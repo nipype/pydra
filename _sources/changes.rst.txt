@@ -6,7 +6,7 @@ Release Notes
 
 * refactoring template formatting for ``input_spec``
 * fixing issues with input fields with extension (and using them in templates)
-* adding simple validators to input spec (using ``attr.validator``)
+* adding simple validators to input definition (using ``attr.validator``)
 * adding ``create_dotfile`` for workflows, that creates graphs as dotfiles (can convert to other formats if dot available)
 * adding a simple user guide with ``input_spec`` description
 * expanding docstrings for ``State``, ``audit`` and ``messenger``

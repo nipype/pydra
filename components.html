@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dataflows Components: Task and Workflow &mdash; Pydra: A simple dataflow engine with scalable semantics 0.1.dev1+g6e6f8b4 documentation</title>
+  <title>Dataflows Components: Task and Workflow &mdash; Pydra: A simple dataflow engine with scalable semantics 0.25.dev184+g0123623c documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -102,8 +102,8 @@ classes that inherit from <code class="docutils literal notranslate"><span class
 <li><p><code class="docutils literal notranslate"><span class="pre">FunctionTask</span></code> is a <em>Task</em> that executes Python functions. Most Python functions
 declared in an existing library, package, or interactively in a terminal can
 be converted to a <code class="docutils literal notranslate"><span class="pre">FunctionTask</span></code> by using <em>Pydra</em>’s decorator - <code class="docutils literal notranslate"><span class="pre">mark.task</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">from</span> <span class="nn">pydra</span> <span class="kn">import</span> <span class="n">mark</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra</span><span class="w"> </span><span class="kn">import</span> <span class="n">mark</span>
 <span class="n">fft</span> <span class="o">=</span> <span class="n">mark</span><span class="o">.</span><span class="n">annotate</span><span class="p">({</span><span class="s1">&#39;a&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
                  <span class="s1">&#39;return&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">})(</span><span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">fft</span><span class="p">)</span>
 <span class="n">fft_task</span> <span class="o">=</span> <span class="n">mark</span><span class="o">.</span><span class="n">task</span><span class="p">(</span><span class="n">fft</span><span class="p">)()</span>
@@ -119,8 +119,8 @@ outputs:</p>
 <span class="nd">@mark</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
     <span class="p">{</span><span class="s2">&quot;return&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;mean&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">&quot;std&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">}}</span>
 <span class="p">)</span>
-<span class="k">def</span> <span class="nf">mean_dev</span><span class="p">(</span><span class="n">my_data</span><span class="p">):</span>
-    <span class="kn">import</span> <span class="nn">statistics</span> <span class="k">as</span> <span class="nn">st</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">mean_dev</span><span class="p">(</span><span class="n">my_data</span><span class="p">):</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">statistics</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">st</span>
     <span class="k">return</span> <span class="n">st</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">my_data</span><span class="p">),</span> <span class="n">st</span><span class="o">.</span><span class="n">stdev</span><span class="p">(</span><span class="n">my_data</span><span class="p">)</span>
 
 <span class="n">result</span> <span class="o">=</span> <span class="n">mean_dev</span><span class="p">(</span><span class="n">my_data</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">])()</span>
@@ -161,16 +161,16 @@ the <em>out_file</em> field form a template:</p>
     <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Input&quot;</span><span class="p">,</span>
     <span class="n">fields</span><span class="o">=</span><span class="p">[</span>
     <span class="p">(</span> <span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="n">File</span><span class="p">,</span>
-      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;input file ...&quot;</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;input file ...&quot;</span><span class="p">,</span>
         <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
         <span class="s2">&quot;mandatory&quot;</span><span class="p">:</span> <span class="kc">True</span> <span class="p">}</span> <span class="p">),</span>
     <span class="p">(</span> <span class="s2">&quot;out_file&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span>
-      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;name of output ...&quot;</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;name of output ...&quot;</span><span class="p">,</span>
         <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
         <span class="s2">&quot;output_file_template&quot;</span><span class="p">:</span>
                           <span class="s2">&quot;</span><span class="si">{in_file}</span><span class="s2">_br&quot;</span> <span class="p">}</span> <span class="p">),</span>
     <span class="p">(</span> <span class="s2">&quot;mask&quot;</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span>
-      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;create binary mask&quot;</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;create binary mask&quot;</span><span class="p">,</span>
         <span class="s2">&quot;argstr&quot;</span><span class="p">:</span> <span class="s2">&quot;-m&quot;</span><span class="p">,</span> <span class="p">}</span> <span class="p">)</span> <span class="p">],</span>
     <span class="n">bases</span><span class="o">=</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">,)</span> <span class="p">)</span>
 

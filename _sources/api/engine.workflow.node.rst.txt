@@ -1,7 +1,0 @@
-engine.workflow.node module
-===========================
-
-.. automodule:: engine.workflow.node
-   :members:
-   :undoc-members:
-   :show-inheritance:

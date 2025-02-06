@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Conditionals and lazy fields" href="conditional-lazy.html" /><link rel="prev" title="Design philosophy" href="design-approach.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Dynamic construction" href="conditional-lazy.html" /><link rel="prev" title="Design philosophy" href="design-approach.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Splitting and combining - Pydra v0.1.dev1+g6e6f8b4</title>
+        <title>Splitting and combining - Pydra v0.25</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g6e6f8b4</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.25</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g6e6f8b4</span>
+  <span class="sidebar-brand-text">Pydra v0.25</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -208,38 +208,44 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Tutorials: Execution</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/getting-started.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/advanced-execution.html">Advanced execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/1-getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/2-advanced-execution.html">Advanced execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/3-troubleshooting.html">Troubleshooting</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Design</span></p>
+<p class="caption" role="heading"><span class="caption-text">Tutorials: Design</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/python.html">Python-tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/shell.html">Shell-tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/workflow.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/4-python.html">Python-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/5-shell.html">Shell-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/6-workflow.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/7-canonical-form.html">Canonical task form</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/first-level-glm.html">One-Level GLM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/two-level-glm.html">Two-Level GLM</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Create a task package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">In-depth</span></p>
+<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Splitting and combining</a></li>
-<li class="toctree-l1"><a class="reference internal" href="conditional-lazy.html">Conditionals and lazy fields</a></li>
-<li class="toctree-l1"><a class="reference internal" href="typing.html">Type checking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="hashing-caching.html">Caching and hashing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="environments.html">Containers and environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conditional-lazy.html">Dynamic construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environments.html">Software environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hashing-caching.html">Caches and hashes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="typing.html">Typing and file-formats</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../reference/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../genindex.html">Index</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../py-modindex.html">Module Index</a></li>
 </ul>
 
 </div>
@@ -365,7 +371,7 @@ This will be explained in the next section.</p>
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Conditionals and lazy fields</div>
+                <div class="title">Dynamic construction</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -384,7 +390,7 @@ This will be explained in the next section.</p>
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2024, Nipype developers
+                Copyright &#169; 2025, Nipype developers
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             

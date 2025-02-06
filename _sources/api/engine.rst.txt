@@ -6,14 +6,6 @@ engine package
    :undoc-members:
    :show-inheritance:
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 1
-
-   engine.workflow
-
 Submodules
 ----------
 
@@ -27,6 +19,8 @@ Submodules
    engine.helpers
    engine.helpers_file
    engine.helpers_state
+   engine.lazy
+   engine.node
    engine.run_pickled
    engine.specs
    engine.state

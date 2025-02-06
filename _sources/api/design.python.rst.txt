@@ -1,7 +1,0 @@
-design.python module
-====================
-
-.. automodule:: design.python
-   :members:
-   :undoc-members:
-   :show-inheritance:

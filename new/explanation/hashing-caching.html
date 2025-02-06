@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Containers and environments" href="environments.html" /><link rel="prev" title="Type checking" href="typing.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Typing and file-formats" href="typing.html" /><link rel="prev" title="Software environments" href="environments.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Caching and hashing - Pydra v0.1.dev1+g6e6f8b4</title>
+        <title>Caches and hashes - Pydra v0.25</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g6e6f8b4</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.25</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -185,7 +185,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g6e6f8b4</span>
+  <span class="sidebar-brand-text">Pydra v0.25</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -208,38 +208,44 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Tutorials: Execution</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/getting-started.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/advanced-execution.html">Advanced execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/1-getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/2-advanced-execution.html">Advanced execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/3-troubleshooting.html">Troubleshooting</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Design</span></p>
+<p class="caption" role="heading"><span class="caption-text">Tutorials: Design</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/python.html">Python-tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/shell.html">Shell-tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/workflow.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/4-python.html">Python-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/5-shell.html">Shell-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/6-workflow.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/7-canonical-form.html">Canonical task form</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/first-level-glm.html">One-Level GLM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/two-level-glm.html">Two-Level GLM</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Create a task package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">In-depth</span></p>
+<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="splitting-combining.html">Splitting and combining</a></li>
-<li class="toctree-l1"><a class="reference internal" href="conditional-lazy.html">Conditionals and lazy fields</a></li>
-<li class="toctree-l1"><a class="reference internal" href="typing.html">Type checking</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Caching and hashing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="environments.html">Containers and environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conditional-lazy.html">Dynamic construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environments.html">Software environments</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Caches and hashes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="typing.html">Typing and file-formats</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../reference/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../genindex.html">Index</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../py-modindex.html">Module Index</a></li>
 </ul>
 
 </div>
@@ -274,15 +280,61 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="caching-and-hashing">
-<h1>Caching and hashing<a class="headerlink" href="#caching-and-hashing" title="Permalink to this heading">¶</a></h1>
-<p>Work in progress....</p>
+          <section id="caches-and-hashes">
+<h1>Caches and hashes<a class="headerlink" href="#caches-and-hashes" title="Permalink to this heading">¶</a></h1>
+<p>In Pydra, each task is run within its own working directory. If a task completes
+successfully, their outputs are stored within this working directory. Working directories
+are created within a cache directory, which is specified when the task is executed, and
+named according to the hash of the task's inputs. This means that if the same task is
+executed with the same inputs, the same working directory will be used, and instead of the task
+being rerun, the outputs from the previous run will be reused.</p>
+<p>In this manner, incomplete workflows can be resumed from where they left off, and completed
+workflows can be rerun without having to rerun all of the tasks. This is particularly useful
+when working with datasets that are to be analysed in several different ways with
+common intermediate steps, or when debugging workflows that have failed part way through.</p>
+<section id="hash-calculations">
+<h2>Hash calculations<a class="headerlink" href="#hash-calculations" title="Permalink to this heading">¶</a></h2>
+<p>Hashes are calculated for different types of objects in different ways. For example, the
+hash of a string is simply the hash of the string itself, whereas the hash of a dictionary
+is the hash of all the file names and contents within the directory. Implementations for
+most common types are provided in the <code class="xref py py-mod docutils literal notranslate"><span class="pre">pydra.utils.hash</span></code> module, but custom types
+can be hashed by providing a custom <code class="docutils literal notranslate"><span class="pre">bytes_repr</span></code> function (see
+<a class="reference internal" href="#registering-custom-bytes-repr-functions"><span class="std std-ref">Registering custom bytes_repr functions</span></a>).</p>
+<p>A cache dictionary, is passed each <code class="docutils literal notranslate"><span class="pre">bytes_repr</span></code> call that maps an objects id (i.e.
+as returned by the built-in <code class="docutils literal notranslate"><span class="pre">id()</span></code> function) to the hash, to avoid infinite recursions
+in the case of circular references.</p>
+<p>The byte representation of each object is hashed using the BlakeB cryptographic algorithm,
+and these hashes are then combined to create a hash of the entire inputs object.</p>
+</section>
+<section id="file-hash-caching-by-mtime">
+<h2>File hash caching by mtime<a class="headerlink" href="#file-hash-caching-by-mtime" title="Permalink to this heading">¶</a></h2>
+<p>To avoid having to recalculate the hash of large files between runs, file hashes themselves
+are cached in a platform specific user directory. These hashes are stored within small
+files named by yet another hash of the file-system path an mtime of the file. This means that
+the contents of a file should only need to be hashed once unless it is modified.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Due to limitations in mtime resolution on different platforms (e.g. 1 second on Linux,
+potentially 2 seconds on Windows), it is conceivable that a file could be modified,
+hashed, and then modified again within resolution period, causing the hash to be
+invalid. Therefore, cached hashes are only used once the mtime resolution period
+has lapsed since it was last modified, and may be recalculated in some rare cases.</p>
+</div>
+</section>
+<section id="registering-custom-bytes-repr-functions">
+<h2>Registering custom bytes_repr functions<a class="headerlink" href="#registering-custom-bytes-repr-functions" title="Permalink to this heading">¶</a></h2>
+<p>Work in progress...</p>
+</section>
+<section id="cache-misses-due-to-unstable-hashes">
+<h2>Cache misses due to unstable hashes<a class="headerlink" href="#cache-misses-due-to-unstable-hashes" title="Permalink to this heading">¶</a></h2>
+<p>Work in progress...</p>
+</section>
 </section>
 
         </article>
@@ -290,23 +342,23 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="environments.html">
+          <a class="next-page" href="typing.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Containers and environments</div>
+                <div class="title">Typing and file-formats</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="typing.html">
+          <a class="prev-page" href="environments.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Type checking</div>
+                <div class="title">Software environments</div>
                 
               </div>
             </a>
@@ -314,7 +366,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2024, Nipype developers
+                Copyright &#169; 2025, Nipype developers
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -328,8 +380,30 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Caches and hashes</a><ul>
+<li><a class="reference internal" href="#hash-calculations">Hash calculations</a></li>
+<li><a class="reference internal" href="#file-hash-caching-by-mtime">File hash caching by mtime</a></li>
+<li><a class="reference internal" href="#registering-custom-bytes-repr-functions">Registering custom bytes_repr functions</a></li>
+<li><a class="reference internal" href="#cache-misses-due-to-unstable-hashes">Cache misses due to unstable hashes</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>

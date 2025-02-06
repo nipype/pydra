@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Input Specification &mdash; Pydra: A simple dataflow engine with scalable semantics 0.1.dev1+g6e6f8b4 documentation</title>
+  <title>Input Specification &mdash; Pydra: A simple dataflow engine with scalable semantics 0.25.dev184+g0123623c documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -97,16 +97,16 @@ In this section, more examples of the input definition will be provided.</p>
     <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Input&quot;</span><span class="p">,</span>
     <span class="n">fields</span><span class="o">=</span><span class="p">[</span>
     <span class="p">(</span> <span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="n">File</span><span class="p">,</span>
-      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;input file ...&quot;</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;input file ...&quot;</span><span class="p">,</span>
         <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
         <span class="s2">&quot;mandatory&quot;</span><span class="p">:</span> <span class="kc">True</span> <span class="p">}</span> <span class="p">),</span>
     <span class="p">(</span> <span class="s2">&quot;out_file&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span>
-      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;name of output ...&quot;</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;name of output ...&quot;</span><span class="p">,</span>
         <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
         <span class="s2">&quot;output_file_template&quot;</span><span class="p">:</span>
                           <span class="s2">&quot;</span><span class="si">{in_file}</span><span class="s2">_br&quot;</span> <span class="p">}</span> <span class="p">),</span>
     <span class="p">(</span> <span class="s2">&quot;mask&quot;</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span>
-      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;create binary mask&quot;</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;create binary mask&quot;</span><span class="p">,</span>
         <span class="s2">&quot;argstr&quot;</span><span class="p">:</span> <span class="s2">&quot;-m&quot;</span><span class="p">,</span> <span class="p">}</span> <span class="p">)</span> <span class="p">],</span>
     <span class="n">bases</span><span class="o">=</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">,)</span> <span class="p">)</span>
 
@@ -115,7 +115,7 @@ In this section, more examples of the input definition will be provided.</p>
 </pre></div>
 </div>
 <p>In order to create an input definition, a new <cite>SpecInfo</cite> object has to be created.
-The field <cite>name</cite> specifies the type of the spec and it should be always “Input” for
+The field <cite>name</cite> specifies the type of the definition and it should be always “Input” for
 the input definition.
 The field <cite>bases</cite> specifies the “base definition” you want to use (can think about it as a
 <cite>parent class</cite>) and it will usually contains <cite>ShellDef</cite> only, unless you want to build on top of
@@ -175,10 +175,10 @@ in the <cite>output_spec</cite> to reverse the conversion of the output values).
 </section>
 <section id="metadata">
 <h2>Metadata<a class="headerlink" href="#metadata" title="Permalink to this heading"></a></h2>
-<p>In the example we used multiple keys in the metadata dictionary including <cite>help_string</cite>,
+<p>In the example we used multiple keys in the metadata dictionary including <cite>help</cite>,
 <cite>position</cite>, etc. In this section all allowed key will be described:</p>
 <dl class="simple">
-<dt><cite>help_string</cite> (<cite>str</cite>, mandatory):</dt><dd><p>A short description of the input field.</p>
+<dt><cite>help</cite> (<cite>str</cite>, mandatory):</dt><dd><p>A short description of the input field.</p>
 </dd>
 <dt><cite>mandatory</cite> (<cite>bool</cite>, default: <cite>False</cite>):</dt><dd><p>If <cite>True</cite> user has to provide a value for the field.</p>
 </dd>
@@ -205,11 +205,11 @@ If hard link not possible, the file is copied to the output directory.</p>
 </dd>
 <dt><cite>container_path</cite> (<cite>bool</cite>, default: <cite>False</cite>, only for <cite>ContainerTask</cite>):</dt><dd><p>If <cite>True</cite> a path will be consider as a path inside the container (and not as a local path).</p>
 </dd>
-<dt><cite>output_file_template</cite> (<cite>str</cite>):</dt><dd><p>If provided, the field is treated also as an output field and it is added to the output spec.
+<dt><cite>output_file_template</cite> (<cite>str</cite>):</dt><dd><p>If provided, the field is treated also as an output field and it is added to the output definition.
 The template can use other fields, e.g. <cite>{file1}</cite>.
 Used in order to create an output definition.</p>
 </dd>
-<dt><cite>output_field_name</cite> (<cite>str</cite>, used together with <cite>output_file_template</cite>)</dt><dd><p>If provided the field is added to the output spec with changed name.
+<dt><cite>output_field_name</cite> (<cite>str</cite>, used together with <cite>output_file_template</cite>)</dt><dd><p>If provided the field is added to the output definition with changed name.
 Used in order to create an output definition.</p>
 </dd>
 <dt><cite>keep_extension</cite> (<cite>bool</cite>, default: <cite>True</cite>):</dt><dd><p>A flag that specifies if the file extension should be removed from the field value.

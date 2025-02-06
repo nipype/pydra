@@ -1,7 +1,0 @@
-design.base module
-==================
-
-.. automodule:: design.base
-   :members:
-   :undoc-members:
-   :show-inheritance:

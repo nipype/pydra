@@ -1,0 +1,1281 @@
+<!doctype html>
+<html class="no-js" lang="English" data-content_root="">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Workflows" href="6-workflow.html" /><link rel="prev" title="Python-tasks" href="4-python.html" />
+
+    <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
+        <title>Shell-tasks - Pydra v0.25</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #ffffff;
+  --color-code-foreground: black;
+  --color-brand-primary: #69306d;
+  --color-brand-content: #69306d;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #111111;
+  --color-code-foreground: #ffffff;
+  --color-brand-primary: #ce8dcf;
+  --color-brand-content: #ce8dcf;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #111111;
+  --color-code-foreground: #ffffff;
+  --color-brand-primary: #ce8dcf;
+  --color-brand-content: #ce8dcf;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">Pydra v0.25</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
+  </div>
+  
+  <span class="sidebar-brand-text">Pydra v0.25</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Tutorials: Execution</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="1-getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="2-advanced-execution.html">Advanced execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="3-troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials: Design</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="4-python.html">Python-tasks</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Shell-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="6-workflow.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical task form</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/first-level-glm.html">One-Level GLM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/two-level-glm.html">Two-Level GLM</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-to</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Create a task package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/design-approach.html">Design philosophy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/splitting-combining.html">Splitting and combining</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Dynamic construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/environments.html">Software environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caches and hashes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/typing.html">Typing and file-formats</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../reference/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../genindex.html">Index</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../py-modindex.html">Module Index</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/tutorial/5-shell.ipynb.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="Shell-tasks">
+<h1>Shell-tasks<a class="headerlink" href="#Shell-tasks" title="Permalink to this heading">¶</a></h1>
+<section id="Command-line-templates">
+<h2>Command-line templates<a class="headerlink" href="#Command-line-templates" title="Permalink to this heading">¶</a></h2>
+<p>Shell task specs can be defined using from string templates that resemble the command-line usage examples typically used in in-line help. Therefore, they can be quick and intuitive way to specify a shell task. For example, a simple spec for the copy command <code class="docutils literal notranslate"><span class="pre">cp</span></code> that omits optional flags,</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
+
+<span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;cp &lt;in_file&gt; &lt;out|destination&gt;&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Input and output fields are both specified by placing the name of the field within enclosing <code class="docutils literal notranslate"><span class="pre">&lt;</span></code> and <code class="docutils literal notranslate"><span class="pre">&gt;</span></code>. Outputs are differentiated by the <code class="docutils literal notranslate"><span class="pre">out|</span></code> prefix.</p>
+<p>This shell task can then be run just as a Python task would be run, first parameterising it, then executing</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tempfile</span><span class="w"> </span><span class="kn">import</span> <span class="n">mkdtemp</span>
+
+<span class="c1"># Make a test file to copy</span>
+<span class="n">test_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">mkdtemp</span><span class="p">())</span>
+<span class="n">test_file</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;in.txt&quot;</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">test_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;Contents to be copied&quot;</span><span class="p">)</span>
+
+<span class="c1"># Parameterise the task definition</span>
+<span class="n">cp</span> <span class="o">=</span> <span class="n">Cp</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">test_file</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;out.txt&quot;</span><span class="p">)</span>
+
+<span class="c1"># Print the cmdline to be run to double check</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Command-line to be run: </span><span class="si">{</span><span class="n">cp</span><span class="o">.</span><span class="n">cmdline</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Run the shell-comand task</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">cp</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Contents of copied file (&#39;</span><span class="si">{</span><span class="n">outputs</span><span class="o">.</span><span class="n">destination</span><span class="si">}</span><span class="s2">&#39;): &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">destination</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Command-line to be run: cp /tmp/tmpioh7dpj1/in.txt /tmp/tmpioh7dpj1/out.txt
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev184+g0123623c
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">AttributeError</span>                            Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[2], line 17</span>
+<span class="ansi-green-intense-fg ansi-bold">     14</span> <span style="color: rgb(0,135,0)">print</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Command-line to be run: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>cp<span style="color: rgb(98,98,98)">.</span>cmdline<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-intense-fg ansi-bold">     16</span> <span style="color: rgb(95,135,135)"># Run the shell-comand task</span>
+<span class="ansi-green-fg">---&gt; 17</span> outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">cp</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     19</span> <span style="color: rgb(0,135,0)">print</span>(
+<span class="ansi-green-intense-fg ansi-bold">     20</span>     <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Contents of copied file (</span><span style="color: rgb(175,0,0)">&#39;</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>outputs<span style="color: rgb(98,98,98)">.</span>destination<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">): </span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">     21</span>     <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">&#39;</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>Path(outputs<span style="color: rgb(98,98,98)">.</span>destination)<span style="color: rgb(98,98,98)">.</span>read_text()<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">     22</span> )
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:192</span>, in <span class="ansi-cyan-fg">TaskDef.__call__</span><span class="ansi-blue-fg">(self, cache_dir, worker, environment, rerun, cache_locations, audit_flags, messengers, messenger_args, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    180</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-intense-fg ansi-bold">    181</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> Submitter(
+<span class="ansi-green-intense-fg ansi-bold">    182</span>         audit_flags<span style="color: rgb(98,98,98)">=</span>audit_flags,
+<span class="ansi-green-intense-fg ansi-bold">    183</span>         cache_dir<span style="color: rgb(98,98,98)">=</span>cache_dir,
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    190</span>         <span style="color: rgb(98,98,98)">*</span><span style="color: rgb(98,98,98)">*</span>kwargs,
+<span class="ansi-green-intense-fg ansi-bold">    191</span>     ) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> sub:
+<span class="ansi-green-fg">--&gt; 192</span>         result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">sub</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    193</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">TypeError</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
+<span class="ansi-green-intense-fg ansi-bold">    194</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">hasattr</span>(e, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">__notes__</span><span style="color: rgb(175,0,0)">&#34;</span>) <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> WORKER_KWARG_FAIL_NOTE <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> e<span style="color: rgb(98,98,98)">.</span>__notes__:
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/submitter.py:198</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def)</span>
+<span class="ansi-green-intense-fg ansi-bold">    194</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>loop<span style="color: rgb(98,98,98)">.</span>run_until_complete(
+<span class="ansi-green-intense-fg ansi-bold">    195</span>             <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run_async(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun)
+<span class="ansi-green-intense-fg ansi-bold">    196</span>         )
+<span class="ansi-green-intense-fg ansi-bold">    197</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-fg">--&gt; 198</span>         <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">worker</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">run</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    199</span> <span class="ansi-bold" style="color: rgb(0,135,0)">finally</span>:
+<span class="ansi-green-intense-fg ansi-bold">    200</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>run_start_time <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:160</span>, in <span class="ansi-cyan-fg">DebugWorker.run</span><span class="ansi-blue-fg">(self, task, rerun)</span>
+<span class="ansi-green-intense-fg ansi-bold">    154</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">run</span>(
+<span class="ansi-green-intense-fg ansi-bold">    155</span>     <span style="color: rgb(0,135,0)">self</span>,
+<span class="ansi-green-intense-fg ansi-bold">    156</span>     task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[DefType]</span><span style="color: rgb(175,0,0)">&#34;</span>,
+<span class="ansi-green-intense-fg ansi-bold">    157</span>     rerun: <span style="color: rgb(0,135,0)">bool</span> <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">False</span>,
+<span class="ansi-green-intense-fg ansi-bold">    158</span> ) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Result</span><span style="color: rgb(175,0,0)">&#34;</span>:
+<span class="ansi-green-intense-fg ansi-bold">    159</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run a task.&#34;&#34;&#34;</span>
+<span class="ansi-green-fg">--&gt; 160</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">run</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/core.py:345</span>, in <span class="ansi-cyan-fg">Task.run</span><span class="ansi-blue-fg">(self, rerun)</span>
+<span class="ansi-green-intense-fg ansi-bold">    339</span> <span style="color: rgb(95,135,135)"># TODO: After these changes have been merged, will refactor this function and</span>
+<span class="ansi-green-intense-fg ansi-bold">    340</span> <span style="color: rgb(95,135,135)"># run_async to use common helper methods for pre/post run tasks</span>
+<span class="ansi-green-intense-fg ansi-bold">    341</span>
+<span class="ansi-green-intense-fg ansi-bold">    342</span> <span style="color: rgb(95,135,135)"># checking if the definition is fully resolved and ready to run</span>
+<span class="ansi-green-intense-fg ansi-bold">    343</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>hooks<span style="color: rgb(98,98,98)">.</span>pre_run(<span style="color: rgb(0,135,0)">self</span>)
+<span class="ansi-green-intense-fg ansi-bold">    344</span> logger<span style="color: rgb(98,98,98)">.</span>debug(
+<span class="ansi-green-fg">--&gt; 345</span>     <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">&#39;</span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)"> is attempting to acquire lock on </span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)">&#34;</span>, <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>name, <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">lockfile</span>
+<span class="ansi-green-intense-fg ansi-bold">    346</span> )
+<span class="ansi-green-intense-fg ansi-bold">    347</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> SoftFileLock(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>lockfile):
+<span class="ansi-green-intense-fg ansi-bold">    348</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> (rerun):
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/core.py:212</span>, in <span class="ansi-cyan-fg">Task.lockfile</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    210</span> <span style="color: rgb(175,0,255)">@property</span>
+<span class="ansi-green-intense-fg ansi-bold">    211</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">lockfile</span>(<span style="color: rgb(0,135,0)">self</span>):
+<span class="ansi-green-fg">--&gt; 212</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">output_dir</span><span style="color: rgb(98,98,98)">.</span>with_suffix(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">.lock</span><span style="color: rgb(175,0,0)">&#34;</span>)
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/core.py:261</span>, in <span class="ansi-cyan-fg">Task.output_dir</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    258</span> <span style="color: rgb(175,0,255)">@property</span>
+<span class="ansi-green-intense-fg ansi-bold">    259</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">output_dir</span>(<span style="color: rgb(0,135,0)">self</span>):
+<span class="ansi-green-intense-fg ansi-bold">    260</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Get the filesystem path where outputs will be written.&#34;&#34;&#34;</span>
+<span class="ansi-green-fg">--&gt; 261</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>cache_dir <span style="color: rgb(98,98,98)">/</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">checksum</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/core.py:206</span>, in <span class="ansi-cyan-fg">Task.checksum</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    204</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_checksum <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    205</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_checksum
+<span class="ansi-green-fg">--&gt; 206</span> input_hash <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">definition</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_hash</span>
+<span class="ansi-green-intense-fg ansi-bold">    207</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_checksum <span style="color: rgb(98,98,98)">=</span> create_checksum(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>_task_type, input_hash)
+<span class="ansi-green-intense-fg ansi-bold">    208</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_checksum
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:364</span>, in <span class="ansi-cyan-fg">TaskDef._hash</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    362</span> <span style="color: rgb(175,0,255)">@property</span>
+<span class="ansi-green-intense-fg ansi-bold">    363</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">_hash</span>(<span style="color: rgb(0,135,0)">self</span>):
+<span class="ansi-green-fg">--&gt; 364</span>     hsh, <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_hashes <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_compute_hashes</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    365</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> hsh
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:389</span>, in <span class="ansi-cyan-fg">TaskDef._compute_hashes</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    386</span> inp_dict[<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Outputs</span><span style="color: rgb(175,0,0)">&#34;</span>] <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>Outputs
+<span class="ansi-green-intense-fg ansi-bold">    387</span> hash_cache <span style="color: rgb(98,98,98)">=</span> Cache()
+<span class="ansi-green-intense-fg ansi-bold">    388</span> field_hashes <span style="color: rgb(98,98,98)">=</span> {
+<span class="ansi-green-fg">--&gt; 389</span>     k: <span class="ansi-yellow-bg">hash_function</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">v</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">cache</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">hash_cache</span><span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> k, v <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> inp_dict<span style="color: rgb(98,98,98)">.</span>items()
+<span class="ansi-green-intense-fg ansi-bold">    390</span> }
+<span class="ansi-green-intense-fg ansi-bold">    391</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> hash_function(<span style="color: rgb(0,135,0)">sorted</span>(field_hashes<span style="color: rgb(98,98,98)">.</span>items())), field_hashes
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:208</span>, in <span class="ansi-cyan-fg">hash_function</span><span class="ansi-blue-fg">(obj, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    206</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">hash_function</span>(obj, <span style="color: rgb(98,98,98)">*</span><span style="color: rgb(98,98,98)">*</span>kwargs):
+<span class="ansi-green-intense-fg ansi-bold">    207</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Generate hash of object.&#34;&#34;&#34;</span>
+<span class="ansi-green-fg">--&gt; 208</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">hash_object</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">obj</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span><span style="color: rgb(98,98,98)">.</span>hex()
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:239</span>, in <span class="ansi-cyan-fg">hash_object</span><span class="ansi-blue-fg">(obj, cache, persistent_cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    229</span> tp <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">type</span>(obj)
+<span class="ansi-green-intense-fg ansi-bold">    230</span> add_exc_note(
+<span class="ansi-green-intense-fg ansi-bold">    231</span>     e,
+<span class="ansi-green-intense-fg ansi-bold">    232</span>     (
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    237</span>     ),
+<span class="ansi-green-intense-fg ansi-bold">    238</span> )
+<span class="ansi-green-fg">--&gt; 239</span> <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> e
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:227</span>, in <span class="ansi-cyan-fg">hash_object</span><span class="ansi-blue-fg">(obj, cache, persistent_cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    225</span>     cache <span style="color: rgb(98,98,98)">=</span> Cache(persistent<span style="color: rgb(98,98,98)">=</span>persistent_cache)
+<span class="ansi-green-intense-fg ansi-bold">    226</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 227</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">hash_single</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">obj</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">cache</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    228</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
+<span class="ansi-green-intense-fg ansi-bold">    229</span>     tp <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">type</span>(obj)
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:296</span>, in <span class="ansi-cyan-fg">hash_single</span><span class="ansi-blue-fg">(obj, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    290</span>     hsh <span style="color: rgb(98,98,98)">=</span> cache<span style="color: rgb(98,98,98)">.</span>persistent<span style="color: rgb(98,98,98)">.</span>get_or_calculate_hash(key, calc_hash)
+<span class="ansi-green-intense-fg ansi-bold">    291</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    292</span>     <span style="color: rgb(95,135,135)"># If the first item is a bytes chunk (i.e. the object type doesn&#39;t have an</span>
+<span class="ansi-green-intense-fg ansi-bold">    293</span>     <span style="color: rgb(95,135,135)"># associated &#39;cache-key&#39;), then simply calculate the hash of the object,</span>
+<span class="ansi-green-intense-fg ansi-bold">    294</span>     <span style="color: rgb(95,135,135)"># passing the first chunk to the `calc_hash` function so it can be included</span>
+<span class="ansi-green-intense-fg ansi-bold">    295</span>     <span style="color: rgb(95,135,135)"># in the hash calculation</span>
+<span class="ansi-green-fg">--&gt; 296</span>     hsh <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">calc_hash</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">first</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">first</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    297</span> logger<span style="color: rgb(98,98,98)">.</span>debug(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Hash of </span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)"> object is </span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)">&#34;</span>, obj, hsh)
+<span class="ansi-green-intense-fg ansi-bold">    298</span> cache[objid] <span style="color: rgb(98,98,98)">=</span> hsh
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:272</span>, in <span class="ansi-cyan-fg">hash_single.&lt;locals&gt;.calc_hash</span><span class="ansi-blue-fg">(first)</span>
+<span class="ansi-green-intense-fg ansi-bold">    270</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> first <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    271</span>     h<span style="color: rgb(98,98,98)">.</span>update(first)
+<span class="ansi-green-fg">--&gt; 272</span> <span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">for</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">chunk</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">bytes_it</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg">  </span><span class="ansi-yellow-bg" style="color: rgb(95,135,135)"># Note that `bytes_it` is in outer scope</span>
+<span class="ansi-green-intense-fg ansi-bold">    273</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">h</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">update</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">chunk</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    274</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> Hash(h<span style="color: rgb(98,98,98)">.</span>digest())
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:498</span>, in <span class="ansi-cyan-fg">bytes_repr_type</span><span class="ansi-blue-fg">(klass, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    496</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> fields <span style="color: rgb(98,98,98)">:=</span> list_fields(klass):
+<span class="ansi-green-intense-fg ansi-bold">    497</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">fields:(</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-fg">--&gt; 498</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">yield from</span> bytes_repr_sequence_contents(fields, cache)
+<span class="ansi-green-intense-fg ansi-bold">    499</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">)</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    500</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">hasattr</span>(klass, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Outputs</span><span style="color: rgb(175,0,0)">&#34;</span>):
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:681</span>, in <span class="ansi-cyan-fg">bytes_repr_sequence_contents</span><span class="ansi-blue-fg">(seq, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    669</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;Serialize the contents of a sequence</span>
+<span class="ansi-green-intense-fg ansi-bold">    670</span>
+<span class="ansi-green-intense-fg ansi-bold">    671</span> <span style="color: rgb(175,0,0)">Concatenates hashed values.</span>
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    678</span> <span style="color: rgb(175,0,0)">    [b&#39;\x6d...&#39;, b&#39;\xa3...&#39;]</span>
+<span class="ansi-green-intense-fg ansi-bold">    679</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    680</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> val <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> seq:
+<span class="ansi-green-fg">--&gt; 681</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(0,135,0)">bytes</span>(<span class="ansi-yellow-bg">hash_single</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">val</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">cache</span><span class="ansi-yellow-bg">)</span>)
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:296</span>, in <span class="ansi-cyan-fg">hash_single</span><span class="ansi-blue-fg">(obj, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    290</span>     hsh <span style="color: rgb(98,98,98)">=</span> cache<span style="color: rgb(98,98,98)">.</span>persistent<span style="color: rgb(98,98,98)">.</span>get_or_calculate_hash(key, calc_hash)
+<span class="ansi-green-intense-fg ansi-bold">    291</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    292</span>     <span style="color: rgb(95,135,135)"># If the first item is a bytes chunk (i.e. the object type doesn&#39;t have an</span>
+<span class="ansi-green-intense-fg ansi-bold">    293</span>     <span style="color: rgb(95,135,135)"># associated &#39;cache-key&#39;), then simply calculate the hash of the object,</span>
+<span class="ansi-green-intense-fg ansi-bold">    294</span>     <span style="color: rgb(95,135,135)"># passing the first chunk to the `calc_hash` function so it can be included</span>
+<span class="ansi-green-intense-fg ansi-bold">    295</span>     <span style="color: rgb(95,135,135)"># in the hash calculation</span>
+<span class="ansi-green-fg">--&gt; 296</span>     hsh <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">calc_hash</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">first</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">first</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    297</span> logger<span style="color: rgb(98,98,98)">.</span>debug(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Hash of </span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)"> object is </span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)">&#34;</span>, obj, hsh)
+<span class="ansi-green-intense-fg ansi-bold">    298</span> cache[objid] <span style="color: rgb(98,98,98)">=</span> hsh
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:272</span>, in <span class="ansi-cyan-fg">hash_single.&lt;locals&gt;.calc_hash</span><span class="ansi-blue-fg">(first)</span>
+<span class="ansi-green-intense-fg ansi-bold">    270</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> first <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    271</span>     h<span style="color: rgb(98,98,98)">.</span>update(first)
+<span class="ansi-green-fg">--&gt; 272</span> <span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">for</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">chunk</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">bytes_it</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg">  </span><span class="ansi-yellow-bg" style="color: rgb(95,135,135)"># Note that `bytes_it` is in outer scope</span>
+<span class="ansi-green-intense-fg ansi-bold">    273</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">h</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">update</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">chunk</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    274</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> Hash(h<span style="color: rgb(98,98,98)">.</span>digest())
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:346</span>, in <span class="ansi-cyan-fg">bytes_repr</span><span class="ansi-blue-fg">(obj, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    337</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">AttributeError</span>:
+<span class="ansi-green-intense-fg ansi-bold">    338</span>         dct <span style="color: rgb(98,98,98)">=</span> {
+<span class="ansi-green-intense-fg ansi-bold">    339</span>             n: <span style="color: rgb(0,135,0)">getattr</span>(obj, n)
+<span class="ansi-green-intense-fg ansi-bold">    340</span>             <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> n <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">dir</span>(obj)
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    344</span>             )
+<span class="ansi-green-intense-fg ansi-bold">    345</span>         }
+<span class="ansi-green-fg">--&gt; 346</span> <span class="ansi-bold" style="color: rgb(0,135,0)">yield from</span> bytes_repr_mapping_contents(dct, cache)
+<span class="ansi-green-intense-fg ansi-bold">    347</span> <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">}</span><span style="color: rgb(175,0,0)">&#34;</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:664</span>, in <span class="ansi-cyan-fg">bytes_repr_mapping_contents</span><span class="ansi-blue-fg">(mapping, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    662</span> <span class="ansi-bold" style="color: rgb(0,135,0)">yield from</span> bytes_repr(key, cache)
+<span class="ansi-green-intense-fg ansi-bold">    663</span> <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">=</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-fg">--&gt; 664</span> <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(0,135,0)">bytes</span>(<span class="ansi-yellow-bg">hash_single</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mapping</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">key</span><span class="ansi-yellow-bg">]</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">cache</span><span class="ansi-yellow-bg">)</span>)
+<span class="ansi-green-intense-fg ansi-bold">    665</span> <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:296</span>, in <span class="ansi-cyan-fg">hash_single</span><span class="ansi-blue-fg">(obj, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    290</span>     hsh <span style="color: rgb(98,98,98)">=</span> cache<span style="color: rgb(98,98,98)">.</span>persistent<span style="color: rgb(98,98,98)">.</span>get_or_calculate_hash(key, calc_hash)
+<span class="ansi-green-intense-fg ansi-bold">    291</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    292</span>     <span style="color: rgb(95,135,135)"># If the first item is a bytes chunk (i.e. the object type doesn&#39;t have an</span>
+<span class="ansi-green-intense-fg ansi-bold">    293</span>     <span style="color: rgb(95,135,135)"># associated &#39;cache-key&#39;), then simply calculate the hash of the object,</span>
+<span class="ansi-green-intense-fg ansi-bold">    294</span>     <span style="color: rgb(95,135,135)"># passing the first chunk to the `calc_hash` function so it can be included</span>
+<span class="ansi-green-intense-fg ansi-bold">    295</span>     <span style="color: rgb(95,135,135)"># in the hash calculation</span>
+<span class="ansi-green-fg">--&gt; 296</span>     hsh <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">calc_hash</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">first</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">first</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    297</span> logger<span style="color: rgb(98,98,98)">.</span>debug(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Hash of </span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)"> object is </span><span class="ansi-bold" style="color: rgb(175,95,135)">%s</span><span style="color: rgb(175,0,0)">&#34;</span>, obj, hsh)
+<span class="ansi-green-intense-fg ansi-bold">    298</span> cache[objid] <span style="color: rgb(98,98,98)">=</span> hsh
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:272</span>, in <span class="ansi-cyan-fg">hash_single.&lt;locals&gt;.calc_hash</span><span class="ansi-blue-fg">(first)</span>
+<span class="ansi-green-intense-fg ansi-bold">    270</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> first <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    271</span>     h<span style="color: rgb(98,98,98)">.</span>update(first)
+<span class="ansi-green-fg">--&gt; 272</span> <span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">for</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">chunk</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">bytes_it</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg">  </span><span class="ansi-yellow-bg" style="color: rgb(95,135,135)"># Note that `bytes_it` is in outer scope</span>
+<span class="ansi-green-intense-fg ansi-bold">    273</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">h</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">update</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">chunk</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    274</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> Hash(h<span style="color: rgb(98,98,98)">.</span>digest())
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/utils/hash.py:493</span>, in <span class="ansi-cyan-fg">bytes_repr_type</span><span class="ansi-blue-fg">(klass, cache)</span>
+<span class="ansi-green-intense-fg ansi-bold">    491</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> inspect<span style="color: rgb(98,98,98)">.</span>isclass(klass) <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> <span style="color: rgb(0,135,0)">issubclass</span>(klass, FileSet):
+<span class="ansi-green-intense-fg ansi-bold">    492</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 493</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">mime-like:(</span><span style="color: rgb(175,0,0)">&#34;</span> <span style="color: rgb(98,98,98)">+</span> <span class="ansi-yellow-bg">klass</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">mime_like</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">encode</span>() <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">)</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    494</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> fileformats<span style="color: rgb(98,98,98)">.</span>core<span style="color: rgb(98,98,98)">.</span>exceptions<span style="color: rgb(98,98,98)">.</span>FormatDefinitionError:
+<span class="ansi-green-intense-fg ansi-bold">    495</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> type_location(klass)
+
+<span class="ansi-red-fg">AttributeError</span>: &#39;property&#39; object has no attribute &#39;encode&#39;
+and therefore cannot hash `&lt;class &#39;pydra.design.base.cpOutputs&#39;&gt;` of type `builtins.type`. Consider implementing a specific `bytes_repr()`(see pydra.utils.hash.register_serializer) or a `__bytes_repr__()` dunder methods for this type
+</pre></div></div>
+</div>
+<p>If paths to output files are not provided in the parameterisation, it will default to the name of the field</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">cp</span> <span class="o">=</span> <span class="n">Cp</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">test_file</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+cp /tmp/tmpioh7dpj1/in.txt /home/runner/work/pydra/pydra/new-docs/source/tutorial/destination
+</pre></div></div>
+</div>
+<section id="Defifying-types">
+<h3>Defifying types<a class="headerlink" href="#Defifying-types" title="Permalink to this heading">¶</a></h3>
+<p>By default, shell-command fields are considered to be of <code class="docutils literal notranslate"><span class="pre">fileformats.generic.FsObject</span></code> type. However, more specific file formats or built-in Python types can be specified by appending the type to the field name after a <code class="docutils literal notranslate"><span class="pre">:</span></code>.</p>
+<p>File formats are specified by their MIME type or &quot;MIME-like&quot; strings (see the <a class="reference external" href="https://arcanaframework.github.io/fileformats/mime.html">FileFormats docs</a> for details)</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">Png</span>
+
+<span class="n">TrimPng</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;trim-png &lt;in_image:image/png&gt; &lt;out|out_image:image/png&gt;&quot;</span><span class="p">)</span>
+
+<span class="n">trim_png</span> <span class="o">=</span> <span class="n">TrimPng</span><span class="p">(</span><span class="n">in_image</span><span class="o">=</span><span class="n">Png</span><span class="o">.</span><span class="n">mock</span><span class="p">(),</span> <span class="n">out_image</span><span class="o">=</span><span class="s2">&quot;/path/to/output.png&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">trim_png</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[4], line 3</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,0,255)">fileformats</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">image</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">import</span> Png
+<span class="ansi-green-fg">----&gt; 3</span> TrimPng <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">define</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">trim-png &lt;in_image:image/png&gt; &lt;out|out_image:image/png&gt;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">      5</span> trim_png <span style="color: rgb(98,98,98)">=</span> TrimPng(in_image<span style="color: rgb(98,98,98)">=</span>Png<span style="color: rgb(98,98,98)">.</span>mock(), out_image<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">/path/to/output.png</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-intense-fg ansi-bold">      7</span> <span style="color: rgb(0,135,0)">print</span>(trim_png<span style="color: rgb(98,98,98)">.</span>cmdline)
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:420</span>, in <span class="ansi-cyan-fg">define</span><span class="ansi-blue-fg">(wrapped, inputs, outputs, bases, outputs_bases, auto_attribs, name)</span>
+<span class="ansi-green-intense-fg ansi-bold">    418</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">isinstance</span>(wrapped, (<span style="color: rgb(0,135,0)">type</span>, <span style="color: rgb(0,135,0)">str</span>)):
+<span class="ansi-green-intense-fg ansi-bold">    419</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">wrapped must be a class or a string, not </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>wrapped<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 420</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">make</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    421</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> make
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:331</span>, in <span class="ansi-cyan-fg">define.&lt;locals&gt;.make</span><span class="ansi-blue-fg">(wrapped)</span>
+<span class="ansi-green-intense-fg ansi-bold">    328</span> klass <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+<span class="ansi-green-intense-fg ansi-bold">    329</span> input_helps, output_helps <span style="color: rgb(98,98,98)">=</span> {}, {}
+<span class="ansi-green-fg">--&gt; 331</span> executable, inferred_inputs, inferred_outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">parse_command_line_template</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">    332</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    333</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    334</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    335</span> <span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    337</span> parsed_inputs, parsed_outputs <span style="color: rgb(98,98,98)">=</span> ensure_field_objects(
+<span class="ansi-green-intense-fg ansi-bold">    338</span>     arg_type<span style="color: rgb(98,98,98)">=</span>arg,
+<span class="ansi-green-intense-fg ansi-bold">    339</span>     out_type<span style="color: rgb(98,98,98)">=</span>out,
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    343</span>     output_helps<span style="color: rgb(98,98,98)">=</span>output_helps,
+<span class="ansi-green-intense-fg ansi-bold">    344</span> )
+<span class="ansi-green-intense-fg ansi-bold">    345</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> name:
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:593</span>, in <span class="ansi-cyan-fg">parse_command_line_template</span><span class="ansi-blue-fg">(template, inputs, outputs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    591</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> name:
+<span class="ansi-green-intense-fg ansi-bold">    592</span>     name, type_str <span style="color: rgb(98,98,98)">=</span> name<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 593</span>     type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_type_str</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">type_str</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    594</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    595</span>     type_ <span style="color: rgb(98,98,98)">=</span> generic<span style="color: rgb(98,98,98)">.</span>FsObject <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> option <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(0,135,0)">str</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:544</span>, in <span class="ansi-cyan-fg">parse_command_line_template.&lt;locals&gt;.from_type_str</span><span class="ansi-blue-fg">(type_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    542</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> tp <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> type_str<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span>):
+<span class="ansi-green-intense-fg ansi-bold">    543</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">/</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> tp:
+<span class="ansi-green-fg">--&gt; 544</span>         type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">tp</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    545</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> tp <span style="color: rgb(98,98,98)">==</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">...</span><span style="color: rgb(175,0,0)">&#34;</span>:
+<span class="ansi-green-intense-fg ansi-bold">    546</span>         type_ <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">...</span><span style="color: rgb(175,0,0)">&#34;</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/identification.py:102</span>, in <span class="ansi-cyan-fg">from_mime</span><span class="ansi-blue-fg">(mime_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    100</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str:
+<span class="ansi-green-intense-fg ansi-bold">    101</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> ty<span style="color: rgb(98,98,98)">.</span>Union<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,255)">__getitem__</span>(<span style="color: rgb(0,135,0)">tuple</span>(from_mime(t) <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> t <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span>)))  <span style="color: rgb(95,135,135)"># type: ignore</span>
+<span class="ansi-green-fg">--&gt; 102</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">fileformats</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">core</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">DataType</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mime_str</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/datatype.py:148</span>, in <span class="ansi-cyan-fg">DataType.from_mime</span><span class="ansi-blue-fg">(cls, mime_string)</span>
+<span class="ansi-green-intense-fg ansi-bold">    146</span> <span style="color: rgb(95,135,135)"># Attempt to load file type using their `iana_mime` attribute</span>
+<span class="ansi-green-intense-fg ansi-bold">    147</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 148</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">FileSet</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">formats_by_iana_mime</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">mime_string</span><span class="ansi-yellow-bg">]</span>
+<span class="ansi-green-intense-fg ansi-bold">    149</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">KeyError</span>:
+<span class="ansi-green-intense-fg ansi-bold">    150</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">pass</span>
+
+<span class="ansi-red-fg">TypeError</span>: &#39;method&#39; object is not subscriptable
+</pre></div></div>
+</div>
+</section>
+<section id="Flags-and-options">
+<h3>Flags and options<a class="headerlink" href="#Flags-and-options" title="Permalink to this heading">¶</a></h3>
+<p>Command line flags can also be added to the shell template, either the single or double hyphen form. The field template name immediately following the flag will be associate with that flag.</p>
+<p>If there is no space between the flag and the field template, then the field is assumed to be a boolean, otherwise it is assumed to be of type string unless otherwise specified.</p>
+<p>If a field is optional, the field template should end with a <code class="docutils literal notranslate"><span class="pre">?</span></code>. Tuple fields are specified by comma separated types.</p>
+<p>Varargs are specified by the type followed by an ellipsis, e.g. <code class="docutils literal notranslate"><span class="pre">&lt;my_varargs:generic/file,...&gt;</span></code></p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pprint</span><span class="w"> </span><span class="kn">import</span> <span class="n">pprint</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">fields_dict</span>
+
+<span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &quot;</span>
+            <span class="s2">&quot;-R&lt;recursive&gt; &quot;</span>
+            <span class="s2">&quot;--text-arg &lt;text_arg?&gt; &quot;</span>
+            <span class="s2">&quot;--int-arg &lt;int_arg:int?&gt; &quot;</span>
+            <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str?&gt; &quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[5], line 4</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,0,255)">pprint</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">import</span> pprint
+<span class="ansi-green-intense-fg ansi-bold">      2</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,0,255)">pydra</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">engine</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">helpers</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">import</span> fields_dict
+<span class="ansi-green-fg">----&gt; 4</span> Cp <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">define</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      5</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      6</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      7</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">-R&lt;recursive&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--text-arg &lt;text_arg?&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      9</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--int-arg &lt;int_arg:int?&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">     10</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--tuple-arg &lt;tuple_arg:int,str?&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">     11</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     12</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     14</span> pprint(fields_dict(Cp))
+<span class="ansi-green-intense-fg ansi-bold">     15</span> pprint(fields_dict(Cp<span style="color: rgb(98,98,98)">.</span>Outputs))
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:420</span>, in <span class="ansi-cyan-fg">define</span><span class="ansi-blue-fg">(wrapped, inputs, outputs, bases, outputs_bases, auto_attribs, name)</span>
+<span class="ansi-green-intense-fg ansi-bold">    418</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">isinstance</span>(wrapped, (<span style="color: rgb(0,135,0)">type</span>, <span style="color: rgb(0,135,0)">str</span>)):
+<span class="ansi-green-intense-fg ansi-bold">    419</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">wrapped must be a class or a string, not </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>wrapped<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 420</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">make</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    421</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> make
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:331</span>, in <span class="ansi-cyan-fg">define.&lt;locals&gt;.make</span><span class="ansi-blue-fg">(wrapped)</span>
+<span class="ansi-green-intense-fg ansi-bold">    328</span> klass <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+<span class="ansi-green-intense-fg ansi-bold">    329</span> input_helps, output_helps <span style="color: rgb(98,98,98)">=</span> {}, {}
+<span class="ansi-green-fg">--&gt; 331</span> executable, inferred_inputs, inferred_outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">parse_command_line_template</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">    332</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    333</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    334</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    335</span> <span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    337</span> parsed_inputs, parsed_outputs <span style="color: rgb(98,98,98)">=</span> ensure_field_objects(
+<span class="ansi-green-intense-fg ansi-bold">    338</span>     arg_type<span style="color: rgb(98,98,98)">=</span>arg,
+<span class="ansi-green-intense-fg ansi-bold">    339</span>     out_type<span style="color: rgb(98,98,98)">=</span>out,
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    343</span>     output_helps<span style="color: rgb(98,98,98)">=</span>output_helps,
+<span class="ansi-green-intense-fg ansi-bold">    344</span> )
+<span class="ansi-green-intense-fg ansi-bold">    345</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> name:
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:593</span>, in <span class="ansi-cyan-fg">parse_command_line_template</span><span class="ansi-blue-fg">(template, inputs, outputs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    591</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> name:
+<span class="ansi-green-intense-fg ansi-bold">    592</span>     name, type_str <span style="color: rgb(98,98,98)">=</span> name<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 593</span>     type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_type_str</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">type_str</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    594</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    595</span>     type_ <span style="color: rgb(98,98,98)">=</span> generic<span style="color: rgb(98,98,98)">.</span>FsObject <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> option <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(0,135,0)">str</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:552</span>, in <span class="ansi-cyan-fg">parse_command_line_template.&lt;locals&gt;.from_type_str</span><span class="ansi-blue-fg">(type_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    550</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    551</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 552</span>         type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">f</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">generic/</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">{</span><span class="ansi-yellow-bg">tp</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">}</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    553</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> FormatRecognitionError:
+<span class="ansi-green-intense-fg ansi-bold">    554</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">TypeError</span>(
+<span class="ansi-green-intense-fg ansi-bold">    555</span>             <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Found unknown type, </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>tp<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">, in command template: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>template<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    556</span>         ) <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/identification.py:102</span>, in <span class="ansi-cyan-fg">from_mime</span><span class="ansi-blue-fg">(mime_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    100</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str:
+<span class="ansi-green-intense-fg ansi-bold">    101</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> ty<span style="color: rgb(98,98,98)">.</span>Union<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,255)">__getitem__</span>(<span style="color: rgb(0,135,0)">tuple</span>(from_mime(t) <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> t <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span>)))  <span style="color: rgb(95,135,135)"># type: ignore</span>
+<span class="ansi-green-fg">--&gt; 102</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">fileformats</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">core</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">DataType</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mime_str</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/datatype.py:148</span>, in <span class="ansi-cyan-fg">DataType.from_mime</span><span class="ansi-blue-fg">(cls, mime_string)</span>
+<span class="ansi-green-intense-fg ansi-bold">    146</span> <span style="color: rgb(95,135,135)"># Attempt to load file type using their `iana_mime` attribute</span>
+<span class="ansi-green-intense-fg ansi-bold">    147</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 148</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">FileSet</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">formats_by_iana_mime</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">mime_string</span><span class="ansi-yellow-bg">]</span>
+<span class="ansi-green-intense-fg ansi-bold">    149</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">KeyError</span>:
+<span class="ansi-green-intense-fg ansi-bold">    150</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">pass</span>
+
+<span class="ansi-red-fg">TypeError</span>: &#39;method&#39; object is not subscriptable
+</pre></div></div>
+</div>
+</section>
+<section id="Defaults">
+<h3>Defaults<a class="headerlink" href="#Defaults" title="Permalink to this heading">¶</a></h3>
+<p>Defaults can be specified by appending them to the field template after <code class="docutils literal notranslate"><span class="pre">=</span></code></p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &quot;</span>
+            <span class="s2">&quot;-R&lt;recursive=True&gt; &quot;</span>
+            <span class="s2">&quot;--text-arg &lt;text_arg=&#39;foo&#39;&gt; &quot;</span>
+            <span class="s2">&quot;--int-arg &lt;int_arg:int=99&gt; &quot;</span>
+            <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str=(1,&#39;bar&#39;)&gt; &quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;--int-arg&#39; default: </span><span class="si">{</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="p">)[</span><span class="s1">&#39;int_arg&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">default</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[6], line 1</span>
+<span class="ansi-green-fg">----&gt; 1</span> Cp <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">define</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      2</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      3</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">-R&lt;recursive=True&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      5</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--text-arg &lt;text_arg=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">foo</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      6</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--int-arg &lt;int_arg:int=99&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      7</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--tuple-arg &lt;tuple_arg:int,str=(1,</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">bar</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">)&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">      9</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     11</span> <span style="color: rgb(0,135,0)">print</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">--int-arg</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)"> default: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>fields_dict(Cp)[<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">int_arg</span><span style="color: rgb(175,0,0)">&#39;</span>]<span style="color: rgb(98,98,98)">.</span>default<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">&#34;</span>)
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:420</span>, in <span class="ansi-cyan-fg">define</span><span class="ansi-blue-fg">(wrapped, inputs, outputs, bases, outputs_bases, auto_attribs, name)</span>
+<span class="ansi-green-intense-fg ansi-bold">    418</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">isinstance</span>(wrapped, (<span style="color: rgb(0,135,0)">type</span>, <span style="color: rgb(0,135,0)">str</span>)):
+<span class="ansi-green-intense-fg ansi-bold">    419</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">wrapped must be a class or a string, not </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>wrapped<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 420</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">make</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    421</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> make
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:331</span>, in <span class="ansi-cyan-fg">define.&lt;locals&gt;.make</span><span class="ansi-blue-fg">(wrapped)</span>
+<span class="ansi-green-intense-fg ansi-bold">    328</span> klass <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+<span class="ansi-green-intense-fg ansi-bold">    329</span> input_helps, output_helps <span style="color: rgb(98,98,98)">=</span> {}, {}
+<span class="ansi-green-fg">--&gt; 331</span> executable, inferred_inputs, inferred_outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">parse_command_line_template</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">    332</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    333</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    334</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    335</span> <span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    337</span> parsed_inputs, parsed_outputs <span style="color: rgb(98,98,98)">=</span> ensure_field_objects(
+<span class="ansi-green-intense-fg ansi-bold">    338</span>     arg_type<span style="color: rgb(98,98,98)">=</span>arg,
+<span class="ansi-green-intense-fg ansi-bold">    339</span>     out_type<span style="color: rgb(98,98,98)">=</span>out,
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    343</span>     output_helps<span style="color: rgb(98,98,98)">=</span>output_helps,
+<span class="ansi-green-intense-fg ansi-bold">    344</span> )
+<span class="ansi-green-intense-fg ansi-bold">    345</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> name:
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:593</span>, in <span class="ansi-cyan-fg">parse_command_line_template</span><span class="ansi-blue-fg">(template, inputs, outputs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    591</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> name:
+<span class="ansi-green-intense-fg ansi-bold">    592</span>     name, type_str <span style="color: rgb(98,98,98)">=</span> name<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 593</span>     type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_type_str</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">type_str</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    594</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    595</span>     type_ <span style="color: rgb(98,98,98)">=</span> generic<span style="color: rgb(98,98,98)">.</span>FsObject <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> option <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(0,135,0)">str</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:552</span>, in <span class="ansi-cyan-fg">parse_command_line_template.&lt;locals&gt;.from_type_str</span><span class="ansi-blue-fg">(type_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    550</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    551</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 552</span>         type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">f</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">generic/</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">{</span><span class="ansi-yellow-bg">tp</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">}</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    553</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> FormatRecognitionError:
+<span class="ansi-green-intense-fg ansi-bold">    554</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">TypeError</span>(
+<span class="ansi-green-intense-fg ansi-bold">    555</span>             <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Found unknown type, </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>tp<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">, in command template: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>template<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    556</span>         ) <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/identification.py:102</span>, in <span class="ansi-cyan-fg">from_mime</span><span class="ansi-blue-fg">(mime_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    100</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str:
+<span class="ansi-green-intense-fg ansi-bold">    101</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> ty<span style="color: rgb(98,98,98)">.</span>Union<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,255)">__getitem__</span>(<span style="color: rgb(0,135,0)">tuple</span>(from_mime(t) <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> t <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span>)))  <span style="color: rgb(95,135,135)"># type: ignore</span>
+<span class="ansi-green-fg">--&gt; 102</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">fileformats</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">core</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">DataType</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mime_str</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/datatype.py:148</span>, in <span class="ansi-cyan-fg">DataType.from_mime</span><span class="ansi-blue-fg">(cls, mime_string)</span>
+<span class="ansi-green-intense-fg ansi-bold">    146</span> <span style="color: rgb(95,135,135)"># Attempt to load file type using their `iana_mime` attribute</span>
+<span class="ansi-green-intense-fg ansi-bold">    147</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 148</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">FileSet</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">formats_by_iana_mime</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">mime_string</span><span class="ansi-yellow-bg">]</span>
+<span class="ansi-green-intense-fg ansi-bold">    149</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">KeyError</span>:
+<span class="ansi-green-intense-fg ansi-bold">    150</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">pass</span>
+
+<span class="ansi-red-fg">TypeError</span>: &#39;method&#39; object is not subscriptable
+</pre></div></div>
+</div>
+</section>
+<section id="Additional-field-attributes">
+<h3>Additional field attributes<a class="headerlink" href="#Additional-field-attributes" title="Permalink to this heading">¶</a></h3>
+<p>Additional attributes of the fields in the template can be specified by providing <code class="docutils literal notranslate"><span class="pre">shell.arg</span></code> or <code class="docutils literal notranslate"><span class="pre">shell.outarg</span></code> fields to the <code class="docutils literal notranslate"><span class="pre">inputs</span></code> and <code class="docutils literal notranslate"><span class="pre">outputs</span></code> keyword arguments to the define</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &lt;out|out_file:file?&gt; &quot;</span>
+            <span class="s2">&quot;-R&lt;recursive&gt; &quot;</span>
+            <span class="s2">&quot;--text-arg &lt;text_arg&gt; &quot;</span>
+            <span class="s2">&quot;--int-arg &lt;int_arg:int?&gt; &quot;</span>
+            <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str&gt; &quot;</span>
+        <span class="p">),</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;recursive&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
+            <span class="n">help</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;If source_file designates a directory, cp copies the directory and &quot;</span>
+                <span class="s2">&quot;the entire subtree connected at that point.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">)},</span>
+        <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;out_dir&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">),</span>
+            <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+
+
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[7], line 1</span>
+<span class="ansi-green-fg">----&gt; 1</span> Cp <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">define</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      2</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      3</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &lt;out|out_file:file?&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">-R&lt;recursive&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      5</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--text-arg &lt;text_arg&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      6</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--int-arg &lt;int_arg:int?&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      7</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">--tuple-arg &lt;tuple_arg:int,str&gt; </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">      9</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">{</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">recursive</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">arg</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">     10</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">help</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">     11</span> <span class="ansi-yellow-bg">                </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">If source_file designates a directory, cp copies the directory and </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">     12</span> <span class="ansi-yellow-bg">                </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">the entire subtree connected at that point.</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">     13</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     14</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">}</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     15</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">{</span>
+<span class="ansi-green-intense-fg ansi-bold">     16</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">out_dir</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">outarg</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">position</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">-</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">2</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     17</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">out_file</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">outarg</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">position</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">-</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">1</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     18</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">}</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     19</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     22</span> pprint(fields_dict(Cp))
+<span class="ansi-green-intense-fg ansi-bold">     23</span> pprint(fields_dict(Cp<span style="color: rgb(98,98,98)">.</span>Outputs))
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:420</span>, in <span class="ansi-cyan-fg">define</span><span class="ansi-blue-fg">(wrapped, inputs, outputs, bases, outputs_bases, auto_attribs, name)</span>
+<span class="ansi-green-intense-fg ansi-bold">    418</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">isinstance</span>(wrapped, (<span style="color: rgb(0,135,0)">type</span>, <span style="color: rgb(0,135,0)">str</span>)):
+<span class="ansi-green-intense-fg ansi-bold">    419</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">wrapped must be a class or a string, not </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>wrapped<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 420</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">make</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    421</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> make
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:331</span>, in <span class="ansi-cyan-fg">define.&lt;locals&gt;.make</span><span class="ansi-blue-fg">(wrapped)</span>
+<span class="ansi-green-intense-fg ansi-bold">    328</span> klass <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+<span class="ansi-green-intense-fg ansi-bold">    329</span> input_helps, output_helps <span style="color: rgb(98,98,98)">=</span> {}, {}
+<span class="ansi-green-fg">--&gt; 331</span> executable, inferred_inputs, inferred_outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">parse_command_line_template</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">    332</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    333</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    334</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    335</span> <span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    337</span> parsed_inputs, parsed_outputs <span style="color: rgb(98,98,98)">=</span> ensure_field_objects(
+<span class="ansi-green-intense-fg ansi-bold">    338</span>     arg_type<span style="color: rgb(98,98,98)">=</span>arg,
+<span class="ansi-green-intense-fg ansi-bold">    339</span>     out_type<span style="color: rgb(98,98,98)">=</span>out,
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    343</span>     output_helps<span style="color: rgb(98,98,98)">=</span>output_helps,
+<span class="ansi-green-intense-fg ansi-bold">    344</span> )
+<span class="ansi-green-intense-fg ansi-bold">    345</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> name:
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:593</span>, in <span class="ansi-cyan-fg">parse_command_line_template</span><span class="ansi-blue-fg">(template, inputs, outputs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    591</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> name:
+<span class="ansi-green-intense-fg ansi-bold">    592</span>     name, type_str <span style="color: rgb(98,98,98)">=</span> name<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 593</span>     type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_type_str</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">type_str</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    594</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    595</span>     type_ <span style="color: rgb(98,98,98)">=</span> generic<span style="color: rgb(98,98,98)">.</span>FsObject <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> option <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(0,135,0)">str</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:552</span>, in <span class="ansi-cyan-fg">parse_command_line_template.&lt;locals&gt;.from_type_str</span><span class="ansi-blue-fg">(type_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    550</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    551</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 552</span>         type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">f</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">generic/</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">{</span><span class="ansi-yellow-bg">tp</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">}</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    553</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> FormatRecognitionError:
+<span class="ansi-green-intense-fg ansi-bold">    554</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">TypeError</span>(
+<span class="ansi-green-intense-fg ansi-bold">    555</span>             <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Found unknown type, </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>tp<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">, in command template: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>template<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    556</span>         ) <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/identification.py:102</span>, in <span class="ansi-cyan-fg">from_mime</span><span class="ansi-blue-fg">(mime_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    100</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str:
+<span class="ansi-green-intense-fg ansi-bold">    101</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> ty<span style="color: rgb(98,98,98)">.</span>Union<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,255)">__getitem__</span>(<span style="color: rgb(0,135,0)">tuple</span>(from_mime(t) <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> t <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span>)))  <span style="color: rgb(95,135,135)"># type: ignore</span>
+<span class="ansi-green-fg">--&gt; 102</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">fileformats</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">core</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">DataType</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mime_str</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/datatype.py:148</span>, in <span class="ansi-cyan-fg">DataType.from_mime</span><span class="ansi-blue-fg">(cls, mime_string)</span>
+<span class="ansi-green-intense-fg ansi-bold">    146</span> <span style="color: rgb(95,135,135)"># Attempt to load file type using their `iana_mime` attribute</span>
+<span class="ansi-green-intense-fg ansi-bold">    147</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 148</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">FileSet</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">formats_by_iana_mime</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">mime_string</span><span class="ansi-yellow-bg">]</span>
+<span class="ansi-green-intense-fg ansi-bold">    149</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">KeyError</span>:
+<span class="ansi-green-intense-fg ansi-bold">    150</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">pass</span>
+
+<span class="ansi-red-fg">TypeError</span>: &#39;method&#39; object is not subscriptable
+</pre></div></div>
+</div>
+</section>
+<section id="Callable-outptus">
+<h3>Callable outptus<a class="headerlink" href="#Callable-outptus" title="Permalink to this heading">¶</a></h3>
+<p>In addition to outputs that are specified to the tool on the command line, outputs can be derived from the outputs of the tool by providing a Python function that can take the output directory and inputs as arguments and return the output value. Callables can be either specified in the <code class="docutils literal notranslate"><span class="pre">callable</span></code> attribute of the <code class="docutils literal notranslate"><span class="pre">shell.out</span></code> field, or in a dictionary mapping the output name to the callable</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">File</span>
+
+<span class="c1"># Arguments to the callable function can be one of</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_file_size</span><span class="p">(</span><span class="n">out_file</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate the file size&quot;&quot;&quot;</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">out_file</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">st_size</span>
+
+
+<span class="n">CpWithSize</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+    <span class="s2">&quot;cp &lt;in_file:file&gt; &lt;out|out_file:file&gt;&quot;</span><span class="p">,</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out_file_size&quot;</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># Parameterise the task definition</span>
+<span class="n">cp_with_size</span> <span class="o">=</span> <span class="n">CpWithSize</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">sample</span><span class="p">())</span>
+
+<span class="c1"># Run the command</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">cp_with_size</span><span class="p">()</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Size of the output file is: </span><span class="si">{</span><span class="n">outputs</span><span class="o">.</span><span class="n">out_file_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[8], line 13</span>
+<span class="ansi-green-intense-fg ansi-bold">      9</span>     result <span style="color: rgb(98,98,98)">=</span> os<span style="color: rgb(98,98,98)">.</span>stat(out_file)
+<span class="ansi-green-intense-fg ansi-bold">     10</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> result<span style="color: rgb(98,98,98)">.</span>st_size
+<span class="ansi-green-fg">---&gt; 13</span> CpWithSize <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">define</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">     14</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">cp &lt;in_file:file&gt; &lt;out|out_file:file&gt;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     15</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">{</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">out_file_size</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">get_file_size</span><span class="ansi-yellow-bg">}</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">     16</span> <span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     18</span> <span style="color: rgb(95,135,135)"># Parameterise the task definition</span>
+<span class="ansi-green-intense-fg ansi-bold">     19</span> cp_with_size <span style="color: rgb(98,98,98)">=</span> CpWithSize(in_file<span style="color: rgb(98,98,98)">=</span>File<span style="color: rgb(98,98,98)">.</span>sample())
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:420</span>, in <span class="ansi-cyan-fg">define</span><span class="ansi-blue-fg">(wrapped, inputs, outputs, bases, outputs_bases, auto_attribs, name)</span>
+<span class="ansi-green-intense-fg ansi-bold">    418</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">isinstance</span>(wrapped, (<span style="color: rgb(0,135,0)">type</span>, <span style="color: rgb(0,135,0)">str</span>)):
+<span class="ansi-green-intense-fg ansi-bold">    419</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">wrapped must be a class or a string, not </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>wrapped<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 420</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">make</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    421</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> make
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:331</span>, in <span class="ansi-cyan-fg">define.&lt;locals&gt;.make</span><span class="ansi-blue-fg">(wrapped)</span>
+<span class="ansi-green-intense-fg ansi-bold">    328</span> klass <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+<span class="ansi-green-intense-fg ansi-bold">    329</span> input_helps, output_helps <span style="color: rgb(98,98,98)">=</span> {}, {}
+<span class="ansi-green-fg">--&gt; 331</span> executable, inferred_inputs, inferred_outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">parse_command_line_template</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">    332</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">wrapped</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    333</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">inputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    334</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    335</span> <span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    337</span> parsed_inputs, parsed_outputs <span style="color: rgb(98,98,98)">=</span> ensure_field_objects(
+<span class="ansi-green-intense-fg ansi-bold">    338</span>     arg_type<span style="color: rgb(98,98,98)">=</span>arg,
+<span class="ansi-green-intense-fg ansi-bold">    339</span>     out_type<span style="color: rgb(98,98,98)">=</span>out,
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    343</span>     output_helps<span style="color: rgb(98,98,98)">=</span>output_helps,
+<span class="ansi-green-intense-fg ansi-bold">    344</span> )
+<span class="ansi-green-intense-fg ansi-bold">    345</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> name:
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:593</span>, in <span class="ansi-cyan-fg">parse_command_line_template</span><span class="ansi-blue-fg">(template, inputs, outputs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    591</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> name:
+<span class="ansi-green-intense-fg ansi-bold">    592</span>     name, type_str <span style="color: rgb(98,98,98)">=</span> name<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">:</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-fg">--&gt; 593</span>     type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_type_str</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">type_str</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    594</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    595</span>     type_ <span style="color: rgb(98,98,98)">=</span> generic<span style="color: rgb(98,98,98)">.</span>FsObject <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> option <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(0,135,0)">str</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/design/shell.py:552</span>, in <span class="ansi-cyan-fg">parse_command_line_template.&lt;locals&gt;.from_type_str</span><span class="ansi-blue-fg">(type_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    550</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    551</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 552</span>         type_ <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">f</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">generic/</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">{</span><span class="ansi-yellow-bg">tp</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">}</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    553</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> FormatRecognitionError:
+<span class="ansi-green-intense-fg ansi-bold">    554</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">TypeError</span>(
+<span class="ansi-green-intense-fg ansi-bold">    555</span>             <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Found unknown type, </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>tp<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">, in command template: </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>template<span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    556</span>         ) <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/identification.py:102</span>, in <span class="ansi-cyan-fg">from_mime</span><span class="ansi-blue-fg">(mime_str)</span>
+<span class="ansi-green-intense-fg ansi-bold">    100</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str:
+<span class="ansi-green-intense-fg ansi-bold">    101</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> ty<span style="color: rgb(98,98,98)">.</span>Union<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,255)">__getitem__</span>(<span style="color: rgb(0,135,0)">tuple</span>(from_mime(t) <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> t <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> mime_str<span style="color: rgb(98,98,98)">.</span>split(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">,</span><span style="color: rgb(175,0,0)">&#34;</span>)))  <span style="color: rgb(95,135,135)"># type: ignore</span>
+<span class="ansi-green-fg">--&gt; 102</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">fileformats</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">core</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">DataType</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">from_mime</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mime_str</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/fileformats/core/datatype.py:148</span>, in <span class="ansi-cyan-fg">DataType.from_mime</span><span class="ansi-blue-fg">(cls, mime_string)</span>
+<span class="ansi-green-intense-fg ansi-bold">    146</span> <span style="color: rgb(95,135,135)"># Attempt to load file type using their `iana_mime` attribute</span>
+<span class="ansi-green-intense-fg ansi-bold">    147</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 148</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">FileSet</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">formats_by_iana_mime</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">mime_string</span><span class="ansi-yellow-bg">]</span>
+<span class="ansi-green-intense-fg ansi-bold">    149</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">KeyError</span>:
+<span class="ansi-green-intense-fg ansi-bold">    150</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">pass</span>
+
+<span class="ansi-red-fg">TypeError</span>: &#39;method&#39; object is not subscriptable
+</pre></div></div>
+</div>
+<p>The callable can take any combination of the following arguments, which will be passed to it when it is called</p>
+<ul class="simple">
+<li><p>field: the <code class="docutils literal notranslate"><span class="pre">Field</span></code> object to be provided a value, useful when writing generic callables</p></li>
+<li><p>output_dir: a <code class="docutils literal notranslate"><span class="pre">Path</span></code> object referencing the working directory the command was run within</p></li>
+<li><p>inputs: a dictionary containing all the resolved inputs to the task</p></li>
+<li><p>stdout: the standard output stream produced by the command</p></li>
+<li><p>stderr: the standard error stream produced by the command</p></li>
+<li><p><em>name of an input</em>: the name of any of the input arguments to the task, including output args that are part of the command line (i.e. output files)</p></li>
+</ul>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</div>
+<p>To make workflows that use the interface type-checkable, the canonical form of a shell task dataclass should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Def</span></code> parameterized by its nested Outputs class, and the <code class="docutils literal notranslate"><span class="pre">Outputs</span></code> nested class should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Outputs</span></code>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span>
+
+<span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Cp</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">[</span><span class="s2">&quot;Cp.Outputs&quot;</span><span class="p">]):</span>
+
+    <span class="n">executable</span> <span class="o">=</span> <span class="s2">&quot;cp&quot;</span>
+
+    <span class="n">in_fs_objects</span><span class="p">:</span> <span class="n">MultiInputObj</span><span class="p">[</span><span class="n">FsObject</span><span class="p">]</span>
+    <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;-R&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">text_arg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--text-arg&quot;</span><span class="p">)</span>
+    <span class="n">int_arg</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--int-arg&quot;</span><span class="p">)</span>
+    <span class="n">tuple_arg</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--tuple-arg&quot;</span><span class="p">)</span>
+
+    <span class="nd">@shell</span><span class="o">.</span><span class="n">outputs</span>
+    <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">ShellOutputs</span><span class="p">):</span>
+        <span class="n">out_dir</span><span class="p">:</span> <span class="n">Directory</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">path_template</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{out_dir}</span><span class="s2">&quot;</span><span class="p">)</span>
+<br/></pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">NameError</span>                                 Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[9], line 4</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,0,255)">pydra</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">engine</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">specs</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,135,0)">import</span> ShellDef, ShellOutputs
+<span class="ansi-green-intense-fg ansi-bold">      3</span> <span class="ansi-yellow-bg" style="color: rgb(175,0,255)">@shell</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">define</span>
+<span class="ansi-green-fg">----&gt; 4</span> <span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">class</span><span class="ansi-yellow-bg" style="color: rgb(188,188,188)"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,0,255)">Cp</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">ShellDef</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">Cp.Outputs</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">]</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">:</span>
+<span class="ansi-green-intense-fg ansi-bold">      6</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">executable</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">cp</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">in_fs_objects</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">MultiInputObj</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">FsObject</span><span class="ansi-yellow-bg">]</span>
+
+Cell <span class="ansi-green-fg">In[9], line 8</span>, in <span class="ansi-cyan-fg">Cp</span><span class="ansi-blue-fg">()</span>
+<span class="ansi-green-intense-fg ansi-bold">      3</span> <span style="color: rgb(175,0,255)">@shell</span><span style="color: rgb(98,98,98)">.</span>define
+<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-bold" style="color: rgb(0,135,0)">class</span><span style="color: rgb(188,188,188)"> </span><span class="ansi-bold" style="color: rgb(0,0,255)">Cp</span>(ShellDef[<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Cp.Outputs</span><span style="color: rgb(175,0,0)">&#34;</span>]):
+<span class="ansi-green-intense-fg ansi-bold">      6</span>     executable <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">cp</span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-fg">----&gt; 8</span>     in_fs_objects: <span class="ansi-yellow-bg">MultiInputObj</span>[FsObject]
+<span class="ansi-green-intense-fg ansi-bold">      9</span>     recursive: <span style="color: rgb(0,135,0)">bool</span> <span style="color: rgb(98,98,98)">=</span> shell<span style="color: rgb(98,98,98)">.</span>arg(argstr<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">-R</span><span style="color: rgb(175,0,0)">&#34;</span>, default<span style="color: rgb(98,98,98)">=</span><span class="ansi-bold" style="color: rgb(0,135,0)">False</span>)
+<span class="ansi-green-intense-fg ansi-bold">     10</span>     text_arg: <span style="color: rgb(0,135,0)">str</span> <span style="color: rgb(98,98,98)">=</span> shell<span style="color: rgb(98,98,98)">.</span>arg(argstr<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">--text-arg</span><span style="color: rgb(175,0,0)">&#34;</span>)
+
+<span class="ansi-red-fg">NameError</span>: name &#39;MultiInputObj&#39; is not defined
+</pre></div></div>
+</div>
+</section>
+</section>
+<section id="Dynamic-definitions">
+<h2>Dynamic definitions<a class="headerlink" href="#Dynamic-definitions" title="Permalink to this heading">¶</a></h2>
+<p>In some cases, it is required to generate the definition for a task dynamically, which can be done by just providing the executable to <code class="docutils literal notranslate"><span class="pre">shell.define</span></code> and specifying all inputs and outputs explicitly</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">File</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_fields</span>
+
+<span class="n">ACommand</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+    <span class="s2">&quot;a-command&quot;</span><span class="p">,</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;in_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
+    <span class="p">},</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">1</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;out_file_size&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+            <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;size of the output directory&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;callable&quot;</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ACommand input fields: </span><span class="si">{</span><span class="n">list_fields</span><span class="p">(</span><span class="n">ACommand</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ACommand input fields: </span><span class="si">{</span><span class="n">list_fields</span><span class="p">(</span><span class="n">ACommand</span><span class="o">.</span><span class="n">Outputs</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<br/></pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+ACommand input fields: [arg(name=&#39;in_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=EMPTY, help=&#39;output file&#39;, requires=[], converter=None, validator=None, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=None, allowed_values=None, container_path=False, formatter=None), arg(name=&#39;additional_args&#39;, type=list[str], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=None, validator=None, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None), outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=EMPTY, help=&#39;output file&#39;, requires=[], converter=None, validator=None, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=False), arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;a-command&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=None, allowed_values=None, container_path=False, formatter=None)]
+ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=EMPTY, help=&#39;output file&#39;, requires=[], converter=None, validator=None, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=False), out(name=&#39;out_file_size&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help=&#39;size of the output directory&#39;, requires=[], converter=None, validator=None, callable=&lt;function get_file_size at 0x7f22f41ae980&gt;), out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, callable=None), out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=EMPTY, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, callable=None), out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=EMPTY, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, callable=None)]
+</pre></div></div>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="6-workflow.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Workflows</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="4-python.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Python-tasks</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Nipype developers
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Shell-tasks</a><ul>
+<li><a class="reference internal" href="#Command-line-templates">Command-line templates</a><ul>
+<li><a class="reference internal" href="#Defifying-types">Defifying types</a></li>
+<li><a class="reference internal" href="#Flags-and-options">Flags and options</a></li>
+<li><a class="reference internal" href="#Defaults">Defaults</a></li>
+<li><a class="reference internal" href="#Additional-field-attributes">Additional field attributes</a></li>
+<li><a class="reference internal" href="#Callable-outptus">Callable outptus</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#Dynamic-definitions">Dynamic definitions</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/scripts/furo.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
+</html>
