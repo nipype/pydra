@@ -78,24 +78,26 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
     return obj
 
 
-def print_help(obj):
+def print_help(defn: "TaskDef[DefType]") -> list[str]:
     """Visit a task object and print its input/output interface."""
-    lines = [f"Help for {obj.__class__.__name__}"]
-    if attrs.fields(obj.interface):
+    from pydra.design.base import EMPTY
+
+    lines = [f"Help for {defn.__class__.__name__}"]
+    if list_fields(defn):
         lines += ["Input Parameters:"]
-    for f in attrs.fields(obj.interface):
+    for f in list_fields(defn):
         default = ""
-        if f.default != attrs.NOTHING and not f.name.startswith("_"):
+        if f.default is not EMPTY and not f.name.startswith("_"):
             default = f" (default: {f.default})"
         try:
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
         lines += [f"- {f.name}: {name}{default}"]
-    output_klass = obj.interface.Outputs
-    if attrs.fields(output_klass):
+    output_klass = defn.Outputs
+    if list_fields(output_klass):
         lines += ["Output Parameters:"]
-    for f in attrs.fields(output_klass):
+    for f in list_fields(output_klass):
         try:
             name = f.type.__name__
         except AttributeError:
