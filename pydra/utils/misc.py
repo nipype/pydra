@@ -147,17 +147,15 @@ def get_builtin_type_names():
     return set(name for name, obj in vars(builtins).items() if isinstance(obj, type))
 
 
-def is_standard_library_type(obj):
+def in_stdlib(obj):
     """Check if a type is in the standard library."""
     module = inspect.getmodule(obj)
     if module is None:
         return False
-    return module.__name__ in STANDARD_LIBRARY_MODULES or module.__name__.startswith(
-        "builtins"
-    )
+    return module.__name__ in STDLIB_MODULES or module.__name__.startswith("builtins")
 
 
-def _standard_library_modules() -> frozenset[str]:
+def _stdlib_modules() -> frozenset[str]:
     """List all standard library modules."""
     std_lib_modules = set(sys.builtin_module_names)
     for _, modname, ispkg in pkgutil.iter_modules():
@@ -166,7 +164,7 @@ def _standard_library_modules() -> frozenset[str]:
     return frozenset(std_lib_modules)
 
 
-STANDARD_LIBRARY_MODULES: frozenset[str] = _standard_library_modules()
+STDLIB_MODULES: frozenset[str] = _stdlib_modules()
 
 # Example usage:
 # print(list_standard_library_modules())

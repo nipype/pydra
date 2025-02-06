@@ -122,9 +122,10 @@ class Node(ty.Generic[OutputType]):
         outputs = self.inputs.Outputs(**lazy_fields)
         # Flag the output lazy fields as being not typed checked (i.e. assigned to another
         # node's inputs) yet
+        outpt: lazy.LazyOutField
         for outpt in attrs_values(outputs).values():
-            outpt.type_checked = False
-        outputs._node = self
+            outpt._type_checked = False
+            outpt._node = self
         self._lzout = outputs
         self._wrap_lzout_types_in_state_arrays()
         return outputs
@@ -223,11 +224,11 @@ class Node(ty.Generic[OutputType]):
             return
         outpt_lf: lazy.LazyOutField
         for outpt_lf in attrs_values(self.lzout).values():
-            assert not outpt_lf.type_checked
-            type_, _ = TypeParser.strip_splits(outpt_lf.type)
+            assert not outpt_lf._type_checked
+            type_, _ = TypeParser.strip_splits(outpt_lf._type)
             for _ in range(self._state.depth):
                 type_ = StateArray[type_]
-            outpt_lf.type = type_
+            outpt_lf._type = type_
 
     def _set_state(self) -> None:
         # Add node name to state's splitter, combiner and cont_dim loaded from the def
@@ -267,8 +268,8 @@ class Node(ty.Generic[OutputType]):
         """Get the states of the upstream nodes that are connected to this node"""
         upstream_states = {}
         for inpt_name, val in self.input_values:
-            if isinstance(val, lazy.LazyOutField) and val.node.state:
-                node: Node = val.node
+            if isinstance(val, lazy.LazyOutField) and val._node.state:
+                node: Node = val._node
                 # variables that are part of inner splitters should be treated as a containers
                 if node.state and f"{node.name}.{inpt_name}" in node.state.splitter:
                     node._inner_cont_dim[f"{node.name}.{inpt_name}"] = 1

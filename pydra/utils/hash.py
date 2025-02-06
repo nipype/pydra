@@ -24,8 +24,9 @@ from typing import (
 from filelock import SoftFileLock
 import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
+import fileformats.core.exceptions
 from . import user_cache_dir, add_exc_note
-from .misc import is_standard_library_type
+from .misc import in_stdlib
 
 logger = logging.getLogger("pydra")
 
@@ -485,17 +486,16 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
                 yield from bytes_repr_type(arg, cache)
         yield b")"
     else:
-        if is_standard_library_type(klass):
+        if in_stdlib(klass):
             yield type_location(klass)
         elif issubclass(klass, FileSet):
-            yield b"mime-like:(" + klass.mime_like.encode() + b")"
+            try:
+                yield b"mime-like:(" + klass.mime_like.encode() + b")"
+            except fileformats.core.exceptions.FormatDefinitionError:
+                yield type_location(klass)
         elif fields := list_fields(klass):
             yield b"fields:("
             yield from bytes_repr_sequence_contents(fields, cache)
-            yield b")"
-        elif attrs.has(fields):
-            yield b"attrs:("
-            yield from bytes_repr_sequence_contents(attrs.fields(klass), cache)
             yield b")"
         else:
             try:
@@ -603,37 +603,40 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
     """Serialize a function, attempting to use the AST of the source code if available
     otherwise falling back to the byte-code of the function."""
     yield b"function:("
-    try:
-        src = inspect.getsource(obj)
-    except OSError:
-        # Fallback to using the bytes representation of the code object
-        yield from bytes_repr(obj.__code__, cache)
+    if in_stdlib(obj):
+        yield f"{obj.__module__}.{obj.__name__}".encode()
     else:
+        try:
+            src = inspect.getsource(obj)
+        except OSError:
+            # Fallback to using the bytes representation of the code object
+            yield from bytes_repr(obj.__code__, cache)
+        else:
 
-        def dump_ast(node: ast.AST) -> bytes:
-            return ast.dump(
-                node, annotate_fields=False, include_attributes=False
-            ).encode()
+            def dump_ast(node: ast.AST) -> bytes:
+                return ast.dump(
+                    node, annotate_fields=False, include_attributes=False
+                ).encode()
 
-        def strip_annotations(node: ast.AST):
-            """Remove annotations from function arguments."""
-            for arg in node.args.args:
-                arg.annotation = None
-            for arg in node.args.kwonlyargs:
-                arg.annotation = None
-            if node.args.vararg:
-                node.args.vararg.annotation = None
-            if node.args.kwarg:
-                node.args.kwarg.annotation = None
+            def strip_annotations(node: ast.AST):
+                """Remove annotations from function arguments."""
+                for arg in node.args.args:
+                    arg.annotation = None
+                for arg in node.args.kwonlyargs:
+                    arg.annotation = None
+                if node.args.vararg:
+                    node.args.vararg.annotation = None
+                if node.args.kwarg:
+                    node.args.kwarg.annotation = None
 
-        indent = re.match(r"(\s*)", src).group(1)
-        if indent:
-            src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
-        func_ast = ast.parse(src).body[0]
-        strip_annotations(func_ast)
-        yield dump_ast(func_ast.args)
-        for stmt in func_ast.body:
-            yield dump_ast(stmt)
+            indent = re.match(r"(\s*)", src).group(1)
+            if indent:
+                src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
+            func_ast = ast.parse(src).body[0]
+            strip_annotations(func_ast)
+            yield dump_ast(func_ast.args)
+            for stmt in func_ast.body:
+                yield dump_ast(stmt)
     yield b")"
 
 

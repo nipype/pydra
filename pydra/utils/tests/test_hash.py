@@ -50,7 +50,7 @@ def test_bytes_repr_builtins():
     assert complex_repr == b"complex:" + bytes(16)
     # Dicts are sorted by key, and values are hashed
     dict_repr = join_bytes_repr({"b": "c", "a": 0})
-    assert re.match(rb"dict:{str:1:a=.{16}str:1:b=.{16}}$", dict_repr)
+    assert re.match(rb"dict:{str:1:a=.{16},str:1:b=.{16},}$", dict_repr)
     # Lists and tuples concatenate hashes of their contents
     list_repr = join_bytes_repr([1, 2, 3])
     assert re.match(rb"list:\(.{48}\)$", list_repr)

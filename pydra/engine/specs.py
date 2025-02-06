@@ -422,9 +422,9 @@ class TaskDef(ty.Generic[OutputsType]):
         resolved = {}
         for name, value in attrs_values(self).items():
             if isinstance(value, LazyInField):
-                resolved[name] = value.get_value(workflow_inputs)
+                resolved[name] = value._get_value(workflow_inputs)
             elif isinstance(value, LazyOutField):
-                resolved[name] = value.get_value(graph, state_index)
+                resolved[name] = value._get_value(graph, state_index)
         return attrs.evolve(self, **resolved)
 
     def _check_rules(self):
@@ -677,11 +677,11 @@ class WorkflowOutputs(TaskOutputs):
         nodes_dict = {n.name: n for n in exec_graph.nodes}
         for name, lazy_field in attrs_values(workflow.outputs).items():
             try:
-                val_out = lazy_field.get_value(exec_graph)
+                val_out = lazy_field._get_value(exec_graph)
                 output_wf[name] = val_out
             except (ValueError, AttributeError):
                 output_wf[name] = None
-                node: "NodeExecution" = nodes_dict[lazy_field.name]
+                node: "NodeExecution" = nodes_dict[lazy_field._node.name]
                 # checking if the tasks has predecessors that raises error
                 if isinstance(node.errored, list):
                     raise ValueError(f"Tasks {node._errored} raised an error")
@@ -691,7 +691,7 @@ class WorkflowOutputs(TaskOutputs):
                     if not err_files:
                         raise
                     raise ValueError(
-                        f"Task {lazy_field.name} raised an error, full crash report is "
+                        f"Task {lazy_field._node.name} raised an error, full crash report is "
                         f"here: "
                         + (
                             str(err_files[0])
@@ -712,7 +712,7 @@ class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("construct",)
 
-    _constructed = attrs.field(default=None, init=False)
+    _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
 
     def _run(self, task: "Task[WorkflowDef]") -> None:
         """Run the workflow."""

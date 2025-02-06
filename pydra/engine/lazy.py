@@ -24,17 +24,17 @@ TypeOrAny = ty.Union[type, ty.Any]
 class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
     """Lazy fields implement promises."""
 
-    field: str
-    type: TypeOrAny
-    cast_from: ty.Optional[ty.Type[ty.Any]] = None
-    type_checked: bool = False
+    _field: str
+    _type: TypeOrAny
+    _cast_from: ty.Optional[ty.Type[ty.Any]] = None
+    _type_checked: bool = False
 
     def __bytes_repr__(self, cache):
         yield type(self).__name__.encode() + b"("
         yield from bytes(hash_single(self.source, cache))
-        yield b"field=" + self.field.encode()
-        yield b"type=" + bytes(hash_single(self.type, cache))
-        yield b"cast_from=" + bytes(hash_single(self.cast_from, cache))
+        yield b"field=" + self._field.encode()
+        yield b"type=" + bytes(hash_single(self._type, cache))
+        yield b"cast_from=" + bytes(hash_single(self._cast_from, cache))
         yield b")"
 
     def _apply_cast(self, value):
@@ -42,31 +42,34 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
         the lazy-field"""
         from pydra.utils.typing import TypeParser
 
-        if self.cast_from:
-            assert TypeParser.matches(value, self.cast_from)
-            value = self.type(value)
+        if self._cast_from:
+            assert TypeParser.matches(value, self._cast_from)
+            value = self._type(value)
         return value
 
 
 @attrs.define(kw_only=True)
 class LazyInField(LazyField[T]):
 
-    workflow: "Workflow" = attrs.field()
+    _workflow: "Workflow" = attrs.field()
 
-    attr_type = "input"
+    _attr_type = "input"
 
     def __eq__(self, other):
         return (
             isinstance(other, LazyInField)
-            and self.field == other.field
-            and self.type == other.type
+            and self._field == other._field
+            and self._type == other._type
         )
 
-    @property
-    def source(self):
-        return self.workflow
+    def __repr__(self):
+        return f"{type(self).__name__}(field={self._field!r}, type={self._type})"
 
-    def get_value(
+    @property
+    def _source(self):
+        return self._workflow
+
+    def _get_value(
         self,
         workflow_def: "WorkflowDef",
     ) -> ty.Any:
@@ -84,7 +87,7 @@ class LazyInField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        value = workflow_def[self.field]
+        value = workflow_def[self._field]
         value = self._apply_cast(value)
         return value
 
@@ -102,24 +105,26 @@ class LazyInField(LazyField[T]):
             a copy of the lazy field with the new type
         """
         return type(self)[new_type](
-            workflow=self.workflow,
-            field=self.field,
-            type=new_type,
-            cast_from=self.cast_from if self.cast_from else self.type,
+            _workflow=self._workflow,
+            _field=self._field,
+            _type=new_type,
+            _cast_from=self._cast_from if self._cast_from else self._type,
         )
 
 
 @attrs.define(kw_only=True)
 class LazyOutField(LazyField[T]):
 
-    node: node.Node
-    attr_type = "output"
+    _node: node.Node
+    _attr_type = "output"
 
-    @property
-    def name(self) -> str:
-        return self.node.name
+    def __repr__(self):
+        return (
+            f"{type(self).__name__}(node={self._node.name!r}, "
+            f"field={self._field!r}, type={self._type})"
+        )
 
-    def get_value(
+    def _get_value(
         self,
         graph: "DiGraph[NodeExecution]",
         state_index: "StateIndex | None" = None,
@@ -146,18 +151,18 @@ class LazyOutField(LazyField[T]):
         if state_index is None:
             state_index = StateIndex()
 
-        task = graph.node(self.node.name).task(state_index)
-        _, split_depth = TypeParser.strip_splits(self.type)
+        task = graph.node(self._node.name).task(state_index)
+        _, split_depth = TypeParser.strip_splits(self._type)
 
         def get_nested(task: "Task[DefType]", depth: int):
             if isinstance(task, StateArray):
                 val = [get_nested(task=t, depth=depth - 1) for t in task]
                 if depth:
-                    val = StateArray[self.type](val)
+                    val = StateArray[self._type](val)
             else:
                 if task.errored:
                     raise ValueError(
-                        f"Cannot retrieve value for {self.field} from {self.name} as "
+                        f"Cannot retrieve value for {self._field} from {self._node.name} as "
                         "the node errored"
                     )
                 res = task.result()
@@ -180,7 +185,7 @@ class LazyOutField(LazyField[T]):
                         "`__bytes_repr__()` dunder methods to handle one or more types in "
                         "your interface inputs."
                     )
-                val = res.get_output_field(self.field)
+                val = res.get_output_field(self._field)
                 val = self._apply_cast(val)
             return val
 
@@ -188,8 +193,8 @@ class LazyOutField(LazyField[T]):
         return value
 
     @property
-    def source(self):
-        return self.node
+    def _source(self):
+        return self._node
 
     def cast(self, new_type: TypeOrAny) -> Self:
         """ "casts" the lazy field to a new type
@@ -205,8 +210,8 @@ class LazyOutField(LazyField[T]):
             a copy of the lazy field with the new type
         """
         return type(self)[new_type](
-            node=self.node,
-            field=self.field,
+            node=self._node,
+            field=self._field,
             type=new_type,
-            cast_from=self.cast_from if self.cast_from else self.type,
+            cast_from=self._cast_from if self._cast_from else self._type,
         )

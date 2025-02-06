@@ -221,19 +221,19 @@ class TypeParser(ty.Generic[T]):
             coerced = attr.NOTHING  # type: ignore[assignment]
         elif is_lazy(obj):
             try:
-                self.check_type(obj.type)
+                self.check_type(obj._type)
             except TypeError as e:
                 if self.superclass_auto_cast:
                     try:
                         # Check whether the type of the lazy field isn't a superclass of
                         # the type to check against, and if so, allow it due to permissive
                         # typing rules.
-                        TypeParser(obj.type, match_any_of_union=True).check_type(
+                        TypeParser(obj._type, match_any_of_union=True).check_type(
                             self.tp
                         )
                     except TypeError:
                         raise TypeError(
-                            f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                            f"Incorrect type for lazy field{self.label_str}: {obj._type!r} "
                             f"is not a subclass or superclass of {self.tp} (and will not "
                             "be able to be coerced to one that is)"
                         ) from e
@@ -247,14 +247,14 @@ class TypeParser(ty.Generic[T]):
                         )
                 else:
                     raise TypeError(
-                        f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                        f"Incorrect type for lazy field{self.label_str}: {obj._type!r} "
                         f"is not a subclass of {self.tp} (and will not be able to be "
                         "coerced to one that is)"
                     ) from e
             coerced = obj  # type: ignore
-            if obj.type is not ty.Any:
+            if obj._type is not ty.Any:
                 # Used to check whether the type of the field can be changed
-                obj.type_checked = True
+                obj._type_checked = True
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:

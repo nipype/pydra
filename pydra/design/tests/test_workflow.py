@@ -65,7 +65,7 @@ def test_workflow():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
+    assert wf.outputs.out == LazyOutField(_node=wf["Mul"], _field="out", _type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -122,7 +122,7 @@ def test_shell_workflow():
     assert wf.inputs.input_video == input_video
     assert wf.inputs.watermark == watermark
     assert wf.outputs.output_video == LazyOutField(
-        node=wf["resize"], field="out_video", type=video.Mp4, type_checked=True
+        _node=wf["resize"], _field="out_video", _type=video.Mp4, _type_checked=True
     )
     assert list(wf.node_names) == ["add_watermark", "resize"]
 
@@ -169,7 +169,7 @@ def test_workflow_canonical():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
+    assert wf.outputs.out == LazyOutField(_node=wf["Mul"], _field="out", _type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -219,10 +219,10 @@ def test_workflow_lazy():
     )
     wf = Workflow.construct(workflow_spec)
     assert wf["add_watermark"].inputs.in_video == LazyInField(
-        workflow=wf, field="input_video", type=video.Mp4, type_checked=True
+        _workflow=wf, _field="input_video", _type=video.Mp4, _type_checked=True
     )
     assert wf["add_watermark"].inputs.watermark == LazyInField(
-        workflow=wf, field="watermark", type=image.Png, type_checked=True
+        _workflow=wf, _field="watermark", _type=image.Png, _type_checked=True
     )
 
 
@@ -275,10 +275,10 @@ def test_direct_access_of_workflow_object():
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
     assert wf.outputs.out1 == LazyOutField(
-        node=wf["Mul"], field="out", type=float, type_checked=True
+        _node=wf["Mul"], _field="out", _type=float, _type_checked=True
     )
     assert wf.outputs.out2 == LazyOutField(
-        node=wf["division"], field="divided", type=ty.Any
+        _node=wf["division"], _field="divided", _type=ty.Any
     )
     assert list(wf.node_names) == ["addition", "Mul", "division"]
 
@@ -314,8 +314,8 @@ def test_workflow_set_outputs_directly():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
-    assert wf.outputs.out2 == LazyOutField(node=wf["Add"], field="out", type=ty.Any)
+    assert wf.outputs.out1 == LazyOutField(_node=wf["Mul"], _field="out", _type=ty.Any)
+    assert wf.outputs.out2 == LazyOutField(_node=wf["Add"], _field="out", _type=ty.Any)
     assert list(wf.node_names) == ["Add", "Mul"]
 
 
@@ -339,7 +339,7 @@ def test_workflow_split_combine1():
     assert wf["Mul"].splitter == ["Mul.x", "Mul.y"]
     assert wf["Mul"].combiner == ["Mul.x"]
     assert wf.outputs.out == LazyOutField(
-        node=wf["Sum"], field="out", type=list[float], type_checked=True
+        _node=wf["Sum"], _field="out", _type=list[float], _type_checked=True
     )
 
 
@@ -366,7 +366,7 @@ def test_workflow_split_combine2():
     assert wf["Add"].splitter == "_Mul"
     assert wf["Add"].combiner == ["Mul.x"]
     assert wf.outputs.out == LazyOutField(
-        node=wf["Sum"], field="out", type=list[float], type_checked=True
+        _node=wf["Sum"], _field="out", _type=list[float], _type_checked=True
     )
 
 
@@ -406,7 +406,7 @@ def test_nested_workflow():
     assert wf.inputs.b == 10.0
     assert wf.inputs.c == 2.0
     assert wf.outputs.out == LazyOutField(
-        node=wf["NestedWorkflow"], field="out", type=float, type_checked=True
+        _node=wf["NestedWorkflow"], _field="out", _type=float, _type_checked=True
     )
     assert list(wf.node_names) == ["Divide", "NestedWorkflow"]
     nwf_spec = copy(wf["NestedWorkflow"]._definition)
@@ -415,7 +415,7 @@ def test_nested_workflow():
     nwf.inputs.a == 100.0
     nwf.inputs.b == 10.0
     nwf.inputs.c == 2.0
-    nwf.outputs.out == LazyOutField(node=nwf["Add"], field="out", type=float)
+    nwf.outputs.out == LazyOutField(_node=nwf["Add"], _field="out", _type=float)
     assert list(nwf.node_names) == ["Power", "Add"]
 
 
@@ -447,5 +447,8 @@ def test_recursively_nested_conditional_workflow():
     assert wf.inputs.a == 1
     assert wf.inputs.depth == 3
     assert wf.outputs.out == LazyOutField(
-        node=wf["RecursiveNestedWorkflow"], field="out", type=float, type_checked=True
+        _node=wf["RecursiveNestedWorkflow"],
+        _field="out",
+        _type=float,
+        _type_checked=True,
     )
