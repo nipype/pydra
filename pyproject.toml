@@ -46,6 +46,7 @@ doc = [
     "sphinx-argparse",
     "nbsphinx",
     "ipython",
+    "ipykernel",
     "nibabel",
     "nilearn",
     "pandas",
