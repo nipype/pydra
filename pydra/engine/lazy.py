@@ -1,6 +1,5 @@
 import typing as ty
 import abc
-from typing import Self
 import attrs
 from pydra.utils.typing import StateArray
 from pydra.utils.hash import hash_single
@@ -91,26 +90,6 @@ class LazyInField(LazyField[T]):
         value = self._apply_cast(value)
         return value
 
-    def cast(self, new_type: TypeOrAny) -> Self:
-        """ "casts" the lazy field to a new type
-
-        Parameters
-        ----------
-        new_type : type
-            the type to cast the lazy-field to
-
-        Returns
-        -------
-        cast_field : LazyInField
-            a copy of the lazy field with the new type
-        """
-        return type(self)[new_type](
-            _workflow=self._workflow,
-            _field=self._field,
-            _type=new_type,
-            _cast_from=self._cast_from if self._cast_from else self._type,
-        )
-
 
 @attrs.define(kw_only=True)
 class LazyOutField(LazyField[T]):
@@ -195,23 +174,3 @@ class LazyOutField(LazyField[T]):
     @property
     def _source(self):
         return self._node
-
-    def cast(self, new_type: TypeOrAny) -> Self:
-        """ "casts" the lazy field to a new type
-
-        Parameters
-        ----------
-        new_type : type
-            the type to cast the lazy-field to
-
-        Returns
-        -------
-        cast_field : LazyOutField
-            a copy of the lazy field with the new type
-        """
-        return type(self)[new_type](
-            node=self._node,
-            field=self._field,
-            type=new_type,
-            cast_from=self._cast_from if self._cast_from else self._type,
-        )

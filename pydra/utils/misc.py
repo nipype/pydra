@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 import ast
 import inspect
+import types
 import sys
 import platformdirs
 import builtins
@@ -147,12 +148,16 @@ def get_builtin_type_names():
     return set(name for name, obj in vars(builtins).items() if isinstance(obj, type))
 
 
-def in_stdlib(obj):
+def in_stdlib(obj: types.FunctionType | type) -> bool:
     """Check if a type is in the standard library."""
     module = inspect.getmodule(obj)
     if module is None:
         return False
-    return module.__name__ in STDLIB_MODULES or module.__name__.startswith("builtins")
+    if module.__name__.startswith("builtins"):
+        return True
+    if module.__name__ == "types" and obj.__name__ not in dir(types):
+        return False
+    return module.__name__.split(".")[-1] in STDLIB_MODULES
 
 
 def _stdlib_modules() -> frozenset[str]:

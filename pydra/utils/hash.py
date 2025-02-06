@@ -329,7 +329,7 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     if attrs.has(type(obj)):
         # Drop any attributes that aren't used in comparisons by default
         dct = attrs.asdict(obj, recurse=False, filter=lambda a, _: bool(a.eq))
-    elif hasattr(obj, "__slots__"):
+    elif hasattr(obj, "__slots__") and obj.__slots__ is not None:
         dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
     else:
         try:
@@ -481,14 +481,14 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
             if isinstance(
                 arg, list
             ):  # sometimes (e.g. Callable) the args of a type is a list
+                yield b"list:("
                 yield from (b for t in arg for b in bytes_repr_type(t, cache))
+                yield b")"
             else:
                 yield from bytes_repr_type(arg, cache)
         yield b")"
     else:
-        if in_stdlib(klass):
-            yield type_location(klass)
-        elif issubclass(klass, FileSet):
+        if inspect.isclass(klass) and issubclass(klass, FileSet):
             try:
                 yield b"mime-like:(" + klass.mime_like.encode() + b")"
             except fileformats.core.exceptions.FormatDefinitionError:
@@ -497,6 +497,12 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
             yield b"fields:("
             yield from bytes_repr_sequence_contents(fields, cache)
             yield b")"
+            if hasattr(klass, "Outputs"):
+                yield b",outputs:("
+                yield from bytes_repr_type(klass.Outputs, cache)
+                yield b")"
+        elif in_stdlib(klass):
+            yield type_location(klass)
         else:
             try:
                 dct = {
@@ -505,7 +511,7 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
             except AttributeError:
                 yield type_location(klass)
             else:
-                yield b"dict:("
+                yield b"__dict__:("
                 yield from bytes_repr_mapping_contents(dct, cache)
                 yield b")"
                 # Include annotations

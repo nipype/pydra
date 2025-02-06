@@ -121,8 +121,6 @@ OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 class TaskDef(ty.Generic[OutputsType]):
     """Base class for all task definitions"""
 
-    _task_type: str
-
     # The following fields are used to store split/combine state information
     _splitter = attrs.field(default=None, init=False, repr=False)
     _combiner = attrs.field(default=None, init=False, repr=False)
@@ -625,7 +623,7 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 @attrs.define(kw_only=True, auto_attribs=False)
 class PythonDef(TaskDef[PythonOutputsType]):
 
-    _task_type: str = "python"
+    _task_type = "python"
 
     def _run(self, task: "Task[PythonDef]") -> None:
         # Prepare the inputs to the function
@@ -708,7 +706,7 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 @attrs.define(kw_only=True, auto_attribs=False)
 class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
-    _task_type: str = "workflow"
+    _task_type = "workflow"
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("construct",)
 
@@ -900,7 +898,7 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 @attrs.define(kw_only=True, auto_attribs=False)
 class ShellDef(TaskDef[ShellOutputsType]):
 
-    _task_type: str = "shell"
+    _task_type = "shell"
 
     BASE_NAMES = ["additional_args"]
 
@@ -953,7 +951,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
             inputs.update(input_updates)
         inputs.update(modified_inputs)
         pos_args = []  # list for (position, command arg)
-        self._positions_provided = []
+        positions_provided = []
         for field in list_fields(self):
             name = field.name
             value = inputs[name]
@@ -970,6 +968,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
                     inputs=inputs,
                     root=root,
                     output_dir=output_dir,
+                    positions_provided=positions_provided,
                 )
                 if pos_val:
                     pos_args.append(pos_val)
@@ -1005,6 +1004,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         value: ty.Any,
         inputs: dict[str, ty.Any],
         output_dir: Path,
+        positions_provided: list[str],
         root: Path | None = None,
     ) -> tuple[int, ty.Any]:
         """
@@ -1022,12 +1022,12 @@ class ShellDef(TaskDef[ShellOutputsType]):
                     f"position should be an integer, but {field.position} given"
                 )
             # checking if the position is not already used
-            if field.position in self._positions_provided:
+            if field.position in positions_provided:
                 raise Exception(
                     f"{field.name} can't have provided position, {field.position} is already used"
                 )
 
-            self._positions_provided.append(field.position)
+            positions_provided.append(field.position)
 
         if value and isinstance(value, str):
             if root:  # values from templates

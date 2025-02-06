@@ -75,7 +75,7 @@ def test_bytes_repr_builtins():
         (1, "6dc1db8d4dcdd8def573476cbb90cce0"),
         (12345678901234567890, "2b5ba668c1e8ea4902361b8d81e53074"),
         (1.0, "29492927b2e505840235e15a5be9f79a"),
-        ({"b": "c", "a": 0}, "2405cd36f4e4b6318c033f32db289f7d"),
+        ({"b": "c", "a": 0}, "04e5c65ec2269775d3b9ccecaf10da38"),
         ([1, 2, 3], "2f8902ff90f63d517bd6f6e6111e15b8"),
         ((1, 2, 3), "054a7b31c29e7875a6f83ff1dcb4841b"),
     ],
@@ -142,7 +142,7 @@ def test_bytes_repr_custom_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_slots_obj():
@@ -153,7 +153,7 @@ def test_bytes_repr_slots_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_slots():
@@ -162,7 +162,7 @@ def test_bytes_repr_attrs_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_no_slots():
@@ -171,7 +171,7 @@ def test_bytes_repr_attrs_no_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_type1():
@@ -195,22 +195,30 @@ def test_bytes_repr_type2():
         def method(self, f: float) -> float:
             return f + 1
 
-    assert join_bytes_repr(MyClass[int]) == (
-        rb"type:(origin:(type:(dict:(),annotations:(),mro:(type:(typing.Generic)))),"
-        rb"args:(type:(builtins.int)))"
+    obj_repr = join_bytes_repr(MyClass[int])
+    assert re.match(
+        (
+            rb"type:\(origin:\(type:\(__dict__:\(str:6:method=.{16},\),annotations:\(str:1:a=.{16},"
+            rb"str:1:b=.{16},\),mro:\(type:\(typing.Generic\)\)\)\),args:\(type:\(builtins.int\)\)\)"
+        ),
+        obj_repr,
     )
 
 
 def test_bytes_special_form1():
     obj_repr = join_bytes_repr(ty.Union[int, float])
-    assert obj_repr == b"type:(typing.Union[type:(builtins.int)type:(builtins.float)])"
+    assert obj_repr == (
+        b"type:(origin:(type:(typing.Union)),args:(type:(builtins.int)"
+        b"type:(builtins.float)))"
+    )
 
 
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form1a():
     obj_repr = join_bytes_repr(int | float)
-    assert (
-        obj_repr == b"type:(types.UnionType[type:(builtins.int)type:(builtins.float)])"
+    assert obj_repr == (
+        b"type:(origin:(type:(types.UnionType)),args:(type:(builtins.int)"
+        b"type:(builtins.float)))"
     )
 
 
@@ -221,30 +229,34 @@ def test_bytes_special_form2():
 
 def test_bytes_special_form3():
     obj_repr = join_bytes_repr(ty.Optional[Path])
-    assert (
-        obj_repr == b"type:(typing.Union[type:(pathlib.Path)type:(builtins.NoneType)])"
+    assert obj_repr == (
+        b"type:(origin:(type:(typing.Union)),args:(type:(pathlib.Path)"
+        b"type:(builtins.NoneType)))"
     )
 
 
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form3a():
     obj_repr = join_bytes_repr(Path | None)
-    assert (
-        obj_repr
-        == b"type:(types.UnionType[type:(pathlib.Path)type:(builtins.NoneType)])"
+    assert obj_repr == (
+        b"type:(origin:(type:(types.UnionType)),args:(type:(pathlib.Path)"
+        b"type:(builtins.NoneType)))"
     )
 
 
 def test_bytes_special_form4():
     obj_repr = join_bytes_repr(ty.Type[Path])
-    assert obj_repr == b"type:(builtins.type[type:(pathlib.Path)])"
+    assert (
+        obj_repr == b"type:(origin:(type:(builtins.type)),args:(type:(pathlib.Path)))"
+    )
 
 
 def test_bytes_special_form5():
     obj_repr = join_bytes_repr(ty.Callable[[Path, int], ty.Tuple[float, str]])
     assert obj_repr == (
-        b"type:(collections.abc.Callable[[type:(pathlib.Path)type:(builtins.int)]"
-        b"type:(builtins.tuple[type:(builtins.float)type:(builtins.str)])])"
+        b"type:(origin:(type:(collections.abc.Callable)),args:(list:(type:(pathlib.Path)"
+        b"type:(builtins.int))type:(origin:(type:(builtins.tuple)),"
+        b"args:(type:(builtins.float)type:(builtins.str)))))"
     )
 
 

@@ -1,6 +1,6 @@
 from operator import attrgetter
 from copy import copy
-import pytest
+from unittest.mock import Mock
 import attrs
 from pydra.engine.lazy import LazyInField, LazyOutField
 import typing as ty
@@ -8,6 +8,7 @@ from pydra.design import shell, python, workflow
 from pydra.engine.helpers import list_fields
 from pydra.engine.specs import WorkflowDef, WorkflowOutputs
 from pydra.engine.core import Workflow
+from pydra.utils.hash import hash_function
 from fileformats import video, image
 
 # NB: We use PascalCase for interfaces and workflow functions as it is translated into a class
@@ -65,7 +66,7 @@ def test_workflow():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(_node=wf["Mul"], _field="out", _type=ty.Any)
+    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -122,7 +123,7 @@ def test_shell_workflow():
     assert wf.inputs.input_video == input_video
     assert wf.inputs.watermark == watermark
     assert wf.outputs.output_video == LazyOutField(
-        _node=wf["resize"], _field="out_video", _type=video.Mp4, _type_checked=True
+        node=wf["resize"], field="out_video", type=video.Mp4, type_checked=True
     )
     assert list(wf.node_names) == ["add_watermark", "resize"]
 
@@ -169,7 +170,7 @@ def test_workflow_canonical():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(_node=wf["Mul"], _field="out", _type=ty.Any)
+    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -177,7 +178,7 @@ def test_workflow_canonical():
 
 def test_workflow_lazy():
 
-    @workflow.define(lazy=["input_video", "watermark"])
+    @workflow.define
     def MyTestShellWorkflow(
         input_video: video.Mp4,
         watermark: image.Png,
@@ -211,19 +212,45 @@ def test_workflow_lazy():
 
         return output_video  # test implicit detection of output name
 
-    input_video = video.Mp4.mock("input.mp4")
-    watermark = image.Png.mock("watermark.png")
+    # input_video = video.Mp4.mock("input.mp4")
+    # watermark = image.Png.mock("watermark.png")
+    mock_node = Mock()
+    mock_node.name = "mock_node"
     workflow_spec = MyTestShellWorkflow(
-        input_video=input_video,
-        watermark=watermark,
+        input_video=LazyOutField(node=mock_node, field="a_video", type=video.Mp4),
+        watermark=LazyOutField(node=mock_node, field="a_watermark", type=image.Png),
     )
+    Workflow.clear_cache(definition=MyTestShellWorkflow)
     wf = Workflow.construct(workflow_spec)
     assert wf["add_watermark"].inputs.in_video == LazyInField(
-        _workflow=wf, _field="input_video", _type=video.Mp4, _type_checked=True
+        workflow=wf, field="input_video", type=video.Mp4, type_checked=True
     )
     assert wf["add_watermark"].inputs.watermark == LazyInField(
-        _workflow=wf, _field="watermark", _type=image.Png, _type_checked=True
+        workflow=wf, field="watermark", type=image.Png, type_checked=True
     )
+
+    # Check to see that the cache is populated with the new workflow
+    workflow_cache = Workflow._constructed_cache[hash_function(MyTestShellWorkflow)]
+    # The non-lazy keys used to construct the workflow
+    key_set = frozenset(["watermark_dims", "constructor"])
+    assert list(workflow_cache) == [key_set]
+    assert len(workflow_cache[key_set]) == 1
+
+    # check to see that the cache is not used if we change the value of one of the
+    # non lazy fields
+    workflow_spec.watermark_dims = (20, 20)
+    wf2 = Workflow.construct(workflow_spec)
+    assert wf2 is not wf
+    assert list(workflow_cache) == [key_set]
+    assert len(workflow_cache[key_set]) == 2
+
+    # check to see that the cache is used if we provide a concrete value for one of the
+    # lazy fields
+    workflow_spec.input_video = video.Mp4.mock("input.mp4")
+    wf3 = Workflow.construct(workflow_spec)
+    assert wf3 is wf2
+    assert list(workflow_cache) == [key_set]
+    assert len(workflow_cache[key_set]) == 2
 
 
 def test_direct_access_of_workflow_object():
@@ -275,10 +302,10 @@ def test_direct_access_of_workflow_object():
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
     assert wf.outputs.out1 == LazyOutField(
-        _node=wf["Mul"], _field="out", _type=float, _type_checked=True
+        node=wf["Mul"], field="out", type=float, type_checked=True
     )
     assert wf.outputs.out2 == LazyOutField(
-        _node=wf["division"], _field="divided", _type=ty.Any
+        node=wf["division"], field="divided", type=ty.Any
     )
     assert list(wf.node_names) == ["addition", "Mul", "division"]
 
@@ -314,8 +341,8 @@ def test_workflow_set_outputs_directly():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyOutField(_node=wf["Mul"], _field="out", _type=ty.Any)
-    assert wf.outputs.out2 == LazyOutField(_node=wf["Add"], _field="out", _type=ty.Any)
+    assert wf.outputs.out1 == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
+    assert wf.outputs.out2 == LazyOutField(node=wf["Add"], field="out", type=ty.Any)
     assert list(wf.node_names) == ["Add", "Mul"]
 
 
@@ -339,7 +366,7 @@ def test_workflow_split_combine1():
     assert wf["Mul"].splitter == ["Mul.x", "Mul.y"]
     assert wf["Mul"].combiner == ["Mul.x"]
     assert wf.outputs.out == LazyOutField(
-        _node=wf["Sum"], _field="out", _type=list[float], _type_checked=True
+        node=wf["Sum"], field="out", type=list[float], type_checked=True
     )
 
 
@@ -366,7 +393,7 @@ def test_workflow_split_combine2():
     assert wf["Add"].splitter == "_Mul"
     assert wf["Add"].combiner == ["Mul.x"]
     assert wf.outputs.out == LazyOutField(
-        _node=wf["Sum"], _field="out", _type=list[float], _type_checked=True
+        node=wf["Sum"], field="out", type=list[float], type_checked=True
     )
 
 
@@ -406,7 +433,7 @@ def test_nested_workflow():
     assert wf.inputs.b == 10.0
     assert wf.inputs.c == 2.0
     assert wf.outputs.out == LazyOutField(
-        _node=wf["NestedWorkflow"], _field="out", _type=float, _type_checked=True
+        node=wf["NestedWorkflow"], field="out", type=float, type_checked=True
     )
     assert list(wf.node_names) == ["Divide", "NestedWorkflow"]
     nwf_spec = copy(wf["NestedWorkflow"]._definition)
@@ -415,7 +442,7 @@ def test_nested_workflow():
     nwf.inputs.a == 100.0
     nwf.inputs.b == 10.0
     nwf.inputs.c == 2.0
-    nwf.outputs.out == LazyOutField(_node=nwf["Add"], _field="out", _type=float)
+    nwf.outputs.out == LazyOutField(node=nwf["Add"], field="out", type=float)
     assert list(nwf.node_names) == ["Power", "Add"]
 
 
@@ -447,8 +474,8 @@ def test_recursively_nested_conditional_workflow():
     assert wf.inputs.a == 1
     assert wf.inputs.depth == 3
     assert wf.outputs.out == LazyOutField(
-        _node=wf["RecursiveNestedWorkflow"],
-        _field="out",
-        _type=float,
-        _type_checked=True,
+        node=wf["RecursiveNestedWorkflow"],
+        field="out",
+        type=float,
+        type_checked=True,
     )

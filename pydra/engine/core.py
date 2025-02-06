@@ -13,7 +13,7 @@ from traceback import format_exception
 import attr
 import cloudpickle as cp
 from copy import copy
-from operator import itemgetter
+from collections import defaultdict
 from typing import Self
 import attrs
 from filelock import SoftFileLock
@@ -21,7 +21,7 @@ from pydra.engine.specs import TaskDef, WorkflowDef, TaskOutputs, WorkflowOutput
 from pydra.engine.graph import DiGraph
 from pydra.engine import state
 from .lazy import LazyInField, LazyOutField
-from pydra.utils.hash import hash_function
+from pydra.utils.hash import hash_function, Cache
 from pydra.utils.typing import TypeParser, StateArray
 from .node import Node
 from datetime import datetime
@@ -611,35 +611,53 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         return f"Workflow(name={self.name!r}, defn={self.inputs!r})"
 
     @classmethod
+    def clear_cache(
+        cls, definition: WorkflowDef[WorkflowOutputsType] | None = None
+    ) -> None:
+        """Clear the cache of constructed workflows"""
+        if definition is None:
+            cls._constructed_cache = defaultdict(lambda: defaultdict(dict))
+        else:
+            cls._constructed_cache[hash_function(definition)] = defaultdict(dict)
+
+    @classmethod
     def construct(
         cls,
         definition: WorkflowDef[WorkflowOutputsType],
     ) -> Self:
         """Construct a workflow from a definition, caching the constructed worklow"""
 
-        lazy_inputs = [f for f in list_fields(type(definition)) if f.lazy]
+        # Check the previously constructed workflows to see if a workflow has been
+        # constructed for the given set of inputs, or a less-specific set (i.e. with a
+        # super-set of lazy inputs), and use that if it exists
 
-        # Create a cache key by hashing all the non-lazy input values in the definition
-        # and use this to store the constructed workflow in case it is reused or nested
-        # and split over within another workflow
-        lazy_input_names = {f.name for f in lazy_inputs}
-        non_lazy_vals = tuple(
-            sorted(
-                (
-                    i
-                    for i in attrs_values(definition).items()
-                    if i[0] not in lazy_input_names
-                ),
-                key=itemgetter(0),
-            )
-        )
-        if lazy_non_lazy_vals := [f for f in non_lazy_vals if is_lazy(f[1])]:
-            raise ValueError(
-                f"Lazy input fields {lazy_non_lazy_vals} found in non-lazy fields "
-            )
-        hash_key = hash_function(non_lazy_vals)
-        if hash_key in cls._constructed:
-            return cls._constructed[hash_key]
+        non_lazy_vals = {
+            n: v for n, v in attrs_values(definition).items() if not is_lazy(v)
+        }
+        non_lazy_keys = frozenset(non_lazy_vals)
+        hash_cache = Cache()  # share the hash cache to avoid recalculations
+        non_lazy_hash = hash_function(non_lazy_vals, cache=hash_cache)
+        defn_hash = hash_function(type(definition), cache=hash_cache)
+        # Check for same non-lazy inputs
+        try:
+            defn_cache = cls._constructed_cache[defn_hash]
+        except KeyError:
+            pass
+        else:
+            if (
+                non_lazy_keys in defn_cache
+                and non_lazy_hash in defn_cache[non_lazy_keys]
+            ):
+                return defn_cache[non_lazy_keys][non_lazy_hash]
+            # Check for supersets of lazy inputs
+            for key_set, key_set_cache in defn_cache.items():
+                if key_set.issubset(non_lazy_keys):
+                    subset_vals = {
+                        k: v for k, v in non_lazy_vals.items() if k in key_set
+                    }
+                    subset_hash = hash_function(subset_vals, cache=hash_cache)
+                    if subset_hash in key_set_cache:
+                        return key_set_cache[subset_hash]
 
         # Initialise the outputs of the workflow
         outputs = definition.Outputs(
@@ -653,16 +671,19 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             inputs=lazy_spec,
             outputs=outputs,
         )
-        for lzy_inpt in lazy_inputs:
-            setattr(
-                lazy_spec,
-                lzy_inpt.name,
-                LazyInField(
-                    _workflow=workflow,
-                    _field=lzy_inpt.name,
-                    _type=lzy_inpt.type,
-                ),
-            )
+        # Set lazy inputs to the workflow, need to do it after the workflow is initialised
+        # so a back ref to the workflow can be set in the lazy field
+        for field in list_fields(definition):
+            if field.name not in non_lazy_keys:
+                setattr(
+                    lazy_spec,
+                    field.name,
+                    LazyInField(
+                        workflow=workflow,
+                        field=field.name,
+                        type=field.type,
+                    ),
+                )
 
         input_values = attrs_values(lazy_spec)
         constructor = input_values.pop("constructor")
@@ -685,7 +706,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
                 # Automatically combine any uncombined state arrays into lists
                 if TypeParser.get_origin(outpt_lf._type) is StateArray:
-                    outpt_lf.type = list[TypeParser.strip_splits(outpt_lf.type)[0]]
+                    outpt_lf._type = list[TypeParser.strip_splits(outpt_lf._type)[0]]
                 setattr(outputs, outpt.name, outpt_lf)
         else:
             if unset_outputs := [
@@ -696,7 +717,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     f"constructor of {workflow!r}"
                 )
 
-        cls._constructed[hash_key] = workflow
+        cls._constructed_cache[defn_hash][non_lazy_keys][non_lazy_hash] = workflow
 
         return workflow
 
@@ -718,11 +739,6 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             "No workflow is currently under construction (i.e. did not find a "
             "`Workflow.construct` in the current call stack"
         )
-
-    @classmethod
-    def clear_cache(cls):
-        """Clear the cache of constructed workflows"""
-        cls._constructed.clear()
 
     def add(
         self,
@@ -772,7 +788,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         return list(self._nodes)
 
     # Used to cache the constructed workflows by their hashed input values
-    _constructed: dict[int, "Workflow[ty.Any]"] = {}
+    _constructed_cache: dict[
+        str, dict[frozenset[str], dict[str, "Workflow[ty.Any]"]]
+    ] = defaultdict(lambda: defaultdict(dict))
 
     def execution_graph(self, submitter: "Submitter") -> DiGraph:
         from pydra.engine.submitter import NodeExecution

@@ -20,7 +20,7 @@ from pydra.utils.typing import StateArray
 
 # from ..helpers import make_klass
 from .utils import Foo
-from pydra.design import python
+from pydra.design import python, workflow
 import pytest
 
 
@@ -346,8 +346,8 @@ def test_input_file_hash_5(tmp_path):
 def test_lazy_field_cast():
     task = Foo(a="a", b=1, c=2.0, name="foo")
 
-    assert task.lzout.y.type == int
-    assert task.lzout.y.cast(float).type == float
+    assert task.lzout.y._type is int
+    assert workflow.cast(task.lzout.y, float)._type is float
 
 
 def test_lazy_field_multi_same_split():

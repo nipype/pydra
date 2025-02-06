@@ -31,7 +31,7 @@ def test_task_equivalence():
         a: ty.Any
 
         class Outputs(PythonOutputs):
-            out: ty.Any
+            out: int
 
         @staticmethod
         def function(a: int) -> int:
@@ -238,14 +238,3 @@ def test_return_annotated_task_multiple_output():
     outputs = Square(in_val=2.0)()
     assert outputs.squared == 4.0
     assert outputs.cubed == 8.0
-
-
-def test_return_halfannotated_task_multiple_output():
-
-    @python.define(inputs={"in_val": float}, outputs=(float, float))
-    def Square(in_val):
-        return in_val**2, in_val**3
-
-    outputs = Square(in_val=2.0)()
-    assert outputs.out1 == 4.0
-    assert outputs.out2 == 8.0

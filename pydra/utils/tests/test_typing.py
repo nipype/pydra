@@ -746,7 +746,7 @@ def test_typing_cast(tmp_path, SpecificTask, OtherSpecificTask):
         assert exc_info_matches(exc_info, "Cannot coerce")
 
         inner = workflow.add(  # Generic task
-            OtherSpecificTask(in_file=entry.out.cast(MyOtherFormatX))
+            OtherSpecificTask(in_file=workflow.cast(entry.out, MyOtherFormatX))
         )
 
         with pytest.raises(TypeError) as exc_info:
@@ -756,7 +756,7 @@ def test_typing_cast(tmp_path, SpecificTask, OtherSpecificTask):
         assert exc_info_matches(exc_info, "Cannot coerce")
 
         exit = workflow.add(
-            SpecificTask(in_file=inner.out.cast(MyFormatX)), name="exit"
+            SpecificTask(in_file=workflow.cast(inner.out, MyFormatX)), name="exit"
         )
 
         return exit.out

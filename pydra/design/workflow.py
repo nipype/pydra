@@ -58,7 +58,7 @@ class arg(Arg):
         through to the tasks, by default it is False
     """
 
-    lazy: bool = False
+    pass
 
 
 @attrs.define
@@ -223,3 +223,30 @@ def add(task_def: "TaskDef[OutputsType]", name: str = None) -> OutputsType:
         The outputs definition of the node
     """
     return this().add(task_def, name=name)
+
+
+U = ty.TypeVar("U")
+
+
+def cast(field: ty.Any, new_type: type[U]) -> U:
+    """Cast a lazy field to a new type. Note that the typing in the signature is a white
+    lie, as the return field is actually a LazyField as placeholder for the object of
+    type U.
+
+    Parameters
+    ----------
+    field : LazyField[T]
+        The field to cast
+    new_type : type[U]
+        The new type to cast the field to
+
+    Returns
+    -------
+    LazyField[U]
+        A copy of the lazy field with the new type
+    """
+    return attrs.evolve(
+        field,
+        type=new_type,
+        cast_from=field._cast_from if field._cast_from else field._type,
+    )
