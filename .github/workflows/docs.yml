@@ -64,6 +64,8 @@ jobs:
         pip install build twine
     - name: Install package
       run: pip install .[doc]
+    - name: Install Python3 kernel
+      run: python -m ipykernel install --user
     - name: Build new docs
       run: |
         cd new-docs
