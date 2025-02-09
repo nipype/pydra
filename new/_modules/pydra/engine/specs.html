@@ -336,7 +336,7 @@
     <span class="k">return</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span><span class="p">,</span> <span class="n">EMPTY</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="TaskOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
+<div class="viewcode-block" id="TaskOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TaskOutputs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all output definitions&quot;&quot;&quot;</span>
 
@@ -393,13 +393,33 @@
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> doesn&#39;t have an attribute </span><span class="si">{</span><span class="n">name_or_index</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span></div>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if two task definitions are equal&quot;&quot;&quot;</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">other_values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">other_fields</span> <span class="o">=</span> <span class="n">list_fields</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">fields</span> <span class="o">!=</span> <span class="n">other_fields</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">hash_eq</span><span class="p">:</span>
+                <span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">hash_function</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">])</span>
+                <span class="n">other_values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">hash_function</span><span class="p">(</span><span class="n">other_values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">values</span> <span class="o">==</span> <span class="n">other_values</span></div>
 
 
 <span class="n">OutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">TaskOutputs</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="TaskDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="viewcode-block" id="TaskDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TaskDef</span><span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Generic</span><span class="p">[</span><span class="n">OutputsType</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all task definitions&quot;&quot;&quot;</span>
 
@@ -621,6 +641,34 @@
             <span class="n">f</span><span class="o">.</span><span class="n">name</span>
             <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">RESERVED_FIELD_NAMES</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if two task definitions are equal&quot;&quot;&quot;</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">other_values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="n">other_values</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># Return if attribute keys don&#39;t match</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">hash_eq</span><span class="p">:</span>
+                <span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">hash_function</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">])</span>
+                <span class="n">other_values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">hash_function</span><span class="p">(</span><span class="n">other_values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">values</span> <span class="o">!=</span> <span class="n">other_values</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="n">hash_cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">hash_function</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">cache</span><span class="o">=</span><span class="n">hash_cache</span><span class="p">)</span> <span class="o">!=</span> <span class="n">hash_function</span><span class="p">(</span>
+            <span class="nb">type</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">cache</span><span class="o">=</span><span class="n">hash_cache</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">other_outputs</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">Outputs</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">hash_function</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Outputs</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">hash_cache</span><span class="p">)</span> <span class="o">==</span> <span class="n">hash_function</span><span class="p">(</span>
+            <span class="n">other_outputs</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">hash_cache</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
@@ -877,7 +925,7 @@
     <span class="n">network</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 
-<div class="viewcode-block" id="PythonOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.PythonOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="viewcode-block" id="PythonOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.PythonOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">PythonOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
 
     <span class="nd">@classmethod</span>
@@ -906,7 +954,7 @@
 <span class="n">PythonOutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">PythonOutputs</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="PythonDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.PythonDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="viewcode-block" id="PythonDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.PythonDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">PythonDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">PythonOutputsType</span><span class="p">]):</span>
 
     <span class="n">_task_type</span> <span class="o">=</span> <span class="s2">&quot;python&quot;</span>
@@ -935,7 +983,7 @@
             <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="WorkflowOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="viewcode-block" id="WorkflowOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">WorkflowOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
 
     <span class="nd">@classmethod</span>
@@ -989,7 +1037,7 @@
 <span class="n">WorkflowOutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">WorkflowOutputs</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="WorkflowDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="viewcode-block" id="WorkflowDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">WorkflowDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">WorkflowOutputsType</span><span class="p">]):</span>
 
     <span class="n">_task_type</span> <span class="o">=</span> <span class="s2">&quot;workflow&quot;</span>
@@ -1020,7 +1068,7 @@
 <span class="n">STDERR_HELP</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;The standard error stream produced by the command.&quot;&quot;&quot;</span>
 
 
-<div class="viewcode-block" id="ShellOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.ShellOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="viewcode-block" id="ShellOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.ShellOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ShellOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Output definition of a generic shell process.&quot;&quot;&quot;</span>
 
@@ -1181,7 +1229,7 @@
 <span class="n">ShellOutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">ShellOutputs</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="ShellDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.ShellDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="viewcode-block" id="ShellDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.ShellDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ShellDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">ShellOutputsType</span><span class="p">]):</span>
 
     <span class="n">_task_type</span> <span class="o">=</span> <span class="s2">&quot;shell&quot;</span>
