@@ -24,6 +24,7 @@ from typing import (
 from filelock import SoftFileLock
 import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
+from fileformats.generic import FsObject
 import fileformats.core.exceptions
 from . import user_cache_dir, add_exc_note
 from .misc import in_stdlib
@@ -332,17 +333,16 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     elif hasattr(obj, "__slots__") and obj.__slots__ is not None:
         dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
     else:
+
+        def is_special_or_method(n: str):
+            return (n.startswith("__") and n.endswith("__")) or inspect.ismethod(
+                getattr(obj, n)
+            )
+
         try:
-            dct = obj.__dict__
+            dct = {n: v for n, v in obj.__dict__.items() if not is_special_or_method(n)}
         except AttributeError:
-            dct = {
-                n: getattr(obj, n)
-                for n in dir(obj)
-                if not (
-                    (n.startswith("__") and n.endswith("__"))
-                    or inspect.ismethod(getattr(obj, n))
-                )
-            }
+            dct = {n: getattr(obj, n) for n in dir(obj) if not is_special_or_method(n)}
     yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
 
@@ -454,6 +454,13 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
     yield b"dict:{"
     yield from bytes_repr_mapping_contents(obj, cache)
     yield b"}"
+
+
+@register_serializer
+def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
+    yield b"module:("
+    yield hash_single(FsObject(obj.__file__), cache=cache)
+    yield b")"
 
 
 @register_serializer(ty._GenericAlias)

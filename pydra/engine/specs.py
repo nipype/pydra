@@ -54,7 +54,7 @@ def is_set(value: ty.Any) -> bool:
     return value not in (attrs.NOTHING, EMPTY)
 
 
-@attrs.define
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class TaskOutputs:
     """Base class for all output definitions"""
 
@@ -113,11 +113,31 @@ class TaskOutputs:
                 f"{self} doesn't have an attribute {name_or_index}"
             ) from None
 
+    def __eq__(self, other: ty.Any) -> bool:
+        """Check if two task definitions are equal"""
+        values = attrs.asdict(self)
+        fields = list_fields(self)
+        try:
+            other_values = attrs.asdict(other)
+        except AttributeError:
+            return False
+        try:
+            other_fields = list_fields(other)
+        except AttributeError:
+            return False
+        if fields != other_fields:
+            return False
+        for field in list_fields(self):
+            if field.hash_eq:
+                values[field.name] = hash_function(values[field.name])
+                other_values[field.name] = hash_function(other_values[field.name])
+        return values == other_values
+
 
 OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 
 
-@attrs.define(kw_only=True, auto_attribs=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class TaskDef(ty.Generic[OutputsType]):
     """Base class for all task definitions"""
 
@@ -339,6 +359,34 @@ class TaskDef(ty.Generic[OutputsType]):
             f.name
             for f in list_fields(self)
             if not (f.name.startswith("_") or f.name in self.RESERVED_FIELD_NAMES)
+        )
+
+    def __eq__(self, other: ty.Any) -> bool:
+        """Check if two task definitions are equal"""
+        values = attrs.asdict(self)
+        try:
+            other_values = attrs.asdict(other)
+        except AttributeError:
+            return False
+        if set(values) != set(other_values):
+            return False  # Return if attribute keys don't match
+        for field in list_fields(self):
+            if field.hash_eq:
+                values[field.name] = hash_function(values[field.name])
+                other_values[field.name] = hash_function(other_values[field.name])
+        if values != other_values:
+            return False
+        hash_cache = Cache()
+        if hash_function(type(self), cache=hash_cache) != hash_function(
+            type(other), cache=hash_cache
+        ):
+            return False
+        try:
+            other_outputs = other.Outputs
+        except AttributeError:
+            return False
+        return hash_function(self.Outputs, cache=hash_cache) == hash_function(
+            other_outputs, cache=hash_cache
         )
 
     def __getitem__(self, name: str) -> ty.Any:
@@ -595,7 +643,7 @@ class RuntimeSpec:
     network: bool = False
 
 
-@attrs.define(kw_only=True, auto_attribs=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class PythonOutputs(TaskOutputs):
 
     @classmethod
@@ -624,7 +672,7 @@ class PythonOutputs(TaskOutputs):
 PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
-@attrs.define(kw_only=True, auto_attribs=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class PythonDef(TaskDef[PythonOutputsType]):
 
     _task_type = "python"
@@ -653,7 +701,7 @@ class PythonDef(TaskDef[PythonOutputsType]):
             )
 
 
-@attrs.define(kw_only=True, auto_attribs=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class WorkflowOutputs(TaskOutputs):
 
     @classmethod
@@ -707,7 +755,7 @@ class WorkflowOutputs(TaskOutputs):
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
-@attrs.define(kw_only=True, auto_attribs=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     _task_type = "workflow"
@@ -738,7 +786,7 @@ STDOUT_HELP = """The standard output stream produced by the command."""
 STDERR_HELP = """The standard error stream produced by the command."""
 
 
-@attrs.define(kw_only=True, auto_attribs=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class ShellOutputs(TaskOutputs):
     """Output definition of a generic shell process."""
 
@@ -899,7 +947,7 @@ class ShellOutputs(TaskOutputs):
 ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
-@attrs.define(kw_only=True, auto_attribs=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class ShellDef(TaskDef[ShellOutputsType]):
 
     _task_type = "shell"

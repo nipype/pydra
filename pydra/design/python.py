@@ -158,7 +158,7 @@ def define(
             )
 
         parsed_inputs["function"] = arg(
-            name="function", type=ty.Callable, default=function
+            name="function", type=ty.Callable, default=function, hash_eq=True
         )
 
         defn = make_task_def(

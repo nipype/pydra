@@ -87,7 +87,7 @@ class Submitter:
     def __init__(
         self,
         cache_dir: os.PathLike | None = None,
-        worker: str | ty.Type[Worker] | Worker = "debug",
+        worker: str | ty.Type[Worker] | Worker | None = "debug",
         environment: "Environment | None" = None,
         rerun: bool = False,
         cache_locations: list[os.PathLike] | None = None,
@@ -97,6 +97,9 @@ class Submitter:
         clean_stale_locks: bool | None = None,
         **kwargs,
     ):
+
+        if worker is None:
+            worker = "debug"
 
         from . import check_latest_version
 

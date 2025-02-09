@@ -23,6 +23,7 @@ from pydra.utils.typing import (
     MultiOutputObj,
     MultiOutputFile,
 )
+from pydra.utils.hash import hash_function
 
 
 if ty.TYPE_CHECKING:
@@ -179,6 +180,8 @@ class Field:
         The converter for the field passed through to the attrs.field, by default it is None
     validator: callable | iterable[callable], optional
         The validator(s) for the field passed through to the attrs.field, by default it is None
+    hash_eq: bool, optional
+        Whether to use the hash of the value for equality comparison, by default it is False
     """
 
     name: str | None = None
@@ -192,8 +195,9 @@ class Field:
     requires: list[RequirementSet] = attrs.field(
         factory=list, converter=requires_converter
     )
-    converter: ty.Callable | None = None
-    validator: ty.Callable | None = None
+    converter: ty.Callable[..., ty.Any] | None = None
+    validator: ty.Callable[..., bool] | None = None
+    hash_eq: bool = False
 
     def requirements_satisfied(self, inputs: "TaskDef") -> bool:
         """Check if all the requirements are satisfied by the inputs"""
@@ -408,6 +412,7 @@ def make_task_def(
     klass : type
         The class created using the attrs package
     """
+
     spec_type._check_arg_refs(inputs, outputs)
 
     for inpt in inputs.values():
@@ -448,7 +453,7 @@ def make_task_def(
     # Now that we have saved the attributes in lists to be
     for arg in inputs.values():
         # If an outarg input then the field type should be Path not a FileSet
-        default_kwargs = _get_default(arg)
+        attrs_kwargs = _get_attrs_kwargs(arg)
         if isinstance(arg, Out) and is_fileset_or_union(arg.type):
             if getattr(arg, "path_template", False):
                 if is_optional(arg.type):
@@ -456,7 +461,7 @@ def make_task_def(
                     # Will default to None and not be inserted into the command
                 else:
                     field_type = Path | bool
-                    default_kwargs = {"default": True}
+                    attrs_kwargs = {"default": True}
             elif is_optional(arg.type):
                 field_type = Path | None
             else:
@@ -471,14 +476,14 @@ def make_task_def(
                 validator=make_validator(arg, klass.__name__),
                 metadata={PYDRA_ATTR_METADATA: arg},
                 on_setattr=attrs.setters.convert,
-                **default_kwargs,
+                **attrs_kwargs,
             ),
         )
         klass.__annotations__[arg.name] = field_type
 
     # Create class using attrs package, will create attributes for all columns and
     # parameters
-    attrs_klass = attrs.define(auto_attribs=False, kw_only=True)(klass)
+    attrs_klass = attrs.define(auto_attribs=False, kw_only=True, eq=False)(klass)
 
     return attrs_klass
 
@@ -541,13 +546,15 @@ def make_outputs_spec(
             n: attrs.field(
                 converter=make_converter(o, f"{spec_name}.Outputs"),
                 metadata={PYDRA_ATTR_METADATA: o},
-                **_get_default(o),
+                **_get_attrs_kwargs(o),
             )
             for n, o in outputs.items()
         },
     )
     outputs_klass.__annotations__.update((o.name, o.type) for o in outputs.values())
-    outputs_klass = attrs.define(auto_attribs=False, kw_only=True)(outputs_klass)
+    outputs_klass = attrs.define(auto_attribs=False, kw_only=True, eq=False)(
+        outputs_klass
+    )
     return outputs_klass
 
 
@@ -972,14 +979,19 @@ def check_explicit_fields_are_none(klass, inputs, outputs):
         )
 
 
-def _get_default(field: Field) -> dict[str, ty.Any]:
+def _get_attrs_kwargs(field: Field) -> dict[str, ty.Any]:
+    kwargs = {}
     if not hasattr(field, "default"):
-        return {"factory": nothing_factory}
-    if field.default is not EMPTY:
-        return {"default": field.default}
-    if is_optional(field.type):
-        return {"default": None}
-    return {"factory": nothing_factory}
+        kwargs["factory"] = nothing_factory
+    elif field.default is not EMPTY:
+        kwargs["default"] = field.default
+    elif is_optional(field.type):
+        kwargs["default"] = None
+    else:
+        kwargs["factory"] = nothing_factory
+    if field.hash_eq:
+        kwargs["eq"] = hash_function
+    return kwargs
 
 
 def nothing_factory():
