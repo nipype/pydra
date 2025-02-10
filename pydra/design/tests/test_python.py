@@ -23,7 +23,7 @@ def test_interface_wrap_function():
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
-        python.arg(name="function", type=ty.Callable, default=func),
+        python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
     ]
     assert outputs == [python.out(name="out", type=float)]
     definition = SampleDef(a=1)
@@ -45,7 +45,7 @@ def test_interface_wrap_function_with_default():
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
-        python.arg(name="function", type=ty.Callable, default=func),
+        python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
         python.arg(name="k", type=float, default=2.0),
     ]
     assert outputs == [python.out(name="out", type=float)]
@@ -69,7 +69,7 @@ def test_interface_wrap_function_overrides():
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help="The argument to be doubled"),
-        python.arg(name="function", type=ty.Callable, default=func),
+        python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
     ]
     assert outputs == [
         python.out(name="b", type=Decimal, help="the doubled output"),
@@ -94,7 +94,7 @@ def test_interface_wrap_function_types():
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=float),
-        python.arg(name="function", type=ty.Callable, default=func),
+        python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
     ]
     assert outputs == [python.out(name="b", type=float)]
     intf = SampleDef(a=1)
@@ -118,6 +118,7 @@ def test_decorated_function_interface():
         python.arg(
             name="function",
             type=ty.Callable,
+            hash_eq=True,
             default=attrs.fields(SampleDef).function.default,
         ),
     ]
@@ -149,6 +150,7 @@ def test_interface_with_function_docstr():
         python.arg(
             name="function",
             type=ty.Callable,
+            hash_eq=True,
             default=attrs.fields(SampleDef).function.default,
         ),
     ]
@@ -183,6 +185,7 @@ def test_interface_with_function_google_docstr():
         python.arg(
             name="function",
             type=ty.Callable,
+            hash_eq=True,
             default=attrs.fields(SampleDef).function.default,
         ),
     ]
@@ -225,6 +228,7 @@ def test_interface_with_function_numpy_docstr():
         python.arg(
             name="function",
             type=ty.Callable,
+            hash_eq=True,
             default=attrs.fields(SampleDef).function.default,
         ),
     ]
@@ -272,6 +276,7 @@ def test_interface_with_class():
         python.arg(
             name="function",
             type=ty.Callable,
+            hash_eq=True,
             default=attrs.fields(SampleDef).function.default,
         ),
     ]
@@ -342,6 +347,7 @@ def test_interface_with_class_no_auto_attribs():
         python.arg(
             name="function",
             type=ty.Callable,
+            hash_eq=True,
             default=attrs.fields(SampleDef).function.default,
         ),
     ]

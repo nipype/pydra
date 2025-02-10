@@ -57,7 +57,9 @@ def test_workflow():
     assert list_fields(MyTestWorkflow) == [
         workflow.arg(name="a"),
         workflow.arg(name="b"),
-        workflow.arg(name="constructor", type=ty.Callable, default=constructor),
+        workflow.arg(
+            name="constructor", type=ty.Callable, hash_eq=True, default=constructor
+        ),
     ]
     assert list_fields(MyTestWorkflow.Outputs) == [
         workflow.out(name="out"),
@@ -108,7 +110,9 @@ def test_shell_workflow():
         workflow.arg(name="input_video", type=video.Mp4),
         workflow.arg(name="watermark", type=image.Png),
         workflow.arg(name="watermark_dims", type=tuple[int, int], default=(10, 10)),
-        workflow.arg(name="constructor", type=ty.Callable, default=constructor),
+        workflow.arg(
+            name="constructor", type=ty.Callable, hash_eq=True, default=constructor
+        ),
     ]
     assert list_fields(MyTestShellWorkflow.Outputs) == [
         workflow.out(name="output_video", type=video.Mp4),
@@ -161,7 +165,9 @@ def test_workflow_canonical():
     assert sorted(list_fields(MyTestWorkflow), key=attrgetter("name")) == [
         workflow.arg(name="a", type=int),
         workflow.arg(name="b", type=float, help="A float input", converter=a_converter),
-        workflow.arg(name="constructor", type=ty.Callable, default=constructor),
+        workflow.arg(
+            name="constructor", type=ty.Callable, hash_eq=True, default=constructor
+        ),
     ]
     assert list_fields(MyTestWorkflow.Outputs) == [
         workflow.out(name="out", type=float),
@@ -290,7 +296,10 @@ def test_direct_access_of_workflow_object():
         workflow.arg(name="a", type=int, help="An integer input"),
         workflow.arg(name="b", type=float, help="A float input"),
         workflow.arg(
-            name="constructor", type=ty.Callable, default=MyTestWorkflow().constructor
+            name="constructor",
+            type=ty.Callable,
+            hash_eq=True,
+            default=MyTestWorkflow().constructor,
         ),
     ]
     assert list_fields(MyTestWorkflow.Outputs) == [
@@ -330,7 +339,10 @@ def test_workflow_set_outputs_directly():
         workflow.arg(name="a", type=int),
         workflow.arg(name="b", type=float),
         workflow.arg(
-            name="constructor", type=ty.Callable, default=MyTestWorkflow().constructor
+            name="constructor",
+            type=ty.Callable,
+            hash_eq=True,
+            default=MyTestWorkflow().constructor,
         ),
     ]
     assert list_fields(MyTestWorkflow.Outputs) == [

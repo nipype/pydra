@@ -165,7 +165,7 @@ def define(
             )
 
         parsed_inputs["constructor"] = arg(
-            name="constructor", type=ty.Callable, default=constructor
+            name="constructor", type=ty.Callable, hash_eq=True, default=constructor
         )
         for inpt_name in lazy:
             parsed_inputs[inpt_name].lazy = True

@@ -363,9 +363,9 @@ class TaskDef(ty.Generic[OutputsType]):
 
     def __eq__(self, other: ty.Any) -> bool:
         """Check if two task definitions are equal"""
-        values = attrs.asdict(self)
+        values = attrs.asdict(self, recurse=False)
         try:
-            other_values = attrs.asdict(other)
+            other_values = attrs.asdict(other, recurse=False)
         except AttributeError:
             return False
         if set(values) != set(other_values):
