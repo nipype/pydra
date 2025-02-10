@@ -645,9 +645,9 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if two task definitions are equal&quot;&quot;&quot;</span>
-        <span class="n">values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">other_values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+            <span class="n">other_values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
         <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="n">other_values</span><span class="p">):</span>
