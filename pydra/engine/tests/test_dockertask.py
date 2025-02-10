@@ -1,9 +1,10 @@
 import pytest
-from ..task import ShellTask
-from ..submitter import Submitter
+from pydra.engine.specs import ShellDef
+from pydra.engine.submitter import Submitter
 from fileformats.generic import File
-from ..environments import Docker
+from pydra.engine.environments import Docker
 from pydra.design import shell, workflow
+from pydra.engine.core import Task
 from .utils import no_win, need_docker, result_submitter, result_no_submitter
 
 
@@ -14,13 +15,19 @@ def test_docker_1_nosubm():
     no submitter
     """
     cmd = "whoami"
-    docky = shell.define(cmd)(environment=Docker(image="busybox"))
-    assert docky.environment.image == "busybox"
-    assert docky.environment.tag == "latest"
-    assert isinstance(docky.environment, Docker)
-    assert docky.cmdline == cmd
+    Docky = shell.define(cmd)
+    docky = Docky()
+    docky_task = Task(
+        definition=docky,
+        name="docky",
+        submitter=Submitter(environment=Docker(image="busybox")),
+    )
+    assert docky_task.environment.image == "busybox"
+    assert docky_task.environment.tag == "latest"
+    assert isinstance(docky_task.environment, Docker)
+    assert docky_task.cmdline == cmd
 
-    res = docky()
+    res = docky_task()
     assert res.output.stdout == "root\n"
     assert res.output.return_code == 0
 
@@ -32,14 +39,14 @@ def test_docker_1(plugin):
     using submitter
     """
     cmd = "whoami"
-    docky = shell.define(cmd)(environment=Docker(image="busybox"))
+    Docky = shell.define(cmd)
+    docky = Docky()
 
-    with Submitter(worker=plugin) as sub:
-        docky(submitter=sub)
+    with Submitter(environment=Docker(image="busybox")) as sub:
+        res = sub(docky)
 
-    res = docky.result()
-    assert res.output.stdout == "root\n"
-    assert res.output.return_code == 0
+    assert res.outputs.stdout == "root\n"
+    assert res.outputs.return_code == 0
 
 
 @no_win
@@ -50,7 +57,8 @@ def test_docker_2(results_function, plugin):
     with and without submitter
     """
     cmdline = "echo hail pydra"
-    docky = shell.define(cmdline)(environment=Docker(image="busybox"))
+    Docky = shell.define(cmdline)
+    docky = Docky()
     # cmdline doesn't know anything about docker
     assert docky.cmdline == cmdline
     res = results_function(docky, plugin)
@@ -68,13 +76,9 @@ def test_docker_2a(results_function, plugin):
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
-    docky = ShellTask(
-        name="docky",
-        executable=cmd_exec,
-        args=cmd_args,
-        environment=Docker(image="busybox"),
-    )
-    assert docky.definition.executable == "echo"
+    Docky = shell.define(" ".join([cmd_exec] + cmd_args))
+    docky = Docky()
+    assert docky.executable == "echo"
     assert docky.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
     res = results_function(docky, plugin)
@@ -93,9 +97,9 @@ def test_docker_st_1(results_function, plugin):
     splitter = executable
     """
     cmd = ["pwd", "whoami"]
-    docky = ShellTask(name="docky", environment=Docker(image="busybox")).split(
-        "executable", executable=cmd
-    )
+    Docky = shell.define("placeholder")
+    docky = Docky().split(executable=cmd)
+
     assert docky.state.splitter == "docky.executable"
 
     res = results_function(docky, plugin)

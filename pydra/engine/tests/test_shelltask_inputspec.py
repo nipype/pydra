@@ -2,8 +2,6 @@ import typing as ty
 from pathlib import Path
 import attr
 import pytest
-
-from ..task import ShellTask
 from pydra.engine.specs import ShellOutputs, ShellDef
 from fileformats.generic import File
 from pydra.design import shell
@@ -11,14 +9,14 @@ from pydra.design import shell
 
 def test_shell_cmd_execargs_1():
     # separate command into exec + args
-    shelly = ShellTask(executable="executable", args="arg")
+    shelly = ShellDef(executable="executable", args="arg")
     assert shelly.cmdline == "executable arg"
     assert shelly.name == "ShellTask_noname"
 
 
 def test_shell_cmd_execargs_2():
     # separate command into exec + args
-    shelly = ShellTask(executable=["cmd_1", "cmd_2"], args="arg")
+    shelly = ShellDef(executable=["cmd_1", "cmd_2"], args="arg")
     assert shelly.cmdline == "cmd_1 cmd_2 arg"
 
 
@@ -38,7 +36,7 @@ def test_shell_cmd_inputs_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", args="arg", inpA="inp1", input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable inp1 arg"
@@ -52,7 +50,7 @@ def test_shell_cmd_inputs_1a():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", args="arg", inpA="inpNone1", input_spec=my_input_spec
     )
     # inp1 should be the first one after executable
@@ -76,7 +74,7 @@ def test_shell_cmd_inputs_1b():
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", args="arg", inpA="inp-1", input_spec=my_input_spec
     )
     # inp1 should be last before arg
@@ -99,7 +97,7 @@ def test_shell_cmd_inputs_1_st():
         bases=(ShellDef,),
     )
 
-    ShellTask(
+    ShellDef(
         name="shelly",
         executable="executable",
         args="arg",
@@ -134,7 +132,7 @@ def test_shell_cmd_inputs_2():
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", inpB="inp1", inpA="inp2", input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable inp1 inp2"
@@ -152,7 +150,7 @@ def test_shell_cmd_inputs_2a():
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA="inpNone1",
         inpB="inpNone2",
@@ -185,7 +183,7 @@ def test_shell_cmd_inputs_2_err():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", inpA="inp1", inpB="inp2", input_spec=my_input_spec
     )
     with pytest.raises(Exception) as e:
@@ -218,7 +216,7 @@ def test_shell_cmd_inputs_2_noerr():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", inpA="inp1", input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", inpA="inp1", input_spec=my_input_spec)
     shelly.cmdline
 
 
@@ -247,7 +245,7 @@ def test_shell_cmd_inputs_3():
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA="inp1",
         inpB="inp-1",
@@ -274,7 +272,7 @@ def test_shell_cmd_inputs_argstr_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", inpA="inp1", input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", inpA="inp1", input_spec=my_input_spec)
     # flag used before inp1
     assert shelly.cmdline == "executable -v inp1"
 
@@ -296,7 +294,7 @@ def test_shell_cmd_inputs_argstr_2():
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", args="arg", inpA=True, input_spec=my_input_spec
     )
     # a flag is used without any additional argument
@@ -319,7 +317,7 @@ def test_shell_cmd_inputs_list_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", inpA=["el_1", "el_2", "el_3"], input_spec=my_input_spec
     )
     # multiple elements
@@ -342,7 +340,7 @@ def test_shell_cmd_inputs_list_2():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", inpA=["el_1", "el_2", "el_3"], input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable -v el_1 el_2 el_3"
@@ -364,7 +362,7 @@ def test_shell_cmd_inputs_list_3():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", inpA=["el_1", "el_2", "el_3"], input_spec=my_input_spec
     )
     # a flag is repeated
@@ -392,7 +390,7 @@ def test_shell_cmd_inputs_list_sep_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA=["aaa", "bbb", "ccc"],
         input_spec=my_input_spec,
@@ -422,7 +420,7 @@ def test_shell_cmd_inputs_list_sep_2():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA=["aaa", "bbb", "ccc"],
         input_spec=my_input_spec,
@@ -452,7 +450,7 @@ def test_shell_cmd_inputs_list_sep_2a():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA=["aaa", "bbb", "ccc"],
         input_spec=my_input_spec,
@@ -482,7 +480,7 @@ def test_shell_cmd_inputs_list_sep_3():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA=["aaa", "bbb", "ccc"],
         input_spec=my_input_spec,
@@ -512,7 +510,7 @@ def test_shell_cmd_inputs_list_sep_3a():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA=["aaa", "bbb", "ccc"],
         input_spec=my_input_spec,
@@ -542,7 +540,7 @@ def test_shell_cmd_inputs_sep_4():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", inpA=["aaa"], input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", inpA=["aaa"], input_spec=my_input_spec)
     assert shelly.cmdline == "executable -v aaa"
 
 
@@ -567,7 +565,7 @@ def test_shell_cmd_inputs_sep_4a():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", inpA="aaa", input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", inpA="aaa", input_spec=my_input_spec)
     assert shelly.cmdline == "executable -v aaa"
 
 
@@ -591,7 +589,7 @@ def test_shell_cmd_inputs_format_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", inpA="aaa", input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", inpA="aaa", input_spec=my_input_spec)
     assert shelly.cmdline == "executable -v aaa"
 
 
@@ -615,7 +613,7 @@ def test_shell_cmd_inputs_format_2():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         inpA=["el_1", "el_2"],
         input_spec=my_input_spec,
@@ -643,7 +641,7 @@ def test_shell_cmd_inputs_format_3():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", inpA=0.007, input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", inpA=0.007, input_spec=my_input_spec)
     assert shelly.cmdline == "executable -v 0.00700"
 
 
@@ -668,7 +666,7 @@ def test_shell_cmd_inputs_mandatory_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec)
     with pytest.raises(Exception) as e:
         shelly.cmdline
     assert "mandatory" in str(e.value)
@@ -711,7 +709,7 @@ def test_shell_cmd_inputs_not_given_1():
         ],
         bases=(ShellDef,),
     )
-    shelly = ShellTask(name="shelly", executable="executable", input_spec=my_input_spec)
+    shelly = ShellDef(name="shelly", executable="executable", input_spec=my_input_spec)
 
     shelly.definition.arg2 = "argument2"
 
@@ -751,7 +749,7 @@ def test_shell_cmd_inputs_template_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA="inpA")
     # outA has argstr in the metadata fields, so it's a part of the command line
     # the full path will be use din the command line
     assert shelly.cmdline == f"executable inpA -o {shelly.output_dir / 'inpA_out'}"
@@ -790,7 +788,7 @@ def test_shell_cmd_inputs_template_1a():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA="inpA")
     # outA has no argstr in metadata, so it's not a part of the command line
     assert shelly.cmdline == "executable inpA"
 
@@ -824,7 +822,7 @@ def test_shell_cmd_inputs_template_2():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec)
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec)
     # inpB not in the inputs, so no outB in the command line
     assert shelly.cmdline == "executable"
     # checking if outB in the output fields
@@ -902,7 +900,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA=inpA, inpB=inpB
     )
     # using syntax from the outAB field
@@ -982,7 +980,7 @@ def test_shell_cmd_inputs_template_3a():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA="inpA", inpB="inpB"
     )
     # using syntax from the outAB field
@@ -1058,7 +1056,7 @@ def test_shell_cmd_inputs_template_4():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA="inpA")
     # inpB is not provided so outB not in the command line
     assert shelly.cmdline == f"executable inpA -o {shelly.output_dir / 'inpA_out'}"
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA", "outB"]
@@ -1085,7 +1083,7 @@ def test_shell_cmd_inputs_template_5_ex():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, outAB="outAB")
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, outAB="outAB")
     with pytest.raises(Exception) as e:
         shelly.cmdline
     assert "read only" in str(e.value)
@@ -1130,23 +1128,23 @@ def test_shell_cmd_inputs_template_6():
 
     # no input for outA (and no default value), so the output is created whenever the
     # template can be formatted (the same way as for templates that has type=str)
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA="inpA")
     assert shelly.cmdline == f"executable inpA -o {shelly.output_dir / 'inpA_out'}"
 
     # a string is provided for outA, so this should be used as the outA value
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA="outA"
     )
     assert shelly.cmdline == "executable inpA -o outA"
 
     # True is provided for outA, so the formatted template should be used as outA value
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=True
     )
     assert shelly.cmdline == f"executable inpA -o {shelly.output_dir / 'inpA_out'}"
 
     # False is provided for outA, so the outA shouldn't be used
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=False
     )
     assert shelly.cmdline == "executable inpA"
@@ -1190,23 +1188,23 @@ def test_shell_cmd_inputs_template_6a():
     )
 
     # no input for outA, but default is False, so the outA shouldn't be used
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA="inpA")
     assert shelly.cmdline == "executable inpA"
 
     # a string is provided for outA, so this should be used as the outA value
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA="outA"
     )
     assert shelly.cmdline == "executable inpA -o outA"
 
     # True is provided for outA, so the formatted template should be used as outA value
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=True
     )
     assert shelly.cmdline == f"executable inpA -o {shelly.output_dir / 'inpA_out'}"
 
     # False is provided for outA, so the outA shouldn't be used
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=False
     )
     assert shelly.cmdline == "executable inpA"
@@ -1249,9 +1247,7 @@ def test_shell_cmd_inputs_template_7(tmp_path: Path):
 
     inpA_file = tmp_path / "a_file.txt"
     inpA_file.write_text("content")
-    shelly = ShellTask(
-        executable="executable", input_spec=my_input_spec, inpA=inpA_file
-    )
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA=inpA_file)
 
     # outA should be formatted in a way that that .txt goes to the end
     assert (
@@ -1298,9 +1294,7 @@ def test_shell_cmd_inputs_template_7a(tmp_path: Path):
 
     inpA_file = tmp_path / "a_file.txt"
     inpA_file.write_text("content")
-    shelly = ShellTask(
-        executable="executable", input_spec=my_input_spec, inpA=inpA_file
-    )
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA=inpA_file)
 
     # outA should be formatted in a way that that .txt goes to the end
     assert (
@@ -1347,9 +1341,7 @@ def test_shell_cmd_inputs_template_7b(tmp_path: Path):
 
     inpA_file = tmp_path / "a_file.txt"
     inpA_file.write_text("content")
-    shelly = ShellTask(
-        executable="executable", input_spec=my_input_spec, inpA=inpA_file
-    )
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA=inpA_file)
 
     # outA should be formatted in a way that that .txt goes to the end
     assert (
@@ -1393,9 +1385,7 @@ def test_shell_cmd_inputs_template_8(tmp_path: Path):
 
     inpA_file = tmp_path / "a_file.t"
     inpA_file.write_text("content")
-    shelly = ShellTask(
-        executable="executable", input_spec=my_input_spec, inpA=inpA_file
-    )
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA=inpA_file)
 
     # outA should be formatted in a way that inpA extension is removed and the template extension is used
     assert (
@@ -1454,7 +1444,7 @@ def test_shell_cmd_inputs_template_9(tmp_path: Path):
     inpA_file = tmp_path / "inpA.t"
     inpA_file.write_text("content")
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file, inpInt=3
     )
 
@@ -1516,7 +1506,7 @@ def test_shell_cmd_inputs_template_9a(tmp_path: Path):
     inpA_file = tmp_path / "inpA.t"
     inpA_file.write_text("content")
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file, inpStr="hola"
     )
 
@@ -1581,7 +1571,7 @@ def test_shell_cmd_inputs_template_9b_err(tmp_path: Path):
     inpFile_file = tmp_path / "inpFile.t"
     inpFile_file.write_text("content")
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         input_spec=my_input_spec,
         inpA=inpA_file,
@@ -1642,7 +1632,7 @@ def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
     inpA_file = tmp_path / "inpA.t"
     inpA_file.write_text("content")
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         input_spec=my_input_spec,
         inpA=inpA_file,
@@ -1687,7 +1677,7 @@ def test_shell_cmd_inputs_template_10():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA=3.3456)
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA=3.3456)
     # outA has argstr in the metadata fields, so it's a part of the command line
     # the full path will be use din the command line
     assert shelly.cmdline == f"executable 3.3 -o {shelly.output_dir / 'file_3.3_out'}"
@@ -1737,7 +1727,7 @@ def test_shell_cmd_inputs_template_requires_1():
     )
 
     # When requirements are not met.
-    shelly = ShellTask(executable="cmd", input_spec=my_input_spec, in_file="in.file")
+    shelly = ShellDef(executable="cmd", input_spec=my_input_spec, in_file="in.file")
     assert "--tpl" not in shelly.cmdline
 
     # When requirements are met.
@@ -1785,7 +1775,7 @@ def test_shell_cmd_inputs_template_function_1():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
+    shelly = ShellDef(executable="executable", input_spec=my_input_spec, inpA="inpA")
 
     assert shelly.cmdline == f"executable inpA -o {shelly.output_dir / 'inpA_out'}"
 
@@ -1843,7 +1833,7 @@ def test_shell_cmd_inputs_template_function_2():
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="executable",
         input_spec=my_input_spec,
         inpA="inpA",
@@ -1889,7 +1879,7 @@ def test_shell_cmd_inputs_template_1_st():
     )
 
     inpA = ["inpA_1", "inpA_2"]
-    ShellTask(
+    ShellDef(
         name="f",
         executable="executable",
         input_spec=my_input_spec,
@@ -2087,13 +2077,13 @@ def test_shell_cmd_inputs_denoise_image(
     my_input_file.write_text("content")
 
     # no input provided
-    shelly = ShellTask(executable="DenoiseImage", input_spec=my_input_spec)
+    shelly = ShellDef(executable="DenoiseImage", input_spec=my_input_spec)
     with pytest.raises(Exception) as e:
         shelly.cmdline
     assert "mandatory" in str(e.value)
 
     # input file name, noiseImage is not set, so using default value False
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
         input_spec=my_input_spec,
@@ -2104,7 +2094,7 @@ def test_shell_cmd_inputs_denoise_image(
     )
 
     # input file name, noiseImage is set to True, so template is used in the output
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
         input_spec=my_input_spec,
@@ -2116,7 +2106,7 @@ def test_shell_cmd_inputs_denoise_image(
     )
 
     # input file name and help_short
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
         help_short=True,
@@ -2136,7 +2126,7 @@ def test_shell_cmd_inputs_denoise_image(
     ]
 
     # adding image_dimensionality that has allowed_values [2, 3, 4]
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
         input_spec=my_input_spec,
@@ -2149,7 +2139,7 @@ def test_shell_cmd_inputs_denoise_image(
 
     # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised
     with pytest.raises(ValueError) as excinfo:
-        shelly = ShellTask(
+        shelly = ShellDef(
             executable="DenoiseImage",
             inputImageFilename=my_input_file,
             input_spec=my_input_spec,

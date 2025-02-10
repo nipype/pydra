@@ -32,7 +32,6 @@ from .specs import (
     TaskHook,
 )
 from .helpers import (
-    create_checksum,
     attrs_fields,
     attrs_values,
     load_result,
@@ -203,8 +202,7 @@ class Task(ty.Generic[DefType]):
         """
         if self._checksum is not None:
             return self._checksum
-        input_hash = self.definition._hash
-        self._checksum = create_checksum(self.definition._task_type, input_hash)
+        self._checksum = self.definition._checksum
         return self._checksum
 
     @property

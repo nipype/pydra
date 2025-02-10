@@ -168,8 +168,12 @@ class Submitter:
     def __call__(
         self,
         task_def: "TaskDef",
+        name: str | None = "task",
     ):
         """Submitter run function."""
+
+        if name is None:
+            name = "task"
 
         task_def._check_rules()
         # If the outer task is split, create an implicit workflow to hold the split nodes
@@ -190,10 +194,10 @@ class Submitter:
                 f"Task {self} is marked for combining, but not splitting. "
                 "Use the `split` method to split the task before combining."
             )
-        task = Task(task_def, submitter=self, name="task", environment=self.environment)
+        task = Task(task_def, submitter=self, name=name, environment=self.environment)
         try:
             self.run_start_time = datetime.now()
-            if task.is_async:  # Only workflow tasks can be async
+            if self.worker.is_async:  # Only workflow tasks can be async
                 self.loop.run_until_complete(
                     self.worker.run_async(task, rerun=self.rerun)
                 )

@@ -159,6 +159,7 @@ class TaskDef(ty.Generic[OutputsType]):
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
+        name: str | None = None,
         **kwargs: ty.Any,
     ) -> OutputsType:
         """Create a task from this definition and execute it to produce a result.
@@ -183,6 +184,8 @@ class TaskDef(ty.Generic[OutputsType]):
             Messengers, by default None
         messenger_args : dict, optional
             Messenger arguments, by default None
+        name : str
+            The name of the task, by default None
         **kwargs : dict
             Keyword arguments to pass on to the worker initialisation
 
@@ -209,7 +212,7 @@ class TaskDef(ty.Generic[OutputsType]):
                 worker=worker,
                 **kwargs,
             ) as sub:
-                result = sub(self)
+                result = sub(self, name=name)
         except TypeError as e:
             if hasattr(e, "__notes__") and WORKER_KWARG_FAIL_NOTE in e.__notes__:
                 if match := re.match(
@@ -411,6 +414,10 @@ class TaskDef(ty.Generic[OutputsType]):
     def _hash(self):
         hsh, self._hashes = self._compute_hashes()
         return hsh
+
+    @property
+    def _checksum(self):
+        return f"{self._task_type}-{self._hash}"
 
     def _hash_changes(self):
         """Detects any changes in the hashed values between the current inputs and the

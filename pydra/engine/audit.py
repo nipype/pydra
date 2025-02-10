@@ -1,6 +1,7 @@
 """Module to keep track of provenance information."""
 
 import os
+import typing as ty
 import json
 from pydra.utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from pydra.engine.helpers import attrs_values
@@ -11,6 +12,9 @@ try:
     import importlib_resources
 except ImportError:
     import importlib.resources as importlib_resources  # type: ignore
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.task import Task
 
 
 class Audit:
@@ -178,17 +182,19 @@ class Audit:
         """
         return self.audit_flags & flag
 
-    def audit_task(self, task):
+    def audit_task(self, task: "Task"):
         import subprocess as sp
-        from .helpers import attrs_fields
+        from .helpers import list_fields
 
         label = task.name
 
-        command = task.cmdline if hasattr(task.inputs, "executable") else None
-        attr_list = attrs_fields(task.inputs)
+        command = (
+            task.definition.cmdline if hasattr(task.definition, "executable") else None
+        )
+        attr_list = list_fields(task.definition)
         for attrs in attr_list:
             input_name = attrs.name
-            value = getattr(task.inputs, input_name)
+            value = task.inputs[input_name]
             if isinstance(value, FileSet):
                 input_path = os.path.abspath(value)
                 file_hash = hash_function(value)

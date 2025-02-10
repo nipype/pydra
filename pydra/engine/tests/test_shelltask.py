@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import stat
 
-from ..task import ShellTask
+from ..task import ShellDef
 from ..submitter import Submitter
 from ..specs import (
     ShellOutputs,
@@ -32,7 +32,7 @@ if sys.platform.startswith("win"):
 def test_shell_cmd_1(plugin_dask_opt, results_function, tmp_path):
     """simple command, no arguments"""
     cmd = ["pwd"]
-    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=tmp_path)
+    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=tmp_path)
     assert shelly.cmdline == " ".join(cmd)
 
     res = results_function(shelly, plugin=plugin_dask_opt)
@@ -47,7 +47,7 @@ def test_shell_cmd_1_strip(plugin, results_function, tmp_path):
     strip option to remove \n at the end os stdout
     """
     cmd = ["pwd"]
-    shelly = ShellTask(name="shelly", executable=cmd, strip=True)
+    shelly = ShellDef(name="shelly", executable=cmd, strip=True)
     shelly.cache_dir = tmp_path
     assert shelly.cmdline == " ".join(cmd)
 
@@ -61,7 +61,7 @@ def test_shell_cmd_1_strip(plugin, results_function, tmp_path):
 def test_shell_cmd_2(plugin, results_function, tmp_path):
     """a command with arguments, cmd and args given as executable"""
     cmd = ["echo", "hail", "pydra"]
-    shelly = ShellTask(name="shelly", executable=cmd)
+    shelly = ShellDef(name="shelly", executable=cmd)
     shelly.cache_dir = tmp_path
     assert shelly.cmdline == " ".join(cmd)
 
@@ -77,7 +77,7 @@ def test_shell_cmd_2a(plugin, results_function, tmp_path):
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
-    shelly = ShellTask(name="shelly", executable=cmd_exec, args=cmd_args)
+    shelly = ShellDef(name="shelly", executable=cmd_exec, args=cmd_args)
     shelly.cache_dir = tmp_path
     assert shelly.definition.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
@@ -94,7 +94,7 @@ def test_shell_cmd_2b(plugin, results_function, tmp_path):
     cmd_exec = "echo"
     cmd_args = "pydra"
     # separate command into exec + args
-    shelly = ShellTask(name="shelly", executable=cmd_exec, args=cmd_args)
+    shelly = ShellDef(name="shelly", executable=cmd_exec, args=cmd_args)
     shelly.cache_dir = tmp_path
     assert shelly.definition.executable == "echo"
     assert shelly.cmdline == "echo pydra"
@@ -116,7 +116,7 @@ def test_shell_cmd_3(plugin_dask_opt, tmp_path):
     cmd = ["pwd", "whoami"]
 
     # all args given as executable
-    shelly = ShellTask(name="shelly").split("executable", executable=cmd)
+    shelly = ShellDef(name="shelly").split("executable", executable=cmd)
     shelly.cache_dir = tmp_path
 
     # assert shelly.cmdline == ["pwd", "whoami"]
@@ -138,7 +138,7 @@ def test_shell_cmd_4(plugin, tmp_path):
     cmd_exec = "echo"
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
-    shelly = ShellTask(name="shelly", executable=cmd_exec).split(
+    shelly = ShellDef(name="shelly", executable=cmd_exec).split(
         splitter="args", args=cmd_args
     )
     shelly.cache_dir = tmp_path
@@ -163,7 +163,7 @@ def test_shell_cmd_5(plugin, tmp_path):
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
     shelly = (
-        ShellTask(name="shelly", executable=cmd_exec)
+        ShellDef(name="shelly", executable=cmd_exec)
         .split(splitter="args", args=cmd_args)
         .combine("args")
     )
@@ -185,7 +185,7 @@ def test_shell_cmd_6(plugin, tmp_path):
     cmd_exec = ["echo", ["echo", "-n"]]
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
-    shelly = ShellTask(name="shelly").split(
+    shelly = ShellDef(name="shelly").split(
         splitter=["executable", "args"], executable=cmd_exec, args=cmd_args
     )
     shelly.cache_dir = tmp_path
@@ -229,7 +229,7 @@ def test_shell_cmd_7(plugin, tmp_path):
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
     shelly = (
-        ShellTask(name="shelly")
+        ShellDef(name="shelly")
         .split(splitter=["executable", "args"], executable=cmd_exec, args=cmd_args)
         .combine("args")
     )
@@ -255,9 +255,9 @@ def test_wf_shell_cmd_1(plugin, tmp_path):
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
     wf.inputs.cmd1 = "pwd"
     wf.inputs.cmd2 = "ls"
-    wf.add(ShellTask(name="shelly_pwd", executable=wf.lzin.cmd1, strip=True))
+    wf.add(ShellDef(name="shelly_pwd", executable=wf.lzin.cmd1, strip=True))
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly_ls", executable=wf.lzin.cmd2, args=wf.shelly_pwd.lzout.stdout
         )
     )
@@ -300,7 +300,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         args=cmd_args,
@@ -348,7 +348,7 @@ def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         args=cmd_args,
@@ -389,7 +389,7 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         text=hello,
@@ -422,7 +422,7 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         text=hello,
@@ -460,7 +460,7 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
     shelly.definition.text = hello
@@ -493,7 +493,7 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
@@ -527,7 +527,7 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
@@ -557,7 +557,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
@@ -581,7 +581,7 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
@@ -612,7 +612,7 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
@@ -650,7 +650,7 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
     with pytest.raises(
         Exception, match=r"default value \('Hello'\) should not be set when the field"
     ):
-        ShellTask(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
+        ShellDef(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
 
 
 def test_shell_cmd_inputspec_4d_exception(plugin):
@@ -680,7 +680,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
     with pytest.raises(
         Exception, match=r"default value \('Hello'\) should not be set together"
     ) as excinfo:
-        ShellTask(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
+        ShellDef(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -720,7 +720,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         opt_t=cmd_t,
@@ -768,7 +768,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         opt_t=cmd_t,
@@ -816,7 +816,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         opt_t=cmd_t,
@@ -861,7 +861,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd_exec, opt_t=cmd_t, input_spec=my_input_spec
     )
     with pytest.raises(Exception) as excinfo:
@@ -904,7 +904,7 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         opt_t=cmd_t,
@@ -944,7 +944,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         args=args,
@@ -989,7 +989,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         args=args,
@@ -1036,7 +1036,7 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         newfile="newfile_tmp.txt",
@@ -1075,7 +1075,7 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         args=args,
@@ -1133,7 +1133,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         newfile="newfile_tmp.txt",
@@ -1190,7 +1190,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         newfile="newfile_tmp.txt",
@@ -1241,7 +1241,7 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1294,7 +1294,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
     )
 
@@ -1342,7 +1342,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1393,7 +1393,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1445,7 +1445,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1496,7 +1496,7 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         files=files_list,
@@ -1545,7 +1545,7 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
     )
 
     with pytest.raises(FileNotFoundError):
-        shelly = ShellTask(
+        shelly = ShellDef(
             name="shelly", executable=cmd_exec, files=file_2, input_spec=my_input_spec
         )
 
@@ -1580,7 +1580,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
     input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellDef,))
     output_spec = SpecInfo(name="Output", fields=output_fields, bases=(ShellOutputs,))
 
-    task = ShellTask(
+    task = ShellDef(
         name="echoMultiple",
         executable="touch",
         input_spec=input_spec,
@@ -1656,7 +1656,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1700,7 +1700,7 @@ def test_shell_cmd_inputspec_with_iterable():
         bases=(ShellDef,),
     )
 
-    task = ShellTask(name="test", input_spec=input_spec, executable="test")
+    task = ShellDef(name="test", input_spec=input_spec, executable="test")
 
     for iterable_type in (list, tuple):
         task.definition.iterable_1 = iterable_type(range(3))
@@ -1750,7 +1750,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1812,7 +1812,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1890,7 +1890,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -1932,7 +1932,7 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         input_spec=my_input_spec,
@@ -1967,7 +1967,7 @@ def test_shell_cmd_inputspec_typeval_1():
     )
 
     with pytest.raises(TypeError):
-        ShellTask(executable=cmd_exec, text="hello", input_spec=my_input_spec)
+        ShellDef(executable=cmd_exec, text="hello", input_spec=my_input_spec)
 
 
 def test_shell_cmd_inputspec_typeval_2():
@@ -1983,7 +1983,7 @@ def test_shell_cmd_inputspec_typeval_2():
     )
 
     with pytest.raises(TypeError):
-        ShellTask(executable=cmd_exec, text="hello", input_spec=my_input_spec)
+        ShellDef(executable=cmd_exec, text="hello", input_spec=my_input_spec)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -2005,7 +2005,7 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
     )
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         input_spec=my_input_spec,
@@ -2043,7 +2043,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -2089,7 +2089,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd_exec,
         input_spec=my_input_spec,
@@ -2149,7 +2149,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -2202,7 +2202,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
     )
 
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly",
             input_spec=my_input_spec,
             executable=wf.lzin.cmd,
@@ -2249,7 +2249,7 @@ def test_wf_shell_cmd_2a(plugin, tmp_path):
     )
 
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly",
             input_spec=my_input_spec,
             executable=wf.lzin.cmd,
@@ -2327,7 +2327,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
     )
 
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly1",
             input_spec=my_input_spec1,
             executable=wf.lzin.cmd1,
@@ -2335,7 +2335,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
         )
     )
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
@@ -2424,7 +2424,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
     )
 
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly1",
             input_spec=my_input_spec1,
             executable=wf.lzin.cmd1,
@@ -2432,7 +2432,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
         )
     )
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
@@ -2519,7 +2519,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
     )
 
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly1",
             input_spec=my_input_spec1,
             executable=wf.lzin.cmd1,
@@ -2527,7 +2527,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
         )
     )
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
@@ -2617,14 +2617,14 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
     )
 
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly1",
             input_spec=my_input_spec1,
             executable=wf.lzin.cmd1,
         ).split("args", args=wf.lzin.args)
     )
     wf.add(
-        ShellTask(
+        ShellDef(
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
@@ -2665,7 +2665,7 @@ def test_shell_cmd_outputspec_1(plugin, results_function, tmp_path):
         fields=[("newfile", File, "newfile_tmp.txt")],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2685,7 +2685,7 @@ def test_shell_cmd_outputspec_1a(plugin, results_function, tmp_path):
         fields=[("newfile", attr.ib(type=File, default="newfile_tmp.txt"))],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2704,7 +2704,7 @@ def test_shell_cmd_outputspec_1b_exception(plugin, tmp_path):
         fields=[("newfile", File, "newfile_tmp_.txt")],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2726,7 +2726,7 @@ def test_shell_cmd_outputspec_2(plugin, results_function, tmp_path):
         fields=[("newfile", File, "newfile_*.txt")],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2746,7 +2746,7 @@ def test_shell_cmd_outputspec_2a_exception(plugin, tmp_path):
         fields=[("newfile", File, "newfile_*K.txt")],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2768,7 +2768,7 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmp_path):
         fields=[("newfile", MultiOutputFile, "newfile_*.txt")],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2802,7 +2802,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2841,7 +2841,7 @@ def test_shell_cmd_outputspec_5a(plugin, results_function, tmp_path):
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     )
 
@@ -2869,7 +2869,7 @@ def test_shell_cmd_outputspec_5b_error():
         fields=[("newfile", attr.ib(type=File, metadata={"callable": gather_output}))],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellDef(name="shelly", executable=cmd, output_spec=my_output_spec)
     with pytest.raises(AttributeError, match="ble"):
         shelly()
 
@@ -2890,7 +2890,7 @@ def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
 
         newfile: MultiOutputFile = attr.ib(metadata={"callable": gather_output})
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"],
         output_spec=SpecInfo(name="Output", bases=(MyOutputDef,)),
@@ -2930,7 +2930,7 @@ def test_shell_cmd_outputspec_6(plugin, results_function, tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         args=args,
@@ -2963,7 +2963,7 @@ def test_shell_cmd_outputspec_6a():
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, args=args, output_spec=my_output_spec
     )
 
@@ -3033,7 +3033,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3109,7 +3109,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3178,7 +3178,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     ).split("args", args=args)
 
@@ -3206,7 +3206,7 @@ def test_shell_cmd_outputspec_8b_error():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(name="shelly", executable=cmd, output_spec=my_output_spec).split(
+    shelly = ShellDef(name="shelly", executable=cmd, output_spec=my_output_spec).split(
         "args", args=args
     )
     with pytest.raises(Exception) as e:
@@ -3243,7 +3243,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         output_spec=my_output_spec,
@@ -3304,7 +3304,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name=cmd,
         executable=cmd,
         input_spec=my_input_spec,
@@ -3351,7 +3351,7 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         output_spec=my_output_spec,
@@ -3383,7 +3383,7 @@ def test_shell_cmd_outputspec_wf_1(plugin, tmp_path):
         fields=[("newfile", File, "newfile_tmp.txt")],
         bases=(ShellOutputs,),
     )
-    wf.add(ShellTask(name="shelly", executable=wf.lzin.cmd, output_spec=my_output_spec))
+    wf.add(ShellDef(name="shelly", executable=wf.lzin.cmd, output_spec=my_output_spec))
     wf.set_output(
         [("stdout", wf.shelly.lzout.stdout), ("newfile", wf.shelly.lzout.newfile)]
     )
@@ -3436,7 +3436,7 @@ def test_shell_cmd_inputspec_outputspec_1():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3490,7 +3490,7 @@ def test_shell_cmd_inputspec_outputspec_1a():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3551,7 +3551,7 @@ def test_shell_cmd_inputspec_outputspec_2():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3618,7 +3618,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3690,7 +3690,7 @@ def test_shell_cmd_inputspec_outputspec_3():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3751,7 +3751,7 @@ def test_shell_cmd_inputspec_outputspec_3a():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3815,7 +3815,7 @@ def test_shell_cmd_inputspec_outputspec_4():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3870,7 +3870,7 @@ def test_shell_cmd_inputspec_outputspec_4a():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3925,7 +3925,7 @@ def test_shell_cmd_inputspec_outputspec_5():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -3979,7 +3979,7 @@ def test_shell_cmd_inputspec_outputspec_5a():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -4033,7 +4033,7 @@ def test_shell_cmd_inputspec_outputspec_5b():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -4082,7 +4082,7 @@ def test_shell_cmd_inputspec_outputspec_6_except():
         ],
         bases=(ShellOutputs,),
     )
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
@@ -4329,7 +4329,7 @@ def test_fsl(data_tests_dir):
     in_file = data_tests_dir / "test.nii.gz"
 
     # separate command into exec + args
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="bet_task", executable="bet", in_file=in_file, input_spec=bet_input_spec
     )
     out_file = shelly.output_dir / "test_brain.nii.gz"
@@ -4376,7 +4376,7 @@ def test_shell_cmd_optional_output_file1(tmp_path):
         bases=(ShellDef,),
     )
 
-    my_cp = ShellTask(
+    my_cp = ShellDef(
         name="my_cp",
         executable="cp",
         input_spec=my_cp_spec,
@@ -4414,7 +4414,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
         bases=(ShellDef,),
     )
 
-    my_cp = ShellTask(
+    my_cp = ShellDef(
         name="my_cp",
         executable="cp",
         input_spec=my_cp_spec,
@@ -4478,7 +4478,7 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         cache_dir=tmp_path,
         executable="echo",
         input_spec=input_spec,
@@ -4540,7 +4540,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         cache_dir=tmp_path,
         executable="touch",
         input_spec=input_spec,
@@ -4607,7 +4607,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         cache_dir=tmp_path,
         executable="touch",
         input_spec=input_spec,
@@ -4675,7 +4675,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         cache_dir=tmp_path,
         executable="touch",
         input_spec=input_spec,
@@ -4728,7 +4728,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         cache_dir=tmp_path,
         executable="echo",
         input_spec=input_spec,
@@ -4782,7 +4782,7 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
         bases=(ShellOutputs,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         cache_dir=tmp_path,
         executable="touch",
         input_spec=input_spec,
@@ -4855,11 +4855,11 @@ def test_shellspec_formatter_1(tmp_path):
         return f"-t [{inputs['in1']}, {inputs['in2']}]"
 
     input_spec = spec_info(formatter_1)
-    shelly = ShellTask(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
+    shelly = ShellDef(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
     assert shelly.cmdline == "exec -t [i1, i2]"
 
     # testing that the formatter can overwrite a provided value for together.
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="exec",
         input_spec=input_spec,
         in1="i1",
@@ -4875,7 +4875,7 @@ def test_shellspec_formatter_1(tmp_path):
 
     input_spec = spec_info(formatter_2)
 
-    shelly = ShellTask(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
+    shelly = ShellDef(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
     assert shelly.cmdline == "exec -t [i1, i2]"
 
     def formatter_3(in1, in3):
@@ -4884,7 +4884,7 @@ def test_shellspec_formatter_1(tmp_path):
 
     input_spec = spec_info(formatter_3)
 
-    shelly = ShellTask(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
+    shelly = ShellDef(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
     with pytest.raises(Exception) as excinfo:
         shelly.cmdline
     assert (
@@ -4900,7 +4900,7 @@ def test_shellspec_formatter_1(tmp_path):
 
     input_spec = spec_info(formatter_5)
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         executable="exec",
         input_spec=input_spec,
         in1="i1",
@@ -4917,7 +4917,7 @@ def test_shellspec_formatter_1(tmp_path):
 
     input_spec = spec_info(formatter_4)
 
-    shelly = ShellTask(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
+    shelly = ShellDef(executable="exec", input_spec=input_spec, in1="i1", in2="i2")
     assert shelly.cmdline == "exec"
 
 
@@ -4969,7 +4969,7 @@ def test_shellspec_formatter_splitter_2(tmp_path):
 
     input_spec = spec_info(formatter_1)
     in1 = ["in11", "in12"]
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="f", executable="executable", input_spec=input_spec, in2="in2"
     ).split("in1", in1=in1)
     assert shelly is not None
@@ -5016,7 +5016,7 @@ def test_shellcommand_error_msg(tmp_path):
         bases=(ShellDef,),
     )
 
-    shelly = ShellTask(
+    shelly = ShellDef(
         name="err_msg", executable=str(script_path), input_spec=input_spec, in1="hello"
     )
 

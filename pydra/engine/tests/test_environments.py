@@ -1,10 +1,12 @@
 from pathlib import Path
 
 from ..environments import Native, Docker, Singularity
-from ..task import ShellTask
+from ..task import ShellDef
 from ..submitter import Submitter
 from fileformats.generic import File
 from pydra.design import shell
+from pydra.engine.core import Task
+from pydra.engine.helpers import attrs_values
 from .utils import no_win, need_docker, need_singularity
 import pytest
 
@@ -17,28 +19,31 @@ def makedir(path, name):
 
 def test_native_1(tmp_path):
     """simple command, no arguments"""
-    newcache = lambda x: makedir(tmp_path, x)
 
-    cmd = ["whoami"]
-    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
-    assert shelly.cmdline == " ".join(cmd)
+    def newcache(x):
+        return makedir(tmp_path, x)
 
-    env_res = Native().execute(shelly)
-    shelly()
-    assert env_res == shelly.output_
+    cmd = "whoami"
+    ShellDef = shell.define(cmd)
 
-    shelly_call = ShellTask(
-        name="shelly_call", executable=cmd, cache_dir=newcache("shelly_call")
+    shelly = ShellDef()
+    assert shelly.cmdline == cmd
+    shelly_task = Task(
+        definition=shelly,
+        submitter=Submitter(cache_dir=newcache("shelly-task")),
+        name="shelly",
     )
-    shelly_call(environment=Native())
-    assert env_res == shelly_call.output_
 
-    shelly_subm = ShellTask(
-        name="shelly_subm", executable=cmd, cache_dir=newcache("shelly_subm")
-    )
-    with Submitter(worker="cf") as sub:
-        shelly_subm(submitter=sub, environment=Native())
-    assert env_res == shelly_subm.result().output.__dict__
+    env_outputs = Native().execute(shelly_task)
+    outputs = shelly(cache_dir=newcache("shelly-exec"))
+    assert env_outputs == attrs_values(outputs)
+
+    outputs = shelly(environment=Native())
+    assert env_outputs == attrs_values(outputs)
+
+    with Submitter(cache_dir=newcache("shelly-submitter"), environment=Native()) as sub:
+        result = sub(shelly)
+    assert env_outputs == attrs_values(result.outputs)
 
 
 @no_win
@@ -49,11 +54,11 @@ def test_docker_1(tmp_path):
 
     cmd = ["whoami"]
     docker = Docker(image="busybox")
-    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
+    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = docker.execute(shelly)
 
-    shelly_env = ShellTask(
+    shelly_env = ShellDef(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -62,7 +67,7 @@ def test_docker_1(tmp_path):
     shelly_env()
     assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
 
-    shelly_call = ShellTask(
+    shelly_call = ShellDef(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     shelly_call(environment=docker)
@@ -85,11 +90,11 @@ def test_docker_1_subm(tmp_path, docker):
 
     cmd = ["whoami"]
     docker = Docker(image="busybox")
-    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
+    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = docker.execute(shelly)
 
-    shelly_env = ShellTask(
+    shelly_env = ShellDef(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -99,7 +104,7 @@ def test_docker_1_subm(tmp_path, docker):
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
-    shelly_call = ShellTask(
+    shelly_call = ShellDef(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     with Submitter(worker="cf") as sub:
@@ -115,11 +120,11 @@ def test_singularity_1(tmp_path):
 
     cmd = ["whoami"]
     sing = Singularity(image="docker://alpine")
-    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
+    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = sing.execute(shelly)
 
-    shelly_env = ShellTask(
+    shelly_env = ShellDef(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -128,7 +133,7 @@ def test_singularity_1(tmp_path):
     shelly_env()
     assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
 
-    shelly_call = ShellTask(
+    shelly_call = ShellDef(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     shelly_call(environment=sing)
@@ -143,11 +148,11 @@ def test_singularity_1_subm(tmp_path, plugin):
 
     cmd = ["whoami"]
     sing = Singularity(image="docker://alpine")
-    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
+    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = sing.execute(shelly)
 
-    shelly_env = ShellTask(
+    shelly_env = ShellDef(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -157,7 +162,7 @@ def test_singularity_1_subm(tmp_path, plugin):
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
-    shelly_call = ShellTask(
+    shelly_call = ShellDef(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     with Submitter(worker=plugin) as sub:

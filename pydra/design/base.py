@@ -830,10 +830,16 @@ def extract_function_inputs_and_outputs(
         inputs = input_types
     for inpt_name, default in input_defaults.items():
         inpt = inputs[inpt_name]
-        if isinstance(inpt, arg_type) and inpt.default is EMPTY:
-            inpt.default = default
-        else:
+        if isinstance(inpt, arg_type):
+            if inpt.default is EMPTY:
+                inpt.default = default
+        elif inspect.isclass(inpt):
             inputs[inpt_name] = arg_type(type=inpt, default=default)
+        else:
+            raise ValueError(
+                f"Unrecognised input type ({inpt}) for input {inpt_name} with default "
+                f"value {default}"
+            )
     return_type = type_hints.get("return", ty.Any)
     if outputs and len(outputs) > 1:
         if return_type is not ty.Any:

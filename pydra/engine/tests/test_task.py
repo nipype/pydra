@@ -1,25 +1,25 @@
 import typing as ty
 import os
 import sys
-import attr
+import attrs
+import shutil
 import pytest
 import cloudpickle as cp
 from pathlib import Path
 import json
 import glob as glob
-from pydra.design import python
+from pydra.design import python, shell, workflow
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from ..task import AuditFlag, ShellTask
-from pydra.engine.specs import argstr_formatting
+from ..task import AuditFlag
+from pydra.engine.specs import argstr_formatting, ShellDef, ShellOutputs
 from pydra.engine.helpers import list_fields, print_help
+from pydra.engine.submitter import Submitter
+from pydra.engine.core import Task
 from .utils import BasicWorkflow
 from pydra.utils import default_run_cache_dir
 from pydra.utils.typing import (
     MultiInputObj,
     MultiOutputObj,
-)
-from ..specs import (
-    ShellDef,
 )
 from fileformats.generic import File
 from pydra.utils.hash import hash_function
@@ -59,7 +59,7 @@ def test_numpy():
 def test_checksum():
     nn = FunAddTwo(a=3)
     assert (
-        nn.checksum
+        nn._checksum
         == "PythonTask_abb4e7cc03b13d0e73884b87d142ed5deae6a312275187a9d8df54407317d7d3"
     )
 
@@ -407,11 +407,9 @@ def test_annotated_func_multreturn_exception():
     but three element provided in the definition - should raise an error
     """
 
-    @python.define
+    @python.define(outputs={"fractional": float, "integer": int, "who_knows": int})
     def TestFunc(
         a: float,
-    ) -> ty.NamedTuple(
-        "Output", [("fractional", float), ("integer", int), ("who_knows", int)]
     ):
         import math
 
@@ -423,7 +421,11 @@ def test_annotated_func_multreturn_exception():
     assert "expected 3 elements" in str(excinfo.value)
 
 
-def test_halfannotated_func():
+def test_halfannotated_func(tmp_path):
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+
     @python.define
     def TestFunc(a, b) -> int:
         return a + b
@@ -437,34 +439,36 @@ def test_halfannotated_func():
     assert getattr(funky, "function") is not None
     assert set(f.name for f in list_fields(funky.Outputs)) == {"out"}
 
-    outputs = funky()
+    outputs = funky(cache_dir=cache_dir)
     assert hasattr(outputs, "out")
     assert outputs.out == 30
 
-    assert os.path.exists(
-        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
-    )
+    assert Path(cache_dir / f"python-{funky._hash}" / "_result.pklz").exists()
 
-    funky.result()  # should not recompute
+    funky(cache_dir=cache_dir)  # should not recompute
     funky.a = 11
-    assert funky.result() is None
-    outputs = funky()
+    assert not Path(cache_dir / f"python-{funky._hash}").exists()
+    outputs = funky(cache_dir=cache_dir)
     assert outputs.out == 31
-    help = funky.help(returnhelp=True)
+    help = print_help(funky)
 
     assert help == [
         "Help for TestFunc",
         "Input Parameters:",
-        "- a: _empty",
-        "- b: _empty",
+        "- a: Any",
+        "- b: Any",
         "Output Parameters:",
         "- out: int",
     ]
 
 
-def test_halfannotated_func_multreturn():
-    @python.define
-    def TestFunc(a, b) -> (int, int):
+def test_halfannotated_func_multreturn(tmp_path):
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+
+    @python.define(outputs=["out1", "out2"])
+    def TestFunc(a, b) -> tuple[int, int]:
         return a + 1, b + 1
 
     funky = TestFunc(a=10, b=20)
@@ -476,26 +480,24 @@ def test_halfannotated_func_multreturn():
     assert getattr(funky, "function") is not None
     assert set(f.name for f in list_fields(funky.Outputs)) == {"out1", "out2"}
 
-    outputs = funky()
+    outputs = funky(cache_dir=cache_dir)
     assert hasattr(outputs, "out1")
     assert outputs.out1 == 11
 
-    assert os.path.exists(
-        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
-    )
+    assert Path(cache_dir / f"python-{funky._hash}" / "_result.pklz").exists()
 
-    funky.result()  # should not recompute
+    funky(cache_dir=cache_dir)  # should not recompute
     funky.a = 11
-    assert funky.result() is None
-    outputs = funky()
+    assert not Path(cache_dir / f"python-{funky._hash}" / "_result.pklz").exists()
+    outputs = funky(cache_dir=cache_dir)
     assert outputs.out1 == 12
-    help = funky.help(returnhelp=True)
+    help = print_help(funky)
 
     assert help == [
         "Help for TestFunc",
         "Input Parameters:",
-        "- a: _empty",
-        "- b: _empty",
+        "- a: Any",
+        "- b: Any",
         "Output Parameters:",
         "- out1: int",
         "- out2: int",
@@ -504,38 +506,37 @@ def test_halfannotated_func_multreturn():
 
 def test_notannotated_func():
     @python.define
-    def no_annots(c, d):
+    def NoAnnots(c, d):
         return c + d
 
-    natask = no_annots(c=17, d=3.2)
-    assert hasattr(natask, "c")
-    assert hasattr(natask, "d")
-    assert hasattr(natask, "function")
+    no_annots = NoAnnots(c=17, d=3.2)
+    assert hasattr(no_annots, "c")
+    assert hasattr(no_annots, "d")
+    assert hasattr(no_annots, "function")
 
-    result = natask._run()
-    assert hasattr(result, "output")
+    outputs = no_annots()
     assert hasattr(outputs, "out")
     assert outputs.out == 20.2
 
 
 def test_notannotated_func_returnlist():
     @python.define
-    def no_annots(c, d):
+    def NoAnnots(c, d):
         return [c, d]
 
-    natask = no_annots(c=17, d=3.2)
-    result = natask._run()
+    no_annots = NoAnnots(c=17, d=3.2)
+    outputs = no_annots()
     assert hasattr(outputs, "out")
     assert outputs.out == [17, 3.2]
 
 
 def test_halfannotated_func_multrun_returnlist():
-    @python.define
-    def no_annots(c, d) -> (list, float):
+    @python.define(outputs=["out1", "out2"])
+    def NoAnnots(c, d) -> tuple[list, float]:
         return [c, d], c + d
 
-    natask = no_annots(c=17, d=3.2)
-    result = natask._run()
+    no_annots = NoAnnots(c=17, d=3.2)
+    outputs = no_annots()
 
     assert hasattr(outputs, "out1")
     assert hasattr(outputs, "out2")
@@ -549,16 +550,15 @@ def test_notannotated_func_multreturn():
     """
 
     @python.define
-    def no_annots(c, d):
+    def NoAnnots(c, d):
         return c + d, c - d
 
-    natask = no_annots(c=17, d=3.2)
-    assert hasattr(natask, "c")
-    assert hasattr(natask, "d")
-    assert hasattr(natask, "function")
+    no_annots = NoAnnots(c=17, d=3.2)
+    assert hasattr(no_annots, "c")
+    assert hasattr(no_annots, "d")
+    assert hasattr(no_annots, "function")
 
-    result = natask._run()
-    assert hasattr(result, "output")
+    outputs = no_annots()
     assert hasattr(outputs, "out")
     assert outputs.out == (20.2, 13.8)
 
@@ -566,18 +566,12 @@ def test_notannotated_func_multreturn():
 def test_input_spec_func_1():
     """the function w/o annotated, but input_spec is used"""
 
-    @python.define
+    @python.define(inputs={"a": python.arg(type=float, help="input a")})
     def TestFunc(a):
         return a
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[("a", attr.ib(type=float, metadata={"help": "input a"}))],
-        bases=(FunctionDef,),
-    )
-
-    funky = TestFunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky, "a") == 3.5
+    funky = TestFunc(a=3.5)
+    assert funky.a == 3.5
 
 
 def test_input_spec_func_1a_except():
@@ -585,17 +579,12 @@ def test_input_spec_func_1a_except():
     a TypeError is raised (float is provided instead of int)
     """
 
-    @python.define
+    @python.define(inputs={"a": python.arg(type=int, help="input a")})
     def TestFunc(a):
         return a
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[("a", attr.ib(type=int, metadata={"help": "input a"}))],
-        bases=(FunctionDef,),
-    )
     with pytest.raises(TypeError):
-        TestFunc(a=3.5, input_spec=my_input_spec)
+        TestFunc(a=3.5)
 
 
 def test_input_spec_func_1b_except():
@@ -603,22 +592,13 @@ def test_input_spec_func_1b_except():
     metadata checks raise an error
     """
 
-    @python.define
-    def TestFunc(a):
-        return a
+    with pytest.raises(
+        TypeError, match="got an unexpected keyword argument 'position'"
+    ):
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "a",
-                attr.ib(type=float, metadata={"position": 1, "help": "input a"}),
-            )
-        ],
-        bases=(FunctionDef,),
-    )
-    with pytest.raises(AttributeError, match="only these keys are supported"):
-        TestFunc(a=3.5, input_spec=my_input_spec)
+        @python.define(inputs={"a": python.arg(type=float, position=1, help="input a")})
+        def TestFunc(a):
+            return a
 
 
 def test_input_spec_func_1d_except():
@@ -630,9 +610,8 @@ def test_input_spec_func_1d_except():
     def TestFunc(a):
         return a
 
-    my_input_spec = SpecInfo(name="Input", fields=[], bases=(FunctionDef,))
-    funky = TestFunc(a=3.5, input_spec=my_input_spec)
-    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+    funky = TestFunc()
+    with pytest.raises(ValueError, match="Mandatory field 'a' is not set"):
         funky()
 
 
@@ -641,18 +620,12 @@ def test_input_spec_func_2():
     input_spec changes the type of the input (so error is not raised)
     """
 
-    @python.define
+    @python.define(inputs={"a": python.arg(type=float, help="input a")})
     def TestFunc(a: int):
         return a
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[("a", attr.ib(type=float, metadata={"help": "input a"}))],
-        bases=(FunctionDef,),
-    )
-
-    funky = TestFunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky, "a") == 3.5
+    funky = TestFunc(a=3.5)
+    assert funky.a == 3.5
 
 
 def test_input_spec_func_2a():
@@ -661,18 +634,12 @@ def test_input_spec_func_2a():
     using the shorter syntax
     """
 
-    @python.define
+    @python.define(inputs={"a": python.arg(type=float, help="input a")})
     def TestFunc(a: int):
         return a
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[("a", float, {"help": "input a"})],
-        bases=(FunctionDef,),
-    )
-
-    funky = TestFunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky, "a") == 3.5
+    funky = TestFunc(a=3.5)
+    assert funky.a == 3.5
 
 
 def test_input_spec_func_3():
@@ -680,26 +647,20 @@ def test_input_spec_func_3():
     additional keys (allowed_values) are used in metadata
     """
 
-    @python.define
+    @python.define(
+        inputs={
+            "a": python.arg(
+                type=int,
+                help="input a",
+                allowed_values=[0, 1, 2],
+            )
+        }
+    )
     def TestFunc(a):
         return a
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "a",
-                attr.ib(
-                    type=int,
-                    metadata={"help": "input a", "allowed_values": [0, 1, 2]},
-                ),
-            )
-        ],
-        bases=(FunctionDef,),
-    )
-
-    funky = TestFunc(a=2, input_spec=my_input_spec)
-    assert getattr(funky, "a") == 2
+    funky = TestFunc(a=2)
+    assert funky.a == 2
 
 
 def test_input_spec_func_3a_except():
@@ -707,26 +668,20 @@ def test_input_spec_func_3a_except():
     allowed_values is used in metadata and the ValueError is raised
     """
 
-    @python.define
+    @python.define(
+        inputs={
+            "a": python.arg(
+                type=int,
+                help="input a",
+                allowed_values=[0, 1, 2],
+            )
+        }
+    )
     def TestFunc(a):
         return a
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "a",
-                attr.ib(
-                    type=int,
-                    metadata={"help": "input a", "allowed_values": [0, 1, 2]},
-                ),
-            )
-        ],
-        bases=(FunctionDef,),
-    )
-
     with pytest.raises(ValueError, match="value of a has to be"):
-        TestFunc(a=3, input_spec=my_input_spec)
+        TestFunc(a=3)
 
 
 def test_input_spec_func_4():
@@ -734,27 +689,17 @@ def test_input_spec_func_4():
     but b is set as mandatory in the input_spec, so error is raised if not provided
     """
 
-    @python.define
-    def TestFunc(a, b=1):
+    @python.define(
+        inputs={
+            "a": python.arg(type=int, help="input a"),
+            "b": python.arg(type=int, help="input b"),
+        }
+    )
+    def TestFunc(a, b):
         return a + b
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "a",
-                attr.ib(type=int, metadata={"help": "input a", "mandatory": True}),
-            ),
-            (
-                "b",
-                attr.ib(type=int, metadata={"help": "input b", "mandatory": True}),
-            ),
-        ],
-        bases=(FunctionDef,),
-    )
-
-    funky = TestFunc(a=2, input_spec=my_input_spec)
-    with pytest.raises(Exception, match="b is mandatory"):
+    funky = TestFunc(a=2)
+    with pytest.raises(Exception, match="Mandatory field 'b' is not set"):
         funky()
 
 
@@ -763,23 +708,16 @@ def test_input_spec_func_4a():
     has a different default value, so value from the function is overwritten
     """
 
-    @python.define
+    @python.define(
+        inputs={
+            "a": python.arg(type=int, help="input a"),
+            "b": python.arg(type=int, help="input b", default=10),
+        }
+    )
     def TestFunc(a, b=1):
         return a + b
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "a",
-                attr.ib(type=int, metadata={"help": "input a", "mandatory": True}),
-            ),
-            ("b", attr.ib(type=int, default=10, metadata={"help": "input b"})),
-        ],
-        bases=(FunctionDef,),
-    )
-
-    funky = TestFunc(a=2, input_spec=my_input_spec)
+    funky = TestFunc(a=2)
     outputs = funky()
     assert outputs.out == 12
 
@@ -789,18 +727,12 @@ def test_input_spec_func_5():
     a single value is provided and should be converted to a list
     """
 
-    @python.define
+    @python.define(inputs={"a": python.arg(type=MultiInputObj, help="input a")})
     def TestFunc(a):
         return len(a)
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[("a", attr.ib(type=MultiInputObj, metadata={"help": "input a"}))],
-        bases=(FunctionDef,),
-    )
-
-    funky = TestFunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky, "a") == MultiInputObj([3.5])
+    funky = TestFunc(a=3.5)
+    assert funky.a == MultiInputObj([3.5])
     outputs = funky()
     assert outputs.out == 1
 
@@ -808,17 +740,11 @@ def test_input_spec_func_5():
 def test_output_spec_func_1():
     """the function w/o annotated, but output_spec is used"""
 
-    @python.define
+    @python.define(outputs={"out1": python.out(type=float, help="output")})
     def TestFunc(a):
         return a
 
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("out1", attr.ib(type=float, metadata={"help": "output"}))],
-        bases=(BaseDef,),
-    )
-
-    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    funky = TestFunc(a=3.5)
     outputs = funky()
     assert outputs.out1 == 3.5
 
@@ -828,17 +754,11 @@ def test_output_spec_func_1a_except():
     float returned instead of int - TypeError
     """
 
-    @python.define
+    @python.define(outputs={"out1": python.out(type=int, help="output")})
     def TestFunc(a):
         return a
 
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("out1", attr.ib(type=int, metadata={"help": "output"}))],
-        bases=(BaseDef,),
-    )
-
-    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    funky = TestFunc(a=3.5)
     with pytest.raises(TypeError):
         funky()
 
@@ -848,17 +768,11 @@ def test_output_spec_func_2():
     output_spec changes the type of the output (so error is not raised)
     """
 
-    @python.define
+    @python.define(outputs={"out1": python.out(type=float, help="output")})
     def TestFunc(a) -> int:
         return a
 
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("out1", attr.ib(type=float, metadata={"help": "output"}))],
-        bases=(BaseDef,),
-    )
-
-    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    funky = TestFunc(a=3.5)
     outputs = funky()
     assert outputs.out1 == 3.5
 
@@ -869,17 +783,11 @@ def test_output_spec_func_2a():
     using a shorter syntax
     """
 
-    @python.define
+    @python.define(outputs={"out1": python.out(type=float, help="output")})
     def TestFunc(a) -> int:
         return a
 
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("out1", float, {"help": "output"})],
-        bases=(BaseDef,),
-    )
-
-    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    funky = TestFunc(a=3.5)
     outputs = funky()
     assert outputs.out1 == 3.5
 
@@ -889,22 +797,11 @@ def test_output_spec_func_3():
     MultiOutputObj is used, output is a 2-el list, so converter doesn't do anything
     """
 
-    @python.define
+    @python.define(outputs={"out_list": python.out(type=MultiOutputObj, help="output")})
     def TestFunc(a, b):
         return [a, b]
 
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[
-            (
-                "out_list",
-                attr.ib(type=MultiOutputObj, metadata={"help": "output"}),
-            )
-        ],
-        bases=(BaseDef,),
-    )
-
-    funky = TestFunc(a=3.5, b=1, output_spec=my_output_spec)
+    funky = TestFunc(a=3.5, b=1)
     outputs = funky()
     assert outputs.out_list == [3.5, 1]
 
@@ -914,24 +811,13 @@ def test_output_spec_func_4():
     MultiOutputObj is used, output is a 1el list, so converter return the element
     """
 
-    @python.define
+    @python.define(outputs={"out_list": python.out(type=MultiOutputObj, help="output")})
     def TestFunc(a):
         return [a]
 
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[
-            (
-                "out_1el",
-                attr.ib(type=MultiOutputObj, metadata={"help": "output"}),
-            )
-        ],
-        bases=(BaseDef,),
-    )
-
-    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    funky = TestFunc(a=3.5)
     outputs = funky()
-    assert outputs.out_1el == 3.5
+    assert outputs.out_list == 3.5
 
 
 def test_exception_func():
@@ -947,10 +833,10 @@ def test_result_none_1():
     """checking if None is properly returned as the result"""
 
     @python.define
-    def fun_none(x):
+    def FunNone(x):
         return None
 
-    task = fun_none(name="none", x=3)
+    task = FunNone(x=3)
     outputs = task()
     assert outputs.out is None
 
@@ -958,11 +844,11 @@ def test_result_none_1():
 def test_result_none_2():
     """checking if None is properly set for all outputs"""
 
-    @python.define
-    def fun_none(x) -> (ty.Any, ty.Any):
-        return None
+    @python.define(outputs=["out1", "out2"])
+    def FunNone(x) -> tuple[ty.Any, ty.Any]:
+        return None  # Do we actually want this behaviour?
 
-    task = fun_none(name="none", x=3)
+    task = FunNone(x=3)
     outputs = task()
     assert outputs.out1 is None
     assert outputs.out2 is None
@@ -971,38 +857,40 @@ def test_result_none_2():
 def test_audit_prov(
     tmpdir,
 ):
-    @python.define
-    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    @python.define(outputs={"out": float})
+    def TestFunc(a: int, b: float = 0.1):
         return a + b
 
     # printing the audit message
-    funky = TestFunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
-    funky.cache_dir = tmpdir
-    funky()
+    funky = TestFunc(a=1)
+    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
 
     # saving the audit message into the file
-    funky = TestFunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
-    funky.cache_dir = tmpdir
-    funky()
+    funky = TestFunc(a=2)
+    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     # this should be the default loctaion
-    message_path = tmpdir / funky.checksum / "messages"
-    assert (tmpdir / funky.checksum / "messages").exists()
+    message_path = tmpdir / funky._checksum / "messages"
+    assert (tmpdir / funky._checksum / "messages").exists()
 
-    collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
-    assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+    collect_messages(tmpdir / funky._checksum, message_path, ld_op="compact")
+    assert (tmpdir / funky._checksum / "messages.jsonld").exists()
 
 
 def test_audit_task(tmpdir):
-    @python.define
-    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    @python.define(outputs={"out": float})
+    def TestFunc(a: int, b: float = 0.1):
         return a + b
 
     from glob import glob
 
-    funky = TestFunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
-    funky.cache_dir = tmpdir
-    funky()
-    message_path = tmpdir / funky.checksum / "messages"
+    funky = TestFunc(a=2)
+    funky(
+        cache_dir=tmpdir,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+        name="TestFunc",
+    )
+    message_path = tmpdir / funky._checksum / "messages"
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file) as f:
@@ -1021,20 +909,19 @@ def test_audit_task(tmpdir):
 
 
 def test_audit_shellcommandtask(tmpdir):
-    args = "-l"
-    shelly = ShellTask(
-        name="shelly",
-        executable="ls",
-        args=args,
-        audit_flags=AuditFlag.PROV,
-        messengers=FileMessenger(),
-    )
+    Shelly = shell.define("ls -l<long=True>")
 
     from glob import glob
 
-    shelly.cache_dir = tmpdir
-    shelly()
-    message_path = tmpdir / shelly.checksum / "messages"
+    shelly = Shelly()
+
+    shelly(
+        cache_dir=tmpdir,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+        name="shelly",
+    )
+    message_path = tmpdir / shelly._checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
 
     command_content = []
@@ -1080,48 +967,33 @@ def test_audit_shellcommandtask_file(tmp_path):
     file_in_2 = File(tmp_path / "test2.txt")
     test_file_hash = hash_function(file_in)
     test_file_hash_2 = hash_function(file_in_2)
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "in_file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help": "text",
-                        "mandatory": True,
-                    },
-                ),
+    Shelly = shell.define(
+        cmd,
+        inputs={
+            "in_file": shell.arg(
+                type=File,
+                position=1,
+                argstr="",
+                help="text",
             ),
-            (
-                "in_file_2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help": "text",
-                        "mandatory": True,
-                    },
-                ),
+            "in_file_2": shell.arg(
+                type=File,
+                position=2,
+                argstr="",
+                help="text",
             ),
-        ],
-        bases=(ShellDef,),
+        },
     )
-    shelly = ShellTask(
-        name="shelly",
+    shelly = Shelly(
         in_file=file_in,
         in_file_2=file_in_2,
-        input_spec=my_input_spec,
-        executable=cmd,
+    )
+    shelly(
+        cache_dir=tmp_path,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-    shelly.cache_dir = tmp_path
-    results = shelly()
-    message_path = tmp_path / shelly.checksum / "messages"
+    message_path = tmp_path / shelly._hash / "messages"
     for file in glob.glob(str(message_path) + "/*.jsonld"):
         with open(file) as x:
             data = json.load(x)
@@ -1142,20 +1014,19 @@ def test_audit_shellcommandtask_version(tmpdir):
         "utf-8"
     )
     version_cmd = version_cmd.splitlines()[0]
-    cmd = "less"
-    shelly = ShellTask(
-        name="shelly",
-        executable=cmd,
-        args="test_task.py",
-        audit_flags=AuditFlag.PROV,
-        messengers=FileMessenger(),
-    )
+    cmd = "less test_task.py"
+    Shelly = shell.define(cmd)
+    shelly = Shelly()
 
     import glob
 
-    shelly.cache_dir = tmpdir
-    shelly()
-    message_path = tmpdir / shelly.checksum / "messages"
+    shelly(
+        cache_dir=tmpdir,
+        name="shelly",
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+    )
+    message_path = tmpdir / shelly._checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
     version_content = []
     for file in glob.glob(str(message_path) + "/*.jsonld"):
@@ -1173,27 +1044,32 @@ def test_audit_prov_messdir_1(
 ):
     """customized messenger dir"""
 
-    @python.define
-    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    @python.define(outputs={"out": float})
+    def TestFunc(a: int, b: float = 0.1):
         return a + b
 
     # printing the audit message
-    funky = TestFunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
-    funky.cache_dir = tmpdir
-    funky()
+    funky = TestFunc(a=1)
+    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
 
     # saving the audit message into the file
-    funky = TestFunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky = TestFunc(a=2)
     # user defined path
-    message_path = tmpdir / funky.checksum / "my_messages"
-    funky.cache_dir = tmpdir
+    message_path = tmpdir / funky._checksum / "my_messages"
     # providing messenger_dir for audit
-    funky.audit.messenger_args = dict(message_dir=message_path)
-    funky()
-    assert (tmpdir / funky.checksum / "my_messages").exists()
+    funky_task = Task(
+        definition=funky,
+        submitter=Submitter(
+            cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
+        ),
+        name="funky",
+    )
+    funky_task.audit.messenger_args = dict(message_dir=message_path)
+    funky_task.run()
+    assert (tmpdir / funky._checksum / "my_messages").exists()
 
-    collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
-    assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+    collect_messages(tmpdir / funky._checksum, message_path, ld_op="compact")
+    assert (tmpdir / funky._checksum / "messages.jsonld").exists()
 
 
 def test_audit_prov_messdir_2(
@@ -1201,27 +1077,25 @@ def test_audit_prov_messdir_2(
 ):
     """customized messenger dir in init"""
 
-    @python.define
-    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    @python.define(outputs={"out": float})
+    def TestFunc(a: int, b: float = 0.1):
         return a + b
 
     # printing the audit message
-    funky = TestFunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
-    funky.cache_dir = tmpdir
-    funky()
+    funky = TestFunc(a=1)
+    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
 
     # user defined path (doesn't depend on checksum, can be defined before init)
     message_path = tmpdir / "my_messages"
     # saving the audit message into the file
-    funky = TestFunc(
-        a=2,
+    funky = TestFunc(a=2)
+    # providing messenger_dir for audit
+    funky(
+        cache_dir=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
         messenger_args=dict(message_dir=message_path),
     )
-    funky.cache_dir = tmpdir
-    # providing messenger_dir for audit
-    funky()
     assert (tmpdir / "my_messages").exists()
 
     collect_messages(tmpdir, message_path, ld_op="compact")
@@ -1233,50 +1107,55 @@ def test_audit_prov_wf(
 ):
     """FileMessenger for wf"""
 
-    @python.define
-    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    @python.define(outputs={"out": float})
+    def TestFunc(a: int, b: float = 0.1):
         return a + b
 
-    wf = Workflow(
+    @workflow.define
+    def Workflow(x: int):
+        test_func = workflow.add(TestFunc(a=x))
+        return test_func.out
+
+    wf = Workflow(x=2)
+
+    wf(
         name="wf",
-        input_spec=["x"],
         cache_dir=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-    wf.add(TestFunc(name="TestFunc", a=wf.lzin.x))
-    wf.set_output([("out", wf.TestFunc.lzout.out)])
-    wf.x = 2
-
-    wf(plugin="cf")
     # default path
-    message_path = tmpdir / wf.checksum / "messages"
+    message_path = tmpdir / wf._checksum / "messages"
     assert message_path.exists()
 
-    collect_messages(tmpdir / wf.checksum, message_path, ld_op="compact")
-    assert (tmpdir / wf.checksum / "messages.jsonld").exists()
+    collect_messages(tmpdir / wf._checksum, message_path, ld_op="compact")
+    assert (tmpdir / wf._checksum / "messages.jsonld").exists()
 
 
 def test_audit_all(
     tmpdir,
 ):
-    @python.define
-    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    @python.define(outputs={"out": float})
+    def TestFunc(a: int, b: float = 0.1):
         return a + b
 
-    funky = TestFunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
-    message_path = tmpdir / funky.checksum / "messages"
-    funky.cache_dir = tmpdir
-    funky.audit.messenger_args = dict(message_dir=message_path)
-    funky()
+    funky = TestFunc(a=2)
+    message_path = tmpdir / funky._checksum / "messages"
+
+    funky(
+        cache_dir=tmpdir,
+        audit_flags=AuditFlag.ALL,
+        messengers=FileMessenger(),
+        messenger_args=dict(message_dir=message_path),
+    )
     from glob import glob
 
-    assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
+    assert len(glob(str(tmpdir / funky._checksum / "proc*.log"))) == 1
     assert len(glob(str(message_path / "*.jsonld"))) == 7
 
     # commented out to speed up testing
-    collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
-    assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+    collect_messages(tmpdir / funky._checksum, message_path, ld_op="compact")
+    assert (tmpdir / funky._checksum / "messages.jsonld").exists()
 
 
 @no_win
@@ -1284,14 +1163,18 @@ def test_shell_cmd(tmpdir):
     cmd = ["echo", "hail", "pydra"]
 
     # all args given as executable
-    shelly = ShellTask(name="shelly", executable=cmd)
+    Shelly = shell.define(" ".join(cmd))
+    shelly = Shelly()
     assert shelly.cmdline == " ".join(cmd)
     outputs = shelly()
     assert outputs.stdout == " ".join(cmd[1:]) + "\n"
 
     # separate command into exec + args
-    shelly = ShellTask(executable=cmd[0], args=cmd[1:])
-    assert shelly.definition.executable == "echo"
+    Shelly = shell.define(
+        cmd[0], inputs=[shell.arg(name=a, default=a) for a in cmd[1:]]
+    )
+    shelly = Shelly()
+    assert shelly.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
     outputs = shelly()
     assert outputs.return_code == 0
@@ -1303,23 +1186,20 @@ def test_functask_callable(tmpdir):
     foo = FunAddTwo(a=1)
     outputs = foo()
     assert outputs.out == 3
-    assert foo.plugin is None
 
     # plugin
     bar = FunAddTwo(a=2)
-    outputs = bar(plugin="cf")
+    outputs = bar(worker="cf", cache_dir=tmpdir)
     assert outputs.out == 4
-    assert bar.plugin is None
-
-    foo2 = FunAddTwo(a=3)
-    foo2.plugin = "cf"
-    outputs = foo2()
-    assert outputs.out == 5
-    assert foo2.plugin == "cf"
 
 
-def test_taskhooks_1(tmpdir, capsys):
-    foo = FunAddTwo(name="foo", a=1, cache_dir=tmpdir)
+def test_taskhooks_1(tmpdir: Path, capsys):
+    cache_dir = tmpdir / "cache"
+    cache_dir.mkdir()
+
+    foo = Task(
+        definition=FunAddTwo(a=1), submitter=Submitter(cache_dir=cache_dir), name="foo"
+    )
     assert foo.hooks
     # ensure all hooks are defined
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
@@ -1330,7 +1210,7 @@ def test_taskhooks_1(tmpdir, capsys):
         print("I was called")
 
     foo.hooks.pre_run = myhook
-    foo()
+    foo.run()
     captured = capsys.readouterr()
     assert "I was called\n" in captured.out
     del captured
@@ -1339,28 +1219,36 @@ def test_taskhooks_1(tmpdir, capsys):
     with pytest.raises(AttributeError):
         foo.hooks.mid_run = myhook
 
+    # clear cache
+    shutil.rmtree(cache_dir)
+    cache_dir.mkdir()
+
     # set all hooks
     foo.hooks.post_run = myhook
     foo.hooks.pre_run_task = myhook
     foo.hooks.post_run_task = myhook
-    foo.a = 2  # ensure not pre-cached
-    foo()
+    foo.run()
     captured = capsys.readouterr()
     assert captured.out.count("I was called\n") == 4
     del captured
 
     # hooks are independent across tasks by default
-    bar = FunAddTwo(name="bar", a=3, cache_dir=tmpdir)
+    bar = Task(
+        definition=FunAddTwo(a=3), name="bar", submitter=Submitter(cache_dir=tmpdir)
+    )
     assert bar.hooks is not foo.hooks
     # but can be shared across tasks
     bar.hooks = foo.hooks
     # and workflows
-    wf = BasicWorkflow()
-    wf.tmpdir = tmpdir
-    wf.hooks = bar.hooks
-    assert foo.hooks == bar.hooks == wf.hooks
+    wf_task = Task(
+        definition=BasicWorkflow(x=1),
+        submitter=Submitter(cache_dir=tmpdir, worker="cf"),
+        name="wf",
+    )
+    wf_task.hooks = bar.hooks
+    assert foo.hooks == bar.hooks == wf_task.hooks
 
-    wf(plugin="cf")
+    wf_task.run()
     captured = capsys.readouterr()
     assert captured.out.count("I was called\n") == 4
     del captured
@@ -1374,7 +1262,9 @@ def test_taskhooks_1(tmpdir, capsys):
 
 def test_taskhooks_2(tmpdir, capsys):
     """checking order of the hooks; using task's attributes"""
-    foo = FunAddTwo(name="foo", a=1, cache_dir=tmpdir)
+    foo = Task(
+        definition=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_dir=tmpdir)
+    )
 
     def myhook_prerun(task, *args):
         print(f"i. prerun hook was called from {task.name}")
@@ -1392,7 +1282,7 @@ def test_taskhooks_2(tmpdir, capsys):
     foo.hooks.post_run = myhook_postrun
     foo.hooks.pre_run_task = myhook_prerun_task
     foo.hooks.post_run_task = myhook_postrun_task
-    foo()
+    foo.run()
 
     captured = capsys.readouterr()
     hook_messages = captured.out.strip().split("\n")
@@ -1405,17 +1295,19 @@ def test_taskhooks_2(tmpdir, capsys):
 
 def test_taskhooks_3(tmpdir, capsys):
     """checking results in the post run hooks"""
-    foo = FunAddTwo(name="foo", a=1, cache_dir=tmpdir)
+    foo = Task(
+        definition=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_dir=tmpdir)
+    )
 
     def myhook_postrun_task(task, result, *args):
-        print(f"postrun task hook, the result is {outputs.out}")
+        print(f"postrun task hook, the result is {result.outputs.out}")
 
     def myhook_postrun(task, result, *args):
-        print(f"postrun hook, the result is {outputs.out}")
+        print(f"postrun hook, the result is {result.outputs.out}")
 
     foo.hooks.post_run = myhook_postrun
     foo.hooks.post_run_task = myhook_postrun_task
-    foo()
+    foo.run()
 
     captured = capsys.readouterr()
     hook_messages = captured.out.strip().split("\n")
@@ -1426,7 +1318,9 @@ def test_taskhooks_3(tmpdir, capsys):
 
 def test_taskhooks_4(tmpdir, capsys):
     """task raises an error: postrun task should be called, postrun shouldn't be called"""
-    foo = FunAddTwo(name="foo", a="one", cache_dir=tmpdir)
+    foo = Task(
+        definition=FunAddTwo(a="one"), name="foo", submitter=Submitter(cache_dir=tmpdir)
+    )
 
     def myhook_postrun_task(task, result, *args):
         print(f"postrun task hook was called, result object is {result}")
@@ -1454,13 +1348,17 @@ def test_traceback(tmpdir):
     """
 
     @python.define
-    def fun_error(x):
+    def FunError(x):
         raise Exception("Error from the function")
 
-    task = fun_error(name="error", cache_dir=tmpdir).split("x", x=[3, 4])
+    task = Task(
+        name="error",
+        definition=FunError().split("x", x=[3, 4]),
+        submitter=Submitter(cache_dir=tmpdir),
+    )
 
     with pytest.raises(Exception, match="from the function") as exinfo:
-        task()
+        task.run()
 
     # getting error file from the error message
     error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
@@ -1471,7 +1369,7 @@ def test_traceback(tmpdir):
     error_tb = cp.loads(error_file.read_bytes())["error message"]
     # the error traceback should be a list and should point to a specific line in the function
     assert isinstance(error_tb, list)
-    assert "in fun_error" in error_tb[-2]
+    assert "in FunError" in error_tb[-2]
 
 
 def test_traceback_wf(tmpdir):
@@ -1481,15 +1379,17 @@ def test_traceback_wf(tmpdir):
     """
 
     @python.define
-    def fun_error(x):
+    def FunError(x):
         raise Exception("Error from the function")
 
-    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir).split("x", x=[3, 4])
-    wf.add(fun_error(name="error", x=wf.lzin.x))
-    wf.set_output([("out", wf.error.lzout.out)])
+    @workflow.define
+    def Workflow(x):
+        error = workflow.add(FunError(x=x), name="error")
+        return error.out
 
+    wf = Workflow().split("x", x=[3, 4])
     with pytest.raises(Exception, match="Task error raised an error") as exinfo:
-        wf()
+        wf(worker="cf")
 
     # getting error file from the error message
     error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
@@ -1500,7 +1400,7 @@ def test_traceback_wf(tmpdir):
     error_tb = cp.loads(error_file.read_bytes())["error message"]
     # the error traceback should be a list and should point to a specific line in the function
     assert isinstance(error_tb, list)
-    assert "in fun_error" in error_tb[-2]
+    assert "in FunError" in error_tb[-2]
 
 
 def test_rerun_errored(tmpdir, capfd):
@@ -1508,20 +1408,20 @@ def test_rerun_errored(tmpdir, capfd):
     Only the errored tasks should be rerun"""
 
     @python.define
-    def pass_odds(x):
+    def PassOdds(x):
         if x % 2 == 0:
-            print(f"x%2 = {x % 2} (error)\n")
+            print(f"x={x} -> x%2 = {bool(x % 2)} (error)\n")
             raise Exception("even error")
         else:
-            print(f"x%2 = {x % 2}\n")
+            print(f"x={x} -> x%2 = {bool(x % 2)}\n")
             return x
 
-    task = pass_odds(name="pass_odds", cache_dir=tmpdir).split("x", x=[1, 2, 3, 4, 5])
+    pass_odds = PassOdds().split("x", x=[1, 2, 3, 4, 5])
 
-    with pytest.raises(Exception, match="even error"):
-        task()
-    with pytest.raises(Exception, match="even error"):
-        task()
+    with pytest.raises(Exception):
+        pass_odds(cache_dir=tmpdir, worker="cf")
+    with pytest.raises(Exception):
+        pass_odds(cache_dir=tmpdir, worker="cf")
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()
@@ -1541,7 +1441,7 @@ def test_rerun_errored(tmpdir, capfd):
     assert errors_found == 4
 
 
-@attr.s(auto_attribs=True)
+@attrs.define(auto_attribs=True)
 class A:
     x: int
 
@@ -1558,14 +1458,18 @@ def test_object_input():
 
 
 def test_argstr_formatting():
-    @attr.define
-    class Inputs:
+    @shell.define
+    class Defn(ShellDef["Defn.Outputs"]):
         a1_field: str
         b2_field: float
         c3_field: ty.Dict[str, str]
         d4_field: ty.List[str]
+        executable = "dummy"
 
-    inputs = Inputs("1", 2.0, {"c": "3"}, ["4"])
+        class Outputs(ShellOutputs):
+            pass
+
+    inputs = Defn(a1_field="1", b2_field=2.0, c3_field={"c": "3"}, d4_field=["4"])
     assert (
         argstr_formatting(
             "{a1_field} {b2_field:02f} -test {c3_field[c]} -me {d4_field[0]}",

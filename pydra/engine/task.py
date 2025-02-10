@@ -149,7 +149,7 @@ class ShellTask(Task):
         self.inputs_mod_root = {}
 
 
-class BoshTask(ShellTask):
+class BoshTask(ShellDef):
 
     def _command_args_single(self, state_ind=None, index=None):
         """Get command line arguments for a single state"""

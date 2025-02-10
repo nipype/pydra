@@ -48,7 +48,10 @@ class Worker(metaclass=abc.ABCMeta):
         pass
 
     async def run_async(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
-        return await task.run_async(rerun=rerun)
+        if task.is_async:
+            return await task.run_async(rerun=rerun)
+        else:
+            return task.run(rerun=rerun)
 
     def close(self):
         """Close this worker."""

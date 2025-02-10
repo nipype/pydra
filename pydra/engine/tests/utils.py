@@ -9,6 +9,7 @@ import operator
 import subprocess as sp
 import pytest
 from fileformats.generic import File
+from pydra.engine.specs import ShellDef
 from ..submitter import Submitter
 from pydra.design import workflow, python
 
@@ -34,18 +35,17 @@ need_sge = pytest.mark.skipif(
 )
 
 
-def result_no_submitter(shell_task, plugin=None):
+def result_no_submitter(shell_def: ShellDef, plugin: str = None):
     """helper function to return result when running without submitter"""
-    return shell_task()
+    return shell_def(worker=plugin)
 
 
-def result_submitter(shell_task, plugin):
+def result_submitter(shell_def: ShellDef, plugin: str):
     """helper function to return result when running with submitter
     with specific plugin
     """
     with Submitter(worker=plugin) as sub:
-        shell_task(submitter=sub)
-    return shell_task.result()
+        return sub(shell_def)
 
 
 dot_check = sp.run(["which", "dot"], stdout=sp.PIPE, stderr=sp.PIPE)
@@ -276,7 +276,7 @@ def FunFileList(filename_list: ty.List[File]):
 
 @workflow.define(outputs=["out"])
 def BasicWorkflow(x):
-    task1 = workflow.add(FunAddTwo(a=x, b=0))
+    task1 = workflow.add(FunAddTwo(a=x))
     task2 = workflow.add(FunAddVar(a=task1.out, b=2))
     return task2.out
 
