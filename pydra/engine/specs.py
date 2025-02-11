@@ -31,7 +31,7 @@ from .helpers_file import template_update, template_update_single
 from . import helpers_state as hlpst
 from . import lazy
 from pydra.utils.hash import hash_function, Cache
-from pydra.utils.typing import StateArray
+from pydra.utils.typing import StateArray, MultiInputObj
 from pydra.design.base import Field, Arg, Out, RequirementSet, EMPTY
 from pydra.design import shell
 from pydra.engine.lazy import LazyInField, LazyOutField
@@ -1126,46 +1126,49 @@ class ShellDef(TaskDef[ShellOutputsType]):
             # if False, nothing is added to the command.
             if value is True:
                 cmd_add.append(field.argstr)
+        elif ty.get_origin(field.type) is MultiInputObj:
+            # if the field is MultiInputObj, it is used to create a list of arguments
+            for val in value or []:
+                cmd_add += self._format_arg(field, val)
         else:
-            if (
-                field.argstr.endswith("...")
-                and isinstance(value, ty.Iterable)
-                and not isinstance(value, (str, bytes))
-            ):
-                field.argstr = field.argstr.replace("...", "")
-                # if argstr has a more complex form, with "{input_field}"
-                if "{" in field.argstr and "}" in field.argstr:
-                    argstr_formatted_l = []
-                    for val in value:
-                        argstr_f = argstr_formatting(
-                            field.argstr, self, value_updates={field.name: val}
-                        )
-                        argstr_formatted_l.append(f" {argstr_f}")
-                    cmd_el_str = field.sep.join(argstr_formatted_l)
-                else:  # argstr has a simple form, e.g. "-f", or "--f"
-                    cmd_el_str = field.sep.join(
-                        [f" {field.argstr} {val}" for val in value]
-                    )
-            else:
-                # in case there are ... when input is not a list
-                field.argstr = field.argstr.replace("...", "")
-                if isinstance(value, ty.Iterable) and not isinstance(
-                    value, (str, bytes)
-                ):
-                    cmd_el_str = field.sep.join([str(val) for val in value])
-                    value = cmd_el_str
-                # if argstr has a more complex form, with "{input_field}"
-                if "{" in field.argstr and "}" in field.argstr:
-                    cmd_el_str = field.argstr.replace(f"{{{field.name}}}", str(value))
-                    cmd_el_str = argstr_formatting(cmd_el_str, self.definition)
-                else:  # argstr has a simple form, e.g. "-f", or "--f"
-                    if value:
-                        cmd_el_str = f"{field.argstr} {value}"
-                    else:
-                        cmd_el_str = ""
-            if cmd_el_str:
-                cmd_add += split_cmd(cmd_el_str)
+            cmd_add += self._format_arg(field, value)
         return field.position, cmd_add
+
+    def _format_arg(self, field: shell.arg, value: ty.Any) -> list[str]:
+        """Returning arguments used to specify the command args for a single inputs"""
+        if (
+            field.argstr.endswith("...")
+            and isinstance(value, ty.Iterable)
+            and not isinstance(value, (str, bytes))
+        ):
+            field.argstr = field.argstr.replace("...", "")
+            # if argstr has a more complex form, with "{input_field}"
+            if "{" in field.argstr and "}" in field.argstr:
+                argstr_formatted_l = []
+                for val in value:
+                    argstr_f = argstr_formatting(
+                        field.argstr, self, value_updates={field.name: val}
+                    )
+                    argstr_formatted_l.append(f" {argstr_f}")
+                cmd_el_str = field.sep.join(argstr_formatted_l)
+            else:  # argstr has a simple form, e.g. "-f", or "--f"
+                cmd_el_str = field.sep.join([f" {field.argstr} {val}" for val in value])
+        else:
+            # in case there are ... when input is not a list
+            field.argstr = field.argstr.replace("...", "")
+            if isinstance(value, ty.Iterable) and not isinstance(value, (str, bytes)):
+                cmd_el_str = field.sep.join([str(val) for val in value])
+                value = cmd_el_str
+            # if argstr has a more complex form, with "{input_field}"
+            if "{" in field.argstr and "}" in field.argstr:
+                cmd_el_str = field.argstr.replace(f"{{{field.name}}}", str(value))
+                cmd_el_str = argstr_formatting(cmd_el_str, self)
+            else:  # argstr has a simple form, e.g. "-f", or "--f"
+                if value:
+                    cmd_el_str = f"{field.argstr} {value}"
+                else:
+                    cmd_el_str = ""
+        return split_cmd(cmd_el_str)
 
     def _get_bindings(self, root: str | None = None) -> dict[str, tuple[str, str]]:
         """Return bindings necessary to run task in an alternative root.
@@ -1259,7 +1262,7 @@ class TaskHook:
             setattr(self, val, donothing)
 
 
-def split_cmd(cmd: str):
+def split_cmd(cmd: str | None):
     """Splits a shell command line into separate arguments respecting quotes
 
     Parameters
@@ -1272,6 +1275,8 @@ def split_cmd(cmd: str):
     str
         the command line string split into process args
     """
+    if cmd is None:
+        return []
     # Check whether running on posix or Windows system
     on_posix = platform.system() != "Windows"
     args = shlex.split(cmd, posix=on_posix)

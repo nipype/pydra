@@ -100,17 +100,25 @@ class arg(Arg):
     formatter: ty.Callable | None = None
 
     @sep.validator
-    def _validate_sep(self, attribute, value):
-        if (
-            value is not None
-            and self.type is not ty.Any
-            and ty.get_origin(self.type) is not MultiInputObj
-        ):
-            tp = ty.get_origin(self.type) or self.type
-            if not issubclass(tp, ty.Iterable):
+    def _validate_sep(self, _, sep):
+        if self.type is ty.Any:
+            return
+        if ty.get_origin(self.type) is MultiInputObj:
+            tp = ty.get_args(self.type)[0]
+        else:
+            tp = self.type
+        origin = ty.get_origin(tp) or tp
+        if inspect.isclass(origin) and issubclass(origin, ty.Iterable):
+            if sep is None:
                 raise ValueError(
-                    f"sep ({value!r}) can only be provided when type is iterable"
+                    f"A value to 'sep' must be provided when type is iterable {tp} "
+                    f"for field {self.name!r}"
                 )
+        elif sep is not None:
+            raise ValueError(
+                f"sep ({sep!r}) can only be provided when type is iterable {tp} "
+                f"for field {self.name!r}"
+            )
 
 
 @attrs.define(kw_only=True)

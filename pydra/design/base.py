@@ -833,7 +833,7 @@ def extract_function_inputs_and_outputs(
         if isinstance(inpt, arg_type):
             if inpt.default is EMPTY:
                 inpt.default = default
-        elif inspect.isclass(inpt):
+        elif inspect.isclass(inpt) or ty.get_origin(inpt):
             inputs[inpt_name] = arg_type(type=inpt, default=default)
         else:
             raise ValueError(

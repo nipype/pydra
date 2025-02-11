@@ -554,7 +554,7 @@ class Task(ty.Generic[DefType]):
                     f"- {changed}: the {field_type} object passed to the {field.type}"
                     f"field appears to have an unstable hash. This could be due to "
                     "a stochastic/non-thread-safe attribute(s) of the object\n\n"
-                    f"The {field.type}.__bytes_repr__() method can be implemented to "
+                    f'A "bytes_repr" method for {field.type!r} can be implemented to '
                     "bespoke hashing methods based only on the stable attributes for "
                     f"the `{field_type.__module__}.{field_type.__name__}` type. "
                     f"See pydra/utils/hash.py for examples. Value: {val}\n"
