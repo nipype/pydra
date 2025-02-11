@@ -313,7 +313,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">helpers_state</span> <span class="k">as</span> <span class="n">hlpst</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.hash</span><span class="w"> </span><span class="kn">import</span> <span class="n">hash_function</span><span class="p">,</span> <span class="n">Cache</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StateArray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StateArray</span><span class="p">,</span> <span class="n">MultiInputObj</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">Arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">,</span> <span class="n">RequirementSet</span><span class="p">,</span> <span class="n">EMPTY</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.lazy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyInField</span><span class="p">,</span> <span class="n">LazyOutField</span>
@@ -441,6 +441,7 @@
         <span class="n">audit_flags</span><span class="p">:</span> <span class="n">AuditFlag</span> <span class="o">=</span> <span class="n">AuditFlag</span><span class="o">.</span><span class="n">NONE</span><span class="p">,</span>
         <span class="n">messengers</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n">Messenger</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">messenger_args</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputsType</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a task from this definition and execute it to produce a result.</span>
@@ -465,6 +466,8 @@
 <span class="sd">            Messengers, by default None</span>
 <span class="sd">        messenger_args : dict, optional</span>
 <span class="sd">            Messenger arguments, by default None</span>
+<span class="sd">        name : str</span>
+<span class="sd">            The name of the task, by default None</span>
 <span class="sd">        **kwargs : dict</span>
 <span class="sd">            Keyword arguments to pass on to the worker initialisation</span>
 
@@ -491,7 +494,7 @@
                 <span class="n">worker</span><span class="o">=</span><span class="n">worker</span><span class="p">,</span>
                 <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
-                <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="s2">&quot;__notes__&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">WORKER_KWARG_FAIL_NOTE</span> <span class="ow">in</span> <span class="n">e</span><span class="o">.</span><span class="n">__notes__</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span>
@@ -693,6 +696,10 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">hsh</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hashes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_hashes</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">hsh</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_checksum</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_task_type</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_hash</span><span class="si">}</span><span class="s2">&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_hash_changes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Detects any changes in the hashed values between the current inputs and the</span>
@@ -1401,46 +1408,49 @@
             <span class="c1"># if False, nothing is added to the command.</span>
             <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
                 <span class="n">cmd_add</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="ow">is</span> <span class="n">MultiInputObj</span><span class="p">:</span>
+            <span class="c1"># if the field is MultiInputObj, it is used to create a list of arguments</span>
+            <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span> <span class="ow">or</span> <span class="p">[]:</span>
+                <span class="n">cmd_add</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_arg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="p">(</span>
-                <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
-                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">)</span>
-                <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">))</span>
-            <span class="p">):</span>
-                <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-                <span class="c1"># if argstr has a more complex form, with &quot;{input_field}&quot;</span>
-                <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">:</span>
-                    <span class="n">argstr_formatted_l</span> <span class="o">=</span> <span class="p">[]</span>
-                    <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
-                        <span class="n">argstr_f</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span>
-                            <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">value_updates</span><span class="o">=</span><span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">val</span><span class="p">}</span>
-                        <span class="p">)</span>
-                        <span class="n">argstr_formatted_l</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">argstr_f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">argstr_formatted_l</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>  <span class="c1"># argstr has a simple form, e.g. &quot;-f&quot;, or &quot;--f&quot;</span>
-                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-                        <span class="p">[</span><span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
-                    <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># in case there are ... when input is not a list</span>
-                <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
-                    <span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)</span>
-                <span class="p">):</span>
-                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">])</span>
-                    <span class="n">value</span> <span class="o">=</span> <span class="n">cmd_el_str</span>
-                <span class="c1"># if argstr has a more complex form, with &quot;{input_field}&quot;</span>
-                <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">:</span>
-                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">{{</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
-                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">definition</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>  <span class="c1"># argstr has a simple form, e.g. &quot;-f&quot;, or &quot;--f&quot;</span>
-                    <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
-                        <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-            <span class="k">if</span> <span class="n">cmd_el_str</span><span class="p">:</span>
-                <span class="n">cmd_add</span> <span class="o">+=</span> <span class="n">split_cmd</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">)</span>
+            <span class="n">cmd_add</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_arg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">field</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">cmd_add</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_format_arg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returning arguments used to specify the command args for a single inputs&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">))</span>
+        <span class="p">):</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="c1"># if argstr has a more complex form, with &quot;{input_field}&quot;</span>
+            <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">:</span>
+                <span class="n">argstr_formatted_l</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+                    <span class="n">argstr_f</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span>
+                        <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">value_updates</span><span class="o">=</span><span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">val</span><span class="p">}</span>
+                    <span class="p">)</span>
+                    <span class="n">argstr_formatted_l</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">argstr_f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">argstr_formatted_l</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># argstr has a simple form, e.g. &quot;-f&quot;, or &quot;--f&quot;</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># in case there are ... when input is not a list</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)):</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">])</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">cmd_el_str</span>
+            <span class="c1"># if argstr has a more complex form, with &quot;{input_field}&quot;</span>
+            <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">:</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">{{</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># argstr has a simple form, e.g. &quot;-f&quot;, or &quot;--f&quot;</span>
+                <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
+                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">split_cmd</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return bindings necessary to run task in an alternative root.</span>
@@ -1534,7 +1544,7 @@
             <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="n">donothing</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="split_cmd"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.split_cmd">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">split_cmd</span><span class="p">(</span><span class="n">cmd</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<div class="viewcode-block" id="split_cmd"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.split_cmd">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">split_cmd</span><span class="p">(</span><span class="n">cmd</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Splits a shell command line into separate arguments respecting quotes</span>
 
 <span class="sd">    Parameters</span>
@@ -1547,6 +1557,8 @@
 <span class="sd">    str</span>
 <span class="sd">        the command line string split into process args</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">cmd</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
     <span class="c1"># Check whether running on posix or Windows system</span>
     <span class="n">on_posix</span> <span class="o">=</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">!=</span> <span class="s2">&quot;Windows&quot;</span>
     <span class="n">args</span> <span class="o">=</span> <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">posix</span><span class="o">=</span><span class="n">on_posix</span><span class="p">)</span>
