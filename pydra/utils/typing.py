@@ -279,6 +279,8 @@ class TypeParser(ty.Generic[T]):
             if not isinstance(pattern, tuple):
                 return coerce_basic(obj, pattern)
             origin, pattern_args = pattern
+            if origin == MultiInputObj:
+                return coerce_multi_input(obj, pattern_args)
             if origin in UNION_TYPES:
                 return coerce_union(obj, pattern_args)
             if origin is type:
@@ -330,6 +332,21 @@ class TypeParser(ty.Generic[T]):
                 f"{pattern_args}{self.label_str}:\n\n"
                 + "\n\n".join(f"{a} -> {e}" for a, e in zip(pattern_args, reasons))
             )
+
+        def coerce_multi_input(obj, pattern_args):
+            # Attempt to coerce the object into arg type of the MultiInputObj first,
+            # and if that fails, try to coerce it into a list of the arg type
+            try:
+                return coerce_sequence(list, obj, pattern_args)
+            except TypeError as e1:
+                try:
+                    return [expand_and_coerce(obj, pattern_args)]
+                except TypeError as e2:
+                    raise TypeError(
+                        f"Could not coerce object ({obj!r}) to MultiInputObj[{pattern_args[0]}] "
+                        f"either as sequence of {pattern_args[0]} ({e1}) or a single {pattern_args[0]} "
+                        f"object to be wrapped in a list {e2}"
+                    ) from e2
 
         def coerce_mapping(
             obj: ty.Mapping, type_: ty.Type[ty.Mapping], pattern_args: list
@@ -407,26 +424,7 @@ class TypeParser(ty.Generic[T]):
                     f"Cannot coerce {obj!r} into {type_}{msg}{self.label_str}"
                 ) from e
 
-        try:
-            return expand_and_coerce(object_, self.pattern)
-        except TypeError as e:
-            # Defial handling for MultiInputObjects (which are annoying)
-            if isinstance(self.pattern, tuple) and self.pattern[0] == MultiInputObj:
-                # Attempt to coerce the object into arg type of the MultiInputObj first,
-                # and if that fails, try to coerce it into a list of the arg type
-                inner_type_parser = copy(self)
-                inner_type_parser.pattern = self.pattern[1][0]
-                try:
-                    return [inner_type_parser.coerce(object_)]
-                except TypeError:
-                    add_exc_note(
-                        e,
-                        "Also failed to coerce to the arg-type of the MultiInputObj "
-                        f"({self.pattern[1][0]})",
-                    )
-                    raise e
-            else:
-                raise e
+        return expand_and_coerce(object_, self.pattern)
 
     def check_type(self, type_: ty.Type[ty.Any]):
         """Checks the given type to see whether it matches or is a subtype of the
@@ -589,7 +587,7 @@ class TypeParser(ty.Generic[T]):
         try:
             return expand_and_check(type_, self.pattern)
         except TypeError as e:
-            # Defial handling for MultiInputObjects (which are annoying)
+            # Special handling for MultiInputObjects (which are annoying)
             if not isinstance(self.pattern, tuple) or self.pattern[0] != MultiInputObj:
                 raise e
             # Attempt to coerce the object into arg type of the MultiInputObj first,
