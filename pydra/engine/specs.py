@@ -1135,7 +1135,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
             cmd_add += self._format_arg(field, value)
         return field.position, cmd_add
 
-    def _format_arg(self, field: shell.arg, value: ty.Any, tp: type) -> list[str]:
+    def _format_arg(self, field: shell.arg, value: ty.Any) -> list[str]:
         """Returning arguments used to specify the command args for a single inputs"""
         if (
             field.argstr.endswith("...")
