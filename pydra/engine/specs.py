@@ -17,7 +17,7 @@ import attrs
 import cloudpickle as cp
 from fileformats.core import FileSet
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.typing import TypeParser
+from pydra.utils.typing import TypeParser, is_optional, non_optional_type
 from .helpers import (
     attrs_fields,
     attrs_values,
@@ -1100,6 +1100,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         cmd_add = []
         # formatter that creates a custom command argument
         # it can take the value of the field, all inputs, or the value of other fields.
+        tp = non_optional_type(field.type) if is_optional(field.type) else field.type
         if field.formatter:
             call_args = inspect.getfullargspec(field.formatter)
             call_args_val = {}
@@ -1121,12 +1122,12 @@ class ShellDef(TaskDef[ShellOutputsType]):
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str != "":
                 cmd_add += split_cmd(cmd_el_str)
-        elif field.type is bool and "{" not in field.argstr:
+        elif tp is bool and "{" not in field.argstr:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command.
             if value is True:
                 cmd_add.append(field.argstr)
-        elif ty.get_origin(field.type) is MultiInputObj:
+        elif ty.get_origin(tp) is MultiInputObj:
             # if the field is MultiInputObj, it is used to create a list of arguments
             for val in value or []:
                 cmd_add += self._format_arg(field, val)
@@ -1134,7 +1135,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
             cmd_add += self._format_arg(field, value)
         return field.position, cmd_add
 
-    def _format_arg(self, field: shell.arg, value: ty.Any) -> list[str]:
+    def _format_arg(self, field: shell.arg, value: ty.Any, tp: type) -> list[str]:
         """Returning arguments used to specify the command args for a single inputs"""
         if (
             field.argstr.endswith("...")

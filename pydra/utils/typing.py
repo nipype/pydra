@@ -1042,6 +1042,15 @@ def is_optional(type_: type) -> bool:
     return False
 
 
+def non_optional_type(type_: type) -> type:
+    if is_optional(type_):
+        non_optional = [a for a in ty.get_args(type_) if a is not type(None)]
+        if len(non_optional) == 1:
+            return non_optional[0]
+        return ty.Union[tuple(non_optional)]
+    return type_
+
+
 def is_fileset_or_union(type_: type) -> bool:
     """Check if the type is a FileSet or a Union containing a FileSet"""
     if is_union(type_):
