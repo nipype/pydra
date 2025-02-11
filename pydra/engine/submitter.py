@@ -525,9 +525,16 @@ class NodeExecution(ty.Generic[DefType]):
             return
         # Check to see if any previously queued tasks have completed
         for index, task in list(self.queued.items()):
-            if task.done:
+            try:
+                is_done = task.done
+            except ValueError:
+                errored = True
+                is_done = False
+            else:
+                errored = False
+            if is_done:
                 self.successful[task.state_index] = self.queued.pop(index)
-            elif task.errored:
+            elif task.errored or errored:
                 self.errored[task.state_index] = self.queued.pop(index)
             elif task.run_start_time:
                 self.running[task.state_index] = (
