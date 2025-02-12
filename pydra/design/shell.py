@@ -623,8 +623,6 @@ def parse_command_line_template(
                     if ext_type.ext is not None:
                         path_template = name + ext_type.ext
                 kwds["path_template"] = path_template
-            if ty.get_origin(type_) is MultiInputObj:
-                kwds["sep"] = " "
             if option is None:
                 add_arg(name, field_type, kwds)
             else:

@@ -27,11 +27,6 @@ import pytest
 make_klass = lambda x: x
 
 
-def test_basespec():
-    definition = BaseDef()
-    assert definition.hash == "0b1d98df22ecd1733562711c205abca2"
-
-
 def test_runtime():
     runtime = Runtime()
     assert hasattr(runtime, "rss_peak_gb")

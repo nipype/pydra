@@ -99,25 +99,27 @@ def test_state_1(
 
 def test_state_2_err():
     with pytest.raises(PydraStateError) as exinfo:
-        State("NA", splitter={"a"})
+        State(definition=example_def, name="NA", splitter={"a"})
     assert "splitter has to be a string, a tuple or a list" == str(exinfo.value)
 
 
 def test_state_3_err():
     with pytest.raises(PydraStateError) as exinfo:
-        State("NA", splitter=["a", "b"], combiner=("a", "b"))
+        State(
+            definition=example_def, name="NA", splitter=["a", "b"], combiner=("a", "b")
+        )
     assert "combiner has to be a string or a list" == str(exinfo.value)
 
 
 def test_state_4_err():
-    st = State("NA", splitter="a", combiner=["a", "b"])
+    st = State(definition=example_def, name="NA", splitter="a", combiner=["a", "b"])
     with pytest.raises(PydraStateError) as exinfo:
         st.combiner_validation()
     assert "all combiners have to be in the splitter" in str(exinfo.value)
 
 
 def test_state_5_err():
-    st = State("NA", combiner="a")
+    st = State(definition=example_def, name="NA", combiner="a")
     with pytest.raises(PydraStateError) as exinfo:
         st.combiner_validation()
     assert "splitter has to be set before" in str(exinfo.value)
@@ -335,7 +337,7 @@ def test_state_6(splitter, cont_dim, values, keys, splits):
     keys = [f"S.{k}" for k in keys]
     splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
 
-    st = State(splitter=splitter, name="S")
+    st = State(definition=example_def, splitter=splitter, name="S")
     st.prepare_states(inputs=inputs, cont_dim=cont_dim)
 
     # checking keys and splits
@@ -371,7 +373,7 @@ def test_state_7(splitter, cont_dim, inputs, mismatch):
         cont_dim = {f"S.{k}": v for k, v in cont_dim.items()}
     inputs = {f"S.{k}": v for k, v in inputs.items()}
 
-    st = State(splitter=splitter, name="S")
+    st = State(definition=example_def, splitter=splitter, name="S")
 
     if mismatch:
         with pytest.raises(ValueError):
@@ -421,7 +423,7 @@ def test_state_8(splitter, cont_dim, values, keys, shapes, splits):
     keys = [f"S.{k}" for k in keys]
     splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
 
-    st = State(splitter=splitter, name="S")
+    st = State(definition=example_def, splitter=splitter, name="S")
     st.prepare_states(inputs=inputs, cont_dim=cont_dim)
 
     # checking keys and splits
@@ -462,7 +464,7 @@ def test_state_9(splitter, values, keys, splits):
     keys = [f"S.{k}" for k in keys]
     splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
 
-    st = State(splitter=splitter, name="S")
+    st = State(definition=example_def, splitter=splitter, name="S")
     st.prepare_states(inputs=inputs)
 
     # checking keys and splits
@@ -1505,7 +1507,10 @@ def test_state_connect_innerspl_4():
     st1 = State(definition=example_def, name="NA", splitter="a")
     st2 = State(definition=example_def, name="NB", splitter=["b", "c"])
     st3 = State(
-        name="NC", splitter="d", other_states={"NA": (st1, "e"), "NB": (st2, "f")}
+        definition=example_def,
+        name="NC",
+        splitter="d",
+        other_states={"NA": (st1, "e"), "NB": (st2, "f")},
     )
 
     assert st3.splitter == [["_NA", "_NB"], "NC.d"]
@@ -1789,7 +1794,11 @@ def test_state_connect_innerspl_combine_1():
     only current part provided - the prev-state part had to be added"""
     st1 = State(definition=example_def, name="NA", splitter="a")
     st2 = State(
-        name="NB", splitter=["c", "b"], combiner=["b"], other_states={"NA": (st1, "b")}
+        definition=example_def,
+        name="NB",
+        splitter=["c", "b"],
+        combiner=["b"],
+        other_states={"NA": (st1, "b")},
     )
 
     assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
@@ -1870,7 +1879,11 @@ def test_state_connect_innerspl_combine_2():
     """
     st1 = State(definition=example_def, name="NA", splitter="a")
     st2 = State(
-        name="NB", splitter=["c", "b"], combiner=["c"], other_states={"NA": (st1, "b")}
+        definition=example_def,
+        name="NB",
+        splitter=["c", "b"],
+        combiner=["c"],
+        other_states={"NA": (st1, "b")},
     )
 
     assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
@@ -2064,6 +2077,7 @@ def test_state_connect_combine_prevst_4():
     st1 = State(definition=example_def, name="NA", splitter="a")
     st2 = State(definition=example_def, name="NB", splitter="a")
     st3 = State(
+        definition=example_def,
         name="NC",
         splitter=["_NA", "_NB"],
         combiner=["NA.a"],
@@ -2116,6 +2130,7 @@ def test_state_connect_combine_prevst_5():
     st1 = State(definition=example_def, name="NA", splitter="a")
     st2 = State(definition=example_def, name="NB", splitter="a")
     st3 = State(
+        definition=example_def,
         name="NC",
         splitter=("_NA", "_NB"),
         combiner=["NA.a"],
@@ -2149,7 +2164,11 @@ def test_state_connect_combine_prevst_6():
     """
     st1 = State(definition=example_def, name="NA", splitter=["a", "b"])
     st2 = State(
-        name="NB", splitter="c", other_states={"NA": (st1, "b")}, combiner="NA.a"
+        definition=example_def,
+        name="NB",
+        splitter="c",
+        other_states={"NA": (st1, "b")},
+        combiner="NA.a",
     )
     assert st2.splitter == ["_NA", "NB.c"]
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*", "NB.c", "*"]
@@ -2277,7 +2296,9 @@ example_def = ExampleDef(a=1, b=2)
 def test_connect_splitters(
     splitter, other_states, expected_splitter, expected_prevst, expected_current
 ):
-    st = State(name="CN", splitter=splitter, other_states=other_states)
+    st = State(
+        definition=example_def, name="CN", splitter=splitter, other_states=other_states
+    )
     st.set_input_groups()
     assert st.splitter == expected_splitter
     assert st.prev_state_splitter == expected_prevst
@@ -2306,13 +2327,19 @@ def test_connect_splitters(
 )
 def test_connect_splitters_exception_1(splitter, other_states):
     with pytest.raises(PydraStateError) as excinfo:
-        State(name="CN", splitter=splitter, other_states=other_states)
+        State(
+            definition=example_def,
+            name="CN",
+            splitter=splitter,
+            other_states=other_states,
+        )
     assert "prev-state and current splitters are mixed" in str(excinfo.value)
 
 
 def test_connect_splitters_exception_2():
     with pytest.raises(PydraStateError) as excinfo:
         st = State(
+            definition=example_def,
             name="CN",
             splitter="_NB",
             other_states={
@@ -2326,6 +2353,7 @@ def test_connect_splitters_exception_2():
 def test_connect_splitters_exception_3():
     with pytest.raises(PydraStateError) as excinfo:
         State(
+            definition=example_def,
             name="CN",
             splitter="_NB",
             other_states=[
