@@ -79,7 +79,6 @@ test = [
     "pympler",
 ]
 tutorial = [
-    "fileformats-medimage-extras",
     "jupyter",
     "jupyter_contrib_nbextensions",
     "jupytext",
@@ -92,7 +91,9 @@ tutorial = [
     "nilearn",
     "numpy",
     "pandas",
-    "pydra-mrtrix3",
+    "fileformats-medimage >= v0.10.0a",
+    "fileformats-medimage-extras >= v0.10.0a",
+    "pydra-mrtrix3 >=3.0.4a14",
     "psutil",
     "pytest",
     "scipy",
