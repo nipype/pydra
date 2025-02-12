@@ -92,6 +92,7 @@ tutorial = [
     "nilearn",
     "numpy",
     "pandas",
+    "fileformats-extras >= v0.15.0a3",
     "fileformats-medimage >= v0.10.0a",
     "fileformats-medimage-extras >= v0.10.0a",
     "pydra-mrtrix3 >=3.0.4a14",
