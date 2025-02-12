@@ -11,11 +11,10 @@ import glob as glob
 from pydra.design import python, shell, workflow
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from ..task import AuditFlag
-from pydra.engine.specs import argstr_formatting, ShellDef, ShellOutputs
+from pydra.engine.specs import argstr_formatting, ShellDef, ShellOutputs, TaskHooks
 from pydra.engine.helpers import list_fields, print_help
 from pydra.engine.submitter import Submitter
 from pydra.engine.core import Task
-from .utils import BasicWorkflow
 from pydra.utils import default_run_cache_dir
 from pydra.utils.typing import (
     MultiInputObj,
@@ -1209,7 +1208,7 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     def myhook(task, *args):
         print("I was called")
 
-    FunAddTwo(a=1)(cache_dir=cache_dir, pre_run=myhook)
+    FunAddTwo(a=1)(cache_dir=cache_dir, hooks=TaskHooks(pre_run=myhook))
     captured = capsys.readouterr()
     assert "I was called\n" in captured.out
     del captured
@@ -1231,10 +1230,12 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     # set all hooks
     FunAddTwo(a=1)(
         cache_dir=cache_dir,
-        pre_run=myhook,
-        post_run=myhook,
-        pre_run_task=myhook,
-        post_run_task=myhook,
+        hooks=TaskHooks(
+            pre_run=myhook,
+            post_run=myhook,
+            pre_run_task=myhook,
+            post_run_task=myhook,
+        ),
     )
     captured = capsys.readouterr()
     assert captured.out.count("I was called\n") == 4
@@ -1258,10 +1259,12 @@ def test_taskhooks_2(tmpdir, capsys):
 
     FunAddTwo(a=1)(
         cache_dir=tmpdir,
-        pre_run=myhook_prerun,
-        post_run=myhook_postrun,
-        pre_run_task=myhook_prerun_task,
-        post_run_task=myhook_postrun_task,
+        hooks=TaskHooks(
+            pre_run=myhook_prerun,
+            post_run=myhook_postrun,
+            pre_run_task=myhook_prerun_task,
+            post_run_task=myhook_postrun_task,
+        ),
     )
 
     captured = capsys.readouterr()
@@ -1307,7 +1310,8 @@ def test_taskhooks_4(tmpdir, capsys):
 
     with pytest.raises(Exception):
         FunAddTwo(a="one")(
-            cache_dir=tmpdir, post_run=myhook_postrun, post_run_task=myhook_postrun_task
+            cache_dir=tmpdir,
+            hooks=TaskHooks(post_run=myhook_postrun, post_run_task=myhook_postrun_task),
         )
 
     captured = capsys.readouterr()

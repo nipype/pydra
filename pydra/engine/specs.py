@@ -138,6 +138,32 @@ class TaskOutputs:
 OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 
 
+def donothing(*args: ty.Any, **kwargs: ty.Any) -> None:
+    return None
+
+
+@attrs.define(kw_only=True)
+class TaskHooks:
+    """Callable task hooks."""
+
+    pre_run_task: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
+    post_run_task: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
+    pre_run: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
+    post_run: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
+
+    def reset(self):
+        for val in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
+            setattr(self, val, donothing)
+
+
 @attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class TaskDef(ty.Generic[OutputsType]):
     """Base class for all task definitions"""
@@ -161,10 +187,7 @@ class TaskDef(ty.Generic[OutputsType]):
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
         name: str | None = None,
-        pre_run: ty.Callable["Task", None] | None = None,
-        post_run: ty.Callable["Task", None] | None = None,
-        pre_run_task: ty.Callable["Task", None] | None = None,
-        post_run_task: ty.Callable["Task", None] | None = None,
+        hooks: TaskHooks | None = None,
         **kwargs: ty.Any,
     ) -> OutputsType:
         """Create a task from this definition and execute it to produce a result.
@@ -220,10 +243,7 @@ class TaskDef(ty.Generic[OutputsType]):
                 result = sub(
                     self,
                     name=name,
-                    pre_run=pre_run,
-                    post_run=post_run,
-                    pre_run_task=pre_run_task,
-                    post_run_task=post_run_task,
+                    hooks=hooks,
                 )
         except TypeError as e:
             # Catch any inadvertent passing of task definition parameters to the
@@ -1252,32 +1272,6 @@ class ShellDef(TaskDef[ShellOutputsType]):
         return output_names
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
-
-
-def donothing(*args: ty.Any, **kwargs: ty.Any) -> None:
-    return None
-
-
-@attrs.define(kw_only=True)
-class TaskHook:
-    """Callable task hooks."""
-
-    pre_run_task: ty.Callable = attrs.field(
-        default=donothing, converter=default_if_none(donothing)
-    )
-    post_run_task: ty.Callable = attrs.field(
-        default=donothing, converter=default_if_none(donothing)
-    )
-    pre_run: ty.Callable = attrs.field(
-        default=donothing, converter=default_if_none(donothing)
-    )
-    post_run: ty.Callable = attrs.field(
-        default=donothing, converter=default_if_none(donothing)
-    )
-
-    def reset(self):
-        for val in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
-            setattr(self, val, donothing)
 
 
 def split_cmd(cmd: str | None):

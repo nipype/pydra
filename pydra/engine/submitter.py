@@ -29,7 +29,7 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from .node import Node
-    from .specs import TaskDef, WorkflowDef
+    from .specs import TaskDef, WorkflowDef, TaskHooks
     from .environments import Environment
     from .state import State
 
@@ -169,10 +169,7 @@ class Submitter:
         self,
         task_def: "TaskDef",
         name: str | None = "task",
-        pre_run: ty.Callable["Task", None] | None = None,
-        post_run: ty.Callable["Task", None] | None = None,
-        pre_run_task: ty.Callable["Task", None] | None = None,
-        post_run_task: ty.Callable["Task", None] | None = None,
+        hooks: "TaskHooks | None" = None,
     ):
         """Submitter run function."""
 
@@ -203,10 +200,7 @@ class Submitter:
             submitter=self,
             name=name,
             environment=self.environment,
-            pre_run=pre_run,
-            post_run=post_run,
-            pre_run_task=pre_run_task,
-            post_run_task=post_run_task,
+            hooks=hooks,
         )
         try:
             self.run_start_time = datetime.now()
