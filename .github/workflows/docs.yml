@@ -47,6 +47,9 @@ jobs:
   build-new:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v4
+    - name: Fetch tags
+      run: git fetch --prune --unshallow
     - name: Install Minconda
       uses: conda-incubator/setup-miniconda@v3
       with:
@@ -56,9 +59,6 @@ jobs:
       run: |
         conda install -c mrtrix3 mrtrix3
         mrconvert --version
-    - uses: actions/checkout@v4
-    - name: Fetch tags
-      run: git fetch --prune --unshallow
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
