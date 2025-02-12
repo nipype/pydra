@@ -12,7 +12,7 @@ dependencies = [
     "cloudpickle >=2.0.0",
     "etelemetry >=0.2.2",
     "filelock >=3.0.0",
-    "fileformats >=0.15a1",
+    "fileformats >=0.15a3",
     "platformdirs >=2",
 ]
 license = { file = "LICENSE" }
@@ -53,6 +53,7 @@ doc = [
     "pandoc",
     "numpy",
     "scipy",
+    "fileformats-extras >= v0.15.0a3",
     "fileformats-medimage >= v0.10.0a",
     "pydra-mrtrix3 >=3.0.4a14",
     "sphinx_rtd_theme",
