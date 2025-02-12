@@ -19,6 +19,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Minconda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        auto-activate-base: true
+        activate-environment: ""
+    - name: Install MRtrix via Conda
+      run: |
+        conda install -c mrtrix3 mrtrix3
+        mrconvert --version
     - uses: actions/checkout@v4
     - name: Fetch tags
       run: git fetch --prune --unshallow
