@@ -169,6 +169,10 @@ class Submitter:
         self,
         task_def: "TaskDef",
         name: str | None = "task",
+        pre_run: ty.Callable["Task", None] | None = None,
+        post_run: ty.Callable["Task", None] | None = None,
+        pre_run_task: ty.Callable["Task", None] | None = None,
+        post_run_task: ty.Callable["Task", None] | None = None,
     ):
         """Submitter run function."""
 
@@ -194,7 +198,16 @@ class Submitter:
                 f"Task {self} is marked for combining, but not splitting. "
                 "Use the `split` method to split the task before combining."
             )
-        task = Task(task_def, submitter=self, name=name, environment=self.environment)
+        task = Task(
+            task_def,
+            submitter=self,
+            name=name,
+            environment=self.environment,
+            pre_run=pre_run,
+            post_run=post_run,
+            pre_run_task=pre_run_task,
+            post_run_task=post_run_task,
+        )
         try:
             self.run_start_time = datetime.now()
             if self.worker.is_async:  # Only workflow tasks can be async
@@ -203,6 +216,12 @@ class Submitter:
                 )
             else:
                 self.worker.run(task, rerun=self.rerun)
+        except Exception as e:
+            e.add_note(
+                f"Full crash report for {type(task_def).__name__!r} task is here: "
+                + str(task.output_dir / "_error.pklz")
+            )
+            raise e
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()

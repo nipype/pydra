@@ -100,6 +100,10 @@ class Task(ty.Generic[DefType]):
         name: str,
         environment: "Environment | None" = None,
         state_index: "state.StateIndex | None" = None,
+        pre_run: ty.Callable["Task", None] | None = None,
+        pre_run_task: ty.Callable["Task", None] | None = None,
+        post_run_task: ty.Callable["Task", None] | None = None,
+        post_run: ty.Callable["Task", None] | None = None,
     ):
         """
         Initialize a task.
@@ -142,7 +146,12 @@ class Task(ty.Generic[DefType]):
         self.allow_cache_override = True
         self._checksum = None
         self._uid = uuid4().hex
-        self.hooks = TaskHook()
+        self.hooks = TaskHook(
+            pre_run=pre_run,
+            post_run=post_run,
+            pre_run_task=pre_run_task,
+            post_run_task=post_run_task,
+        )
         self._errored = False
         self._lzout = None
 

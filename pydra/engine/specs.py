@@ -14,6 +14,7 @@ from glob import glob
 from copy import deepcopy
 from typing import Self
 import attrs
+from attrs.converters import default_if_none
 import cloudpickle as cp
 from fileformats.core import FileSet
 from pydra.utils.messenger import AuditFlag, Messenger
@@ -160,6 +161,10 @@ class TaskDef(ty.Generic[OutputsType]):
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
         name: str | None = None,
+        pre_run: ty.Callable["Task", None] | None = None,
+        post_run: ty.Callable["Task", None] | None = None,
+        pre_run_task: ty.Callable["Task", None] | None = None,
+        post_run_task: ty.Callable["Task", None] | None = None,
         **kwargs: ty.Any,
     ) -> OutputsType:
         """Create a task from this definition and execute it to produce a result.
@@ -212,8 +217,17 @@ class TaskDef(ty.Generic[OutputsType]):
                 worker=worker,
                 **kwargs,
             ) as sub:
-                result = sub(self, name=name)
+                result = sub(
+                    self,
+                    name=name,
+                    pre_run=pre_run,
+                    post_run=post_run,
+                    pre_run_task=pre_run_task,
+                    post_run_task=post_run_task,
+                )
         except TypeError as e:
+            # Catch any inadvertent passing of task definition parameters to the
+            # execution call
             if hasattr(e, "__notes__") and WORKER_KWARG_FAIL_NOTE in e.__notes__:
                 if match := re.match(
                     r".*got an unexpected keyword argument '(\w+)'", str(e)
@@ -1248,15 +1262,18 @@ def donothing(*args: ty.Any, **kwargs: ty.Any) -> None:
 class TaskHook:
     """Callable task hooks."""
 
-    pre_run_task: ty.Callable = donothing
-    post_run_task: ty.Callable = donothing
-    pre_run: ty.Callable = donothing
-    post_run: ty.Callable = donothing
-
-    def __setattr__(self, attr, val):
-        if attr not in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
-            raise AttributeError("Cannot set unknown hook")
-        super().__setattr__(attr, val)
+    pre_run_task: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
+    post_run_task: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
+    pre_run: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
+    post_run: ty.Callable = attrs.field(
+        default=donothing, converter=default_if_none(donothing)
+    )
 
     def reset(self):
         for val in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:

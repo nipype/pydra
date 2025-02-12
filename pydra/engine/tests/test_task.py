@@ -1198,7 +1198,7 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     cache_dir.mkdir()
 
     foo = Task(
-        definition=FunAddTwo(a=1), submitter=Submitter(cache_dir=cache_dir), name="foo"
+        definition=FunAddTwo(a=1), submitter=Submitter(cache_dir=tmpdir), name="foo"
     )
     assert foo.hooks
     # ensure all hooks are defined
@@ -1209,8 +1209,7 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     def myhook(task, *args):
         print("I was called")
 
-    foo.hooks.pre_run = myhook
-    foo.run()
+    FunAddTwo(a=1)(cache_dir=cache_dir, pre_run=myhook)
     captured = capsys.readouterr()
     assert "I was called\n" in captured.out
     del captured
@@ -1219,52 +1218,31 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     with pytest.raises(AttributeError):
         foo.hooks.mid_run = myhook
 
-    # clear cache
-    shutil.rmtree(cache_dir)
-    cache_dir.mkdir()
-
-    # set all hooks
-    foo.hooks.post_run = myhook
-    foo.hooks.pre_run_task = myhook
-    foo.hooks.post_run_task = myhook
-    foo.run()
-    captured = capsys.readouterr()
-    assert captured.out.count("I was called\n") == 4
-    del captured
-
-    # hooks are independent across tasks by default
-    bar = Task(
-        definition=FunAddTwo(a=3), name="bar", submitter=Submitter(cache_dir=tmpdir)
-    )
-    assert bar.hooks is not foo.hooks
-    # but can be shared across tasks
-    bar.hooks = foo.hooks
-    # and workflows
-    wf_task = Task(
-        definition=BasicWorkflow(x=1),
-        submitter=Submitter(cache_dir=tmpdir, worker="cf"),
-        name="wf",
-    )
-    wf_task.hooks = bar.hooks
-    assert foo.hooks == bar.hooks == wf_task.hooks
-
-    wf_task.run()
-    captured = capsys.readouterr()
-    assert captured.out.count("I was called\n") == 4
-    del captured
-
     # reset all hooks
     foo.hooks.reset()
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
         hook = getattr(foo.hooks, attr)
         assert hook() is None
 
+    # clear cache
+    shutil.rmtree(cache_dir)
+    cache_dir.mkdir()
+
+    # set all hooks
+    FunAddTwo(a=1)(
+        cache_dir=cache_dir,
+        pre_run=myhook,
+        post_run=myhook,
+        pre_run_task=myhook,
+        post_run_task=myhook,
+    )
+    captured = capsys.readouterr()
+    assert captured.out.count("I was called\n") == 4
+    del captured
+
 
 def test_taskhooks_2(tmpdir, capsys):
     """checking order of the hooks; using task's attributes"""
-    foo = Task(
-        definition=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_dir=tmpdir)
-    )
 
     def myhook_prerun(task, *args):
         print(f"i. prerun hook was called from {task.name}")
@@ -1278,11 +1256,13 @@ def test_taskhooks_2(tmpdir, capsys):
     def myhook_postrun(task, *args):
         print(f"iv. postrun hook was called {task.name}")
 
-    foo.hooks.pre_run = myhook_prerun
-    foo.hooks.post_run = myhook_postrun
-    foo.hooks.pre_run_task = myhook_prerun_task
-    foo.hooks.post_run_task = myhook_postrun_task
-    foo.run()
+    FunAddTwo(a=1)(
+        cache_dir=tmpdir,
+        pre_run=myhook_prerun,
+        post_run=myhook_postrun,
+        pre_run_task=myhook_prerun_task,
+        post_run_task=myhook_postrun_task,
+    )
 
     captured = capsys.readouterr()
     hook_messages = captured.out.strip().split("\n")
@@ -1318,9 +1298,6 @@ def test_taskhooks_3(tmpdir, capsys):
 
 def test_taskhooks_4(tmpdir, capsys):
     """task raises an error: postrun task should be called, postrun shouldn't be called"""
-    foo = Task(
-        definition=FunAddTwo(a="one"), name="foo", submitter=Submitter(cache_dir=tmpdir)
-    )
 
     def myhook_postrun_task(task, result, *args):
         print(f"postrun task hook was called, result object is {result}")
@@ -1328,11 +1305,10 @@ def test_taskhooks_4(tmpdir, capsys):
     def myhook_postrun(task, result, *args):
         print("postrun hook should not be called")
 
-    foo.hooks.post_run = myhook_postrun
-    foo.hooks.post_run_task = myhook_postrun_task
-
     with pytest.raises(Exception):
-        foo()
+        FunAddTwo(a="one")(
+            cache_dir=tmpdir, post_run=myhook_postrun, post_run_task=myhook_postrun_task
+        )
 
     captured = capsys.readouterr()
     hook_messages = captured.out.strip().split("\n")
@@ -1351,11 +1327,13 @@ def test_traceback(tmpdir):
     def FunError(x):
         raise Exception("Error from the function")
 
-    with pytest.raises(Exception, match="Task 'FunError' raised an error") as exinfo:
+    with pytest.raises(Exception, match="Error from the function") as exinfo:
         FunError(x=3)(worker="cf", cache_dir=tmpdir)
 
     # getting error file from the error message
-    error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
+    error_file_match = (
+        str(exinfo.value.__notes__[0]).split("here: ")[-1].split("_error.pklz")[0]
+    )
     error_file = Path(error_file_match) / "_error.pklz"
     # checking if the file exists
     assert error_file.exists()
@@ -1386,7 +1364,9 @@ def test_traceback_wf(tmpdir):
         wf(worker="cf")
 
     # getting error file from the error message
-    error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
+    error_file_match = (
+        str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0].strip()
+    )
     error_file = Path(error_file_match) / "_error.pklz"
     # checking if the file exists
     assert error_file.exists()
