@@ -108,7 +108,11 @@ class arg(Arg):
         else:
             tp = self.type
         origin = ty.get_origin(tp) or tp
-        if inspect.isclass(origin) and issubclass(origin, ty.Iterable):
+        if (
+            inspect.isclass(origin)
+            and issubclass(origin, ty.Sequence)
+            and tp is not str
+        ):
             if sep is None:
                 raise ValueError(
                     f"A value to 'sep' must be provided when type is iterable {tp} "

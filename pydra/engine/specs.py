@@ -748,7 +748,7 @@ class WorkflowOutputs(TaskOutputs):
                     if not err_files:
                         raise
                     raise ValueError(
-                        f"Task {lazy_field._node.name} raised an error, full crash report is "
+                        f"Task {lazy_field._node.name!r} raised an error, full crash report is "
                         f"here: "
                         + (
                             str(err_files[0])

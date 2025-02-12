@@ -1351,14 +1351,8 @@ def test_traceback(tmpdir):
     def FunError(x):
         raise Exception("Error from the function")
 
-    task = Task(
-        name="error",
-        definition=FunError().split("x", x=[3, 4]),
-        submitter=Submitter(cache_dir=tmpdir),
-    )
-
-    with pytest.raises(Exception, match="from the function") as exinfo:
-        task.run()
+    with pytest.raises(Exception, match="Task 'FunError' raised an error") as exinfo:
+        FunError(x=3)(worker="cf", cache_dir=tmpdir)
 
     # getting error file from the error message
     error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
@@ -1383,12 +1377,12 @@ def test_traceback_wf(tmpdir):
         raise Exception("Error from the function")
 
     @workflow.define
-    def Workflow(x):
-        error = workflow.add(FunError(x=x), name="error")
-        return error.out
+    def Workflow(x_list):
+        fun_error = workflow.add(FunError().split(x=x_list), name="fun_error")
+        return fun_error.out
 
-    wf = Workflow().split("x", x=[3, 4])
-    with pytest.raises(Exception, match="Task error raised an error") as exinfo:
+    wf = Workflow(x_list=[3, 4])
+    with pytest.raises(Exception, match="Task 'fun_error' raised an error") as exinfo:
         wf(worker="cf")
 
     # getting error file from the error message
@@ -1463,7 +1457,7 @@ def test_argstr_formatting():
         a1_field: str
         b2_field: float
         c3_field: ty.Dict[str, str]
-        d4_field: ty.List[str]
+        d4_field: ty.List[str] = shell.arg(sep=" ")
         executable = "dummy"
 
         class Outputs(ShellOutputs):

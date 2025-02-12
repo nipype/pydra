@@ -491,13 +491,13 @@ class NodeExecution(ty.Generic[DefType]):
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def task(self, index: StateIndex | None = None) -> "Task | list[Task[DefType]]":
+    def task(self, index: StateIndex = StateIndex()) -> "Task | list[Task[DefType]]":
         """Get a task object for a given state index."""
         self.tasks  # Ensure tasks are loaded
         try:
             return self._tasks[index]
         except KeyError:
-            if index is None:
+            if not index:
                 return StateArray(self._tasks.values())
             raise
 
