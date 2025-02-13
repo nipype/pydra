@@ -46,6 +46,10 @@ jobs:
 
   build-new:
     runs-on: ubuntu-latest
+    # Set up the environment so that it finds conda
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
     - uses: actions/checkout@v4
     - name: Fetch tags
