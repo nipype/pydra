@@ -315,7 +315,7 @@
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">lazy</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.hash</span> <span class="kn">import</span> <span class="n">hash_function</span><span class="p">,</span> <span class="n">Cache</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">StateArray</span><span class="p">,</span> <span class="n">MultiInputObj</span>
-<span class="kn">from</span> <span class="nn">pydra.design.base</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">Arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">,</span> <span class="n">RequirementSet</span><span class="p">,</span> <span class="n">EMPTY</span>
+<span class="kn">from</span> <span class="nn">pydra.design.base</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">Arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">,</span> <span class="n">RequirementSet</span><span class="p">,</span> <span class="n">NO_DEFAULT</span>
 <span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
 <span class="kn">from</span> <span class="nn">pydra.engine.lazy</span> <span class="kn">import</span> <span class="n">LazyInField</span><span class="p">,</span> <span class="n">LazyOutField</span>
 
@@ -334,7 +334,7 @@
 
 <div class="viewcode-block" id="is_set"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.is_set">[docs]</a><span class="k">def</span> <span class="nf">is_set</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if a value has been set.&quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span><span class="p">,</span> <span class="n">EMPTY</span><span class="p">)</span></div>
+    <span class="k">return</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span><span class="p">,</span> <span class="n">NO_DEFAULT</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="TaskOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -370,9 +370,9 @@
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> outputs object is not a lazy output of a workflow node&quot;</span>
             <span class="p">)</span> <span class="kn">from</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Generator</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The names of the fields in the output object&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">attrs_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">attrs_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)))</span>
 
     <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name_or_index</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the value for the given attribute</span>

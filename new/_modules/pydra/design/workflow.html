@@ -298,6 +298,8 @@
 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Workflow</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">TaskDef</span><span class="p">,</span> <span class="n">TaskOutputs</span><span class="p">,</span> <span class="n">WorkflowDef</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.environments</span> <span class="kn">import</span> <span class="n">Environment</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">TaskHooks</span>
 
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;define&quot;</span><span class="p">,</span> <span class="s2">&quot;add&quot;</span><span class="p">,</span> <span class="s2">&quot;this&quot;</span><span class="p">,</span> <span class="s2">&quot;arg&quot;</span><span class="p">,</span> <span class="s2">&quot;out&quot;</span><span class="p">]</span>
@@ -488,7 +490,12 @@
 <span class="n">OutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputsType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">&quot;TaskOutputs&quot;</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="add"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.workflow.add">[docs]</a><span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="n">task_def</span><span class="p">:</span> <span class="s2">&quot;TaskDef[OutputsType]&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputsType</span><span class="p">:</span>
+<div class="viewcode-block" id="add"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.workflow.add">[docs]</a><span class="k">def</span> <span class="nf">add</span><span class="p">(</span>
+    <span class="n">task_def</span><span class="p">:</span> <span class="s2">&quot;TaskDef[OutputsType]&quot;</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">environment</span><span class="p">:</span> <span class="s2">&quot;Environment | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="s2">&quot;TaskHooks | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputsType</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Add a node to the workflow currently being constructed</span>
 
 <span class="sd">    Parameters</span>
@@ -498,13 +505,18 @@
 <span class="sd">    name : str, optional</span>
 <span class="sd">        The name of the node, by default it will be the name of the task definition</span>
 <span class="sd">        class</span>
+<span class="sd">    environment : Environment, optional</span>
+<span class="sd">        The environment to run the task in, such as the Docker or Singularity container,</span>
+<span class="sd">        by default it will be the &quot;native&quot;</span>
+<span class="sd">    hooks : TaskHooks, optional</span>
+<span class="sd">        The hooks to run before or after the task, by default no hooks will be run</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    Outputs</span>
 <span class="sd">        The outputs definition of the node</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">this</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">task_def</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span></div>
+    <span class="k">return</span> <span class="n">this</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">task_def</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">)</span></div>
 
 
 <span class="n">U</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;U&quot;</span><span class="p">)</span>

@@ -326,7 +326,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev215+ga4e0b126
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev216+ga56b61e5
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -334,7 +334,7 @@ A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev215+g
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev215+ga4e0b126/run-cache/python-425c2576a48f771273fc025773a7c6e1&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, definition=TenToThePower(p=3, function=&lt;function TenToThePower at 0x7fabf07c09a0&gt;))
+Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev216+ga56b61e5/run-cache/python-db220e60910684fecc13e32d80ad7991&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, definition=TenToThePower(p=3, function=&lt;function TenToThePower at 0x7f6c707b0900&gt;))
 </pre></div></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">Result</span></code> object contains</p>
@@ -421,12 +421,13 @@ Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev215+ga4e0b126
 <section id="Reusing-previously-generated-results">
 <h2>Reusing previously generated results<a class="headerlink" href="#Reusing-previously-generated-results" title="Permalink to this heading">¶</a></h2>
 <p>Pydra caches all task results in the runtime cache (see <a class="reference external" href="./1-getting-started.html##File-system-locations">File-system locations</a>) as long as exactly the hashes of the inputs provided to the task are the same. Here we go through some of the practicalities of this caching and hashing (see <a class="reference external" href="../explanation/hashing-caching.html">Caches and hashes</a> for more details and issues to consider).</p>
-<p>First we import the functions and classes we need andcreate some sample NIfTI files to work with</p>
-<div class="nbinput nblast docutils container">
+<p>If we attempt to run the same task with the same parameterisation the cache directory will point to the same location and the results will be reused</p>
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">import</span> <span class="nn">tempfile</span>
 <span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
 <span class="kn">from</span> <span class="nn">fileformats.medimage</span> <span class="kn">import</span> <span class="n">Nifti1</span>
@@ -440,15 +441,6 @@ Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev215+ga4e0b126
 
 <span class="c1"># Generate some random NIfTI files to work with</span>
 <span class="n">nifti_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">Nifti1</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">nifti_dir</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
-</pre></div>
-</div>
-</div>
-<p>If we attempt to run the same task with the same parameterisation the cache directory will point to the same location and the results will be reused</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
 
 <span class="n">VOX_SIZES</span> <span class="o">=</span> <span class="p">[</span>
         <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
@@ -508,16 +500,16 @@ Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev215+ga4e0b126
 <div class="highlight"><pre>
 <span class="ansi-red-fg">---------------------------------------------------------------------------</span>
 <span class="ansi-red-fg">RuntimeError</span>                              Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[6], line 26</span>
-<span class="ansi-green-intense-fg ansi-bold">     22</span> submitter <span style="color: rgb(98,98,98)">=</span> Submitter(cache_dir<span style="color: rgb(98,98,98)">=</span>test_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">cache</span><span style="color: rgb(175,0,0)">&#34;</span>)
-<span class="ansi-green-intense-fg ansi-bold">     25</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> submitter:
-<span class="ansi-green-fg">---&gt; 26</span>     result1 <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">submitter</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mrgrid_varying_vox</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">     29</span> mrgrid_varying_vox2 <span style="color: rgb(98,98,98)">=</span> MrGrid(operation<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">regrid</span><span style="color: rgb(175,0,0)">&#34;</span>)<span style="color: rgb(98,98,98)">.</span>split(
-<span class="ansi-green-intense-fg ansi-bold">     30</span>     (<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">in_file</span><span style="color: rgb(175,0,0)">&#34;</span>, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">voxel</span><span style="color: rgb(175,0,0)">&#34;</span>),
-<span class="ansi-green-intense-fg ansi-bold">     31</span>     in_file<span style="color: rgb(98,98,98)">=</span>nifti_files,
-<span class="ansi-green-intense-fg ansi-bold">     32</span>     voxel<span style="color: rgb(98,98,98)">=</span>copy(VOX_SIZES),
-<span class="ansi-green-intense-fg ansi-bold">     33</span> )
-<span class="ansi-green-intense-fg ansi-bold">     35</span> <span style="color: rgb(95,135,135)"># Result from previous run is reused as the task and inputs are identical</span>
+Cell <span class="ansi-green-fg">In[5], line 40</span>
+<span class="ansi-green-intense-fg ansi-bold">     36</span> submitter <span style="color: rgb(98,98,98)">=</span> Submitter(cache_dir<span style="color: rgb(98,98,98)">=</span>test_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">cache</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-intense-fg ansi-bold">     39</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> submitter:
+<span class="ansi-green-fg">---&gt; 40</span>     result1 <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">submitter</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">mrgrid_varying_vox</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">     43</span> mrgrid_varying_vox2 <span style="color: rgb(98,98,98)">=</span> MrGrid(operation<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">regrid</span><span style="color: rgb(175,0,0)">&#34;</span>)<span style="color: rgb(98,98,98)">.</span>split(
+<span class="ansi-green-intense-fg ansi-bold">     44</span>     (<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">in_file</span><span style="color: rgb(175,0,0)">&#34;</span>, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">voxel</span><span style="color: rgb(175,0,0)">&#34;</span>),
+<span class="ansi-green-intense-fg ansi-bold">     45</span>     in_file<span style="color: rgb(98,98,98)">=</span>nifti_files,
+<span class="ansi-green-intense-fg ansi-bold">     46</span>     voxel<span style="color: rgb(98,98,98)">=</span>copy(VOX_SIZES),
+<span class="ansi-green-intense-fg ansi-bold">     47</span> )
+<span class="ansi-green-intense-fg ansi-bold">     49</span> <span style="color: rgb(95,135,135)"># Result from previous run is reused as the task and inputs are identical</span>
 
 File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:218</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def, name, hooks)</span>
 <span class="ansi-green-intense-fg ansi-bold">    213</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
@@ -596,20 +588,20 @@ File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packag
 <span class="ansi-green-fg">---&gt; 56</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">RuntimeError</span>(msg)
 <span class="ansi-green-intense-fg ansi-bold">     57</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> output
 
-<span class="ansi-red-fg">RuntimeError</span>: Error running &#39;MrGrid&#39; task with [&#39;mrgrid&#39;, &#39;/tmp/tmp6_52dmm5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;, &#39;regrid&#39;, &#39;/tmp/tmp6_52dmm5/cache/shell-b70952aaf1f98d57a954334cc3df37b5/out_file.mif&#39;, &#39;-voxel&#39;, &#39;0.5,0.5,0.5&#39;]:
+<span class="ansi-red-fg">RuntimeError</span>: Error running &#39;MrGrid&#39; task with [&#39;mrgrid&#39;, &#39;/tmp/tmpvgiltz0n/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;, &#39;regrid&#39;, &#39;/tmp/tmpvgiltz0n/cache/shell-fdc6a8c6810dd12f574f0acd72993235/out_file.mif&#39;, &#39;-voxel&#39;, &#39;0.5,0.5,0.5&#39;]:
 
 stderr:
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmp6_52dmm5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-1.1 format (sizeof_hdr != 348)</span>
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmp6_52dmm5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-2 format (sizeof_hdr != 540)</span>
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] unknown format for image &#34;/tmp/tmp6_52dmm5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] error opening image &#34;/tmp/tmp6_52dmm5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmpvgiltz0n/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-1.1 format (sizeof_hdr != 348)</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmpvgiltz0n/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-2 format (sizeof_hdr != 540)</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] unknown format for image &#34;/tmp/tmpvgiltz0n/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] error opening image &#34;/tmp/tmpvgiltz0n/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
 
-Full crash report for &#39;Split&#39; task is here: /tmp/tmp6_52dmm5/cache/workflow-130dfff879abb61b31526b94dbc3683f/_error.pklz
+Full crash report for &#39;Split&#39; task is here: /tmp/tmpvgiltz0n/cache/workflow-b125cc362afc71c43c6ae82643ee340b/_error.pklz
 </pre></div></div>
 </div>
 <p>Note that for file objects, the contents of the files are used to calculate the hash not their paths. Therefore, when inputting large files there might be some additional overhead on the first run (the file hashes themselves are cached by path and mtime so shouldn’t need to be recalculated unless they are modified). However, this makes the hashes invariant to file-system movement. For example, changing the name of one of the files in the nifti directory won’t invalidate the hash.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Rename a NIfTI file within the test directory</span>
@@ -656,7 +648,7 @@ Full crash report for &#39;Split&#39; task is here: /tmp/tmp6_52dmm5/cache/workf
 <div class="highlight"><pre>
 <span class="ansi-red-fg">---------------------------------------------------------------------------</span>
 <span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[7], line 15</span>
+Cell <span class="ansi-green-fg">In[6], line 15</span>
 <span class="ansi-green-intense-fg ansi-bold">     12</span> <span style="color: rgb(95,135,135)"># Result from previous run is reused as contents of the files have not changed, despite</span>
 <span class="ansi-green-intense-fg ansi-bold">     13</span> <span style="color: rgb(95,135,135)"># the file names changing</span>
 <span class="ansi-green-intense-fg ansi-bold">     14</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> submitter:
@@ -845,9 +837,9 @@ File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/pathlib.py:
 <span class="ansi-green-intense-fg ansi-bold">    839</span> <span style="color: rgb(175,0,0)">    &#34;&#34;&#34;</span>
 <span class="ansi-green-fg">--&gt; 840</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">os</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">stat</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">follow_symlinks</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">follow_symlinks</span><span class="ansi-yellow-bg">)</span>
 
-<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;/tmp/tmp6_52dmm5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;
-and therefore cannot hash `Nifti1(&#39;/tmp/tmp6_52dmm5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;)` of type `fileformats.medimage.nifti.Nifti1`. Consider implementing a specific `bytes_repr()`(see pydra.utils.hash.register_serializer) or a `__bytes_repr__()` dunder methods for this type
-Full crash report for &#39;Split&#39; task is here: /tmp/tmp6_52dmm5/cache/workflow-130dfff879abb61b31526b94dbc3683f/_error.pklz
+<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;/tmp/tmpvgiltz0n/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;
+and therefore cannot hash `Nifti1(&#39;/tmp/tmpvgiltz0n/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;)` of type `fileformats.medimage.nifti.Nifti1`. Consider implementing a specific `bytes_repr()`(see pydra.utils.hash.register_serializer) or a `__bytes_repr__()` dunder methods for this type
+Full crash report for &#39;Split&#39; task is here: /tmp/tmpvgiltz0n/cache/workflow-b125cc362afc71c43c6ae82643ee340b/_error.pklz
 </pre></div></div>
 </div>
 </section>
@@ -855,7 +847,7 @@ Full crash report for &#39;Split&#39; task is here: /tmp/tmp6_52dmm5/cache/workf
 <h2>Environments and hooks<a class="headerlink" href="#Environments-and-hooks" title="Permalink to this heading">¶</a></h2>
 <p>For shell tasks, it is possible to specify that the command runs within a specific software environment, such as those provided by software containers (e.g. Docker or Singularity/Apptainer). This is down by providing the environment to the submitter/execution call,</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">tempfile</span>
@@ -885,7 +877,7 @@ Full crash report for &#39;Split&#39; task is here: /tmp/tmp6_52dmm5/cache/workf
 <div class="highlight"><pre>
 <span class="ansi-red-fg">---------------------------------------------------------------------------</span>
 <span class="ansi-red-fg">NotImplementedError</span>                       Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[8], line 14</span>
+Cell <span class="ansi-green-fg">In[7], line 14</span>
 <span class="ansi-green-intense-fg ansi-bold">     11</span> mrgrid <span style="color: rgb(98,98,98)">=</span> MrGrid(in_file<span style="color: rgb(98,98,98)">=</span>nifti_file, operation<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">regrid</span><span style="color: rgb(175,0,0)">&#34;</span>, voxel<span style="color: rgb(98,98,98)">=</span>(<span style="color: rgb(98,98,98)">0.5</span>,<span style="color: rgb(98,98,98)">0.5</span>,<span style="color: rgb(98,98,98)">0.5</span>))
 <span class="ansi-green-intense-fg ansi-bold">     13</span> <span style="color: rgb(95,135,135)"># Run the task to resample all NIfTI files</span>
 <span class="ansi-green-fg">---&gt; 14</span> outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">mrgrid</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">environment</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">Docker</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">image</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">mrtrix3/mrtrix3</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">tag</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">latest</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">)</span>
@@ -986,7 +978,7 @@ File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packag
 <span class="ansi-green-intense-fg ansi-bold">   1247</span> host_path, env_path <span style="color: rgb(98,98,98)">=</span> fileset<span style="color: rgb(98,98,98)">.</span>parent, Path(<span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>root<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>fileset<span style="color: rgb(98,98,98)">.</span>parent<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)">&#34;</span>)
 
 <span class="ansi-red-fg">NotImplementedError</span>: Generating environment bindings for nested FileSets are not yet supported
-Full crash report for &#39;MrGrid&#39; task is here: /home/runner/.cache/pydra/0.25.dev215+ga4e0b126/run-cache/shell-b70952aaf1f98d57a954334cc3df37b5/_error.pklz
+Full crash report for &#39;MrGrid&#39; task is here: /home/runner/.cache/pydra/0.25.dev216+ga56b61e5/run-cache/shell-fdc6a8c6810dd12f574f0acd72993235/_error.pklz
 </pre></div></div>
 </div>
 <p>Of course for this to work Docker needs to work and be configured for <a class="reference external" href="https://docs.docker.com/engine/install/linux-postinstall/">sudo-less execution</a>. See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>
@@ -999,7 +991,7 @@ Full crash report for &#39;MrGrid&#39; task is here: /home/runner/.cache/pydra/0
 </ul>
 <p>QUESTION: What are these hooks intended for? Should the post_run_task hook be run before the outputs have been collected?</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Task</span>
@@ -1034,7 +1026,7 @@ Full crash report for &#39;MrGrid&#39; task is here: /home/runner/.cache/pydra/0
 <div class="highlight"><pre>
 <span class="ansi-red-fg">---------------------------------------------------------------------------</span>
 <span class="ansi-red-fg">RuntimeError</span>                              Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[9], line 19</span>
+Cell <span class="ansi-green-fg">In[8], line 19</span>
 <span class="ansi-green-intense-fg ansi-bold">     16</span>         os<span style="color: rgb(98,98,98)">.</span>system(<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">msg * </span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task has completed successfully!</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">&#39;</span>)
 <span class="ansi-green-intense-fg ansi-bold">     18</span> <span style="color: rgb(95,135,135)"># Run the task to resample all NIfTI files</span>
 <span class="ansi-green-fg">---&gt; 19</span> outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">mrgrid</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">hooks</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">TaskHooks</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">post_run</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">notify_task_completion</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">cache_dir</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">tempfile</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">mkdtemp</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">)</span>
@@ -1108,15 +1100,15 @@ File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packag
 <span class="ansi-green-fg">---&gt; 56</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">RuntimeError</span>(msg)
 <span class="ansi-green-intense-fg ansi-bold">     57</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> output
 
-<span class="ansi-red-fg">RuntimeError</span>: Error running &#39;task&#39; task with [&#39;mrgrid&#39;, &#39;/tmp/tmpx9hs_y9_/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;, &#39;regrid&#39;, &#39;/tmp/tmpipt4dlc7/shell-b70952aaf1f98d57a954334cc3df37b5/out_file.mif&#39;, &#39;-voxel&#39;, &#39;0.5,0.5,0.5&#39;]:
+<span class="ansi-red-fg">RuntimeError</span>: Error running &#39;task&#39; task with [&#39;mrgrid&#39;, &#39;/tmp/tmp4xdd22ki/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#39;, &#39;regrid&#39;, &#39;/tmp/tmpzdzo7rat/shell-fdc6a8c6810dd12f574f0acd72993235/out_file.mif&#39;, &#39;-voxel&#39;, &#39;0.5,0.5,0.5&#39;]:
 
 stderr:
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmpx9hs_y9_/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-1.1 format (sizeof_hdr != 348)</span>
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmpx9hs_y9_/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-2 format (sizeof_hdr != 540)</span>
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] unknown format for image &#34;/tmp/tmpx9hs_y9_/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
-mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] error opening image &#34;/tmp/tmpx9hs_y9_/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmp4xdd22ki/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-1.1 format (sizeof_hdr != 348)</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] image &#34;/tmp/tmp4xdd22ki/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34; is not in NIFTI-2 format (sizeof_hdr != 540)</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] unknown format for image &#34;/tmp/tmp4xdd22ki/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
+mrgrid: <span class="ansi-red-intense-fg ansi-bold">[ERROR] error opening image &#34;/tmp/tmp4xdd22ki/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;</span>
 
-Full crash report for &#39;MrGrid&#39; task is here: /tmp/tmpipt4dlc7/shell-b70952aaf1f98d57a954334cc3df37b5/_error.pklz
+Full crash report for &#39;MrGrid&#39; task is here: /tmp/tmpzdzo7rat/shell-fdc6a8c6810dd12f574f0acd72993235/_error.pklz
 </pre></div></div>
 </div>
 </section>

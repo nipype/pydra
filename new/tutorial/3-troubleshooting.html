@@ -331,7 +331,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev215+ga4e0b126
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev216+ga56b61e5
 </pre></div></div>
 </div>
 <p>This allows the secondary processes to import the script without executing it. Without such a block Pydra will lock up and not process the workflow. On Linux this is not an issue due to the way that processes are forked, but is good practice in any case for code portability.</p>
@@ -360,14 +360,12 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
 <span class="n">wf</span> <span class="o">=</span> <span class="n">UnsafeDivisionWorkflow</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">denominator</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span> <span class="p">,</span><span class="mi">0</span><span class="p">])</span>
 
 <span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-    <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">&quot;cf&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">wf</span><span class="p">)</span>
-
-<span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Workflow failed with errors:</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">))</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Workflow completed successfully :)&quot;</span><span class="p">)</span>
-</pre></div>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">&quot;cf&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">wf</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<br/></pre></div>
 </div>
 </div>
 <div class="nboutput docutils container">
@@ -421,171 +419,7 @@ ZeroDivisionError: float division by zero
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">ValueError</span>                                Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[3], line 6</span>
-<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,0,135)">__name__</span> <span style="color: rgb(98,98,98)">==</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">__main__</span><span style="color: rgb(175,0,0)">&#34;</span>:
-<span class="ansi-green-intense-fg ansi-bold">      5</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> Submitter(worker<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">cf</span><span style="color: rgb(175,0,0)">&#34;</span>) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> sub:
-<span class="ansi-green-fg">----&gt; 6</span>         result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">sub</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wf</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">      8</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> result<span style="color: rgb(98,98,98)">.</span>errored:
-<span class="ansi-green-intense-fg ansi-bold">      9</span>     <span style="color: rgb(0,135,0)">print</span>(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Workflow failed with errors:</span><span class="ansi-bold" style="color: rgb(175,95,0)">\n</span><span style="color: rgb(175,0,0)">&#34;</span> <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(result<span style="color: rgb(98,98,98)">.</span>errors))
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:218</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def, name, hooks)</span>
-<span class="ansi-green-intense-fg ansi-bold">    213</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
-<span class="ansi-green-intense-fg ansi-bold">    214</span>     e<span style="color: rgb(98,98,98)">.</span>add_note(
-<span class="ansi-green-intense-fg ansi-bold">    215</span>         <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Full crash report for </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span><span style="color: rgb(0,135,0)">type</span>(task_def)<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,135)">__name__</span><span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)"> task is here: </span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    216</span>         <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(task<span style="color: rgb(98,98,98)">.</span>output_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">_error.pklz</span><span style="color: rgb(175,0,0)">&#34;</span>)
-<span class="ansi-green-intense-fg ansi-bold">    217</span>     )
-<span class="ansi-green-fg">--&gt; 218</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> e
-<span class="ansi-green-intense-fg ansi-bold">    219</span> <span class="ansi-bold" style="color: rgb(0,135,0)">finally</span>:
-<span class="ansi-green-intense-fg ansi-bold">    220</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>run_start_time <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:208</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def, name, hooks)</span>
-<span class="ansi-green-intense-fg ansi-bold">    206</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>run_start_time <span style="color: rgb(98,98,98)">=</span> datetime<span style="color: rgb(98,98,98)">.</span>now()
-<span class="ansi-green-intense-fg ansi-bold">    207</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>is_async:  <span style="color: rgb(95,135,135)"># Only workflow tasks can be async</span>
-<span class="ansi-green-fg">--&gt; 208</span>     <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">loop</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">run_until_complete</span><span class="ansi-yellow-bg">(</span>
-<span class="ansi-green-intense-fg ansi-bold">    209</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">worker</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">run_async</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    210</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    211</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-intense-fg ansi-bold">    212</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/nest_asyncio.py:98</span>, in <span class="ansi-cyan-fg">_patch_loop.&lt;locals&gt;.run_until_complete</span><span class="ansi-blue-fg">(self, future)</span>
-<span class="ansi-green-intense-fg ansi-bold">     95</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> f<span style="color: rgb(98,98,98)">.</span>done():
-<span class="ansi-green-intense-fg ansi-bold">     96</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">RuntimeError</span>(
-<span class="ansi-green-intense-fg ansi-bold">     97</span>         <span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">Event loop stopped before Future completed.</span><span style="color: rgb(175,0,0)">&#39;</span>)
-<span class="ansi-green-fg">---&gt; 98</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">f</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">result</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/asyncio/futures.py:202</span>, in <span class="ansi-cyan-fg">Future.result</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    200</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>__log_traceback <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">False</span>
-<span class="ansi-green-intense-fg ansi-bold">    201</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_exception <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-fg">--&gt; 202</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_exception<span style="color: rgb(98,98,98)">.</span>with_traceback(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_exception_tb)
-<span class="ansi-green-intense-fg ansi-bold">    203</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_result
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/asyncio/tasks.py:314</span>, in <span class="ansi-cyan-fg">Task.__step_run_and_handle_result</span><span class="ansi-blue-fg">(***failed resolving arguments***)</span>
-<span class="ansi-green-intense-fg ansi-bold">    310</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
-<span class="ansi-green-intense-fg ansi-bold">    311</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> exc <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    312</span>         <span style="color: rgb(95,135,135)"># We use the `send` method directly, because coroutines</span>
-<span class="ansi-green-intense-fg ansi-bold">    313</span>         <span style="color: rgb(95,135,135)"># don&#39;t have `__iter__` and `__next__` methods.</span>
-<span class="ansi-green-fg">--&gt; 314</span>         result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">coro</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">send</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">None</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    315</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-intense-fg ansi-bold">    316</span>         result <span style="color: rgb(98,98,98)">=</span> coro<span style="color: rgb(98,98,98)">.</span>throw(exc)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py:52</span>, in <span class="ansi-cyan-fg">Worker.run_async</span><span class="ansi-blue-fg">(self, task, rerun)</span>
-<span class="ansi-green-intense-fg ansi-bold">     50</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[DefType]</span><span style="color: rgb(175,0,0)">&#34;</span>, rerun: <span style="color: rgb(0,135,0)">bool</span> <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">False</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Result</span><span style="color: rgb(175,0,0)">&#34;</span>:
-<span class="ansi-green-intense-fg ansi-bold">     51</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> task<span style="color: rgb(98,98,98)">.</span>is_async:
-<span class="ansi-green-fg">---&gt; 52</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>run_async(rerun<span style="color: rgb(98,98,98)">=</span>rerun)
-<span class="ansi-green-intense-fg ansi-bold">     53</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-intense-fg ansi-bold">     54</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> task<span style="color: rgb(98,98,98)">.</span>run(rerun<span style="color: rgb(98,98,98)">=</span>rerun)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py:421</span>, in <span class="ansi-cyan-fg">Task.run_async</span><span class="ansi-blue-fg">(self, rerun)</span>
-<span class="ansi-green-intense-fg ansi-bold">    419</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
-<span class="ansi-green-intense-fg ansi-bold">    420</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>audit<span style="color: rgb(98,98,98)">.</span>monitor()
-<span class="ansi-green-fg">--&gt; 421</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>_run_async(<span style="color: rgb(0,135,0)">self</span>)
-<span class="ansi-green-intense-fg ansi-bold">    422</span>     result<span style="color: rgb(98,98,98)">.</span>outputs <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>Outputs<span style="color: rgb(98,98,98)">.</span>_from_task(<span style="color: rgb(0,135,0)">self</span>)
-<span class="ansi-green-intense-fg ansi-bold">    423</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>:
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py:814</span>, in <span class="ansi-cyan-fg">WorkflowDef._run_async</span><span class="ansi-blue-fg">(self, task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    812</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">_run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    813</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow asynchronously.&#34;&#34;&#34;</span>
-<span class="ansi-green-fg">--&gt; 814</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>submitter<span style="color: rgb(98,98,98)">.</span>expand_workflow_async(task)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:362</span>, in <span class="ansi-cyan-fg">Submitter.expand_workflow_async</span><span class="ansi-blue-fg">(self, workflow_task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    360</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> task <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> tasks:
-<span class="ansi-green-intense-fg ansi-bold">    361</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> task<span style="color: rgb(98,98,98)">.</span>is_async:
-<span class="ansi-green-fg">--&gt; 362</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run_async(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun)
-<span class="ansi-green-intense-fg ansi-bold">    363</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-intense-fg ansi-bold">    364</span>         task_futures<span style="color: rgb(98,98,98)">.</span>add(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun))
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py:52</span>, in <span class="ansi-cyan-fg">Worker.run_async</span><span class="ansi-blue-fg">(self, task, rerun)</span>
-<span class="ansi-green-intense-fg ansi-bold">     50</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[DefType]</span><span style="color: rgb(175,0,0)">&#34;</span>, rerun: <span style="color: rgb(0,135,0)">bool</span> <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">False</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Result</span><span style="color: rgb(175,0,0)">&#34;</span>:
-<span class="ansi-green-intense-fg ansi-bold">     51</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> task<span style="color: rgb(98,98,98)">.</span>is_async:
-<span class="ansi-green-fg">---&gt; 52</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>run_async(rerun<span style="color: rgb(98,98,98)">=</span>rerun)
-<span class="ansi-green-intense-fg ansi-bold">     53</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-intense-fg ansi-bold">     54</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> task<span style="color: rgb(98,98,98)">.</span>run(rerun<span style="color: rgb(98,98,98)">=</span>rerun)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py:421</span>, in <span class="ansi-cyan-fg">Task.run_async</span><span class="ansi-blue-fg">(self, rerun)</span>
-<span class="ansi-green-intense-fg ansi-bold">    419</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
-<span class="ansi-green-intense-fg ansi-bold">    420</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>audit<span style="color: rgb(98,98,98)">.</span>monitor()
-<span class="ansi-green-fg">--&gt; 421</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>_run_async(<span style="color: rgb(0,135,0)">self</span>)
-<span class="ansi-green-intense-fg ansi-bold">    422</span>     result<span style="color: rgb(98,98,98)">.</span>outputs <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>Outputs<span style="color: rgb(98,98,98)">.</span>_from_task(<span style="color: rgb(0,135,0)">self</span>)
-<span class="ansi-green-intense-fg ansi-bold">    423</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>:
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py:814</span>, in <span class="ansi-cyan-fg">WorkflowDef._run_async</span><span class="ansi-blue-fg">(self, task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    812</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">_run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    813</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow asynchronously.&#34;&#34;&#34;</span>
-<span class="ansi-green-fg">--&gt; 814</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>submitter<span style="color: rgb(98,98,98)">.</span>expand_workflow_async(task)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:366</span>, in <span class="ansi-cyan-fg">Submitter.expand_workflow_async</span><span class="ansi-blue-fg">(self, workflow_task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    364</span>             task_futures<span style="color: rgb(98,98,98)">.</span>add(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun))
-<span class="ansi-green-intense-fg ansi-bold">    365</span>     task_futures <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>fetch_finished(task_futures)
-<span class="ansi-green-fg">--&gt; 366</span>     tasks <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">get_runnable_tasks</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">exec_graph</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    367</span> workflow_task<span style="color: rgb(98,98,98)">.</span>return_values <span style="color: rgb(98,98,98)">=</span> {<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">workflow</span><span style="color: rgb(175,0,0)">&#34;</span>: wf, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">exec_graph</span><span style="color: rgb(175,0,0)">&#34;</span>: exec_graph}
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:422</span>, in <span class="ansi-cyan-fg">Submitter.get_runnable_tasks</span><span class="ansi-blue-fg">(self, graph)</span>
-<span class="ansi-green-intense-fg ansi-bold">    420</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> node<span style="color: rgb(98,98,98)">.</span>started:
-<span class="ansi-green-intense-fg ansi-bold">    421</span>         not_started<span style="color: rgb(98,98,98)">.</span>add(node)
-<span class="ansi-green-fg">--&gt; 422</span>     tasks<span style="color: rgb(98,98,98)">.</span>extend(<span class="ansi-yellow-bg">node</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">get_runnable_tasks</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">graph</span><span class="ansi-yellow-bg">)</span>)
-<span class="ansi-green-intense-fg ansi-bold">    423</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_check_locks(tasks)
-<span class="ansi-green-intense-fg ansi-bold">    424</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> tasks
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:613</span>, in <span class="ansi-cyan-fg">NodeExecution.get_runnable_tasks</span><span class="ansi-blue-fg">(self, graph)</span>
-<span class="ansi-green-intense-fg ansi-bold">    596</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;For a given node, check to see which tasks have been successfully run, are ready</span>
-<span class="ansi-green-intense-fg ansi-bold">    597</span> <span style="color: rgb(175,0,0)">to run, can&#39;t be run due to upstream errors, or are blocked on other tasks to complete.</span>
-<span class="ansi-green-intense-fg ansi-bold">    598</span>
-<span class="ansi-green-fg">   (...)</span>
-<span class="ansi-green-intense-fg ansi-bold">    610</span> <span style="color: rgb(175,0,0)">    List of tasks that are ready to run</span>
-<span class="ansi-green-intense-fg ansi-bold">    611</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    612</span> runnable: <span style="color: rgb(0,135,0)">list</span>[<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[DefType]</span><span style="color: rgb(175,0,0)">&#34;</span>] <span style="color: rgb(98,98,98)">=</span> []
-<span class="ansi-green-fg">--&gt; 613</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">tasks</span>  <span style="color: rgb(95,135,135)"># Ensure tasks are loaded</span>
-<span class="ansi-green-intense-fg ansi-bold">    614</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>started:
-<span class="ansi-green-intense-fg ansi-bold">    615</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>blocked <span style="color: rgb(98,98,98)">=</span> copy(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_tasks)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:504</span>, in <span class="ansi-cyan-fg">NodeExecution.tasks</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    501</span> <span style="color: rgb(175,0,255)">@property</span>
-<span class="ansi-green-intense-fg ansi-bold">    502</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">tasks</span>(<span style="color: rgb(0,135,0)">self</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> ty<span style="color: rgb(98,98,98)">.</span>Iterable[<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[DefType]</span><span style="color: rgb(175,0,0)">&#34;</span>]:
-<span class="ansi-green-intense-fg ansi-bold">    503</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_tasks <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-fg">--&gt; 504</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_tasks <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">{</span><span class="ansi-yellow-bg">t</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">state_index</span><span class="ansi-yellow-bg">:</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">t</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">for</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">t</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_generate_tasks</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">}</span>
-<span class="ansi-green-intense-fg ansi-bold">    505</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_tasks<span style="color: rgb(98,98,98)">.</span>values()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:573</span>, in <span class="ansi-cyan-fg">NodeExecution._generate_tasks</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    570</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">_generate_tasks</span>(<span style="color: rgb(0,135,0)">self</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> ty<span style="color: rgb(98,98,98)">.</span>Iterable[<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[DefType]</span><span style="color: rgb(175,0,0)">&#34;</span>]:
-<span class="ansi-green-intense-fg ansi-bold">    571</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>node<span style="color: rgb(98,98,98)">.</span>state:
-<span class="ansi-green-intense-fg ansi-bold">    572</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> Task(
-<span class="ansi-green-fg">--&gt; 573</span>             definition<span style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">node</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_definition</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_resolve_lazy_inputs</span><span class="ansi-yellow-bg">(</span>
-<span class="ansi-green-intense-fg ansi-bold">    574</span> <span class="ansi-yellow-bg">                </span><span class="ansi-yellow-bg">workflow_inputs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">workflow_inputs</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    575</span> <span class="ansi-yellow-bg">                </span><span class="ansi-yellow-bg">graph</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">graph</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    576</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">)</span>,
-<span class="ansi-green-intense-fg ansi-bold">    577</span>             submitter<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>submitter,
-<span class="ansi-green-intense-fg ansi-bold">    578</span>             environment<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>node<span style="color: rgb(98,98,98)">.</span>_environment,
-<span class="ansi-green-intense-fg ansi-bold">    579</span>             name<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>node<span style="color: rgb(98,98,98)">.</span>name,
-<span class="ansi-green-intense-fg ansi-bold">    580</span>         )
-<span class="ansi-green-intense-fg ansi-bold">    581</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-intense-fg ansi-bold">    582</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> index, split_defn <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>node<span style="color: rgb(98,98,98)">.</span>_split_definition()<span style="color: rgb(98,98,98)">.</span>items():
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py:514</span>, in <span class="ansi-cyan-fg">TaskDef._resolve_lazy_inputs</span><span class="ansi-blue-fg">(self, workflow_inputs, graph, state_index)</span>
-<span class="ansi-green-intense-fg ansi-bold">    512</span>         resolved[name] <span style="color: rgb(98,98,98)">=</span> value<span style="color: rgb(98,98,98)">.</span>_get_value(workflow_inputs)
-<span class="ansi-green-intense-fg ansi-bold">    513</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">isinstance</span>(value, LazyOutField):
-<span class="ansi-green-fg">--&gt; 514</span>         resolved[name] <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">value</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_get_value</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">graph</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">state_index</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    515</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> attrs<span style="color: rgb(98,98,98)">.</span>evolve(<span style="color: rgb(0,135,0)">self</span>, <span style="color: rgb(98,98,98)">*</span><span style="color: rgb(98,98,98)">*</span>resolved)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/lazy.py:171</span>, in <span class="ansi-cyan-fg">LazyOutField._get_value</span><span class="ansi-blue-fg">(self, graph, state_index)</span>
-<span class="ansi-green-intense-fg ansi-bold">    168</span>         val <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_apply_cast(val)
-<span class="ansi-green-intense-fg ansi-bold">    169</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> val
-<span class="ansi-green-fg">--&gt; 171</span> value <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">get_nested</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">depth</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">split_depth</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    172</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> value
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/lazy.py:143</span>, in <span class="ansi-cyan-fg">LazyOutField._get_value.&lt;locals&gt;.get_nested</span><span class="ansi-blue-fg">(task, depth)</span>
-<span class="ansi-green-intense-fg ansi-bold">    141</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-intense-fg ansi-bold">    142</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> task<span style="color: rgb(98,98,98)">.</span>errored:
-<span class="ansi-green-fg">--&gt; 143</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(
-<span class="ansi-green-intense-fg ansi-bold">    144</span>             <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Cannot retrieve value for </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_field<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)"> from </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_node<span style="color: rgb(98,98,98)">.</span>name<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)"> as </span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    145</span>             <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">the node errored</span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    146</span>         )
-<span class="ansi-green-intense-fg ansi-bold">    147</span>     res <span style="color: rgb(98,98,98)">=</span> task<span style="color: rgb(98,98,98)">.</span>result()
-<span class="ansi-green-intense-fg ansi-bold">    148</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> res <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-
-<span class="ansi-red-fg">ValueError</span>: Cannot retrieve value for out from Divide as the node errored
-Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.25.dev215+ga4e0b126/run-cache/workflow-753a8a50b703a52bbdd35e98f99b09d3/_error.pklz
+Cannot retrieve value for out from Divide as the node errored
 </pre></div></div>
 </div>
 <p>The error pickle files can be loaded using the <code class="docutils literal notranslate"><span class="pre">cloudpickle</span></code> library, noting that it is important to use the same Python version to load the files that was used to run the Pydra workflow</p>
@@ -593,12 +427,15 @@ Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">cloudpickle</span> <span class="k">as</span> <span class="nn">cp</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.utils</span> <span class="kn">import</span> <span class="n">default_run_cache_dir</span>
+<span class="kn">import</span> <span class="nn">cloudpickle</span> <span class="k">as</span> <span class="nn">cp</span>
+<span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
+<span class="kn">from</span> <span class="nn">pydra.tasks.testing</span> <span class="kn">import</span> <span class="n">Divide</span>
 
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;&lt;your-cache-root&gt;/&lt;task-cache-dir/_error.pklz&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">default_run_cache_dir</span> <span class="o">/</span> <span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">_checksum</span> <span class="o">/</span> <span class="s2">&quot;_error.pklz&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
     <span class="n">error</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -607,24 +444,25 @@ Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[4], line 3</span>
-<span class="ansi-green-intense-fg ansi-bold">      1</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> <span class="ansi-bold" style="color: rgb(0,0,255)">cloudpickle</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> <span class="ansi-bold" style="color: rgb(0,0,255)">cp</span>
-<span class="ansi-green-fg">----&gt; 3</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">open</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&lt;your-cache-root&gt;/&lt;task-cache-dir/_error.pklz</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">rb</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> f:
-<span class="ansi-green-intense-fg ansi-bold">      4</span>     error <span style="color: rgb(98,98,98)">=</span> cp<span style="color: rgb(98,98,98)">.</span>load(f)
-<span class="ansi-green-intense-fg ansi-bold">      6</span> <span style="color: rgb(0,135,0)">print</span>(error)
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/interactiveshell.py:324</span>, in <span class="ansi-cyan-fg">_modified_open</span><span class="ansi-blue-fg">(file, *args, **kwargs)</span>
-<span class="ansi-green-intense-fg ansi-bold">    317</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> file <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> {<span style="color: rgb(98,98,98)">0</span>, <span style="color: rgb(98,98,98)">1</span>, <span style="color: rgb(98,98,98)">2</span>}:
-<span class="ansi-green-intense-fg ansi-bold">    318</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> <span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>(
-<span class="ansi-green-intense-fg ansi-bold">    319</span>         <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">IPython won</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">t let you open fd=</span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span>file<span class="ansi-bold" style="color: rgb(175,95,135)">}</span><span style="color: rgb(175,0,0)"> by default </span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    320</span>         <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">as it is likely to crash IPython. If you know what you are doing, </span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    321</span>         <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">you can use builtins</span><span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)"> open.</span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    322</span>     )
-<span class="ansi-green-fg">--&gt; 324</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">io_open</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">file</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">args</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span>
-
-<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;&lt;your-cache-root&gt;/&lt;task-cache-dir/_error.pklz&#39;
+{&#39;error message&#39;: [&#39;Traceback (most recent call last):\n&#39;,
+                   &#39;  File &#39;
+                   &#39;&#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, &#39;
+                   &#39;line 367, in run\n&#39;
+                   &#39;    self.definition._run(self)\n&#39;,
+                   &#39;  File &#39;
+                   &#39;&#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, &#39;
+                   &#39;line 726, in _run\n&#39;
+                   &#39;    returned = self.function(**inputs)\n&#39;
+                   &#39;               ^^^^^^^^^^^^^^^^^^^^^^^\n&#39;,
+                   &#39;  File &#39;
+                   &#39;&#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/tasks/testing/__init__.py&#34;, &#39;
+                   &#39;line 11, in Divide\n&#39;
+                   &#39;    return x / y\n&#39;
+                   &#39;           ~~^~~\n&#39;,
+                   &#39;ZeroDivisionError: float division by zero\n&#39;],
+ &#39;login name&#39;: &#39;runner&#39;,
+ &#39;name with checksum&#39;: &#39;python-e126e9583a239ed19de120df484c689f&#39;,
+ &#39;time of crash&#39;: &#39;20250213-234729&#39;}
 </pre></div></div>
 </div>
 </section>
@@ -657,11 +495,11 @@ all the task dirs in your cache root to find the issue.</p>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev215+ga4e0b126/run-cache/workflow-a6c81dfe51c2b3ebeaa29ceb75f8bd11
+Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev216+ga56b61e5/run-cache/workflow-36c43e4b2e97bd084de2a8eaf5eb4faa
 </pre></div></div>
 </div>
 <p>To find the task directory where the issue first surfaced, iterate through every task cache dir and check the results for <code class="docutils literal notranslate"><span class="pre">float(&quot;inf&quot;)</span></code>s</p>
-<div class="nbinput docutils container">
+<div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
@@ -673,28 +511,12 @@ Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.2
 <span class="k">for</span> <span class="n">task_cache_dir</span> <span class="ow">in</span> <span class="n">run_cache</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">task_cache_dir</span> <span class="o">/</span> <span class="s2">&quot;_result.pklz&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">==</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;inf&#39;</span><span class="p">):</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="n">task_cache_dir</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> produced an infinite value for </span><span class="si">{</span><span class="n">field_name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">==</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;nan&#39;</span><span class="p">):</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="n">task_cache_dir</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> produced a NaN value for </span><span class="si">{</span><span class="n">field_name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">TypeError</span>                                 Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[6], line 9</span>
-<span class="ansi-green-intense-fg ansi-bold">      7</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span style="color: rgb(0,135,0)">open</span>(task_cache_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">_result.pklz</span><span style="color: rgb(175,0,0)">&#34;</span>, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">rb</span><span style="color: rgb(175,0,0)">&#34;</span>) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> f:
-<span class="ansi-green-intense-fg ansi-bold">      8</span>     result <span style="color: rgb(98,98,98)">=</span> cp<span style="color: rgb(98,98,98)">.</span>load(f)
-<span class="ansi-green-fg">----&gt; 9</span> <span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">for</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">field_name</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">result</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg">:</span>
-<span class="ansi-green-intense-fg ansi-bold">     10</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">if</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">result</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">outputs</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">field_name</span><span class="ansi-yellow-bg">]</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">==</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">float</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">inf</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">:</span>
-<span class="ansi-green-intense-fg ansi-bold">     11</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">print</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">f</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">Task </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">{</span><span class="ansi-yellow-bg">task_cache_dir</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">name</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">!r}</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)"> produced an infinite value for </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">{</span><span class="ansi-yellow-bg">field_name</span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,95,135)">!r}</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span>
-
-<span class="ansi-red-fg">TypeError</span>: &#39;NoneType&#39; object is not iterable
-</pre></div></div>
 </div>
 </section>
 </section>
