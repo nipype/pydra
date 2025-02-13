@@ -80,7 +80,7 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
 
 def print_help(defn: "TaskDef[DefType]") -> list[str]:
     """Visit a task object and print its input/output interface."""
-    from pydra.design.base import EMPTY
+    from pydra.design.base import NO_DEFAULT
 
     lines = [f"Help for {defn.__class__.__name__}"]
     if list_fields(defn):
@@ -91,7 +91,7 @@ def print_help(defn: "TaskDef[DefType]") -> list[str]:
         ):
             continue
         default = ""
-        if f.default is not EMPTY and not f.name.startswith("_"):
+        if f.default is not NO_DEFAULT and not f.name.startswith("_"):
             default = f" (default: {f.default})"
         try:
             name = f.type.__name__

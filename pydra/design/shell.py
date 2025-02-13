@@ -20,7 +20,7 @@ from .base import (
     extract_fields_from_class,
     ensure_field_objects,
     make_task_def,
-    EMPTY,
+    NO_DEFAULT,
 )
 from pydra.utils.typing import is_fileset_or_union, MultiInputObj
 
@@ -211,7 +211,7 @@ class outarg(arg, Out):
 
     @path_template.validator
     def _validate_path_template(self, attribute, value):
-        if value and self.default not in (EMPTY, True, None):
+        if value and self.default not in (NO_DEFAULT, True, None):
             raise ValueError(
                 f"path_template ({value!r}) can only be provided when no default "
                 f"({self.default!r}) is provided"
@@ -512,7 +512,7 @@ def parse_command_line_template(
     if not args_str:
         return executable, inputs, outputs
     tokens = re.split(r"\s+", args_str.strip())
-    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+(?:\?|=[^>]+)?)>"
+    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|=[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"
     arg_re = re.compile(arg_pattern)
     opt_re = re.compile(opt_pattern)
@@ -568,7 +568,7 @@ def parse_command_line_template(
                         ) from None
             types.append(type_)
         if len(types) == 2 and types[1] == "...":
-            type_ = MultiInputObj[types[0]]
+            type_ = tuple[types[0], ...]
         elif len(types) > 1:
             type_ = tuple[*types]
         else:
@@ -590,21 +590,32 @@ def parse_command_line_template(
                 field_type = arg
             # Identify type after ':' symbols
             kwds = {}
+            is_multi = False
+            optional = False
             if name.endswith("?"):
                 assert "=" not in name
                 name = name[:-1]
                 optional = True
                 kwds["default"] = None
+            elif name.endswith("+"):
+                is_multi = True
+                name = name[:-1]
+            elif name.endswith("*"):
+                is_multi = True
+                name = name[:-1]
+                kwds["default"] = attrs.Factory(list)
             elif "=" in name:
                 name, default = name.split("=")
                 kwds["default"] = eval(default)
-            else:
-                optional = False
             if ":" in name:
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
+                if ty.get_origin(type_) is tuple:
+                    kwds["sep"] = " "
             else:
                 type_ = generic.FsObject if option is None else str
+            if is_multi:
+                type_ = MultiInputObj[type_]
             if optional:
                 type_ |= None  # Make the arguments optional
             kwds["type"] = type_

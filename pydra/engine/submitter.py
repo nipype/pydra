@@ -576,6 +576,7 @@ class NodeExecution(ty.Generic[DefType]):
                 ),
                 submitter=self.submitter,
                 environment=self.node._environment,
+                hooks=self.node._hooks,
                 name=self.node.name,
             )
         else:
@@ -589,6 +590,7 @@ class NodeExecution(ty.Generic[DefType]):
                     submitter=self.submitter,
                     environment=self.node._environment,
                     name=self.node.name,
+                    hooks=self.node._hooks,
                     state_index=index,
                 )
 

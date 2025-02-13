@@ -14,7 +14,7 @@ def Divide(x: float, y: float) -> float:
 @python.define
 def SafeDivide(x: float, y: float) -> float:
     if y == 0:
-        return float("inf")
+        return float("nan")
     return x / y
 
 

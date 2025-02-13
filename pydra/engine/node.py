@@ -17,7 +17,7 @@ from pydra.engine.state import State, StateIndex
 if ty.TYPE_CHECKING:
     from .core import Workflow
     from .environments import Environment
-    from pydra.engine.specs import TaskDef, TaskOutputs
+    from pydra.engine.specs import TaskDef, TaskOutputs, TaskHooks
 
 
 OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
@@ -43,6 +43,7 @@ class Node(ty.Generic[OutputType]):
     name: str
     _definition: "TaskDef[OutputType]"
     _environment: "Environment | None" = None
+    _hooks: "TaskHooks | None" = None
     _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False, repr=False)
     _lzout: OutputType | None = attrs.field(
         init=False, default=None, eq=False, hash=False, repr=False

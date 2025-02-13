@@ -16,6 +16,8 @@ from .base import (
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Workflow
     from pydra.engine.specs import TaskDef, TaskOutputs, WorkflowDef
+    from pydra.engine.environments import Environment
+    from pydra.engine.specs import TaskHooks
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -206,7 +208,12 @@ def this() -> "Workflow":
 OutputsType = ty.TypeVar("OutputsType", bound="TaskOutputs")
 
 
-def add(task_def: "TaskDef[OutputsType]", name: str = None) -> OutputsType:
+def add(
+    task_def: "TaskDef[OutputsType]",
+    name: str | None = None,
+    environment: "Environment | None" = None,
+    hooks: "TaskHooks | None" = None,
+) -> OutputsType:
     """Add a node to the workflow currently being constructed
 
     Parameters
@@ -216,13 +223,18 @@ def add(task_def: "TaskDef[OutputsType]", name: str = None) -> OutputsType:
     name : str, optional
         The name of the node, by default it will be the name of the task definition
         class
+    environment : Environment, optional
+        The environment to run the task in, such as the Docker or Singularity container,
+        by default it will be the "native"
+    hooks : TaskHooks, optional
+        The hooks to run before or after the task, by default no hooks will be run
 
     Returns
     -------
     Outputs
         The outputs definition of the node
     """
-    return this().add(task_def, name=name)
+    return this().add(task_def, name=name, environment=environment, hooks=hooks)
 
 
 U = ty.TypeVar("U")

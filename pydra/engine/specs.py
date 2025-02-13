@@ -33,7 +33,7 @@ from . import helpers_state as hlpst
 from . import lazy
 from pydra.utils.hash import hash_function, Cache
 from pydra.utils.typing import StateArray, MultiInputObj
-from pydra.design.base import Field, Arg, Out, RequirementSet, EMPTY
+from pydra.design.base import Field, Arg, Out, RequirementSet, NO_DEFAULT
 from pydra.design import shell
 from pydra.engine.lazy import LazyInField, LazyOutField
 
@@ -52,7 +52,7 @@ DefType = ty.TypeVar("DefType", bound="TaskDef")
 
 def is_set(value: ty.Any) -> bool:
     """Check if a value has been set."""
-    return value not in (attrs.NOTHING, EMPTY)
+    return value not in (attrs.NOTHING, NO_DEFAULT)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False)
@@ -88,9 +88,9 @@ class TaskOutputs:
                 f"{self} outputs object is not a lazy output of a workflow node"
             ) from None
 
-    def __iter__(self) -> list[str]:
+    def __iter__(self) -> ty.Generator[str, None, None]:
         """The names of the fields in the output object"""
-        return sorted(f.name for f in attrs_fields(self))
+        return iter(sorted(f.name for f in attrs_fields(self)))
 
     def __getitem__(self, name_or_index: str | int) -> ty.Any:
         """Return the value for the given attribute

@@ -21,7 +21,7 @@ class arg(shell.arg):
     type: type, optional
         The type of the field, by default it is Any
     default : Any, optional
-        the default value for the field, by default it is EMPTY
+        the default value for the field, by default it is NO_DEFAULT
     help: str
         A short description of the input field.
     allowed_values: list, optional
@@ -55,7 +55,7 @@ class out(shell.out):
     type: type, optional
         The type of the field, by default it is Any
     default : Any, optional
-        the default value for the field, by default it is EMPTY
+        the default value for the field, by default it is NO_DEFAULT
     help: str, optional
         A short description of the input field.
     requires: list, optional

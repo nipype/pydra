@@ -41,21 +41,21 @@ __all__ = [
 
 class _Empty(enum.Enum):
 
-    EMPTY = enum.auto()
+    NO_DEFAULT = enum.auto()
 
     def __repr__(self):
-        return "EMPTY"
+        return "NO_DEFAULT"
 
     def __bool__(self):
         return False
 
 
-EMPTY = _Empty.EMPTY  # To provide a blank placeholder for the default field
+NO_DEFAULT = _Empty.NO_DEFAULT  # To provide a blank placeholder for the default field
 
 
 def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
     """Ensure the default value has been coerced into the correct type"""
-    if value is EMPTY or isinstance(value, attrs.Factory):
+    if value is NO_DEFAULT or isinstance(value, attrs.Factory):
         return value
     if self_.type is ty.Callable and isinstance(value, ty.Callable):
         return value
@@ -168,7 +168,7 @@ class Field:
         The type of the field, by default it is Any
         from name to field, by default it is None
     default : Any, optional
-        the default value for the field, by default it is EMPTY
+        the default value for the field, by default it is NO_DEFAULT
     help: str, optional
         A short description of the input field.
     requires: str | list[str | list[str] | Requirement], optional
@@ -189,7 +189,8 @@ class Field:
         validator=is_type, default=ty.Any, converter=default_if_none(ty.Any)
     )
     default: ty.Any = attrs.field(
-        default=EMPTY, converter=attrs.Converter(convert_default_value, takes_self=True)
+        default=NO_DEFAULT,
+        converter=attrs.Converter(convert_default_value, takes_self=True),
     )
     help: str = ""
     requires: list[RequirementSet] = attrs.field(
@@ -205,7 +206,7 @@ class Field:
 
     @property
     def mandatory(self):
-        return self.default is EMPTY
+        return self.default is NO_DEFAULT
 
 
 @attrs.define(kw_only=True)
@@ -220,7 +221,7 @@ class Arg(Field):
     type: type, optional
         The type of the field, by default it is Any
     default : Any, optional
-        the default value for the field, by default it is EMPTY
+        the default value for the field, by default it is NO_DEFAULT
     help: str
         A short description of the input field.
     allowed_values: list, optional
@@ -262,7 +263,7 @@ class Out(Field):
     type: type, optional
         The type of the field, by default it is Any
     default : Any, optional
-        the default value for the field, by default it is EMPTY
+        the default value for the field, by default it is NO_DEFAULT
     help: str, optional
         A short description of the input field.
     requires: list, optional
@@ -831,7 +832,7 @@ def extract_function_inputs_and_outputs(
     for inpt_name, default in input_defaults.items():
         inpt = inputs[inpt_name]
         if isinstance(inpt, arg_type):
-            if inpt.default is EMPTY:
+            if inpt.default is NO_DEFAULT:
                 inpt.default = default
         elif inspect.isclass(inpt) or ty.get_origin(inpt):
             inputs[inpt_name] = arg_type(type=inpt, default=default)
@@ -989,7 +990,7 @@ def _get_attrs_kwargs(field: Field) -> dict[str, ty.Any]:
     kwargs = {}
     if not hasattr(field, "default"):
         kwargs["factory"] = nothing_factory
-    elif field.default is not EMPTY:
+    elif field.default is not NO_DEFAULT:
         kwargs["default"] = field.default
     elif is_optional(field.type):
         kwargs["default"] = None
@@ -1005,7 +1006,7 @@ def nothing_factory():
 
 
 def set_none_default_if_optional(field: Field) -> None:
-    if is_optional(field.type) and field.default is EMPTY:
+    if is_optional(field.type) and field.default is NO_DEFAULT:
         field.default = None
 
 

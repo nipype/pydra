@@ -744,6 +744,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         task_def: TaskDef[OutputsType],
         name: str | None = None,
         environment: Environment | None = None,
+        hooks: TaskHooks | None = None,
     ) -> OutputsType:
         """Add a node to the workflow
 
@@ -754,6 +755,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         name : str, optional
             The name of the node, by default it will be the name of the task definition
             class
+        environment : Environment, optional
+            The environment to run the task in, such as the Docker or Singularity container,
+            by default it will be the "native"
+        hooks : TaskHooks, optional
+            The hooks to run before or after the task, by default no hooks will be run
 
         Returns
         -------
@@ -770,7 +776,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                 f"{task_def._task_type!r} tasks ({task_def!r})"
             )
         node = Node[OutputsType](
-            name=name, definition=task_def, workflow=self, environment=environment
+            name=name,
+            definition=task_def,
+            workflow=self,
+            environment=environment,
+            hooks=hooks,
         )
         self._nodes[name] = node
         return node.lzout
