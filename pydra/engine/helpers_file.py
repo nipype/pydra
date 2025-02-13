@@ -9,7 +9,7 @@ from copy import copy
 import subprocess as sp
 from contextlib import contextmanager
 import attr
-from fileformats.core import FileSet
+from fileformats.generic import FileSet
 from pydra.engine.helpers import is_lazy, attrs_values, list_fields
 
 
@@ -77,6 +77,10 @@ def copy_nested_files(
 
     cache: ty.Dict[FileSet, FileSet] = {}
 
+    # Set to keep track of file paths that have already been copied
+    # to allow FileSet.copy to avoid name clashes
+    clashes_to_avoid = set()
+
     def copy_fileset(fileset: FileSet):
         try:
             return cache[fileset]
@@ -89,7 +93,15 @@ def copy_nested_files(
             MountIndentifier.on_same_mount(p, dest_dir) for p in fileset.fspaths
         ):
             supported -= FileSet.CopyMode.hardlink
-        copied = fileset.copy(dest_dir=dest_dir, supported_modes=supported, **kwargs)
+        cp_kwargs = {}
+
+        cp_kwargs.update(kwargs)
+        copied = fileset.copy(
+            dest_dir=dest_dir,
+            supported_modes=supported,
+            avoid_clashes=clashes_to_avoid,  # this prevents fname clashes between filesets
+            **kwargs,
+        )
         cache[fileset] = copied
         return copied
 
