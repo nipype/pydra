@@ -282,20 +282,20 @@
           <h1>Source code for pydra.design.shell</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Decorators and helper functions to create ShellTasks used in Pydra workflows&quot;&quot;&quot;</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">builtins</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass_transform</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_mime</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats</span><span class="w"> </span><span class="kn">import</span> <span class="n">generic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.core.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">FormatRecognitionError</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">attrs_values</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">import</span> <span class="nn">typing</span> <span class="k">as</span> <span class="nn">ty</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">import</span> <span class="nn">attrs</span>
+<span class="kn">import</span> <span class="nn">builtins</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">dataclass_transform</span>
+<span class="kn">from</span> <span class="nn">fileformats.core</span> <span class="kn">import</span> <span class="n">from_mime</span>
+<span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">generic</span>
+<span class="kn">from</span> <span class="nn">fileformats.core.exceptions</span> <span class="kn">import</span> <span class="n">FormatRecognitionError</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">attrs_values</span>
+<span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Arg</span><span class="p">,</span>
     <span class="n">Out</span><span class="p">,</span>
     <span class="n">check_explicit_fields_are_none</span><span class="p">,</span>
@@ -304,10 +304,10 @@
     <span class="n">make_task_def</span><span class="p">,</span>
     <span class="n">EMPTY</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_fileset_or_union</span><span class="p">,</span> <span class="n">MultiInputObj</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">is_fileset_or_union</span><span class="p">,</span> <span class="n">MultiInputObj</span>
 
 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShellDef</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">ShellDef</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;arg&quot;</span><span class="p">,</span> <span class="s2">&quot;out&quot;</span><span class="p">,</span> <span class="s2">&quot;outarg&quot;</span><span class="p">,</span> <span class="s2">&quot;define&quot;</span><span class="p">]</span>
 
@@ -318,7 +318,7 @@
 
 
 <div class="viewcode-block" id="arg"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.shell.arg">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">arg</span><span class="p">(</span><span class="n">Arg</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">arg</span><span class="p">(</span><span class="n">Arg</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;An input field that specifies a command line argument</span>
 
 <span class="sd">    Parameters</span>
@@ -382,7 +382,7 @@
     <span class="n">formatter</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@sep</span><span class="o">.</span><span class="n">validator</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_sep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">sep</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_validate_sep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">sep</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="ow">is</span> <span class="n">MultiInputObj</span><span class="p">:</span>
@@ -408,7 +408,7 @@
 
 
 <div class="viewcode-block" id="out"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.shell.out">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">out</span><span class="p">(</span><span class="n">Out</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">out</span><span class="p">(</span><span class="n">Out</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;An output field that specifies a command line argument</span>
 
 <span class="sd">    Parameters</span>
@@ -423,14 +423,14 @@
 
     <span class="nb">callable</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Set type from return annotation of callable if not set</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_type_hints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;return&quot;</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="outarg"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.shell.outarg">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">outarg</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">outarg</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;An input field that specifies where to save the output file</span>
 
 <span class="sd">    Parameters</span>
@@ -492,7 +492,7 @@
     <span class="n">keep_extension</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
     <span class="nd">@path_template</span><span class="o">.</span><span class="n">validator</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_path_template</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_validate_path_template</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">value</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">default</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">EMPTY</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;path_template (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when no default &quot;</span>
@@ -500,7 +500,7 @@
             <span class="p">)</span>
 
     <span class="nd">@keep_extension</span><span class="o">.</span><span class="n">validator</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_keep_extension</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_validate_keep_extension</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">value</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">path_template</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;keep_extension (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when path_template &quot;</span>
@@ -512,7 +512,7 @@
     <span class="n">kw_only_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">field_specifiers</span><span class="o">=</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">outarg</span><span class="p">),</span>
 <span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">outputs</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">outputs</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator to specify the output fields of a shell command is a dataclass-style type&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">wrapped</span>
 
@@ -521,7 +521,7 @@
     <span class="n">kw_only_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">field_specifiers</span><span class="o">=</span><span class="p">(</span><span class="n">arg</span><span class="p">,),</span>
 <span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">define</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">define</span><span class="p">(</span>
     <span class="n">wrapped</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">/</span><span class="p">,</span>
     <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Arg</span><span class="p">]</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Arg</span> <span class="o">|</span> <span class="nb">type</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -582,9 +582,9 @@
 <span class="sd">    ShellDef</span>
 <span class="sd">        The interface for the shell command</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">make</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">make</span><span class="p">(</span>
         <span class="n">wrapped</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ShellDef</span><span class="p">:</span>
 
@@ -600,7 +600,7 @@
                     <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Shell task class </span><span class="si">{</span><span class="n">wrapped</span><span class="si">}</span><span class="s2"> must have an `executable` &quot;</span>
                         <span class="s2">&quot;attribute that specifies the command to run&quot;</span>
-                    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+                    <span class="p">)</span> <span class="kn">from</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">executable</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
                 <span class="nb">isinstance</span><span class="p">(</span><span class="n">executable</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span>
                 <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">executable</span><span class="p">)</span>
@@ -715,7 +715,7 @@
     <span class="k">return</span> <span class="n">make</span></div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">parse_command_line_template</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">parse_command_line_template</span><span class="p">(</span>
     <span class="n">template</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Arg</span><span class="p">]</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Arg</span> <span class="o">|</span> <span class="nb">type</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Out</span><span class="p">]</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Out</span> <span class="o">|</span> <span class="nb">type</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -803,7 +803,7 @@
     <span class="n">arguments</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">option</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field_type</span><span class="p">,</span> <span class="n">kwds</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field_type</span><span class="p">,</span> <span class="n">kwds</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Merge the typing information with an existing field if it exists&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">field_type</span><span class="p">,</span> <span class="n">Out</span><span class="p">):</span>
             <span class="n">dct</span> <span class="o">=</span> <span class="n">outputs</span>
@@ -831,7 +831,7 @@
         <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">field_type</span><span class="p">,</span> <span class="n">Arg</span><span class="p">):</span>
             <span class="n">arguments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">from_type_str</span><span class="p">(</span><span class="n">type_str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">from_type_str</span><span class="p">(</span><span class="n">type_str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">:</span>
         <span class="n">types</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">tp</span> <span class="ow">in</span> <span class="n">type_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">):</span>
             <span class="k">if</span> <span class="s2">&quot;/&quot;</span> <span class="ow">in</span> <span class="n">tp</span><span class="p">:</span>
@@ -847,7 +847,7 @@
                     <span class="k">except</span> <span class="n">FormatRecognitionError</span><span class="p">:</span>
                         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                             <span class="sa">f</span><span class="s2">&quot;Found unknown type, </span><span class="si">{</span><span class="n">tp</span><span class="si">!r}</span><span class="s2">, in command template: </span><span class="si">{</span><span class="n">template</span><span class="si">!r}</span><span class="s2">&quot;</span>
-                        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+                        <span class="p">)</span> <span class="kn">from</span> <span class="kc">None</span>
             <span class="n">types</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">type_</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">types</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">types</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;...&quot;</span><span class="p">:</span>
             <span class="n">type_</span> <span class="o">=</span> <span class="n">MultiInputObj</span><span class="p">[</span><span class="n">types</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
@@ -905,8 +905,6 @@
                     <span class="k">if</span> <span class="n">ext_type</span><span class="o">.</span><span class="n">ext</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span> <span class="o">+</span> <span class="n">ext_type</span><span class="o">.</span><span class="n">ext</span>
                 <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;path_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">path_template</span>
-            <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">type_</span><span class="p">)</span> <span class="ow">is</span> <span class="n">MultiInputObj</span><span class="p">:</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;sep&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span>
             <span class="k">if</span> <span class="n">option</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field_type</span><span class="p">,</span> <span class="n">kwds</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -938,7 +936,7 @@
     <span class="k">return</span> <span class="n">executable</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">remaining_positions</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">remaining_positions</span><span class="p">(</span>
     <span class="n">args</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Arg</span><span class="p">],</span> <span class="n">num_args</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the remaining positions for input fields</span>
@@ -984,12 +982,12 @@
 
 
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">_InputPassThrough</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">_InputPassThrough</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A class that can be used to pass through an input to the output&quot;&quot;&quot;</span>
 
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">ShellDef</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">ShellDef</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 </pre></div>
         </article>

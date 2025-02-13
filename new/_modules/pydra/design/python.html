@@ -280,11 +280,11 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for pydra.design.python</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass_transform</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span></span><span class="kn">import</span> <span class="nn">typing</span> <span class="k">as</span> <span class="nn">ty</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">dataclass_transform</span>
+<span class="kn">import</span> <span class="nn">attrs</span>
+<span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Arg</span><span class="p">,</span>
     <span class="n">Out</span><span class="p">,</span>
     <span class="n">ensure_field_objects</span><span class="p">,</span>
@@ -296,13 +296,13 @@
 <span class="p">)</span>
 
 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">PythonDef</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">PythonDef</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;arg&quot;</span><span class="p">,</span> <span class="s2">&quot;out&quot;</span><span class="p">,</span> <span class="s2">&quot;define&quot;</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="arg"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.python.arg">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">arg</span><span class="p">(</span><span class="n">Arg</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">arg</span><span class="p">(</span><span class="n">Arg</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Argument of a Python task definition</span>
 
 <span class="sd">    Parameters</span>
@@ -339,7 +339,7 @@
 
 
 <div class="viewcode-block" id="out"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.python.out">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">out</span><span class="p">(</span><span class="n">Out</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">out</span><span class="p">(</span><span class="n">Out</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Output of a Python task definition</span>
 
 <span class="sd">    Parameters</span>
@@ -369,7 +369,7 @@
     <span class="n">kw_only_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">field_specifiers</span><span class="o">=</span><span class="p">(</span><span class="n">out</span><span class="p">,),</span>
 <span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">outputs</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">outputs</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator to specify the output fields of a shell command is a dataclass-style type&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">wrapped</span>
 
@@ -378,7 +378,7 @@
     <span class="n">kw_only_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">field_specifiers</span><span class="o">=</span><span class="p">(</span><span class="n">arg</span><span class="p">,),</span>
 <span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">define</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">define</span><span class="p">(</span>
     <span class="n">wrapped</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">/</span><span class="p">,</span>
     <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Arg</span><span class="p">]</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Arg</span> <span class="o">|</span> <span class="nb">type</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -406,9 +406,9 @@
 <span class="sd">    PythonDef</span>
 <span class="sd">        The task definition class for the Python function</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">PythonDef</span><span class="p">,</span> <span class="n">PythonOutputs</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">PythonDef</span><span class="p">,</span> <span class="n">PythonOutputs</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">make</span><span class="p">(</span><span class="n">wrapped</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PythonDef</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">make</span><span class="p">(</span><span class="n">wrapped</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PythonDef</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
             <span class="n">klass</span> <span class="o">=</span> <span class="n">wrapped</span>
             <span class="n">function</span> <span class="o">=</span> <span class="n">klass</span><span class="o">.</span><span class="n">function</span>

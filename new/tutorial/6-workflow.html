@@ -297,16 +297,16 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">python</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">python</span>
 
 <span class="c1"># Example python task definitions</span>
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
 
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">Mul</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">Mul</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 </pre></div>
 </div>
@@ -317,7 +317,7 @@
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">BasicWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">BasicWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
     <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span>
@@ -330,11 +330,11 @@ returned by the workflow should be returned in a tuple.</p>
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats</span><span class="w"> </span><span class="kn">import</span> <span class="n">image</span><span class="p">,</span> <span class="n">video</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
+<span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">image</span><span class="p">,</span> <span class="n">video</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">ShellWorkflow</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">ShellWorkflow</span><span class="p">(</span>
     <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
     <span class="n">watermark</span><span class="p">:</span> <span class="n">image</span><span class="o">.</span><span class="n">Png</span><span class="p">,</span>
     <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
@@ -370,11 +370,11 @@ returned by the workflow should be returned in a tuple.</p>
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">Sum</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">Sum</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
     <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">SplitWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">SplitWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
     <span class="c1"># Multiply over all combinations of the elements of a and b, then combine the results</span>
     <span class="c1"># for each a element into a list over each b element</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">))</span>
@@ -390,7 +390,7 @@ returned by the workflow should be returned in a tuple.</p>
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">SplitThenCombineWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">SplitThenCombineWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
     <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;Mul.x&quot;</span><span class="p">))</span>
     <span class="nb">sum</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Sum</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">))</span>
@@ -408,7 +408,7 @@ returned by the workflow should be returned in a tuple.</p>
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">ConditionalWorkflow</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">ConditionalWorkflow</span><span class="p">(</span>
     <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
     <span class="n">watermark</span><span class="p">:</span> <span class="n">image</span><span class="o">.</span><span class="n">Png</span><span class="p">,</span>
     <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -446,11 +446,11 @@ returned by the workflow should be returned in a tuple.</p>
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">Subtract</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">Subtract</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">x</span> <span class="o">-</span> <span class="n">y</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">RecursiveNestedWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">RecursiveNestedWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
     <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
     <span class="n">decrement_depth</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Subtract</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">depth</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">depth</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -474,7 +474,7 @@ returned by the workflow should be returned in a tuple.</p>
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fileformats</span><span class="w"> </span><span class="kn">import</span> <span class="n">generic</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">generic</span>
 
 <span class="n">Mp4Handbrake</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
     <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; &quot;</span>
@@ -488,7 +488,7 @@ returned by the workflow should be returned in a tuple.</p>
 <span class="p">)</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">TypeErrorWorkflow</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">TypeErrorWorkflow</span><span class="p">(</span>
     <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
     <span class="n">watermark</span><span class="p">:</span> <span class="n">generic</span><span class="o">.</span><span class="n">File</span><span class="p">,</span>
     <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
@@ -529,12 +529,12 @@ returned by the workflow should be returned in a tuple.</p>
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;divided&quot;</span><span class="p">])</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">Divide</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">Divide</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">x</span> <span class="o">/</span> <span class="n">y</span>
 
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;out1&quot;</span><span class="p">,</span> <span class="s2">&quot;out2&quot;</span><span class="p">])</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">DirectAccesWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">DirectAccesWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A test workflow demonstration a few alternative ways to set and connect nodes</span>
 
 <span class="sd">    Args:</span>
@@ -565,7 +565,7 @@ returned by the workflow should be returned in a tuple.</p>
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out1&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">&quot;out2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">})</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">SetOutputsOfWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">SetOutputsOfWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A test workflow demonstration a few alternative ways to set and connect nodes</span>
 
 <span class="sd">    Args:</span>
@@ -600,18 +600,18 @@ returned by the workflow should be returned in a tuple.</p>
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.medimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">Nifti1</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.medimage_mrtrix3</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">tempfile</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">fileformats.medimage</span> <span class="kn">import</span> <span class="n">Nifti1</span>
+<span class="kn">from</span> <span class="nn">fileformats.medimage_mrtrix3</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ImageFormat</span> <span class="k">as</span> <span class="n">Mif</span><span class="p">,</span> <span class="n">ImageHeader</span> <span class="k">as</span> <span class="n">Mih</span><span class="p">,</span> <span class="n">ImageDataFile</span> <span class="k">as</span> <span class="n">Mid</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.environments</span><span class="w"> </span><span class="kn">import</span> <span class="n">Docker</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">python</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.tasks.mrtrix3.v3_0</span><span class="w"> </span><span class="kn">import</span> <span class="n">MrConvert</span><span class="p">,</span> <span class="n">MrThreshold</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.environments</span> <span class="kn">import</span> <span class="n">Docker</span>
+<span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">python</span>
+<span class="kn">from</span> <span class="nn">pydra.tasks.mrtrix3.v3_0</span> <span class="kn">import</span> <span class="n">MrConvert</span><span class="p">,</span> <span class="n">MrThreshold</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;out_image&quot;</span><span class="p">])</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">ToyMedianThreshold</span><span class="p">(</span><span class="n">in_image</span><span class="p">:</span> <span class="n">Nifti1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mif</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">ToyMedianThreshold</span><span class="p">(</span><span class="n">in_image</span><span class="p">:</span> <span class="n">Nifti1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mif</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A toy example workflow that</span>
 
 <span class="sd">    * converts a NIfTI image to MRTrix3 image format with a separate header</span>
@@ -625,13 +625,13 @@ returned by the workflow should be returned in a tuple.</p>
     <span class="p">)</span>
 
     <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">SelectDataFile</span><span class="p">(</span><span class="n">in_file</span><span class="p">:</span> <span class="n">Mih</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mid</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">SelectDataFile</span><span class="p">(</span><span class="n">in_file</span><span class="p">:</span> <span class="n">Mih</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mid</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">in_file</span><span class="o">.</span><span class="n">data_file</span>
 
     <span class="n">select_data_file</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">SelectDataFile</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">input_conversion</span><span class="o">.</span><span class="n">out_file</span><span class="p">))</span>
 
     <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">Median</span><span class="p">(</span><span class="n">data_file</span><span class="p">:</span> <span class="n">Mid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">Median</span><span class="p">(</span><span class="n">data_file</span><span class="p">:</span> <span class="n">Mid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">data_file</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
@@ -670,7 +670,7 @@ returned by the workflow should be returned in a tuple.</p>
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev206+gd1d95cc9
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev215+ga4e0b126
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -686,51 +686,48 @@ Cell <span class="ansi-green-fg">In[11], line 60</span>
 <span class="ansi-green-fg">---&gt; 60</span> outputs <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">wf</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
 <span class="ansi-green-intense-fg ansi-bold">     62</span> <span style="color: rgb(0,135,0)">print</span>(outputs)
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:220</span>, in <span class="ansi-cyan-fg">TaskDef.__call__</span><span class="ansi-blue-fg">(self, cache_dir, worker, environment, rerun, cache_locations, audit_flags, messengers, messenger_args, name, pre_run, post_run, pre_run_task, post_run_task, **kwargs)</span>
-<span class="ansi-green-intense-fg ansi-bold">    208</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
-<span class="ansi-green-intense-fg ansi-bold">    209</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> Submitter(
-<span class="ansi-green-intense-fg ansi-bold">    210</span>         audit_flags<span style="color: rgb(98,98,98)">=</span>audit_flags,
-<span class="ansi-green-intense-fg ansi-bold">    211</span>         cache_dir<span style="color: rgb(98,98,98)">=</span>cache_dir,
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py:243</span>, in <span class="ansi-cyan-fg">TaskDef.__call__</span><span class="ansi-blue-fg">(self, cache_dir, worker, environment, rerun, cache_locations, audit_flags, messengers, messenger_args, name, hooks, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    231</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-intense-fg ansi-bold">    232</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> Submitter(
+<span class="ansi-green-intense-fg ansi-bold">    233</span>         audit_flags<span style="color: rgb(98,98,98)">=</span>audit_flags,
+<span class="ansi-green-intense-fg ansi-bold">    234</span>         cache_dir<span style="color: rgb(98,98,98)">=</span>cache_dir,
 <span class="ansi-green-fg">   (...)</span>
-<span class="ansi-green-intense-fg ansi-bold">    218</span>         <span style="color: rgb(98,98,98)">*</span><span style="color: rgb(98,98,98)">*</span>kwargs,
-<span class="ansi-green-intense-fg ansi-bold">    219</span>     ) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> sub:
-<span class="ansi-green-fg">--&gt; 220</span>         result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">sub</span><span class="ansi-yellow-bg">(</span>
-<span class="ansi-green-intense-fg ansi-bold">    221</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    222</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">name</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">name</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    223</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">pre_run</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">pre_run</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    224</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">post_run</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">post_run</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    225</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">pre_run_task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">pre_run_task</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    226</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">post_run_task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">post_run_task</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">    227</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    228</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">TypeError</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
-<span class="ansi-green-intense-fg ansi-bold">    229</span>     <span style="color: rgb(95,135,135)"># Catch any inadvertent passing of task definition parameters to the</span>
-<span class="ansi-green-intense-fg ansi-bold">    230</span>     <span style="color: rgb(95,135,135)"># execution call</span>
-<span class="ansi-green-intense-fg ansi-bold">    231</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">hasattr</span>(e, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">__notes__</span><span style="color: rgb(175,0,0)">&#34;</span>) <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> WORKER_KWARG_FAIL_NOTE <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> e<span style="color: rgb(98,98,98)">.</span>__notes__:
+<span class="ansi-green-intense-fg ansi-bold">    241</span>         <span style="color: rgb(98,98,98)">*</span><span style="color: rgb(98,98,98)">*</span>kwargs,
+<span class="ansi-green-intense-fg ansi-bold">    242</span>     ) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> sub:
+<span class="ansi-green-fg">--&gt; 243</span>         result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">sub</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">    244</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    245</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">name</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">name</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    246</span> <span class="ansi-yellow-bg">            </span><span class="ansi-yellow-bg">hooks</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">hooks</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">    247</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    248</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">TypeError</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
+<span class="ansi-green-intense-fg ansi-bold">    249</span>     <span style="color: rgb(95,135,135)"># Catch any inadvertent passing of task definition parameters to the</span>
+<span class="ansi-green-intense-fg ansi-bold">    250</span>     <span style="color: rgb(95,135,135)"># execution call</span>
+<span class="ansi-green-intense-fg ansi-bold">    251</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">hasattr</span>(e, <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">__notes__</span><span style="color: rgb(175,0,0)">&#34;</span>) <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> WORKER_KWARG_FAIL_NOTE <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> e<span style="color: rgb(98,98,98)">.</span>__notes__:
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/submitter.py:224</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def, name, pre_run, post_run, pre_run_task, post_run_task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    219</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
-<span class="ansi-green-intense-fg ansi-bold">    220</span>     e<span style="color: rgb(98,98,98)">.</span>add_note(
-<span class="ansi-green-intense-fg ansi-bold">    221</span>         <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Full crash report for </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span><span style="color: rgb(0,135,0)">type</span>(task_def)<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,135)">__name__</span><span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)"> task is here: </span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    222</span>         <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(task<span style="color: rgb(98,98,98)">.</span>output_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">_error.pklz</span><span style="color: rgb(175,0,0)">&#34;</span>)
-<span class="ansi-green-intense-fg ansi-bold">    223</span>     )
-<span class="ansi-green-fg">--&gt; 224</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> e
-<span class="ansi-green-intense-fg ansi-bold">    225</span> <span class="ansi-bold" style="color: rgb(0,135,0)">finally</span>:
-<span class="ansi-green-intense-fg ansi-bold">    226</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>run_start_time <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:218</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def, name, hooks)</span>
+<span class="ansi-green-intense-fg ansi-bold">    213</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
+<span class="ansi-green-intense-fg ansi-bold">    214</span>     e<span style="color: rgb(98,98,98)">.</span>add_note(
+<span class="ansi-green-intense-fg ansi-bold">    215</span>         <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Full crash report for </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span><span style="color: rgb(0,135,0)">type</span>(task_def)<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,135)">__name__</span><span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)"> task is here: </span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    216</span>         <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(task<span style="color: rgb(98,98,98)">.</span>output_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">_error.pklz</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-intense-fg ansi-bold">    217</span>     )
+<span class="ansi-green-fg">--&gt; 218</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">raise</span> e
+<span class="ansi-green-intense-fg ansi-bold">    219</span> <span class="ansi-bold" style="color: rgb(0,135,0)">finally</span>:
+<span class="ansi-green-intense-fg ansi-bold">    220</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>run_start_time <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/submitter.py:218</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def, name, pre_run, post_run, pre_run_task, post_run_task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    214</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>loop<span style="color: rgb(98,98,98)">.</span>run_until_complete(
-<span class="ansi-green-intense-fg ansi-bold">    215</span>             <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run_async(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun)
-<span class="ansi-green-intense-fg ansi-bold">    216</span>         )
-<span class="ansi-green-intense-fg ansi-bold">    217</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
-<span class="ansi-green-fg">--&gt; 218</span>         <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">worker</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">run</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    219</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
-<span class="ansi-green-intense-fg ansi-bold">    220</span>     e<span style="color: rgb(98,98,98)">.</span>add_note(
-<span class="ansi-green-intense-fg ansi-bold">    221</span>         <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Full crash report for </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span><span style="color: rgb(0,135,0)">type</span>(task_def)<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,135)">__name__</span><span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)"> task is here: </span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    222</span>         <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(task<span style="color: rgb(98,98,98)">.</span>output_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">_error.pklz</span><span style="color: rgb(175,0,0)">&#34;</span>)
-<span class="ansi-green-intense-fg ansi-bold">    223</span>     )
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:212</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def, name, hooks)</span>
+<span class="ansi-green-intense-fg ansi-bold">    208</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>loop<span style="color: rgb(98,98,98)">.</span>run_until_complete(
+<span class="ansi-green-intense-fg ansi-bold">    209</span>             <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run_async(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun)
+<span class="ansi-green-intense-fg ansi-bold">    210</span>         )
+<span class="ansi-green-intense-fg ansi-bold">    211</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-fg">--&gt; 212</span>         <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">worker</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">run</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    213</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> e:
+<span class="ansi-green-intense-fg ansi-bold">    214</span>     e<span style="color: rgb(98,98,98)">.</span>add_note(
+<span class="ansi-green-intense-fg ansi-bold">    215</span>         <span style="color: rgb(175,0,0)">f</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Full crash report for </span><span class="ansi-bold" style="color: rgb(175,95,135)">{</span><span style="color: rgb(0,135,0)">type</span>(task_def)<span style="color: rgb(98,98,98)">.</span><span style="color: rgb(0,0,135)">__name__</span><span class="ansi-bold" style="color: rgb(175,95,135)">!r}</span><span style="color: rgb(175,0,0)"> task is here: </span><span style="color: rgb(175,0,0)">&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    216</span>         <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(task<span style="color: rgb(98,98,98)">.</span>output_dir <span style="color: rgb(98,98,98)">/</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">_error.pklz</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-intense-fg ansi-bold">    217</span>     )
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:163</span>, in <span class="ansi-cyan-fg">DebugWorker.run</span><span class="ansi-blue-fg">(self, task, rerun)</span>
-<span class="ansi-green-intense-fg ansi-bold">    157</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">run</span>(
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py:163</span>, in <span class="ansi-cyan-fg">DebugWorker.run</span><span class="ansi-blue-fg">(self, task, rerun)</span>
+<span class="ansi-green-intense-fg ansi-bold">    157</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">run</span>(
 <span class="ansi-green-intense-fg ansi-bold">    158</span>     <span style="color: rgb(0,135,0)">self</span>,
 <span class="ansi-green-intense-fg ansi-bold">    159</span>     task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[DefType]</span><span style="color: rgb(175,0,0)">&#34;</span>,
 <span class="ansi-green-intense-fg ansi-bold">    160</span>     rerun: <span style="color: rgb(0,135,0)">bool</span> <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">False</span>,
@@ -738,46 +735,46 @@ File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/pyth
 <span class="ansi-green-intense-fg ansi-bold">    162</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run a task.&#34;&#34;&#34;</span>
 <span class="ansi-green-fg">--&gt; 163</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">run</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">rerun</span><span class="ansi-yellow-bg">)</span>
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/core.py:375</span>, in <span class="ansi-cyan-fg">Task.run</span><span class="ansi-blue-fg">(self, rerun)</span>
-<span class="ansi-green-intense-fg ansi-bold">    373</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
-<span class="ansi-green-intense-fg ansi-bold">    374</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>audit<span style="color: rgb(98,98,98)">.</span>monitor()
-<span class="ansi-green-fg">--&gt; 375</span>     <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">definition</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_run</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    376</span>     result<span style="color: rgb(98,98,98)">.</span>outputs <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>Outputs<span style="color: rgb(98,98,98)">.</span>_from_task(<span style="color: rgb(0,135,0)">self</span>)
-<span class="ansi-green-intense-fg ansi-bold">    377</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>:
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py:367</span>, in <span class="ansi-cyan-fg">Task.run</span><span class="ansi-blue-fg">(self, rerun)</span>
+<span class="ansi-green-intense-fg ansi-bold">    365</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-intense-fg ansi-bold">    366</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>audit<span style="color: rgb(98,98,98)">.</span>monitor()
+<span class="ansi-green-fg">--&gt; 367</span>     <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">definition</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_run</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    368</span>     result<span style="color: rgb(98,98,98)">.</span>outputs <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>Outputs<span style="color: rgb(98,98,98)">.</span>_from_task(<span style="color: rgb(0,135,0)">self</span>)
+<span class="ansi-green-intense-fg ansi-bold">    369</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>:
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:790</span>, in <span class="ansi-cyan-fg">WorkflowDef._run</span><span class="ansi-blue-fg">(self, task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    788</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">_run</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    789</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow.&#34;&#34;&#34;</span>
-<span class="ansi-green-fg">--&gt; 790</span>     <span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">submitter</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">expand_workflow</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg">)</span>
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py:810</span>, in <span class="ansi-cyan-fg">WorkflowDef._run</span><span class="ansi-blue-fg">(self, task)</span>
+<span class="ansi-green-intense-fg ansi-bold">    808</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">_run</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    809</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow.&#34;&#34;&#34;</span>
+<span class="ansi-green-fg">--&gt; 810</span>     <span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">submitter</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">expand_workflow</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">task</span><span class="ansi-yellow-bg">)</span>
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/submitter.py:267</span>, in <span class="ansi-cyan-fg">Submitter.expand_workflow</span><span class="ansi-blue-fg">(self, workflow_task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    257</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;Expands and executes a workflow task synchronously. Typically only used during</span>
-<span class="ansi-green-intense-fg ansi-bold">    258</span> <span style="color: rgb(175,0,0)">debugging and testing, as the asynchronous version is more efficient.</span>
-<span class="ansi-green-intense-fg ansi-bold">    259</span>
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/submitter.py:261</span>, in <span class="ansi-cyan-fg">Submitter.expand_workflow</span><span class="ansi-blue-fg">(self, workflow_task)</span>
+<span class="ansi-green-intense-fg ansi-bold">    251</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;Expands and executes a workflow task synchronously. Typically only used during</span>
+<span class="ansi-green-intense-fg ansi-bold">    252</span> <span style="color: rgb(175,0,0)">debugging and testing, as the asynchronous version is more efficient.</span>
+<span class="ansi-green-intense-fg ansi-bold">    253</span>
 <span class="ansi-green-fg">   (...)</span>
-<span class="ansi-green-intense-fg ansi-bold">    264</span>
-<span class="ansi-green-intense-fg ansi-bold">    265</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">    266</span> <span style="color: rgb(95,135,135)"># Construct the workflow</span>
-<span class="ansi-green-fg">--&gt; 267</span> wf <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">workflow_task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">definition</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">construct</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    268</span> <span style="color: rgb(95,135,135)"># Generate the execution graph</span>
-<span class="ansi-green-intense-fg ansi-bold">    269</span> exec_graph <span style="color: rgb(98,98,98)">=</span> wf<span style="color: rgb(98,98,98)">.</span>execution_graph(submitter<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span>)
+<span class="ansi-green-intense-fg ansi-bold">    258</span>
+<span class="ansi-green-intense-fg ansi-bold">    259</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;</span>
+<span class="ansi-green-intense-fg ansi-bold">    260</span> <span style="color: rgb(95,135,135)"># Construct the workflow</span>
+<span class="ansi-green-fg">--&gt; 261</span> wf <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">workflow_task</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">definition</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">construct</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    262</span> <span style="color: rgb(95,135,135)"># Generate the execution graph</span>
+<span class="ansi-green-intense-fg ansi-bold">    263</span> exec_graph <span style="color: rgb(98,98,98)">=</span> wf<span style="color: rgb(98,98,98)">.</span>execution_graph(submitter<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span>)
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:801</span>, in <span class="ansi-cyan-fg">WorkflowDef.construct</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    799</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    800</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed
-<span class="ansi-green-fg">--&gt; 801</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">Workflow</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">construct</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    802</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py:821</span>, in <span class="ansi-cyan-fg">WorkflowDef.construct</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    819</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    820</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed
+<span class="ansi-green-fg">--&gt; 821</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">Workflow</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">construct</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    822</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_constructed
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/core.py:698</span>, in <span class="ansi-cyan-fg">Workflow.construct</span><span class="ansi-blue-fg">(cls, definition)</span>
-<span class="ansi-green-intense-fg ansi-bold">    696</span> constructor <span style="color: rgb(98,98,98)">=</span> input_values<span style="color: rgb(98,98,98)">.</span>pop(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">constructor</span><span style="color: rgb(175,0,0)">&#34;</span>)
-<span class="ansi-green-intense-fg ansi-bold">    697</span> <span style="color: rgb(95,135,135)"># Call the user defined constructor to set the outputs</span>
-<span class="ansi-green-fg">--&gt; 698</span> output_lazy_fields <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">constructor</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">input_values</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    699</span> <span style="color: rgb(95,135,135)"># Check to see whether any mandatory inputs are not set</span>
-<span class="ansi-green-intense-fg ansi-bold">    700</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> node <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> workflow<span style="color: rgb(98,98,98)">.</span>nodes:
+File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py:690</span>, in <span class="ansi-cyan-fg">Workflow.construct</span><span class="ansi-blue-fg">(cls, definition)</span>
+<span class="ansi-green-intense-fg ansi-bold">    688</span> constructor <span style="color: rgb(98,98,98)">=</span> input_values<span style="color: rgb(98,98,98)">.</span>pop(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">constructor</span><span style="color: rgb(175,0,0)">&#34;</span>)
+<span class="ansi-green-intense-fg ansi-bold">    689</span> <span style="color: rgb(95,135,135)"># Call the user defined constructor to set the outputs</span>
+<span class="ansi-green-fg">--&gt; 690</span> output_lazy_fields <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">constructor</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">input_values</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    691</span> <span style="color: rgb(95,135,135)"># Check to see whether any mandatory inputs are not set</span>
+<span class="ansi-green-intense-fg ansi-bold">    692</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> node <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> workflow<span style="color: rgb(98,98,98)">.</span>nodes:
 
 Cell <span class="ansi-green-fg">In[11], line 19</span>, in <span class="ansi-cyan-fg">ToyMedianThreshold</span><span class="ansi-blue-fg">(in_image)</span>
 <span class="ansi-green-intense-fg ansi-bold">     11</span> <span style="color: rgb(175,0,255)">@workflow</span><span style="color: rgb(98,98,98)">.</span>define(outputs<span style="color: rgb(98,98,98)">=</span>[<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">out_image</span><span style="color: rgb(175,0,0)">&#34;</span>])
-<span class="ansi-green-intense-fg ansi-bold">     12</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">ToyMedianThreshold</span>(in_image: Nifti1) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> Mif:
+<span class="ansi-green-intense-fg ansi-bold">     12</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">ToyMedianThreshold</span>(in_image: Nifti1) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> Mif:
 <span class="ansi-green-intense-fg ansi-bold">     13</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;A toy example workflow that</span>
 <span class="ansi-green-intense-fg ansi-bold">     14</span>
 <span class="ansi-green-intense-fg ansi-bold">     15</span> <span style="color: rgb(175,0,0)">    * converts a NIfTI image to MRTrix3 image format with a separate header</span>
@@ -789,11 +786,11 @@ Cell <span class="ansi-green-fg">In[11], line 19</span>, in <span class="ansi-cy
 <span class="ansi-green-intense-fg ansi-bold">     22</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">environment</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">Docker</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">mrtrix3/mrtrix3</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">tag</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">latest</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#34;</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
 <span class="ansi-green-intense-fg ansi-bold">     23</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">)</span>
 <span class="ansi-green-intense-fg ansi-bold">     25</span>     <span style="color: rgb(175,0,255)">@python</span><span style="color: rgb(98,98,98)">.</span>define
-<span class="ansi-green-intense-fg ansi-bold">     26</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">SelectDataFile</span>(in_file: Mih) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> Mid:
+<span class="ansi-green-intense-fg ansi-bold">     26</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">SelectDataFile</span>(in_file: Mih) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> Mid:
 <span class="ansi-green-intense-fg ansi-bold">     27</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> in_file<span style="color: rgb(98,98,98)">.</span>data_file
 
 <span class="ansi-red-fg">TypeError</span>: add() got an unexpected keyword argument &#39;environment&#39;
-Full crash report for &#39;ToyMedianThreshold&#39; task is here: /home/runner/.cache/pydra/0.25.dev206+gd1d95cc9/run-cache/workflow-924a85142a36d807123041509b053bf5/_error.pklz
+Full crash report for &#39;ToyMedianThreshold&#39; task is here: /home/runner/.cache/pydra/0.25.dev215+ga4e0b126/run-cache/workflow-a6d945ed10a1f69147e1b80ac03a4d71/_error.pklz
 </pre></div></div>
 </div>
 <p>See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>

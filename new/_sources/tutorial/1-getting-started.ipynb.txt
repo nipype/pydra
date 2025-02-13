@@ -30,6 +30,7 @@
    "source": [
     "from pathlib import Path\n",
     "from tempfile import mkdtemp\n",
+    "from pprint import pprint\n",
     "import json\n",
     "\n",
     "JSON_CONTENTS = {'a': True, 'b': 'two', 'c': 3, 'd': [7, 0.55, 6]}\n",
@@ -160,7 +161,7 @@
     "outputs = mrgrid()\n",
     "\n",
     "# Print the locations of the output files\n",
-    "print(\"\\n\".join(str(p) for p in outputs.out_file))"
+    "pprint(outputs.out_file)"
    ]
   },
   {
@@ -184,8 +185,6 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "\n",
-    "\n",
     "mrgrid_varying_vox_sizes = MrGrid(operation=\"regrid\").split(\n",
     "    (\"in_file\", \"voxel\"),\n",
     "    in_file=nifti_dir.iterdir(),\n",
@@ -205,7 +204,9 @@
     "    ],\n",
     ")\n",
     "\n",
-    "print(\"\\n\".join(str(p) for p in outputs.out_file))"
+    "outputs = mrgrid_varying_vox_sizes()\n",
+    "\n",
+    "pprint(outputs.out_file)"
    ]
   },
   {
@@ -277,7 +278,9 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "outputs = mrgrid(cache_root=Path(\"~/pydra-cache\").expanduser())"
+    "outputs = mrgrid(cache_dir=Path(\"~/pydra-cache\").expanduser())\n",
+    "\n",
+    "pprint(outputs)"
    ]
   },
   {
@@ -296,7 +299,7 @@
    "source": [
     "from pydra.utils import default_run_cache_dir\n",
     "\n",
-    "my_cache_dir = Path(\"~/pydra-cache\").expanduser()\n",
+    "my_cache_dir = Path(\"~/new-pydra-cache\").expanduser()\n",
     "my_cache_dir.mkdir(exist_ok=True)\n",
     "\n",
     "outputs = mrgrid(\n",

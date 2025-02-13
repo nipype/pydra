@@ -300,14 +300,14 @@ magical for linters follow. Therefore, when designing task definitions to be use
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pprint</span><span class="w"> </span><span class="kn">import</span> <span class="n">pprint</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">fields_dict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">PythonDef</span><span class="p">,</span> <span class="n">PythonOutputs</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">python</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">fields_dict</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">PythonDef</span><span class="p">,</span> <span class="n">PythonOutputs</span>
+<span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">python</span>
 
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalPythonDef</span><span class="p">(</span><span class="n">PythonDef</span><span class="p">[</span><span class="s2">&quot;CanonicalPythonDef.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">CanonicalPythonDef</span><span class="p">(</span><span class="n">PythonDef</span><span class="p">[</span><span class="s2">&quot;CanonicalPythonDef.Outputs&quot;</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Canonical Python task definition class for testing</span>
 
 <span class="sd">    Args:</span>
@@ -319,7 +319,7 @@ magical for linters follow. Therefore, when designing task definitions to be use
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span>  <span class="c1"># set default value</span>
 
-    <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">PythonOutputs</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">PythonOutputs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Args:</span>
 <span class="sd">            c: Sum of a and b</span>
@@ -330,7 +330,7 @@ magical for linters follow. Therefore, when designing task definitions to be use
         <span class="n">d</span><span class="p">:</span> <span class="nb">float</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">/</span> <span class="n">b</span>
 
 <span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">CanonicalPythonDef</span><span class="p">))</span>
@@ -345,9 +345,9 @@ magical for linters follow. Therefore, when designing task definitions to be use
 <div class="highlight"><pre>
 {&#39;a&#39;: arg(name=&#39;a&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help=&#39;First input to be inputted&#39;, requires=[], converter=None, validator=None, hash_eq=False, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
  &#39;b&#39;: arg(name=&#39;b&#39;, type=&lt;class &#39;float&#39;&gt;, default=2.0, help=&#39;Second input&#39;, requires=[], converter=None, validator=None, hash_eq=False, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
- &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function CanonicalPythonDef.function at 0x7f76d3fe7a60&gt;, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=True, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
-{&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False),
- &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False)}
+ &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function CanonicalPythonDef.function at 0x7fb1e2d41bc0&gt;, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=True, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
+{&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;Sum of a and b&#39;, requires=[], converter=None, validator=None, hash_eq=False),
+ &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;Product of a and b&#39;, requires=[], converter=None, validator=None, hash_eq=False)}
 </pre></div></div>
 </div>
 <p>To set additional attributes other than the type and default, such as <code class="docutils literal notranslate"><span class="pre">allowed_values</span></code> and <code class="docutils literal notranslate"><span class="pre">validators</span></code>, <code class="docutils literal notranslate"><span class="pre">python.arg</span></code> and <code class="docutils literal notranslate"><span class="pre">python.out</span></code> can be used instead.</p>
@@ -355,11 +355,11 @@ magical for linters follow. Therefore, when designing task definitions to be use
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">attrs.validators</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">attrs.validators</span>
 
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalPythonDef</span><span class="p">(</span><span class="n">PythonDef</span><span class="p">[</span><span class="s2">&quot;CanonicalPythonDef.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">CanonicalPythonDef</span><span class="p">(</span><span class="n">PythonDef</span><span class="p">[</span><span class="s2">&quot;CanonicalPythonDef.Outputs&quot;</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Canonical Python task definition class for testing</span>
 
 <span class="sd">    Args:</span>
@@ -371,7 +371,7 @@ magical for linters follow. Therefore, when designing task definitions to be use
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">allowed_values</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
     <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrs</span><span class="o">.</span><span class="n">validators</span><span class="o">.</span><span class="n">not_</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
 
-    <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">PythonOutputs</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">PythonOutputs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Args:</span>
 <span class="sd">            c: Sum of a and b</span>
@@ -382,7 +382,7 @@ magical for linters follow. Therefore, when designing task definitions to be use
         <span class="n">d</span><span class="p">:</span> <span class="nb">float</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">/</span> <span class="n">b</span>
 
 <span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">CanonicalPythonDef</span><span class="p">))</span>
@@ -397,9 +397,9 @@ magical for linters follow. Therefore, when designing task definitions to be use
 <div class="highlight"><pre>
 {&#39;a&#39;: arg(name=&#39;a&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help=&#39;First input to be inputted&#39;, requires=[], converter=None, validator=None, hash_eq=False, allowed_values=(1, 2, 3, 4, 5), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
  &#39;b&#39;: arg(name=&#39;b&#39;, type=&lt;class &#39;float&#39;&gt;, default=2.0, help=&#39;Second input&#39;, requires=[], converter=None, validator=&lt;not_ validator wrapping 0, capturing (&lt;class &#39;ValueError&#39;&gt;, &lt;class &#39;TypeError&#39;&gt;)&gt;, hash_eq=False, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
- &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function CanonicalPythonDef.function at 0x7f76d2d522a0&gt;, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=True, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
-{&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False),
- &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False)}
+ &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function CanonicalPythonDef.function at 0x7fb1e80af6a0&gt;, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=True, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
+{&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;Sum of a and b&#39;, requires=[], converter=None, validator=None, hash_eq=False),
+ &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help=&#39;Product of a and b&#39;, requires=[], converter=None, validator=None, hash_eq=False)}
 </pre></div></div>
 </div>
 </section>
@@ -410,16 +410,16 @@ magical for linters follow. Therefore, when designing task definitions to be use
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats</span><span class="w"> </span><span class="kn">import</span> <span class="n">generic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiInputObj</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">generic</span>
+<span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">MultiInputObj</span>
 
 
 <span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CpWithSize</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">[</span><span class="s2">&quot;CpWithSize.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">CpWithSize</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">[</span><span class="s2">&quot;CpWithSize.Outputs&quot;</span><span class="p">]):</span>
 
     <span class="n">executable</span> <span class="o">=</span> <span class="s2">&quot;cp&quot;</span>
 
@@ -429,10 +429,10 @@ magical for linters follow. Therefore, when designing task definitions to be use
     <span class="n">int_arg</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--int-arg&quot;</span><span class="p">)</span>
     <span class="n">tuple_arg</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--tuple-arg&quot;</span><span class="p">)</span>
 
-    <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">ShellOutputs</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">ShellOutputs</span><span class="p">):</span>
 
         <span class="nd">@staticmethod</span>
-        <span class="k">def</span><span class="w"> </span><span class="nf">get_file_size</span><span class="p">(</span><span class="n">out_file</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">def</span> <span class="nf">get_file_size</span><span class="p">(</span><span class="n">out_file</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">            </span><span class="sd">&quot;&quot;&quot;Calculate the file size&quot;&quot;&quot;</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">out_file</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">st_size</span>
@@ -459,7 +459,7 @@ magical for linters follow. Therefore, when designing task definitions to be use
  &#39;text_arg&#39;: arg(name=&#39;text_arg&#39;, type=&lt;class &#39;str&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--text-arg&#39;, position=3, sep=None, allowed_values=None, container_path=False, formatter=None),
  &#39;tuple_arg&#39;: arg(name=&#39;tuple_arg&#39;, type=tuple[int, str] | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--tuple-arg&#39;, position=4, sep=None, allowed_values=None, container_path=False, formatter=None)}
 {&#39;out_file&#39;: out(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None),
- &#39;out_file_size&#39;: out(name=&#39;out_file_size&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=&lt;staticmethod(&lt;function CpWithSize.Outputs.get_file_size at 0x7f76d2d336a0&gt;)&gt;),
+ &#39;out_file_size&#39;: out(name=&#39;out_file_size&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=&lt;staticmethod(&lt;function CpWithSize.Outputs.get_file_size at 0x7fb1e2d14900&gt;)&gt;),
  &#39;return_code&#39;: out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, hash_eq=False, callable=None),
  &#39;stderr&#39;: out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=EMPTY, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None),
  &#39;stdout&#39;: out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=EMPTY, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None)}
@@ -473,25 +473,25 @@ magical for linters follow. Therefore, when designing task definitions to be use
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">python</span><span class="p">,</span> <span class="n">workflow</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkflowDef</span><span class="p">,</span> <span class="n">WorkflowOutputs</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">python</span><span class="p">,</span> <span class="n">workflow</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">WorkflowDef</span><span class="p">,</span> <span class="n">WorkflowOutputs</span>
 
 <span class="c1"># Example python task definitions</span>
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
 
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">Mul</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">Mul</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalWorkflowDef</span><span class="p">(</span><span class="n">WorkflowDef</span><span class="p">[</span><span class="s2">&quot;CanonicalWorkflowDef.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">CanonicalWorkflowDef</span><span class="p">(</span><span class="n">WorkflowDef</span><span class="p">[</span><span class="s2">&quot;CanonicalWorkflowDef.Outputs&quot;</span><span class="p">]):</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">a_converter</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">a_converter</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">value</span>
         <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
@@ -503,12 +503,12 @@ magical for linters follow. Therefore, when designing task definitions to be use
     <span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">constructor</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">constructor</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
         <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
         <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span>
 
-    <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">WorkflowOutputs</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">WorkflowOutputs</span><span class="p">):</span>
         <span class="n">out</span><span class="p">:</span> <span class="nb">float</span>
 </pre></div>
 </div>

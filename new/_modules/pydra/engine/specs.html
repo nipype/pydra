@@ -282,26 +282,26 @@
           <h1>Source code for pydra.engine.specs</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Task I/O definitions.&quot;&quot;&quot;</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">shlex</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">Counter</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">glob</span><span class="w"> </span><span class="kn">import</span> <span class="n">glob</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Self</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">attrs.converters</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_if_none</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">cloudpickle</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">FileSet</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.messenger</span><span class="w"> </span><span class="kn">import</span> <span class="n">AuditFlag</span><span class="p">,</span> <span class="n">Messenger</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TypeParser</span><span class="p">,</span> <span class="n">is_optional</span><span class="p">,</span> <span class="n">non_optional_type</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">platform</span>
+<span class="kn">import</span> <span class="nn">shlex</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Counter</span>
+<span class="kn">import</span> <span class="nn">typing</span> <span class="k">as</span> <span class="nn">ty</span>
+<span class="kn">from</span> <span class="nn">glob</span> <span class="kn">import</span> <span class="n">glob</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Self</span>
+<span class="kn">import</span> <span class="nn">attrs</span>
+<span class="kn">from</span> <span class="nn">attrs.converters</span> <span class="kn">import</span> <span class="n">default_if_none</span>
+<span class="kn">import</span> <span class="nn">cloudpickle</span> <span class="k">as</span> <span class="nn">cp</span>
+<span class="kn">from</span> <span class="nn">fileformats.core</span> <span class="kn">import</span> <span class="n">FileSet</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.messenger</span> <span class="kn">import</span> <span class="n">AuditFlag</span><span class="p">,</span> <span class="n">Messenger</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">TypeParser</span><span class="p">,</span> <span class="n">is_optional</span><span class="p">,</span> <span class="n">non_optional_type</span>
+<span class="kn">from</span> <span class="nn">.helpers</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">attrs_fields</span><span class="p">,</span>
     <span class="n">attrs_values</span><span class="p">,</span>
     <span class="n">is_lazy</span><span class="p">,</span>
@@ -310,46 +310,46 @@
     <span class="n">ensure_list</span><span class="p">,</span>
     <span class="n">parse_format_string</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.helpers_file</span><span class="w"> </span><span class="kn">import</span> <span class="n">template_update</span><span class="p">,</span> <span class="n">template_update_single</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">helpers_state</span> <span class="k">as</span> <span class="n">hlpst</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.hash</span><span class="w"> </span><span class="kn">import</span> <span class="n">hash_function</span><span class="p">,</span> <span class="n">Cache</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StateArray</span><span class="p">,</span> <span class="n">MultiInputObj</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">Arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">,</span> <span class="n">RequirementSet</span><span class="p">,</span> <span class="n">EMPTY</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.lazy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyInField</span><span class="p">,</span> <span class="n">LazyOutField</span>
+<span class="kn">from</span> <span class="nn">.helpers_file</span> <span class="kn">import</span> <span class="n">template_update</span><span class="p">,</span> <span class="n">template_update_single</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">helpers_state</span> <span class="k">as</span> <span class="n">hlpst</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">lazy</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.hash</span> <span class="kn">import</span> <span class="n">hash_function</span><span class="p">,</span> <span class="n">Cache</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">StateArray</span><span class="p">,</span> <span class="n">MultiInputObj</span>
+<span class="kn">from</span> <span class="nn">pydra.design.base</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">Arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">,</span> <span class="n">RequirementSet</span><span class="p">,</span> <span class="n">EMPTY</span>
+<span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.lazy</span> <span class="kn">import</span> <span class="n">LazyInField</span><span class="p">,</span> <span class="n">LazyOutField</span>
 
 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Task</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.graph</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiGraph</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.submitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeExecution</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Workflow</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.state</span><span class="w"> </span><span class="kn">import</span> <span class="n">StateIndex</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.environments</span><span class="w"> </span><span class="kn">import</span> <span class="n">Environment</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.workers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Worker</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Task</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.graph</span> <span class="kn">import</span> <span class="n">DiGraph</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.submitter</span> <span class="kn">import</span> <span class="n">NodeExecution</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Workflow</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.state</span> <span class="kn">import</span> <span class="n">StateIndex</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.environments</span> <span class="kn">import</span> <span class="n">Environment</span>
+    <span class="kn">from</span> <span class="nn">pydra.engine.workers</span> <span class="kn">import</span> <span class="n">Worker</span>
 
 
 <span class="n">DefType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;DefType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">&quot;TaskDef&quot;</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="is_set"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.is_set">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">is_set</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<div class="viewcode-block" id="is_set"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.is_set">[docs]</a><span class="k">def</span> <span class="nf">is_set</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if a value has been set.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span><span class="p">,</span> <span class="n">EMPTY</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="TaskOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">TaskOutputs</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">TaskOutputs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all output definitions&quot;&quot;&quot;</span>
 
     <span class="n">RESERVED_FIELD_NAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;inputs&quot;</span><span class="p">,)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The inputs object associated with a lazy-outputs object&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_node</span><span class="p">()</span><span class="o">.</span><span class="n">inputs</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_defaults</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_from_defaults</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an output object from the default values of the fields&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="o">**</span><span class="p">{</span>
@@ -362,19 +362,19 @@
             <span class="p">}</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_node</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_get_node</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> outputs object is not a lazy output of a workflow node&quot;</span>
-            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The names of the fields in the output object&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">attrs_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name_or_index</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name_or_index</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the value for the given attribute</span>
 
 <span class="sd">        Parameters</span>
@@ -394,9 +394,9 @@
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> doesn&#39;t have an attribute </span><span class="si">{</span><span class="n">name_or_index</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if two task definitions are equal&quot;&quot;&quot;</span>
         <span class="n">values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="n">fields</span> <span class="o">=</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
@@ -420,8 +420,34 @@
 <span class="n">OutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">TaskOutputs</span><span class="p">)</span>
 
 
+<div class="viewcode-block" id="donothing"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.donothing">[docs]</a><span class="k">def</span> <span class="nf">donothing</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="TaskHooks"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskHooks">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">TaskHooks</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Callable task hooks.&quot;&quot;&quot;</span>
+
+    <span class="n">pre_run_task</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">post_run_task</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">pre_run</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">post_run</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
+    <span class="p">)</span>
+
+<div class="viewcode-block" id="TaskHooks.reset"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskHooks.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;pre_run_task&quot;</span><span class="p">,</span> <span class="s2">&quot;post_run_task&quot;</span><span class="p">,</span> <span class="s2">&quot;pre_run&quot;</span><span class="p">,</span> <span class="s2">&quot;post_run&quot;</span><span class="p">]:</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="n">donothing</span><span class="p">)</span></div></div>
+
+
 <div class="viewcode-block" id="TaskDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">TaskDef</span><span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Generic</span><span class="p">[</span><span class="n">OutputsType</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">TaskDef</span><span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Generic</span><span class="p">[</span><span class="n">OutputsType</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all task definitions&quot;&quot;&quot;</span>
 
     <span class="c1"># The following fields are used to store split/combine state information</span>
@@ -432,7 +458,7 @@
 
     <span class="n">RESERVED_FIELD_NAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;split&quot;</span><span class="p">,</span> <span class="s2">&quot;combine&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">cache_dir</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">worker</span><span class="p">:</span> <span class="s2">&quot;str | ty.Type[Worker] | Worker&quot;</span> <span class="o">=</span> <span class="s2">&quot;debug&quot;</span><span class="p">,</span>
@@ -443,10 +469,7 @@
         <span class="n">messengers</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n">Messenger</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">messenger_args</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">pre_run</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">[</span><span class="s2">&quot;Task&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">post_run</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">[</span><span class="s2">&quot;Task&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">pre_run_task</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">[</span><span class="s2">&quot;Task&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">post_run_task</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">[</span><span class="s2">&quot;Task&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">hooks</span><span class="p">:</span> <span class="n">TaskHooks</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputsType</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a task from this definition and execute it to produce a result.</span>
@@ -482,7 +505,7 @@
 <span class="sd">            The output interface of the task, or in the case of split tasks, a list of</span>
 <span class="sd">            output interfaces</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.submitter</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: F811</span>
+        <span class="kn">from</span> <span class="nn">pydra.engine.submitter</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: F811</span>
             <span class="n">Submitter</span><span class="p">,</span>
             <span class="n">WORKER_KWARG_FAIL_NOTE</span><span class="p">,</span>
         <span class="p">)</span>
@@ -502,10 +525,7 @@
                 <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span>
                     <span class="bp">self</span><span class="p">,</span>
                     <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
-                    <span class="n">pre_run</span><span class="o">=</span><span class="n">pre_run</span><span class="p">,</span>
-                    <span class="n">post_run</span><span class="o">=</span><span class="n">post_run</span><span class="p">,</span>
-                    <span class="n">pre_run_task</span><span class="o">=</span><span class="n">pre_run_task</span><span class="p">,</span>
-                    <span class="n">post_run_task</span><span class="o">=</span><span class="n">post_run_task</span><span class="p">,</span>
+                    <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
                 <span class="p">)</span>
         <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="c1"># Catch any inadvertent passing of task definition parameters to the</span>
@@ -523,7 +543,7 @@
             <span class="k">raise</span>
         <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">WorkflowDef</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_splitter</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Workflow </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> failed with errors:&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Workflow </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> failed with errors&quot;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">errors</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -532,7 +552,7 @@
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span>
 
-<div class="viewcode-block" id="TaskDef.split"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef.split">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">split</span><span class="p">(</span>
+<div class="viewcode-block" id="TaskDef.split"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef.split">[docs]</a>    <span class="k">def</span> <span class="nf">split</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">splitter</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">ty</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">/</span><span class="p">,</span>
@@ -612,7 +632,7 @@
         <span class="n">split_def</span><span class="o">.</span><span class="n">_cont_dim</span> <span class="o">=</span> <span class="n">cont_dim</span>
         <span class="k">return</span> <span class="n">split_def</span></div>
 
-<div class="viewcode-block" id="TaskDef.combine"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef.combine">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">combine</span><span class="p">(</span>
+<div class="viewcode-block" id="TaskDef.combine"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef.combine">[docs]</a>    <span class="k">def</span> <span class="nf">combine</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">combiner</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Union</span><span class="p">[</span><span class="n">ty</span><span class="o">.</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
         <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -652,7 +672,7 @@
         <span class="n">combined_def</span><span class="o">.</span><span class="n">_combiner</span> <span class="o">=</span> <span class="n">combiner</span>
         <span class="k">return</span> <span class="n">combined_def</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Generator</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Generator</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Iterate through all the names in the definition&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="n">f</span><span class="o">.</span><span class="n">name</span>
@@ -660,7 +680,7 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">RESERVED_FIELD_NAMES</span><span class="p">)</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if two task definitions are equal&quot;&quot;&quot;</span>
         <span class="n">values</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
@@ -688,7 +708,7 @@
             <span class="n">other_outputs</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">hash_cache</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the value for the given attribute, resolving any templates</span>
 
 <span class="sd">        Parameters</span>
@@ -704,24 +724,24 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> doesn&#39;t have an attribute </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> doesn&#39;t have an attribute </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">hsh</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hashes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_hashes</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">hsh</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_checksum</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_checksum</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_task_type</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_hash</span><span class="si">}</span><span class="s2">&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_hash_changes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_hash_changes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Detects any changes in the hashed values between the current inputs and the</span>
 <span class="sd">        previously calculated values&quot;&quot;&quot;</span>
         <span class="n">_</span><span class="p">,</span> <span class="n">new_hashes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_hashes</span><span class="p">()</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">new_hashes</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hashes</span><span class="p">[</span><span class="n">k</span><span class="p">]]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_hashes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">bytes</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">_compute_hashes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">bytes</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute a basic hash for any given set of fields.&quot;&quot;&quot;</span>
         <span class="n">inp_dict</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -741,7 +761,7 @@
         <span class="p">}</span>
         <span class="k">return</span> <span class="n">hash_function</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">field_hashes</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span> <span class="n">field_hashes</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_lazy_inputs</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_resolve_lazy_inputs</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">workflow_inputs</span><span class="p">:</span> <span class="s2">&quot;WorkflowDef&quot;</span><span class="p">,</span>
         <span class="n">graph</span><span class="p">:</span> <span class="s2">&quot;DiGraph[NodeExecution]&quot;</span><span class="p">,</span>
@@ -764,7 +784,7 @@
 <span class="sd">        Self</span>
 <span class="sd">            The task definition with all lazy fields resolved</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.state</span><span class="w"> </span><span class="kn">import</span> <span class="n">StateIndex</span>
+        <span class="kn">from</span> <span class="nn">pydra.engine.state</span> <span class="kn">import</span> <span class="n">StateIndex</span>
 
         <span class="k">if</span> <span class="n">state_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">state_index</span> <span class="o">=</span> <span class="n">StateIndex</span><span class="p">()</span>
@@ -776,7 +796,7 @@
                 <span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">_get_value</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">state_index</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">resolved</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_check_rules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_check_rules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if all rules are satisfied.&quot;&quot;&quot;</span>
 
         <span class="n">field</span><span class="p">:</span> <span class="n">Arg</span>
@@ -829,7 +849,7 @@
             <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_check_arg_refs</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Arg</span><span class="p">],</span> <span class="n">outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Out</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_check_arg_refs</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Arg</span><span class="p">],</span> <span class="n">outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Out</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Checks if all fields referenced in requirements and xor are present in the inputs</span>
 <span class="sd">        are valid field names</span>
@@ -851,7 +871,7 @@
                     <span class="sa">f</span><span class="s2">&quot;of </span><span class="si">{</span><span class="n">inpt</span><span class="si">}</span><span class="s2"> &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">unrecognised</span><span class="p">))</span>
                 <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_check_resolved</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_check_resolved</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks that all the fields in the definition have been resolved&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">lazy_values</span> <span class="o">:=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">is_lazy</span><span class="p">(</span><span class="n">v</span><span class="p">)]:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -861,7 +881,7 @@
 
 
 <div class="viewcode-block" id="Runtime"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.Runtime">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Runtime</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">Runtime</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Represent run time metadata.&quot;&quot;&quot;</span>
 
     <span class="n">rss_peak_gb</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
@@ -873,7 +893,7 @@
 
 
 <div class="viewcode-block" id="Result"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.Result">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Result</span><span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Generic</span><span class="p">[</span><span class="n">OutputsType</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">Result</span><span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Generic</span><span class="p">[</span><span class="n">OutputsType</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Metadata regarding the outputs of processing.&quot;&quot;&quot;</span>
 
     <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span>
@@ -884,21 +904,21 @@
 
     <span class="n">CLOUD_PICKLE_ATTRS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;definition&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">state</span> <span class="o">=</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">CLOUD_PICKLE_ATTRS</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">state</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="n">attr</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">state</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">CLOUD_PICKLE_ATTRS</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">state</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="n">attr</span><span class="p">])</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Result.get_output_field"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.Result.get_output_field">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_output_field</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field_name</span><span class="p">):</span>
+<div class="viewcode-block" id="Result.get_output_field"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.Result.get_output_field">[docs]</a>    <span class="k">def</span> <span class="nf">get_output_field</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field_name</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Used in get_values in Workflow</span>
 
 <span class="sd">        Parameters</span>
@@ -912,7 +932,7 @@
             <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span> <span class="n">field_name</span><span class="p">)</span></div>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">errors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">errors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
             <span class="n">error_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">/</span> <span class="s2">&quot;_error.pklz&quot;</span>
             <span class="k">if</span> <span class="n">error_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
@@ -922,7 +942,7 @@
 
 
 <div class="viewcode-block" id="RuntimeSpec"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.RuntimeSpec">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">RuntimeSpec</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">RuntimeSpec</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Specification for a task.</span>
 
@@ -947,10 +967,10 @@
 
 
 <div class="viewcode-block" id="PythonOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.PythonOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">PythonOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">PythonOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_task</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[PythonDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_from_task</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[PythonDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect the outputs of a task from a combination of the provided inputs,</span>
 <span class="sd">        the objects in the output directory, and the stdout and stderr of the process.</span>
 
@@ -976,11 +996,11 @@
 
 
 <div class="viewcode-block" id="PythonDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.PythonDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">PythonDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">PythonOutputsType</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">PythonDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">PythonOutputsType</span><span class="p">]):</span>
 
     <span class="n">_task_type</span> <span class="o">=</span> <span class="s2">&quot;python&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[PythonDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[PythonDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Prepare the inputs to the function</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="k">del</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span>
@@ -1005,10 +1025,10 @@
 
 
 <div class="viewcode-block" id="WorkflowOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">WorkflowOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">WorkflowOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_task</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_from_task</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect the outputs of a workflow task from the outputs of the nodes in the</span>
 
 <span class="sd">        Parameters</span>
@@ -1059,7 +1079,7 @@
 
 
 <div class="viewcode-block" id="WorkflowDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">WorkflowDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">WorkflowOutputsType</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">WorkflowDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">WorkflowOutputsType</span><span class="p">]):</span>
 
     <span class="n">_task_type</span> <span class="o">=</span> <span class="s2">&quot;workflow&quot;</span>
 
@@ -1067,16 +1087,16 @@
 
     <span class="n">_constructed</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the workflow.&quot;&quot;&quot;</span>
         <span class="n">task</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_run_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_run_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the workflow asynchronously.&quot;&quot;&quot;</span>
         <span class="k">await</span> <span class="n">task</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow_async</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
 
-<div class="viewcode-block" id="WorkflowDef.construct"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowDef.construct">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">construct</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Workflow&quot;</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Workflow</span>
+<div class="viewcode-block" id="WorkflowDef.construct"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowDef.construct">[docs]</a>    <span class="k">def</span> <span class="nf">construct</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Workflow&quot;</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Workflow</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructed</span>
@@ -1090,7 +1110,7 @@
 
 
 <div class="viewcode-block" id="ShellOutputs"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.ShellOutputs">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ShellOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">ShellOutputs</span><span class="p">(</span><span class="n">TaskOutputs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Output definition of a generic shell process.&quot;&quot;&quot;</span>
 
     <span class="n">BASE_NAMES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;return_code&quot;</span><span class="p">,</span> <span class="s2">&quot;stdout&quot;</span><span class="p">,</span> <span class="s2">&quot;stderr&quot;</span><span class="p">]</span>
@@ -1100,7 +1120,7 @@
     <span class="n">stderr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;stderr&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="n">STDERR_HELP</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_task</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[ShellDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_from_task</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[ShellDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect the outputs of a shell process from a combination of the provided inputs,</span>
 <span class="sd">        the objects in the output directory, and the stdout and stderr of the process.</span>
 
@@ -1142,7 +1162,7 @@
         <span class="k">return</span> <span class="n">outputs</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_default_value</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fld</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_resolve_default_value</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fld</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve path and glob expr default values relative to the output dir&quot;&quot;&quot;</span>
         <span class="n">default</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">default</span>
         <span class="k">if</span> <span class="n">fld</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">Path</span><span class="p">:</span>
@@ -1165,7 +1185,7 @@
         <span class="k">return</span> <span class="n">default</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_required_fields_satisfied</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fld</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="s2">&quot;ShellDef&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_required_fields_satisfied</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fld</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="s2">&quot;ShellDef&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;checking if all fields from the requires and template are set in the input</span>
 <span class="sd">        if requires is a list of list, checking if at least one list has all elements set</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -1193,13 +1213,13 @@
         <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">rs</span><span class="o">.</span><span class="n">satisfied</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span> <span class="k">for</span> <span class="n">rs</span> <span class="ow">in</span> <span class="n">requirements</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_value</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_resolve_value</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">fld</span><span class="p">:</span> <span class="s2">&quot;shell.out&quot;</span><span class="p">,</span>
         <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[DefType]&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect output file if metadata specified.&quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
+        <span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_required_fields_satisfied</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">task</span><span class="o">.</span><span class="n">definition</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
@@ -1251,7 +1271,7 @@
 
 
 <div class="viewcode-block" id="ShellDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.ShellDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ShellDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">ShellOutputsType</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">ShellDef</span><span class="p">(</span><span class="n">TaskDef</span><span class="p">[</span><span class="n">ShellOutputsType</span><span class="p">]):</span>
 
     <span class="n">_task_type</span> <span class="o">=</span> <span class="s2">&quot;shell&quot;</span>
 
@@ -1267,12 +1287,12 @@
 
     <span class="n">RESERVED_FIELD_NAMES</span> <span class="o">=</span> <span class="n">TaskDef</span><span class="o">.</span><span class="n">RESERVED_FIELD_NAMES</span> <span class="o">+</span> <span class="p">(</span><span class="s2">&quot;cmdline&quot;</span><span class="p">,)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[ShellDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[ShellDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the shell command.&quot;&quot;&quot;</span>
         <span class="n">task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">cmdline</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">cmdline</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The equivalent command line that would be submitted if the task were run on</span>
 <span class="sd">        the current working directory.&quot;&quot;&quot;</span>
         <span class="c1"># checking the inputs fields before returning the command line</span>
@@ -1290,7 +1310,7 @@
                 <span class="n">cmdline</span> <span class="o">+=</span> <span class="s2">&quot; &quot;</span> <span class="o">+</span> <span class="n">arg</span>
         <span class="k">return</span> <span class="n">cmdline</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_command_args</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_command_args</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">input_updates</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1335,7 +1355,7 @@
         <span class="n">command_args</span> <span class="o">+=</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;additional_args&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">command_args</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_command_shelltask_executable</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_command_shelltask_executable</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returning position and value for executable ShellTask input&quot;&quot;&quot;</span>
@@ -1343,7 +1363,7 @@
         <span class="k">assert</span> <span class="n">value</span>
         <span class="k">return</span> <span class="n">pos</span><span class="p">,</span> <span class="n">ensure_list</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">tuple2list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_command_shelltask_args</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_command_shelltask_args</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returning position and value for args ShellTask input&quot;&quot;&quot;</span>
@@ -1353,7 +1373,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">pos</span><span class="p">,</span> <span class="n">ensure_list</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">tuple2list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_command_pos_args</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_command_pos_args</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span>
         <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span>
@@ -1431,7 +1451,7 @@
             <span class="n">cmd_add</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_arg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">field</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">cmd_add</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_format_arg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">_format_arg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returning arguments used to specify the command args for a single inputs&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
@@ -1467,7 +1487,7 @@
                     <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="k">return</span> <span class="n">split_cmd</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">_get_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return bindings necessary to run task in an alternative root.</span>
 
 <span class="sd">        This is primarily intended for contexts when a task is going</span>
@@ -1489,7 +1509,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_bindings</span><span class="p">(</span><span class="n">root</span><span class="o">=</span><span class="n">root</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bindings</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_prepare_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare input files to be passed to the task</span>
 
 <span class="sd">        This updates the ``bindings`` attribute of the current task to make files available</span>
@@ -1517,7 +1537,7 @@
                     <span class="n">env_path</span> <span class="o">/</span> <span class="n">rel</span> <span class="k">for</span> <span class="n">rel</span> <span class="ow">in</span> <span class="n">fileset</span><span class="o">.</span><span class="n">relative_fspaths</span>
                 <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_generated_output_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stdout</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">stderr</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_generated_output_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stdout</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">stderr</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a list of all outputs that will be generated by the task.</span>
 <span class="sd">        Takes into account the task input and the requires list for the output fields.</span>
 <span class="sd">        TODO: should be in all Output specs?</span>
@@ -1536,33 +1556,7 @@
     <span class="n">DEFAULT_COPY_COLLATION</span> <span class="o">=</span> <span class="n">FileSet</span><span class="o">.</span><span class="n">CopyCollation</span><span class="o">.</span><span class="n">adjacent</span></div>
 
 
-<div class="viewcode-block" id="donothing"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.donothing">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">donothing</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">return</span> <span class="kc">None</span></div>
-
-
-<div class="viewcode-block" id="TaskHook"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskHook">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">TaskHook</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Callable task hooks.&quot;&quot;&quot;</span>
-
-    <span class="n">pre_run_task</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
-        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">post_run_task</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
-        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">pre_run</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
-        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">post_run</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
-        <span class="n">default</span><span class="o">=</span><span class="n">donothing</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">default_if_none</span><span class="p">(</span><span class="n">donothing</span><span class="p">)</span>
-    <span class="p">)</span>
-
-<div class="viewcode-block" id="TaskHook.reset"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskHook.reset">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;pre_run_task&quot;</span><span class="p">,</span> <span class="s2">&quot;post_run_task&quot;</span><span class="p">,</span> <span class="s2">&quot;pre_run&quot;</span><span class="p">,</span> <span class="s2">&quot;post_run&quot;</span><span class="p">]:</span>
-            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="n">donothing</span><span class="p">)</span></div></div>
-
-
-<div class="viewcode-block" id="split_cmd"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.split_cmd">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">split_cmd</span><span class="p">(</span><span class="n">cmd</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="split_cmd"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.split_cmd">[docs]</a><span class="k">def</span> <span class="nf">split_cmd</span><span class="p">(</span><span class="n">cmd</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Splits a shell command line into separate arguments respecting quotes</span>
 
 <span class="sd">    Parameters</span>
@@ -1590,7 +1584,7 @@
     <span class="k">return</span> <span class="n">cmd_args</span></div>
 
 
-<div class="viewcode-block" id="argstr_formatting"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.argstr_formatting">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">argstr_formatting</span><span class="p">(</span>
+<div class="viewcode-block" id="argstr_formatting"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.argstr_formatting">[docs]</a><span class="k">def</span> <span class="nf">argstr_formatting</span><span class="p">(</span>
     <span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">],</span> <span class="n">value_updates</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;formatting argstr that have form {field_name},</span>

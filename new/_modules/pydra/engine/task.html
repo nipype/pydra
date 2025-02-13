@@ -321,31 +321,31 @@
 
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Task</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.messenger</span><span class="w"> </span><span class="kn">import</span> <span class="n">AuditFlag</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.specs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">import</span> <span class="nn">attrs</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">Task</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.messenger</span> <span class="kn">import</span> <span class="n">AuditFlag</span>
+<span class="kn">from</span> <span class="nn">.specs</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">PythonDef</span><span class="p">,</span>
     <span class="n">ShellDef</span><span class="p">,</span>
     <span class="n">attrs_fields</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">.helpers</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">attrs_values</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.helpers_file</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_local_file</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.environments</span><span class="w"> </span><span class="kn">import</span> <span class="n">Native</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.helpers_file</span> <span class="kn">import</span> <span class="n">is_local_file</span>
+<span class="kn">from</span> <span class="nn">.environments</span> <span class="kn">import</span> <span class="n">Native</span>
 
 
-<div class="viewcode-block" id="PythonTask"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.task.PythonTask">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">PythonTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+<div class="viewcode-block" id="PythonTask"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.task.PythonTask">[docs]</a><span class="k">class</span> <span class="nc">PythonTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Wrap a Python callable as a task element.&quot;&quot;&quot;</span>
 
     <span class="n">definition</span><span class="p">:</span> <span class="n">PythonDef</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run_task</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">environment</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_run_task</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">environment</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">definition</span><span class="p">)</span>
         <span class="k">del</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">output_</span> <span class="o">=</span> <span class="kc">None</span>
@@ -367,12 +367,12 @@
             <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="ShellTask"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.task.ShellTask">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ShellTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+<div class="viewcode-block" id="ShellTask"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.task.ShellTask">[docs]</a><span class="k">class</span> <span class="nc">ShellTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Wrap a shell command as a task element.&quot;&quot;&quot;</span>
 
     <span class="n">definition</span><span class="p">:</span> <span class="n">ShellDef</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">definition</span><span class="p">:</span> <span class="n">ShellDef</span><span class="p">,</span>
         <span class="n">audit_flags</span><span class="p">:</span> <span class="n">AuditFlag</span> <span class="o">=</span> <span class="n">AuditFlag</span><span class="o">.</span><span class="n">NONE</span><span class="p">,</span>
@@ -431,9 +431,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">inputs_mod_root</span> <span class="o">=</span> <span class="p">{}</span></div>
 
 
-<div class="viewcode-block" id="BoshTask"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.task.BoshTask">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">BoshTask</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">):</span>
+<div class="viewcode-block" id="BoshTask"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.task.BoshTask">[docs]</a><span class="k">class</span> <span class="nc">BoshTask</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">):</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_command_args_single</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_ind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_command_args_single</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_ind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get command line arguments for a single state&quot;&quot;&quot;</span>
         <span class="n">input_filepath</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bosh_invocation_file</span><span class="p">(</span><span class="n">state_ind</span><span class="o">=</span><span class="n">state_ind</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
         <span class="n">cmd_list</span> <span class="o">=</span> <span class="p">(</span>
@@ -444,7 +444,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">cmd_list</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_bosh_invocation_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_ind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_bosh_invocation_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_ind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;creating bosh invocation file - json file with inputs values&quot;&quot;&quot;</span>
         <span class="n">input_json</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">attrs_fields</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">definition</span><span class="p">,</span> <span class="n">exclude_names</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;executable&quot;</span><span class="p">,</span> <span class="s2">&quot;args&quot;</span><span class="p">)):</span>
