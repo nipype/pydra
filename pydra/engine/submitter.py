@@ -114,9 +114,9 @@ class Submitter:
         )
         if cache_dir is None:
             cache_dir = default_run_cache_dir
-            cache_dir.mkdir(parents=True, exist_ok=True)
-        elif not cache_dir.exists():
-            raise ValueError(f"Cache directory {str(cache_dir)!r} does not exist")
+        cache_dir = Path(cache_dir).resolve()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
         self.environment = environment

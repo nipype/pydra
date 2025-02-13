@@ -261,7 +261,7 @@ class TaskDef(ty.Generic[OutputsType]):
             raise
         if result.errored:
             if isinstance(self, WorkflowDef) or self._splitter:
-                raise RuntimeError(f"Workflow {self} failed with errors:")
+                raise RuntimeError(f"Workflow {self} failed with errors")
             else:
                 errors = result.errors
                 raise RuntimeError(

@@ -75,3 +75,8 @@ def SafeDivisionWorkflow(a: float, b: float, denominator: float) -> float:
     divide = workflow.add(SafeDivide(x=add.out, y=denominator))
     subtract = workflow.add(Subtract(x=divide.out, y=b))
     return subtract.out
+
+
+@python.define
+def TenToThePower(p: int) -> int:
+    return 10**p

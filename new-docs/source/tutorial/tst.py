@@ -1,47 +1,21 @@
-from pathlib import Path
-from tempfile import mkdtemp
-from pprint import pprint
-import json
-from pydra.utils.hash import hash_function
-from pydra.tasks.mrtrix3.v3_0 import MrGrid
-from fileformats.medimage import Nifti1
+from pydra.design import python
+import shutil
 
-JSON_CONTENTS = {"a": True, "b": "two", "c": 3, "d": [7, 0.55, 6]}
 
-test_dir = Path(mkdtemp())
-cache_root = Path(mkdtemp())
-json_file = test_dir / "test.json"
-with open(json_file, "w") as f:
-    json.dump(JSON_CONTENTS, f)
+@python.define
+def TenToThePower(p: int) -> int:
+    return 10**p
 
-nifti_dir = test_dir / "nifti"
-nifti_dir.mkdir()
 
-for i in range(10):
-    Nifti1.sample(nifti_dir, seed=i)  # Create a dummy NIfTI file in the dest. directory
+if __name__ == "__main__":
 
-niftis = list(nifti_dir.iterdir())
-pprint([hash_function(nifti) for nifti in niftis])
+    shutil.rmtree("/Users/tclose/Library/Caches/pydra/0.25.dev190+g6a726571/run-cache")
 
-mrgrid_varying_vox_sizes = MrGrid(operation="regrid").split(
-    ("in_file", "voxel"),
-    in_file=niftis,
-    # Define a list of voxel sizes to resample the NIfTI files to,
-    # the list must be the same length as the list of NIfTI files
-    voxel=[
-        (1.0, 1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (1.0, 1.0, 1.0),
-        (0.5, 0.5, 0.5),
-        (0.75, 0.75, 0.75),
-        (0.5, 0.5, 0.5),
-        (0.5, 0.5, 0.5),
-        (1.0, 1.0, 1.0),
-        (1.25, 1.25, 1.25),
-        (1.25, 1.25, 1.25),
-    ],
-)
+    ten_to_the_power = TenToThePower().split(p=[1, 2, 3, 4, 5])
 
-outputs = mrgrid_varying_vox_sizes(cache_dir=cache_root)
+    # Run the 5 tasks in parallel split across 3 processes
+    outputs = ten_to_the_power(worker="cf", n_procs=3)
 
-pprint(outputs.out_file)
+    p1, p2, p3, p4, p5 = outputs.out
+
+    print(f"10^5 = {p5}")
