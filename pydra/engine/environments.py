@@ -94,7 +94,7 @@ class Docker(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts = task.definition._get_bindings(root=self.root)
+        mounts, inputs_mod_root = task.definition._get_bindings(root=self.root)
 
         docker_args = [
             "docker",
@@ -129,7 +129,7 @@ class Singularity(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts = task.definition._get_bindings(root=self.root)
+        mounts, inputs_mod_root = task.definition._get_bindings(root=self.root)
 
         # todo adding xargsy etc
         singularity_args = [

@@ -90,6 +90,7 @@ class Task(ty.Generic[DefType]):
     submitter: "Submitter | None"
     environment: "Environment | None"
     state_index: state.StateIndex
+    bindings: dict[str, ty.Any] | None = None  # Bindings for the task environment
 
     _inputs: dict[str, ty.Any] | None = None
 
