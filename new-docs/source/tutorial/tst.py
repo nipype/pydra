@@ -1,10 +1,32 @@
 import tempfile
+from pathlib import Path
 import numpy as np
 from fileformats.medimage import Nifti1
 import fileformats.medimage_mrtrix3 as mrtrix3
 from pydra.engine.environments import Docker
 from pydra.design import workflow, python
 from pydra.tasks.mrtrix3.v3_0 import MrConvert, MrThreshold
+
+MRTRIX2NUMPY_DTYPES = {
+    "Int8": np.dtype("i1"),
+    "UInt8": np.dtype("u1"),
+    "Int16LE": np.dtype("<i2"),
+    "Int16BE": np.dtype(">i2"),
+    "UInt16LE": np.dtype("<u2"),
+    "UInt16BE": np.dtype(">u2"),
+    "Int32LE": np.dtype("<i4"),
+    "Int32BE": np.dtype(">i4"),
+    "UInt32LE": np.dtype("<u4"),
+    "UInt32BE": np.dtype(">u4"),
+    "Float32LE": np.dtype("<f4"),
+    "Float32BE": np.dtype(">f4"),
+    "Float64LE": np.dtype("<f8"),
+    "Float64BE": np.dtype(">f8"),
+    "CFloat32LE": np.dtype("<c8"),
+    "CFloat32BE": np.dtype(">c8"),
+    "CFloat64LE": np.dtype("<c16"),
+    "CFloat64BE": np.dtype(">c16"),
+}
 
 
 @workflow.define(outputs=["out_image"])
@@ -22,20 +44,17 @@ def ToyMedianThreshold(in_image: Nifti1) -> mrtrix3.ImageFormat:
     )
 
     @python.define
-    def SelectDataFile(in_file: mrtrix3.ImageHeader) -> mrtrix3.ImageDataFile:
-        return in_file.data_file
-
-    select_data = workflow.add(SelectDataFile(in_file=input_conversion.out_file))
-
-    @python.define
-    def Median(data_file: mrtrix3.ImageDataFile) -> float:
-        data = np.load(data_file)
+    def Median(mih: mrtrix3.ImageHeader) -> float:
+        """A bespoke function that reads the separate data file in the MRTrix3 image
+        header format (i.e. .mih) and calculates the median value."""
+        dtype = MRTRIX2NUMPY_DTYPES[mih.metadata["datatype"].strip()]
+        data = np.frombuffer(Path.read_bytes(mih.data_file), dtype=dtype)
         return np.median(data)
 
-    median = workflow.add(Median(data_file=select_data.out))
+    median = workflow.add(Median(mih=input_conversion.out_file))
     threshold = workflow.add(
-        MrThreshold(in_file=in_image, abs=median.out),
-        environment=Docker("mrtrix3/mrtrix3", tag=""),
+        MrThreshold(in_file=in_image, out_file="binary.mif", abs=median.out),
+        environment=Docker("mrtrix3/mrtrix3", tag="latest"),
     )
 
     output_conversion = workflow.add(

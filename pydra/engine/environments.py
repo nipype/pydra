@@ -94,7 +94,7 @@ class Docker(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, inputs_mod_root = task.definition._get_bindings(root=self.root)
+        mounts, input_updates = task.definition._get_bindings(root=self.root)
 
         docker_args = [
             "docker",
@@ -112,7 +112,11 @@ class Docker(Container):
         keys = ["return_code", "stdout", "stderr"]
 
         values = execute(
-            docker_args + [docker_img] + task.definition._command_args(root=self.root),
+            docker_args
+            + [docker_img]
+            + task.definition._command_args(
+                root=self.root, input_updates=input_updates
+            ),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:
@@ -129,7 +133,7 @@ class Singularity(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, inputs_mod_root = task.definition._get_bindings(root=self.root)
+        mounts, input_updates = task.definition._get_bindings(root=self.root)
 
         # todo adding xargsy etc
         singularity_args = [
@@ -150,7 +154,9 @@ class Singularity(Container):
         values = execute(
             singularity_args
             + [singularity_img]
-            + task.definition._command_args(root=self.root),
+            + task.definition._command_args(
+                root=self.root, input_updates=input_updates
+            ),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:
