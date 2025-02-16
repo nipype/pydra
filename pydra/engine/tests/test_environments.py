@@ -50,12 +50,19 @@ def test_native_1(tmp_path):
 @need_docker
 def test_docker_1(tmp_path):
     """docker env: simple command, no arguments"""
-    newcache = lambda x: makedir(tmp_path, x)
+
+    def newcache(x):
+        makedir(tmp_path, x)
 
     cmd = ["whoami"]
     docker = Docker(image="busybox")
-    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
-    assert shelly.cmdline == " ".join(cmd)
+    shell_def = shell.define(cmd)
+    shelly = Task(
+        definition=shell_def,
+        submitter=Submitter(cache_dir=newcache("shelly")),
+        name="shelly",
+    )
+    assert shell_def.cmdline == " ".join(cmd)
     env_res = docker.execute(shelly)
 
     shelly_env = ShellDef(
@@ -86,12 +93,19 @@ def test_docker_1(tmp_path):
 )
 def test_docker_1_subm(tmp_path, docker):
     """docker env with submitter: simple command, no arguments"""
-    newcache = lambda x: makedir(tmp_path, x)
 
-    cmd = ["whoami"]
+    def newcache(x):
+        makedir(tmp_path, x)
+
+    cmd = "whoami"
     docker = Docker(image="busybox")
-    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
-    assert shelly.cmdline == " ".join(cmd)
+    shell_def = shell.define(cmd)()
+    shelly = Task(
+        definition=shell_def,
+        submitter=Submitter(cache_dir=newcache("shelly")),
+        name="shelly",
+    )
+    assert shell_def.cmdline == cmd
     env_res = docker.execute(shelly)
 
     shelly_env = ShellDef(
@@ -116,12 +130,19 @@ def test_docker_1_subm(tmp_path, docker):
 @need_singularity
 def test_singularity_1(tmp_path):
     """singularity env: simple command, no arguments"""
-    newcache = lambda x: makedir(tmp_path, x)
+
+    def newcache(x):
+        makedir(tmp_path, x)
 
     cmd = ["whoami"]
     sing = Singularity(image="docker://alpine")
-    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
-    assert shelly.cmdline == " ".join(cmd)
+    shell_def = shell.define(cmd)
+    shelly = Task(
+        definition=shell_def,
+        submitter=Submitter(cache_dir=newcache("shelly")),
+        name="shelly",
+    )
+    assert shell_def.cmdline == " ".join(cmd)
     env_res = sing.execute(shelly)
 
     shelly_env = ShellDef(
@@ -144,12 +165,19 @@ def test_singularity_1(tmp_path):
 @need_singularity
 def test_singularity_1_subm(tmp_path, plugin):
     """docker env with submitter: simple command, no arguments"""
-    newcache = lambda x: makedir(tmp_path, x)
+
+    def newcache(x):
+        makedir(tmp_path, x)
 
     cmd = ["whoami"]
     sing = Singularity(image="docker://alpine")
-    shelly = ShellDef(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
-    assert shelly.cmdline == " ".join(cmd)
+    shell_def = shell.define(cmd)
+    shelly = Task(
+        definition=shell_def,
+        submitter=Submitter(cache_dir=newcache("shelly")),
+        name="shelly",
+    )
+    assert shell_def.cmdline == " ".join(cmd)
     env_res = sing.execute(shelly)
 
     shelly_env = ShellDef(

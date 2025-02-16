@@ -123,6 +123,10 @@ class Task(ty.Generic[DefType]):
         if state_index is None:
             state_index = state.StateIndex()
 
+        if not isinstance(definition, TaskDef):
+            raise ValueError(
+                f"Task definition ({definition!r}) must be a TaskDef, not {type(definition)}"
+            )
         # Check that the definition is fully resolved and ready to run
         definition._check_resolved()
         definition._check_rules()

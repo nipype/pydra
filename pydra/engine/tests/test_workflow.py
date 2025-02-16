@@ -39,11 +39,6 @@ from ..specs import ShellDef
 from pydra.utils import exc_info_matches
 
 
-def test_wf_no_input_spec():
-    with pytest.raises(ValueError, match='Empty "Inputs" definition'):
-        Workflow(name="workflow")
-
-
 def test_wf_specinfo_input_spec():
     input_spec = SpecInfo(
         name="Input",
