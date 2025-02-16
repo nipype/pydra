@@ -345,7 +345,7 @@ class TypeParser(ty.Generic[T]):
                 return coerce_sequence(list, obj, pattern_args)
             except TypeError as e1:
                 try:
-                    return [expand_and_coerce(obj, pattern_args)]
+                    return [expand_and_coerce(obj, pattern_args[0])]
                 except TypeError as e2:
                     raise TypeError(
                         f"Could not coerce object ({obj!r}) to MultiInputObj[{pattern_args[0]}] "
