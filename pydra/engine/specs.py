@@ -186,7 +186,6 @@ class TaskDef(ty.Generic[OutputsType]):
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
-        name: str | None = None,
         hooks: TaskHooks | None = None,
         **kwargs: ty.Any,
     ) -> OutputsType:
@@ -212,8 +211,6 @@ class TaskDef(ty.Generic[OutputsType]):
             Messengers, by default None
         messenger_args : dict, optional
             Messenger arguments, by default None
-        name : str
-            The name of the task, by default None
         **kwargs : dict
             Keyword arguments to pass on to the worker initialisation
 
@@ -242,7 +239,6 @@ class TaskDef(ty.Generic[OutputsType]):
             ) as sub:
                 result = sub(
                     self,
-                    name=name,
                     hooks=hooks,
                 )
         except TypeError as e:
