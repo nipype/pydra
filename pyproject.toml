@@ -12,7 +12,7 @@ dependencies = [
     "cloudpickle >=2.0.0",
     "etelemetry >=0.2.2",
     "filelock >=3.0.0",
-    "fileformats >=0.15a5",
+    "fileformats >=0.15a4",
     "platformdirs >=2",
 ]
 license = { file = "LICENSE" }
@@ -41,7 +41,7 @@ psij = ["psij-python"]
 dask = ["dask", "distributed"]
 dev = ["black", "pre-commit", "pydra[test]"]
 doc = [
-    "fileformats-extras >= v0.15.0a5",
+    "fileformats-extras >= v0.15.0a4",
     "fileformats-medimage >= v0.10.0a2",
     "fileformats-medimage-extras >= v0.10.0a2",
     "furo>=2022.2.14.1",
