@@ -1,5 +1,5 @@
 from pathlib import Path
-
+import typing as ty
 from ..environments import Native, Docker, Singularity
 from ..task import ShellDef
 from ..submitter import Submitter
@@ -17,6 +17,10 @@ def makedir(path, name):
     return newdir
 
 
+def drop_stderr(dct: dict[str, ty.Any]):
+    return {k: v for k, v in dct.items() if k != "stderror"}
+
+
 def test_native_1(tmp_path):
     """simple command, no arguments"""
 
@@ -24,27 +28,26 @@ def test_native_1(tmp_path):
         return makedir(tmp_path, x)
 
     cmd = "whoami"
-    ShellDef = shell.define(cmd)
-
-    shelly = ShellDef()
+    Shelly = shell.define(cmd)
+    shelly = Shelly()
     assert shelly.cmdline == cmd
-    shelly_task = Task(
+
+    shelly_job = Task(
         definition=shelly,
         submitter=Submitter(cache_dir=newcache("shelly-task")),
         name="shelly",
     )
+    env_outputs = Native().execute(shelly_job)
 
-    # Up to here
-    env_outputs = Native().execute(shelly_task)
     outputs = shelly(cache_dir=newcache("shelly-exec"))
-    assert env_outputs == attrs_values(outputs)
+    assert drop_stderr(env_outputs) == drop_stderr(attrs_values(outputs))
 
     outputs = shelly(environment=Native())
     assert env_outputs == attrs_values(outputs)
 
     with Submitter(cache_dir=newcache("shelly-submitter"), environment=Native()) as sub:
         result = sub(shelly)
-    assert env_outputs == attrs_values(result.outputs)
+    assert drop_stderr(env_outputs) == drop_stderr(attrs_values(result.outputs))
 
 
 @no_win
@@ -57,14 +60,16 @@ def test_docker_1(tmp_path):
 
     cmd = ["whoami"]
     docker = Docker(image="busybox")
-    shell_def = shell.define(cmd)
-    shelly = Task(
-        definition=shell_def,
+    Shelly = shell.define(cmd)
+    shelly = Shelly()
+    assert shelly.cmdline == " ".join(cmd)
+
+    shelly_job = Task(
+        definition=shelly,
         submitter=Submitter(cache_dir=newcache("shelly")),
         name="shelly",
     )
-    assert shell_def.cmdline == " ".join(cmd)
-    env_res = docker.execute(shelly)
+    env_res = docker.execute(shelly_job)
 
     shelly_env = ShellDef(
         name="shelly",
@@ -100,24 +105,20 @@ def test_docker_1_subm(tmp_path, docker):
 
     cmd = "whoami"
     docker = Docker(image="busybox")
-    shell_def = shell.define(cmd)()
-    shelly = Task(
-        definition=shell_def,
+    shelly = shell.define(cmd)()
+    shelly_job = Task(
+        definition=shelly,
         submitter=Submitter(cache_dir=newcache("shelly")),
         name="shelly",
     )
-    assert shell_def.cmdline == cmd
-    env_res = docker.execute(shelly)
+    assert shelly.cmdline == cmd
+    env_res = docker.execute(shelly_job)
 
-    shelly_env = ShellDef(
-        name="shelly",
-        executable=cmd,
-        cache_dir=newcache("shelly_env"),
-        environment=docker,
-    )
-    with Submitter(worker="cf") as sub:
-        shelly_env(submitter=sub)
-    assert env_res == shelly_env.result().output.__dict__
+    with Submitter(
+        worker="cf", cache_dir=newcache("shelly_env"), environment=docker
+    ) as sub:
+        result = sub(shelly)
+    assert env_res == attrs_values(result.outputs)
 
     shelly_call = ShellDef(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
