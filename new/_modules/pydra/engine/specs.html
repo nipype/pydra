@@ -299,7 +299,7 @@
 <span class="kn">import</span> <span class="nn">cloudpickle</span> <span class="k">as</span> <span class="nn">cp</span>
 <span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">FileSet</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.messenger</span> <span class="kn">import</span> <span class="n">AuditFlag</span><span class="p">,</span> <span class="n">Messenger</span>
-<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">TypeParser</span><span class="p">,</span> <span class="n">is_optional</span><span class="p">,</span> <span class="n">non_optional_type</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">TypeParser</span><span class="p">,</span> <span class="n">is_optional</span><span class="p">,</span> <span class="n">optional_type</span>
 <span class="kn">from</span> <span class="nn">.helpers</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">attrs_fields</span><span class="p">,</span>
     <span class="n">attrs_values</span><span class="p">,</span>
@@ -1411,7 +1411,7 @@
         <span class="n">cmd_add</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="c1"># formatter that creates a custom command argument</span>
         <span class="c1"># it can take the value of the field, all inputs, or the value of other fields.</span>
-        <span class="n">tp</span> <span class="o">=</span> <span class="n">non_optional_type</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="k">else</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span>
+        <span class="n">tp</span> <span class="o">=</span> <span class="n">optional_type</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="k">else</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span>
         <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">formatter</span><span class="p">:</span>
             <span class="n">call_args</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">formatter</span><span class="p">)</span>
             <span class="n">call_args_val</span> <span class="o">=</span> <span class="p">{}</span>
