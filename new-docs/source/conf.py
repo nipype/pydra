@@ -50,7 +50,7 @@ extensions = [
 ]
 
 
-nbsphinx_allow_errors = True
+nbsphinx_allow_errors = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
