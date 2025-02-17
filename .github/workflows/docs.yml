@@ -55,7 +55,11 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install pandoc libnotify-bin
+        sudo apt-get install -y pandoc xvfb libnotify-bin
+    - name: Set up XVFB to handle desktp notifications
+      run: |
+        Xvfb :99 &
+        export DISPLAY=:99
     - uses: actions/checkout@v4
     - name: Fetch tags
       run: git fetch --prune --unshallow
