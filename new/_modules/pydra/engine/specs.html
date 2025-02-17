@@ -298,7 +298,7 @@
 <span class="kn">import</span> <span class="nn">attrs</span>
 <span class="kn">from</span> <span class="nn">attrs.converters</span> <span class="kn">import</span> <span class="n">default_if_none</span>
 <span class="kn">import</span> <span class="nn">cloudpickle</span> <span class="k">as</span> <span class="nn">cp</span>
-<span class="kn">from</span> <span class="nn">fileformats.core</span> <span class="kn">import</span> <span class="n">FileSet</span>
+<span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">FileSet</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.messenger</span> <span class="kn">import</span> <span class="n">AuditFlag</span><span class="p">,</span> <span class="n">Messenger</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">TypeParser</span><span class="p">,</span> <span class="n">is_optional</span><span class="p">,</span> <span class="n">non_optional_type</span>
 <span class="kn">from</span> <span class="nn">.helpers</span> <span class="kn">import</span> <span class="p">(</span>
@@ -1486,56 +1486,6 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="k">return</span> <span class="n">split_cmd</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return bindings necessary to run task in an alternative root.</span>
-
-<span class="sd">        This is primarily intended for contexts when a task is going</span>
-<span class="sd">        to be run in a container with mounted volumes.</span>
-
-<span class="sd">        Arguments</span>
-<span class="sd">        ---------</span>
-<span class="sd">        root: str</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        bindings: dict</span>
-<span class="sd">          Mapping from paths in the host environment to the target environment</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="k">if</span> <span class="n">root</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">{}</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_bindings</span><span class="p">(</span><span class="n">root</span><span class="o">=</span><span class="n">root</span><span class="p">)</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bindings</span>
-
-    <span class="k">def</span> <span class="nf">_prepare_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare input files to be passed to the task</span>
-
-<span class="sd">        This updates the ``bindings`` attribute of the current task to make files available</span>
-<span class="sd">        in an ``Environment``-defined ``root``.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">fld</span><span class="p">:</span> <span class="n">Arg</span>
-        <span class="k">for</span> <span class="n">fld</span> <span class="ow">in</span> <span class="n">attrs_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">TypeParser</span><span class="o">.</span><span class="n">contains_type</span><span class="p">(</span><span class="n">FileSet</span><span class="p">,</span> <span class="n">fld</span><span class="o">.</span><span class="n">type</span><span class="p">):</span>
-                <span class="n">fileset</span><span class="p">:</span> <span class="n">FileSet</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fileset</span><span class="p">,</span> <span class="n">FileSet</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                        <span class="s2">&quot;Generating environment bindings for nested FileSets are not &quot;</span>
-                        <span class="s2">&quot;yet supported&quot;</span>
-                    <span class="p">)</span>
-                <span class="n">copy</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">copy_mode</span> <span class="o">==</span> <span class="n">FileSet</span><span class="o">.</span><span class="n">CopyMode</span><span class="o">.</span><span class="n">copy</span>
-
-                <span class="n">host_path</span><span class="p">,</span> <span class="n">env_path</span> <span class="o">=</span> <span class="n">fileset</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">root</span><span class="si">}{</span><span class="n">fileset</span><span class="o">.</span><span class="n">parent</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-                <span class="c1"># Default to mounting paths as read-only, but respect existing modes</span>
-                <span class="n">old_mode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bindings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">host_path</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;ro&quot;</span><span class="p">))[</span><span class="mi">1</span><span class="p">]</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">bindings</span><span class="p">[</span><span class="n">host_path</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">env_path</span><span class="p">,</span> <span class="s2">&quot;rw&quot;</span> <span class="k">if</span> <span class="n">copy</span> <span class="k">else</span> <span class="n">old_mode</span><span class="p">)</span>
-
-                <span class="c1"># Provide in-container paths without type-checking</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">inputs_mod_root</span><span class="p">[</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
-                    <span class="n">env_path</span> <span class="o">/</span> <span class="n">rel</span> <span class="k">for</span> <span class="n">rel</span> <span class="ow">in</span> <span class="n">fileset</span><span class="o">.</span><span class="n">relative_fspaths</span>
-                <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_generated_output_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stdout</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">stderr</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a list of all outputs that will be generated by the task.</span>
