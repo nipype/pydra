@@ -5,7 +5,7 @@
    "id": "c8149a94",
    "metadata": {},
    "source": [
-    "# One-Level GLM"
+    "# General Linear Model (GLM)"
    ]
   },
   {
