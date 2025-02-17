@@ -55,11 +55,14 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pandoc xvfb libnotify-bin
-    - name: Set up XVFB to handle desktp notifications
+        sudo apt-get install -y pandoc xvfb libnotify-bin dunst dbus-x11
+    - name: Set up OS to handle desktop notifications (used in adv.-exec. tutorial)
       run: |
         Xvfb :99 &
         export DISPLAY=:99
+        eval "$(dbus-launch --sh-syntax)"
+        dunst &
+        notify-send "Test Notification"
     - uses: actions/checkout@v4
     - name: Fetch tags
       run: git fetch --prune --unshallow
