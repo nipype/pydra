@@ -93,8 +93,7 @@ The following comprehensive examples demonstrate how to use Pydra to build and e
 complex workflows
 
 * :ref:`T1w MRI preprocessing`
-* :ref:`One-level GLM`
-* :ref:`Two-Level GLM`
+* :ref:`General Linear Model (GLM)`
 
 How-to Guides
 -------------
@@ -140,8 +139,7 @@ See the full reference documentation for Pydra
    :hidden:
 
    examples/t1w-preprocess
-   examples/first-level-glm
-   examples/two-level-glm
+   examples/glm
 
 .. toctree::
    :maxdepth: 2
