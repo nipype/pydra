@@ -29,11 +29,12 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from .node import Node
-    from .specs import TaskDef, WorkflowDef, TaskHooks
+    from .specs import TaskDef, TaskOutputs, WorkflowDef, TaskHooks, Result
     from .environments import Environment
     from .state import State
 
 DefType = ty.TypeVar("DefType", bound="TaskDef")
+OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
 
 # Used to flag development mode of Audit
 develop = False
@@ -167,14 +168,34 @@ class Submitter:
 
     def __call__(
         self,
-        task_def: "TaskDef",
-        name: str | None = "task",
+        task_def: "TaskDef[OutputType]",
         hooks: "TaskHooks | None" = None,
-    ):
-        """Submitter run function."""
+        raise_errors: bool | None = None,
+    ) -> "Result[OutputType]":
+        """Submitter run function.
 
-        if name is None:
-            name = "task"
+        Parameters
+        ----------
+        task_def : :obj:`~pydra.engine.specs.TaskDef`
+            The task definition to run
+        hooks : :obj:`~pydra.engine.specs.TaskHooks`, optional
+            Task hooks, callable functions called as the task is setup and torn down,
+            by default no functions are called at the hooks
+        raise_errors : bool, optional
+            Whether to raise errors, by default True if the 'debug' worker is used,
+            otherwise False
+
+        Returns
+        -------
+        result : Any
+            The result of the task
+        """
+        if raise_errors is None:
+            raise_errors = self.worker_name == "debug"
+        if not isinstance(raise_errors, bool):
+            raise TypeError(
+                f"'raise_errors' must be a boolean or None, not {type(raise_errors)}"
+            )
 
         task_def._check_rules()
         # If the outer task is split, create an implicit workflow to hold the split nodes
@@ -198,7 +219,7 @@ class Submitter:
         task = Task(
             task_def,
             submitter=self,
-            name=name,
+            name="task",
             environment=self.environment,
             hooks=hooks,
         )
@@ -211,11 +232,15 @@ class Submitter:
             else:
                 self.worker.run(task, rerun=self.rerun)
         except Exception as e:
-            e.add_note(
+            msg = (
                 f"Full crash report for {type(task_def).__name__!r} task is here: "
                 + str(task.output_dir / "_error.pklz")
             )
-            raise e
+            if raise_errors:
+                e.add_note(msg)
+                raise e
+            else:
+                logger.error("\nTask execution failed\n" + msg)
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()

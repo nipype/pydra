@@ -48,6 +48,7 @@ doc = [
     "ipython",
     "ipykernel",
     "ipywidgets",
+    "matplotlib",
     "nbsphinx",
     "nest_asyncio",
     "nibabel",
