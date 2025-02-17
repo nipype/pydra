@@ -56,7 +56,7 @@ doc = [
     "fileformats-extras >= v0.15.0a3",
     "fileformats-medimage >= v0.10.0a2",
     "fileformats-medimage-extras >= v0.10.0a",
-    "pydra-mrtrix3 >=3.0.4a14",
+    "pydra-mrtrix3 >=3.0.4a17",
     "sphinx_rtd_theme",
     "sphinx-click",
     "sphinxcontrib-apidoc ~=0.3.0",
