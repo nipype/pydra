@@ -34,6 +34,7 @@ def test_native_1(tmp_path):
         name="shelly",
     )
 
+    # Up to here
     env_outputs = Native().execute(shelly_task)
     outputs = shelly(cache_dir=newcache("shelly-exec"))
     assert env_outputs == attrs_values(outputs)
