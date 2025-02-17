@@ -5,7 +5,7 @@
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Workflows" href="6-workflow.html" /><link rel="prev" title="Python-tasks" href="4-python.html" />
 
-    <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
+    <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
         <title>Shell-tasks - Pydra v0.25</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
@@ -338,7 +338,7 @@
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Command-line to be run: cp /tmp/tmp7mjyok6j/in.txt /tmp/tmp7mjyok6j/out.txt
+Command-line to be run: cp /tmp/tmpqjaqi47z/in.txt /tmp/tmpqjaqi47z/out.txt
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -346,7 +346,7 @@ Command-line to be run: cp /tmp/tmp7mjyok6j/in.txt /tmp/tmp7mjyok6j/out.txt
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev225+gd7a050eb
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev228+g30c954cf
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -354,7 +354,7 @@ A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev225+g
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Contents of copied file (&#39;/tmp/tmp7mjyok6j/out.txt&#39;): &#39;Contents to be copied&#39;
+Contents of copied file (&#39;/tmp/tmpqjaqi47z/out.txt&#39;): &#39;Contents to be copied&#39;
 </pre></div></div>
 </div>
 <p>If paths to output files are not provided in the parameterisation, it will default to the name of the field</p>
@@ -372,7 +372,7 @@ Contents of copied file (&#39;/tmp/tmp7mjyok6j/out.txt&#39;): &#39;Contents to b
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-cp /tmp/tmp7mjyok6j/in.txt /home/runner/work/pydra/pydra/new-docs/source/tutorial/destination
+cp /tmp/tmpqjaqi47z/in.txt /home/runner/work/pydra/pydra/new-docs/source/tutorial/destination
 </pre></div></div>
 </div>
 <section id="Defifying-types">
@@ -648,7 +648,7 @@ Size of the output file is: 256
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 ACommand input fields: [arg(name=&#39;in_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=None, allowed_values=None, container_path=False, formatter=None), arg(name=&#39;additional_args&#39;, type=list[str], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None), outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=False), arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;a-command&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=None, allowed_values=None, container_path=False, formatter=None)]
-ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=False), out(name=&#39;out_file_size&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#39;size of the output directory&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=&lt;function get_file_size at 0x7f061bfd3560&gt;), out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None)]
+ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=False), out(name=&#39;out_file_size&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#39;size of the output directory&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=&lt;function get_file_size at 0x7fe0647ce340&gt;), out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None)]
 </pre></div></div>
 </div>
 </section>
