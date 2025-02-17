@@ -22,7 +22,12 @@ from .base import (
     make_task_def,
     NO_DEFAULT,
 )
-from pydra.utils.typing import is_fileset_or_union, MultiInputObj
+from pydra.utils.typing import (
+    is_fileset_or_union,
+    MultiInputObj,
+    is_optional,
+    optional_type,
+)
 
 if ty.TYPE_CHECKING:
     from pydra.engine.specs import ShellDef
@@ -94,10 +99,14 @@ class arg(Arg):
 
     argstr: str | None = ""
     position: int | None = None
-    sep: str | None = attrs.field(default=None)
+    sep: str | None = attrs.field()
     allowed_values: list | None = None
     container_path: bool = False  # IS THIS STILL USED??
     formatter: ty.Callable | None = None
+
+    @sep.default
+    def _sep_default(self):
+        return " " if self.type is tuple or ty.get_origin(self.type) is tuple else None
 
     @sep.validator
     def _validate_sep(self, _, sep):
@@ -107,7 +116,10 @@ class arg(Arg):
             tp = ty.get_args(self.type)[0]
         else:
             tp = self.type
+        if is_optional(tp):
+            tp = optional_type(tp)
         origin = ty.get_origin(tp) or tp
+
         if (
             inspect.isclass(origin)
             and issubclass(origin, ty.Sequence)

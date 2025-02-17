@@ -1037,22 +1037,24 @@ class TypeParser(ty.Generic[T]):
 
 
 def is_union(type_: type) -> bool:
+    """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form"""
     return ty.get_origin(type_) in UNION_TYPES
 
 
 def is_optional(type_: type) -> bool:
-    """Check if the type is Optional"""
+    """Check if the type is Optional, i.e. a union containing None"""
     if is_union(type_):
         return any(a is type(None) or is_optional(a) for a in ty.get_args(type_))
     return False
 
 
-def non_optional_type(type_: type) -> type:
+def optional_type(type_: type) -> type:
+    """Gets the non-None args of an optional type (i.e. a union with a None arg)"""
     if is_optional(type_):
-        non_optional = [a for a in ty.get_args(type_) if a is not type(None)]
-        if len(non_optional) == 1:
-            return non_optional[0]
-        return ty.Union[tuple(non_optional)]
+        non_none = [a for a in ty.get_args(type_) if a is not type(None)]
+        if len(non_none) == 1:
+            return non_none[0]
+        return ty.Union[tuple(non_none)]
     return type_
 
 

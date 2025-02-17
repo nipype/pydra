@@ -18,7 +18,7 @@ from attrs.converters import default_if_none
 import cloudpickle as cp
 from fileformats.generic import FileSet
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.typing import TypeParser, is_optional, non_optional_type
+from pydra.utils.typing import TypeParser, is_optional, optional_type
 from .helpers import (
     attrs_fields,
     attrs_values,
@@ -1130,7 +1130,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         cmd_add = []
         # formatter that creates a custom command argument
         # it can take the value of the field, all inputs, or the value of other fields.
-        tp = non_optional_type(field.type) if is_optional(field.type) else field.type
+        tp = optional_type(field.type) if is_optional(field.type) else field.type
         if field.formatter:
             call_args = inspect.getfullargspec(field.formatter)
             call_args_val = {}

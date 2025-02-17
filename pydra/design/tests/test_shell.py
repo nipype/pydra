@@ -162,7 +162,7 @@ def test_interface_template_more_complex():
 
     Cp = shell.define(
         (
-            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
+            "cp <in_fs_objects:fs-object+> <out|out_dir:directory> "
             "-R<recursive> "
             "--text-arg <text_arg?> "
             "--int-arg <int_arg:int?> "
@@ -187,7 +187,9 @@ def test_interface_template_more_complex():
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
-            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            name="in_fs_objects",
+            type=MultiInputObj[FsObject],
+            position=1,
         ),
         output,
         shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
@@ -210,6 +212,7 @@ def test_interface_template_more_complex():
             argstr="--tuple-arg",
             type=tuple[int, str] | None,
             default=None,
+            sep=" ",
             position=6,
         ),
         ShellDef.additional_args,
@@ -245,7 +248,7 @@ def test_interface_template_with_overrides_and_optionals():
 
     Cp = shell.define(
         (
-            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> <out|out_file:file?> "
+            "cp <in_fs_objects:fs-object+> <out|out_dir:directory> <out|out_file:file?> "
             "-R<recursive> "
             "--text-arg <text_arg> "
             "--int-arg <int_arg:int?> "
@@ -284,7 +287,9 @@ def test_interface_template_with_overrides_and_optionals():
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
-            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            name="in_fs_objects",
+            type=MultiInputObj[FsObject],
+            position=1,
         ),
         shell.arg(
             name="recursive",
@@ -306,6 +311,7 @@ def test_interface_template_with_overrides_and_optionals():
             name="tuple_arg",
             argstr="--tuple-arg",
             type=tuple[int, str],
+            sep=" ",
             position=5,
         ),
     ] + outargs + [ShellDef.additional_args]
@@ -332,7 +338,7 @@ def test_interface_template_with_defaults():
 
     Cp = shell.define(
         (
-            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
+            "cp <in_fs_objects:fs-object+> <out|out_dir:directory> "
             "-R<recursive=True> "
             "--text-arg <text_arg='foo'> "
             "--int-arg <int_arg:int=99> "
@@ -357,7 +363,9 @@ def test_interface_template_with_defaults():
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
-            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            name="in_fs_objects",
+            type=MultiInputObj[FsObject],
+            position=1,
         ),
         output,
         shell.arg(name="recursive", argstr="-R", type=bool, default=True, position=3),
@@ -400,7 +408,7 @@ def test_interface_template_with_type_overrides():
 
     Cp = shell.define(
         (
-            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
+            "cp <in_fs_objects:fs-object+> <out|out_dir:directory> "
             "-R<recursive> "
             "--text-arg <text_arg> "
             "--int-arg <int_arg> "
@@ -426,7 +434,9 @@ def test_interface_template_with_type_overrides():
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
-            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            name="in_fs_objects",
+            type=MultiInputObj[FsObject],
+            position=1,
         ),
         output,
         shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
