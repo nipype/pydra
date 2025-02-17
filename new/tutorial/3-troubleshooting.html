@@ -225,8 +225,7 @@
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../examples/first-level-glm.html">One-Level GLM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../examples/two-level-glm.html">Two-Level GLM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/glm.html">One-Level GLM</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to</span></p>
 <ul>
@@ -331,7 +330,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev232+gb769a37a
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev239+g45ef805a
 </pre></div></div>
 </div>
 <p>This allows the secondary processes to import the script without executing it. Without such a block Pydra will lock up and not process the workflow. On Linux this is not an issue due to the way that processes are forked, but is good practice in any case for code portability.</p>
@@ -368,7 +367,7 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
 <br/></pre></div>
 </div>
 </div>
-<div class="nboutput docutils container">
+<div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area stderr docutils container">
@@ -386,7 +385,7 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^^^^^^
   File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, line 372, in run
     self.definition._run(self)
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, line 726, in _run
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, line 722, in _run
     returned = self.function(**inputs)
                ^^^^^^^^^^^^^^^^^^^^^^^
   File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/tasks/testing/__init__.py&#34;, line 11, in Divide
@@ -412,14 +411,9 @@ Traceback (most recent call last):
   File &#34;/usr/share/miniconda/lib/python3.12/asyncio/futures.py&#34;, line 202, in result
     raise self._exception.with_traceback(self._exception_tb)
 ZeroDivisionError: float division by zero
-</pre></div></div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-Cannot retrieve value for out from Divide as the node errored
+
+Task execution failed
+Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.25.dev239+g45ef805a/run-cache/workflow-c04fc24f46a5e59a0aeb3c40901eba13/_error.pklz
 </pre></div></div>
 </div>
 <p>The error pickle files can be loaded using the <code class="docutils literal notranslate"><span class="pre">cloudpickle</span></code> library, noting that it is important to use the same Python version to load the files that was used to run the Pydra workflow</p>
@@ -451,7 +445,7 @@ Cannot retrieve value for out from Divide as the node errored
                    &#39;    self.definition._run(self)\n&#39;,
                    &#39;  File &#39;
                    &#39;&#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, &#39;
-                   &#39;line 726, in _run\n&#39;
+                   &#39;line 722, in _run\n&#39;
                    &#39;    returned = self.function(**inputs)\n&#39;
                    &#39;               ^^^^^^^^^^^^^^^^^^^^^^^\n&#39;,
                    &#39;  File &#39;
@@ -462,7 +456,7 @@ Cannot retrieve value for out from Divide as the node errored
                    &#39;ZeroDivisionError: float division by zero\n&#39;],
  &#39;login name&#39;: &#39;runner&#39;,
  &#39;name with checksum&#39;: &#39;python-e126e9583a239ed19de120df484c689f&#39;,
- &#39;time of crash&#39;: &#39;20250217-024245&#39;}
+ &#39;time of crash&#39;: &#39;20250217-044029&#39;}
 </pre></div></div>
 </div>
 </section>
@@ -495,7 +489,7 @@ all the task dirs in your cache root to find the issue.</p>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev232+gb769a37a/run-cache/workflow-36c43e4b2e97bd084de2a8eaf5eb4faa
+Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev239+g45ef805a/run-cache/workflow-36c43e4b2e97bd084de2a8eaf5eb4faa
 </pre></div></div>
 </div>
 <p>To find the task directory where the issue first surfaced, iterate through every task cache dir and check the results for <code class="docutils literal notranslate"><span class="pre">float(&quot;inf&quot;)</span></code>s</p>

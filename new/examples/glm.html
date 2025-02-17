@@ -3,7 +3,7 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Two-Level GLM" href="two-level-glm.html" /><link rel="prev" title="T1w MRI preprocessing" href="t1w-preprocess.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Create a task package" href="../howto/create-task-package.html" /><link rel="prev" title="T1w MRI preprocessing" href="t1w-preprocess.html" />
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
         <title>One-Level GLM - Pydra v0.25</title>
@@ -226,7 +226,6 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="t1w-preprocess.html">T1w MRI preprocessing</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">One-Level GLM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="two-level-glm.html">Two-Level GLM</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to</span></p>
 <ul>
@@ -267,7 +266,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/examples/first-level-glm.ipynb.txt" title="View this page">
+  <a class="muted-link" href="../_sources/examples/glm.ipynb.txt" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -303,7 +302,7 @@
 <section id="Preparation">
 <h2>Preparation<a class="headerlink" href="#Preparation" title="Permalink to this heading">¶</a></h2>
 <p>Import packages that will be used globally and set up output directory</p>
-<div class="nbinput docutils container">
+<div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
@@ -317,17 +316,20 @@
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">python</span><span class="p">,</span> <span class="n">workflow</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.submitter</span> <span class="kn">import</span> <span class="n">Submitter</span>
 <span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">File</span><span class="p">,</span> <span class="n">Directory</span>
 <span class="kn">from</span> <span class="nn">fileformats.text</span> <span class="kn">import</span> <span class="n">Csv</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">norm</span>
 
 <span class="kn">import</span> <span class="nn">nibabel</span> <span class="k">as</span> <span class="nn">nib</span>
-<span class="kn">from</span> <span class="nn">nilearn.datasets</span> <span class="kn">import</span> <span class="p">(</span>
-        <span class="n">fetch_openneuro_dataset_index</span><span class="p">,</span>
-        <span class="n">fetch_openneuro_dataset</span><span class="p">,</span>
-        <span class="n">select_from_index</span><span class="p">,</span>
-    <span class="p">)</span>
+<span class="c1"># These functions were removed within nilearn, so this notebook needs to be rewritten</span>
+<span class="c1"># to use the &#39;openneuro&#39; module instead</span>
+<span class="c1"># from nilearn.datasets import (</span>
+<span class="c1">#         fetch_openneuro_dataset_index,</span>
+<span class="c1">#         fetch_openneuro_dataset,</span>
+<span class="c1">#         select_from_index,</span>
+<span class="c1">#     )</span>
 <span class="kn">from</span> <span class="nn">nilearn.interfaces.fsl</span> <span class="kn">import</span> <span class="n">get_design_from_fslmat</span>
 <span class="kn">from</span> <span class="nn">nilearn.glm.first_level</span> <span class="kn">import</span> <span class="n">first_level_from_bids</span>
 <span class="kn">from</span> <span class="nn">nilearn.reporting</span> <span class="kn">import</span> <span class="n">get_clusters_table</span><span class="p">,</span> <span class="n">make_glm_report</span>
@@ -338,27 +340,6 @@
 <span class="p">)</span>
 </pre></div>
 </div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">ImportError</span>                               Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[2], line 17</span>
-<span class="ansi-green-intense-fg ansi-bold">     14</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span> <span class="ansi-bold" style="color: rgb(0,0,255)">scipy</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">stats</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> norm
-<span class="ansi-green-intense-fg ansi-bold">     16</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> <span class="ansi-bold" style="color: rgb(0,0,255)">nibabel</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> <span class="ansi-bold" style="color: rgb(0,0,255)">nib</span>
-<span class="ansi-green-fg">---&gt; 17</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span> <span class="ansi-bold" style="color: rgb(0,0,255)">nilearn</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">datasets</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> (
-<span class="ansi-green-intense-fg ansi-bold">     18</span>         fetch_openneuro_dataset_index,
-<span class="ansi-green-intense-fg ansi-bold">     19</span>         fetch_openneuro_dataset,
-<span class="ansi-green-intense-fg ansi-bold">     20</span>         select_from_index,
-<span class="ansi-green-intense-fg ansi-bold">     21</span>     )
-<span class="ansi-green-intense-fg ansi-bold">     22</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span> <span class="ansi-bold" style="color: rgb(0,0,255)">nilearn</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">interfaces</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">fsl</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> get_design_from_fslmat
-<span class="ansi-green-intense-fg ansi-bold">     23</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span> <span class="ansi-bold" style="color: rgb(0,0,255)">nilearn</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">glm</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">first_level</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> first_level_from_bids
-
-<span class="ansi-red-fg">ImportError</span>: cannot import name &#39;fetch_openneuro_dataset_index&#39; from &#39;nilearn.datasets&#39; (/usr/share/miniconda/lib/python3.12/site-packages/nilearn/datasets/__init__.py)
-</pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
@@ -790,17 +771,77 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/new-docs/source/outputs/6_glm&#39;)
 </section>
 <section id="Run-Workflow-Run">
 <h2>Run Workflow Run<a class="headerlink" href="#Run-Workflow-Run" title="Permalink to this heading">¶</a></h2>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">wf</span> <span class="o">=</span> <span class="n">FullWorkflow</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="n">workflow_out_dir</span><span class="p">,</span> <span class="n">n_subjects</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">contrast</span><span class="o">=</span><span class="s1">&#39;StopSuccess - Go&#39;</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="kc">False</span><span class="p">:</span>
-    <span class="n">results</span> <span class="o">=</span> <span class="n">wf</span><span class="p">(</span><span class="n">plugin</span><span class="o">=</span><span class="s1">&#39;cf&#39;</span><span class="p">,</span> <span class="n">n_procs</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s1">&#39;cf&#39;</span><span class="p">,</span> <span class="n">n_procs</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">wf</span><span class="p">)</span>
+
     <span class="nb">print</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
 </pre></div>
 </div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev239+g45ef805a
+Task exception was never retrieved
+future: &lt;Task finished name=&#39;Task-2&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py:189&gt; exception=NameError(&#34;name &#39;fetch_openneuro_dataset_index&#39; is not defined&#34;)&gt;
+concurrent.futures.process._RemoteTraceback:
+&#34;&#34;&#34;
+Traceback (most recent call last):
+  File &#34;/usr/share/miniconda/lib/python3.12/concurrent/futures/process.py&#34;, line 264, in _process_worker
+    r = call_item.fn(*call_item.args, **call_item.kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 205, in unpickle_and_run
+    return task.run(rerun=rerun)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, line 372, in run
+    self.definition._run(self)
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, line 722, in _run
+    returned = self.function(**inputs)
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File &#34;/tmp/ipykernel_5142/3719594497.py&#34;, line 3, in GetOpenneuroDataset
+    _, urls = fetch_openneuro_dataset_index()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name &#39;fetch_openneuro_dataset_index&#39; is not defined
+&#34;&#34;&#34;
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/tasks.py&#34;, line 316, in __step_run_and_handle_result
+    result = coro.throw(exc)
+             ^^^^^^^^^^^^^^^
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 197, in run
+    return await self.loop.run_in_executor(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/futures.py&#34;, line 289, in __await__
+    yield self  # This tells Task to wait for completion.
+    ^^^^^^^^^^
+  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/tasks.py&#34;, line 385, in __wakeup
+    future.result()
+  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/futures.py&#34;, line 202, in result
+    raise self._exception.with_traceback(self._exception_tb)
+NameError: name &#39;fetch_openneuro_dataset_index&#39; is not defined
+
+Task execution failed
+Full crash report for &#39;FullWorkflow&#39; task is here: /home/runner/.cache/pydra/0.25.dev239+g45ef805a/run-cache/workflow-5e57994820190d04dc389af87d6d1fa4/_error.pklz
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev239+g45ef805a/run-cache/workflow-5e57994820190d04dc389af87d6d1fa4&#39;), outputs=None, runtime=None, errored=True, definition=FullWorkflow(output_dir=PosixPath(&#39;/home/runner/work/pydra/pydra/new-docs/source/outputs/6_glm&#39;), n_subjects=1, contrast=&#39;StopSuccess - Go&#39;, exclusion_patterns=None, constructor=&lt;function FullWorkflow at 0x7fbeb55fce00&gt;))
+</pre></div></div>
 </div>
 </section>
 <section id="Visualization">
@@ -814,227 +855,34 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/new-docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">!</span>ls<span class="w"> </span>../outputs/6_glm
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">!</span><span class="w"> </span>ls<span class="w"> </span>../outputs/6_glm
 </pre></div>
 </div>
 </div>
 <section id="Plot-figures">
 <h3>Plot figures<a class="headerlink" href="#Plot-figures" title="Permalink to this heading">¶</a></h3>
-<section id="First-level-contrast">
-<h4>First level contrast<a class="headerlink" href="#First-level-contrast" title="Permalink to this heading">¶</a></h4>
-<div class="nbinput docutils container">
+<div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">Image</span>
 
-<span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/firstlevel_contrast.jpg&#39;</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="ow">not</span> <span class="n">results</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
+    <span class="c1"># First-level contrast</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/firstlevel_contrast.jpg&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Nilearn Z map</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/nilearn_z_map.jpg&#39;</span><span class="p">)</span>
+
+    <span class="c1"># FSL Z map</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/fsl_z_map.jpg&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Nilearn and FSL comparison</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/nilearn_fsl_comp.jpg&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[15], line 3</span>
-<span class="ansi-green-intense-fg ansi-bold">      1</span> <span class="ansi-bold" style="color: rgb(0,135,0)">from</span> <span class="ansi-bold" style="color: rgb(0,0,255)">IPython</span><span class="ansi-bold" style="color: rgb(0,0,255)">.</span><span class="ansi-bold" style="color: rgb(0,0,255)">display</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> Image
-<span class="ansi-green-fg">----&gt; 3</span> <span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">../outputs/6_glm/firstlevel_contrast.jpg</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg">)</span>
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1053</span>, in <span class="ansi-cyan-fg">Image.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, format, embed, width, height, retina, unconfined, metadata, alt)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1051</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>unconfined <span style="color: rgb(98,98,98)">=</span> unconfined
-<span class="ansi-green-intense-fg ansi-bold">   1052</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>alt <span style="color: rgb(98,98,98)">=</span> alt
-<span class="ansi-green-fg">-&gt; 1053</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg" style="color: rgb(0,0,255)">__init__</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">   1054</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1056</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata<span style="color: rgb(98,98,98)">.</span>get(<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>, {}):
-<span class="ansi-green-intense-fg ansi-bold">   1057</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span style="color: rgb(98,98,98)">=</span> metadata[<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>]
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:371</span>, in <span class="ansi-cyan-fg">DisplayObject.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, metadata)</span>
-<span class="ansi-green-intense-fg ansi-bold">    368</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    369</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span style="color: rgb(98,98,98)">=</span> {}
-<span class="ansi-green-fg">--&gt; 371</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    372</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_check_data()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1088</span>, in <span class="ansi-cyan-fg">Image.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1086</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;Reload the raw data from file or URL.&#34;&#34;&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">   1087</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>embed:
-<span class="ansi-green-fg">-&gt; 1088</span>     <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1089</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>retina:
-<span class="ansi-green-intense-fg ansi-bold">   1090</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_retina_shape()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:397</span>, in <span class="ansi-cyan-fg">DisplayObject.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    395</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>filename <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    396</span>     encoding <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_read_flags <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">utf-8</span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-fg">--&gt; 397</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">open</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_read_flags</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> f:
-<span class="ansi-green-intense-fg ansi-bold">    398</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>data <span style="color: rgb(98,98,98)">=</span> f<span style="color: rgb(98,98,98)">.</span>read()
-<span class="ansi-green-intense-fg ansi-bold">    399</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>url <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    400</span>     <span style="color: rgb(95,135,135)"># Deferred import</span>
-
-<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;../outputs/6_glm/firstlevel_contrast.jpg&#39;
-</pre></div></div>
-</div>
-</section>
-<section id="Nilearn-Z-map">
-<h4>Nilearn Z map<a class="headerlink" href="#Nilearn-Z-map" title="Permalink to this heading">¶</a></h4>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/nilearn_z_map.jpg&#39;</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[16], line 1</span>
-<span class="ansi-green-fg">----&gt; 1</span> <span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">../outputs/6_glm/nilearn_z_map.jpg</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg">)</span>
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1053</span>, in <span class="ansi-cyan-fg">Image.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, format, embed, width, height, retina, unconfined, metadata, alt)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1051</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>unconfined <span style="color: rgb(98,98,98)">=</span> unconfined
-<span class="ansi-green-intense-fg ansi-bold">   1052</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>alt <span style="color: rgb(98,98,98)">=</span> alt
-<span class="ansi-green-fg">-&gt; 1053</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg" style="color: rgb(0,0,255)">__init__</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">   1054</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1056</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata<span style="color: rgb(98,98,98)">.</span>get(<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>, {}):
-<span class="ansi-green-intense-fg ansi-bold">   1057</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span style="color: rgb(98,98,98)">=</span> metadata[<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>]
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:371</span>, in <span class="ansi-cyan-fg">DisplayObject.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, metadata)</span>
-<span class="ansi-green-intense-fg ansi-bold">    368</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    369</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span style="color: rgb(98,98,98)">=</span> {}
-<span class="ansi-green-fg">--&gt; 371</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    372</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_check_data()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1088</span>, in <span class="ansi-cyan-fg">Image.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1086</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;Reload the raw data from file or URL.&#34;&#34;&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">   1087</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>embed:
-<span class="ansi-green-fg">-&gt; 1088</span>     <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1089</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>retina:
-<span class="ansi-green-intense-fg ansi-bold">   1090</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_retina_shape()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:397</span>, in <span class="ansi-cyan-fg">DisplayObject.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    395</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>filename <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    396</span>     encoding <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_read_flags <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">utf-8</span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-fg">--&gt; 397</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">open</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_read_flags</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> f:
-<span class="ansi-green-intense-fg ansi-bold">    398</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>data <span style="color: rgb(98,98,98)">=</span> f<span style="color: rgb(98,98,98)">.</span>read()
-<span class="ansi-green-intense-fg ansi-bold">    399</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>url <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    400</span>     <span style="color: rgb(95,135,135)"># Deferred import</span>
-
-<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;../outputs/6_glm/nilearn_z_map.jpg&#39;
-</pre></div></div>
-</div>
-</section>
-<section id="FSL-Z-map">
-<h4>FSL Z map<a class="headerlink" href="#FSL-Z-map" title="Permalink to this heading">¶</a></h4>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/fsl_z_map.jpg&#39;</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[17], line 1</span>
-<span class="ansi-green-fg">----&gt; 1</span> <span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">../outputs/6_glm/fsl_z_map.jpg</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg">)</span>
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1053</span>, in <span class="ansi-cyan-fg">Image.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, format, embed, width, height, retina, unconfined, metadata, alt)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1051</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>unconfined <span style="color: rgb(98,98,98)">=</span> unconfined
-<span class="ansi-green-intense-fg ansi-bold">   1052</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>alt <span style="color: rgb(98,98,98)">=</span> alt
-<span class="ansi-green-fg">-&gt; 1053</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg" style="color: rgb(0,0,255)">__init__</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">   1054</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1056</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata<span style="color: rgb(98,98,98)">.</span>get(<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>, {}):
-<span class="ansi-green-intense-fg ansi-bold">   1057</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span style="color: rgb(98,98,98)">=</span> metadata[<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>]
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:371</span>, in <span class="ansi-cyan-fg">DisplayObject.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, metadata)</span>
-<span class="ansi-green-intense-fg ansi-bold">    368</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    369</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span style="color: rgb(98,98,98)">=</span> {}
-<span class="ansi-green-fg">--&gt; 371</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    372</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_check_data()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1088</span>, in <span class="ansi-cyan-fg">Image.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1086</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;Reload the raw data from file or URL.&#34;&#34;&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">   1087</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>embed:
-<span class="ansi-green-fg">-&gt; 1088</span>     <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1089</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>retina:
-<span class="ansi-green-intense-fg ansi-bold">   1090</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_retina_shape()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:397</span>, in <span class="ansi-cyan-fg">DisplayObject.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    395</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>filename <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    396</span>     encoding <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_read_flags <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">utf-8</span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-fg">--&gt; 397</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">open</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_read_flags</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> f:
-<span class="ansi-green-intense-fg ansi-bold">    398</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>data <span style="color: rgb(98,98,98)">=</span> f<span style="color: rgb(98,98,98)">.</span>read()
-<span class="ansi-green-intense-fg ansi-bold">    399</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>url <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    400</span>     <span style="color: rgb(95,135,135)"># Deferred import</span>
-
-<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;../outputs/6_glm/fsl_z_map.jpg&#39;
-</pre></div></div>
-</div>
-</section>
-<section id="Nilearn-FSL-comparison">
-<h4>Nilearn FSL comparison<a class="headerlink" href="#Nilearn-FSL-comparison" title="Permalink to this heading">¶</a></h4>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/nilearn_fsl_comp.jpg&#39;</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">FileNotFoundError</span>                         Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[18], line 1</span>
-<span class="ansi-green-fg">----&gt; 1</span> <span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">../outputs/6_glm/nilearn_fsl_comp.jpg</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">&#39;</span><span class="ansi-yellow-bg">)</span>
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1053</span>, in <span class="ansi-cyan-fg">Image.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, format, embed, width, height, retina, unconfined, metadata, alt)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1051</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>unconfined <span style="color: rgb(98,98,98)">=</span> unconfined
-<span class="ansi-green-intense-fg ansi-bold">   1052</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>alt <span style="color: rgb(98,98,98)">=</span> alt
-<span class="ansi-green-fg">-&gt; 1053</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg" style="color: rgb(0,0,255)">__init__</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">data</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">url</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span>
-<span class="ansi-green-intense-fg ansi-bold">   1054</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">metadata</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1056</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata<span style="color: rgb(98,98,98)">.</span>get(<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>, {}):
-<span class="ansi-green-intense-fg ansi-bold">   1057</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>width <span style="color: rgb(98,98,98)">=</span> metadata[<span style="color: rgb(175,0,0)">&#39;</span><span style="color: rgb(175,0,0)">width</span><span style="color: rgb(175,0,0)">&#39;</span>]
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:371</span>, in <span class="ansi-cyan-fg">DisplayObject.__init__</span><span class="ansi-blue-fg">(self, data, url, filename, metadata)</span>
-<span class="ansi-green-intense-fg ansi-bold">    368</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    369</span>     <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>metadata <span style="color: rgb(98,98,98)">=</span> {}
-<span class="ansi-green-fg">--&gt; 371</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    372</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_check_data()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:1088</span>, in <span class="ansi-cyan-fg">Image.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1086</span> <span style="color: rgb(175,0,0)">&#34;&#34;&#34;Reload the raw data from file or URL.&#34;&#34;&#34;</span>
-<span class="ansi-green-intense-fg ansi-bold">   1087</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>embed:
-<span class="ansi-green-fg">-&gt; 1088</span>     <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">super</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">Image</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">reload</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">   1089</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>retina:
-<span class="ansi-green-intense-fg ansi-bold">   1090</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_retina_shape()
-
-File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packages/IPython/core/display.py:397</span>, in <span class="ansi-cyan-fg">DisplayObject.reload</span><span class="ansi-blue-fg">(self)</span>
-<span class="ansi-green-intense-fg ansi-bold">    395</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>filename <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    396</span>     encoding <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">b</span><span style="color: rgb(175,0,0)">&#34;</span> <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_read_flags <span class="ansi-bold" style="color: rgb(0,135,0)">else</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">utf-8</span><span style="color: rgb(175,0,0)">&#34;</span>
-<span class="ansi-green-fg">--&gt; 397</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">open</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">filename</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_read_flags</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">encoding</span><span class="ansi-yellow-bg">)</span> <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> f:
-<span class="ansi-green-intense-fg ansi-bold">    398</span>         <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>data <span style="color: rgb(98,98,98)">=</span> f<span style="color: rgb(98,98,98)">.</span>read()
-<span class="ansi-green-intense-fg ansi-bold">    399</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>url <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    400</span>     <span style="color: rgb(95,135,135)"># Deferred import</span>
-
-<span class="ansi-red-fg">FileNotFoundError</span>: [Errno 2] No such file or directory: &#39;../outputs/6_glm/nilearn_fsl_comp.jpg&#39;
-</pre></div></div>
-</div>
-</section>
 </section>
 </section>
 <section id="Exercise">
@@ -1049,12 +897,12 @@ File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packag
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="two-level-glm.html">
+          <a class="next-page" href="../howto/create-task-package.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Two-Level GLM</div>
+                <div class="title">Create a task package</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -1115,13 +963,7 @@ File <span class="ansi-green-fg">/usr/share/miniconda/lib/python3.12/site-packag
 <li><a class="reference internal" href="#Run-Workflow-Run">Run Workflow Run</a></li>
 <li><a class="reference internal" href="#Visualization">Visualization</a></li>
 <li><a class="reference internal" href="#Examine-folder-structure">Examine folder structure</a><ul>
-<li><a class="reference internal" href="#Plot-figures">Plot figures</a><ul>
-<li><a class="reference internal" href="#First-level-contrast">First level contrast</a></li>
-<li><a class="reference internal" href="#Nilearn-Z-map">Nilearn Z map</a></li>
-<li><a class="reference internal" href="#FSL-Z-map">FSL Z map</a></li>
-<li><a class="reference internal" href="#Nilearn-FSL-comparison">Nilearn FSL comparison</a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#Plot-figures">Plot figures</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#Exercise">Exercise</a></li>

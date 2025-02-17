@@ -223,8 +223,7 @@
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../examples/first-level-glm.html">One-Level GLM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../examples/two-level-glm.html">Two-Level GLM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples/glm.html">One-Level GLM</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to</span></p>
 <ul>
@@ -468,7 +467,6 @@
         <span class="n">audit_flags</span><span class="p">:</span> <span class="n">AuditFlag</span> <span class="o">=</span> <span class="n">AuditFlag</span><span class="o">.</span><span class="n">NONE</span><span class="p">,</span>
         <span class="n">messengers</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n">Messenger</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">messenger_args</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">hooks</span><span class="p">:</span> <span class="n">TaskHooks</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputsType</span><span class="p">:</span>
@@ -494,8 +492,6 @@
 <span class="sd">            Messengers, by default None</span>
 <span class="sd">        messenger_args : dict, optional</span>
 <span class="sd">            Messenger arguments, by default None</span>
-<span class="sd">        name : str</span>
-<span class="sd">            The name of the task, by default None</span>
 <span class="sd">        **kwargs : dict</span>
 <span class="sd">            Keyword arguments to pass on to the worker initialisation</span>
 
@@ -524,7 +520,6 @@
             <span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
                 <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span>
                     <span class="bp">self</span><span class="p">,</span>
-                    <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
                     <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
                 <span class="p">)</span>
         <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
