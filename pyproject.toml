@@ -55,7 +55,7 @@ doc = [
     "scipy",
     "fileformats-extras >= v0.15.0a3",
     "fileformats-medimage >= v0.10.0a2",
-    "fileformats-medimage-extras >= v0.10.0a",
+    "fileformats-medimage-extras >= v0.10.0a2",
     "pydra-mrtrix3 >=3.0.4a17",
     "sphinx_rtd_theme",
     "sphinx-click",
