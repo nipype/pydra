@@ -219,7 +219,7 @@ class Submitter:
         task = Task(
             task_def,
             submitter=self,
-            name="task",
+            name="main",
             environment=self.environment,
             hooks=hooks,
         )
