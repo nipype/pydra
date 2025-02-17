@@ -52,17 +52,34 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-    - name: Install system dependencies
+    - name: Install Pandoc for NBSphinx
       run: |
         sudo apt-get update
-        sudo apt-get install -y pandoc xvfb libnotify-bin dunst dbus-x11
-    - name: Set up OS to handle desktop notifications (used in adv.-exec. tutorial)
+        sudo apt-get install -y pandoc
+    - name: Install Dependencies for virtual notifications in Adv.-Exec Tutorial
+      run: |
+          sudo apt update
+          sudo apt install -y xvfb libnotify-bin dbus-x11 xfce4-notifyd
+    - name: Start Virtual Display (for notifications)
       run: |
         Xvfb :99 &
         export DISPLAY=:99
         eval "$(dbus-launch --sh-syntax)"
-        dunst &
-        notify-send "Test Notification"
+        echo "DISPLAY=:99" >> $GITHUB_ENV
+        echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
+    - name: Start Notification Daemon (for notifications)
+      run: |
+        xfce4-notifyd &
+        sleep 2  # Give it some time to start
+    - name: Send Notification (test notifications)
+      run: |
+        notify-send "GitHub Runner Notification" "This is a test notification from GitHub Actions"
+    - name: Debug Running Processes (for notifications)
+      run: |
+        ps aux | grep notify
+        ps aux | grep xfce4-notifyd
+        dbus-monitor --session &
+        sleep 3
     - uses: actions/checkout@v4
     - name: Fetch tags
       run: git fetch --prune --unshallow
