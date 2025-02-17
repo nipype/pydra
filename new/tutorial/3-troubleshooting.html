@@ -331,7 +331,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev228+g30c954cf
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev229+gcb58cc83
 </pre></div></div>
 </div>
 <p>This allows the secondary processes to import the script without executing it. Without such a block Pydra will lock up and not process the workflow. On Linux this is not an issue due to the way that processes are forked, but is good practice in any case for code portability.</p>
@@ -462,7 +462,7 @@ Cannot retrieve value for out from Divide as the node errored
                    &#39;ZeroDivisionError: float division by zero\n&#39;],
  &#39;login name&#39;: &#39;runner&#39;,
  &#39;name with checksum&#39;: &#39;python-e126e9583a239ed19de120df484c689f&#39;,
- &#39;time of crash&#39;: &#39;20250217-013020&#39;}
+ &#39;time of crash&#39;: &#39;20250217-021340&#39;}
 </pre></div></div>
 </div>
 </section>
@@ -495,7 +495,7 @@ all the task dirs in your cache root to find the issue.</p>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev228+g30c954cf/run-cache/workflow-36c43e4b2e97bd084de2a8eaf5eb4faa
+Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev229+gcb58cc83/run-cache/workflow-36c43e4b2e97bd084de2a8eaf5eb4faa
 </pre></div></div>
 </div>
 <p>To find the task directory where the issue first surfaced, iterate through every task cache dir and check the results for <code class="docutils literal notranslate"><span class="pre">float(&quot;inf&quot;)</span></code>s</p>
