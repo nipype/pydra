@@ -654,6 +654,14 @@ class Result(ty.Generic[OutputsType]):
                     return cp.load(f)
         return None
 
+    @property
+    def task(self):
+        task_pkl = self.output_dir / "_task.pklz"
+        if not task_pkl.exists():
+            return None
+        with open(task_pkl, "rb") as f:
+            return cp.load(f)
+
 
 @attrs.define(kw_only=True)
 class RuntimeSpec:
