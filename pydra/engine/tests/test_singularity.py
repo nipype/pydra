@@ -4,7 +4,7 @@ import pytest
 from ..submitter import Submitter
 from pydra.design import shell, workflow
 from fileformats.generic import File
-from ..environments import Singularity
+from pydra.engine.environments import Singularity
 
 
 need_docker = pytest.mark.skipif(
@@ -369,11 +369,11 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
     with open(file, "w") as f:
         f.write("hello from pydra\n")
 
-    cmd = ["sed", "-is", "s/hello/hi/"]
+    cmd = "sed -is 's/hello/hi/'"
     image = "docker://alpine"
 
     Singu = shell.define(
-        " ".join(cmd),
+        cmd,
         inputs=[
             shell.arg(
                 name="orig_file",
