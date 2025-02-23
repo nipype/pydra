@@ -386,7 +386,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
         outputs=[
             shell.outarg(
                 name="out_file",
-                type=str,
+                type=File,
                 path_template="{orig_file}",
                 help="output file",
             ),

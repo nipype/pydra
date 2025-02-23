@@ -18,7 +18,7 @@ def makedir(path, name):
 
 
 def drop_stderr(dct: dict[str, ty.Any]):
-    return {k: v for k, v in dct.items() if k != "stderror"}
+    return {k: v for k, v in dct.items() if k != "stderr"}
 
 
 def test_native_1(tmp_path):
@@ -174,15 +174,11 @@ def test_singularity_1_subm(tmp_path, plugin):
         worker=plugin, environment=sing, cache_dir=newcache("shelly_sub")
     ) as sub:
         results = sub(shelly)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
     outputs = shelly(environment=sing, cache_dir=newcache("shelly_call"))
     # singularity gives info about cashed image in stderr
-    for key in ["stdout", "return_code"]:
-        assert (
-            outputs_dict[key]
-            == attrs_values(outputs)[key]
-            == attrs_values(results.outputs)[key]
-        )
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
 def shelly_with_input_factory(filename, executable) -> ShellDef:

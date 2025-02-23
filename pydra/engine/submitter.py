@@ -206,7 +206,7 @@ class Submitter:
 
             @workflow.define(outputs=output_types)
             def Split(defn: TaskDef, output_types: dict):
-                node = workflow.add(defn)
+                node = workflow.add(defn, environment=self.environment, hooks=hooks)
                 return tuple(getattr(node, o) for o in output_types)
 
             task_def = Split(defn=task_def, output_types=output_types)
