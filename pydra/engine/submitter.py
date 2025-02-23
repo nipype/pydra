@@ -211,16 +211,20 @@ class Submitter:
 
             task_def = Split(defn=task_def, output_types=output_types)
 
+            environment = None
         elif task_def._combiner:
             raise ValueError(
                 f"Task {self} is marked for combining, but not splitting. "
                 "Use the `split` method to split the task before combining."
             )
+        else:
+            environment = self.environment
+
         task = Task(
             task_def,
             submitter=self,
             name="main",
-            environment=self.environment,
+            environment=environment,
             hooks=hooks,
         )
         try:

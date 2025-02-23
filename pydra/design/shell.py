@@ -357,6 +357,9 @@ def define(
             klass = None
             input_helps, output_helps = {}, {}
 
+            if isinstance(wrapped, list):
+                wrapped = " ".join(wrapped)
+
             executable, inferred_inputs, inferred_outputs = parse_command_line_template(
                 wrapped,
                 inputs=inputs,
