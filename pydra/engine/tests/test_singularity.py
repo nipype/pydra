@@ -184,7 +184,6 @@ def test_singularity_inputspec_1(plugin, tmp_path):
             shell.arg(
                 name="file",
                 type=File,
-                mandatory=True,
                 position=1,
                 argstr="",
                 help="input file",
@@ -378,7 +377,6 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                 position=1,
                 argstr="",
                 help="orig file",
-                mandatory=True,
                 copyfile=True,
             ),
             shell.arg(
@@ -426,7 +424,6 @@ def test_singularity_inputspec_state_1(tmp_path):
             shell.arg(
                 name="file",
                 type=File,
-                mandatory=True,
                 position=1,
                 argstr="",
                 help="input file",
@@ -464,7 +461,6 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
             shell.arg(
                 name="file",
                 type=File,
-                mandatory=True,
                 position=1,
                 argstr="",
                 help="input file",
@@ -495,7 +491,6 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
             shell.arg(
                 name="file",
                 type=File,
-                mandatory=True,
                 position=1,
                 argstr="",
                 help="input file",
@@ -536,7 +531,6 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
             shell.arg(
                 name="file",
                 type=File,
-                mandatory=True,
                 position=1,
                 argstr="",
                 help="input file",
@@ -580,7 +574,6 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
             shell.arg(
                 name="file",
                 type=File,
-                mandatory=True,
                 position=1,
                 argstr="",
                 help="input file",
