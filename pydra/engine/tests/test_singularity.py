@@ -46,7 +46,8 @@ def test_singularity_2_nosubm(tmp_path):
     assert singu.cmdline == " ".join(cmd)
 
     outputs = singu(
-        Singularity(image=image),
+        environment=Singularity(image=image),
+        cache_dir=tmp_path,
     )
     assert outputs.stdout.strip() == " ".join(cmd[1:])
     assert outputs.return_code == 0
@@ -379,7 +380,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                 position=1,
                 argstr="",
                 help="orig file",
-                copyfile=True,
+                copy_mode=File.CopyMode.copy,
             ),
         ],
         outputs=[

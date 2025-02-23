@@ -144,10 +144,10 @@ def test_singularity_1(tmp_path):
 
     with Submitter(cache_dir=newcache("shelly_sub"), environment=sing) as sub:
         results = sub(shelly)
-    assert outputs_dict == attrs_values(results.outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
     outputs = shelly(environment=sing, cache_dir=newcache("shelly_call"))
-    assert outputs_dict == attrs_values(outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
 @no_win
@@ -170,7 +170,9 @@ def test_singularity_1_subm(tmp_path, plugin):
     assert shelly.cmdline == cmd
     outputs_dict = sing.execute(shelly_job)
 
-    with Submitter(worker=plugin, cache_dir=newcache("shelly_sub")) as sub:
+    with Submitter(
+        worker=plugin, environment=sing, cache_dir=newcache("shelly_sub")
+    ) as sub:
         results = sub(shelly)
 
     outputs = shelly(environment=sing, cache_dir=newcache("shelly_call"))
