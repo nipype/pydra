@@ -1,6 +1,5 @@
 from pathlib import Path
 import typing as ty
-import attrs
 from ..environments import Native, Docker, Singularity
 from ..submitter import Submitter
 from fileformats.generic import File
@@ -77,7 +76,10 @@ def test_docker_1(tmp_path):
     assert attrs_values(result.outputs) == outputs_dict
 
     outputs = shelly(environment=docker, cache_dir=newcache("shelly_call"))
-    assert outputs_dict == attrs_values(outputs)
+    # If busybox isn't found locally, then the stderr will have the download progress from
+    # the Docker auto-pull in it
+    for key in ["stdout", "return_code"]:
+        assert outputs_dict[key] == attrs_values(outputs)[key]
 
 
 @no_win
@@ -127,14 +129,15 @@ def test_singularity_1(tmp_path):
 
     cmd = "whoami"
     sing = Singularity(image="docker://alpine")
-    shell_def = shell.define(cmd)
-    shelly = Task(
-        definition=shell_def,
+    Shelly = shell.define(cmd)
+    shelly = Shelly()
+    shelly_job = Task(
+        definition=shelly,
         submitter=Submitter(cache_dir=newcache("shelly")),
         name="shelly",
     )
-    assert shell_def.cmdline == cmd
-    outputs_dict = sing.execute(shelly)
+    assert shelly.cmdline == cmd
+    outputs_dict = sing.execute(shelly_job)
 
     with Submitter(cache_dir=newcache("shelly_sub"), environment=sing) as sub:
         results = sub(shelly)
@@ -154,24 +157,23 @@ def test_singularity_1_subm(tmp_path, plugin):
 
     cmd = "whoami"
     sing = Singularity(image="docker://alpine")
-    shell_def = shell.define(cmd)
-    shelly = Task(
-        definition=shell_def,
+    Shelly = shell.define(cmd)
+    shelly = Shelly()
+    shelly_job = Task(
+        definition=shelly,
         submitter=Submitter(cache_dir=newcache("shelly")),
         name="shelly",
     )
-    assert shell_def.cmdline == cmd
-    outputs_dict = sing.execute(shelly)
+    assert shelly.cmdline == cmd
+    outputs_dict = sing.execute(shelly_job)
 
     with Submitter(worker=plugin) as sub:
         results = sub(shelly)
     assert outputs_dict == attrs_values(results.outputs)
 
     outputs = shelly(environment=sing, cache_dir=newcache("shelly_call"))
-    for key in [
-        "stdout",
-        "return_code",
-    ]:  # singularity gives info about cashed image in stderr
+    # singularity gives info about cashed image in stderr
+    for key in ["stdout", "return_code"]:
         assert outputs_dict[key] == attrs_values(outputs)[key]
 
 
