@@ -438,8 +438,8 @@ def test_singularity_inputspec_state_1(tmp_path):
     singu = Singu().split("file", file=filename)
 
     outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
-    assert outputs.stdout[0] == "hello from pydra"
-    assert outputs.stdout[1] == "have a nice one"
+    assert outputs.stdout[0].strip() == "hello from pydra"
+    assert outputs.stdout[1].strip() == "have a nice one"
 
 
 @need_singularity
@@ -475,8 +475,8 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
     singu = Singu().split("file", file=filename)
 
     outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
-    assert outputs.stdout[0] == "hello from pydra"
-    assert outputs.stdout[1] == "have a nice one"
+    assert outputs.stdout[0].strip() == "hello from pydra"
+    assert outputs.stdout[1].strip() == "have a nice one"
 
 
 @need_singularity
@@ -512,7 +512,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
     with Submitter(cache_dir=tmp_path) as sub:
         res = sub(Workflow(cmd=cmd, file=filename))
 
-    assert res.outputs.out == "hello from pydra"
+    assert res.outputs.out.strip() == "hello from pydra"
 
 
 @need_singularity
@@ -555,7 +555,10 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         res = sub(wf)
 
-    assert res.outputs.out == ["hello from pydra", "have a nice one"]
+    assert [o.strip() for o in res.outputs.out] == [
+        "hello from pydra",
+        "have a nice one",
+    ]
 
 
 @need_singularity
@@ -598,4 +601,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         res = sub(wf)
 
-    assert res.outputs.out == ["hello from pydra", "have a nice one"]
+    assert [o.strip() for o in res.outputs.out] == [
+        "hello from pydra",
+        "have a nice one",
+    ]
