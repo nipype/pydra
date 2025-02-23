@@ -178,6 +178,7 @@ class TaskDef(ty.Generic[OutputsType]):
 
     def __call__(
         self,
+        /,
         cache_dir: os.PathLike | None = None,
         worker: "str | ty.Type[Worker] | Worker" = "debug",
         environment: "Environment | None" = None,
