@@ -86,7 +86,7 @@ def test_singularity_2a(plugin, tmp_path):
     assert singu.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
     with Submitter(
-        worker=plugin,
+        worker=plugin, environment=Singularity(image=image), cache_dir=tmp_path
     ) as sub:
         res = sub(singu)
 
@@ -129,7 +129,7 @@ def test_singularity_st_2(tmp_path, n):
     Singu = shell.define("echo")
     singu = Singu().split("args", args=args_n)
     with Submitter(
-        plugin="slurm",
+        plugin="slurm", environment=Singularity(image=image), cache_dir=tmp_path
     ) as sub:
         res = sub(singu)
 
