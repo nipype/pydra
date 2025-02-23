@@ -125,7 +125,7 @@ def test_singularity_1(tmp_path):
     def newcache(x):
         makedir(tmp_path, x)
 
-    cmd = ["whoami"]
+    cmd = "whoami"
     sing = Singularity(image="docker://alpine")
     shell_def = shell.define(cmd)
     shelly = Task(
@@ -133,7 +133,7 @@ def test_singularity_1(tmp_path):
         submitter=Submitter(cache_dir=newcache("shelly")),
         name="shelly",
     )
-    assert shell_def.cmdline == " ".join(cmd)
+    assert shell_def.cmdline == cmd
     outputs_dict = sing.execute(shelly)
 
     with Submitter(cache_dir=newcache("shelly_sub"), environment=sing) as sub:
@@ -152,7 +152,7 @@ def test_singularity_1_subm(tmp_path, plugin):
     def newcache(x):
         makedir(tmp_path, x)
 
-    cmd = ["whoami"]
+    cmd = "whoami"
     sing = Singularity(image="docker://alpine")
     shell_def = shell.define(cmd)
     shelly = Task(
@@ -160,7 +160,7 @@ def test_singularity_1_subm(tmp_path, plugin):
         submitter=Submitter(cache_dir=newcache("shelly")),
         name="shelly",
     )
-    assert shell_def.cmdline == " ".join(cmd)
+    assert shell_def.cmdline == cmd
     outputs_dict = sing.execute(shelly)
 
     with Submitter(worker=plugin) as sub:
