@@ -103,7 +103,7 @@ def test_singularity_st_1(plugin, tmp_path):
     """commands without arguments in container
     splitter = executable
     """
-    cmd = ["pwd", "ls"]
+    cmd = ["whoami", "pwd", "ls"]
     image = "docker://alpine"
     Singu = shell.define("dummy")
     singu = Singu().split("executable", executable=cmd)
@@ -111,9 +111,10 @@ def test_singularity_st_1(plugin, tmp_path):
     outputs = singu(
         plugin=plugin, environment=Singularity(image=image), cache_dir=tmp_path
     )
-    assert outputs.stdout[0] == "/mnt/pydra"
-    assert outputs.stdout[1] == ""
-    assert outputs.return_code == [0, 0]
+    assert outputs.stdout[0] == "root"
+    assert outputs.stdout[1] == "/mnt/pydra"
+    assert outputs.stdout[2] == ""
+    assert outputs.return_code == [0, 0, 0]
 
 
 @need_singularity
@@ -372,7 +373,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
     image = "docker://alpine"
 
     Singu = shell.define(
-        cmd,
+        " ".join(cmd),
         inputs=[
             shell.arg(
                 name="orig_file",
