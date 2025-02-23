@@ -73,13 +73,16 @@ def test_docker_1(tmp_path):
 
     with Submitter(cache_dir=newcache("shelly_sub"), environment=docker) as sub:
         result = sub(shelly)
-    assert attrs_values(result.outputs) == outputs_dict
 
     outputs = shelly(environment=docker, cache_dir=newcache("shelly_call"))
     # If busybox isn't found locally, then the stderr will have the download progress from
     # the Docker auto-pull in it
     for key in ["stdout", "return_code"]:
-        assert outputs_dict[key] == attrs_values(outputs)[key]
+        assert (
+            outputs_dict[key]
+            == attrs_values(outputs)[key]
+            == attrs_values(result.outputs)[key]
+        )
 
 
 @no_win
@@ -167,14 +170,17 @@ def test_singularity_1_subm(tmp_path, plugin):
     assert shelly.cmdline == cmd
     outputs_dict = sing.execute(shelly_job)
 
-    with Submitter(worker=plugin) as sub:
+    with Submitter(worker=plugin, cache_dir=newcache("shelly_sub")) as sub:
         results = sub(shelly)
-    assert outputs_dict == attrs_values(results.outputs)
 
     outputs = shelly(environment=sing, cache_dir=newcache("shelly_call"))
     # singularity gives info about cashed image in stderr
     for key in ["stdout", "return_code"]:
-        assert outputs_dict[key] == attrs_values(outputs)[key]
+        assert (
+            outputs_dict[key]
+            == attrs_values(outputs)[key]
+            == attrs_values(results.outputs)[key]
+        )
 
 
 def shelly_with_input_factory(filename, executable) -> ShellDef:
