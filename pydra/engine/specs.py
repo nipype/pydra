@@ -521,7 +521,7 @@ class TaskDef(ty.Generic[OutputsType]):
             if is_lazy(value):
                 continue
 
-            if value is attrs.NOTHING:
+            if value is attrs.NOTHING and not getattr(field, "path_template", False):
                 errors.append(f"Mandatory field {field.name!r} is not set")
 
             # Collect alternative fields associated with this field.
@@ -1043,10 +1043,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
             output_dir = Path.cwd()
         self._check_resolved()
         inputs = attrs_values(self)
-        modified_inputs = template_update(self, output_dir=output_dir)
+        inputs.update(template_update(self, output_dir=output_dir))
         if input_updates:
             inputs.update(input_updates)
-        inputs.update(modified_inputs)
         pos_args = []  # list for (position, command arg)
         positions_provided = []
         for field in list_fields(self):

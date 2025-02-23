@@ -228,10 +228,15 @@ class outarg(arg, Out):
                 f"path_template ({value!r}) can only be provided when no default "
                 f"({self.default!r}) is provided"
             )
+        if value and not is_fileset_or_union(self.type):
+            raise ValueError(
+                f"path_template ({value!r}) can only be provided when type is a FileSet, "
+                f"or union thereof, not {self.type!r}"
+            )
 
     @keep_extension.validator
     def _validate_keep_extension(self, attribute, value):
-        if value and self.path_template is not None:
+        if value and self.path_template is None:
             raise ValueError(
                 f"keep_extension ({value!r}) can only be provided when path_template "
                 f"is provided"

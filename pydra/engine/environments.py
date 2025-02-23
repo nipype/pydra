@@ -10,7 +10,6 @@ from pydra.utils.typing import TypeParser
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
     from pydra.engine.specs import ShellDef
-    from pydra.design import shell
 
 
 class Environment:
@@ -94,7 +93,7 @@ class Container(Environment):
         return f"{loc_abs}:{self.root}{loc_abs}:{mode}"
 
     def _get_bindings(
-        self, definition: "ShellDef", root: str | None = None
+        self, task: "Task", root: str | None = None
     ) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[Path, ...]]]:
         """Return bindings necessary to run task in an alternative root.
 
@@ -111,27 +110,32 @@ class Container(Environment):
         bindings: dict
           Mapping from paths in the host environment to the target environment
         """
+        from pydra.design import shell
+
         bindings: dict[str, tuple[str, str]] = {}
         input_updates: dict[str, tuple[Path, ...]] = {}
         if root is None:
             return bindings
         fld: shell.arg
-        for fld in list_fields(definition):
+        for fld in list_fields(task.definition):
             if TypeParser.contains_type(FileSet, fld.type):
-                fileset: FileSet | None = definition[fld.name]
-                if fileset is None:
+                fileset: FileSet | None = task.inputs[fld.name]
+                if not fileset:
                     continue
                 if not isinstance(fileset, (os.PathLike, FileSet)):
                     raise NotImplementedError(
-                        "Generating environment bindings for nested FileSets is not "
-                        "supported yet"
+                        f"No support for generating bindings for {type(fileset)} types "
+                        f"({fileset})"
                     )
                 copy = fld.copy_mode == FileSet.CopyMode.copy
 
                 host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
 
                 # Default to mounting paths as read-only, but respect existing modes
-                bindings[host_path] = (env_path, "rw" if copy else "ro")
+                bindings[host_path] = (
+                    env_path,
+                    "rw" if copy or isinstance(fld, shell.outarg) else "ro",
+                )
 
                 # Provide updated in-container paths to the command to be run. If a
                 # fs-object, which resolves to a single path, just pass in the name of
@@ -152,9 +156,7 @@ class Docker(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, input_updates = self._get_bindings(
-            definition=task.definition, root=self.root
-        )
+        mounts, input_updates = self._get_bindings(task=task, root=self.root)
 
         docker_args = [
             "docker",
@@ -193,9 +195,7 @@ class Singularity(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, input_updates = self._get_bindings(
-            definition=task.definition, root=self.root
-        )
+        mounts, input_updates = self._get_bindings(task=task, root=self.root)
 
         # todo adding xargsy etc
         singularity_args = [

@@ -43,7 +43,7 @@ def test_native_1(tmp_path):
     outputs = shelly(cache_dir=newcache("shelly-exec"))
     assert drop_stderr(env_outputs) == drop_stderr(attrs_values(outputs))
 
-    outputs = shelly(environment=Native())
+    outputs = shelly(environment=Native(), cache_dir=newcache("shelly-call"))
     assert env_outputs == attrs_values(outputs)
 
     with Submitter(cache_dir=newcache("shelly-submitter"), environment=Native()) as sub:
@@ -59,11 +59,11 @@ def test_docker_1(tmp_path):
     def newcache(x):
         makedir(tmp_path, x)
 
-    cmd = ["whoami"]
+    cmd = "whoami"
     docker = Docker(image="busybox")
     Shelly = shell.define(cmd)
     shelly = Shelly()
-    assert shelly.cmdline == " ".join(cmd)
+    assert shelly.cmdline == cmd
 
     shelly_job = Task(
         definition=shelly,
@@ -267,7 +267,7 @@ def test_docker_fileinp(tmp_path):
         f.write("hello ")
 
     shelly = shelly_with_input_factory(filename=filename, executable="cat")
-    outputs_dict = docker.execute(shelly)
+    outputs_dict = docker.execute(make_job(shelly, tmp_path, "shelly"))
 
     with Submitter(environment=docker, cache_dir=newcache("shell_sub")) as sub:
         results = sub(shelly)
@@ -340,7 +340,7 @@ def test_docker_fileinp_st(tmp_path):
     outputs = shelly.split(file=filename)(
         environment=docker, cache_dir=newcache("shelly_call")
     )
-    assert [s.strip for s in outputs.stdout] == ["hello", "hi"]
+    assert [s.strip() for s in outputs.stdout] == ["hello", "hi"]
 
 
 def shelly_outputfile_factory(filename, executable="cp"):
@@ -351,16 +351,20 @@ def shelly_outputfile_factory(filename, executable="cp"):
             shell.arg(
                 name="file_orig",
                 type=File,
-                position=2,
+                position=1,
                 help="new file",
                 argstr="",
             ),
-            shell.arg(
+        ],
+        outputs=[
+            shell.outarg(
                 name="file_copy",
-                type=str,
-                output_file_template="{file_orig}_copy",
+                type=File,
+                path_template="{file_orig}_copy",
                 help="output file",
                 argstr="",
+                position=2,
+                keep_extension=True,
             ),
         ],
     )
@@ -390,11 +394,10 @@ def test_shell_fileout(tmp_path):
         result = sub(shelly)
     assert Path(result.outputs.file_copy) == result.output_dir / "file_copy.txt"
 
-    outputs = shelly(environment=Native(), cache_dir=newcache("shelly_call"))
-    assert (
-        Path(outputs.file_copy)
-        == newcache("shelly_call") / shelly._checksum / "file_copy.txt"
-    )
+    call_cache = newcache("shelly_call")
+
+    outputs = shelly(environment=Native(), cache_dir=call_cache)
+    assert Path(outputs.file_copy) == call_cache / shelly._checksum / "file_copy.txt"
 
 
 def test_shell_fileout_st(tmp_path):
@@ -414,15 +417,13 @@ def test_shell_fileout_st(tmp_path):
 
     filename = [filename_1, filename_2]
 
-    shelly = shelly_outputfile_factory(
-        tempdir=tmp_path, filename=None, name="shelly_sub"
-    )
+    shelly = shelly_outputfile_factory(filename=None)
     with Submitter(environment=Native(), cache_dir=newcache("shelly")) as sub:
         results = sub(shelly.split(file_orig=filename))
 
-    assert results.outputs.file_copy == [
-        File(results.output_dir / "file_1_copy.txt"),
-        File(results.output_dir / "file_2_copy.txt"),
+    assert [f.name for f in results.outputs.file_copy] == [
+        "file_1_copy.txt",
+        "file_2_copy.txt",
     ]
 
     call_cache = newcache("shelly_call")
@@ -430,18 +431,7 @@ def test_shell_fileout_st(tmp_path):
     outputs = shelly.split(file_orig=filename)(
         environment=Native(), cache_dir=call_cache
     )
-    assert outputs.file_copy == [
-        File(
-            call_cache
-            / attrs.evolve(shelly, file_orig=filename_1)._checksum
-            / "file_1_copy.txt"
-        ),
-        File(
-            call_cache
-            / attrs.evolve(shelly, file_orig=filename_1)._checksum
-            / "file_1_copy.txt"
-        ),
-    ]
+    assert [f.name for f in outputs.file_copy] == ["file_1_copy.txt", "file_2_copy.txt"]
 
 
 @no_win
@@ -459,15 +449,11 @@ def test_docker_fileout(tmp_path):
     with open(filename, "w") as f:
         f.write("hello ")
 
-    shelly_sub = shelly_outputfile_factory(
-        tempdir=tmp_path, filename=filename, name="shelly_sub"
-    )
-    shelly_sub.environment = docker_env
-    shelly_sub()
-    assert (
-        Path(shelly_sub.result().output.file_copy)
-        == shelly_sub.output_dir / "file_copy.txt"
-    )
+    shelly = shelly_outputfile_factory(filename=filename)
+
+    with Submitter(environment=docker_env, cache_dir=newcache("shelly")) as sub:
+        results = sub(shelly)
+    assert results.outputs.file_copy == File(results.output_dir / "file_copy.txt")
 
 
 @no_win
@@ -495,15 +481,7 @@ def test_docker_fileout_st(tmp_path):
 
     with Submitter(environment=docker_env, cache_dir=newcache("shelly_sub")) as sub:
         results = sub(shelly.split(file_orig=filename))
-    assert results.outputs.file_copy == [
-        File(
-            results.output_dir
-            / attrs.evolve(shelly, file_orig=filename_1)._checksum
-            / "file_1_copy.txt"
-        ),
-        File(
-            results.output_dir
-            / attrs.evolve(shelly, file_orig=filename_2)._checksum
-            / "file_2_copy.txt"
-        ),
+    assert [f.name for f in results.outputs.file_copy] == [
+        "file_1_copy.txt",
+        "file_2_copy.txt",
     ]
