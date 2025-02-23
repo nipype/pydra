@@ -109,7 +109,7 @@ jobs:
         run: pip install $ARCHIVE
 
       - name: Print version
-        run: python -c "import pydra; print(pydra.__version__)"
+        run: python -c "import pydra; print(pydra.engine.__version__)"
 
       - name: Install Pydra tests dependencies
         run: pip install pydra[test]
