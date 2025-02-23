@@ -802,7 +802,7 @@
             <span class="k">if</span> <span class="n">is_lazy</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
                 <span class="k">continue</span>
 
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="s2">&quot;path_template&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
                 <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mandatory field </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not set&quot;</span><span class="p">)</span>
 
             <span class="c1"># Collect alternative fields associated with this field.</span>
@@ -1324,10 +1324,9 @@
             <span class="n">output_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_resolved</span><span class="p">()</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">modified_inputs</span> <span class="o">=</span> <span class="n">template_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">)</span>
+        <span class="n">inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">template_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">input_updates</span><span class="p">:</span>
             <span class="n">inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">input_updates</span><span class="p">)</span>
-        <span class="n">inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">modified_inputs</span><span class="p">)</span>
         <span class="n">pos_args</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># list for (position, command arg)</span>
         <span class="n">positions_provided</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
