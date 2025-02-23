@@ -152,7 +152,9 @@ def test_singularity_outputspec_1(plugin, tmp_path):
 
     Singu = shell.define(
         " ".join(cmd),
-        inputs=[shell.arg(name="newfile", type=File, path_template="newfile_tmp.txt")],
+        outputs=[
+            shell.outarg(name="newfile", type=File, path_template="newfile_tmp.txt")
+        ],
     )
     singu = Singu()
 
@@ -379,7 +381,9 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                 help="orig file",
                 copyfile=True,
             ),
-            shell.arg(
+        ],
+        outputs=[
+            shell.outarg(
                 name="out_file",
                 type=str,
                 path_template="{orig_file}",
