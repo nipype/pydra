@@ -119,7 +119,7 @@ jobs:
 
       - name: Pytest
         run: |
-          pytest -vs -n auto --doctest-modules --pyargs pydra \
+          pytest -vs -n auto --doctest-modules \
                  --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
 
       - name: Upload to codecov
