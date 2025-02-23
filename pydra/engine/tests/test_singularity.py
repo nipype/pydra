@@ -2,10 +2,9 @@ import shutil
 import subprocess as sp
 import pytest
 import attr
-
-from ..task import ShellDef
 from ..submitter import Submitter
-from ..specs import ShellOutputs, ShellDef
+from ..specs import ShellOutputs
+from pydra.design import shell
 from fileformats.generic import File
 from ..environments import Singularity
 
@@ -30,19 +29,11 @@ def test_singularity_1_nosubm(tmp_path):
     """
     cmd = "pwd"
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu",
-        executable=cmd,
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    )
-    assert singu.environment.image == "docker://alpine"
-    assert isinstance(singu.environment, Singularity)
-    assert singu.cmdline == cmd
-
-    res = singu()
-    assert "/mnt/pydra" in res.output.stdout
-    assert res.output.return_code == 0
+    Singu = shell.define(cmd)
+    singu = Singu()
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert "/mnt/pydra" in outputs.stdout
+    assert outputs.return_code == 0
 
 
 @need_singularity
@@ -52,17 +43,16 @@ def test_singularity_2_nosubm(tmp_path):
     """
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu",
-        executable=cmd,
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    )
+    Singu = shell.define(" ".join(cmd))
+    singu = Singu()
     assert singu.cmdline == " ".join(cmd)
 
-    res = singu()
-    assert res.output.stdout.strip() == " ".join(cmd[1:])
-    assert res.output.return_code == 0
+    outputs = singu(
+        Singularity(image=image),
+        cache_dir=tmp_path,
+    )
+    assert outputs.stdout.strip() == " ".join(cmd[1:])
+    assert outputs.return_code == 0
 
 
 @need_singularity
@@ -72,20 +62,17 @@ def test_singularity_2(plugin, tmp_path):
     """
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
+    Singu = shell.define(" ".join(cmd))
+    singu = Singu()
 
-    singu = ShellDef(
-        name="singu",
-        executable=cmd,
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    )
     assert singu.cmdline == " ".join(cmd)
 
-    with Submitter(worker=plugin) as sub:
-        singu(submitter=sub)
-    res = singu.result()
-    assert res.output.stdout.strip() == " ".join(cmd[1:])
-    assert res.output.return_code == 0
+    with Submitter(
+        worker=plugin, environment=Singularity(image=image), cache_dir=tmp_path
+    ) as sub:
+        res = sub(singu)
+    assert res.outputs.stdout.strip() == " ".join(cmd[1:])
+    assert res.outputs.return_code == 0
 
 
 @need_singularity
@@ -97,20 +84,19 @@ def test_singularity_2a(plugin, tmp_path):
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu",
-        executable=cmd_exec,
-        args=cmd_args,
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    )
+    Singu = shell.define(cmd_exec)
+    singu = Singu(additional_args=cmd_args)
     assert singu.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
-    with Submitter(worker=plugin) as sub:
-        singu(submitter=sub)
-    res = singu.result()
-    assert res.output.stdout.strip() == " ".join(cmd_args)
-    assert res.output.return_code == 0
+    with Submitter(
+        worker=plugin,
+        environment=Singularity(image=image),
+        cache_dir=tmp_path,
+    ) as sub:
+        res = sub(singu)
+
+    assert res.outputs.stdout.strip() == " ".join(cmd_args)
+    assert res.outputs.return_code == 0
 
 
 # tests with State
@@ -123,15 +109,15 @@ def test_singularity_st_1(plugin, tmp_path):
     """
     cmd = ["pwd", "ls"]
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu", environment=Singularity(image=image), cache_dir=tmp_path
-    ).split("executable", executable=cmd)
-    assert singu.state.splitter == "singu.executable"
+    Singu = shell.define("dummy")
+    singu = Singu().split("executable", executable=cmd)
 
-    res = singu(plugin=plugin)
-    assert "/mnt/pydra" in res[0].output.stdout
-    assert res[1].output.stdout == ""
-    assert res[0].output.return_code == res[1].output.return_code == 0
+    outputs = singu(
+        plugin=plugin, environment=Singularity(image=image), cache_dir=tmp_path
+    )
+    assert outputs.stdout[0] == "/mnt/pydra"
+    assert outputs.stdout[1] == ""
+    assert outputs.return_code == [0, 0]
 
 
 @need_singularity
