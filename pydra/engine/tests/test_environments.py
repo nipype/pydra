@@ -1,7 +1,7 @@
 from pathlib import Path
 import typing as ty
-from ..environments import Native, Docker, Singularity
-from ..submitter import Submitter
+from pydra.engine.environments import Native, Docker, Singularity
+from pydra.engine.submitter import Submitter
 from fileformats.generic import File
 from pydra.design import shell
 from pydra.engine.core import Task
