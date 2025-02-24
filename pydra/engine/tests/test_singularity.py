@@ -375,7 +375,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
     @shell.define
     class Singu(ShellDef["Singu.Outputs"]):
 
-        executable = ["sed", "-is", "'s/hello/hi/'"]
+        executable = ["sed", "-is", "s/hello/hi/"]
 
         orig_file: File = shell.arg(
             position=1,

@@ -99,6 +99,8 @@ class Submitter:
         **kwargs,
     ):
 
+        from pydra.engine.environments import Native
+
         if worker is None:
             worker = "debug"
 
@@ -120,7 +122,7 @@ class Submitter:
 
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
-        self.environment = environment
+        self.environment = environment if environment is not None else Native()
         self.rerun = rerun
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
