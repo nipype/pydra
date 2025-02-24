@@ -13,6 +13,9 @@ from pydra.engine.specs import ShellDef
 from ..submitter import Submitter
 from pydra.design import workflow, python
 
+if ty.TYPE_CHECKING:
+    from pydra.engine.environments import Environment
+
 
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),
@@ -35,17 +38,28 @@ need_sge = pytest.mark.skipif(
 )
 
 
-def result_no_submitter(shell_def: ShellDef, plugin: str = None):
+def run_no_submitter(
+    shell_def: ShellDef,
+    cache_dir: Path | None = None,
+    plugin: str | None = None,
+    environment: "Environment | None" = None,
+):
     """helper function to return result when running without submitter"""
-    return shell_def(worker=plugin)
+    return shell_def(worker=plugin, cache_dir=cache_dir, environment=environment)
 
 
-def result_submitter(shell_def: ShellDef, plugin: str):
+def run_submitter(
+    shell_def: ShellDef,
+    cache_dir: Path | None = None,
+    plugin: str | None = None,
+    environment: "Environment | None" = None,
+):
     """helper function to return result when running with submitter
     with specific plugin
     """
-    with Submitter(worker=plugin) as sub:
-        return sub(shell_def)
+    with Submitter(worker=plugin, cache_dir=cache_dir, environment=environment) as sub:
+        results = sub(shell_def)
+    return results.outputs
 
 
 dot_check = sp.run(["which", "dot"], stdout=sp.PIPE, stderr=sp.PIPE)

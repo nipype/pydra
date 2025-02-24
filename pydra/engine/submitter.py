@@ -207,7 +207,9 @@ class Submitter:
             output_types = {o.name: list[o.type] for o in list_fields(task_def.Outputs)}
 
             @workflow.define(outputs=output_types)
-            def Split(defn: TaskDef, output_types: dict, environment: Environment):
+            def Split(
+                defn: TaskDef, output_types: dict, environment: Environment | None
+            ):
                 node = workflow.add(defn, environment=environment, hooks=hooks)
                 return tuple(getattr(node, o) for o in output_types)
 

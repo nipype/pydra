@@ -21,14 +21,14 @@ from pydra.utils.typing import (
     MultiOutputFile,
     MultiInputObj,
 )
-from .utils import result_no_submitter, result_submitter, no_win
+from .utils import run_no_submitter, run_submitter, no_win
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_1(plugin_dask_opt, results_function, tmp_path):
     """simple command, no arguments"""
     cmd = ["pwd"]
@@ -41,7 +41,7 @@ def test_shell_cmd_1(plugin_dask_opt, results_function, tmp_path):
     assert res.output.stderr == ""
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_1_strip(plugin, results_function, tmp_path):
     """simple command, no arguments
     strip option to remove \n at the end os stdout
@@ -57,7 +57,7 @@ def test_shell_cmd_1_strip(plugin, results_function, tmp_path):
     assert res.output.stderr == ""
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_2(plugin, results_function, tmp_path):
     """a command with arguments, cmd and args given as executable"""
     cmd = ["echo", "hail", "pydra"]
@@ -71,7 +71,7 @@ def test_shell_cmd_2(plugin, results_function, tmp_path):
     assert res.output.stderr == ""
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_2a(plugin, results_function, tmp_path):
     """a command with arguments, using executable and args"""
     cmd_exec = "echo"
@@ -88,7 +88,7 @@ def test_shell_cmd_2a(plugin, results_function, tmp_path):
     assert res.output.stderr == ""
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_2b(plugin, results_function, tmp_path):
     """a command with arguments, using  strings executable and args"""
     cmd_exec = "echo"
@@ -276,7 +276,7 @@ def test_wf_shell_cmd_1(plugin, tmp_path):
 # customised input definition
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_1(plugin, results_function, tmp_path):
     """a command with executable, args and one command opt,
     using a customized input_spec to add the opt to the command
@@ -316,7 +316,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function, tmp_path):
     assert res.output.stdout == "hello from pydra"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
     """a command with executable, args and two command options,
     using a customized input_spec to add the opt to the command
@@ -364,7 +364,7 @@ def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
     assert res.output.stdout == "HELLO from pydra"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
@@ -402,7 +402,7 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
     assert res.output.stdout == "HELLO\n"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided
     using shorter syntax for input definition (no attr.ib)
@@ -435,7 +435,7 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
     assert res.output.stdout == "HELLO\n"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_3b(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided after init"""
     cmd_exec = "echo"
@@ -502,7 +502,7 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmp_path):
     assert "mandatory" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_3c(plugin, results_function, tmp_path):
     """mandatory=False, so tasks runs fine even without the value"""
     cmd_exec = "echo"
@@ -537,7 +537,7 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmp_path):
     assert res.output.stdout == "\n"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
@@ -568,7 +568,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
     assert res.output.stdout == "Hello\n"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided
     using shorter syntax for input definition (no attr.ib)
@@ -592,7 +592,7 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
     assert res.output.stdout == "Hello\n"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_4b(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
@@ -683,7 +683,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
         ShellDef(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
     """checking xor in metadata: task should work fine, since only one option is True"""
     cmd_exec = "ls"
@@ -781,7 +781,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
     assert "is mutually exclusive" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
     """checking requires in metadata:
     the required field is set in the init, so the task works fine
@@ -869,7 +869,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
     assert "requires" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
     """checking requires in metadata:
     the required field set after the init
@@ -918,7 +918,7 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
     results_function(shelly, plugin)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
     """
     providing output name using input_spec,
@@ -961,7 +961,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
     assert out1.name == "newfile_tmp.txt"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
     """
     providing output name using input_spec,
@@ -1004,7 +1004,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
     assert res.output.out1_changed.fspath.name == "newfile_tmp.txt"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
     """
     providing new file and output name using input_spec,
@@ -1049,7 +1049,7 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
     assert res.output.out1.fspath.exists()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
     """
     providing output name using input_spec,
@@ -1090,7 +1090,7 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
     assert res.output.out1.fspath.name == "newfile_tmp.txt"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
     """
     providing new file and output name using input_spec,
@@ -1147,7 +1147,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
     assert res.output.out1.fspath.exists()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
     """
     providing new file and output name using input_spec,
@@ -1204,7 +1204,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
     assert res.output.out1.fspath.exists()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
     """
     providing output name using input_spec (output_file_template in metadata),
@@ -1257,7 +1257,7 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
     assert shelly.output_dir == res.output.file_copy.fspath.parent
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter])
 def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
     """
     providing output name using input_spec (output_file_template in metadata),
@@ -1306,7 +1306,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
     assert shelly.output_dir == res.output.file_copy.fspath.parent
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
     """
     providing output name using input_spec (output_file_template in metadata)
@@ -1356,7 +1356,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
     assert res.output.file_copy.fspath.name == "file_copy"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
     """
     providing output name using input_spec (output_file_template in metadata)
@@ -1408,7 +1408,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
     assert res.output.file_copy.fspath.parent == shelly.output_dir
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
     """
     providing output name explicitly by manually setting value in input_spec
@@ -1462,7 +1462,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
     assert shelly.output_dir == res.output.file_copy.fspath.parent
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_10(plugin, results_function, tmp_path):
     """using input_spec, providing list of files as an input"""
 
@@ -1605,7 +1605,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
         assert out_file.fspath.name == "test1" or out_file.fspath.name == "test2"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
     """
     providing output name using input_spec
@@ -1708,7 +1708,7 @@ def test_shell_cmd_inputspec_with_iterable():
         assert task.cmdline == "test --in1 0 1 2 --in2 bar --in2 foo"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=True to the file-input from input_spec
@@ -1770,7 +1770,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
         assert "hello from pydra\n" == f.read()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=False to the File-input from input_spec
@@ -1850,7 +1850,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
     "if we allow for this orig_file is changing, so does checksum,"
     " and the results can't be found"
 )
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
     """shelltask changes a file in place,
     copyfile is None for the file-input, so original filed is changed
@@ -1907,7 +1907,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
         assert "hi from pydra\n" == f.read()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
     """adding state to the input from input_spec"""
     cmd_exec = "echo"
@@ -1986,7 +1986,7 @@ def test_shell_cmd_inputspec_typeval_2():
         ShellDef(executable=cmd_exec, text="hello", input_spec=my_input_spec)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
     """adding state to the input from input_spec
     using shorter syntax for input_spec (without default)
@@ -2018,7 +2018,7 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
     assert res[1].output.stdout == "hi\n"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
     """
     adding splitter to input that is used in the output_file_tamplate
@@ -2057,7 +2057,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
         assert res[i].output.out1.fspath.parent == shelly.output_dir[i]
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
     """adding state to the File-input from input_spec"""
 
@@ -2104,7 +2104,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
     assert res[1].output.stdout == "have a nice one"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path):
     """adding state to the File-input from input_spec"""
 
@@ -2654,7 +2654,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
 # customised output definition
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_1(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output, providing specific pathname
@@ -2674,7 +2674,7 @@ def test_shell_cmd_outputspec_1(plugin, results_function, tmp_path):
     assert res.output.newfile.fspath.exists()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_1a(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output, providing specific pathname
@@ -2714,7 +2714,7 @@ def test_shell_cmd_outputspec_1b_exception(plugin, tmp_path):
     assert "does not exist" in str(exinfo.value)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_2(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output,
@@ -2756,7 +2756,7 @@ def test_shell_cmd_outputspec_2a_exception(plugin, tmp_path):
     assert "no file matches" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_3(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output,
@@ -2779,7 +2779,7 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmp_path):
     assert all([file.fspath.exists() for file in res.output.newfile])
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output,
@@ -2818,7 +2818,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
     )
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_5a(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output,
@@ -2874,7 +2874,7 @@ def test_shell_cmd_outputspec_5b_error():
         shelly()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
     """
     Customised output definition defined as a class,
@@ -2904,7 +2904,7 @@ def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
     assert all([file.exists() for file in res.output.newfile])
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_6(plugin, results_function, tmp_path):
     """
     providing output name by providing output_file_template
@@ -2972,7 +2972,7 @@ def test_shell_cmd_outputspec_6a():
     assert res.output.out1.fspath.exists()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
     """
     providing output with output_file_name and using MultiOutputFile as a type.
@@ -3048,7 +3048,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
         assert file.fspath.exists()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
     """
     providing output with output_file_name and using MultiOutputFile as a type.
@@ -3126,7 +3126,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
     assert res.output.new_files.fspath.exists()
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
     """
     customised output_spec, adding int and str to the output,
@@ -3214,7 +3214,7 @@ def test_shell_cmd_outputspec_8b_error():
     assert "has to have a callable" in str(e.value)
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
     """
     customised output_spec, adding Directory to the output named by args
@@ -3257,7 +3257,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
         assert get_lowest_directory(arg_dir) == f"/dir{index+1}"
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
     """
     customised output_spec, adding Directory to the output named by input definition
@@ -3325,7 +3325,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
     )
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_state_outputspec_1(plugin, results_function, tmp_path):
     """
     providing output name by providing output_file_template

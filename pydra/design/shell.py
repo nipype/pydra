@@ -152,12 +152,27 @@ class out(Out):
         passed) or any input field name (a specific input field will be sent).
     """
 
-    callable: ty.Callable | None = None
+    callable: ty.Callable | None = attrs.field(default=None)
 
     def __attrs_post_init__(self):
         # Set type from return annotation of callable if not set
         if self.type is ty.Any and self.callable:
             self.type = ty.get_type_hints(self.callable).get("return", ty.Any)
+
+    @callable.validator
+    def _callable_validator(self, _, value):
+
+        if value:
+            if not callable(value):
+                raise ValueError(f"callable must be a function, not {value!r}")
+        elif not getattr(self, "path_template", None) and self.name not in [
+            "return_code",
+            "stdout",
+            "stderr",
+        ]:  # ShellOutputs.BASE_NAMES
+            raise ValueError(
+                "A shell output field must have either a callable or a path_template"
+            )
 
 
 @attrs.define(kw_only=True)

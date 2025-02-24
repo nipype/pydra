@@ -3,7 +3,7 @@ import subprocess as sp
 import attr
 import pytest
 from pydra.engine.helpers import attrs_values
-from .utils import result_no_submitter, result_submitter, no_win
+from .utils import run_no_submitter, run_submitter, no_win
 from pydra.design import workflow, boutiques, shell
 
 need_bosh_docker = pytest.mark.skipif(
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skip()
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir):
     """simple task to run fsl.bet using BoshTask"""
     btask = boutiques.define(zenodo_id="1482743")

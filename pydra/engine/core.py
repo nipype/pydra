@@ -44,7 +44,7 @@ from .helpers import (
 )
 from .helpers_file import copy_nested_files, template_update
 from pydra.utils.messenger import AuditFlag
-from pydra.engine.environments import Environment, Native
+from pydra.engine.environments import Environment
 
 logger = logging.getLogger("pydra")
 
@@ -134,7 +134,9 @@ class Task(ty.Generic[DefType]):
         # We save the submitter is the definition is a workflow otherwise we don't
         # so the task can be pickled
         self.submitter = submitter
-        self.environment = environment if environment is not None else Native()
+        self.environment = (
+            environment if environment is not None else submitter.environment
+        )
         self.name = name
         self.state_index = state_index
 
