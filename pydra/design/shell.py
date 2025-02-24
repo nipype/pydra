@@ -549,7 +549,7 @@ def parse_command_line_template(
     tokens = tokens[start_args_index:]
     if not tokens:
         return executable, inputs, outputs
-    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|=[^>]+)?)>"
+    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|(?:=|\$)[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"
     arg_re = re.compile(arg_pattern)
     opt_re = re.compile(opt_pattern)
@@ -644,6 +644,13 @@ def parse_command_line_template(
             elif "=" in name:
                 name, default = name.split("=")
                 kwds["default"] = eval(default)
+            elif "$" in name:
+                name, path_template = name.split("$")
+                kwds["path_template"] = path_template
+                if field_type is not outarg:
+                    raise ValueError(
+                        f"Path templates can only be used with output fields, not {token}"
+                    )
             if ":" in name:
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
@@ -661,7 +668,7 @@ def parse_command_line_template(
                 # Add field to outputs with the same name as the input
                 add_arg(name, out, {"type": type_, "callable": _InputPassThrough(name)})
             # If name contains a '.', treat it as a file template and strip it from the name
-            if field_type is outarg:
+            if field_type is outarg and "path_template" not in kwds:
                 path_template = name
                 if is_fileset_or_union(type_):
                     if ty.get_origin(type_):

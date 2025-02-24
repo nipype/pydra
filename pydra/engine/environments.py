@@ -92,7 +92,7 @@ class Container(Environment):
         loc_abs = Path(loc).absolute()
         return f"{loc_abs}:{self.root}{loc_abs}:{mode}"
 
-    def _get_bindings(
+    def get_bindings(
         self, task: "Task", root: str | None = None
     ) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[Path, ...]]]:
         """Return bindings necessary to run task in an alternative root.
@@ -156,13 +156,14 @@ class Docker(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, input_updates = self._get_bindings(task=task, root=self.root)
+        mounts, input_updates = self.get_bindings(task=task, root=self.root)
+
+        # add the cache directory to the list of mounts
+        mounts[task.cache_dir] = (f"{self.root}{task.cache_dir}", "rw")
 
         docker_args = [
             "docker",
             "run",
-            "-v",
-            self.bind(task.cache_dir, "rw"),
             *self.xargs,
         ]
         docker_args.extend(
@@ -195,7 +196,7 @@ class Singularity(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, input_updates = self._get_bindings(task=task, root=self.root)
+        mounts, input_updates = self.get_bindings(task=task, root=self.root)
 
         # todo adding xargsy etc
         singularity_args = [
