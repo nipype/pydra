@@ -4,6 +4,7 @@ from __future__ import annotations
 import typing as ty
 import re
 from collections import defaultdict
+import shlex
 import inspect
 from copy import copy
 import attrs
@@ -350,15 +351,12 @@ def define(
                 ShellDef, ShellOutputs, klass, arg, out, auto_attribs
             )
         else:
-            if not isinstance(wrapped, str):
+            if not isinstance(wrapped, (str, list)):
                 raise ValueError(
                     f"wrapped must be a class or a string, not {wrapped!r}"
                 )
             klass = None
             input_helps, output_helps = {}, {}
-
-            if isinstance(wrapped, list):
-                wrapped = " ".join(wrapped)
 
             executable, inferred_inputs, inferred_outputs = parse_command_line_template(
                 wrapped,
@@ -447,8 +445,10 @@ def define(
     # If wrapped is provided (i.e. this is not being used as a decorator), return the
     # interface class
     if wrapped is not None:
-        if not isinstance(wrapped, (type, str)):
-            raise ValueError(f"wrapped must be a class or a string, not {wrapped!r}")
+        if not isinstance(wrapped, (type, str, list)):
+            raise ValueError(
+                f"wrapped must be a class, a string or a list, not {wrapped!r}"
+            )
         return make(wrapped)
     return make
 
@@ -516,10 +516,13 @@ def parse_command_line_template(
     else:
         assert outputs is None
         outputs = {}
-    parts = template.split()
+    if isinstance(template, list):
+        tokens = template
+    else:
+        tokens = shlex.split(template)
     executable = []
     start_args_index = 0
-    for part in parts:
+    for part in tokens:
         if part.startswith("<") or part.startswith("-"):
             break
         executable.append(part)
@@ -528,10 +531,9 @@ def parse_command_line_template(
         raise ValueError(f"Found no executable in command line template: {template}")
     if len(executable) == 1:
         executable = executable[0]
-    args_str = " ".join(parts[start_args_index:])
-    if not args_str:
+    tokens = tokens[start_args_index:]
+    if not tokens:
         return executable, inputs, outputs
-    tokens = re.split(r"\s+", args_str.strip())
     arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|=[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"
     arg_re = re.compile(arg_pattern)
@@ -673,7 +675,7 @@ def parse_command_line_template(
             option = token
         else:
             raise ValueError(
-                f"Found unknown token '{token}' in command line template: {template}"
+                f"Found unknown token {token!r} in command line template: {template}"
             )
 
     remaining_pos = remaining_positions(arguments, len(arguments) + 1, 1)

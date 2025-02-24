@@ -1,7 +1,8 @@
 import shutil
 import subprocess as sp
 import pytest
-from ..submitter import Submitter
+from pydra.engine.submitter import Submitter
+from pydra.engine.specs import ShellDef, ShellOutputs
 from pydra.design import shell, workflow
 from fileformats.generic import File
 from pydra.engine.environments import Singularity
@@ -369,30 +370,25 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
     with open(file, "w") as f:
         f.write("hello from pydra\n")
 
-    cmd = "sed -is 's/hello/hi/'"
     image = "docker://alpine"
 
-    Singu = shell.define(
-        cmd,
-        inputs=[
-            shell.arg(
-                name="orig_file",
-                type=File,
-                position=1,
-                argstr="",
-                help="orig file",
-                copy_mode=File.CopyMode.copy,
-            ),
-        ],
-        outputs=[
-            shell.outarg(
-                name="out_file",
-                type=File,
+    @shell.define
+    class Singu(ShellDef["Singu.Outputs"]):
+
+        executable = ["sed", "-is", "'s/hello/hi/'"]
+
+        orig_file: File = shell.arg(
+            position=1,
+            argstr="",
+            help="orig file",
+            copy_mode=File.CopyMode.copy,
+        )
+
+        class Outputs(ShellOutputs):
+            out_file: File = shell.outarg(
                 path_template="{orig_file}",
                 help="output file",
-            ),
-        ],
-    )
+            )
 
     singu = Singu(orig_file=str(file))
 
