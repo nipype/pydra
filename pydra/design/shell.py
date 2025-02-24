@@ -4,7 +4,6 @@ from __future__ import annotations
 import typing as ty
 import re
 from collections import defaultdict
-import shlex
 import inspect
 from copy import copy
 import attrs
@@ -28,6 +27,7 @@ from pydra.utils.typing import (
     MultiInputObj,
     is_optional,
     optional_type,
+    non_optional_type,
 )
 
 if ty.TYPE_CHECKING:
@@ -117,8 +117,7 @@ class arg(Arg):
             tp = ty.get_args(self.type)[0]
         else:
             tp = self.type
-        if is_optional(tp):
-            tp = optional_type(tp)
+        tp = non_optional_type(tp)
         origin = ty.get_origin(tp) or tp
 
         if (
@@ -534,7 +533,7 @@ def parse_command_line_template(
     if isinstance(template, list):
         tokens = template
     else:
-        tokens = shlex.split(template)
+        tokens = template.split()
     executable = []
     start_args_index = 0
     for part in tokens:
@@ -643,7 +642,9 @@ def parse_command_line_template(
                 kwds["default"] = attrs.Factory(list)
             elif "=" in name:
                 name, default = name.split("=")
-                kwds["default"] = eval(default)
+                kwds["default"] = (
+                    default[1:-1] if re.match(r"('|\").*\1", default) else eval(default)
+                )
             elif "$" in name:
                 name, path_template = name.split("$")
                 kwds["path_template"] = path_template

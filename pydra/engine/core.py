@@ -773,11 +773,17 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         OutputType
             The outputs definition of the node
         """
+        from pydra.engine.environments import Native
+
         if name is None:
             name = type(task_def).__name__
         if name in self._nodes:
             raise ValueError(f"Node with name {name!r} already exists in the workflow")
-        if environment and task_def._task_type != "shell":
+        if (
+            environment
+            and not isinstance(environment, Native)
+            and task_def._task_type != "shell"
+        ):
             raise ValueError(
                 "Environments can only be used with 'shell' tasks not "
                 f"{task_def._task_type!r} tasks ({task_def!r})"

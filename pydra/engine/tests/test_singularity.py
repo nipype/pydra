@@ -390,7 +390,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                 help="output file",
             )
 
-    singu = Singu(orig_file=str(file))
+    singu = Singu(orig_file=file)
 
     outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
     assert outputs.stdout == ""

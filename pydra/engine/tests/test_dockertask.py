@@ -545,7 +545,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
 
     wf = Workflow().split(file=[file_1, file_2])
 
-    outputs = wf()
+    outputs = wf(cache_dir=tmp_path)
 
     assert outputs.out[0].strip() == "hello from pydra"
     assert outputs.out[1].strip() == "have a nice one"
@@ -589,5 +589,5 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
 
     wf = Workflow().split(file=[str(file_1), str(file_2)])
 
-    outputs = wf()
+    outputs = wf(cache_dir=tmp_path)
     assert outputs.out == ["hello from pydra", "have a nice one"]
