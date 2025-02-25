@@ -76,6 +76,7 @@ test = [
     "pytest-rerunfailures",
     "pytest-timeout",
     "codecov",
+    "fileformats-extras >=0.15a4",
     "numpy",
     "pyld",
     "psutil",
