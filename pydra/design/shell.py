@@ -27,7 +27,6 @@ from pydra.utils.typing import (
     MultiInputObj,
     is_optional,
     optional_type,
-    non_optional_type,
 )
 
 if ty.TYPE_CHECKING:
@@ -117,7 +116,8 @@ class arg(Arg):
             tp = ty.get_args(self.type)[0]
         else:
             tp = self.type
-        tp = non_optional_type(tp)
+        if is_optional(tp):
+            tp = optional_type(tp)
         origin = ty.get_origin(tp) or tp
 
         if (
