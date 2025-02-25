@@ -13,7 +13,7 @@ from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from pydra.engine.helpers import attrs_values
-from .base import (
+from pydra.design.base import (
     Arg,
     Out,
     check_explicit_fields_are_none,

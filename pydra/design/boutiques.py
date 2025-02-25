@@ -6,8 +6,8 @@ from pathlib import Path
 from functools import reduce
 from fileformats.generic import File
 from pydra.engine.specs import ShellDef
-from .base import make_task_def
-from . import shell
+from pydra.design.base import make_task_def
+from pydra.design import shell
 
 
 class arg(shell.arg):

@@ -2,7 +2,7 @@ import typing as ty
 import inspect
 from typing import dataclass_transform
 import attrs
-from .base import (
+from pydra.design.base import (
     Arg,
     Out,
     ensure_field_objects,
