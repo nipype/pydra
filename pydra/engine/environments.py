@@ -147,6 +147,10 @@ class Container(Environment):
                     if isinstance(fileset, os.PathLike)
                     else tuple(env_path / rel for rel in fileset.relative_fspaths)
                 )
+
+        # Add the cache directory to the list of mounts
+        bindings[task.cache_dir] = (f"{self.root}/{task.cache_dir}", "rw")
+
         return bindings, input_updates
 
 
@@ -157,9 +161,6 @@ class Docker(Container):
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
         mounts, input_updates = self.get_bindings(task=task, root=self.root)
-
-        # add the cache directory to the list of mounts
-        mounts[task.cache_dir] = (f"{self.root}{task.cache_dir}", "rw")
 
         docker_args = [
             "docker",
@@ -202,8 +203,6 @@ class Singularity(Container):
         singularity_args = [
             "singularity",
             "exec",
-            "-B",
-            self.bind(task.cache_dir, "rw"),
             *self.xargs,
         ]
         singularity_args.extend(

@@ -269,7 +269,7 @@ def _single_template_formatting(
     # inp_fields = set(re.findall(r"{(\w+)(?:\.\w+)?(?::[0-9.]+f)?}", template))
 
     if len(inp_fields) == 0:
-        return template
+        return Path(template)
 
     val_dict = {}
     file_template = None

@@ -131,7 +131,7 @@ def test_singularity_1(tmp_path):
         makedir(tmp_path, x)
 
     cmd = "whoami"
-    sing = Singularity(image="docker://alpine")
+    sing = Singularity(image="docker://alpine", xargs=["--fakeroot"])
     Shelly = shell.define(cmd)
     shelly = Shelly()
     shelly_job = Task(
@@ -159,7 +159,7 @@ def test_singularity_1_subm(tmp_path, plugin):
         makedir(tmp_path, x)
 
     cmd = "whoami"
-    sing = Singularity(image="docker://alpine")
+    sing = Singularity(image="docker://alpine", xargs=["--fakeroot"])
     Shelly = shell.define(cmd)
     shelly = Shelly()
     shelly_job = Task(

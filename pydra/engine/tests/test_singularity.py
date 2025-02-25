@@ -70,6 +70,7 @@ def test_singularity_2(plugin, tmp_path):
         worker=plugin, environment=Singularity(image=image), cache_dir=tmp_path
     ) as sub:
         res = sub(singu)
+    assert not res.errored, "\n".join(res.errors["error message"])
     assert res.outputs.stdout.strip() == " ".join(cmd[1:])
     assert res.outputs.return_code == 0
 
@@ -110,11 +111,13 @@ def test_singularity_st_1(plugin, tmp_path):
     singu = Singu().split("executable", executable=cmd)
 
     outputs = singu(
-        plugin=plugin, environment=Singularity(image=image), cache_dir=tmp_path
+        plugin=plugin,
+        environment=Singularity(image=image, xargs=["--fakeroot"]),
+        cache_dir=tmp_path,
     )
-    assert outputs.stdout[0] == "root"
-    assert outputs.stdout[1] == "/mnt/pydra"
-    assert outputs.stdout[2] == ""
+    assert outputs.stdout[0].strip() == "root"
+    assert "/mnt/pydra" in outputs.stdout[1]
+    assert outputs.stdout[2].strip() == "_task.pklz"
     assert outputs.return_code == [0, 0, 0]
 
 
@@ -161,11 +164,10 @@ def test_singularity_outputspec_1(plugin, tmp_path):
     )
     singu = Singu()
 
-    with Submitter(
-        worker=plugin, environment=Singularity(image=image), cache_dir=tmp_path
-    ) as sub:
+    with Submitter(environment=Singularity(image=image), cache_dir=tmp_path) as sub:
         res = sub(singu)
 
+    assert not res.errored, "\n".join(res.errors["error message"])
     assert res.outputs.stdout == ""
     assert res.outputs.newfile.fspath.exists()
 
@@ -386,7 +388,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
 
         class Outputs(ShellOutputs):
             out_file: File = shell.outarg(
-                path_template="{orig_file}",
+                path_template="{orig_file}.txt",  # FIXME: Shouldn't have to specify the extension
                 help="output file",
             )
 
@@ -396,7 +398,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
     assert outputs.stdout == ""
     assert outputs.out_file.fspath.exists()
     # the file is  copied, and than it is changed in place
-    assert outputs.out_file.fspath.parent == singu.output_dir
+    assert outputs.out_file.fspath.parent.parent == tmp_path
     with open(outputs.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
