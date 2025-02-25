@@ -44,7 +44,7 @@ from .helpers import (
 )
 from .helpers_file import copy_nested_files, template_update
 from pydra.utils.messenger import AuditFlag
-from pydra.engine.environments import Environment, Native
+from pydra.engine.environments import Environment
 
 logger = logging.getLogger("pydra")
 
@@ -134,7 +134,9 @@ class Task(ty.Generic[DefType]):
         # We save the submitter is the definition is a workflow otherwise we don't
         # so the task can be pickled
         self.submitter = submitter
-        self.environment = environment if environment is not None else Native()
+        self.environment = (
+            environment if environment is not None else submitter.environment
+        )
         self.name = name
         self.state_index = state_index
 
@@ -771,11 +773,17 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         OutputType
             The outputs definition of the node
         """
+        from pydra.engine.environments import Native
+
         if name is None:
             name = type(task_def).__name__
         if name in self._nodes:
             raise ValueError(f"Node with name {name!r} already exists in the workflow")
-        if environment and task_def._task_type != "shell":
+        if (
+            environment
+            and not isinstance(environment, Native)
+            and task_def._task_type != "shell"
+        ):
             raise ValueError(
                 "Environments can only be used with 'shell' tasks not "
                 f"{task_def._task_type!r} tasks ({task_def!r})"

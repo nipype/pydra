@@ -178,6 +178,7 @@ class TaskDef(ty.Generic[OutputsType]):
 
     def __call__(
         self,
+        /,
         cache_dir: os.PathLike | None = None,
         worker: "str | ty.Type[Worker] | Worker" = "debug",
         environment: "Environment | None" = None,
@@ -521,7 +522,7 @@ class TaskDef(ty.Generic[OutputsType]):
             if is_lazy(value):
                 continue
 
-            if value is attrs.NOTHING:
+            if value is attrs.NOTHING and not getattr(field, "path_template", False):
                 errors.append(f"Mandatory field {field.name!r} is not set")
 
             # Collect alternative fields associated with this field.
@@ -653,6 +654,14 @@ class Result(ty.Generic[OutputsType]):
                 with open(error_file, "rb") as f:
                     return cp.load(f)
         return None
+
+    @property
+    def task(self):
+        task_pkl = self.output_dir / "_task.pklz"
+        if not task_pkl.exists():
+            return None
+        with open(task_pkl, "rb") as f:
+            return cp.load(f)
 
 
 @attrs.define(kw_only=True)
@@ -937,48 +946,46 @@ class ShellOutputs(TaskOutputs):
 
         if not cls._required_fields_satisfied(fld, task.definition):
             return None
-        elif isinstance(fld, shell.outarg) and fld.path_template:
+        if isinstance(fld, shell.outarg) and fld.path_template:
             return template_update_single(
                 fld,
                 definition=task.definition,
                 output_dir=task.output_dir,
                 spec_type="output",
             )
-        elif fld.callable:
-            callable_ = fld.callable
-            if isinstance(fld.callable, staticmethod):
-                # In case callable is defined as a static method,
-                # retrieve the function wrapped in the descriptor.
-                callable_ = fld.callable.__func__
-            call_args = inspect.getfullargspec(callable_)
-            call_args_val = {}
-            for argnm in call_args.args:
-                if argnm == "field":
-                    call_args_val[argnm] = fld
-                elif argnm == "output_dir":
-                    call_args_val[argnm] = task.output_dir
-                elif argnm == "inputs":
-                    call_args_val[argnm] = task.inputs
-                elif argnm == "stdout":
-                    call_args_val[argnm] = task.return_values["stdout"]
-                elif argnm == "stderr":
-                    call_args_val[argnm] = task.return_values["stderr"]
-                else:
-                    try:
-                        call_args_val[argnm] = task.inputs[argnm]
-                    except KeyError as e:
-                        e.add_note(
-                            f"arguments of the callable function from {fld.name} "
-                            f"has to be in inputs or be field or output_dir, "
-                            f"but {argnm} is used"
-                        )
-                        raise
-            return callable_(**call_args_val)
-        else:
-            raise Exception(
-                f"Metadata for '{fld.name}', does not not contain any of the required fields "
-                f'("callable", "output_file_template" or "value"): {fld}.'
-            )
+        assert fld.callable, (
+            f"Output field '{fld.name}', does not not contain any of the required fields "
+            f'("callable", "output_file_template" or "value"): {fld}.'
+        )
+        callable_ = fld.callable
+        if isinstance(fld.callable, staticmethod):
+            # In case callable is defined as a static method,
+            # retrieve the function wrapped in the descriptor.
+            callable_ = fld.callable.__func__
+        call_args = inspect.getfullargspec(callable_)
+        call_args_val = {}
+        for argnm in call_args.args:
+            if argnm == "field":
+                call_args_val[argnm] = fld
+            elif argnm == "output_dir":
+                call_args_val[argnm] = task.output_dir
+            elif argnm == "inputs":
+                call_args_val[argnm] = task.inputs
+            elif argnm == "stdout":
+                call_args_val[argnm] = task.return_values["stdout"]
+            elif argnm == "stderr":
+                call_args_val[argnm] = task.return_values["stderr"]
+            else:
+                try:
+                    call_args_val[argnm] = task.inputs[argnm]
+                except KeyError as e:
+                    e.add_note(
+                        f"arguments of the callable function from {fld.name} "
+                        f"has to be in inputs or be field or output_dir, "
+                        f"but {argnm} is used"
+                    )
+                    raise
+        return callable_(**call_args_val)
 
 
 ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
@@ -1035,10 +1042,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
             output_dir = Path.cwd()
         self._check_resolved()
         inputs = attrs_values(self)
-        modified_inputs = template_update(self, output_dir=output_dir)
+        inputs.update(template_update(self, output_dir=output_dir))
         if input_updates:
             inputs.update(input_updates)
-        inputs.update(modified_inputs)
         pos_args = []  # list for (position, command arg)
         positions_provided = []
         for field in list_fields(self):

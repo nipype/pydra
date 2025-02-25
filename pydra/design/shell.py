@@ -13,7 +13,7 @@ from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from pydra.engine.helpers import attrs_values
-from .base import (
+from pydra.design.base import (
     Arg,
     Out,
     check_explicit_fields_are_none,
@@ -151,12 +151,27 @@ class out(Out):
         passed) or any input field name (a specific input field will be sent).
     """
 
-    callable: ty.Callable | None = None
+    callable: ty.Callable | None = attrs.field(default=None)
 
     def __attrs_post_init__(self):
         # Set type from return annotation of callable if not set
         if self.type is ty.Any and self.callable:
             self.type = ty.get_type_hints(self.callable).get("return", ty.Any)
+
+    @callable.validator
+    def _callable_validator(self, _, value):
+
+        if value:
+            if not callable(value):
+                raise ValueError(f"callable must be a function, not {value!r}")
+        elif not getattr(self, "path_template", None) and self.name not in [
+            "return_code",
+            "stdout",
+            "stderr",
+        ]:  # ShellOutputs.BASE_NAMES
+            raise ValueError(
+                "A shell output field must have either a callable or a path_template"
+            )
 
 
 @attrs.define(kw_only=True)
@@ -228,10 +243,15 @@ class outarg(arg, Out):
                 f"path_template ({value!r}) can only be provided when no default "
                 f"({self.default!r}) is provided"
             )
+        if value and not (is_fileset_or_union(self.type) or self.type is ty.Any):
+            raise ValueError(
+                f"path_template ({value!r}) can only be provided when type is a FileSet, "
+                f"or union thereof, not {self.type!r}"
+            )
 
     @keep_extension.validator
     def _validate_keep_extension(self, attribute, value):
-        if value and self.path_template is not None:
+        if value and self.path_template is None:
             raise ValueError(
                 f"keep_extension ({value!r}) can only be provided when path_template "
                 f"is provided"
@@ -345,7 +365,7 @@ def define(
                 ShellDef, ShellOutputs, klass, arg, out, auto_attribs
             )
         else:
-            if not isinstance(wrapped, str):
+            if not isinstance(wrapped, (str, list)):
                 raise ValueError(
                     f"wrapped must be a class or a string, not {wrapped!r}"
                 )
@@ -439,8 +459,10 @@ def define(
     # If wrapped is provided (i.e. this is not being used as a decorator), return the
     # interface class
     if wrapped is not None:
-        if not isinstance(wrapped, (type, str)):
-            raise ValueError(f"wrapped must be a class or a string, not {wrapped!r}")
+        if not isinstance(wrapped, (type, str, list)):
+            raise ValueError(
+                f"wrapped must be a class, a string or a list, not {wrapped!r}"
+            )
         return make(wrapped)
     return make
 
@@ -508,10 +530,13 @@ def parse_command_line_template(
     else:
         assert outputs is None
         outputs = {}
-    parts = template.split()
+    if isinstance(template, list):
+        tokens = template
+    else:
+        tokens = template.split()
     executable = []
     start_args_index = 0
-    for part in parts:
+    for part in tokens:
         if part.startswith("<") or part.startswith("-"):
             break
         executable.append(part)
@@ -520,11 +545,10 @@ def parse_command_line_template(
         raise ValueError(f"Found no executable in command line template: {template}")
     if len(executable) == 1:
         executable = executable[0]
-    args_str = " ".join(parts[start_args_index:])
-    if not args_str:
+    tokens = tokens[start_args_index:]
+    if not tokens:
         return executable, inputs, outputs
-    tokens = re.split(r"\s+", args_str.strip())
-    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|=[^>]+)?)>"
+    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|(?:=|\$)[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"
     arg_re = re.compile(arg_pattern)
     opt_re = re.compile(opt_pattern)
@@ -618,7 +642,16 @@ def parse_command_line_template(
                 kwds["default"] = attrs.Factory(list)
             elif "=" in name:
                 name, default = name.split("=")
-                kwds["default"] = eval(default)
+                kwds["default"] = (
+                    default[1:-1] if re.match(r"('|\").*\1", default) else eval(default)
+                )
+            elif "$" in name:
+                name, path_template = name.split("$")
+                kwds["path_template"] = path_template
+                if field_type is not outarg:
+                    raise ValueError(
+                        f"Path templates can only be used with output fields, not {token}"
+                    )
             if ":" in name:
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
@@ -636,7 +669,7 @@ def parse_command_line_template(
                 # Add field to outputs with the same name as the input
                 add_arg(name, out, {"type": type_, "callable": _InputPassThrough(name)})
             # If name contains a '.', treat it as a file template and strip it from the name
-            if field_type is outarg:
+            if field_type is outarg and "path_template" not in kwds:
                 path_template = name
                 if is_fileset_or_union(type_):
                     if ty.get_origin(type_):
@@ -665,7 +698,7 @@ def parse_command_line_template(
             option = token
         else:
             raise ValueError(
-                f"Found unknown token '{token}' in command line template: {template}"
+                f"Found unknown token {token!r} in command line template: {template}"
             )
 
     remaining_pos = remaining_positions(arguments, len(arguments) + 1, 1)

@@ -12,6 +12,9 @@ import attr
 from fileformats.generic import FileSet
 from pydra.engine.helpers import is_lazy, attrs_values, list_fields
 
+if ty.TYPE_CHECKING:
+    from pydra.engine.specs import TaskDef
+    from pydra.design import shell
 
 logger = logging.getLogger("pydra")
 
@@ -157,7 +160,7 @@ def template_update_single(
     input_values: dict[str, ty.Any] = None,
     output_dir: Path | None = None,
     spec_type: str = "input",
-):
+) -> Path | None:
     """Update a single template from the input_spec or output_spec
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
@@ -198,9 +201,9 @@ def template_update_single(
     if output_dir and value is not None:
         # should be converted to str, it is also used for input fields that should be str
         if type(value) is list:
-            return [str(output_dir / Path(val).name) for val in value]
+            return [output_dir / val.name for val in value]
         else:
-            return str(output_dir / Path(value).name)
+            return output_dir / value.name
     else:
         return None
 
@@ -235,25 +238,38 @@ def _template_formatting(field, definition, input_values):
     # as default, we assume that keep_extension is True
     if isinstance(template, (tuple, list)):
         formatted = [
-            _string_template_formatting(field, t, definition, input_values)
+            _single_template_formatting(field, t, definition, input_values)
             for t in template
         ]
     else:
         assert isinstance(template, str)
-        formatted = _string_template_formatting(
+        formatted = _single_template_formatting(
             field, template, definition, input_values
         )
     return formatted
 
 
-def _string_template_formatting(field, template, definition, input_values):
+def _single_template_formatting(
+    field: "shell.outarg",
+    template: str,
+    definition: "TaskDef",
+    input_values: dict[str, ty.Any],
+) -> Path | None:
     from pydra.utils.typing import MultiInputObj, MultiOutputFile
 
     inp_fields = re.findall(r"{\w+}", template)
     inp_fields_fl = re.findall(r"{\w+:[0-9.]+f}", template)
     inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_fl]
+
+    # FIXME: This would be a better solution, and would allow you to explicitly specify
+    # whether you want to use the extension of the input file or not, by referencing
+    # the "ext" attribute of the input file. However, this would require a change in the
+    # way the element formatting is done
+    #
+    # inp_fields = set(re.findall(r"{(\w+)(?:\.\w+)?(?::[0-9.]+f)?}", template))
+
     if len(inp_fields) == 0:
-        return template
+        return Path(template)
 
     val_dict = {}
     file_template = None
@@ -320,7 +336,7 @@ def _string_template_formatting(field, template, definition, input_values):
         formatted_value = _element_formatting(
             template, val_dict, file_template, keep_extension=field.keep_extension
         )
-    return formatted_value
+    return Path(formatted_value) if formatted_value is not None else formatted_value
 
 
 def _element_formatting(

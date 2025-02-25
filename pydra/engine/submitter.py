@@ -99,6 +99,8 @@ class Submitter:
         **kwargs,
     ):
 
+        from pydra.engine.environments import Native
+
         if worker is None:
             worker = "debug"
 
@@ -120,7 +122,7 @@ class Submitter:
 
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
-        self.environment = environment
+        self.environment = environment if environment is not None else Native()
         self.rerun = rerun
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
@@ -190,6 +192,8 @@ class Submitter:
         result : Any
             The result of the task
         """
+        from pydra.engine.environments import Environment
+
         if raise_errors is None:
             raise_errors = self.worker_name == "debug"
         if not isinstance(raise_errors, bool):
@@ -205,22 +209,30 @@ class Submitter:
             output_types = {o.name: list[o.type] for o in list_fields(task_def.Outputs)}
 
             @workflow.define(outputs=output_types)
-            def Split(defn: TaskDef, output_types: dict):
-                node = workflow.add(defn)
+            def Split(
+                defn: TaskDef, output_types: dict, environment: Environment | None
+            ):
+                node = workflow.add(defn, environment=environment, hooks=hooks)
                 return tuple(getattr(node, o) for o in output_types)
 
-            task_def = Split(defn=task_def, output_types=output_types)
+            task_def = Split(
+                defn=task_def, output_types=output_types, environment=self.environment
+            )
 
+            environment = None
         elif task_def._combiner:
             raise ValueError(
                 f"Task {self} is marked for combining, but not splitting. "
                 "Use the `split` method to split the task before combining."
             )
+        else:
+            environment = self.environment
+
         task = Task(
             task_def,
             submitter=self,
             name="main",
-            environment=self.environment,
+            environment=environment,
             hooks=hooks,
         )
         try:

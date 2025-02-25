@@ -16,44 +16,41 @@ if importlib.util.find_spec("numpy") is None:
 
 
 @python.define(outputs=["b"])
-def arrayout(val):
+def ArrayOut(val):
     return np.array([val, val])
 
 
 def test_multiout(tmpdir):
     """testing a simple function that returns a numpy array"""
-    wf = Workflow("wf", input_spec=["val"], val=2)
-    wf.add(arrayout(name="mo", val=wf.lzin.val))
 
-    wf.set_output([("array", wf.mo.lzout.b)])
-    wf.cache_dir = tmpdir
+    @workflow.define(outputs=["array"])
+    def Workflow(val):
+        mo = workflow.add(ArrayOut(val=val))
+        return mo.b
 
-    with Submitter(worker="cf", n_procs=2) as sub:
-        sub(runnable=wf)
+    wf = Workflow(val=2)
 
-    results = wf.result(return_inputs=True)
+    with Submitter(worker="cf", cache_dir=tmpdir, n_procs=2) as sub:
+        results = sub(wf)
 
-    assert results[0] == {"wf.val": 2}
-    assert np.array_equal(results[1].output.array, np.array([2, 2]))
+    assert np.array_equal(results.outputs.array, np.array([2, 2]))
 
 
 def test_multiout_st(tmpdir):
     """testing a simple function that returns a numpy array, adding splitter"""
-    wf = Workflow("wf", input_spec=["val"], val=[0, 1, 2])
-    wf.add(arrayout(name="mo"))
-    wf.mo.split("val", val=wf.lzin.val).combine("val")
 
-    wf.set_output([("array", wf.mo.lzout.b)])
-    wf.cache_dir = tmpdir
+    @workflow.define(outputs=["array"])
+    def Workflow(values):
+        mo = workflow.add(ArrayOut().split(val=values).combine("val"))
+        return mo.b
 
-    with Submitter(worker="cf", n_procs=2) as sub:
-        sub(runnable=wf)
+    wf = Workflow(values=[0, 1, 2])
 
-    results = wf.result(return_inputs=True)
+    with Submitter(worker="cf", cache_dir=tmpdir, n_procs=2) as sub:
+        results = sub(wf)
 
-    assert results[0] == {"wf.val": [0, 1, 2]}
     for el in range(3):
-        assert np.array_equal(results[1].output.array[el], np.array([el, el]))
+        assert np.array_equal(results.outputs.array[el], np.array([el, el]))
 
 
 def test_numpy_hash_1():
@@ -81,20 +78,19 @@ def test_numpy_hash_3():
 
 def test_task_numpyinput_1(tmp_path: Path):
     """task with numeric numpy array as an input"""
-    nn = Identity(name="NA")
-    nn.cache_dir = tmp_path
-    nn.split(x=[np.array([1, 2]), np.array([3, 4])])
+    nn = Identity().split(x=[np.array([1, 2]), np.array([3, 4])])
     # checking the results
-    results = nn()
-    assert (results[0].output.out == np.array([1, 2])).all()
-    assert (results[1].output.out == np.array([3, 4])).all()
+    outputs = nn(cache_dir=tmp_path)
+    assert (outputs.out[0] == np.array([1, 2])).all()
+    assert (outputs.out[1] == np.array([3, 4])).all()
 
 
 def test_task_numpyinput_2(tmp_path: Path):
     """task with numpy array of type object as an input"""
-    nn = Identity(name="NA")
-    nn.cache_dir = tmp_path
-    nn.split(x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)])
+    nn = Identity().split(
+        x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)]
+    )
     # checking the results
-    results = nn()
-    assert (results[0].output.out == np.array(["VAL1"], dtype=object)).all()
+    outputs = nn(cache_dir=tmp_path)
+    assert outputs.out[0] == np.array(["VAL1"], dtype=object)
+    assert outputs.out[1] == np.array(["VAL2"], dtype=object)

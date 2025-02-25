@@ -1,13 +1,11 @@
 import shutil
 import subprocess as sp
 import pytest
-import attr
-
-from ..task import ShellDef
-from ..submitter import Submitter
-from ..specs import ShellOutputs, ShellDef
+from pydra.engine.submitter import Submitter
+from pydra.engine.specs import ShellDef, ShellOutputs
+from pydra.design import shell, workflow
 from fileformats.generic import File
-from ..environments import Singularity
+from pydra.engine.environments import Singularity
 
 
 need_docker = pytest.mark.skipif(
@@ -30,19 +28,11 @@ def test_singularity_1_nosubm(tmp_path):
     """
     cmd = "pwd"
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu",
-        executable=cmd,
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    )
-    assert singu.environment.image == "docker://alpine"
-    assert isinstance(singu.environment, Singularity)
-    assert singu.cmdline == cmd
-
-    res = singu()
-    assert "/mnt/pydra" in res.output.stdout
-    assert res.output.return_code == 0
+    Singu = shell.define(cmd)
+    singu = Singu()
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert "/mnt/pydra" in outputs.stdout
+    assert outputs.return_code == 0
 
 
 @need_singularity
@@ -52,17 +42,16 @@ def test_singularity_2_nosubm(tmp_path):
     """
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu",
-        executable=cmd,
+    Singu = shell.define(" ".join(cmd))
+    singu = Singu()
+    assert singu.cmdline == " ".join(cmd)
+
+    outputs = singu(
         environment=Singularity(image=image),
         cache_dir=tmp_path,
     )
-    assert singu.cmdline == " ".join(cmd)
-
-    res = singu()
-    assert res.output.stdout.strip() == " ".join(cmd[1:])
-    assert res.output.return_code == 0
+    assert outputs.stdout.strip() == " ".join(cmd[1:])
+    assert outputs.return_code == 0
 
 
 @need_singularity
@@ -72,20 +61,18 @@ def test_singularity_2(plugin, tmp_path):
     """
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
+    Singu = shell.define(" ".join(cmd))
+    singu = Singu()
 
-    singu = ShellDef(
-        name="singu",
-        executable=cmd,
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    )
     assert singu.cmdline == " ".join(cmd)
 
-    with Submitter(worker=plugin) as sub:
-        singu(submitter=sub)
-    res = singu.result()
-    assert res.output.stdout.strip() == " ".join(cmd[1:])
-    assert res.output.return_code == 0
+    with Submitter(
+        worker=plugin, environment=Singularity(image=image), cache_dir=tmp_path
+    ) as sub:
+        res = sub(singu)
+    assert not res.errored, "\n".join(res.errors["error message"])
+    assert res.outputs.stdout.strip() == " ".join(cmd[1:])
+    assert res.outputs.return_code == 0
 
 
 @need_singularity
@@ -97,20 +84,17 @@ def test_singularity_2a(plugin, tmp_path):
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu",
-        executable=cmd_exec,
-        args=cmd_args,
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    )
+    Singu = shell.define(cmd_exec)
+    singu = Singu(additional_args=cmd_args)
     assert singu.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
-    with Submitter(worker=plugin) as sub:
-        singu(submitter=sub)
-    res = singu.result()
-    assert res.output.stdout.strip() == " ".join(cmd_args)
-    assert res.output.return_code == 0
+    with Submitter(
+        worker=plugin, environment=Singularity(image=image), cache_dir=tmp_path
+    ) as sub:
+        res = sub(singu)
+
+    assert res.outputs.stdout.strip() == " ".join(cmd_args)
+    assert res.outputs.return_code == 0
 
 
 # tests with State
@@ -121,17 +105,20 @@ def test_singularity_st_1(plugin, tmp_path):
     """commands without arguments in container
     splitter = executable
     """
-    cmd = ["pwd", "ls"]
+    cmd = ["whoami", "pwd", "ls"]
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu", environment=Singularity(image=image), cache_dir=tmp_path
-    ).split("executable", executable=cmd)
-    assert singu.state.splitter == "singu.executable"
+    Singu = shell.define("dummy")
+    singu = Singu().split("executable", executable=cmd)
 
-    res = singu(plugin=plugin)
-    assert "/mnt/pydra" in res[0].output.stdout
-    assert res[1].output.stdout == ""
-    assert res[0].output.return_code == res[1].output.return_code == 0
+    outputs = singu(
+        plugin=plugin,
+        environment=Singularity(image=image, xargs=["--fakeroot"]),
+        cache_dir=tmp_path,
+    )
+    assert outputs.stdout[0].strip() == "root"
+    assert "/mnt/pydra" in outputs.stdout[1]
+    assert outputs.stdout[2].strip() == "_task.pklz"
+    assert outputs.return_code == [0, 0, 0]
 
 
 @need_singularity
@@ -145,17 +132,16 @@ def test_singularity_st_2(tmp_path, n):
     """splitter over args (checking bigger splitters if slurm available)"""
     args_n = list(range(n))
     image = "docker://alpine"
-    singu = ShellDef(
-        name="singu",
-        executable="echo",
-        environment=Singularity(image=image),
-        cache_dir=tmp_path,
-    ).split("args", args=args_n)
-    assert singu.state.splitter == "singu.args"
-    res = singu(plugin="slurm")
-    assert "1" in res[1].output.stdout
-    assert str(n - 1) in res[-1].output.stdout
-    assert res[0].output.return_code == res[1].output.return_code == 0
+    Singu = shell.define("echo")
+    singu = Singu().split("args", args=args_n)
+    with Submitter(
+        plugin="slurm", environment=Singularity(image=image), cache_dir=tmp_path
+    ) as sub:
+        res = sub(singu)
+
+    assert "1" in res.outputs.stdout[1]
+    assert str(n - 1) in res.outputs.stdout[-1]
+    assert res.outputs.return_code[0] == res.outputs.return_code[1] == 0
 
 
 # tests with customized output_spec
@@ -170,25 +156,20 @@ def test_singularity_outputspec_1(plugin, tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
     image = "docker://alpine"
 
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("newfile", File, "newfile_tmp.txt")],
-        bases=(ShellOutputs,),
+    Singu = shell.define(
+        " ".join(cmd),
+        outputs=[
+            shell.outarg(name="newfile", type=File, path_template="newfile_tmp.txt")
+        ],
     )
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        output_spec=my_output_spec,
-        cache_dir=tmp_path,
-    )
+    singu = Singu()
 
-    with Submitter(worker=plugin) as sub:
-        singu(submitter=sub)
+    with Submitter(environment=Singularity(image=image), cache_dir=tmp_path) as sub:
+        res = sub(singu)
 
-    res = singu.result()
-    assert res.output.stdout == ""
-    assert res.output.newfile.fspath.exists()
+    assert not res.errored, "\n".join(res.errors["error message"])
+    assert res.outputs.stdout == ""
+    assert res.outputs.newfile.fspath.exists()
 
 
 # tests with customised input_spec
@@ -204,37 +185,23 @@ def test_singularity_inputspec_1(plugin, tmp_path):
     cmd = "cat"
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
             )
         ],
-        bases=(ShellDef,),
     )
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        file=filename,
-        input_spec=my_input_spec,
-        strip=True,
-        cache_dir=tmp_path,
-    )
+    singu = Singu(file=filename)
 
-    res = singu()
-    assert res.output.stdout == "hello from pydra"
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout.strip() == "hello from pydra"
 
 
 @need_singularity
@@ -249,32 +216,23 @@ def test_singularity_inputspec_1a(plugin, tmp_path):
     cmd = "cat"
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    default=filename,
-                    metadata={"position": 1, "argstr": "", "help": "input file"},
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                default=filename,
+                position=1,
+                argstr="",
+                help="input file",
             )
         ],
-        bases=(ShellDef,),
     )
+    singu = Singu(file=filename)
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        input_spec=my_input_spec,
-        strip=True,
-        cache_dir=tmp_path,
-    )
-
-    res = singu()
-    assert res.output.stdout == "hello from pydra"
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout.strip() == "hello from pydra"
 
 
 @need_singularity
@@ -291,48 +249,31 @@ def test_singularity_inputspec_2(plugin, tmp_path):
     cmd = "cat"
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file1",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file 1",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file1",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file 1",
             ),
-            (
-                "file2",
-                attr.ib(
-                    type=File,
-                    default=filename_2,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help": "input file 2",
-                    },
-                ),
+            shell.arg(
+                name="file2",
+                type=File,
+                default=filename_2,
+                position=2,
+                argstr="",
+                help="input file 2",
             ),
         ],
-        bases=(ShellDef,),
     )
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        file1=filename_1,
-        input_spec=my_input_spec,
-        strip=True,
-        cache_dir=tmp_path,
-    )
+    singu = Singu(file1=filename_1)
 
-    res = singu()
-    assert res.output.stdout == "hello from pydra\nhave a nice one"
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout == "hello from pydra\nhave a nice one"
 
 
 @need_singularity
@@ -351,47 +292,30 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
     image = "docker://alpine"
 
     # the field with default value can't be before value without default
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file1",
-                attr.ib(
-                    type=File,
-                    default=filename_1,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file 1",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file1",
+                type=File,
+                default=filename_1,
+                position=1,
+                argstr="",
+                help="input file 1",
             ),
-            (
-                "file2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help": "input file 2",
-                    },
-                ),
+            shell.arg(
+                name="file2",
+                type=File,
+                position=2,
+                argstr="",
+                help="input file 2",
             ),
         ],
-        bases=(ShellDef,),
     )
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        file2=filename_2,
-        input_spec=my_input_spec,
-        strip=True,
-        cache_dir=tmp_path,
-    )
-    res = singu()
-    assert res.output.stdout == "hello from pydra\nhave a nice one"
+    singu = Singu(file2=filename_2)
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout == "hello from pydra\nhave a nice one"
 
 
 @need_singularity
@@ -411,48 +335,31 @@ def test_singularity_inputspec_2a(plugin, tmp_path):
     image = "docker://alpine"
 
     # if you want set default in the first field you can use default_value in metadata
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file1",
-                attr.ib(
-                    type=File,
-                    default=filename_1,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file 1",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file1",
+                type=File,
+                default=filename_1,
+                position=1,
+                argstr="",
+                help="input file 1",
             ),
-            (
-                "file2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help": "input file 2",
-                    },
-                ),
+            shell.arg(
+                name="file2",
+                type=File,
+                position=2,
+                argstr="",
+                help="input file 2",
             ),
         ],
-        bases=(ShellDef,),
     )
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        file2=filename_2,
-        input_spec=my_input_spec,
-        strip=True,
-        cache_dir=tmp_path,
-    )
+    singu = Singu(file2=filename_2)
 
-    res = singu()
-    assert res.output.stdout == "hello from pydra\nhave a nice one"
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout == "hello from pydra\nhave a nice one"
 
 
 @need_singularity
@@ -465,54 +372,34 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
     with open(file, "w") as f:
         f.write("hello from pydra\n")
 
-    cmd = ["sed", "-is", "s/hello/hi/"]
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "orig_file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help": "orig file",
-                        "mandatory": True,
-                        "copyfile": True,
-                    },
-                ),
-            ),
-            (
-                "out_file",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "output_file_template": "{orig_file}",
-                        "help": "output file",
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellDef,),
-    )
+    @shell.define
+    class Singu(ShellDef["Singu.Outputs"]):
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        input_spec=my_input_spec,
-        orig_file=str(file),
-        cache_dir=tmp_path,
-    )
+        executable = ["sed", "-is", "s/hello/hi/"]
 
-    res = singu()
-    assert res.output.stdout == ""
-    assert res.output.out_file.fspath.exists()
+        orig_file: File = shell.arg(
+            position=1,
+            argstr="",
+            help="orig file",
+            copy_mode=File.CopyMode.copy,
+        )
+
+        class Outputs(ShellOutputs):
+            out_file: File = shell.outarg(
+                path_template="{orig_file}.txt",  # FIXME: Shouldn't have to specify the extension
+                help="output file",
+            )
+
+    singu = Singu(orig_file=file)
+
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out_file.fspath.exists()
     # the file is  copied, and than it is changed in place
-    assert res.output.out_file.fspath.parent == singu.output_dir
-    with open(res.output.out_file) as f:
+    assert outputs.out_file.fspath.parent.parent == tmp_path
+    with open(outputs.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
     with open(file) as f:
@@ -535,37 +422,24 @@ def test_singularity_inputspec_state_1(tmp_path):
     filename = [str(filename_1), str(filename_2)]
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
             )
         ],
-        bases=(ShellDef,),
     )
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        input_spec=my_input_spec,
-        strip=True,
-        cache_dir=tmp_path,
-    ).split("file", file=filename)
+    singu = Singu().split("file", file=filename)
 
-    res = singu()
-    assert res[0].output.stdout == "hello from pydra"
-    assert res[1].output.stdout == "have a nice one"
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout[0].strip() == "hello from pydra"
+    assert outputs.stdout[1].strip() == "have a nice one"
 
 
 @need_singularity
@@ -585,37 +459,24 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
     filename = [str(file_1), str(file_2)]
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
             )
         ],
-        bases=(ShellDef,),
     )
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=cmd,
-        input_spec=my_input_spec,
-        strip=True,
-        cache_dir=tmp_path,
-    ).split("file", file=filename)
+    singu = Singu().split("file", file=filename)
 
-    res = singu()
-    assert res[0].output.stdout == "hello from pydra"
-    assert res[1].output.stdout == "have a nice one"
+    outputs = singu(environment=Singularity(image=image), cache_dir=tmp_path)
+    assert outputs.stdout[0].strip() == "hello from pydra"
+    assert outputs.stdout[1].strip() == "have a nice one"
 
 
 @need_singularity
@@ -628,46 +489,30 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
     cmd = "cat"
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
             )
         ],
-        bases=(ShellDef,),
     )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
-    wf.inputs.cmd = cmd
-    wf.inputs.file = filename
+    @workflow.define
+    def Workflow(cmd: str, file: File) -> str:
+        singu = workflow.add(
+            Singu(executable=cmd, file=file), environment=Singularity(image=image)
+        )
+        return singu.stdout
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=wf.lzin.cmd,
-        file=wf.lzin.file,
-        input_spec=my_input_spec,
-        strip=True,
-    )
-    wf.add(singu)
+    with Submitter(cache_dir=tmp_path) as sub:
+        res = sub(Workflow(cmd=cmd, file=filename))
 
-    wf.set_output([("out", wf.singu.lzout.stdout)])
-
-    with Submitter(worker="serial") as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
-    assert res.output.out == "hello from pydra"
+    assert res.outputs.out.strip() == "hello from pydra"
 
 
 @need_singularity
@@ -684,47 +529,36 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
     filename = [str(file_1), str(file_2)]
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
             )
         ],
-        bases=(ShellDef,),
     )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
-    wf.inputs.cmd = cmd
+    @workflow.define
+    def Workflow(cmd: str, file: File) -> str:
+        singu = workflow.add(
+            Singu(executable=cmd, file=file),
+            environment=Singularity(image=image),
+        )
+        return singu.stdout
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=wf.lzin.cmd,
-        file=wf.lzin.file,
-        input_spec=my_input_spec,
-        strip=True,
-    )
-    wf.add(singu)
-    wf.split("file", file=filename)
+    wf = Workflow(cmd=cmd).split("file", file=filename)
 
-    wf.set_output([("out", wf.singu.lzout.stdout)])
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        res = sub(wf)
 
-    with Submitter(worker=plugin) as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
-    assert res[0].output.out == "hello from pydra"
-    assert res[1].output.out == "have a nice one"
+    assert [o.strip() for o in res.outputs.out] == [
+        "hello from pydra",
+        "have a nice one",
+    ]
 
 
 @need_singularity
@@ -741,42 +575,33 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
     filename = [str(file_1), str(file_2)]
     image = "docker://alpine"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file",
-                    },
-                ),
+    Singu = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
             )
         ],
-        bases=(ShellDef,),
     )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
-    wf.inputs.cmd = cmd
-    wf.inputs.file = filename
+    @workflow.define
+    def Workflow(cmd: str, files: list[File]) -> list[str]:
+        singu = workflow.add(
+            Singu(executable=cmd).split(file=files),
+            environment=Singularity(image=image),
+        )
+        return singu.stdout
 
-    singu = ShellDef(
-        name="singu",
-        environment=Singularity(image=image),
-        executable=wf.lzin.cmd,
-        input_spec=my_input_spec,
-        strip=True,
-    ).split("file", file=wf.lzin.file)
-    wf.add(singu)
+    wf = Workflow(cmd=cmd, files=filename)
 
-    wf.set_output([("out", wf.singu.lzout.stdout)])
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        res = sub(wf)
 
-    with Submitter(worker=plugin) as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
-    assert res.output.out == ["hello from pydra", "have a nice one"]
+    assert [o.strip() for o in res.outputs.out] == [
+        "hello from pydra",
+        "have a nice one",
+    ]

@@ -211,8 +211,8 @@ def test_interface_template_more_complex():
             name="tuple_arg",
             argstr="--tuple-arg",
             type=tuple[int, str] | None,
-            default=None,
             sep=" ",
+            default=None,
             position=6,
         ),
         ShellDef.additional_args,
@@ -286,11 +286,7 @@ def test_interface_template_with_overrides_and_optionals():
             position=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
-        shell.arg(
-            name="in_fs_objects",
-            type=MultiInputObj[FsObject],
-            position=1,
-        ),
+        shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         shell.arg(
             name="recursive",
             argstr="-R",
@@ -362,11 +358,7 @@ def test_interface_template_with_defaults():
             position=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
-        shell.arg(
-            name="in_fs_objects",
-            type=MultiInputObj[FsObject],
-            position=1,
-        ),
+        shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         output,
         shell.arg(name="recursive", argstr="-R", type=bool, default=True, position=3),
         shell.arg(
@@ -379,6 +371,7 @@ def test_interface_template_with_defaults():
             type=tuple[int, str],
             default=(1, "bar"),
             position=6,
+            sep=" ",
         ),
         ShellDef.additional_args,
     ]
@@ -433,11 +426,7 @@ def test_interface_template_with_type_overrides():
             position=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
-        shell.arg(
-            name="in_fs_objects",
-            type=MultiInputObj[FsObject],
-            position=1,
-        ),
+        shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         output,
         shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
         shell.arg(name="text_arg", argstr="--text-arg", type=str, position=4),
@@ -453,6 +442,7 @@ def test_interface_template_with_type_overrides():
             argstr="--tuple-arg",
             type=tuple[int, str],
             position=6,
+            sep=" ",
         ),
         ShellDef.additional_args,
     ]

@@ -1,11 +1,12 @@
+import attrs
 import pytest
-from pydra.engine.specs import ShellDef
 from pydra.engine.submitter import Submitter
+from pydra.engine.specs import ShellDef, ShellOutputs
 from fileformats.generic import File
 from pydra.engine.environments import Docker
 from pydra.design import shell, workflow
 from pydra.engine.core import Task
-from .utils import no_win, need_docker, result_submitter, result_no_submitter
+from .utils import no_win, need_docker, run_submitter, run_no_submitter
 
 
 @no_win
@@ -25,11 +26,11 @@ def test_docker_1_nosubm():
     assert docky_task.environment.image == "busybox"
     assert docky_task.environment.tag == "latest"
     assert isinstance(docky_task.environment, Docker)
-    assert docky_task.cmdline == cmd
+    assert docky.cmdline == cmd
 
-    res = docky_task()
-    assert res.output.stdout == "root\n"
-    assert res.output.return_code == 0
+    res = docky_task.run()
+    assert res.outputs.stdout == "root\n"
+    assert res.outputs.return_code == 0
 
 
 @no_win
@@ -51,8 +52,8 @@ def test_docker_1(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_docker_2(results_function, plugin):
+@pytest.mark.parametrize("run_function", [run_no_submitter, run_submitter])
+def test_docker_2(run_function, plugin, tmp_path):
     """a command with arguments, cmd and args given as executable
     with and without submitter
     """
@@ -61,29 +62,28 @@ def test_docker_2(results_function, plugin):
     docky = Docky()
     # cmdline doesn't know anything about docker
     assert docky.cmdline == cmdline
-    res = results_function(docky, plugin)
-    assert res.output.stdout.strip() == " ".join(cmdline.split()[1:])
-    assert res.output.return_code == 0
+    outputs = run_function(docky, tmp_path, plugin, environment=Docker(image="busybox"))
+    assert outputs.stdout.strip() == " ".join(cmdline.split()[1:])
+    assert outputs.return_code == 0
 
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_docker_2a(results_function, plugin):
+@pytest.mark.parametrize("run_function", [run_no_submitter, run_submitter])
+def test_docker_2a(run_function, plugin, tmp_path):
     """a command with arguments, using executable and args
     using submitter
     """
-    cmd_exec = "echo"
-    cmd_args = ["hail", "pydra"]
+    cmd = ["echo", "hail", "pydra"]
     # separate command into exec + args
-    Docky = shell.define(" ".join([cmd_exec] + cmd_args))
+    Docky = shell.define(cmd)
     docky = Docky()
-    assert docky.executable == "echo"
-    assert docky.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
+    assert docky.executable == cmd
+    assert docky.cmdline == " ".join(cmd)
 
-    res = results_function(docky, plugin)
-    assert res.output.stdout.strip() == " ".join(cmd_args)
-    assert res.output.return_code == 0
+    outputs = run_function(docky, tmp_path, plugin, environment=Docker(image="busybox"))
+    assert outputs.stdout.strip() == " ".join(cmd[1:])
+    assert outputs.return_code == 0
 
 
 # tests with State
@@ -91,21 +91,22 @@ def test_docker_2a(results_function, plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_docker_st_1(results_function, plugin):
+@pytest.mark.parametrize("run_function", [run_no_submitter, run_submitter])
+def test_docker_st_1(run_function, plugin, tmp_path):
     """commands without arguments in container
     splitter = executable
     """
     cmd = ["pwd", "whoami"]
-    Docky = shell.define("placeholder")
+    Docky = shell.define("docky")  # cmd is just a placeholder
     docky = Docky().split(executable=cmd)
 
-    assert docky.state.splitter == "docky.executable"
-
-    res = results_function(docky, plugin)
-    assert res[0].output.stdout == f"/mnt/pydra{docky.output_dir[0]}\n"
-    assert res[1].output.stdout == "root\n"
-    assert res[0].output.return_code == res[1].output.return_code == 0
+    outputs = run_function(docky, tmp_path, plugin, environment=Docker(image="busybox"))
+    assert (
+        outputs.stdout[0]
+        == f"/mnt/pydra{tmp_path}/{attrs.evolve(docky, executable=cmd[0])._checksum}\n"
+    )
+    assert outputs.stdout[1] == "root\n"
+    assert outputs.return_code[0] == outputs.return_code[1] == 0
 
 
 # tests with customized output_spec
@@ -118,13 +119,11 @@ def test_docker_outputspec_1(plugin, tmp_path):
     customised output_spec, adding files to the output, providing specific pathname
     output_path is automatically added to the bindings
     """
-    outputs = [shell.out(name="newfile", type=File, help="new file")]
-    docky = shell.define("touch newfile_tmp.txt", outputs=outputs)(
-        environment=Docker(image="ubuntu")
-    )
+    Docky = shell.define("touch <out|newfile$newfile_tmp.txt>")
+    docky = Docky()
 
-    res = docky(plugin=plugin)
-    assert res.output.stdout == ""
+    outputs = docky(plugin=plugin, environment=Docker(image="ubuntu"))
+    assert outputs.stdout == ""
 
 
 # tests with customised input_spec
@@ -140,24 +139,23 @@ def test_docker_inputspec_1(tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file",
-            type=File,
-            position=1,
-            argstr="",
-            help="input file",
-        )
-    ]
-
-    docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
-        file=filename,
-        strip=True,
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
+            )
+        ],
     )
 
-    res = docky()
-    assert res.output.stdout == "hello from pydra"
+    docky = Docky(file=filename)
+
+    outputs = docky(environment=Docker(image="busybox"), cache_dir=tmp_path)
+    assert outputs.stdout.strip() == "hello from pydra"
 
 
 @no_win
@@ -172,24 +170,24 @@ def test_docker_inputspec_1a(tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file",
-            type=File,
-            default=filename,
-            position=1,
-            argstr="",
-            help="input file",
-        )
-    ]
-
-    docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
-        strip=True,
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                default=filename,
+                position=1,
+                argstr="",
+                help="input file",
+            )
+        ],
     )
 
-    res = docky()
-    assert res.output.stdout == "hello from pydra"
+    docky = Docky()
+
+    outputs = docky(environment=Docker(image="busybox"), cache_dir=tmp_path)
+    assert outputs.stdout.strip() == "hello from pydra"
 
 
 @no_win
@@ -206,32 +204,35 @@ def test_docker_inputspec_2(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file1",
-            type=File,
-            position=1,
-            argstr="",
-            help="input file 1",
-        ),
-        shell.arg(
-            name="file2",
-            type=File,
-            default=filename_2,
-            position=2,
-            argstr="",
-            help="input file 2",
-        ),
-    ]
-    docky = shell.define(cmd, inputs=inputs)(
-        name="docky",
-        environment=Docker(image="busybox"),
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file1",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file 1",
+            ),
+            shell.arg(
+                name="file2",
+                type=File,
+                default=filename_2,
+                position=2,
+                argstr="",
+                help="input file 2",
+            ),
+        ],
+    )
+    docky = Docky(
         file1=filename_1,
-        strip=True,
     )
 
-    res = docky()
-    assert res.output.stdout == "hello from pydra\nhave a nice one"
+    outputs = docky(
+        name="docky",
+        environment=Docker(image="busybox"),
+    )
+    assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
 
 @no_win
@@ -249,33 +250,34 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file1",
-            type=File,
-            default=filename_1,
-            position=1,
-            argstr="",
-            help="input file 1",
-        ),
-        shell.arg(
-            name="file2",
-            type=File,
-            position=2,
-            argstr="",
-            help="input file 2",
-        ),
-    ]
-
-    docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
-        file2=filename_2,
-        strip=True,
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file1",
+                type=File,
+                default=filename_1,
+                position=1,
+                argstr="",
+                help="input file 1",
+            ),
+            shell.arg(
+                name="file2",
+                type=File,
+                position=2,
+                argstr="",
+                help="input file 2",
+            ),
+        ],
     )
-    assert docky.definition.file2.fspath == filename_2
 
-    res = docky()
-    assert res.output.stdout == "hello from pydra\nhave a nice one"
+    docky = Docky(
+        file2=filename_2,
+    )
+    assert docky.file2.fspath == filename_2
+
+    outputs = docky(environment=Docker(image="busybox"))
+    assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
 
 @no_win
@@ -294,32 +296,31 @@ def test_docker_inputspec_2a(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file1",
-            type=File,
-            default=filename_1,
-            position=1,
-            argstr="",
-            help="input file 1",
-        ),
-        shell.arg(
-            name="file2",
-            type=File,
-            position=2,
-            argstr="",
-            help="input file 2",
-        ),
-    ]
-
-    docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
-        file2=filename_2,
-        strip=True,
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file1",
+                type=File,
+                default=filename_1,
+                position=1,
+                argstr="",
+                help="input file 1",
+            ),
+            shell.arg(
+                name="file2",
+                type=File,
+                position=2,
+                argstr="",
+                help="input file 2",
+            ),
+        ],
     )
 
-    res = docky()
-    assert res.output.stdout == "hello from pydra\nhave a nice one"
+    docky = Docky(file2=filename_2)
+
+    outputs = docky(environment=Docker(image="busybox"))
+    assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
 
 @no_win
@@ -350,8 +351,8 @@ def test_docker_inputspec_3(plugin, tmp_path):
     )
 
     cmdline = docky.cmdline
-    res = docky()
-    assert "docker" in res.output.stdout
+    outputs = docky()
+    assert "docker" in outputs.stdout
     assert cmdline == docky.cmdline
 
 
@@ -366,36 +367,30 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
     with open(file, "w") as f:
         f.write("hello from pydra\n")
 
-    cmd = ["sed", "-is", "s/hello/hi/"]
-
-    inputs = [
-        shell.arg(
-            name="orig_file",
-            type=File,
+    @shell.define
+    class Docky(ShellDef["Docky.Outputs"]):
+        executable = ["sed", "-is", "s/hello/hi/"]
+        orig_file: File = shell.arg(
             position=1,
             argstr="",
             help="orig file",
-            copyfile="copy",
-        ),
-        shell.arg(
-            name="out_file",
-            type=str,
-            output_file_template="{orig_file}",
-            help="output file",
-        ),
-    ]
+            copy_mode="copy",
+        )
 
-    docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
-        orig_file=str(file),
-    )
+        class Outputs(ShellOutputs):
+            out_file: File = shell.outarg(
+                path_template="{orig_file}.txt",
+                help="output file",
+            )
 
-    res = docky()
-    assert res.output.stdout == ""
-    out_file = res.output.out_file.fspath
+    docky = Docky(orig_file=str(file))
+
+    outputs = docky(environment=Docker(image="busybox"), cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    out_file = outputs.out_file.fspath
     assert out_file.exists()
     # the file is copied, and then it is changed in place
-    assert out_file.parent == docky.output_dir
+    assert out_file.parent.parent == tmp_path
     with open(out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
@@ -418,24 +413,24 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file",
-            type=File,
-            position=1,
-            argstr="",
-            help="input file",
-        )
-    ]
-
-    docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
-        strip=True,
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
+            )
+        ],
     )
 
-    res = docky(split={"file": [str(filename_1), str(filename_2)]})
-    assert res[0].output.stdout == "hello from pydra"
-    assert res[1].output.stdout == "have a nice one"
+    docky = Docky().split(file=[str(filename_1), str(filename_2)])
+
+    outputs = docky(environment=Docker(image="busybox"))
+    assert outputs.stdout[0].strip() == "hello from pydra"
+    assert outputs.stdout[1].strip() == "have a nice one"
 
 
 @no_win
@@ -454,23 +449,23 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file",
-            type=File,
-            position=1,
-            argstr="",
-            help="input file",
-        )
-    ]
-    docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
-        strip=True,
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
+            )
+        ],
     )
+    docky = Docky().split(file=[str(file_1), str(file_2)])
 
-    res = docky(split={"file": [str(file_1), str(file_2)]})
-    assert res[0].output.stdout == "hello from pydra"
-    assert res[1].output.stdout == "have a nice one"
+    outputs = docky(environment=Docker(image="busybox"))
+    assert outputs.stdout[0].strip() == "hello from pydra"
+    assert outputs.stdout[1].strip() == "have a nice one"
 
 
 @no_win
@@ -483,33 +478,33 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file",
-            type=File,
-            position=1,
-            argstr="",
-            help="input file",
-        )
-    ]
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
+            )
+        ],
+    )
 
     @workflow.define
-    def Workflow(cmd, file):
+    def Workflow(file):
 
         docky = workflow.add(
-            shell.define(cmd, inputs=inputs)(
-                file=file,
-                environment=Docker(image="busybox"),
-                strip=True,
-            )
+            Docky(file=file),
+            environment=Docker(image="busybox"),
         )
 
         return docky.stdout
 
-    wf = Workflow(cmd=cmd, file=filename)
+    wf = Workflow(file=filename)
 
-    res = wf.result()
-    assert res.output.out == "hello from pydra"
+    outputs = wf()
+    assert outputs.out.strip() == "hello from pydra"
 
 
 @no_win
@@ -525,35 +520,35 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file",
-            type=File,
-            position=1,
-            argstr="",
-            help="input file",
-        )
-    ]
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
+            )
+        ],
+    )
 
     @workflow.define
-    def Workflow(cmd, file):
+    def Workflow(file):
 
         docky = workflow.add(
-            shell.define(cmd, inputs=inputs)(
-                environment=Docker(image="busybox"),
-                file=file,
-                strip=True,
-            )
+            Docky(file=file),
+            environment=Docker(image="busybox"),
         )
 
         return docky.stdout
 
-    wf = Workflow(cmd=cmd)
+    wf = Workflow().split(file=[file_1, file_2])
 
-    res = wf(split={"file": [file_1, file_2]})
+    outputs = wf(cache_dir=tmp_path)
 
-    assert res[0].output.out == "hello from pydra"
-    assert res[1].output.out == "have a nice one"
+    assert outputs.out[0].strip() == "hello from pydra"
+    assert outputs.out[1].strip() == "have a nice one"
 
 
 @no_win
@@ -569,30 +564,30 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    inputs = [
-        shell.arg(
-            name="file",
-            type=File,
-            position=1,
-            argstr="",
-            help="input file",
-        )
-    ]
+    Docky = shell.define(
+        cmd,
+        inputs=[
+            shell.arg(
+                name="file",
+                type=File,
+                position=1,
+                argstr="",
+                help="input file",
+            )
+        ],
+    )
 
     @workflow.define
-    def Workflow(cmd, file):
+    def Workflow(file):
 
         docky = workflow.add(
-            shell.define(cmd, inputs=inputs)(
-                environment=Docker(image="busybox"),
-                file=file,
-                strip=True,
-            )
+            Docky(file=file),
+            environment=Docker(image="busybox"),
         )
 
         return docky.stdout
 
-    wf = Workflow(cmd=cmd)
+    wf = Workflow().split(file=[str(file_1), str(file_2)])
 
-    res = wf(split={"file": [str(file_1), str(file_2)]})
-    assert res.output.out == ["hello from pydra", "have a nice one"]
+    outputs = wf(cache_dir=tmp_path)
+    assert outputs.out == ["hello from pydra", "have a nice one"]

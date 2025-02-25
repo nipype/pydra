@@ -1058,10 +1058,29 @@ def optional_type(type_: type) -> type:
     return type_
 
 
-def is_fileset_or_union(type_: type) -> bool:
-    """Check if the type is a FileSet or a Union containing a FileSet"""
+def is_fileset_or_union(type_: type, allow_none: bool | None = None) -> bool:
+    """Check if the type is a FileSet or a Union containing a FileSet
+
+    Parameters
+    ----------
+    type_ : type
+        the type to check
+    allow_none : bool, optional
+        whether to allow None as a valid type, by default None. If None, then None
+        is not allowed at the outer layer, but is allowed within a Union
+
+    Returns
+    -------
+    is_fileset : bool
+        whether the type is a FileSet or a Union containing a FileSet
+    """
+    if type_ is None and allow_none:
+        return True
     if is_union(type_):
-        return any(is_fileset_or_union(t) for t in ty.get_args(type_))
+        return any(
+            is_fileset_or_union(t, allow_none=allow_none or allow_none is None)
+            for t in ty.get_args(type_)
+        )
     elif not inspect.isclass(type_):
         return False
     return issubclass(type_, core.FileSet)
