@@ -213,7 +213,6 @@ def test_interface_template_more_complex():
             type=tuple[int, str] | None,
             sep=" ",
             default=None,
-            sep=" ",
             position=6,
         ),
         ShellDef.additional_args,
