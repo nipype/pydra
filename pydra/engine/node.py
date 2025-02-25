@@ -121,14 +121,28 @@ class Node(ty.Generic[OutputType]):
                 type=field.type,
             )
         outputs = self.inputs.Outputs(**lazy_fields)
-        # Flag the output lazy fields as being not typed checked (i.e. assigned to another
-        # node's inputs) yet
+
         outpt: lazy.LazyOutField
         for outpt in attrs_values(outputs).values():
-            outpt._type_checked = False
+            # Assign the current node to the lazy fields so they can access the state
             outpt._node = self
+            # If the node has a non-empty state, wrap the type of the lazy field in
+            # a combination of an optional list and a number of nested StateArrays
+            # types based on the number of states the node is split over and whether
+            # it has a combiner
+            if self._state:
+                type_, _ = TypeParser.strip_splits(outpt._type)
+                if self._state.combiner:
+                    type_ = list[type_]
+                for _ in range(self._state.depth - int(bool(self._state.combiner))):
+                    type_ = StateArray[type_]
+                outpt._type = type_
+            # Flag the output lazy fields as being not typed checked (i.e. assigned to
+            # another node's inputs) yet. This is used to prevent the user from changing
+            # the type of the output after it has been accessed by connecting it to an
+            # output of an upstream node with additional state variables.
+            outpt._type_checked = False
         self._lzout = outputs
-        self._wrap_lzout_types_in_state_arrays()
         return outputs
 
     @property
@@ -216,20 +230,6 @@ class Node(ty.Generic[OutputType]):
                 f"Outputs {used} of {self} have already been accessed and therefore "
                 + msg
             )
-
-    def _wrap_lzout_types_in_state_arrays(self) -> None:
-        """Wraps a types of the lazy out fields in a number of nested StateArray types
-        based on the number of states the node is split over"""
-        # Unwrap StateArray types from the output types
-        if not self.state:
-            return
-        outpt_lf: lazy.LazyOutField
-        for outpt_lf in attrs_values(self.lzout).values():
-            assert not outpt_lf._type_checked
-            type_, _ = TypeParser.strip_splits(outpt_lf._type)
-            for _ in range(self._state.depth):
-                type_ = StateArray[type_]
-            outpt_lf._type = type_
 
     def _set_state(self) -> None:
         # Add node name to state's splitter, combiner and cont_dim loaded from the def

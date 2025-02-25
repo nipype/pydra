@@ -6,10 +6,9 @@ from pydra.utils.hash import hash_single
 from . import node
 
 if ty.TYPE_CHECKING:
-    from .graph import DiGraph
     from .submitter import NodeExecution
     from .core import Task, Workflow
-    from .specs import TaskDef, WorkflowDef
+    from .specs import TaskDef
     from .state import StateIndex
 
 
@@ -46,6 +45,27 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
             value = self._type(value)
         return value
 
+    def _get_value(
+        self,
+        node_exec: "NodeExecution",
+        state_index: "StateIndex | None" = None,
+    ) -> ty.Any:
+        """Return the value of a lazy field.
+
+        Parameters
+        ----------
+        node_exec: NodeExecution
+            the object representing the execution state of the current node
+        state_index : StateIndex, optional
+            the state index of the field to access
+
+        Returns
+        -------
+        value : Any
+            the resolved value of the lazy-field
+        """
+        raise NotImplementedError("LazyField is an abstract class")
+
 
 @attrs.define(kw_only=True)
 class LazyInField(LazyField[T]):
@@ -70,23 +90,25 @@ class LazyInField(LazyField[T]):
 
     def _get_value(
         self,
-        workflow_def: "WorkflowDef",
+        node_exec: "NodeExecution",
+        state_index: "StateIndex | None" = None,
     ) -> ty.Any:
         """Return the value of a lazy field.
 
         Parameters
         ----------
-        wf : Workflow
-            the workflow the lazy field references
-        state_index : int, optional
-            the state index of the field to access
+        node_exec: NodeExecution
+            the object representing the execution state of the current node
+        state_index : StateIndex, optional
+            the state index of the field to access (ignored, used for duck-typing with
+            LazyOutField)
 
         Returns
         -------
         value : Any
             the resolved value of the lazy-field
         """
-        value = workflow_def[self._field]
+        value = node_exec.workflow_inputs[self._field]
         value = self._apply_cast(value)
         return value
 
@@ -105,16 +127,16 @@ class LazyOutField(LazyField[T]):
 
     def _get_value(
         self,
-        graph: "DiGraph[NodeExecution]",
+        node_exec: "NodeExecution",
         state_index: "StateIndex | None" = None,
     ) -> ty.Any:
         """Return the value of a lazy field.
 
         Parameters
         ----------
-        wf : Workflow
-            the workflow the lazy field references
-        state_index : int, optional
+        node_exec: NodeExecution
+            the object representing the execution state of the current node
+        state_index : StateIndex, optional
             the state index of the field to access
 
         Returns
@@ -130,7 +152,7 @@ class LazyOutField(LazyField[T]):
         if state_index is None:
             state_index = StateIndex()
 
-        task = graph.node(self._node.name).task(state_index)
+        task = node_exec.graph.node(self._node.name).task(state_index)
         _, split_depth = TypeParser.strip_splits(self._type)
 
         def get_nested(task: "Task[DefType]", depth: int):

@@ -1,13 +1,11 @@
 from pathlib import Path
 import typing as ty
 import os
-import attrs
 from unittest.mock import Mock
-
-# from copy import deepcopy
 import time
+import pytest
 from fileformats.generic import File
-from ..specs import (
+from pydra.engine.specs import (
     Runtime,
     Result,
 )
@@ -15,113 +13,68 @@ from pydra.engine.lazy import (
     LazyInField,
     LazyOutField,
 )
-
+from pydra.engine.core import Workflow
+from pydra.engine.submitter import NodeExecution
 from pydra.utils.typing import StateArray
-
-# from ..helpers import make_klass
-from .utils import Foo, BasicWorkflow
 from pydra.design import python, workflow
-import pytest
+from .utils import Foo, FunAddTwo, FunAddVar, ListSum
 
 
-# @python.define
-# def Foo(a: str, b: int, c: float) -> str:
-#     return f"{a}{b}{c}"
-
-
-def test_runtime():
-    runtime = Runtime()
-    assert hasattr(runtime, "rss_peak_gb")
-    assert hasattr(runtime, "vms_peak_gb")
-    assert hasattr(runtime, "cpu_peak_percent")
-
-
-def test_result(tmp_path):
-    result = Result(output_dir=tmp_path)
-    assert hasattr(result, "runtime")
-    assert hasattr(result, "outputs")
-    assert hasattr(result, "errored")
-    assert getattr(result, "errored") is False
-
-
-class NodeTesting:
-    @attrs.define()
-    class Input:
-        inp_a: str = "A"
-        inp_b: str = "B"
-
-    def __init__(self):
-        class InpDef:
-            def __init__(self):
-                self.fields = [("inp_a", int), ("inp_b", int)]
-
-        class Outputs:
-            def __init__(self):
-                self.fields = [("out_a", int)]
-
-        self.name = "tn"
-        self.inputs = self.Input()
-        self.input_spec = InpDef()
-        self.output_spec = Outputs()
-        self.output_names = ["out_a"]
-        self.state = None
-
-    def result(self, state_index=None):
-        class Output:
-            def __init__(self):
-                self.out_a = "OUT_A"
-
-        class Result:
-            def __init__(self):
-                self.output = Output()
-                self.errored = False
-
-            def get_output_field(self, field):
-                return getattr(self.output, field)
-
-        return Result()
-
-
-class WorkflowTesting:
-    def __init__(self):
-        class Input:
-            def __init__(self):
-                self.inp_a = "A"
-                self.inp_b = "B"
-
-        self.inputs = Input()
-        self.tn = NodeTesting()
+@workflow.define
+def TestWorkflow(x: int, y: list[int]) -> int:
+    node_a = workflow.add(FunAddTwo(a=x), name="A")
+    node_b = workflow.add(FunAddVar(a=node_a.out).split(b=y).combine("b"), name="B")
+    node_c = workflow.add(ListSum(x=node_b.out), name="C")
+    return node_c.out
 
 
 @pytest.fixture
-def mock_node():
-    node = Mock()
-    node.name = "tn"
-    node.definition = Foo(a="a", b=1, c=2.0)
-    return node
+def workflow_task():
+    return TestWorkflow(x=1, y=[1, 2, 3])
 
 
 @pytest.fixture
-def mock_workflow():
-    mock_workflow = Mock()
-    mock_workflow.inputs = BasicWorkflow(x=1)
-    mock_workflow.outputs = BasicWorkflow.Outputs(out=attrs.NOTHING)
-    return mock_workflow
+def workflow_obj(workflow_task):
+    wf = Workflow.construct(workflow_task)
+    for n in wf.nodes:
+        if n._state:
+            n._state.prepare_states()
+            n._state.prepare_inputs()
+    return wf
 
 
-def test_lazy_inp(mock_workflow):
-    lf = LazyInField(field="a", type=int, workflow=mock_workflow)
-    assert lf._get_value() == "a"
-
-    lf = LazyInField(field="b", type=str, workflow_def=mock_workflow)
-    assert lf._get_value() == 1
+@pytest.fixture
+def node_a(workflow_obj):
+    return workflow_obj["A"]
 
 
-def test_lazy_out():
-    tn = NodeTesting()
-    lzout = LazyOutField(task=tn)
-    lf = lzout.out_a
-    assert lf.get_value(wf=WorkflowTesting()) == "OUT_A"
+@pytest.fixture
+def node_b(workflow_obj):
+    return workflow_obj["B"]
+
+
+@pytest.fixture
+def node_c(workflow_obj):
+    return workflow_obj["C"]
+
+
+@pytest.fixture
+def node_exec(node_c, workflow_task):
+    # We only use this to resolve the upstream outputs from, can be any node
+    return NodeExecution(node=node_c, workflow_inputs=workflow_task, submitter=Mock())
+
+
+def test_lazy_inp(workflow_obj, node_exec):
+    lf = LazyInField(field="x", type=int, workflow=workflow_obj)
+    assert lf._get_value(node_exec) == 1
+
+    lf = LazyInField(field="y", type=str, workflow=workflow_obj)
+    assert lf._get_value(node_exec) == [1, 2, 3]
+
+
+def test_lazy_out(node_a, node_exec):
+    lf = LazyOutField(field="a", type=int, node=node_a)
+    assert lf._get_value(node_exec) == 3
 
 
 def test_lazy_getvale():
@@ -409,3 +362,18 @@ def test_wf_lzin_split(tmp_path):
 
     outputs = outer(cache_dir=tmp_path)
     assert outputs.out == [1, 2, 3]
+
+
+def test_runtime():
+    runtime = Runtime()
+    assert hasattr(runtime, "rss_peak_gb")
+    assert hasattr(runtime, "vms_peak_gb")
+    assert hasattr(runtime, "cpu_peak_percent")
+
+
+def test_result(tmp_path):
+    result = Result(output_dir=tmp_path)
+    assert hasattr(result, "runtime")
+    assert hasattr(result, "outputs")
+    assert hasattr(result, "errored")
+    assert getattr(result, "errored") is False

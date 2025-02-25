@@ -9,15 +9,18 @@ from tempfile import mkdtemp
 from copy import copy
 from datetime import datetime
 from collections import defaultdict
+import attrs
 from .workers import Worker, WORKERS
 from .graph import DiGraph
 from .helpers import (
     get_open_loop,
     list_fields,
+    attrs_values,
 )
 from pydra.utils.hash import PersistentCache
 from .state import StateIndex
 from pydra.utils.typing import StateArray
+from pydra.engine.lazy import LazyField
 from .audit import Audit
 from .core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
@@ -607,10 +610,7 @@ class NodeExecution(ty.Generic[DefType]):
     def _generate_tasks(self) -> ty.Iterable["Task[DefType]"]:
         if not self.node.state:
             yield Task(
-                definition=self.node._definition._resolve_lazy_inputs(
-                    workflow_inputs=self.workflow_inputs,
-                    graph=self.graph,
-                ),
+                definition=self._resolve_lazy_inputs(task_def=self.node._definition),
                 submitter=self.submitter,
                 environment=self.node._environment,
                 hooks=self.node._hooks,
@@ -619,9 +619,8 @@ class NodeExecution(ty.Generic[DefType]):
         else:
             for index, split_defn in self.node._split_definition().items():
                 yield Task(
-                    definition=split_defn._resolve_lazy_inputs(
-                        workflow_inputs=self.workflow_inputs,
-                        graph=self.graph,
+                    definition=self._resolve_lazy_inputs(
+                        task_def=split_defn,
                         state_index=index,
                     ),
                     submitter=self.submitter,
@@ -630,6 +629,32 @@ class NodeExecution(ty.Generic[DefType]):
                     hooks=self.node._hooks,
                     state_index=index,
                 )
+
+    def _resolve_lazy_inputs(
+        self,
+        task_def: "TaskDef",
+        state_index: "StateIndex | None" = None,
+    ) -> "TaskDef":
+        """Resolves lazy fields in the task definition by replacing them with their
+        actual values calculated by upstream jobs.
+
+        Parameters
+        ----------
+        task_def : TaskDef
+            The definition to resolve the lazy fields of
+        state_index : StateIndex, optional
+            The state index for the workflow, by default None
+
+        Returns
+        -------
+        TaskDef
+            The task definition with all lazy fields resolved
+        """
+        resolved = {}
+        for name, value in attrs_values(self).items():
+            if isinstance(value, LazyField):
+                resolved[name] = value._get_value(self, state_index)
+        return attrs.evolve(self, **resolved)
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Task[DefType]"]:
         """For a given node, check to see which tasks have been successfully run, are ready
