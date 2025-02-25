@@ -59,7 +59,8 @@ jobs:
     steps:
       - name: Fetch repository
         uses: actions/checkout@v4
-
+      - name: Fetch tags
+        run: git fetch --prune --unshallow
       - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
         uses: actions/setup-python@v5
         with:
