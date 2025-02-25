@@ -309,7 +309,6 @@ def test_interface_template_with_overrides_and_optionals():
             type=tuple[int, str],
             sep=" ",
             position=5,
-            sep=" ",
         ),
     ] + outargs + [ShellDef.additional_args]
     assert sorted_fields(Cp.Outputs) == outargs + [

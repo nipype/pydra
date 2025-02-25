@@ -77,7 +77,7 @@ def test_task_init_3(
     if input_type == "array":
         a_in = np.array(a_in)
 
-    nn = FunAddTwo(name="NA").split(splitter=splitter, a=a_in)
+    nn = FunAddTwo().split(splitter=splitter, a=a_in)
 
     assert np.allclose(nn.inputs.a, [3, 5])
     assert nn.state.splitter == state_splitter

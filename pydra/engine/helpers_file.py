@@ -12,6 +12,9 @@ import attr
 from fileformats.generic import FileSet
 from pydra.engine.helpers import is_lazy, attrs_values, list_fields
 
+if ty.TYPE_CHECKING:
+    from pydra.engine.specs import TaskDef
+    from pydra.design import shell
 
 logger = logging.getLogger("pydra")
 
@@ -235,18 +238,23 @@ def _template_formatting(field, definition, input_values):
     # as default, we assume that keep_extension is True
     if isinstance(template, (tuple, list)):
         formatted = [
-            _string_template_formatting(field, t, definition, input_values)
+            _single_template_formatting(field, t, definition, input_values)
             for t in template
         ]
     else:
         assert isinstance(template, str)
-        formatted = _string_template_formatting(
+        formatted = _single_template_formatting(
             field, template, definition, input_values
         )
-    return Path(formatted)
+    return formatted
 
 
-def _string_template_formatting(field, template, definition, input_values):
+def _single_template_formatting(
+    field: "shell.outarg",
+    template: str,
+    definition: "TaskDef",
+    input_values: dict[str, ty.Any],
+) -> Path | None:
     from pydra.utils.typing import MultiInputObj, MultiOutputFile
 
     inp_fields = re.findall(r"{\w+}", template)
@@ -328,7 +336,7 @@ def _string_template_formatting(field, template, definition, input_values):
         formatted_value = _element_formatting(
             template, val_dict, file_template, keep_extension=field.keep_extension
         )
-    return formatted_value
+    return Path(formatted_value) if formatted_value is not None else formatted_value
 
 
 def _element_formatting(

@@ -2,6 +2,7 @@ from pathlib import Path
 import typing as ty
 import os
 import attrs
+from unittest.mock import Mock
 
 # from copy import deepcopy
 import time
@@ -9,7 +10,6 @@ from fileformats.generic import File
 from ..specs import (
     Runtime,
     Result,
-    ShellDef,
 )
 from pydra.engine.lazy import (
     LazyInField,
@@ -19,12 +19,14 @@ from pydra.engine.lazy import (
 from pydra.utils.typing import StateArray
 
 # from ..helpers import make_klass
-from .utils import Foo
+from .utils import Foo, BasicWorkflow
 from pydra.design import python, workflow
 import pytest
 
 
-make_klass = lambda x: x
+# @python.define
+# def Foo(a: str, b: int, c: float) -> str:
+#     return f"{a}{b}{c}"
 
 
 def test_runtime():
@@ -34,20 +36,12 @@ def test_runtime():
     assert hasattr(runtime, "cpu_peak_percent")
 
 
-def test_result():
-    result = Result()
+def test_result(tmp_path):
+    result = Result(output_dir=tmp_path)
     assert hasattr(result, "runtime")
-    assert hasattr(result, "output")
+    assert hasattr(result, "outputs")
     assert hasattr(result, "errored")
     assert getattr(result, "errored") is False
-
-
-def test_shellspec():
-    with pytest.raises(TypeError):
-        definition = ShellDef()
-    definition = ShellDef(executable="ls")  # (executable, args)
-    assert hasattr(definition, "executable")
-    assert hasattr(definition, "args")
 
 
 class NodeTesting:
@@ -99,20 +93,33 @@ class WorkflowTesting:
         self.tn = NodeTesting()
 
 
-def test_lazy_inp():
-    tn = NodeTesting()
-    lzin = LazyIn(task=tn)
+@pytest.fixture
+def mock_node():
+    node = Mock()
+    node.name = "tn"
+    node.definition = Foo(a="a", b=1, c=2.0)
+    return node
 
-    lf = lzin.inp_a
-    assert lf.get_value(wf=WorkflowTesting()) == "A"
 
-    lf = lzin.inp_b
-    assert lf.get_value(wf=WorkflowTesting()) == "B"
+@pytest.fixture
+def mock_workflow():
+    mock_workflow = Mock()
+    mock_workflow.inputs = BasicWorkflow(x=1)
+    mock_workflow.outputs = BasicWorkflow.Outputs(out=attrs.NOTHING)
+    return mock_workflow
+
+
+def test_lazy_inp(mock_workflow):
+    lf = LazyInField(field="a", type=int, workflow=mock_workflow)
+    assert lf._get_value() == "a"
+
+    lf = LazyInField(field="b", type=str, workflow_def=mock_workflow)
+    assert lf._get_value() == 1
 
 
 def test_lazy_out():
     tn = NodeTesting()
-    lzout = LazyOut(task=tn)
+    lzout = LazyOutField(task=tn)
     lf = lzout.out_a
     assert lf.get_value(wf=WorkflowTesting()) == "OUT_A"
 
@@ -364,10 +371,10 @@ def test_lazy_field_multi_same_split():
 
 def test_lazy_field_multi_diff_split():
     @python.define
-    def f(x: ty.Any, y: ty.Any) -> ty.Any:
+    def F(x: ty.Any, y: ty.Any) -> ty.Any:
         return x
 
-    task = f(x=[1, 2, 3], name="foo")
+    task = F(x=[1, 2, 3], name="foo")
 
     lf = task.lzout.out.split("foo.x")
 
@@ -383,18 +390,22 @@ def test_lazy_field_multi_diff_split():
     assert lf3.splits == set([(("foo.x",),), (("foo.y",),)])
 
 
-def test_wf_lzin_split():
+def test_wf_lzin_split(tmp_path):
     @python.define
     def identity(x: int) -> int:
         return x
 
-    inner = Workflow(name="inner", input_spec=["x"])
-    inner.add(identity(x=inner.lzin.x, name="f"))
-    inner.set_output(("out", inner.f.lzout.out))
+    @workflow.define
+    def Inner(x):
+        ident = workflow.add(identity(x=x))
+        return ident.out
 
-    outer = Workflow(name="outer", input_spec=["x"])
-    outer.add(inner.split(x=outer.lzin.x))
-    outer.set_output(("out", outer.inner.lzout.out))
+    @workflow.define
+    def Outer(xs):
+        inner = workflow.add(Inner().split(x=xs))
+        return inner.out
 
-    outputs = outer(x=[1, 2, 3])
-    assert outputs.out == StateArray([1, 2, 3])
+    outer = Outer(xs=[1, 2, 3])
+
+    outputs = outer(cache_dir=tmp_path)
+    assert outputs.out == [1, 2, 3]
