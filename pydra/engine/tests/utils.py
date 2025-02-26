@@ -290,8 +290,8 @@ def FunFileList(filename_list: ty.List[File]):
 
 @workflow.define(outputs=["out"])
 def BasicWorkflow(x):
-    task1 = workflow.add(FunAddTwo(a=x))
-    task2 = workflow.add(FunAddVar(a=task1.out, b=2))
+    task1 = workflow.add(FunAddTwo(a=x), name="A")
+    task2 = workflow.add(FunAddVar(a=task1.out, b=2), name="B")
     return task2.out
 
 

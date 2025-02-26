@@ -6,10 +6,9 @@ from pydra.utils.hash import hash_single
 from . import node
 
 if ty.TYPE_CHECKING:
-    from .graph import DiGraph
-    from .submitter import NodeExecution
+    from .submitter import DiGraph, NodeExecution
     from .core import Task, Workflow
-    from .specs import TaskDef, WorkflowDef
+    from .specs import TaskDef
     from .state import StateIndex
 
 
@@ -46,6 +45,30 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
             value = self._type(value)
         return value
 
+    def _get_value(
+        self,
+        workflow: "Workflow",
+        graph: "DiGraph[NodeExecution]",
+        state_index: "StateIndex | None" = None,
+    ) -> ty.Any:
+        """Return the value of a lazy field.
+
+        Parameters
+        ----------
+        workflow: Workflow
+            the workflow object
+        graph: DiGraph[NodeExecution]
+            the graph representing the execution state of the workflow
+        state_index : StateIndex, optional
+            the state index of the field to access
+
+        Returns
+        -------
+        value : Any
+            the resolved value of the lazy-field
+        """
+        raise NotImplementedError("LazyField is an abstract class")
+
 
 @attrs.define(kw_only=True)
 class LazyInField(LazyField[T]):
@@ -70,15 +93,19 @@ class LazyInField(LazyField[T]):
 
     def _get_value(
         self,
-        workflow_def: "WorkflowDef",
+        workflow: "Workflow",
+        graph: "DiGraph[NodeExecution]",
+        state_index: "StateIndex | None" = None,
     ) -> ty.Any:
         """Return the value of a lazy field.
 
         Parameters
         ----------
-        wf : Workflow
-            the workflow the lazy field references
-        state_index : int, optional
+        workflow: Workflow
+            the workflow object
+        graph: DiGraph[NodeExecution]
+            the graph representing the execution state of the workflow
+        state_index : StateIndex, optional
             the state index of the field to access
 
         Returns
@@ -86,7 +113,7 @@ class LazyInField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        value = workflow_def[self._field]
+        value = workflow.inputs[self._field]
         value = self._apply_cast(value)
         return value
 
@@ -105,6 +132,7 @@ class LazyOutField(LazyField[T]):
 
     def _get_value(
         self,
+        workflow: "Workflow",
         graph: "DiGraph[NodeExecution]",
         state_index: "StateIndex | None" = None,
     ) -> ty.Any:
@@ -112,9 +140,11 @@ class LazyOutField(LazyField[T]):
 
         Parameters
         ----------
-        wf : Workflow
-            the workflow the lazy field references
-        state_index : int, optional
+        workflow: Workflow
+            the workflow object
+        graph: DiGraph[NodeExecution]
+            the graph representing the execution state of the workflow
+        state_index : StateIndex, optional
             the state index of the field to access
 
         Returns

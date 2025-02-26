@@ -1,32 +1,64 @@
 from pathlib import Path
 import typing as ty
-import os
-import attrs
-from unittest.mock import Mock
-
-# from copy import deepcopy
 import time
+import pytest
 from fileformats.generic import File
-from ..specs import (
+from pydra.engine.specs import (
     Runtime,
     Result,
+    WorkflowDef,
 )
 from pydra.engine.lazy import (
     LazyInField,
     LazyOutField,
 )
-
+from pydra.engine.core import Workflow
+from pydra.engine.node import Node
+from pydra.engine.submitter import Submitter, NodeExecution, DiGraph
 from pydra.utils.typing import StateArray
-
-# from ..helpers import make_klass
-from .utils import Foo, BasicWorkflow
 from pydra.design import python, workflow
-import pytest
+from .utils import Foo, FunAddTwo, FunAddVar, ListSum
 
 
-# @python.define
-# def Foo(a: str, b: int, c: float) -> str:
-#     return f"{a}{b}{c}"
+@workflow.define
+def TestWorkflow(x: int, y: list[int]) -> int:
+    node_a = workflow.add(FunAddTwo(a=x), name="A")
+    node_b = workflow.add(FunAddVar(a=node_a.out).split(b=y).combine("b"), name="B")
+    node_c = workflow.add(ListSum(x=node_b.out), name="C")
+    return node_c.out
+
+
+@pytest.fixture
+def workflow_task(submitter: Submitter) -> WorkflowDef:
+    wf = TestWorkflow(x=1, y=[1, 2, 3])
+    with submitter:
+        submitter(wf)
+    return wf
+
+
+@pytest.fixture
+def wf(workflow_task: WorkflowDef) -> Workflow:
+    wf = Workflow.construct(workflow_task)
+    for n in wf.nodes:
+        if n._state:
+            n._state.prepare_states()
+            n._state.prepare_inputs()
+    return wf
+
+
+@pytest.fixture
+def submitter(tmp_path) -> Submitter:
+    return Submitter(tmp_path)
+
+
+@pytest.fixture
+def graph(wf: Workflow, submitter: Submitter) -> DiGraph[NodeExecution]:
+    return wf.execution_graph(submitter=submitter)
+
+
+@pytest.fixture
+def node_a(wf) -> Node:
+    return wf["A"]  # we can pick any node to retrieve the values to
 
 
 def test_runtime():
@@ -44,111 +76,34 @@ def test_result(tmp_path):
     assert getattr(result, "errored") is False
 
 
-class NodeTesting:
-    @attrs.define()
-    class Input:
-        inp_a: str = "A"
-        inp_b: str = "B"
+def test_lazy_inp(wf: Workflow, graph: DiGraph[NodeExecution]):
+    lf = LazyInField(field="x", type=int, workflow=wf)
+    assert lf._get_value(workflow=wf, graph=graph) == 1
 
-    def __init__(self):
-        class InpDef:
-            def __init__(self):
-                self.fields = [("inp_a", int), ("inp_b", int)]
-
-        class Outputs:
-            def __init__(self):
-                self.fields = [("out_a", int)]
-
-        self.name = "tn"
-        self.inputs = self.Input()
-        self.input_spec = InpDef()
-        self.output_spec = Outputs()
-        self.output_names = ["out_a"]
-        self.state = None
-
-    def result(self, state_index=None):
-        class Output:
-            def __init__(self):
-                self.out_a = "OUT_A"
-
-        class Result:
-            def __init__(self):
-                self.output = Output()
-                self.errored = False
-
-            def get_output_field(self, field):
-                return getattr(self.output, field)
-
-        return Result()
+    lf = LazyInField(field="y", type=str, workflow=wf)
+    assert lf._get_value(workflow=wf, graph=graph) == [1, 2, 3]
 
 
-class WorkflowTesting:
-    def __init__(self):
-        class Input:
-            def __init__(self):
-                self.inp_a = "A"
-                self.inp_b = "B"
-
-        self.inputs = Input()
-        self.tn = NodeTesting()
-
-
-@pytest.fixture
-def mock_node():
-    node = Mock()
-    node.name = "tn"
-    node.definition = Foo(a="a", b=1, c=2.0)
-    return node
-
-
-@pytest.fixture
-def mock_workflow():
-    mock_workflow = Mock()
-    mock_workflow.inputs = BasicWorkflow(x=1)
-    mock_workflow.outputs = BasicWorkflow.Outputs(out=attrs.NOTHING)
-    return mock_workflow
-
-
-def test_lazy_inp(mock_workflow):
-    lf = LazyInField(field="a", type=int, workflow=mock_workflow)
-    assert lf._get_value() == "a"
-
-    lf = LazyInField(field="b", type=str, workflow_def=mock_workflow)
-    assert lf._get_value() == 1
-
-
-def test_lazy_out():
-    tn = NodeTesting()
-    lzout = LazyOutField(task=tn)
-    lf = lzout.out_a
-    assert lf.get_value(wf=WorkflowTesting()) == "OUT_A"
-
-
-def test_lazy_getvale():
-    tn = NodeTesting()
-    lf = LazyIn(task=tn)
-    with pytest.raises(Exception) as excinfo:
-        lf.inp_c
-    assert (
-        str(excinfo.value)
-        == "Task 'tn' has no input attribute 'inp_c', available: 'inp_a', 'inp_b'"
-    )
+def test_lazy_out(node_a, wf, graph):
+    lf = LazyOutField(field="out", type=int, node=node_a)
+    assert lf._get_value(wf, graph) == 3
 
 
 def test_input_file_hash_1(tmp_path):
-    os.chdir(tmp_path)
-    outfile = "test.file"
-    fields = [("in_file", ty.Any)]
-    input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseDef,))
-    inputs = make_klass(input_spec)
-    assert inputs(in_file=outfile).hash == "9a106eb2830850834d9b5bf098d5fa85"
+
+    outfile = tmp_path / "test.file"
+    outfile.touch()
+
+    @python.define
+    def A(in_file: File) -> File:
+        return in_file
+
+    assert A(in_file=outfile)._hash == "9644d3998748b339819c23ec6abec520"
 
     with open(outfile, "w") as fp:
         fp.write("test")
-    fields = [("in_file", File)]
-    input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseDef,))
-    inputs = make_klass(input_spec)
-    assert inputs(in_file=outfile).hash == "02fa5f6f1bbde7f25349f54335e1adaf"
+
+    assert A(in_file=outfile)._hash == "9f7f9377ddef6d8c018f1bf8e89c208c"
 
 
 def test_input_file_hash_2(tmp_path):
@@ -157,26 +112,26 @@ def test_input_file_hash_2(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    input_spec = SpecInfo(name="Inputs", fields=[("in_file", File)], bases=(BaseDef,))
-    inputs = make_klass(input_spec)
+    @python.define
+    def A(in_file: File) -> File:
+        return in_file
 
     # checking specific hash value
-    hash1 = inputs(in_file=file).hash
-    assert hash1 == "aaa50d60ed33d3a316d58edc882a34c3"
+    hash1 = A(in_file=file)._hash
+    assert hash1 == "179bd3cbdc747edc4957579376fe8c7d"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = inputs(in_file=file_diffname).hash
+    hash2 = A(in_file=file_diffname)._hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
-    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash3 = inputs(in_file=file_diffcontent).hash
+    hash3 = A(in_file=file_diffcontent)._hash
     assert hash1 != hash3
 
 
@@ -186,33 +141,31 @@ def test_input_file_hash_2a(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    input_spec = SpecInfo(
-        name="Inputs", fields=[("in_file", ty.Union[File, int])], bases=(BaseDef,)
-    )
-    inputs = make_klass(input_spec)
+    @python.define
+    def A(in_file: ty.Union[File, int]) -> File:
+        return in_file
 
     # checking specific hash value
-    hash1 = inputs(in_file=file).hash
-    assert hash1 == "aaa50d60ed33d3a316d58edc882a34c3"
+    hash1 = A(in_file=file)._hash
+    assert hash1 == "179bd3cbdc747edc4957579376fe8c7d"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = inputs(in_file=file_diffname).hash
+    hash2 = A(in_file=file_diffname)._hash
     assert hash1 == hash2
 
+    # checking if string is also accepted
+    hash3 = A(in_file=str(file))._hash
+    assert hash3 == hash1
+
     # checking if different content (the same name) affects the hash
-    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash3 = inputs(in_file=file_diffcontent).hash
-    assert hash1 != hash3
-
-    # checking if string is also accepted
-    hash4 = inputs(in_file=str(file)).hash
-    assert hash4 == "800af2b5b334c9e3e5c40c0e49b7ffb5"
+    hash4 = A(in_file=file_diffcontent)._hash
+    assert hash1 != hash4
 
 
 def test_input_file_hash_3(tmp_path):
@@ -221,22 +174,21 @@ def test_input_file_hash_3(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    input_spec = SpecInfo(
-        name="Inputs", fields=[("in_file", File), ("in_int", int)], bases=(BaseDef,)
-    )
-    inputs = make_klass(input_spec)
+    @python.define
+    def A(in_file: File, in_int: int) -> File:
+        return in_file, in_int
 
-    my_inp = inputs(in_file=file, in_int=3)
+    a = A(in_file=file, in_int=3)
     # original hash and files_hash (dictionary contains info about files)
-    hash1 = my_inp.hash
+    hash1 = a._hash
     # files_hash1 = deepcopy(my_inp.files_hash)
     # file name should be in files_hash1[in_file]
     filename = str(Path(file))
     # assert filename in files_hash1["in_file"]
 
     # changing int input
-    my_inp.in_int = 5
-    hash2 = my_inp.hash
+    a.in_int = 5
+    hash2 = a._hash
     # files_hash2 = deepcopy(my_inp.files_hash)
     # hash should be different
     assert hash1 != hash2
@@ -249,7 +201,7 @@ def test_input_file_hash_3(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    hash3 = my_inp.hash
+    hash3 = a._hash
     # files_hash3 = deepcopy(my_inp.files_hash)
     # hash should be the same,
     # but the entry for in_file in files_hash should be different (modification time)
@@ -261,11 +213,11 @@ def test_input_file_hash_3(tmp_path):
     # assert files_hash3["in_file"][filename][1] == files_hash2["in_file"][filename][1]
 
     # setting the in_file again
-    my_inp.in_file = file
+    a.in_file = file
     # filename should be removed from files_hash
     # assert my_inp.files_hash["in_file"] == {}
     # will be saved again when hash is calculated
-    assert my_inp.hash == hash3
+    assert a._hash == hash3
     # assert filename in my_inp.files_hash["in_file"]
 
 
@@ -277,26 +229,23 @@ def test_input_file_hash_4(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    input_spec = SpecInfo(
-        name="Inputs",
-        fields=[("in_file", ty.List[ty.List[ty.Union[int, File]]])],
-        bases=(BaseDef,),
-    )
-    inputs = make_klass(input_spec)
+    @python.define
+    def A(in_file: ty.List[ty.List[ty.Union[int, File]]]) -> File:
+        return in_file
 
     # checking specific hash value
-    hash1 = inputs(in_file=[[file, 3]]).hash
-    assert hash1 == "0693adbfac9f675af87e900065b1de00"
+    hash1 = A(in_file=[[file, 3]])._hash
+    assert hash1 == "ffd7afe0ca9d4585518809a509244b4b"
 
     # the same file, but int field changes
-    hash1a = inputs(in_file=[[file, 5]]).hash
+    hash1a = A(in_file=[[file, 5]])._hash
     assert hash1 != hash1a
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = inputs(in_file=[[file_diffname, 3]]).hash
+    hash2 = A(in_file=[[file_diffname, 3]])._hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
@@ -304,7 +253,7 @@ def test_input_file_hash_4(tmp_path):
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash3 = inputs(in_file=[[file_diffcontent, 3]]).hash
+    hash3 = A(in_file=[[file_diffcontent, 3]])._hash
     assert hash1 != hash3
 
 
@@ -314,26 +263,23 @@ def test_input_file_hash_5(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    input_spec = SpecInfo(
-        name="Inputs",
-        fields=[("in_file", ty.List[ty.Dict[ty.Any, ty.Union[File, int]]])],
-        bases=(BaseDef,),
-    )
-    inputs = make_klass(input_spec)
+    @python.define
+    def A(in_file: ty.List[ty.Dict[ty.Any, ty.Union[File, int]]]) -> File:
+        return in_file
 
     # checking specific hash value
-    hash1 = inputs(in_file=[{"file": file, "int": 3}]).hash
-    assert hash1 == "56e6e2c9f3bdf0cd5bd3060046dea480"
+    hash1 = A(in_file=[{"file": file, "int": 3}])._hash
+    assert hash1 == "ba884a74e33552854271f55b03e53947"
 
     # the same file, but int field changes
-    hash1a = inputs(in_file=[{"file": file, "int": 5}]).hash
+    hash1a = A(in_file=[{"file": file, "int": 5}])._hash
     assert hash1 != hash1a
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = inputs(in_file=[{"file": file_diffname, "int": 3}]).hash
+    hash2 = A(in_file=[{"file": file_diffname, "int": 3}])._hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
@@ -341,53 +287,15 @@ def test_input_file_hash_5(tmp_path):
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash3 = inputs(in_file=[{"file": file_diffcontent, "int": 3}]).hash
+    hash3 = A(in_file=[{"file": file_diffcontent, "int": 3}])._hash
     assert hash1 != hash3
 
 
-def test_lazy_field_cast():
-    task = Foo(a="a", b=1, c=2.0, name="foo")
+def test_lazy_field_cast(wf: Workflow):
+    lzout = wf.add(Foo(a="a", b=1, c=2.0), name="foo")
 
-    assert task.lzout.y._type is int
-    assert workflow.cast(task.lzout.y, float)._type is float
-
-
-def test_lazy_field_multi_same_split():
-    @python.define
-    def f(x: ty.List[int]) -> ty.List[int]:
-        return x
-
-    task = f(x=[1, 2, 3], name="foo")
-
-    lf = task.lzout.out.split("foo.x")
-
-    assert lf.type == StateArray[int]
-    assert lf.splits == set([(("foo.x",),)])
-
-    lf2 = lf.split("foo.x")
-    assert lf2.type == StateArray[int]
-    assert lf2.splits == set([(("foo.x",),)])
-
-
-def test_lazy_field_multi_diff_split():
-    @python.define
-    def F(x: ty.Any, y: ty.Any) -> ty.Any:
-        return x
-
-    task = F(x=[1, 2, 3], name="foo")
-
-    lf = task.lzout.out.split("foo.x")
-
-    assert lf.type == StateArray[ty.Any]
-    assert lf.splits == set([(("foo.x",),)])
-
-    lf2 = lf.split("foo.x")
-    assert lf2.type == StateArray[ty.Any]
-    assert lf2.splits == set([(("foo.x",),)])
-
-    lf3 = lf.split("foo.y")
-    assert lf3.type == StateArray[StateArray[ty.Any]]
-    assert lf3.splits == set([(("foo.x",),), (("foo.y",),)])
+    assert lzout.y._type is int
+    assert workflow.cast(lzout.y, float)._type is float
 
 
 def test_wf_lzin_split(tmp_path):

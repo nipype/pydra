@@ -35,14 +35,12 @@ from pydra.utils.hash import hash_function, Cache
 from pydra.utils.typing import StateArray, MultiInputObj
 from pydra.design.base import Field, Arg, Out, RequirementSet, NO_DEFAULT
 from pydra.design import shell
-from pydra.engine.lazy import LazyInField, LazyOutField
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
     from pydra.engine.graph import DiGraph
     from pydra.engine.submitter import NodeExecution
     from pydra.engine.core import Workflow
-    from pydra.engine.state import StateIndex
     from pydra.engine.environments import Environment
     from pydra.engine.workers import Worker
 
@@ -476,41 +474,6 @@ class TaskDef(ty.Generic[OutputsType]):
         }
         return hash_function(sorted(field_hashes.items())), field_hashes
 
-    def _resolve_lazy_inputs(
-        self,
-        workflow_inputs: "WorkflowDef",
-        graph: "DiGraph[NodeExecution]",
-        state_index: "StateIndex | None" = None,
-    ) -> Self:
-        """Resolves lazy fields in the task definition by replacing them with their
-        actual values.
-
-        Parameters
-        ----------
-        workflow : Workflow
-            The workflow the task is part of
-        graph : DiGraph[NodeExecution]
-            The execution graph of the workflow
-        state_index : StateIndex, optional
-            The state index for the workflow, by default None
-
-        Returns
-        -------
-        Self
-            The task definition with all lazy fields resolved
-        """
-        from pydra.engine.state import StateIndex
-
-        if state_index is None:
-            state_index = StateIndex()
-        resolved = {}
-        for name, value in attrs_values(self).items():
-            if isinstance(value, LazyInField):
-                resolved[name] = value._get_value(workflow_inputs)
-            elif isinstance(value, LazyOutField):
-                resolved[name] = value._get_value(graph, state_index)
-        return attrs.evolve(self, **resolved)
-
     def _check_rules(self):
         """Check if all rules are satisfied."""
 
@@ -773,7 +736,7 @@ class WorkflowOutputs(TaskOutputs):
         nodes_dict = {n.name: n for n in exec_graph.nodes}
         for name, lazy_field in attrs_values(workflow.outputs).items():
             try:
-                val_out = lazy_field._get_value(exec_graph)
+                val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
                 output_wf[name] = val_out
             except (ValueError, AttributeError):
                 output_wf[name] = None

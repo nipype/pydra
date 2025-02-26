@@ -7,7 +7,7 @@ import sys
 import types
 import typing as ty
 import logging
-import attr
+import attrs
 from pydra.utils import add_exc_note
 from fileformats import field, core, generic
 
@@ -217,8 +217,8 @@ class TypeParser(ty.Generic[T]):
         from pydra.engine.helpers import is_lazy
 
         coerced: T
-        if obj is attr.NOTHING:
-            coerced = attr.NOTHING  # type: ignore[assignment]
+        if obj is attrs.NOTHING:
+            coerced = attrs.NOTHING  # type: ignore[assignment]
         elif is_lazy(obj):
             try:
                 self.check_type(obj._type)
@@ -279,8 +279,8 @@ class TypeParser(ty.Generic[T]):
 
         def expand_and_coerce(obj, pattern: ty.Union[type, tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
-            if obj is attr.NOTHING:
-                return attr.NOTHING
+            if obj is attrs.NOTHING:
+                return attrs.NOTHING
             if not isinstance(pattern, tuple):
                 return coerce_basic(obj, pattern)
             origin, pattern_args = pattern
