@@ -15,7 +15,6 @@ from pydra.engine.lazy import (
 from pydra.engine.core import Workflow
 from pydra.engine.node import Node
 from pydra.engine.submitter import Submitter, NodeExecution, DiGraph
-from pydra.utils.typing import StateArray
 from pydra.design import python, workflow
 from .utils import Foo, FunAddTwo, FunAddVar, ListSum
 
