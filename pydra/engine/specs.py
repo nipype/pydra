@@ -260,7 +260,7 @@ class TaskDef(ty.Generic[OutputsType]):
             else:
                 errors = result.errors
                 raise RuntimeError(
-                    f"Task {self} failed @ {errors['time of crash']} with following errors:\n"
+                    f"Task {self} failed @ {errors['time of crash']} with the following errors:\n"
                     + "\n".join(errors["error message"])
                 )
         return result.outputs

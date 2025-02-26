@@ -896,7 +896,7 @@ def test_audit_task(tmpdir):
             data = json.load(f)
             if "@type" in data:
                 if "AssociatedWith" in data:
-                    assert "TestFunc" in data["Label"]
+                    assert "main" in data["Label"]
 
             if "@type" in data:
                 if data["@type"] == "input":
@@ -931,7 +931,7 @@ def test_audit_shellcommandtask(tmpdir):
 
             if "@type" in data:
                 if "AssociatedWith" in data:
-                    assert "shelly" in data["Label"]
+                    assert "main" == data["Label"]
 
             if "@type" in data:
                 if data["@type"] == "input":

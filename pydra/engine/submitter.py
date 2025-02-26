@@ -256,7 +256,7 @@ class Submitter:
                 e.add_note(msg)
                 raise e
             else:
-                logger.error("\nTask execution failed\n" + msg)
+                logger.error("\nTask execution failed\n%s", msg)
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()
