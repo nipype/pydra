@@ -736,7 +736,7 @@ class WorkflowOutputs(TaskOutputs):
         nodes_dict = {n.name: n for n in exec_graph.nodes}
         for name, lazy_field in attrs_values(workflow.outputs).items():
             try:
-                val_out = lazy_field._get_value(exec_graph)
+                val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
                 output_wf[name] = val_out
             except (ValueError, AttributeError):
                 output_wf[name] = None

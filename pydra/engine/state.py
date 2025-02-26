@@ -41,7 +41,13 @@ class StateIndex:
         else:
             self.indices = OrderedDict(sorted(indices.items()))
 
-    def __repr__(self):
+    def __len__(self) -> int:
+        return len(self.indices)
+
+    def __iter__(self) -> ty.Generator[str, None, None]:
+        return iter(self.indices)
+
+    def __repr__(self) -> str:
         return (
             "StateIndex(" + ", ".join(f"{n}={v}" for n, v in self.indices.items()) + ")"
         )
@@ -49,14 +55,48 @@ class StateIndex:
     def __hash__(self):
         return hash(tuple(self.indices.items()))
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return self.indices == other.indices
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "__".join(f"{n}-{i}" for n, i in self.indices.items())
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.indices)
+
+    def subset(self, state_names: ty.Iterable[str]) -> ty.Self:
+        """Create a new StateIndex with only the specified fields
+
+        Parameters
+        ----------
+        fields : list[str]
+            the fields to keep in the new StateIndex
+
+        Returns
+        -------
+        StateIndex
+            a new StateIndex with only the specified fields
+        """
+        return type(self)({k: v for k, v in self.indices.items() if k in state_names})
+
+    def matches(self, other: "StateIndex") -> bool:
+        """Check if the indices that are present in the other StateIndex match
+
+        Parameters
+        ----------
+        other : StateIndex
+            the other StateIndex to compare against
+
+        Returns
+        -------
+        bool
+            True if all the indices in the other StateIndex match
+        """
+        if not set(self.indices).issuperset(other.indices):
+            raise ValueError(
+                f"StateIndex {self} does not contain all the indices in {other}"
+            )
+        return all(self.indices[k] == v for k, v in other.indices.items())
 
 
 class State:
@@ -172,6 +212,9 @@ class State:
     def names(self):
         """Return the names of the states."""
         # analysing states from connected tasks if inner_inputs
+        if not hasattr(self, "keys_final"):
+            self.prepare_states()
+            self.prepare_inputs()
         previous_states_keys = {
             f"_{v.name}": v.keys_final for v in self.inner_inputs.values()
         }

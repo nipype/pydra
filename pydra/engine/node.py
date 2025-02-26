@@ -269,7 +269,11 @@ class Node(ty.Generic[OutputType]):
         """Get the states of the upstream nodes that are connected to this node"""
         upstream_states = {}
         for inpt_name, val in self.input_values:
-            if isinstance(val, lazy.LazyOutField) and val._node.state:
+            if (
+                isinstance(val, lazy.LazyOutField)
+                and val._node.state
+                and val._node.state.depth
+            ):
                 node: Node = val._node
                 # variables that are part of inner splitters should be treated as a containers
                 if node.state and f"{node.name}.{inpt_name}" in node.state.splitter:

@@ -817,9 +817,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     def execution_graph(self, submitter: "Submitter") -> DiGraph:
         from pydra.engine.submitter import NodeExecution
 
-        exec_nodes = [
-            NodeExecution(n, submitter, workflow_inputs=self.inputs) for n in self.nodes
-        ]
+        exec_nodes = [NodeExecution(n, submitter, workflow=self) for n in self.nodes]
         graph = self._create_graph(exec_nodes)
         # Set the graph attribute of the nodes so lazy fields can be resolved as tasks
         # are created

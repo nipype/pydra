@@ -32,7 +32,8 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from .node import Node
-    from .specs import TaskDef, TaskOutputs, WorkflowDef, TaskHooks, Result
+    from .specs import WorkflowDef, TaskDef, TaskOutputs, TaskHooks, Result
+    from .core import Workflow
     from .environments import Environment
     from .state import State
 
@@ -501,7 +502,7 @@ class NodeExecution(ty.Generic[DefType]):
 
     _tasks: dict[StateIndex | None, "Task[DefType]"] | None
 
-    workflow_inputs: "WorkflowDef"
+    workflow: "Workflow"
 
     graph: DiGraph["NodeExecution"] | None
 
@@ -509,7 +510,7 @@ class NodeExecution(ty.Generic[DefType]):
         self,
         node: "Node",
         submitter: Submitter,
-        workflow_inputs: "WorkflowDef",
+        workflow: "Workflow",
     ):
         self.name = node.name
         self.node = node
@@ -523,8 +524,16 @@ class NodeExecution(ty.Generic[DefType]):
         self.running = {}  # Not used in logic, but may be useful for progress tracking
         self.unrunnable = defaultdict(list)
         self.state_names = self.node.state.names if self.node.state else []
-        self.workflow_inputs = workflow_inputs
+        self.workflow = workflow
         self.graph = None
+
+    def __repr__(self):
+        return (
+            f"NodeExecution(name={self.name!r}, blocked={list(self.blocked)}, "
+            f"queued={list(self.queued)}, running={list(self.running)}, "
+            f"successful={list(self.successful)}, errored={list(self.errored)}, "
+            f"unrunnable={list(self.unrunnable)})"
+        )
 
     @property
     def inputs(self) -> "Node.Inputs":
@@ -547,12 +556,16 @@ class NodeExecution(ty.Generic[DefType]):
     def task(self, index: StateIndex = StateIndex()) -> "Task | list[Task[DefType]]":
         """Get a task object for a given state index."""
         self.tasks  # Ensure tasks are loaded
-        try:
-            return self._tasks[index]
-        except KeyError:
-            if not index:
-                return StateArray(self._tasks.values())
-            raise
+        task_index = next(iter(self._tasks))
+        if len(task_index) > len(index):
+            tasks = []
+            for ind, task in self._tasks.items():
+                if ind.matches(index):
+                    tasks.append(task)
+            return StateArray(tasks)
+        elif len(index) > len(task_index):
+            index = index.subset(task_index)
+        return self._tasks[index]
 
     @property
     def started(self) -> bool:
@@ -651,10 +664,12 @@ class NodeExecution(ty.Generic[DefType]):
             The task definition with all lazy fields resolved
         """
         resolved = {}
-        for name, value in attrs_values(self).items():
+        for name, value in attrs_values(task_def).items():
             if isinstance(value, LazyField):
-                resolved[name] = value._get_value(self, state_index)
-        return attrs.evolve(self, **resolved)
+                resolved[name] = value._get_value(
+                    workflow=self.workflow, graph=self.graph, state_index=state_index
+                )
+        return attrs.evolve(task_def, **resolved)
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Task[DefType]"]:
         """For a given node, check to see which tasks have been successfully run, are ready
@@ -676,19 +691,35 @@ class NodeExecution(ty.Generic[DefType]):
         runnable: list["Task[DefType]"] = []
         self.tasks  # Ensure tasks are loaded
         if not self.started:
+            assert self._tasks
             self.blocked = copy(self._tasks)
         # Check to see if any blocked tasks are now runnable/unrunnable
         for index, task in list(self.blocked.items()):
             pred: NodeExecution
             is_runnable = True
             for pred in graph.predecessors[self.node.name]:
-                if index not in pred.successful:
+                pred_jobs = pred.task(index)
+                if isinstance(pred_jobs, StateArray):
+                    pred_inds = [j.state_index for j in pred_jobs]
+                else:
+                    pred_inds = [pred_jobs.state_index]
+                if not all(i in pred.successful for i in pred_inds):
                     is_runnable = False
-                    if index in pred.errored:
-                        self.unrunnable[index].append(self.blocked.pop(index))
-                    if index in pred.unrunnable:
-                        self.unrunnable[index].extend(pred.unrunnable[index])
-                        self.blocked.pop(index)
+                    blocked = True
+                    if pred_errored := [i for i in pred_inds if i in pred.errored]:
+                        self.unrunnable[index].extend(
+                            [pred.errored[i] for i in pred_errored]
+                        )
+                        blocked = False
+                    if pred_unrunnable := [
+                        i for i in pred_inds if i in pred.unrunnable
+                    ]:
+                        self.unrunnable[index].extend(
+                            [pred.unrunnable[i] for i in pred_unrunnable]
+                        )
+                        blocked = False
+                    if not blocked:
+                        del self.blocked[index]
                     break
             if is_runnable:
                 runnable.append(self.blocked.pop(index))
