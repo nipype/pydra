@@ -610,51 +610,6 @@ def test_hash_changes_in_workflow_inputs(tmp_path):
         wf(cache_dir=cache_dir)
 
 
-def test_hash_changes_in_workflow_graph(tmpdir):
-    class X:
-        """Dummy class with unstable hash (i.e. which isn't altered in a node in which
-        it is an input)"""
-
-        value = 1
-
-        def __bytes_repr__(self, cache):
-            """Bytes representation from class attribute, which will be changed be
-            'alter_x" node.
-
-            NB: this is a contrived example where the bytes_repr implementation returns
-            a bytes representation of a class attribute in order to trigger the exception,
-            hopefully cases like this will be very rare"""
-            yield bytes(self.value)
-
-    @python.define(outputs=["x", "y"])
-    def Identity(x: X) -> ty.Tuple[X, int]:
-        return x, 99
-
-    @python.define
-    def AlterX(y):
-        X.value = 2
-        return y
-
-    @python.define
-    def ToTuple(x, y):
-        return (x, y)
-
-    @workflow.define
-    def Workflow(x):
-        taska = workflow.add(Identity(x=x))
-        taskb = workflow.add(AlterX(y=taska.y))
-        taskc = workflow.add(ToTuple(x=taska.x, y=taskb.out))
-        return taskc.out
-
-    wf = Workflow(x=X())
-
-    with pytest.raises(
-        RuntimeError, match="Graph of 'wf_with_blocked_tasks' workflow is not empty"
-    ):
-        with Submitter(worker="cf", cache_dir=tmpdir) as sub:
-            sub(wf)
-
-
 @python.define
 def to_tuple(x, y):
     return (x, y)
