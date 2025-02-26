@@ -735,8 +735,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             # Find the frame where the construct method was called
             if (
                 frame.f_code.co_name == "construct"
-                and "cls" in frame.f_locals
-                and frame.f_locals["cls"] is cls
+                and frame.f_locals.get("cls") is cls
                 and "workflow" in frame.f_locals
             ):
                 return frame.f_locals["workflow"]  # local var "workflow" in construct

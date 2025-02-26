@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import time
 from fileformats.generic import File
-from pydra.design import python
+from pydra.design import python, workflow
 
 from .utils import (
     FunAddTwo,
@@ -24,9 +24,35 @@ from .utils import (
     Op4Var,
 )
 
-from ..core import Task
+from pydra.engine.core import Task
+from pydra.engine.specs import TaskDef
+from pydra.engine.state import State
 from pydra.utils.typing import StateArray
-from ..submitter import Submitter
+from pydra.engine.submitter import Submitter
+from pydra.engine.core import Workflow
+
+
+@workflow.define
+def IdentityWorkflow(a: int) -> int:
+
+    @python.define
+    def Identity(a):
+        return a
+
+    a = workflow.add(Identity(a=a))
+    return a.out
+
+
+def get_state(task: TaskDef) -> State:
+    """helper function to get the state of the task once it has been added to workflow"""
+    identity_workflow = IdentityWorkflow(a=1)
+    wf = Workflow.construct(identity_workflow)
+    wf.add(task, name="NA")
+    node = wf["NA"]
+    if node.state:
+        node.state.prepare_states()
+        node.state.prepare_inputs()
+    return node.state
 
 
 @pytest.fixture(scope="module")
@@ -58,7 +84,7 @@ def test_task_init_1a():
 
 def test_task_init_2():
     """task with a name and inputs"""
-    nn = FunAddTwo(name="NA", a=3)
+    nn = FunAddTwo(a=3)
     # adding NA to the name of the variable
     assert getattr(nn.inputs, "a") == 3
     assert nn.state is None
@@ -77,15 +103,15 @@ def test_task_init_3(
     if input_type == "array":
         a_in = np.array(a_in)
 
-    nn = FunAddTwo().split(splitter=splitter, a=a_in)
+    nn = FunAddTwo().split(splitter, a=a_in)
 
-    assert np.allclose(nn.inputs.a, [3, 5])
-    assert nn.state.splitter == state_splitter
-    assert nn.state.splitter_rpn == state_rpn
+    assert np.allclose(nn.a, [3, 5])
+    state = get_state(nn)
+    assert state.splitter == state_splitter
+    assert state.splitter_rpn == state_rpn
 
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == states_ind
-    assert nn.state.states_val == states_val
+    assert state.states_ind == states_ind
+    assert state.states_val == states_val
 
 
 @pytest.mark.parametrize(
@@ -127,7 +153,7 @@ def test_task_init_3a(
         a_in, b_in = np.array(a_in), np.array(b_in)
     elif input_type == "mixed":
         a_in = np.array(a_in)
-    nn = FunAddVar(name="NA").split(splitter=splitter, a=a_in, b=b_in)
+    nn = FunAddVar().split(splitter, a=a_in, b=b_in)
 
     assert np.allclose(nn.inputs.a, [3, 5])
     assert np.allclose(nn.inputs.b, [10, 20])
@@ -141,8 +167,8 @@ def test_task_init_3a(
 
 def test_task_init_4():
     """task with interface splitter and inputs set in the split method"""
-    nn = FunAddTwo(name="NA")
-    nn.split(splitter="a", a=[3, 5])
+    nn = FunAddTwo()
+    nn.split("a", a=[3, 5])
     assert np.allclose(nn.inputs.a, [3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -155,9 +181,9 @@ def test_task_init_4():
 
 def test_task_init_4b():
     """updating splitter using overwrite=True"""
-    nn = FunAddTwo(name="NA")
-    nn.split(splitter="a", a=[1, 2])
-    nn.split(splitter="a", a=[3, 5], overwrite=True)
+    nn = FunAddTwo()
+    nn.split("a", a=[1, 2])
+    nn.split("a", a=[3, 5], overwrite=True)
     assert np.allclose(nn.inputs.a, [3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -170,9 +196,9 @@ def test_task_init_4b():
 
 def test_task_init_4c():
     """trying to set splitter twice without using overwrite"""
-    nn = FunAddVar(name="NA").split(splitter="b", b=[1, 2])
+    nn = FunAddVar().split("b", b=[1, 2])
     with pytest.raises(Exception) as excinfo:
-        nn.split(splitter="a", a=[3, 5])
+        nn.split("a", a=[3, 5])
     assert "splitter has been already set" in str(excinfo.value)
 
     assert nn.state.splitter == "NA.b"
@@ -182,16 +208,14 @@ def test_task_init_4d():
     """trying to set the same splitter twice without using overwrite
     if the splitter is the same, the exception shouldn't be raised
     """
-    nn = FunAddTwo(name="NA").split(splitter="a", a=[3, 5])
-    nn.split(splitter="a", a=[3, 5])
+    nn = FunAddTwo().split("a", a=[3, 5])
+    nn.split("a", a=[3, 5])
     assert nn.state.splitter == "NA.a"
 
 
 def test_task_init_5():
     """task with inputs, splitter and combiner"""
-    nn = (
-        FunAddVar(name="NA").split(splitter=["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
-    )
+    nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
 
     assert nn.state.splitter == ["NA.a", "NA.b"]
     assert nn.state.splitter_rpn == ["NA.a", "NA.b", "*"]
@@ -219,9 +243,7 @@ def test_task_init_5():
 
 def test_task_init_5a():
     """updating combiner using overwrite=True"""
-    nn = (
-        FunAddVar(name="NA").split(splitter=["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
-    )
+    nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
     nn.combine("a", overwrite=True)
 
     assert nn.state.splitter == ["NA.a", "NA.b"]
@@ -250,9 +272,7 @@ def test_task_init_5a():
 
 def test_task_init_5b():
     """updating combiner without using overwrite"""
-    nn = (
-        FunAddVar(name="NA").split(splitter=["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
-    )
+    nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
     with pytest.raises(Exception) as excinfo:
         nn.combine("a")
     assert "combiner has been already set" in str(excinfo.value)
@@ -264,9 +284,7 @@ def test_task_init_5c():
     """trying to set the same combiner twice without using overwrite
     if the combiner is the same, the exception shouldn't be raised
     """
-    nn = (
-        FunAddVar(name="NA").split(splitter=["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
-    )
+    nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
     nn.combine("b")
 
     assert nn.state.splitter == ["NA.a", "NA.b"]
@@ -279,9 +297,9 @@ def test_task_init_5c():
 
 def test_task_init_6():
     """task with splitter, but the input is an empty list"""
-    nn = FunAddTwo(name="NA")
-    nn.split(splitter="a", a=[])
-    assert nn.inputs.a == []
+    nn = FunAddTwo()
+    nn.split("a", a=[])
+    assert nn.a == []
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
@@ -301,7 +319,7 @@ def test_task_init_7(tmp_path):
     with open(file2, "w") as f:
         f.write("from pydra\n")
 
-    nn1 = FunFileList(name="NA", filename_list=[file1, file2])
+    nn1 = FunFileList(filename_list=[file1, file2])
     output_dir1 = nn1.output_dir
 
     # changing the content of the file
@@ -310,7 +328,7 @@ def test_task_init_7(tmp_path):
     with open(file2, "w") as f:
         f.write("from pydra")
 
-    nn2 = FunFileList(name="NA", filename_list=[file1, file2])
+    nn2 = FunFileList(filename_list=[file1, file2])
     output_dir2 = nn2.output_dir
 
     # the checksum should be different - content of file2 is different
@@ -319,17 +337,17 @@ def test_task_init_7(tmp_path):
 
 def test_task_init_8():
     """task without setting the input, the value should be set to attr.NOTHING"""
-    nn = FunAddTwo(name="NA")
+    nn = FunAddTwo()
     assert nn.inputs.a is attr.NOTHING
 
 
 def test_task_init_9():
     """task without setting the input, but using the default avlue from function"""
-    nn1 = FunAddVarDefault(name="NA", a=2)
-    assert nn1.inputs.b == 1
+    nn1 = FunAddVarDefault(a=2)
+    assert nn1.b == 1
 
-    nn2 = FunAddVarDefault(name="NA", a=2, b=1)
-    assert nn2.inputs.b == 1
+    nn2 = FunAddVarDefault(a=2, b=1)
+    assert nn2.b == 1
     # both tasks should have the same checksum
     assert nn1.checksum == nn2.checksum
 
@@ -345,7 +363,7 @@ def test_odir_init():
     """checking if output_dir is available for a task without init
     before running the task
     """
-    nn = FunAddTwo(name="NA", a=3)
+    nn = FunAddTwo(a=3)
     assert nn.output_dir
 
 
@@ -355,7 +373,7 @@ def test_odir_init():
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1(plugin_dask_opt, tmp_path):
     """task without splitter"""
-    nn = FunAddTwo(name="NA", a=3)
+    nn = FunAddTwo(a=3)
     nn.cache_dir = tmp_path
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
@@ -384,7 +402,7 @@ def test_task_nostate_1(plugin_dask_opt, tmp_path):
 
 def test_task_nostate_1_call():
     """task without splitter"""
-    nn = FunAddTwo(name="NA", a=3)
+    nn = FunAddTwo(a=3)
     nn()
     # checking the results
     results = nn.result()
@@ -396,7 +414,7 @@ def test_task_nostate_1_call():
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     """task without splitter"""
-    nn = FunAddTwo(name="NA", a=3)
+    nn = FunAddTwo(a=3)
     nn.cache_dir = tmp_path
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
@@ -414,7 +432,7 @@ def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_plug(plugin_dask_opt, tmp_path):
     """task without splitter"""
-    nn = FunAddTwo(name="NA", a=3)
+    nn = FunAddTwo(a=3)
     nn.cache_dir = tmp_path
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
@@ -430,7 +448,7 @@ def test_task_nostate_1_call_plug(plugin_dask_opt, tmp_path):
 
 def test_task_nostate_1_call_updateinp():
     """task without splitter"""
-    nn = FunAddTwo(name="NA", a=30)
+    nn = FunAddTwo(a=30)
     # updating input when calling the node
     nn(a=3)
 
@@ -443,7 +461,7 @@ def test_task_nostate_1_call_updateinp():
 
 def test_task_nostate_2(plugin, tmp_path):
     """task with a list as an input, but no splitter"""
-    nn = Moment(name="NA", n=3, lst=[2, 3, 4])
+    nn = Moment(n=3, lst=[2, 3, 4])
     nn.cache_dir = tmp_path
     assert np.allclose(nn.inputs.n, [3])
     assert np.allclose(nn.inputs.lst, [2, 3, 4])
@@ -461,9 +479,9 @@ def test_task_nostate_2(plugin, tmp_path):
 
 def test_task_nostate_3(plugin, tmp_path):
     """task with a dictionary as an input"""
-    nn = FunDict(name="NA", d={"a": "ala", "b": "bala"})
+    nn = FunDict(d={"a": "ala", "b": "bala"})
     nn.cache_dir = tmp_path
-    assert nn.inputs.d == {"a": "ala", "b": "bala"}
+    assert nn.d == {"a": "ala", "b": "bala"}
 
     with Submitter(worker=plugin) as sub:
         sub(nn)
@@ -481,7 +499,7 @@ def test_task_nostate_4(plugin, tmp_path):
     with open(file1, "w") as f:
         f.write("hello from pydra\n")
 
-    nn = FunFile(name="NA", filename=file1)
+    nn = FunFile(filename=file1)
     nn.cache_dir = tmp_path
 
     with Submitter(plugin) as sub:
@@ -504,7 +522,7 @@ def test_task_nostate_5(tmp_path):
     with open(file2, "w") as f:
         f.write("from pydra\n")
 
-    nn = FunFileList(name="NA", filename_list=[file1, file2])
+    nn = FunFileList(filename_list=[file1, file2])
 
     nn()
 
@@ -517,7 +535,7 @@ def test_task_nostate_5(tmp_path):
 
 def test_task_nostate_6():
     """checking if the function gets the None value"""
-    nn = FunAddVarNone(name="NA", a=2, b=None)
+    nn = FunAddVarNone(a=2, b=None)
     assert nn.inputs.b is None
     nn()
     assert nn.result().output.out == 2
@@ -525,7 +543,7 @@ def test_task_nostate_6():
 
 def test_task_nostate_6a_exception():
     """checking if the function gets the attr.Nothing value"""
-    nn = FunAddVarNone(name="NA", a=2)
+    nn = FunAddVarNone(a=2)
     assert nn.inputs.b is attr.NOTHING
     with pytest.raises(TypeError) as excinfo:
         nn()
@@ -534,8 +552,8 @@ def test_task_nostate_6a_exception():
 
 def test_task_nostate_7():
     """using the default value from the function for b input"""
-    nn = FunAddVarDefault(name="NA", a=2)
-    assert nn.inputs.b == 1
+    nn = FunAddVarDefault(a=2)
+    assert nn.b == 1
     nn()
     assert nn.result().output.out == 3
 
@@ -548,7 +566,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     """task with provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
     cache_dir.mkdir()
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = FunAddTwo(a=3, cache_dir=cache_dir)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
@@ -567,7 +585,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     cache_dir = "test_task_nostate"
     (tmp_path / cache_dir).mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = FunAddTwo(a=3, cache_dir=cache_dir)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
@@ -592,11 +610,11 @@ def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = FunAddTwo(a=3, cache_dir=cache_dir)
     with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn2)
 
@@ -620,11 +638,11 @@ def test_task_nostate_cachelocations_forcererun(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = FunAddTwo(a=3, cache_dir=cache_dir)
     with Submitter(worker=plugin) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     with Submitter(worker=plugin) as sub:
         sub(nn2, rerun=True)
 
@@ -647,10 +665,10 @@ def test_task_nostate_cachelocations_nosubmitter(tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = FunAddTwo(a=3, cache_dir=cache_dir)
     nn()
 
-    nn2 = FunAddTwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     nn2()
 
     # checking the results
@@ -673,10 +691,10 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = FunAddTwo(a=3, cache_dir=cache_dir)
     nn()
 
-    nn2 = FunAddTwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     nn2(rerun=True)
 
     # checking the results
@@ -702,11 +720,11 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = FunAddTwo(a=3, cache_dir=cache_dir)
     with Submitter(worker=plugin) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     # updating cache location to non-existing dir
     with Submitter(worker=plugin) as sub:
         sub(nn2, cache_locations=cache_dir1)
@@ -731,12 +749,12 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
     if input_type == "array":
         a_in = np.array(a_in)
 
-    nn = FunAddTwo(name="NA").split(splitter="a", a=a_in)
+    nn = FunAddTwo().split("a", a=a_in)
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
-    assert (nn.inputs.a == np.array([3, 5])).all()
+    assert (nn.a == np.array([3, 5])).all()
 
     with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
@@ -770,14 +788,14 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
 
 def test_task_state_1a(plugin, tmp_path):
     """task with the simplest splitter (inputs set separately)"""
-    nn = FunAddTwo(name="NA")
-    nn.split(splitter="a", a=[1, 2])
+    nn = FunAddTwo()
+    nn.split("a", a=[1, 2])
     nn.inputs.a = StateArray([3, 5])
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
-    assert (nn.inputs.a == np.array([3, 5])).all()
+    assert (nn.a == np.array([3, 5])).all()
 
     with Submitter(worker=plugin) as sub:
         sub(nn)
@@ -793,11 +811,11 @@ def test_task_state_singl_1(plugin, tmp_path):
     """Tasks with two inputs and a splitter (no combiner)
     one input is a single value, the other is in the splitter and combiner
     """
-    nn = FunAddVar(name="NA").split(splitter="a", a=[3, 5], b=10)
+    nn = FunAddVar().split("a", a=[3, 5], b=10)
     nn.cache_dir = tmp_path
 
-    assert nn.inputs.a == [3, 5]
-    assert nn.inputs.b == 10
+    assert nn.a == [3, 5]
+    assert nn.b == 10
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
     assert nn.state.splitter_final == "NA.a"
@@ -863,11 +881,11 @@ def test_task_state_2(
         a_in, b_in = np.array(a_in), np.array(b_in)
     elif input_type == "mixed":
         a_in = np.array(a_in)
-    nn = FunAddVar(name="NA").split(splitter=splitter, a=a_in, b=b_in)
+    nn = FunAddVar().split(splitter, a=a_in, b=b_in)
     nn.cache_dir = tmp_path
 
-    assert (nn.inputs.a == np.array([3, 5])).all()
-    assert (nn.inputs.b == np.array([10, 20])).all()
+    assert (nn.a == np.array([3, 5])).all()
+    assert (nn.b == np.array([10, 20])).all()
     assert nn.state.splitter == state_splitter
     assert nn.state.splitter_rpn == state_rpn
     assert nn.state.splitter_final == state_splitter
@@ -903,12 +921,12 @@ def test_task_state_2(
 
 def test_task_state_3(plugin, tmp_path):
     """task with the simplest splitter, the input is an empty list"""
-    nn = FunAddTwo(name="NA").split(splitter="a", a=[])
+    nn = FunAddTwo().split("a", a=[])
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
-    assert nn.inputs.a == []
+    assert nn.a == []
 
     with Submitter(worker=plugin) as sub:
         sub(nn)
@@ -928,7 +946,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
     lst_in = [[2, 3, 4], [1, 2, 3]]
     if input_type == "array":
         lst_in = np.array(lst_in, dtype=int)
-    nn = Moment(name="NA", n=3).split(splitter="lst", lst=lst_in)
+    nn = Moment(n=3).split("lst", lst=lst_in)
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, 3)
@@ -957,7 +975,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
 
 def test_task_state_4a(plugin, tmp_path):
     """task with a tuple as an input, and a simple splitter"""
-    nn = Moment(name="NA", n=3).split(splitter="lst", lst=[(2, 3, 4), (1, 2, 3)])
+    nn = Moment(n=3).split("lst", lst=[(2, 3, 4), (1, 2, 3)])
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, 3)
@@ -979,9 +997,7 @@ def test_task_state_4a(plugin, tmp_path):
 
 def test_task_state_5(plugin, tmp_path):
     """task with a list as an input, and the variable is part of the scalar splitter"""
-    nn = Moment(name="NA").split(
-        splitter=("n", "lst"), n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]
-    )
+    nn = Moment().split(("n", "lst"), n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]])
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, [1, 3])
@@ -1005,9 +1021,7 @@ def test_task_state_5_exception(plugin, tmp_path):
     """task with a list as an input, and the variable is part of the scalar splitter
     the shapes are not matching, so exception should be raised
     """
-    nn = Moment(name="NA").split(
-        splitter=("n", "lst"), n=[1, 3, 3], lst=[[2, 3, 4], [1, 2, 3]]
-    )
+    nn = Moment().split(("n", "lst"), n=[1, 3, 3], lst=[[2, 3, 4], [1, 2, 3]])
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, [1, 3, 3])
@@ -1022,9 +1036,7 @@ def test_task_state_5_exception(plugin, tmp_path):
 
 def test_task_state_6(plugin, tmp_path):
     """ask with a list as an input, and the variable is part of the outer splitter"""
-    nn = Moment(name="NA").split(
-        splitter=["n", "lst"], n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]
-    )
+    nn = Moment().split(["n", "lst"], n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]])
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, [1, 3])
@@ -1046,9 +1058,7 @@ def test_task_state_6(plugin, tmp_path):
 
 def test_task_state_6a(plugin, tmp_path):
     """ask with a tuple as an input, and the variable is part of the outer splitter"""
-    nn = Moment(name="NA").split(
-        splitter=["n", "lst"], n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)]
-    )
+    nn = Moment().split(["n", "lst"], n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)])
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, [1, 3])
@@ -1071,10 +1081,10 @@ def test_task_state_6a(plugin, tmp_path):
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_comb_1(plugin_dask_opt, tmp_path):
     """task with the simplest splitter and combiner"""
-    nn = FunAddTwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
+    nn = FunAddTwo().split(a=[3, 5]).combine(combiner="a")
     nn.cache_dir = tmp_path
 
-    assert (nn.inputs.a == np.array([3, 5])).all()
+    assert (nn.a == np.array([3, 5])).all()
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
@@ -1207,14 +1217,10 @@ def test_task_state_comb_2(
     tmp_path,
 ):
     """Tasks with scalar and outer splitters and  partial or full combiners"""
-    nn = (
-        FunAddVar(name="NA")
-        .split(a=[3, 5], b=[10, 20], splitter=splitter)
-        .combine(combiner=combiner)
-    )
+    nn = FunAddVar().split(splitter, a=[3, 5], b=[10, 20]).combine(combiner=combiner)
     nn.cache_dir = tmp_path
 
-    assert (nn.inputs.a == np.array([3, 5])).all()
+    assert (nn.a == np.array([3, 5])).all()
 
     assert nn.state.splitter == state_splitter
     assert nn.state.splitter_rpn == state_rpn
@@ -1256,11 +1262,11 @@ def test_task_state_comb_singl_1(plugin, tmp_path):
     """Tasks with two inputs;
     one input is a single value, the other is in the splitter and combiner
     """
-    nn = FunAddVar(name="NA").split(splitter="a", a=[3, 5], b=10).combine(combiner="a")
+    nn = FunAddVar().split("a", a=[3, 5], b=10).combine(combiner="a")
     nn.cache_dir = tmp_path
 
-    assert nn.inputs.a == [3, 5]
-    assert nn.inputs.b == 10
+    assert nn.a == [3, 5]
+    assert nn.b == 10
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
     assert nn.state.combiner == ["NA.a"]
@@ -1284,12 +1290,12 @@ def test_task_state_comb_singl_1(plugin, tmp_path):
 
 def test_task_state_comb_3(plugin, tmp_path):
     """task with the simplest splitter, the input is an empty list"""
-    nn = FunAddTwo(name="NA").split(splitter="a", a=[]).combine(combiner=["a"])
+    nn = FunAddTwo().split("a", a=[]).combine(combiner=["a"])
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
-    assert nn.inputs.a == []
+    assert nn.a == []
 
     with Submitter(worker=plugin) as sub:
         sub(nn)
@@ -1309,11 +1315,7 @@ def test_task_state_comb_order():
     """
 
     # single combiner "a" - will create two lists, first one for b=3, second for b=5
-    nn_a = (
-        FunAddVar(name="NA")
-        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
-        .combine(combiner="a")
-    )
+    nn_a = FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner="a")
     assert nn_a.state.combiner == ["NA.a"]
 
     results_a = nn_a()
@@ -1321,11 +1323,7 @@ def test_task_state_comb_order():
     assert combined_results_a == [[13, 23], [15, 25]]
 
     # single combiner "b" - will create two lists, first one for a=10, second for a=20
-    nn_b = (
-        FunAddVar(name="NA")
-        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
-        .combine(combiner="b")
-    )
+    nn_b = FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner="b")
     assert nn_b.state.combiner == ["NA.b"]
 
     results_b = nn_b()
@@ -1334,9 +1332,7 @@ def test_task_state_comb_order():
 
     # combiner with both fields ["a", "b"] - will create one list
     nn_ab = (
-        FunAddVar(name="NA")
-        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
-        .combine(combiner=["a", "b"])
+        FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner=["a", "b"])
     )
     assert nn_ab.state.combiner == ["NA.a", "NA.b"]
 
@@ -1348,9 +1344,7 @@ def test_task_state_comb_order():
     # combiner with both fields ["b", "a"] - will create the same list as nn_ab
     # no difference in the order for setting combiner
     nn_ba = (
-        FunAddVar(name="NA")
-        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
-        .combine(combiner=["b", "a"])
+        FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner=["b", "a"])
     )
     assert nn_ba.state.combiner == ["NA.b", "NA.a"]
 
@@ -1450,10 +1444,10 @@ def test_task_state_cachedir(plugin_dask_opt, tmp_path):
     """task with a state and provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
     cache_dir.mkdir()
-    nn = FunAddTwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    nn = FunAddTwo(cache_dir=cache_dir).split("a", a=[3, 5])
 
     assert nn.state.splitter == "NA.a"
-    assert (nn.inputs.a == np.array([3, 5])).all()
+    assert (nn.a == np.array([3, 5])).all()
 
     with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
@@ -1475,13 +1469,13 @@ def test_task_state_cachelocations(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    nn = FunAddTwo(a=3, cache_dir=cache_dir).split("a", a=[3, 5])
     with Submitter(worker=plugin) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(
-        name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
-    ).split(splitter="a", a=[3, 5])
+    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir).split(
+        "a", a=[3, 5]
+    )
     with Submitter(worker=plugin) as sub:
         sub(nn2)
 
@@ -1506,13 +1500,13 @@ def test_task_state_cachelocations_forcererun(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    nn = FunAddTwo(a=3, cache_dir=cache_dir).split("a", a=[3, 5])
     with Submitter(worker=plugin) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(
-        name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
-    ).split(splitter="a", a=[3, 5])
+    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir).split(
+        "a", a=[3, 5]
+    )
     with Submitter(worker=plugin) as sub:
         sub(nn2, rerun=True)
 
@@ -1541,12 +1535,12 @@ def test_task_state_cachelocations_updated(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    nn = FunAddTwo(cache_dir=cache_dir).split("a", a=[3, 5])
     with Submitter(worker=plugin) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir).split(
-        splitter="a", a=[3, 5]
+    nn2 = FunAddTwo(cache_dir=cache_dir2, cache_locations=cache_dir).split(
+        "a", a=[3, 5]
     )
     with Submitter(worker=plugin) as sub:
         sub(nn2, cache_locations=cache_dir1)
@@ -1579,13 +1573,11 @@ def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
     input2 = input_dir / "input2.txt"
     input2.write_text("test")
 
-    nn = FunFile(name="NA", filename=input1, cache_dir=cache_dir)
+    nn = FunFile(filename=input1, cache_dir=cache_dir)
     with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
-    nn2 = FunFile(
-        name="NA", filename=input2, cache_dir=cache_dir2, cache_locations=cache_dir
-    )
+    nn2 = FunFile(filename=input2, cache_dir=cache_dir2, cache_locations=cache_dir)
     with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn2)
 
