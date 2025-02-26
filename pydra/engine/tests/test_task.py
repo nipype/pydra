@@ -1332,7 +1332,8 @@ def test_traceback(tmpdir):
         raise Exception("Error from the function")
 
     with pytest.raises(Exception, match="Error from the function") as exinfo:
-        FunError(x=3)(worker="cf", cache_dir=tmpdir)
+        with Submitter(worker="cf", cache_dir=tmpdir) as sub:
+            sub(FunError(x=3), raise_errors=True)
 
     # getting error file from the error message
     error_file_match = (
@@ -1364,8 +1365,9 @@ def test_traceback_wf(tmpdir):
         return fun_error.out
 
     wf = Workflow(x_list=[3, 4])
-    with pytest.raises(Exception, match="Task 'fun_error' raised an error") as exinfo:
-        wf(worker="cf")
+    with pytest.raises(Exception, match="Task 'fun_error' raised an error.*") as exinfo:
+        with Submitter(worker="cf", cache_dir=tmpdir) as sub:
+            sub(wf, raise_errors=True)
 
     # getting error file from the error message
     error_file_match = (
