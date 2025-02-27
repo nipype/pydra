@@ -686,7 +686,7 @@ class PythonDef(TaskDef[PythonOutputsType]):
 
     _task_type = "python"
 
-    def _run(self, task: "Task[PythonDef]") -> None:
+    def _run(self, task: "Task[PythonDef]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
         inputs = attrs_values(self)
         del inputs["function"]
@@ -773,13 +773,13 @@ class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
 
-    def _run(self, task: "Task[WorkflowDef]") -> None:
+    def _run(self, task: "Task[WorkflowDef]", rerun: bool) -> None:
         """Run the workflow."""
-        task.submitter.expand_workflow(task)
+        task.submitter.expand_workflow(task, rerun)
 
-    async def _run_async(self, task: "Task[WorkflowDef]") -> None:
+    async def _run_async(self, task: "Task[WorkflowDef]", rerun: bool) -> None:
         """Run the workflow asynchronously."""
-        await task.submitter.expand_workflow_async(task)
+        await task.submitter.expand_workflow_async(task, rerun)
 
     def construct(self) -> "Workflow":
         from pydra.engine.core import Workflow
@@ -971,7 +971,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
 
-    def _run(self, task: "Task[ShellDef]") -> None:
+    def _run(self, task: "Task[ShellDef]", rerun: bool = True) -> None:
         """Run the shell command."""
         task.return_values = task.environment.execute(task)
 

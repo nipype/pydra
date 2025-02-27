@@ -58,9 +58,6 @@ class Submitter:
         The worker to use, by default "cf"
     environment: Environment, optional
         The execution environment to use, by default None
-    rerun : bool, optional
-        Whether to force the re-computation of the task results even if existing
-        results are found, by default False
     cache_locations : list[os.PathLike], optional
         Alternate cache locations to check for pre-computed results, by default None
     audit_flags : AuditFlag, optional
@@ -81,7 +78,6 @@ class Submitter:
     cache_dir: os.PathLike
     worker: Worker
     environment: "Environment | None"
-    rerun: bool
     cache_locations: list[os.PathLike]
     audit_flags: AuditFlag
     messengers: ty.Iterable[Messenger]
@@ -91,10 +87,10 @@ class Submitter:
 
     def __init__(
         self,
+        /,
         cache_dir: os.PathLike | None = None,
         worker: str | ty.Type[Worker] | Worker | None = "debug",
         environment: "Environment | None" = None,
-        rerun: bool = False,
         cache_locations: list[os.PathLike] | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
@@ -127,7 +123,6 @@ class Submitter:
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
         self.environment = environment if environment is not None else Native()
-        self.rerun = rerun
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         if isinstance(worker, Worker):
@@ -177,6 +172,7 @@ class Submitter:
         task_def: "TaskDef[OutputType]",
         hooks: "TaskHooks | None" = None,
         raise_errors: bool | None = None,
+        rerun: bool = False,
     ) -> "Result[OutputType]":
         """Submitter run function.
 
@@ -190,6 +186,9 @@ class Submitter:
         raise_errors : bool, optional
             Whether to raise errors, by default True if the 'debug' worker is used,
             otherwise False
+        rerun : bool, optional
+            Whether to force the re-computation of the task results even if existing
+            results are found, by default False
 
         Returns
         -------
@@ -242,11 +241,9 @@ class Submitter:
         try:
             self.run_start_time = datetime.now()
             if self.worker.is_async:  # Only workflow tasks can be async
-                self.loop.run_until_complete(
-                    self.worker.run_async(task, rerun=self.rerun)
-                )
+                self.loop.run_until_complete(self.worker.run_async(task, rerun=rerun))
             else:
-                self.worker.run(task, rerun=self.rerun)
+                self.worker.run(task, rerun=rerun)
         except Exception as e:
             msg = (
                 f"Full crash report for {type(task_def).__name__!r} task is here: "
@@ -288,7 +285,7 @@ class Submitter:
         self._worker = WORKERS[self.worker_name](**self.worker_kwargs)
         self.worker.loop = self.loop
 
-    def expand_workflow(self, workflow_task: "Task[WorkflowDef]") -> None:
+    def expand_workflow(self, workflow_task: "Task[WorkflowDef]", rerun: bool) -> None:
         """Expands and executes a workflow task synchronously. Typically only used during
         debugging and testing, as the asynchronous version is more efficient.
 
@@ -305,11 +302,13 @@ class Submitter:
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
             for task in tasks:
-                self.worker.run(task, rerun=self.rerun)
+                self.worker.run(task, rerun=rerun)
             tasks = self.get_runnable_tasks(exec_graph)
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
 
-    async def expand_workflow_async(self, workflow_task: "Task[WorkflowDef]") -> None:
+    async def expand_workflow_async(
+        self, workflow_task: "Task[WorkflowDef]", rerun: bool
+    ) -> None:
         """
         Expand and execute a workflow task asynchronously.
 
@@ -400,9 +399,9 @@ class Submitter:
                         raise RuntimeError(msg)
             for task in tasks:
                 if task.is_async:
-                    await self.worker.run_async(task, rerun=self.rerun)
+                    await self.worker.run_async(task, rerun=rerun)
                 else:
-                    task_futures.add(self.worker.run(task, rerun=self.rerun))
+                    task_futures.add(self.worker.run(task, rerun=rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
             tasks = self.get_runnable_tasks(exec_graph)
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}

@@ -1,13 +1,11 @@
 import os
 import shutil
-import attr
+import attrs
 import typing as ty
 import numpy as np
 import time
-from unittest import mock
 from pathlib import Path
 import pytest
-import time
 from fileformats.generic import File
 from pydra.design import python, workflow
 
@@ -43,16 +41,20 @@ def IdentityWorkflow(a: int) -> int:
     return a.out
 
 
-def get_state(task: TaskDef) -> State:
+def get_state(task: TaskDef, name="NA") -> State:
     """helper function to get the state of the task once it has been added to workflow"""
     identity_workflow = IdentityWorkflow(a=1)
-    wf = Workflow.construct(identity_workflow)
-    wf.add(task, name="NA")
-    node = wf["NA"]
+    wf = Workflow.construct(identity_workflow, dont_cache=True)
+    wf.add(task, name=name)
+    node = wf[name]
     if node.state:
         node.state.prepare_states()
         node.state.prepare_inputs()
     return node.state
+
+
+def num_python_cache_dirs(cache_path: Path) -> int:
+    return len(list(cache_path.glob("python-*")))
 
 
 @pytest.fixture(scope="module")
@@ -68,15 +70,6 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-# Tests for tasks initializations
-def test_task_init_1():
-    """task with mandatory arguments only"""
-    nn = FunAddTwo()
-    assert isinstance(nn, Task)
-    assert nn.name == "fun_addtwo"
-    assert hasattr(nn, "__call__")
-
-
 def test_task_init_1a():
     with pytest.raises(TypeError):
         FunAddTwo("NA")
@@ -86,8 +79,9 @@ def test_task_init_2():
     """task with a name and inputs"""
     nn = FunAddTwo(a=3)
     # adding NA to the name of the variable
-    assert getattr(nn.inputs, "a") == 3
-    assert nn.state is None
+    assert nn.a == 3
+    state = get_state(nn)
+    assert state is None
 
 
 @pytest.mark.parametrize(
@@ -154,54 +148,55 @@ def test_task_init_3a(
     elif input_type == "mixed":
         a_in = np.array(a_in)
     nn = FunAddVar().split(splitter, a=a_in, b=b_in)
+    state = get_state(nn)
 
-    assert np.allclose(nn.inputs.a, [3, 5])
-    assert np.allclose(nn.inputs.b, [10, 20])
-    assert nn.state.splitter == state_splitter
-    assert nn.state.splitter_rpn == state_rpn
+    assert np.allclose(nn.a, [3, 5])
+    assert np.allclose(nn.b, [10, 20])
+    assert state.splitter == state_splitter
+    assert state.splitter_rpn == state_rpn
 
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == states_ind
-    assert nn.state.states_val == states_val
+    assert state.states_ind == states_ind
+    assert state.states_val == states_val
 
 
 def test_task_init_4():
     """task with interface splitter and inputs set in the split method"""
     nn = FunAddTwo()
-    nn.split("a", a=[3, 5])
-    assert np.allclose(nn.inputs.a, [3, 5])
+    nn = nn.split("a", a=[3, 5])
+    state = get_state(nn)
+    assert np.allclose(nn.a, [3, 5])
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
 
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
-    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+    assert state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
 
 def test_task_init_4b():
     """updating splitter using overwrite=True"""
     nn = FunAddTwo()
-    nn.split("a", a=[1, 2])
-    nn.split("a", a=[3, 5], overwrite=True)
-    assert np.allclose(nn.inputs.a, [3, 5])
+    nn = nn.split("a", a=[1, 2])
+    nn = nn.split("a", a=[3, 5], overwrite=True)
+    state = get_state(nn)
+    assert np.allclose(nn.a, [3, 5])
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
 
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
-    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+    assert state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
 
 def test_task_init_4c():
     """trying to set splitter twice without using overwrite"""
     nn = FunAddVar().split("b", b=[1, 2])
+    state = get_state(nn)
     with pytest.raises(Exception) as excinfo:
         nn.split("a", a=[3, 5])
-    assert "splitter has been already set" in str(excinfo.value)
+    assert "Cannot overwrite existing splitter" in str(excinfo.value)
 
-    assert nn.state.splitter == "NA.b"
+    assert state.splitter == "NA.b"
 
 
 def test_task_init_4d():
@@ -209,75 +204,77 @@ def test_task_init_4d():
     if the splitter is the same, the exception shouldn't be raised
     """
     nn = FunAddTwo().split("a", a=[3, 5])
-    nn.split("a", a=[3, 5])
-    assert nn.state.splitter == "NA.a"
+    nn = nn.split("a", a=[3, 5], overwrite=True)
+    state = get_state(nn)
+    assert state.splitter == "NA.a"
 
 
 def test_task_init_5():
     """task with inputs, splitter and combiner"""
     nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
+    state = get_state(nn)
 
-    assert nn.state.splitter == ["NA.a", "NA.b"]
-    assert nn.state.splitter_rpn == ["NA.a", "NA.b", "*"]
-    assert nn.state.combiner == ["NA.b"]
+    assert state.splitter == ["NA.a", "NA.b"]
+    assert state.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert state.combiner == ["NA.b"]
 
-    assert nn.state.splitter_final == "NA.a"
-    assert nn.state.splitter_rpn_final == ["NA.a"]
+    assert state.splitter_final == "NA.a"
+    assert state.splitter_rpn_final == ["NA.a"]
 
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == [
+    assert state.states_ind == [
         {"NA.a": 0, "NA.b": 0},
         {"NA.a": 0, "NA.b": 1},
         {"NA.a": 1, "NA.b": 0},
         {"NA.a": 1, "NA.b": 1},
     ]
-    assert nn.state.states_val == [
+    assert state.states_val == [
         {"NA.a": 3, "NA.b": 1},
         {"NA.a": 3, "NA.b": 2},
         {"NA.a": 5, "NA.b": 1},
         {"NA.a": 5, "NA.b": 2},
     ]
 
-    assert nn.state.final_combined_ind_mapping == {0: [0, 1], 1: [2, 3]}
+    assert state.final_combined_ind_mapping == {0: [0, 1], 1: [2, 3]}
 
 
 def test_task_init_5a():
     """updating combiner using overwrite=True"""
     nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
-    nn.combine("a", overwrite=True)
+    nn = nn.combine("a", overwrite=True)
+    state = get_state(nn)
 
-    assert nn.state.splitter == ["NA.a", "NA.b"]
-    assert nn.state.splitter_rpn == ["NA.a", "NA.b", "*"]
-    assert nn.state.combiner == ["NA.a"]
+    assert state.splitter == ["NA.a", "NA.b"]
+    assert state.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert state.combiner == ["NA.a"]
 
-    assert nn.state.splitter_final == "NA.b"
-    assert nn.state.splitter_rpn_final == ["NA.b"]
+    assert state.splitter_final == "NA.b"
+    assert state.splitter_rpn_final == ["NA.b"]
 
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == [
+    assert state.states_ind == [
         {"NA.a": 0, "NA.b": 0},
         {"NA.a": 0, "NA.b": 1},
         {"NA.a": 1, "NA.b": 0},
         {"NA.a": 1, "NA.b": 1},
     ]
-    assert nn.state.states_val == [
+    assert state.states_val == [
         {"NA.a": 3, "NA.b": 1},
         {"NA.a": 3, "NA.b": 2},
         {"NA.a": 5, "NA.b": 1},
         {"NA.a": 5, "NA.b": 2},
     ]
 
-    assert nn.state.final_combined_ind_mapping == {0: [0, 2], 1: [1, 3]}
+    assert state.final_combined_ind_mapping == {0: [0, 2], 1: [1, 3]}
 
 
 def test_task_init_5b():
     """updating combiner without using overwrite"""
     nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
+    state = get_state(nn)
     with pytest.raises(Exception) as excinfo:
         nn.combine("a")
-    assert "combiner has been already set" in str(excinfo.value)
+    assert "Attempting to overwrite existing combiner" in str(excinfo.value)
 
-    assert nn.state.combiner == ["NA.b"]
+    assert state.combiner == ["NA.b"]
 
 
 def test_task_init_5c():
@@ -285,28 +282,29 @@ def test_task_init_5c():
     if the combiner is the same, the exception shouldn't be raised
     """
     nn = FunAddVar().split(["a", "b"], a=[3, 5], b=[1, 2]).combine("b")
-    nn.combine("b")
+    state = get_state(nn)
+    nn = nn.combine("b", overwrite=True)
 
-    assert nn.state.splitter == ["NA.a", "NA.b"]
-    assert nn.state.splitter_rpn == ["NA.a", "NA.b", "*"]
-    assert nn.state.combiner == ["NA.b"]
+    assert state.splitter == ["NA.a", "NA.b"]
+    assert state.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert state.combiner == ["NA.b"]
 
-    assert nn.state.splitter_final == "NA.a"
-    assert nn.state.splitter_rpn_final == ["NA.a"]
+    assert state.splitter_final == "NA.a"
+    assert state.splitter_rpn_final == ["NA.a"]
 
 
 def test_task_init_6():
     """task with splitter, but the input is an empty list"""
     nn = FunAddTwo()
-    nn.split("a", a=[])
+    nn = nn.split("a", a=[])
+    state = get_state(nn)
     assert nn.a == []
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
 
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == []
-    assert nn.state.states_val == []
+    assert state.states_ind == []
+    assert state.states_val == []
 
 
 def test_task_init_7(tmp_path):
@@ -320,7 +318,7 @@ def test_task_init_7(tmp_path):
         f.write("from pydra\n")
 
     nn1 = FunFileList(filename_list=[file1, file2])
-    output_dir1 = nn1.output_dir
+    hash1 = nn1._hash
 
     # changing the content of the file
     time.sleep(2)  # need the mtime to be different
@@ -329,16 +327,16 @@ def test_task_init_7(tmp_path):
         f.write("from pydra")
 
     nn2 = FunFileList(filename_list=[file1, file2])
-    output_dir2 = nn2.output_dir
+    hash2 = nn2._hash
 
     # the checksum should be different - content of file2 is different
-    assert output_dir1.name != output_dir2.name
+    assert hash1 != hash2
 
 
 def test_task_init_8():
-    """task without setting the input, the value should be set to attr.NOTHING"""
+    """task without setting the input, the value should be set to attrs.NOTHING"""
     nn = FunAddTwo()
-    assert nn.inputs.a is attr.NOTHING
+    assert nn.a is attrs.NOTHING
 
 
 def test_task_init_9():
@@ -349,22 +347,14 @@ def test_task_init_9():
     nn2 = FunAddVarDefault(a=2, b=1)
     assert nn2.b == 1
     # both tasks should have the same checksum
-    assert nn1.checksum == nn2.checksum
+    assert nn1._hash == nn2._hash
 
 
-def test_task_error():
-    func = FunDiv(name="div", a=1, b=0)
+def test_task_error(tmp_path):
+    func = FunDiv(a=1, b=0)
     with pytest.raises(ZeroDivisionError):
-        func()
-    assert (func.output_dir / "_error.pklz").exists()
-
-
-def test_odir_init():
-    """checking if output_dir is available for a task without init
-    before running the task
-    """
-    nn = FunAddTwo(a=3)
-    assert nn.output_dir
+        func(cache_dir=tmp_path)
+    assert (next(tmp_path.iterdir()) / "_error.pklz").exists()
 
 
 # Tests for tasks without state (i.e. no splitter)
@@ -374,123 +364,104 @@ def test_odir_init():
 def test_task_nostate_1(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
-    nn.cache_dir = tmp_path
-    assert np.allclose(nn.inputs.a, [3])
-    assert nn.state is None
 
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    assert np.allclose(nn.a, [3])
+    state = get_state(nn)
+    assert state is None
+
+    with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == 5
-    # checking the return_inputs option, either is return_inputs is True, or "val",
-    # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(return_inputs=True)
-    results_verb_val = nn.result(return_inputs="val")
-    assert results_verb[0] == results_verb_val[0] == {"NA.a": 3}
-    assert results_verb[1].output.out == results_verb_val[1].output.out == 5
-    # checking the return_inputs option return_inputs="ind"
-    # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(return_inputs="ind")
-    assert results_verb_ind[0] == {"NA.a": None}
-    assert results_verb_ind[1].output.out == 5
+    assert results.outputs.out == 5
 
     # checking the output_dir
-    assert nn.output_dir.exists()
+    assert results.output_dir.exists()
 
 
-def test_task_nostate_1_call():
+def test_task_nostate_1_call(tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
-    nn()
+    with Submitter(cache_dir=tmp_path) as sub:
+        results = sub(nn)
     # checking the results
-    results = nn.result()
-    assert results.output.out == 5
+
+    assert results.outputs.out == 5
     # checking the output_dir
-    assert nn.output_dir.exists()
+    assert results.output_dir.exists()
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
-    nn.cache_dir = tmp_path
-    assert np.allclose(nn.inputs.a, [3])
-    assert nn.state is None
 
-    with Submitter(worker=plugin_dask_opt) as sub:
-        nn(submitter=sub)
+    assert np.allclose(nn.a, [3])
+    state = get_state(nn)
+    assert state is None
+
+    with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == 5
+
+    assert results.outputs.out == 5
     # checking the output_dir
-    assert nn.output_dir.exists()
+    assert results.output_dir.exists()
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_plug(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
-    nn.cache_dir = tmp_path
-    assert np.allclose(nn.inputs.a, [3])
-    assert nn.state is None
 
-    nn(plugin=plugin_dask_opt)
+    assert np.allclose(nn.a, [3])
+    state = get_state(nn)
+    assert state is None
 
-    # checking the results
-    results = nn.result()
-    assert results.output.out == 5
-    # checking the output_dir
-    assert nn.output_dir.exists()
-
-
-def test_task_nostate_1_call_updateinp():
-    """task without splitter"""
-    nn = FunAddTwo(a=30)
-    # updating input when calling the node
-    nn(a=3)
+    with Submitter(cache_dir=tmp_path, worker=plugin_dask_opt) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == 5
+
+    assert results.outputs.out == 5
     # checking the output_dir
-    assert nn.output_dir.exists()
+    assert results.output_dir.exists()
 
 
 def test_task_nostate_2(plugin, tmp_path):
     """task with a list as an input, but no splitter"""
     nn = Moment(n=3, lst=[2, 3, 4])
-    nn.cache_dir = tmp_path
-    assert np.allclose(nn.inputs.n, [3])
-    assert np.allclose(nn.inputs.lst, [2, 3, 4])
-    assert nn.state is None
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    assert np.allclose(nn.n, [3])
+    assert np.allclose(nn.lst, [2, 3, 4])
+    state = get_state(nn)
+    assert state is None
+
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == 33
+
+    assert results.outputs.out == 33
     # checking the output_dir
-    assert nn.output_dir.exists()
+    assert results.output_dir.exists()
 
 
 def test_task_nostate_3(plugin, tmp_path):
     """task with a dictionary as an input"""
     nn = FunDict(d={"a": "ala", "b": "bala"})
-    nn.cache_dir = tmp_path
+
     assert nn.d == {"a": "ala", "b": "bala"}
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == "a:ala_b:bala"
+
+    assert results.outputs.out == "a:ala_b:bala"
     # checking the output_dir
-    assert nn.output_dir.exists()
+    assert results.output_dir.exists()
 
 
 def test_task_nostate_4(plugin, tmp_path):
@@ -500,16 +471,15 @@ def test_task_nostate_4(plugin, tmp_path):
         f.write("hello from pydra\n")
 
     nn = FunFile(filename=file1)
-    nn.cache_dir = tmp_path
 
-    with Submitter(plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == "hello from pydra\n"
+
+    assert results.outputs.out == "hello from pydra\n"
     # checking the output_dir
-    assert nn.output_dir.exists()
+    assert results.output_dir.exists()
 
 
 def test_task_nostate_5(tmp_path):
@@ -524,27 +494,25 @@ def test_task_nostate_5(tmp_path):
 
     nn = FunFileList(filename_list=[file1, file2])
 
-    nn()
+    outputs = nn()
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == "hello from pydra\n"
-    # checking the output_dir
-    assert nn.output_dir.exists()
+
+    assert outputs.out == "hello from pydra\n"
 
 
 def test_task_nostate_6():
     """checking if the function gets the None value"""
     nn = FunAddVarNone(a=2, b=None)
-    assert nn.inputs.b is None
-    nn()
-    assert nn.result().output.out == 2
+    assert nn.b is None
+    outputs = nn()
+    assert outputs.out == 2
 
 
 def test_task_nostate_6a_exception():
-    """checking if the function gets the attr.Nothing value"""
+    """checking if the function gets the attrs.Nothing value"""
     nn = FunAddVarNone(a=2)
-    assert nn.inputs.b is attr.NOTHING
+    assert nn.b is attrs.NOTHING
     with pytest.raises(TypeError) as excinfo:
         nn()
     assert "unsupported" in str(excinfo.value)
@@ -554,8 +522,8 @@ def test_task_nostate_7():
     """using the default value from the function for b input"""
     nn = FunAddVarDefault(a=2)
     assert nn.b == 1
-    nn()
-    assert nn.result().output.out == 3
+    outputs = nn()
+    assert outputs.out == 3
 
 
 # Testing caching for tasks without states
@@ -566,16 +534,17 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     """task with provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
     cache_dir.mkdir()
-    nn = FunAddTwo(a=3, cache_dir=cache_dir)
-    assert np.allclose(nn.inputs.a, [3])
-    assert nn.state is None
+    nn = FunAddTwo(a=3)
+    state = get_state(nn)
+    assert np.allclose(nn.a, [3])
+    assert state is None
 
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == 5
+
+    assert results.outputs.out == 5
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
@@ -585,16 +554,17 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     cache_dir = "test_task_nostate"
     (tmp_path / cache_dir).mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir)
-    assert np.allclose(nn.inputs.a, [3])
-    assert nn.state is None
+    nn = FunAddTwo(a=3)
+    assert np.allclose(nn.a, [3])
+    state = get_state(nn)
+    assert state is None
 
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
-    assert results.output.out == 5
+
+    assert results.outputs.out == 5
 
     shutil.rmtree(cache_dir)
 
@@ -610,21 +580,22 @@ def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir)
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    nn = FunAddTwo(a=3)
+    with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
+        results = sub(nn)
 
-    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn2)
+    nn2 = FunAddTwo(a=3)
+    with Submitter(
+        worker=plugin_dask_opt, cache_dir=cache_dir2, cache_locations=cache_dir
+    ) as sub:
+        results2 = sub(nn2)
 
     # checking the results
-    results2 = nn2.result()
-    assert results2.output.out == 5
+
+    assert results2.outputs.out == 5
 
     # checking if the second task didn't run the interface again
-    assert nn.output_dir.exists()
-    assert not nn2.output_dir.exists()
+    assert results.output_dir == results2.output_dir
 
 
 def test_task_nostate_cachelocations_forcererun(plugin, tmp_path):
@@ -638,21 +609,23 @@ def test_task_nostate_cachelocations_forcererun(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir)
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    nn = FunAddTwo(a=3)
+    with Submitter(worker=plugin, cache_dir=cache_dir) as sub:
+        results = sub(nn)
 
-    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    with Submitter(worker=plugin) as sub:
-        sub(nn2, rerun=True)
+    nn2 = FunAddTwo(a=3)
+    with Submitter(
+        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir
+    ) as sub:
+        results2 = sub(nn2, rerun=True)
 
     # checking the results
-    results2 = nn2.result()
-    assert results2.output.out == 5
+
+    assert results2.outputs.out == 5
 
     # checking if the second task rerun the interface
-    assert nn.output_dir.exists()
-    assert nn2.output_dir.exists()
+    assert results.output_dir.exists()
+    assert results2.output_dir.exists()
 
 
 def test_task_nostate_cachelocations_nosubmitter(tmp_path):
@@ -665,19 +638,19 @@ def test_task_nostate_cachelocations_nosubmitter(tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir)
-    nn()
+    nn = FunAddTwo(a=3)
+    nn(cache_dir=cache_dir)
 
-    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    nn2()
+    nn2 = FunAddTwo(a=3)
+    outputs2 = nn2(cache_dir=cache_dir2, cache_locations=cache_dir)
 
     # checking the results
-    results2 = nn2.result()
-    assert results2.output.out == 5
+
+    assert outputs2.out == 5
 
     # checking if the second task didn't run the interface again
-    assert nn.output_dir.exists()
-    assert not nn2.output_dir.exists()
+    assert num_python_cache_dirs(cache_dir) == 1
+    assert not num_python_cache_dirs(cache_dir2)
 
 
 def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
@@ -691,19 +664,19 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir)
-    nn()
+    nn = FunAddTwo(a=3)
+    nn(cache_dir=cache_dir)
 
-    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    nn2(rerun=True)
+    nn2 = FunAddTwo(a=3)
+    outputs2 = nn2(rerun=True, cache_dir=cache_dir2, cache_locations=cache_dir)
 
     # checking the results
-    results2 = nn2.result()
-    assert results2.output.out == 5
+
+    assert outputs2.out == 5
 
     # checking if the second task run the interface again
-    assert nn.output_dir.exists()
-    assert nn2.output_dir.exists()
+    assert num_python_cache_dirs(cache_dir) == 1
+    assert num_python_cache_dirs(cache_dir2)
 
 
 def test_task_nostate_cachelocations_updated(plugin, tmp_path):
@@ -720,22 +693,29 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir)
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    nn = FunAddTwo(a=3)
+    with Submitter(worker=plugin, cache_dir=cache_dir) as sub:
+        results = sub(nn)
 
-    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = FunAddTwo(a=3)
+    with Submitter(
+        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir
+    ) as sub:
+        results1 = sub(nn2)
+
     # updating cache location to non-existing dir
-    with Submitter(worker=plugin) as sub:
-        sub(nn2, cache_locations=cache_dir1)
+    with Submitter(
+        worker=plugin, cache_locations=cache_dir1, cache_dir=tmp_path
+    ) as sub:
+        results2 = sub(nn2)
 
     # checking the results
-    results2 = nn2.result()
-    assert results2.output.out == 5
+
+    assert results2.outputs.out == 5
 
     # checking if both tasks run interface
-    assert nn.output_dir.exists()
-    assert nn2.output_dir.exists()
+    assert results.output_dir == results1.output_dir
+    assert results.output_dir != results2.output_dir
 
 
 # Tests for tasks with states (i.e. with splitter)
@@ -750,89 +730,68 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
         a_in = np.array(a_in)
 
     nn = FunAddTwo().split("a", a=a_in)
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
     assert (nn.a == np.array([3, 5])).all()
 
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
-
-    # checking the return_inputs option, either return_inputs is True or "val",
-    # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(return_inputs=True)
-    results_verb_val = nn.result(return_inputs="val")
-    for i, res in enumerate(expected):
-        assert (results_verb[i][0], results_verb[i][1].output.out) == res
-        assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
-
-    # checking the return_inputs option return_inputs="ind"
-    # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(return_inputs="ind")
-    expected_ind = [({"NA.a": 0}, 5), ({"NA.a": 1}, 7)]
-    for i, res in enumerate(expected_ind):
-        assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
-
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out[i] == res[1]
 
 
 def test_task_state_1a(plugin, tmp_path):
     """task with the simplest splitter (inputs set separately)"""
     nn = FunAddTwo()
-    nn.split("a", a=[1, 2])
-    nn.inputs.a = StateArray([3, 5])
-    nn.cache_dir = tmp_path
+    nn = nn.split("a", a=[1, 2])
+    nn.a = StateArray([3, 5])
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
+    state = get_state(nn)
+
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
     assert (nn.a == np.array([3, 5])).all()
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
+        assert results.outputs.out[i] == res[1]
 
 
 def test_task_state_singl_1(plugin, tmp_path):
     """Tasks with two inputs and a splitter (no combiner)
     one input is a single value, the other is in the splitter and combiner
     """
-    nn = FunAddVar().split("a", a=[3, 5], b=10)
-    nn.cache_dir = tmp_path
+    nn = FunAddVar(b=10).split("a", a=[3, 5])
+    state = get_state(nn)
 
     assert nn.a == [3, 5]
     assert nn.b == 10
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
-    assert nn.state.splitter_final == "NA.a"
-    assert nn.state.splitter_rpn_final == ["NA.a"]
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
+    assert state.splitter_final == "NA.a"
+    assert state.splitter_rpn_final == ["NA.a"]
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
     expected = [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 10}, 15)]
-    results = nn.result()
+
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
+        assert results.outputs.out[i] == res[1]
     # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+    assert results.output_dir.exists()
 
 
 @pytest.mark.parametrize(
@@ -882,62 +841,41 @@ def test_task_state_2(
     elif input_type == "mixed":
         a_in = np.array(a_in)
     nn = FunAddVar().split(splitter, a=a_in, b=b_in)
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
     assert (nn.a == np.array([3, 5])).all()
     assert (nn.b == np.array([10, 20])).all()
-    assert nn.state.splitter == state_splitter
-    assert nn.state.splitter_rpn == state_rpn
-    assert nn.state.splitter_final == state_splitter
-    assert nn.state.splitter_rpn_final == state_rpn
+    assert state.splitter == state_splitter
+    assert state.splitter_rpn == state_rpn
+    assert state.splitter_final == state_splitter
+    assert state.splitter_rpn_final == state_rpn
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
-
-    # checking the return_inputs option, either return_inputs is True or "val",
-    # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(return_inputs=True)
-    results_verb_val = nn.result(return_inputs="val")
-    for i, res in enumerate(expected):
-        assert (results_verb[i][0], results_verb[i][1].output.out) == res
-        assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
-
-    # checking the return_inputs option return_inputs="ind"
-    # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(return_inputs="ind")
-    for i, res in enumerate(expected_ind):
-        assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
-
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out[i] == res[1]
 
 
 def test_task_state_3(plugin, tmp_path):
     """task with the simplest splitter, the input is an empty list"""
     nn = FunAddTwo().split("a", a=[])
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
     assert nn.a == []
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     expected = []
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
-    # checking the output_dir
-    assert nn.output_dir == []
+        assert results.outputs.out[i] == res[1]
 
 
 @pytest.mark.parametrize("input_type", ["list", "array"])
@@ -947,74 +885,62 @@ def test_task_state_4(plugin, input_type, tmp_path):
     if input_type == "array":
         lst_in = np.array(lst_in, dtype=int)
     nn = Moment(n=3).split("lst", lst=lst_in)
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert np.allclose(nn.inputs.n, 3)
-    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
-    assert nn.state.splitter == "NA.lst"
+    assert np.allclose(nn.n, 3)
+    assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
+    assert state.splitter == "NA.lst"
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking that split is done across dim 0
-    el_0 = nn.state.states_val[0]["NA.lst"]
+    el_0 = state.states_val[0]["NA.lst"]
     if input_type == "list":
         assert el_0 == [2, 3, 4]
     elif input_type == "array":
         assert el_0 == [2, 3, 4]
 
     # checking the results
-    results = nn.result()
+
     for i, expected in enumerate([33, 12]):
-        assert results[i].output.out == expected
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out[i] == expected
 
 
 def test_task_state_4a(plugin, tmp_path):
     """task with a tuple as an input, and a simple splitter"""
     nn = Moment(n=3).split("lst", lst=[(2, 3, 4), (1, 2, 3)])
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert np.allclose(nn.inputs.n, 3)
-    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
-    assert nn.state.splitter == "NA.lst"
+    assert np.allclose(nn.n, 3)
+    assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
+    assert state.splitter == "NA.lst"
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     for i, expected in enumerate([33, 12]):
-        assert results[i].output.out == expected
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out[i] == expected
 
 
 def test_task_state_5(plugin, tmp_path):
     """task with a list as an input, and the variable is part of the scalar splitter"""
     nn = Moment().split(("n", "lst"), n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]])
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert np.allclose(nn.inputs.n, [1, 3])
-    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
-    assert nn.state.splitter == ("NA.n", "NA.lst")
+    assert np.allclose(nn.n, [1, 3])
+    assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
+    assert state.splitter == ("NA.n", "NA.lst")
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     for i, expected in enumerate([3, 12]):
-        assert results[i].output.out == expected
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out[i] == expected
 
 
 def test_task_state_5_exception(plugin, tmp_path):
@@ -1022,112 +948,81 @@ def test_task_state_5_exception(plugin, tmp_path):
     the shapes are not matching, so exception should be raised
     """
     nn = Moment().split(("n", "lst"), n=[1, 3, 3], lst=[[2, 3, 4], [1, 2, 3]])
-    nn.cache_dir = tmp_path
 
-    assert np.allclose(nn.inputs.n, [1, 3, 3])
-    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
-    assert nn.state.splitter == ("NA.n", "NA.lst")
+    assert np.allclose(nn.n, [1, 3, 3])
+    assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
 
     with pytest.raises(Exception) as excinfo:
-        with Submitter(worker=plugin) as sub:
-            sub(nn)
+        get_state(nn)
+
     assert "shape" in str(excinfo.value)
 
 
 def test_task_state_6(plugin, tmp_path):
     """ask with a list as an input, and the variable is part of the outer splitter"""
     nn = Moment().split(["n", "lst"], n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]])
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert np.allclose(nn.inputs.n, [1, 3])
-    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
-    assert nn.state.splitter == ["NA.n", "NA.lst"]
+    assert np.allclose(nn.n, [1, 3])
+    assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
+    assert state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     for i, expected in enumerate([3, 2, 33, 12]):
-        assert results[i].output.out == expected
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out[i] == expected
 
 
 def test_task_state_6a(plugin, tmp_path):
     """ask with a tuple as an input, and the variable is part of the outer splitter"""
     nn = Moment().split(["n", "lst"], n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)])
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert np.allclose(nn.inputs.n, [1, 3])
-    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
-    assert nn.state.splitter == ["NA.n", "NA.lst"]
+    assert np.allclose(nn.n, [1, 3])
+    assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
+    assert state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     for i, expected in enumerate([3, 2, 33, 12]):
-        assert results[i].output.out == expected
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out[i] == expected
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_comb_1(plugin_dask_opt, tmp_path):
     """task with the simplest splitter and combiner"""
     nn = FunAddTwo().split(a=[3, 5]).combine(combiner="a")
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
     assert (nn.a == np.array([3, 5])).all()
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
-    assert nn.state.combiner == ["NA.a"]
-    assert nn.state.splitter_final is None
-    assert nn.state.splitter_rpn_final == []
+    assert state.splitter == ["NA.a"]
+    assert state.splitter_rpn == ["NA.a"]
+    assert state.combiner == ["NA.a"]
+    assert state.splitter_final is None
+    assert state.splitter_rpn_final == []
 
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
-    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
-    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+    assert state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
     # checking the results
-    results = nn.result()
+
     # fully combined (no nested list)
-    combined_results = [res.output.out for res in results]
-    assert combined_results == [5, 7]
-
-    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-    expected_ind = [({"NA.a": 0}, 5), ({"NA.a": 1}, 7)]
-    # checking the return_inputs option, either return_inputs is True or "val",
-    # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(return_inputs=True)
-    results_verb_val = nn.result(return_inputs="val")
-    for i, res in enumerate(expected):
-        assert (results_verb[i][0], results_verb[i][1].output.out) == res
-        assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
-    # checking the return_inputs option return_inputs="ind"
-    # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(return_inputs="ind")
-    for i, res in enumerate(expected_ind):
-        assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
-
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+    assert results.outputs.out == [5, 7]
 
 
 @pytest.mark.parametrize(
     "splitter, combiner, state_splitter, state_rpn, state_combiner, state_combiner_all, "
-    "state_splitter_final, state_rpn_final, expected, expected_val",
+    "state_splitter_final, state_rpn_final, expected",  # , expected_val",
     [
         (
             ("a", "b"),
@@ -1139,7 +1034,7 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
             None,
             [],
             [13, 25],
-            [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 20}, 25)],
+            # [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 20}, 25)],
         ),
         (
             ("a", "b"),
@@ -1151,7 +1046,7 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
             None,
             [],
             [13, 25],
-            [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 20}, 25)],
+            # [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 20}, 25)],
         ),
         (
             ["a", "b"],
@@ -1163,10 +1058,10 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
             "NA.b",
             ["NA.b"],
             [[13, 15], [23, 25]],
-            [
-                [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 10}, 15)],
-                [({"NA.a": 3, "NA.b": 20}, 23), ({"NA.a": 5, "NA.b": 20}, 25)],
-            ],
+            # [
+            #     [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 10}, 15)],
+            #     [({"NA.a": 3, "NA.b": 20}, 23), ({"NA.a": 5, "NA.b": 20}, 25)],
+            # ],
         ),
         (
             ["a", "b"],
@@ -1178,10 +1073,10 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
             "NA.a",
             ["NA.a"],
             [[13, 23], [15, 25]],
-            [
-                [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 3, "NA.b": 20}, 23)],
-                [({"NA.a": 5, "NA.b": 10}, 15), ({"NA.a": 5, "NA.b": 20}, 25)],
-            ],
+            # [
+            #     [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 3, "NA.b": 20}, 23)],
+            #     [({"NA.a": 5, "NA.b": 10}, 15), ({"NA.a": 5, "NA.b": 20}, 25)],
+            # ],
         ),
         (
             ["a", "b"],
@@ -1193,12 +1088,12 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
             None,
             [],
             [13, 23, 15, 25],
-            [
-                ({"NA.a": 3, "NA.b": 10}, 13),
-                ({"NA.a": 3, "NA.b": 20}, 23),
-                ({"NA.a": 5, "NA.b": 10}, 15),
-                ({"NA.a": 5, "NA.b": 20}, 25),
-            ],
+            # [
+            #     ({"NA.a": 3, "NA.b": 10}, 13),
+            #     ({"NA.a": 3, "NA.b": 20}, 23),
+            #     ({"NA.a": 5, "NA.b": 10}, 15),
+            #     ({"NA.a": 5, "NA.b": 20}, 25),
+            # ],
         ),
     ],
 )
@@ -1213,100 +1108,84 @@ def test_task_state_comb_2(
     state_splitter_final,
     state_rpn_final,
     expected,
-    expected_val,
+    # expected_val,
     tmp_path,
 ):
     """Tasks with scalar and outer splitters and  partial or full combiners"""
     nn = FunAddVar().split(splitter, a=[3, 5], b=[10, 20]).combine(combiner=combiner)
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
     assert (nn.a == np.array([3, 5])).all()
 
-    assert nn.state.splitter == state_splitter
-    assert nn.state.splitter_rpn == state_rpn
-    assert nn.state.combiner == state_combiner
+    assert state.splitter == state_splitter
+    assert state.splitter_rpn == state_rpn
+    assert state.combiner == state_combiner
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
-    assert nn.state.splitter_final == state_splitter_final
-    assert nn.state.splitter_rpn_final == state_rpn_final
-    assert set(nn.state.current_combiner_all) == set(state_combiner_all)
+    assert state.splitter_final == state_splitter_final
+    assert state.splitter_rpn_final == state_rpn_final
+    assert set(state.current_combiner_all) == set(state_combiner_all)
 
     # checking the results
-    results = nn.result()
+
     # checking the return_inputs option, either return_inputs is True or "val",
     # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(return_inputs=True)
+    # results_verb = nn.result(return_inputs=True)
 
-    if nn.state.splitter_rpn_final:
+    if state.splitter_rpn_final:
         for i, res in enumerate(expected):
-            assert [res.output.out for res in results[i]] == res
+            assert results.outputs.out == res
         # results_verb
-        for i, res_l in enumerate(expected_val):
-            for j, res in enumerate(res_l):
-                assert (results_verb[i][j][0], results_verb[i][j][1].output.out) == res
+        # for i, res_l in enumerate(expected_val):
+        #     for j, res in enumerate(res_l):
+        #         assert (results_verb[i][j][0], results_verb[i][j][1].output.out) == res
     # if the combiner is full expected is "a flat list"
     else:
-        assert [res.output.out for res in results] == expected
-        for i, res in enumerate(expected_val):
-            assert (results_verb[i][0], results_verb[i][1].output.out) == res
-
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+        assert results.outputs.out == expected
+        # for i, res in enumerate(expected_val):
+        #     assert (results_verb[i][0], results_verb[i][1].output.out) == res
 
 
 def test_task_state_comb_singl_1(plugin, tmp_path):
     """Tasks with two inputs;
     one input is a single value, the other is in the splitter and combiner
     """
-    nn = FunAddVar().split("a", a=[3, 5], b=10).combine(combiner="a")
-    nn.cache_dir = tmp_path
+    nn = FunAddVar(b=10).split("a", a=[3, 5]).combine(combiner="a")
+    state = get_state(nn)
 
     assert nn.a == [3, 5]
     assert nn.b == 10
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
-    assert nn.state.combiner == ["NA.a"]
-    assert nn.state.splitter_final is None
-    assert nn.state.splitter_rpn_final == []
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
+    assert state.combiner == ["NA.a"]
+    assert state.splitter_final is None
+    assert state.splitter_rpn_final == []
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
-    # checking the results
-    expected = ({}, [13, 15])
-    results = nn.result()
-    # full combiner, no nested list
-    combined_results = [res.output.out for res in results]
-    assert combined_results == expected[1]
-    # checking the output_dir
-    assert nn.output_dir
-    for odir in nn.output_dir:
-        assert odir.exists()
+    assert results.outputs.out == [13, 15]
 
 
 def test_task_state_comb_3(plugin, tmp_path):
     """task with the simplest splitter, the input is an empty list"""
     nn = FunAddTwo().split("a", a=[]).combine(combiner=["a"])
-    nn.cache_dir = tmp_path
+    state = get_state(nn)
 
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
+    assert state.splitter == "NA.a"
+    assert state.splitter_rpn == ["NA.a"]
     assert nn.a == []
 
-    with Submitter(worker=plugin) as sub:
-        sub(nn)
+    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     expected = []
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
-    # checking the output_dir
-    assert nn.output_dir == []
+        assert results.outputs.out[i] == res[1]
 
 
 def test_task_state_comb_order():
@@ -1316,41 +1195,42 @@ def test_task_state_comb_order():
 
     # single combiner "a" - will create two lists, first one for b=3, second for b=5
     nn_a = FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner="a")
-    assert nn_a.state.combiner == ["NA.a"]
+    state_a = get_state(nn_a)
+    assert state_a.combiner == ["NA.a"]
 
-    results_a = nn_a()
-    combined_results_a = [[res.output.out for res in res_l] for res_l in results_a]
-    assert combined_results_a == [[13, 23], [15, 25]]
+    outputs = nn_a()
+    # combined_results_a = [[res.output.out for res in res_l] for res_l in results_a]
+    assert outputs.out == [[13, 23], [15, 25]]
 
     # single combiner "b" - will create two lists, first one for a=10, second for a=20
     nn_b = FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner="b")
-    assert nn_b.state.combiner == ["NA.b"]
+    state_b = get_state(nn_b)
+    assert state_b.combiner == ["NA.b"]
 
-    results_b = nn_b()
-    combined_results_b = [[res.output.out for res in res_l] for res_l in results_b]
-    assert combined_results_b == [[13, 15], [23, 25]]
+    outputs_b = nn_b()
+    # combined_results_b = [[res.output.out for res in res_l] for res_l in results_b]
+    assert outputs_b.out == [[13, 15], [23, 25]]
 
     # combiner with both fields ["a", "b"] - will create one list
     nn_ab = (
         FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner=["a", "b"])
     )
-    assert nn_ab.state.combiner == ["NA.a", "NA.b"]
+    state_ab = get_state(nn_ab)
+    assert state_ab.combiner == ["NA.a", "NA.b"]
 
-    results_ab = nn_ab()
-    # full combiner, no nested list
-    combined_results_ab = [res.output.out for res in results_ab]
-    assert combined_results_ab == [13, 15, 23, 25]
+    outputs_ab = nn_ab()
+    assert outputs_ab.out == [13, 15, 23, 25]
 
     # combiner with both fields ["b", "a"] - will create the same list as nn_ab
     # no difference in the order for setting combiner
     nn_ba = (
         FunAddVar().split(["a", "b"], a=[10, 20], b=[3, 5]).combine(combiner=["b", "a"])
     )
-    assert nn_ba.state.combiner == ["NA.b", "NA.a"]
+    state_ba = get_state(nn_ba)
+    assert state_ba.combiner == ["NA.b", "NA.a"]
 
-    results_ba = nn_ba()
-    combined_results_ba = [res.output.out for res in results_ba]
-    assert combined_results_ba == [13, 15, 23, 25]
+    outputs_ba = nn_ba()
+    assert outputs_ba.out == [13, 15, 23, 25]
 
 
 # Testing with container dimensions for the input
@@ -1359,30 +1239,22 @@ def test_task_state_comb_order():
 def test_task_state_contdim_1(tmp_path):
     """task with a spliter and container dimension for one of the value"""
     task_4var = Op4Var(
-        name="op_4var",
         a="a1",
-        cache_dir=tmp_path,
-    )
-    task_4var.split(
+    ).split(
         ("b", ["c", "d"]),
         b=[["b1", "b2"], ["b3", "b4"]],
         c=["c1", "c2"],
         d=["d1", "d2"],
         cont_dim={"b": 2},
     )
-    task_4var()
-    res = task_4var.result()
-    assert len(res) == 4
-    assert res[3].output.out == "a1 b4 c2 d2"
+    outputs = task_4var(cache_dir=tmp_path)
+    assert len(outputs.out) == 4
+    assert outputs.out[3] == "a1 b4 c2 d2"
 
 
 def test_task_state_contdim_2(tmp_path):
     """task with a splitter and container dimension for one of the value"""
-    task_4var = Op4Var(
-        name="op_4var",
-        cache_dir=tmp_path,
-    )
-    task_4var.split(
+    task_4var = Op4Var().split(
         ["a", ("b", ["c", "d"])],
         cont_dim={"b": 2},
         a=["a1", "a2"],
@@ -1390,50 +1262,46 @@ def test_task_state_contdim_2(tmp_path):
         c=["c1", "c2"],
         d=["d1", "d2"],
     )
-    task_4var()
-    res = task_4var.result()
-    assert len(res) == 8
-    assert res[7].output.out == "a2 b4 c2 d2"
+    outputs = task_4var(cache_dir=tmp_path)
+    assert len(outputs.out) == 8
+    assert outputs.out[7] == "a2 b4 c2 d2"
 
 
 def test_task_state_comb_contdim_1(tmp_path):
     """task with a splitter-combiner, and container dimension for one of the value"""
-    task_4var = Op4Var(
-        name="op_4var",
-        a="a1",
-        cache_dir=tmp_path,
+    task_4var = (
+        Op4Var(a="a1")
+        .split(
+            ("b", ["c", "d"]),
+            cont_dim={"b": 2},
+            b=[["b1", "b2"], ["b3", "b4"]],
+            c=["c1", "c2"],
+            d=["d1", "d2"],
+        )
+        .combine("b")
     )
-    task_4var.split(
-        ("b", ["c", "d"]),
-        cont_dim={"b": 2},
-        b=[["b1", "b2"], ["b3", "b4"]],
-        c=["c1", "c2"],
-        d=["d1", "d2"],
-    ).combine("b")
-    task_4var()
-    res = task_4var.result()
-    assert len(res) == 4
-    assert res[3].output.out == "a1 b4 c2 d2"
+    outputs = task_4var(cache_dir=tmp_path)
+    assert len(outputs.out) == 4
+    assert outputs.out[3] == "a1 b4 c2 d2"
 
 
 def test_task_state_comb_contdim_2(tmp_path):
     """task with a splitter-combiner, and container dimension for one of the value"""
-    task_4var = Op4Var(
-        name="op_4var",
-        cache_dir=tmp_path,
+    task_4var = (
+        Op4Var()
+        .split(
+            ["a", ("b", ["c", "d"])],
+            a=["a1", "a2"],
+            b=[["b1", "b2"], ["b3", "b4"]],
+            c=["c1", "c2"],
+            d=["d1", "d2"],
+            cont_dim={"b": 2},
+        )
+        .combine("a")
     )
-    task_4var.split(
-        ["a", ("b", ["c", "d"])],
-        a=["a1", "a2"],
-        b=[["b1", "b2"], ["b3", "b4"]],
-        c=["c1", "c2"],
-        d=["d1", "d2"],
-        cont_dim={"b": 2},
-    ).combine("a")
-    task_4var()
-    res = task_4var.result()
-    assert len(res) == 4
-    assert res[3][1].output.out == "a2 b4 c2 d2"
+    outputs = task_4var(cache_dir=tmp_path)
+    assert len(outputs.out) == 4
+    assert outputs.out[3][1] == "a2 b4 c2 d2"
 
 
 # Testing caching for tasks with states
@@ -1444,19 +1312,20 @@ def test_task_state_cachedir(plugin_dask_opt, tmp_path):
     """task with a state and provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
     cache_dir.mkdir()
-    nn = FunAddTwo(cache_dir=cache_dir).split("a", a=[3, 5])
+    nn = FunAddTwo().split("a", a=[3, 5])
+    state = get_state(nn)
 
-    assert nn.state.splitter == "NA.a"
+    assert state.splitter == "NA.a"
     assert (nn.a == np.array([3, 5])).all()
 
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
+        results = sub(nn)
 
     # checking the results
-    results = nn.result()
+
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
+        assert results.outputs.out[i] == res[1]
 
 
 def test_task_state_cachelocations(plugin, tmp_path):
@@ -1469,24 +1338,24 @@ def test_task_state_cachelocations(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir).split("a", a=[3, 5])
-    with Submitter(worker=plugin) as sub:
+    nn = FunAddTwo(a=3).split("a", a=[3, 5])
+    with Submitter(worker=plugin, cache_dir=cache_dir) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir).split(
-        "a", a=[3, 5]
-    )
-    with Submitter(worker=plugin) as sub:
-        sub(nn2)
+    nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
+    with Submitter(
+        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir
+    ) as sub:
+        results2 = sub(nn2)
 
     # checking the results
-    results2 = nn2.result()
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results2[i].output.out == res[1]
+        assert results2.outputs.out[i] == res[1]
 
-    assert all([dir.exists() for dir in nn.output_dir])
-    assert not any([dir.exists() for dir in nn2.output_dir])
+    # Would ideally check for all nodes of the workflows
+    assert num_python_cache_dirs(cache_dir) == 2
+    assert not num_python_cache_dirs(cache_dir2)
 
 
 def test_task_state_cachelocations_forcererun(plugin, tmp_path):
@@ -1500,25 +1369,25 @@ def test_task_state_cachelocations_forcererun(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(a=3, cache_dir=cache_dir).split("a", a=[3, 5])
-    with Submitter(worker=plugin) as sub:
+    nn = FunAddTwo(a=3).split("a", a=[3, 5])
+    with Submitter(worker=plugin, cache_dir=cache_dir) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(a=3, cache_dir=cache_dir2, cache_locations=cache_dir).split(
-        "a", a=[3, 5]
-    )
-    with Submitter(worker=plugin) as sub:
-        sub(nn2, rerun=True)
+    nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
+    with Submitter(
+        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir
+    ) as sub:
+        results2 = sub(nn2, rerun=True)
 
     # checking the results
-    results2 = nn2.result()
+
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results2[i].output.out == res[1]
+        assert results2.outputs.out[i] == res[1]
 
     # both workflows should be run
-    assert all([dir.exists() for dir in nn.output_dir])
-    assert all([dir.exists() for dir in nn2.output_dir])
+    assert num_python_cache_dirs(cache_dir) == 2
+    assert num_python_cache_dirs(cache_dir2) == 2
 
 
 def test_task_state_cachelocations_updated(plugin, tmp_path):
@@ -1535,25 +1404,25 @@ def test_task_state_cachelocations_updated(plugin, tmp_path):
     cache_dir2 = tmp_path / "test_task_nostate2"
     cache_dir2.mkdir()
 
-    nn = FunAddTwo(cache_dir=cache_dir).split("a", a=[3, 5])
-    with Submitter(worker=plugin) as sub:
+    nn = FunAddTwo().split("a", a=[3, 5])
+    with Submitter(worker=plugin, cache_dir=cache_dir) as sub:
         sub(nn)
 
-    nn2 = FunAddTwo(cache_dir=cache_dir2, cache_locations=cache_dir).split(
-        "a", a=[3, 5]
-    )
-    with Submitter(worker=plugin) as sub:
-        sub(nn2, cache_locations=cache_dir1)
+    nn2 = FunAddTwo().split("a", a=[3, 5])
+    with Submitter(
+        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+    ) as sub:
+        results2 = sub(nn2)
 
     # checking the results
-    results2 = nn2.result()
+
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results2[i].output.out == res[1]
+        assert results2.outputs.out[i] == res[1]
 
     # both workflows should be run
-    assert all([dir.exists() for dir in nn.output_dir])
-    assert all([dir.exists() for dir in nn2.output_dir])
+    assert num_python_cache_dirs(cache_dir) == 2
+    assert num_python_cache_dirs(cache_dir2) == 2
 
 
 def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
@@ -1573,21 +1442,22 @@ def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
     input2 = input_dir / "input2.txt"
     input2.write_text("test")
 
-    nn = FunFile(filename=input1, cache_dir=cache_dir)
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn)
+    nn = FunFile(filename=input1)
+    with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
+        results = sub(nn)
 
-    nn2 = FunFile(filename=input2, cache_dir=cache_dir2, cache_locations=cache_dir)
-    with Submitter(worker=plugin_dask_opt) as sub:
-        sub(nn2)
+    nn2 = FunFile(filename=input2)
+    with Submitter(
+        worker=plugin_dask_opt, cache_dir=cache_dir2, cache_locations=cache_dir
+    ) as sub:
+        results2 = sub(nn2)
 
     # checking the results
-    results2 = nn2.result()
-    assert results2.output.out == "test"
+
+    assert results2.outputs.out == "test"
 
     # checking if the second task didn't run the interface again
-    assert nn.output_dir.exists()
-    assert not nn2.output_dir.exists()
+    assert results.output_dir == results2.output_dir
 
 
 class OverriddenContentsFile(File):
@@ -1610,10 +1480,10 @@ class OverriddenContentsFile(File):
             yield from super().byte_chunks(**kwargs)
 
     @property
-    def contents(self):
+    def raw_contents(self):
         if self._contents is not None:
             return self._contents
-        return super().contents
+        return super().raw_contents
 
 
 def test_task_files_persistentcache(tmp_path):
@@ -1629,21 +1499,14 @@ def test_task_files_persistentcache(tmp_path):
 
     @python.define
     def read_contents(x: OverriddenContentsFile) -> bytes:
-        return x.contents
+        return x.raw_contents
 
-    assert (
-        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
-        == b"foo"
-    )
+    assert read_contents(x=test_file)(cache_dir=cache_dir).out == b"foo"
     test_file._contents = b"bar"
     # should return result from the first run using the persistent cache
-    assert (
-        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
-        == b"foo"
-    )
+    assert read_contents(x=test_file)(cache_dir=cache_dir).out == b"foo"
     time.sleep(2)  # Windows has a 2-second resolution for mtime
     test_file_path.touch()  # update the mtime to invalidate the persistent cache value
     assert (
-        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
-        == b"bar"
+        read_contents(x=test_file)(cache_dir=cache_dir).out == b"bar"
     )  # returns the overridden value

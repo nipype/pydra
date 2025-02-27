@@ -371,7 +371,7 @@ class Task(ty.Generic[DefType]):
                 self.audit.audit_task(task=self)
             try:
                 self.audit.monitor()
-                self.definition._run(self)
+                self.definition._run(self, rerun)
                 result.outputs = self.definition.Outputs._from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
@@ -425,7 +425,7 @@ class Task(ty.Generic[DefType]):
             self.audit.start_audit(odir=self.output_dir)
             try:
                 self.audit.monitor()
-                await self.definition._run_async(self)
+                await self.definition._run_async(self, rerun)
                 result.outputs = self.definition.Outputs._from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
@@ -628,8 +628,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
     @classmethod
     def construct(
-        cls,
-        definition: WorkflowDef[WorkflowOutputsType],
+        cls, definition: WorkflowDef[WorkflowOutputsType], dont_cache: bool = False
     ) -> Self:
         """Construct a workflow from a definition, caching the constructed worklow"""
 
@@ -722,8 +721,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     f"Expected outputs {unset_outputs} to be set by the "
                     f"constructor of {workflow!r}"
                 )
-
-        cls._constructed_cache[defn_hash][non_lazy_keys][non_lazy_hash] = workflow
+        if not dont_cache:
+            cls._constructed_cache[defn_hash][non_lazy_keys][non_lazy_hash] = workflow
 
         return workflow
 
