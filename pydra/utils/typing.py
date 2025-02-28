@@ -1058,6 +1058,12 @@ def optional_type(type_: type) -> type:
     return type_
 
 
+def is_multi_input(type_: type) -> bool:
+    """Check if the type is a MultiInputObj"""
+    type_ = optional_type(type_)
+    return MultiInputObj in (type_, ty.get_origin(type_))
+
+
 def is_fileset_or_union(type_: type, allow_none: bool | None = None) -> bool:
     """Check if the type is a FileSet or a Union containing a FileSet
 

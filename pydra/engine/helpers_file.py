@@ -135,9 +135,7 @@ def template_update(
         if isinstance(field, shell.outarg)
         and field.path_template
         and getattr(definition, field.name)
-        and all(
-            getattr(definition, required_field) for required_field in field.requires
-        )
+        and all(req.satisfied(definition) for req in field.requires)
     ]
 
     dict_mod = {}

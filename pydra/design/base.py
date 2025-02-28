@@ -62,6 +62,13 @@ def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
     return TypeParser[self_.type](self_.type, label=self_.name)(value)
 
 
+def allowed_values_converter(value: ty.Iterable[str] | None) -> list[str] | None:
+    """Ensure the allowed_values field is a list of strings or None"""
+    if value is None:
+        return None
+    return list(value)
+
+
 @attrs.define
 class Requirement:
     """Define a requirement for a task input field
@@ -76,14 +83,19 @@ class Requirement:
     """
 
     name: str
-    allowed_values: list[str] = attrs.field(factory=list, converter=list)
+    allowed_values: list[str] | None = attrs.field(
+        default=None, converter=allowed_values_converter
+    )
 
     def satisfied(self, inputs: "TaskDef") -> bool:
         """Check if the requirement is satisfied by the inputs"""
         value = getattr(inputs, self.name)
-        if value is attrs.NOTHING:
+        field = {f.name: f for f in list_fields(inputs)}[self.name]
+        if value is attrs.NOTHING or field.type is bool and value is False:
             return False
-        return not self.allowed_values or value in self.allowed_values
+        if self.allowed_values is None:
+            return True
+        return value in self.allowed_values
 
     @classmethod
     def parse(cls, value: ty.Any) -> Self:
@@ -415,6 +427,13 @@ def make_task_def(
     """
 
     spec_type._check_arg_refs(inputs, outputs)
+
+    # Check that the field attributes are valid after all fields have been set
+    # (especially the type)
+    for inpt in inputs.values():
+        attrs.validate(inpt)
+    for outpt in outputs.values():
+        attrs.validate(outpt)
 
     if name is None and klass is not None:
         name = klass.__name__

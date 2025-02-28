@@ -63,7 +63,6 @@ class SpecificShellTask(specs.ShellDef["SpecificShellTask.Outputs"]):
         help="the input file",
         argstr="",
         copy_mode="copy",
-        sep=" ",
     )
 
     class Outputs(specs.ShellOutputs):
@@ -86,7 +85,6 @@ class OtherSpecificShellTask(ShellDef):
         help="the input file",
         argstr="",
         copy_mode="copy",
-        sep=" ",
     )
 
     class Outputs(specs.ShellOutputs):
