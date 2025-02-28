@@ -26,6 +26,7 @@ from .core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils import default_run_cache_dir
 from pydra.design import workflow
+from .state import State
 import logging
 
 logger = logging.getLogger("pydra.submitter")
@@ -35,7 +36,7 @@ if ty.TYPE_CHECKING:
     from .specs import WorkflowDef, TaskDef, TaskOutputs, TaskHooks, Result
     from .core import Workflow
     from .environments import Environment
-    from .state import State
+
 
 DefType = ty.TypeVar("DefType", bound="TaskDef")
 OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
@@ -209,7 +210,22 @@ class Submitter:
         if task_def._splitter:
             from pydra.engine.specs import TaskDef
 
-            output_types = {o.name: list[o.type] for o in list_fields(task_def.Outputs)}
+            state = State(
+                name="not-important",
+                definition=task_def,
+                splitter=task_def._splitter,
+                combiner=task_def._combiner,
+            )
+            list_depth = 2 if state.depth(after_combine=False) != state.depth() else 1
+
+            def wrap_type(tp):
+                for _ in range(list_depth):
+                    tp = list[tp]
+                return tp
+
+            output_types = {
+                o.name: wrap_type(o.type) for o in list_fields(task_def.Outputs)
+            }
 
             @workflow.define(outputs=output_types)
             def Split(

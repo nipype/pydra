@@ -152,19 +152,18 @@ class LazyOutField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        from pydra.utils.typing import (
-            TypeParser,
-        )  # pylint: disable=import-outside-toplevel
         from pydra.engine.state import StateIndex
 
         if state_index is None:
             state_index = StateIndex()
 
-        task = graph.node(self._node.name).task(state_index)
-        _, split_depth = TypeParser.strip_splits(self._type)
+        node_exec = graph.node(self._node.name)
+        task = node_exec.task(state_index)
+        split_depth = node_exec.node.state.depth() if node_exec.node.state else 0
 
         def get_nested(task: "Task[DefType]", depth: int):
-            if isinstance(task, StateArray):
+            if depth:
+                assert isinstance(task, StateArray)
                 val = [get_nested(task=t, depth=depth - 1) for t in task]
                 if depth:
                     val = StateArray[self._type](val)

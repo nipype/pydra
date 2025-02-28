@@ -134,7 +134,7 @@ class Node(ty.Generic[OutputType]):
                 type_, _ = TypeParser.strip_splits(outpt._type)
                 if self._state.combiner:
                     type_ = list[type_]
-                for _ in range(self._state.depth - int(bool(self._state.combiner))):
+                for _ in range(self._state.depth()):
                     type_ = StateArray[type_]
                 outpt._type = type_
             # Flag the output lazy fields as being not typed checked (i.e. assigned to
@@ -272,7 +272,7 @@ class Node(ty.Generic[OutputType]):
             if (
                 isinstance(val, lazy.LazyOutField)
                 and val._node.state
-                and val._node.state.depth
+                and val._node.state.depth()
             ):
                 node: Node = val._node
                 # variables that are part of inner splitters should be treated as a containers

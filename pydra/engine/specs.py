@@ -231,7 +231,6 @@ class TaskDef(ty.Generic[OutputsType]):
                 cache_locations=cache_locations,
                 messenger_args=messenger_args,
                 messengers=messengers,
-                rerun=rerun,
                 environment=environment,
                 worker=worker,
                 **kwargs,
@@ -239,6 +238,7 @@ class TaskDef(ty.Generic[OutputsType]):
                 result = sub(
                     self,
                     hooks=hooks,
+                    rerun=rerun,
                 )
         except TypeError as e:
             # Catch any inadvertent passing of task definition parameters to the

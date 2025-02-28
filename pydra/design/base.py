@@ -416,11 +416,6 @@ def make_task_def(
 
     spec_type._check_arg_refs(inputs, outputs)
 
-    for inpt in inputs.values():
-        set_none_default_if_optional(inpt)
-    for outpt in inputs.values():
-        set_none_default_if_optional(outpt)
-
     if name is None and klass is not None:
         name = klass.__name__
     if reserved_names := [n for n in inputs if n in spec_type.RESERVED_FIELD_NAMES]:
@@ -459,10 +454,10 @@ def make_task_def(
             if getattr(arg, "path_template", False):
                 if is_optional(arg.type):
                     field_type = Path | bool | None
-                    # Will default to None and not be inserted into the command
+                    attrs_kwargs = {"default": None}
                 else:
                     field_type = Path | bool
-                    attrs_kwargs = {"default": True}
+                    attrs_kwargs = {"default": True}  # use the template by default
             elif is_optional(arg.type):
                 field_type = Path | None
             else:
@@ -988,12 +983,10 @@ def check_explicit_fields_are_none(klass, inputs, outputs):
 
 def _get_attrs_kwargs(field: Field) -> dict[str, ty.Any]:
     kwargs = {}
-    if not hasattr(field, "default"):
-        kwargs["factory"] = nothing_factory
-    elif field.default is not NO_DEFAULT:
+    if field.default is not NO_DEFAULT:
         kwargs["default"] = field.default
-    elif is_optional(field.type):
-        kwargs["default"] = None
+    # elif is_optional(field.type):
+    #     kwargs["default"] = None
     else:
         kwargs["factory"] = nothing_factory
     if field.hash_eq:
@@ -1005,9 +998,9 @@ def nothing_factory():
     return attrs.NOTHING
 
 
-def set_none_default_if_optional(field: Field) -> None:
-    if is_optional(field.type) and field.default is NO_DEFAULT:
-        field.default = None
+# def set_none_default_if_optional(field: Field) -> None:
+#     if is_optional(field.type) and field.default is NO_DEFAULT:
+#         field.default = None
 
 
 white_space_re = re.compile(r"\s+")

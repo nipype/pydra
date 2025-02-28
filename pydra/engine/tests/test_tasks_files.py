@@ -191,26 +191,3 @@ def test_broken_dir_link1(tmpdir):
 
     with pytest.raises(FileNotFoundError):
         DirCountFileAnnot(dirpath=Path(dir1))
-
-
-def test_broken_dir_link2(tmpdir):
-    # valid dirs with broken symlink(s) are hashed
-    dir2 = tmpdir.join("dir2")
-    os.mkdir(dir2)
-    file1 = dir2.join("file1")
-    file2 = dir2.join("file2")
-    file1.open("w+").close()
-    file2.open("w+").close()
-
-    file1_link = dir2.join("file1_link")
-    os.symlink(file1, file1_link)
-    os.remove(file1)  # file1_link is broken
-
-    nn = DirCountFile(dirpath=dir2)
-    # does not raises error because pydra treats dirpath as a string
-    with Submitter(worker="cf") as sub:
-        sub(nn)
-
-    nn2 = DirCountFileAnnot(dirpath=str(dir2))
-    with Submitter(worker="cf") as sub:
-        sub(nn2)

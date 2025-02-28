@@ -231,29 +231,38 @@ class State:
                 names.append(token)
         return names
 
-    @property
-    def depth(self) -> int:
+    def depth(self, after_combine: bool = True) -> int:
         """Return the number of splits of the state, i.e. the number nested
         state arrays to wrap around the type of lazy out fields
+
+        Parameters
+        ----------
+        after_combine : :obj:`bool`
+            if True, the depth is after combining the fields, otherwise it is before
+            any combinations
 
         Returns
         -------
         int
-            number of uncombined independent splits (i.e. linked splits only add 1)
+            number of splits in the state (i.e. linked splits only add 1)
         """
         depth = 0
         stack = []
+
+        def included(s):
+            return s not in self.combiner if after_combine else True
+
         for spl in self.splitter_rpn:
             if spl in [".", "*"]:
                 if spl == ".":
-                    depth += int(all(s not in self.combiner for s in stack))
+                    depth += int(all(included(s) for s in stack))
                 else:
                     assert spl == "*"
-                    depth += len([s for s in stack if s not in self.combiner])
+                    depth += len([s for s in stack if included(s)])
                 stack = []
             else:
                 stack.append(spl)
-        remaining_stack = [s for s in stack if s not in self.combiner]
+        remaining_stack = [s for s in stack if included(s)]
         return depth + len(remaining_stack)
 
     @property

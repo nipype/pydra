@@ -386,6 +386,7 @@ def define(
                 input_helps=input_helps,
                 output_helps=output_helps,
             )
+
             if name:
                 class_name = name
             else:
@@ -679,6 +680,10 @@ def parse_command_line_template(
                     if ext_type.ext is not None:
                         path_template = name + ext_type.ext
                 kwds["path_template"] = path_template
+            # Set the default value to None if the field is optional and no default is
+            # provided
+            if is_optional(type_) and "default" not in kwds:
+                kwds["default"] = None
             if option is None:
                 add_arg(name, field_type, kwds)
             else:

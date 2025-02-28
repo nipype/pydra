@@ -371,6 +371,7 @@ def test_task_nostate_1(plugin_dask_opt, tmp_path):
 
     with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
     assert results.outputs.out == 5
@@ -384,6 +385,7 @@ def test_task_nostate_1_call(tmp_path):
     nn = FunAddTwo(a=3)
     with Submitter(cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
     # checking the results
 
     assert results.outputs.out == 5
@@ -402,6 +404,7 @@ def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
 
     with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -421,6 +424,7 @@ def test_task_nostate_1_call_plug(plugin_dask_opt, tmp_path):
 
     with Submitter(cache_dir=tmp_path, worker=plugin_dask_opt) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -440,6 +444,7 @@ def test_task_nostate_2(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -456,6 +461,7 @@ def test_task_nostate_3(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -474,6 +480,7 @@ def test_task_nostate_4(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -513,9 +520,9 @@ def test_task_nostate_6a_exception():
     """checking if the function gets the attrs.Nothing value"""
     nn = FunAddVarNone(a=2)
     assert nn.b is attrs.NOTHING
-    with pytest.raises(TypeError) as excinfo:
+    with pytest.raises(ValueError) as excinfo:
         nn()
-    assert "unsupported" in str(excinfo.value)
+    assert "Mandatory field 'b' is not set" in str(excinfo.value)
 
 
 def test_task_nostate_7():
@@ -541,6 +548,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
 
     with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -561,6 +569,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
 
     with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -583,12 +592,14 @@ def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     nn = FunAddTwo(a=3)
     with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
         worker=plugin_dask_opt, cache_dir=cache_dir2, cache_locations=cache_dir
     ) as sub:
         results2 = sub(nn2)
+    assert not results2.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -612,6 +623,7 @@ def test_task_nostate_cachelocations_forcererun(plugin, tmp_path):
     nn = FunAddTwo(a=3)
     with Submitter(worker=plugin, cache_dir=cache_dir) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
@@ -696,18 +708,21 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
     nn = FunAddTwo(a=3)
     with Submitter(worker=plugin, cache_dir=cache_dir) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir
     ) as sub:
         results1 = sub(nn2)
+    assert not results1.errored, "\n".join(results.errors["error message"])
 
     # updating cache location to non-existing dir
     with Submitter(
         worker=plugin, cache_locations=cache_dir1, cache_dir=tmp_path
     ) as sub:
         results2 = sub(nn2)
+    assert not results2.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -738,6 +753,7 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
 
     with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -760,6 +776,7 @@ def test_task_state_1a(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -784,6 +801,7 @@ def test_task_state_singl_1(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
     expected = [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 10}, 15)]
@@ -852,6 +870,7 @@ def test_task_state_2(
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -870,6 +889,7 @@ def test_task_state_3(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -893,6 +913,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking that split is done across dim 0
     el_0 = state.states_val[0]["NA.lst"]
@@ -918,6 +939,7 @@ def test_task_state_4a(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -936,6 +958,7 @@ def test_task_state_5(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -969,6 +992,7 @@ def test_task_state_6(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -987,6 +1011,7 @@ def test_task_state_6a(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -1010,6 +1035,7 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
 
     with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
@@ -1123,6 +1149,7 @@ def test_task_state_comb_2(
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert state.splitter_final == state_splitter_final
     assert state.splitter_rpn_final == state_rpn_final
@@ -1165,6 +1192,7 @@ def test_task_state_comb_singl_1(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out == [13, 15]
 
@@ -1180,6 +1208,7 @@ def test_task_state_comb_3(plugin, tmp_path):
 
     with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -1188,7 +1217,7 @@ def test_task_state_comb_3(plugin, tmp_path):
         assert results.outputs.out[i] == res[1]
 
 
-def test_task_state_comb_order():
+def test_task_state_comb_order(tmp_path):
     """tasks with an outer splitter and various combiner;
     showing the order of results
     """
@@ -1198,7 +1227,7 @@ def test_task_state_comb_order():
     state_a = get_state(nn_a)
     assert state_a.combiner == ["NA.a"]
 
-    outputs = nn_a()
+    outputs = nn_a(cache_dir=tmp_path / "cache")
     # combined_results_a = [[res.output.out for res in res_l] for res_l in results_a]
     assert outputs.out == [[13, 23], [15, 25]]
 
@@ -1207,7 +1236,7 @@ def test_task_state_comb_order():
     state_b = get_state(nn_b)
     assert state_b.combiner == ["NA.b"]
 
-    outputs_b = nn_b()
+    outputs_b = nn_b(cache_dir=tmp_path / "cache_b")
     # combined_results_b = [[res.output.out for res in res_l] for res_l in results_b]
     assert outputs_b.out == [[13, 15], [23, 25]]
 
@@ -1218,7 +1247,7 @@ def test_task_state_comb_order():
     state_ab = get_state(nn_ab)
     assert state_ab.combiner == ["NA.a", "NA.b"]
 
-    outputs_ab = nn_ab()
+    outputs_ab = nn_ab(cache_dir=tmp_path / "cache_ab")
     assert outputs_ab.out == [13, 15, 23, 25]
 
     # combiner with both fields ["b", "a"] - will create the same list as nn_ab
@@ -1229,7 +1258,7 @@ def test_task_state_comb_order():
     state_ba = get_state(nn_ba)
     assert state_ba.combiner == ["NA.b", "NA.a"]
 
-    outputs_ba = nn_ba()
+    outputs_ba = nn_ba(cache_dir=tmp_path / "cache_ba")
     assert outputs_ba.out == [13, 15, 23, 25]
 
 
@@ -1320,6 +1349,7 @@ def test_task_state_cachedir(plugin_dask_opt, tmp_path):
 
     with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -1347,6 +1377,7 @@ def test_task_state_cachelocations(plugin, tmp_path):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir
     ) as sub:
         results2 = sub(nn2)
+    assert not results2.errored, "\n".join(results.errors["error message"])
 
     # checking the results
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
@@ -1413,6 +1444,7 @@ def test_task_state_cachelocations_updated(plugin, tmp_path):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(nn2)
+    assert not results2.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 
@@ -1445,12 +1477,14 @@ def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
     nn = FunFile(filename=input1)
     with Submitter(worker=plugin_dask_opt, cache_dir=cache_dir) as sub:
         results = sub(nn)
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunFile(filename=input2)
     with Submitter(
         worker=plugin_dask_opt, cache_dir=cache_dir2, cache_locations=cache_dir
     ) as sub:
         results2 = sub(nn2)
+    assert not results2.errored, "\n".join(results.errors["error message"])
 
     # checking the results
 

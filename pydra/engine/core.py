@@ -709,7 +709,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     f"{len(output_lazy_fields)} ({output_lazy_fields})"
                 )
             for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
-                # Automatically combine any uncombined state arrays into lists
+                # Automatically combine any uncombined state arrays into a single lists
                 if TypeParser.get_origin(outpt_lf._type) is StateArray:
                     outpt_lf._type = list[TypeParser.strip_splits(outpt_lf._type)[0]]
                 setattr(outputs, outpt.name, outpt_lf)
