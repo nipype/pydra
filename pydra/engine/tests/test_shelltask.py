@@ -34,10 +34,10 @@ def test_shell_cmd_1(plugin_dask_opt, results_function, tmp_path):
     shelly = shell.define(cmd)()
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin=plugin_dask_opt, cache_dir=tmp_path)
-    assert Path(res.outputs.stdout.rstrip()).parent == tmp_path
-    assert res.outputs.return_code == 0
-    assert res.outputs.stderr == ""
+    outputs = results_function(shelly, worker=plugin_dask_opt, cache_dir=tmp_path)
+    assert Path(outputs.stdout.rstrip()).parent == tmp_path
+    assert outputs.return_code == 0
+    assert outputs.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -50,10 +50,10 @@ def test_shell_cmd_1_strip(plugin, results_function, tmp_path):
 
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert Path(res.outputs.stdout) == Path(shelly.output_dir)
-    assert res.outputs.return_code == 0
-    assert res.outputs.stderr == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert Path(outputs.stdout) == Path(shelly.output_dir)
+    assert outputs.return_code == 0
+    assert outputs.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -64,10 +64,10 @@ def test_shell_cmd_2(plugin, results_function, tmp_path):
 
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout.strip() == " ".join(cmd[1:])
-    assert res.outputs.return_code == 0
-    assert res.outputs.stderr == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout.strip() == " ".join(cmd[1:])
+    assert outputs.return_code == 0
+    assert outputs.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -81,10 +81,10 @@ def test_shell_cmd_2a(plugin, results_function, tmp_path):
     assert shelly.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout.strip() == " ".join(cmd_args)
-    assert res.outputs.return_code == 0
-    assert res.outputs.stderr == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout.strip() == " ".join(cmd_args)
+    assert outputs.return_code == 0
+    assert outputs.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -98,10 +98,10 @@ def test_shell_cmd_2b(plugin, results_function, tmp_path):
     assert shelly.executable == "echo"
     assert shelly.cmdline == "echo pydra"
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "pydra\n"
-    assert res.outputs.return_code == 0
-    assert res.outputs.stderr == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "pydra\n"
+    assert outputs.return_code == 0
+    assert outputs.stderr == ""
 
 
 # tests with State
@@ -118,15 +118,15 @@ def test_shell_cmd_3(plugin_dask_opt, tmp_path):
     shelly = shell.define("placeholder")().split("executable", executable=cmd)
 
     # assert shelly.cmdline == ["pwd", "whoami"]
-    res = shelly(plugin=plugin_dask_opt)
-    assert Path(res.outputs.stdout[0].rstrip()) == shelly.output_dir[0]
+    outputs = shelly(worker=plugin_dask_opt)
+    assert Path(outputs.stdout[0].rstrip()) == shelly.output_dir[0]
 
     if "USER" in os.environ:
-        assert res.outputs.stdout[1] == f"{os.environ['USER']}\n"
+        assert outputs.stdout[1] == f"{os.environ['USER']}\n"
     else:
-        assert res.outputs.stdout[1]
-    assert res.outputs.return_code[0] == res.outputs.return_code[1] == 0
-    assert res.outputs.stderr[0] == res.outputs.stderr[1] == ""
+        assert outputs.stdout[1]
+    assert outputs.return_code[0] == outputs.return_code[1] == 0
+    assert outputs.stderr[0] == outputs.stderr[1] == ""
 
 
 def test_shell_cmd_4(plugin, tmp_path):
@@ -141,13 +141,13 @@ def test_shell_cmd_4(plugin, tmp_path):
     assert shelly.inputs.executable == "echo"
     assert shelly.inputs.args == ["nipype", "pydra"]
     # assert shelly.cmdline == ["echo nipype", "echo pydra"]
-    res = shelly(plugin=plugin)
+    outputs = shelly(worker=plugin)
 
-    assert res.outputs.stdout[0] == "nipype\n"
-    assert res.outputs.stdout[1] == "pydra\n"
+    assert outputs.stdout[0] == "nipype\n"
+    assert outputs.stdout[1] == "pydra\n"
 
-    assert res.outputs.return_code[0] == res.outputs.return_code[1] == 0
-    assert res.outputs.stderr[0] == res.outputs.stderr[1] == ""
+    assert outputs.return_code[0] == outputs.return_code[1] == 0
+    assert outputs.stderr[0] == outputs.stderr[1] == ""
 
 
 def test_shell_cmd_5(plugin, tmp_path):
@@ -164,10 +164,10 @@ def test_shell_cmd_5(plugin, tmp_path):
     assert shelly.inputs.executable == "echo"
     assert shelly.inputs.args == ["nipype", "pydra"]
     # assert shelly.cmdline == ["echo nipype", "echo pydra"]
-    res = shelly(plugin=plugin)
+    outputs = shelly(worker=plugin)
 
-    assert res.outputs.stdout[0] == "nipype\n"
-    assert res.outputs.stdout[1] == "pydra\n"
+    assert outputs.stdout[0] == "nipype\n"
+    assert outputs.stdout[1] == "pydra\n"
 
 
 def test_shell_cmd_6(plugin, tmp_path):
@@ -189,25 +189,25 @@ def test_shell_cmd_6(plugin, tmp_path):
     #     "echo -n nipype",
     #     "echo -n pydra",
     # ]
-    res = shelly(plugin=plugin)
+    outputs = shelly(worker=plugin)
 
-    assert res.outputs.stdout[0] == "nipype\n"
-    assert res.outputs.stdout[1] == "pydra\n"
-    assert res.outputs.stdout[2] == "nipype"
-    assert res.outputs.stdout[3] == "pydra"
+    assert outputs.stdout[0] == "nipype\n"
+    assert outputs.stdout[1] == "pydra\n"
+    assert outputs.stdout[2] == "nipype"
+    assert outputs.stdout[3] == "pydra"
 
     assert (
-        res.outputs.return_code[0]
-        == res.outputs.return_code[1]
-        == res.outputs.return_code[2]
-        == res.outputs.return_code[3]
+        outputs.return_code[0]
+        == outputs.return_code[1]
+        == outputs.return_code[2]
+        == outputs.return_code[3]
         == 0
     )
     assert (
-        res.outputs.stderr[0]
-        == res.outputs.stderr[1]
-        == res.outputs.stderr[2]
-        == res.outputs.stderr[3]
+        outputs.stderr[0]
+        == outputs.stderr[1]
+        == outputs.stderr[2]
+        == outputs.stderr[3]
         == ""
     )
 
@@ -228,13 +228,12 @@ def test_shell_cmd_7(plugin, tmp_path):
     assert shelly.inputs.executable == ["echo", ["echo", "-n"]]
     assert shelly.inputs.args == ["nipype", "pydra"]
 
-    res = shelly(plugin=plugin)
+    outputs = shelly(worker=plugin)
 
-    assert res[0][0].output.stdout == "nipype\n"
-    assert res[0][1].output.stdout == "pydra\n"
-
-    assert res[1][0].output.stdout == "nipype"
-    assert res[1][1].output.stdout == "pydra"
+    assert outputs.stdout[0][0] == "nipype\n"
+    assert outputs.stdout[0][1] == "pydra"
+    assert outputs.stdout[1][0] == "nipype"
+    assert outputs.stdout[1][1] == "pydra"
 
 
 # tests with workflows
@@ -289,8 +288,8 @@ def test_shell_cmd_inputspec_1(plugin, results_function, tmp_path):
     assert shelly.args == cmd_args
     assert shelly.cmdline == "echo -n 'hello from pydra'"
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "hello from pydra"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "hello from pydra"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -327,8 +326,8 @@ def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
     assert shelly.executable == cmd_exec
     assert shelly.args == cmd_args
     assert shelly.cmdline == "echo -n HELLO 'from pydra'"
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "HELLO from pydra"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "HELLO from pydra"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -353,8 +352,8 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
     )
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "HELLO\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "HELLO\n"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -376,8 +375,8 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
     )
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "HELLO\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "HELLO\n"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -402,8 +401,8 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmp_path):
 
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "HELLO\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "HELLO\n"
 
 
 def test_shell_cmd_inputspec_3c_exception(plugin, tmp_path):
@@ -448,8 +447,8 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmp_path):
 
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "echo"
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "\n"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -473,8 +472,8 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "Hello\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "Hello\n"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -495,8 +494,8 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "Hello\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "Hello\n"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -520,8 +519,8 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmp_path):
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "echo Hi"
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "Hi\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "Hi\n"
 
 
 def test_shell_cmd_inputspec_4c_exception(plugin):
@@ -592,7 +591,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
     shelly = Shelly(opt_t=cmd_t)
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "ls -t"
-    results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    results_function(shelly, worker=plugin, cache_dir=tmp_path)
 
 
 def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
@@ -651,7 +650,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
     shelly = Shelly(opt_t=cmd_t, opt_l=cmd_l)
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    results_function(shelly, worker=plugin, cache_dir=tmp_path)
 
 
 def test_shell_cmd_inputspec_6a_exception(plugin):
@@ -714,7 +713,7 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
     shelly.opt_l = cmd_l
     assert shelly.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    results_function(shelly, worker=plugin, cache_dir=tmp_path)
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -738,9 +737,9 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, additional_args=args)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    out1 = res.outputs.out1.fspath
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    out1 = outputs.out1.fspath
     assert out1.exists()
     # checking if the file is created in a good place
     assert shelly.output_dir == out1.parent
@@ -773,11 +772,11 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
         additional_args=args,
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
     # checking if the file is created in a good place
-    assert shelly.output_dir == res.outputs.out1_changed.fspath.parent
-    assert res.outputs.out1_changed.fspath.name == "newfile_tmp.txt"
+    assert shelly.output_dir == outputs.out1_changed.fspath.parent
+    assert outputs.out1_changed.fspath.name == "newfile_tmp.txt"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -805,9 +804,9 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, newfile="newfile_tmp.txt")
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.out1.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out1.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -831,11 +830,11 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, additional_args=args)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
     # checking if the file is created in a good place
-    assert shelly.output_dir == res.outputs.out1.fspath.parent
-    assert res.outputs.out1.fspath.name == "newfile_tmp.txt"
+    assert shelly.output_dir == outputs.out1.fspath.parent
+    assert outputs.out1.fspath.name == "newfile_tmp.txt"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -872,9 +871,9 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
         time="02121010",
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.out1.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out1.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -911,9 +910,9 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
         time="02121010",
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.out1.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out1.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -949,12 +948,12 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
         file_orig=file,
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.file_copy.fspath.exists()
-    assert res.outputs.file_copy.fspath.name == "file_copy.txt"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.file_copy.fspath.exists()
+    assert outputs.file_copy.fspath.name == "file_copy.txt"
     # checking if it's created in a good place
-    assert shelly.output_dir == res.outputs.file_copy.fspath.parent
+    assert shelly.output_dir == outputs.file_copy.fspath.parent
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter])
@@ -987,12 +986,12 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
 
     shelly = Shelly(executable=cmd, file_orig=file)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.file_copy.fspath.exists()
-    assert res.outputs.file_copy.fspath.name == "file_copy.txt"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.file_copy.fspath.exists()
+    assert outputs.file_copy.fspath.name == "file_copy.txt"
     # checking if it's created in a good place
-    assert shelly.output_dir == res.outputs.file_copy.fspath.parent
+    assert shelly.output_dir == outputs.file_copy.fspath.parent
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1027,10 +1026,10 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
         file_orig=file,
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.file_copy.fspath.exists()
-    assert res.outputs.file_copy.fspath.name == "file_copy"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.file_copy.fspath.exists()
+    assert outputs.file_copy.fspath.name == "file_copy"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1066,11 +1065,11 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
         file_orig=file,
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.file_copy.fspath.exists()
-    assert res.outputs.file_copy.fspath.name == "file"
-    assert res.outputs.file_copy.fspath.parent == shelly.output_dir
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.file_copy.fspath.exists()
+    assert outputs.file_copy.fspath.name == "file"
+    assert outputs.file_copy.fspath.parent == shelly.output_dir
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1107,12 +1106,12 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
         file_copy="my_file_copy.txt",
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.file_copy.fspath.exists()
-    assert res.outputs.file_copy.fspath.name == "my_file_copy.txt"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.file_copy.fspath.exists()
+    assert outputs.file_copy.fspath.name == "my_file_copy.txt"
     # checking if it's created in a good place
-    assert shelly.output_dir == res.outputs.file_copy.fspath.parent
+    assert shelly.output_dir == outputs.file_copy.fspath.parent
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1145,8 +1144,8 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmp_path):
     )
 
     assert shelly.executable == cmd_exec
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == "hello from boston"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == "hello from boston"
 
 
 def test_shell_cmd_inputspec_10_err(tmp_path):
@@ -1262,9 +1261,9 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
         number=2,
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    fspath = res.outputs.file_copy.fspath
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    fspath = outputs.file_copy.fspath
     assert fspath.exists()
     assert fspath.name == "file_even.txt"
     # checking if it's created in a good place
@@ -1325,12 +1324,12 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, orig_file=str(file))
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.out_file.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out_file.fspath.exists()
     # the file is  copied, and than it is changed in place
-    assert res.outputs.out_file.fspath.parent == shelly.output_dir
-    with open(res.outputs.out_file) as f:
+    assert outputs.out_file.fspath.parent == shelly.output_dir
+    with open(outputs.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
     with open(file) as f:
@@ -1368,21 +1367,21 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, orig_file=str(file))
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.out_file.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out_file.fspath.exists()
     # the file is uses a soft link, but it creates and an extra copy before modifying
-    assert res.outputs.out_file.fspath.parent == shelly.output_dir
+    assert outputs.out_file.fspath.parent == shelly.output_dir
 
-    assert res.outputs.out_file.fspath.parent.joinpath(
-        res.outputs.out_file.fspath.name + "s"
+    assert outputs.out_file.fspath.parent.joinpath(
+        outputs.out_file.fspath.name + "s"
     ).exists()
-    with open(res.outputs.out_file) as f:
+    with open(outputs.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the file is uses a soft link, but it creates and an extra copy
     # it might depend on the OS
-    linked_file_copy = res.outputs.out_file.fspath.parent.joinpath(
-        res.outputs.out_file.fspath.name + "s"
+    linked_file_copy = outputs.out_file.fspath.parent.joinpath(
+        outputs.out_file.fspath.name + "s"
     )
     if linked_file_copy.exists():
         with open(linked_file_copy) as f:
@@ -1430,12 +1429,12 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
         orig_file=str(file),
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.out_file.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out_file.fspath.exists()
     # the file is  not copied, it is changed in place
-    assert res.outputs.out_file == file
-    with open(res.outputs.out_file) as f:
+    assert outputs.out_file == file
+    with open(outputs.out_file) as f:
         assert "hi from pydra\n" == f.read()
 
 
@@ -1460,9 +1459,9 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout[0] == "HELLO\n"
-    assert res.outputs.stdout[1] == "hi\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout[0] == "HELLO\n"
+    assert outputs.stdout[1] == "hi\n"
 
 
 def test_shell_cmd_inputspec_typeval_1():
@@ -1521,9 +1520,9 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
     shelly = Shelly().split(text=["HELLO", "hi"])
     assert shelly.inputs.executable == cmd_exec
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout[0] == "HELLO\n"
-    assert res.outputs.stdout[1] == "hi\n"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout[0] == "HELLO\n"
+    assert outputs.stdout[1] == "hi\n"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1546,11 +1545,11 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd).split(args=args)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
     for i in range(len(args)):
-        assert res[i].output.stdout == ""
-        assert res[i].output.out1.fspath.exists()
-        assert res[i].output.out1.fspath.parent == shelly.output_dir[i]
+        assert outputs.stdout[i] == ""
+        assert outputs.out1[i].fspath.exists()
+        assert outputs.out1[i].fspath.parent == shelly.output_dir[i]
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1581,9 +1580,9 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout[0] == "hello from pydra"
-    assert res.outputs.stdout[1] == "have a nice one"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout[0] == "hello from pydra"
+    assert outputs.stdout[1] == "have a nice one"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1623,13 +1622,13 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
     ).split("orig_file", orig_file=files)
 
     txt_l = ["from pydra", "world"]
-    res_l = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    for i, res in enumerate(res_l):
-        assert res.outputs.stdout == ""
-        assert res.outputs.out_file.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    for i in range(len(files)):
+        assert outputs.stdout[i] == ""
+        assert outputs.out_file[i].fspath.exists()
         # the file is  copied, and than it is changed in place
-        assert res.outputs.out_file.fspath.parent == shelly.output_dir[i]
-        with open(res.outputs.out_file) as f:
+        assert outputs.out_file[i].fspath.parent == shelly.output_dir[i]
+        with open(outputs.out_file[i]) as f:
             assert f"hi {txt_l[i]}\n" == f.read()
         # the original file is unchanged
         with open(files[i]) as f:
@@ -1969,9 +1968,9 @@ def test_shell_cmd_outputspec_1(plugin, results_function, tmp_path):
     )
     shelly = Shelly()
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.newfile.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1991,9 +1990,9 @@ def test_shell_cmd_outputspec_1a(plugin, results_function, tmp_path):
 
     shelly = Shelly()
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.newfile.fspath.exists()
 
 
 def test_shell_cmd_outputspec_1b_exception(plugin, tmp_path):
@@ -2036,9 +2035,9 @@ def test_shell_cmd_outputspec_2(plugin, results_function, tmp_path):
 
     shelly = Shelly()
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.newfile.fspath.exists()
 
 
 def test_shell_cmd_outputspec_2a_exception(plugin, tmp_path):
@@ -2082,11 +2081,11 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmp_path):
 
     shelly = Shelly()
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
     # newfile is a list
-    assert len(res.outputs.newfile) == 2
-    assert all([file.fspath.exists() for file in res.outputs.newfile])
+    assert len(outputs.newfile) == 2
+    assert all([file.fspath.exists() for file in outputs.newfile])
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -2112,11 +2111,11 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
 
     shelly = Shelly()
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
     # newfile is a list
-    assert len(res.outputs.newfile) == 2
-    assert all([file.fspath.exists() for file in res.outputs.newfile])
+    assert len(outputs.newfile) == 2
+    assert all([file.fspath.exists() for file in outputs.newfile])
     assert (
         shelly.output_names
         == shelly._generated_output_names
@@ -2148,11 +2147,11 @@ def test_shell_cmd_outputspec_5a(plugin, results_function, tmp_path):
 
     shelly = Shelly()
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
     # newfile is a list
-    assert len(res.outputs.newfile) == 2
-    assert all([file.fspath.exists() for file in res.outputs.newfile])
+    assert len(outputs.newfile) == 2
+    assert all([file.fspath.exists() for file in outputs.newfile])
 
 
 def test_shell_cmd_outputspec_5b_error():
@@ -2203,11 +2202,11 @@ def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
 
     shelly = Shelly()
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
     # newfile is a list
-    assert len(res.outputs.newfile) == 2
-    assert all([file.exists() for file in res.outputs.newfile])
+    assert len(outputs.newfile) == 2
+    assert all([file.exists() for file in outputs.newfile])
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -2236,9 +2235,9 @@ def test_shell_cmd_outputspec_6(plugin, results_function, tmp_path):
         additional_args=args,
     )
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    assert res.outputs.out1.fspath.exists()
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    assert outputs.out1.fspath.exists()
 
 
 def test_shell_cmd_outputspec_6a():
@@ -2263,9 +2262,9 @@ def test_shell_cmd_outputspec_6a():
 
     shelly = Shelly(additional_args=args)
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.out1.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.out1.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -2309,9 +2308,9 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
         files_id=new_files_id,
     )
 
-    res = results_function(shelly, cache_dir=tmp_path)
-    assert res.outputs.stdout == ""
-    for file in res.outputs.new_files:
+    outputs = results_function(shelly, cache_dir=tmp_path)
+    assert outputs.stdout == ""
+    for file in outputs.new_files:
         assert file.fspath.exists()
 
 
@@ -2359,9 +2358,9 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
     # XXX: Figure out why this fails with "cf". Occurs in CI when using Ubuntu + Python >= 3.10
     #      (but not when using macOS + Python >= 3.10). Same error occurs in test_shell_cmd_inputspec_11
     #      see https://github.com/nipype/pydra/issues/671
-    res = results_function(shelly, "serial")
-    assert res.outputs.stdout == ""
-    assert res.outputs.new_files.fspath.exists()
+    outputs = results_function(shelly, "serial")
+    assert outputs.stdout == ""
+    assert outputs.new_files.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -2404,10 +2403,10 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
 
     shelly = Shelly().split("additional_args", args=args)
 
-    results = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    for index, res in enumerate(results):
-        assert res.outputs.out_file_index == index + 1
-        assert res.outputs.stderr_field == f"stderr: {res.outputs.stderr}"
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
+    for index in range(2):
+        assert outputs.out_file_index[index] == index + 1
+        assert outputs.stderr_field[index] == f"stderr: {outputs.stderr}"
 
 
 def test_shell_cmd_outputspec_8b_error():
@@ -2459,7 +2458,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
 
     shelly = Shelly(resultsDir="outdir").split(additional_args=args)
 
-    results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    results_function(shelly, worker=plugin, cache_dir=tmp_path)
     for index, arg_dir in enumerate(args):
         assert Path(Path(tmp_path) / Path(arg_dir)).exists()
         assert get_lowest_directory(arg_dir) == f"/dir{index+1}"
@@ -2486,11 +2485,6 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
             argstr="",
         )
 
-    @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
-
-        executable = cmd
-
         class Outputs(ShellOutputs):
 
             resultsDir: Directory = shell.outarg(
@@ -2504,10 +2498,10 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
         == shelly._generated_output_names
         == ["return_code", "stdout", "stderr", "resultsDir"]
     )
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
     print("Cache_dirr:", shelly.cache_dir)
     assert (shelly.output_dir / Path("test")).exists()
-    assert get_lowest_directory(res.outputs.resultsDir) == get_lowest_directory(
+    assert get_lowest_directory(outputs.resultsDir) == get_lowest_directory(
         shelly.output_dir / Path("test")
     )
 
@@ -2537,10 +2531,10 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmp_path):
         executable=cmd,
     ).split("args", args=args)
 
-    res = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    outputs = results_function(shelly, worker=plugin, cache_dir=tmp_path)
     for i in range(len(args)):
-        assert res[i].output.stdout == ""
-        assert res[i].output.out1.fspath.exists()
+        assert outputs.stdout[i] == ""
+        assert outputs.out1[i].fspath.exists()
 
 
 # customised output_spec for tasks in workflows
@@ -2616,11 +2610,6 @@ def test_shell_cmd_inputspec_outputspec_1a():
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         file2: str = shell.arg(help="2nd creadted file", argstr="", position=2)
 
-    @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
-
-        executable = cmd
-
         class Outputs(ShellOutputs):
 
             newfile1: File = shell.outarg(path_template="{file1}", help="newfile 1")
@@ -2631,11 +2620,11 @@ def test_shell_cmd_inputspec_outputspec_1a():
     )
     shelly.file1 = "new_file_1.txt"
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
     # newfile2 is not created, since file2 is not provided
-    assert res.outputs.newfile2 is attr.NOTHING
+    assert outputs.newfile2 is attr.NOTHING
 
 
 def test_shell_cmd_inputspec_outputspec_2():
@@ -2673,10 +2662,10 @@ def test_shell_cmd_inputspec_outputspec_2():
         == ["return_code", "stdout", "stderr", "newfile1", "newfile2"]
     )
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
-    assert res.outputs.newfile2.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
+    assert outputs.newfile2.fspath.exists()
 
 
 def test_shell_cmd_inputspec_outputspec_2a():
@@ -2723,10 +2712,10 @@ def test_shell_cmd_inputspec_outputspec_2a():
         "newfile1",
     ]
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
-    assert res.outputs.newfile2 is attr.NOTHING
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
+    assert outputs.newfile2 is attr.NOTHING
 
 
 def test_shell_cmd_inputspec_outputspec_3():
@@ -2759,10 +2748,10 @@ def test_shell_cmd_inputspec_outputspec_3():
     shelly.file2 = "new_file_2.txt"
     shelly.additional_inp = 2
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
-    assert res.outputs.newfile2.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
+    assert outputs.newfile2.fspath.exists()
 
 
 def test_shell_cmd_inputspec_outputspec_3a():
@@ -2809,11 +2798,11 @@ def test_shell_cmd_inputspec_outputspec_3a():
         "newfile1",
     ]
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
     # additional input not provided so no newfile2 set (even if the file was created)
-    assert res.outputs.newfile2 is attr.NOTHING
+    assert outputs.newfile2 is attr.NOTHING
 
 
 def test_shell_cmd_inputspec_outputspec_4():
@@ -2849,9 +2838,9 @@ def test_shell_cmd_inputspec_outputspec_4():
         == ["return_code", "stdout", "stderr", "newfile1"]
     )
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
 
 
 def test_shell_cmd_inputspec_outputspec_4a():
@@ -2883,9 +2872,9 @@ def test_shell_cmd_inputspec_outputspec_4a():
     # the value is not in the list from requires
     shelly.additional_inp = 1
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1 is attr.NOTHING
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1 is attr.NOTHING
 
 
 def test_shell_cmd_inputspec_outputspec_5():
@@ -2921,9 +2910,9 @@ def test_shell_cmd_inputspec_outputspec_5():
     shelly.file1 = "new_file_1.txt"
     shelly.additional_inp_A = 2
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
 
 
 def test_shell_cmd_inputspec_outputspec_5a():
@@ -2959,9 +2948,9 @@ def test_shell_cmd_inputspec_outputspec_5a():
     shelly.file1 = "new_file_1.txt"
     shelly.additional_inp_B = 2
 
-    res = shelly()
-    assert res.outputs.stdout == ""
-    assert res.outputs.newfile1.fspath.exists()
+    outputs = shelly()
+    assert outputs.stdout == ""
+    assert outputs.newfile1.fspath.exists()
 
 
 def test_shell_cmd_inputspec_outputspec_5b():
@@ -2996,10 +2985,10 @@ def test_shell_cmd_inputspec_outputspec_5b():
     )
     shelly.file1 = "new_file_1.txt"
 
-    res = shelly()
-    assert res.outputs.stdout == ""
+    outputs = shelly()
+    assert outputs.stdout == ""
     # neither additional_inp_A nor additional_inp_B is set, so newfile1 is NOTHING
-    assert res.outputs.newfile1 is attr.NOTHING
+    assert outputs.newfile1 is attr.NOTHING
 
 
 def test_shell_cmd_inputspec_outputspec_6_except():
@@ -3163,7 +3152,7 @@ def test_fsl(data_tests_dir):
     out_file = shelly.output_dir / "test_brain.nii.gz"
     assert shelly.executable == "bet"
     assert shelly.cmdline == f"bet {in_file} {out_file}"
-    # res = shelly(plugin="cf")
+    # outputs = shelly(plugin="cf")
 
 
 def test_shell_cmd_optional_output_file1(tmp_path):
@@ -3329,12 +3318,12 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
         out_name="test",
     )
     shelly()
-    res = shelly.result()
+    outputs = shelly.result()
     # the first output file is created
-    assert res.outputs.out_1.fspath == Path(shelly.output_dir) / Path("test_1.nii")
-    assert res.outputs.out_1.fspath.exists()
+    assert outputs.out_1.fspath == Path(shelly.output_dir) / Path("test_1.nii")
+    assert outputs.out_1.fspath.exists()
     # the second output file is not created
-    assert res.outputs.out_2 == attr.NOTHING
+    assert outputs.out_2 == attr.NOTHING
 
 
 def test_shell_cmd_non_existing_outputs_4(tmp_path):
@@ -3401,10 +3390,10 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
         out_name=["test_1.nii", "test_2.nii"],
     )
     shelly()
-    res = shelly.result()
+    outputs = shelly.result()
     # checking if the outputs are Nothing
-    assert res.outputs.out_list[0] == attr.NOTHING
-    assert res.outputs.out_list[1] == attr.NOTHING
+    assert outputs.out_list[0] == attr.NOTHING
+    assert outputs.out_list[1] == attr.NOTHING
 
 
 def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
@@ -3434,10 +3423,10 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
         out_name=["test_1", "test_2"],
     )
     shelly()
-    res = shelly.result()
+    outputs = shelly.result()
     # checking if the outputs are Nothing
-    assert res.outputs.out_list[0] == File(Path(shelly.output_dir) / "test_1_real.nii")
-    assert res.outputs.out_list[1] == attr.NOTHING
+    assert outputs.out_list[0] == File(Path(shelly.output_dir) / "test_1_real.nii")
+    assert outputs.out_list[1] == attr.NOTHING
 
 
 @pytest.mark.xfail(
