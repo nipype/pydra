@@ -1766,7 +1766,6 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
     with Submitter(worker=plugin) as sub:
         res = sub(wf)
 
-    res = wf.result()
     assert res.outputs.out1 == ""
     assert res.outputs.touch_file.fspath.exists()
     assert res.outputs.touch_file.fspath.parent == wf.output_dir
@@ -1828,7 +1827,6 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
     with Submitter(worker=plugin) as sub:
         res = sub(wf)
 
-    res = wf.result()
     assert res.outputs.out1 == ""
     assert res.outputs.touch_file.fspath.exists()
     assert res.outputs.out2 == ""
@@ -1951,7 +1949,6 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
     with Submitter(worker=plugin) as sub:
         res = sub(wf)
 
-    res = wf.result()
     assert res.outputs.out1 == ["", ""]
     assert all([file.fspath.exists() for file in res.outputs.touch_file])
     assert res.outputs.out2 == ["", ""]
@@ -3258,9 +3255,8 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
         executable="echo",
         out_name="test",
     )
-    shelly()
-    res = shelly.result()
-    assert res.outputs.out_1 == attr.NOTHING and res.outputs.out_2 == attr.NOTHING
+    outputs = shelly()
+    assert outputs.out_1 == attr.NOTHING and outputs.out_2 == attr.NOTHING
 
 
 def test_shell_cmd_non_existing_outputs_2(tmp_path):
@@ -3293,13 +3289,12 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
         executable="touch",
         out_name="test",
     )
-    shelly()
-    res = shelly.result()
+    outputs = shelly()
     # the first output file is created
-    assert res.outputs.out_1.fspath == Path(shelly.output_dir) / Path("test_1.nii")
-    assert res.outputs.out_1.fspath.exists()
+    assert outputs.out_1.fspath == Path(shelly.output_dir) / Path("test_1.nii")
+    assert outputs.out_1.fspath.exists()
     # the second output file is not created
-    assert res.outputs.out_2 == attr.NOTHING
+    assert outputs.out_2 == attr.NOTHING
 
 
 def test_shell_cmd_non_existing_outputs_3(tmp_path):
