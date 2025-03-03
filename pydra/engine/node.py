@@ -305,26 +305,6 @@ class Node(ty.Generic[OutputType]):
         else:
             return getattr(inputs, inp_nm)[ind]
 
-    def _split_definition(self) -> dict[StateIndex, "TaskDef[OutputType]"]:
-        """Split the definition into the different states it will be run over"""
-        # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
-        if not self.state:
-            return {None: self._definition}
-        split_defs = {}
-        for input_ind in self.state.inputs_ind:
-            inputs_dict = {}
-            for inp in set(self.input_names):
-                if f"{self.name}.{inp}" in input_ind:
-                    inputs_dict[inp] = self._extract_input_el(
-                        inputs=self._definition,
-                        inp_nm=inp,
-                        ind=input_ind[f"{self.name}.{inp}"],
-                    )
-            split_defs[StateIndex(input_ind)] = attrs.evolve(
-                self._definition, **inputs_dict
-            )
-        return split_defs
-
         # else:
         #     # todo it never gets here
         #     breakpoint()

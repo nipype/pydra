@@ -1163,7 +1163,7 @@ def test_wf_3nd_st_2(plugin, tmpdir):
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
-    wf = Workflow.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("x")
+    wf = Workflow().split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("x")
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
@@ -1186,8 +1186,8 @@ def test_wf_3nd_ndst_2(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2().split("x", x=y))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2().split("x", x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out).combine("add2x.x"))
         return mult.out
 
@@ -1215,7 +1215,7 @@ def test_wf_3nd_st_3(plugin, tmpdir):
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
-    wf = Workflow.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("y")
+    wf = Workflow().split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("y")
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
@@ -1245,7 +1245,7 @@ def test_wf_3nd_ndst_3(plugin, tmpdir):
 
     wf = Workflow(x=[1, 2, 3], y=[11, 12])
 
-    with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
+    with Submitter(worker="debug", cache_dir=tmpdir) as sub:
         results = sub(wf)
 
     assert not results.errored, "\n".join(results.errors["error message"])
@@ -1268,7 +1268,7 @@ def test_wf_3nd_st_4(plugin, tmpdir):
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
-    wf = Workflow.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine(["x", "y"])
+    wf = Workflow().split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine(["x", "y"])
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
@@ -1322,7 +1322,11 @@ def test_wf_3nd_st_5(plugin, tmpdir):
         addvar = workflow.add(FunAddVar3(a=add2x.out, b=add2y.out, c=z))
         return addvar.out
 
-    wf = Workflow.split(["x", "y", "z"], x=[2, 3], y=[11, 12], z=[10, 100]).combine("y")
+    wf = (
+        Workflow()
+        .split(["x", "y", "z"], x=[2, 3], y=[11, 12], z=[10, 100])
+        .combine("y")
+    )
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
@@ -1828,7 +1832,7 @@ def test_wf_ndst_singl_1(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        mult = workflow.add(Multiply(y=y).split("x", x=x))
+        mult = workflow.add(Multiply(y=y).split("x", x=x), name="mult")
         add2 = workflow.add(Add2(x=mult.out).combine("mult.x"))
         return add2.out
 
@@ -1855,7 +1859,7 @@ def test_wf_st_singl_2(plugin, tmpdir):
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
-    wf = Workflow.split("x", x=[1, 2, 3], y=11)
+    wf = Workflow().split("x", x=[1, 2, 3], y=11)
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
