@@ -32,7 +32,7 @@ from .helpers_file import template_update, template_update_single
 from . import helpers_state as hlpst
 from . import lazy
 from pydra.utils.hash import hash_function, Cache
-from pydra.utils.typing import StateArray, MultiInputObj
+from pydra.utils.typing import StateArray, is_multi_input
 from pydra.design.base import Field, Arg, Out, RequirementSet, NO_DEFAULT
 from pydra.design import shell
 
@@ -231,7 +231,6 @@ class TaskDef(ty.Generic[OutputsType]):
                 cache_locations=cache_locations,
                 messenger_args=messenger_args,
                 messengers=messengers,
-                rerun=rerun,
                 environment=environment,
                 worker=worker,
                 **kwargs,
@@ -239,6 +238,7 @@ class TaskDef(ty.Generic[OutputsType]):
                 result = sub(
                     self,
                     hooks=hooks,
+                    rerun=rerun,
                 )
         except TypeError as e:
             # Catch any inadvertent passing of task definition parameters to the
@@ -260,7 +260,7 @@ class TaskDef(ty.Generic[OutputsType]):
             else:
                 errors = result.errors
                 raise RuntimeError(
-                    f"Task {self} failed @ {errors['time of crash']} with following errors:\n"
+                    f"Task {self} failed @ {errors['time of crash']} with the following errors:\n"
                     + "\n".join(errors["error message"])
                 )
         return result.outputs
@@ -338,7 +338,9 @@ class TaskDef(ty.Generic[OutputsType]):
             ):
                 split_val = StateArray(value)
             else:
-                raise TypeError(f"Could not split {value} as it is not a sequence type")
+                raise TypeError(
+                    f"Could not split {value!r} as it is not a sequence type"
+                )
             split_inputs[name] = split_val
         split_def = attrs.evolve(self, **split_inputs)
         split_def._splitter = splitter
@@ -507,7 +509,7 @@ class TaskDef(ty.Generic[OutputsType]):
 
             # Raise error if any required field is unset.
             if (
-                value is not None
+                value
                 and field.requires
                 and not any(rs.satisfied(self) for rs in field.requires)
             ):
@@ -686,7 +688,7 @@ class PythonDef(TaskDef[PythonOutputsType]):
 
     _task_type = "python"
 
-    def _run(self, task: "Task[PythonDef]") -> None:
+    def _run(self, task: "Task[PythonDef]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
         inputs = attrs_values(self)
         del inputs["function"]
@@ -773,13 +775,13 @@ class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
 
-    def _run(self, task: "Task[WorkflowDef]") -> None:
+    def _run(self, task: "Task[WorkflowDef]", rerun: bool) -> None:
         """Run the workflow."""
-        task.submitter.expand_workflow(task)
+        task.submitter.expand_workflow(task, rerun)
 
-    async def _run_async(self, task: "Task[WorkflowDef]") -> None:
+    async def _run_async(self, task: "Task[WorkflowDef]", rerun: bool) -> None:
         """Run the workflow asynchronously."""
-        await task.submitter.expand_workflow_async(task)
+        await task.submitter.expand_workflow_async(task, rerun)
 
     def construct(self) -> "Workflow":
         from pydra.engine.core import Workflow
@@ -971,7 +973,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
 
-    def _run(self, task: "Task[ShellDef]") -> None:
+    def _run(self, task: "Task[ShellDef]", rerun: bool = True) -> None:
         """Run the shell command."""
         task.return_values = task.environment.execute(task)
 
@@ -981,6 +983,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         the current working directory."""
         # checking the inputs fields before returning the command line
         self._check_resolved()
+        self._check_rules()
         # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
         cmd_args = self._command_args()
         cmdline = cmd_args[0]
@@ -1013,7 +1016,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         for field in list_fields(self):
             name = field.name
             value = inputs[name]
-            if value is None:
+            if value is None or is_multi_input(field.type) and value == []:
                 continue
             if name == "executable":
                 pos_args.append(self._command_shelltask_executable(field, value))
@@ -1126,7 +1129,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
             # if False, nothing is added to the command.
             if value is True:
                 cmd_add.append(field.argstr)
-        elif ty.get_origin(tp) is MultiInputObj:
+        elif is_multi_input(tp):
             # if the field is MultiInputObj, it is used to create a list of arguments
             for val in value or []:
                 cmd_add += self._format_arg(field, val)
@@ -1147,7 +1150,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 argstr_formatted_l = []
                 for val in value:
                     argstr_f = argstr_formatting(
-                        field.argstr, self, value_updates={field.name: val}
+                        field.argstr,
+                        self,
+                        value_updates={field.name: val},
                     )
                     argstr_formatted_l.append(f" {argstr_f}")
                 cmd_el_str = field.sep.join(argstr_formatted_l)
@@ -1218,20 +1223,20 @@ def split_cmd(cmd: str | None):
 
 
 def argstr_formatting(
-    argstr: str, inputs: dict[str, ty.Any], value_updates: dict[str, ty.Any] = None
+    argstr: str, inputs: TaskDef[OutputsType], value_updates: dict[str, ty.Any] = None
 ):
     """formatting argstr that have form {field_name},
     using values from inputs and updating with value_update if provided
     """
     # if there is a value that has to be updated (e.g. single value from a list)
     # getting all fields that should be formatted, i.e. {field_name}, ...
+    inputs_dict = attrs_values(inputs)
     if value_updates:
-        inputs = copy(inputs)
-        inputs.update(value_updates)
+        inputs_dict.update(value_updates)
     inp_fields = parse_format_string(argstr)
     val_dict = {}
     for fld_name in inp_fields:
-        fld_value = inputs[fld_name]
+        fld_value = inputs_dict[fld_name]
         fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
         if fld_value is None or (
             fld_value is False

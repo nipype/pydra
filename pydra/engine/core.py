@@ -371,7 +371,7 @@ class Task(ty.Generic[DefType]):
                 self.audit.audit_task(task=self)
             try:
                 self.audit.monitor()
-                self.definition._run(self)
+                self.definition._run(self, rerun)
                 result.outputs = self.definition.Outputs._from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
@@ -425,7 +425,7 @@ class Task(ty.Generic[DefType]):
             self.audit.start_audit(odir=self.output_dir)
             try:
                 self.audit.monitor()
-                await self.definition._run_async(self)
+                await self.definition._run_async(self, rerun)
                 result.outputs = self.definition.Outputs._from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
@@ -628,8 +628,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
     @classmethod
     def construct(
-        cls,
-        definition: WorkflowDef[WorkflowOutputsType],
+        cls, definition: WorkflowDef[WorkflowOutputsType], dont_cache: bool = False
     ) -> Self:
         """Construct a workflow from a definition, caching the constructed worklow"""
 
@@ -710,7 +709,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     f"{len(output_lazy_fields)} ({output_lazy_fields})"
                 )
             for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
-                # Automatically combine any uncombined state arrays into lists
+                # Automatically combine any uncombined state arrays into a single lists
                 if TypeParser.get_origin(outpt_lf._type) is StateArray:
                     outpt_lf._type = list[TypeParser.strip_splits(outpt_lf._type)[0]]
                 setattr(outputs, outpt.name, outpt_lf)
@@ -722,8 +721,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     f"Expected outputs {unset_outputs} to be set by the "
                     f"constructor of {workflow!r}"
                 )
-
-        cls._constructed_cache[defn_hash][non_lazy_keys][non_lazy_hash] = workflow
+        if not dont_cache:
+            cls._constructed_cache[defn_hash][non_lazy_keys][non_lazy_hash] = workflow
 
         return workflow
 
@@ -735,8 +734,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             # Find the frame where the construct method was called
             if (
                 frame.f_code.co_name == "construct"
-                and "cls" in frame.f_locals
-                and frame.f_locals["cls"] is cls
+                and frame.f_locals.get("cls") is cls
                 and "workflow" in frame.f_locals
             ):
                 return frame.f_locals["workflow"]  # local var "workflow" in construct

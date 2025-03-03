@@ -110,14 +110,16 @@ class arg(Arg):
 
     @sep.validator
     def _validate_sep(self, _, sep):
-        if self.type is ty.Any:
-            return
-        if ty.get_origin(self.type) is MultiInputObj:
+        if self.type is MultiInputObj:
+            tp = ty.Any
+        elif ty.get_origin(self.type) is MultiInputObj:
             tp = ty.get_args(self.type)[0]
         else:
             tp = self.type
         if is_optional(tp):
             tp = optional_type(tp)
+        if tp is ty.Any:
+            return
         origin = ty.get_origin(tp) or tp
 
         if (
@@ -238,16 +240,21 @@ class outarg(arg, Out):
 
     @path_template.validator
     def _validate_path_template(self, attribute, value):
-        if value and self.default not in (NO_DEFAULT, True, None):
-            raise ValueError(
-                f"path_template ({value!r}) can only be provided when no default "
-                f"({self.default!r}) is provided"
-            )
-        if value and not (is_fileset_or_union(self.type) or self.type is ty.Any):
-            raise ValueError(
-                f"path_template ({value!r}) can only be provided when type is a FileSet, "
-                f"or union thereof, not {self.type!r}"
-            )
+        if value:
+            if self.default not in (NO_DEFAULT, True, None):
+                raise ValueError(
+                    f"path_template ({value!r}) can only be provided when no default "
+                    f"({self.default!r}) is provided"
+                )
+            if not (is_fileset_or_union(self.type) or self.type is ty.Any):
+                raise ValueError(
+                    f"path_template ({value!r}) can only be provided when type is a FileSet, "
+                    f"or union thereof, not {self.type!r}"
+                )
+            if self.argstr is None:
+                raise ValueError(
+                    f"path_template ({value!r}) can only be provided when argstr is not None"
+                )
 
     @keep_extension.validator
     def _validate_keep_extension(self, attribute, value):
@@ -386,6 +393,7 @@ def define(
                 input_helps=input_helps,
                 output_helps=output_helps,
             )
+
             if name:
                 class_name = name
             else:
@@ -679,6 +687,10 @@ def parse_command_line_template(
                     if ext_type.ext is not None:
                         path_template = name + ext_type.ext
                 kwds["path_template"] = path_template
+            # Set the default value to None if the field is optional and no default is
+            # provided
+            if is_optional(type_) and "default" not in kwds:
+                kwds["default"] = None
             if option is None:
                 add_arg(name, field_type, kwds)
             else:

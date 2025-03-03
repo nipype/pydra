@@ -5,22 +5,22 @@ import pytest
 import typing as ty
 
 from ..submitter import Submitter
-from pydra.design import python
+from pydra.design import python, workflow
 from fileformats.generic import File, Directory
 
 
 @python.define
-def dir_count_file(dirpath):
+def DirCountFile(dirpath: Directory) -> int:
     return len(os.listdir(dirpath))
 
 
 @python.define
-def dir_count_file_annot(dirpath: Directory):
+def DirCountFileAnnot(dirpath: Directory) -> int:
     return len(os.listdir(dirpath))
 
 
 @python.define
-def file_add2(file):
+def FileAdd2(file: File) -> File:
     array_inp = np.load(file)
     array_out = array_inp + 2
     cwd = os.getcwd()
@@ -31,7 +31,7 @@ def file_add2(file):
 
 
 @python.define
-def file_mult(file):
+def FileMult(file: File) -> File:
     array_inp = np.load(file)
     array_out = 10 * array_inp
     cwd = os.getcwd()
@@ -41,7 +41,7 @@ def file_mult(file):
 
 
 @python.define
-def file_add2_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
+def FileAdd2Annot(file: File) -> File:
     array_inp = np.load(file)
     array_out = array_inp + 2
     cwd = os.getcwd()
@@ -52,7 +52,7 @@ def file_add2_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
 
 
 @python.define
-def file_mult_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
+def FileMultAnnot(file: File) -> File:
     array_inp = np.load(file)
     array_out = 10 * array_inp
     cwd = os.getcwd()
@@ -68,36 +68,38 @@ def test_task_1(tmpdir):
     # creating abs path
     file = os.path.join(os.getcwd(), "arr1.npy")
     np.save(file, arr)
-    nn = file_add2(name="add2", file=file)
+    nn = FileAdd2(file=file)
 
     with Submitter(worker="cf") as sub:
-        sub(nn)
+        res = sub(nn)
 
     # checking the results
-    results = nn.result()
-    res = np.load(results.output.out)
-    assert res == np.array([4])
+
+    result = np.load(res.outputs.out)
+    assert result == np.array([4])
 
 
 def test_wf_1(tmpdir):
     """workflow with 2 tasks that take file as an input and give file as an aoutput"""
-    wf = Workflow(name="wf_1", input_spec=["file_orig"])
-    wf.add(file_add2(name="add2", file=wf.lzin.file_orig))
-    wf.add(file_mult(name="mult", file=wf.add2.lzout.out))
-    wf.set_output([("out", wf.mult.lzout.out)])
+
+    @workflow.define
+    def Workflow(file_orig: File):
+        add2 = workflow.add(FileAdd2(file=file_orig))
+        mult = workflow.add(FileMult(file=add2.out))
+        return mult.out
 
     os.chdir(tmpdir)
     arr = np.array([2, 3])
     # creating abs path
     file_orig = os.path.join(os.getcwd(), "arr_orig.npy")
     np.save(file_orig, arr)
-    wf.inputs.file_orig = file_orig
+    wf = Workflow(file_orig=file_orig)
 
     with Submitter(worker="cf") as sub:
-        sub(wf)
+        res = sub(wf)
 
-    assert wf.output_dir.exists()
-    file_output = wf.result().output.out
+    assert res.output_dir.exists()
+    file_output = res.outputs.out
     assert Path(file_output).exists()
     # loading results
     array_out = np.load(file_output)
@@ -111,15 +113,15 @@ def test_file_annotation_1(tmpdir):
     # creating abs path
     file = os.path.join(os.getcwd(), "arr1.npy")
     np.save(file, arr)
-    nn = file_add2_annot(name="add2", file=file)
+    nn = FileAdd2Annot(file=file)
 
     with Submitter(worker="cf") as sub:
-        sub(nn)
+        res = sub(nn)
 
     # checking the results
-    results = nn.result()
-    res = np.load(results.output.out)
-    assert res == np.array([4])
+    assert res.errored is False, " ".join(res.errors["error message"])
+    arr = np.load(res.outputs.out)
+    assert arr == np.array([4])
 
 
 def test_broken_file(tmpdir):
@@ -127,13 +129,12 @@ def test_broken_file(tmpdir):
     os.chdir(tmpdir)
     file = os.path.join(os.getcwd(), "non_existent.npy")
 
-    nn = file_add2(name="add2", file=file)
     with pytest.raises(FileNotFoundError):
         with Submitter(worker="cf") as sub:
-            sub(nn)
+            sub(FileAdd2(file=file))
 
     with pytest.raises(FileNotFoundError, match="do not exist"):
-        file_add2_annot(name="add2_annot", file=file)
+        FileAdd2Annot(file=file)
 
 
 def test_broken_file_link(tmpdir):
@@ -149,31 +150,27 @@ def test_broken_file_link(tmpdir):
     os.symlink(file, file_link)
     os.remove(file)
 
-    nn = file_add2(name="add2", file=file_link)
     # raises error inside task
     # unless variable is defined as a File pydra will treat it as a string
     with pytest.raises(FileNotFoundError):
         with Submitter(worker="cf") as sub:
-            sub(nn)
+            sub(FileAdd2(file=file_link))
 
     with pytest.raises(FileNotFoundError, match="do not exist"):
-        file_add2_annot(name="add2_annot", file=file_link)
+        FileAdd2Annot(file=file_link)
 
 
 def test_broken_dir():
     """Test how broken directories are handled during hashing"""
 
-    # dirpath doesn't exist
-    nn = dir_count_file(name="listdir", dirpath="/broken_dir_path/")
-    # raises error inside task
     # unless variable is defined as a File pydra will treat it as a string
     with pytest.raises(FileNotFoundError):
         with Submitter(worker="cf") as sub:
-            sub(nn)
+            sub(DirCountFile(dirpath="/broken_dir_path/"))
 
     # raises error before task is run
     with pytest.raises(FileNotFoundError):
-        dir_count_file_annot(name="listdir", dirpath="/broken_dir_path/")
+        DirCountFileAnnot(dirpath="/broken_dir_path/")
 
 
 def test_broken_dir_link1(tmpdir):
@@ -187,34 +184,10 @@ def test_broken_dir_link1(tmpdir):
     os.symlink(dir1, dir1_link)
     os.rmdir(dir1)
 
-    nn = dir_count_file(name="listdir", dirpath=Path(dir1))
     # raises error while running task
     with pytest.raises(FileNotFoundError):
         with Submitter(worker="cf") as sub:
-            sub(nn)
+            sub(DirCountFile(dirpath=Path(dir1)))
 
     with pytest.raises(FileNotFoundError):
-        dir_count_file_annot(name="listdir", dirpath=Path(dir1))
-
-
-def test_broken_dir_link2(tmpdir):
-    # valid dirs with broken symlink(s) are hashed
-    dir2 = tmpdir.join("dir2")
-    os.mkdir(dir2)
-    file1 = dir2.join("file1")
-    file2 = dir2.join("file2")
-    file1.open("w+").close()
-    file2.open("w+").close()
-
-    file1_link = dir2.join("file1_link")
-    os.symlink(file1, file1_link)
-    os.remove(file1)  # file1_link is broken
-
-    nn = dir_count_file(name="listdir", dirpath=dir2)
-    # does not raises error because pydra treats dirpath as a string
-    with Submitter(worker="cf") as sub:
-        sub(nn)
-
-    nn2 = dir_count_file_annot(name="listdir", dirpath=str(dir2))
-    with Submitter(worker="cf") as sub:
-        sub(nn2)
+        DirCountFileAnnot(dirpath=Path(dir1))

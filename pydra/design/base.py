@@ -62,6 +62,13 @@ def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
     return TypeParser[self_.type](self_.type, label=self_.name)(value)
 
 
+def allowed_values_converter(value: ty.Iterable[str] | None) -> list[str] | None:
+    """Ensure the allowed_values field is a list of strings or None"""
+    if value is None:
+        return None
+    return list(value)
+
+
 @attrs.define
 class Requirement:
     """Define a requirement for a task input field
@@ -76,14 +83,19 @@ class Requirement:
     """
 
     name: str
-    allowed_values: list[str] = attrs.field(factory=list, converter=list)
+    allowed_values: list[str] | None = attrs.field(
+        default=None, converter=allowed_values_converter
+    )
 
     def satisfied(self, inputs: "TaskDef") -> bool:
         """Check if the requirement is satisfied by the inputs"""
         value = getattr(inputs, self.name)
-        if value is attrs.NOTHING:
+        field = {f.name: f for f in list_fields(inputs)}[self.name]
+        if value is attrs.NOTHING or field.type is bool and value is False:
             return False
-        return not self.allowed_values or value in self.allowed_values
+        if self.allowed_values is None:
+            return True
+        return value in self.allowed_values
 
     @classmethod
     def parse(cls, value: ty.Any) -> Self:
@@ -350,8 +362,8 @@ def extract_fields_from_class(
 
     if not issubclass(klass, spec_type):
         raise ValueError(
-            f"The canonical form of {spec_type.__module__.split('.')[-1]} task definitions, "
-            f"{klass}, must inherit from {spec_type}"
+            f"When using the canonical form for {spec_type.__module__.split('.')[-1]} "
+            f"tasks, {klass} must inherit from {spec_type}"
         )
 
     inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
@@ -364,8 +376,8 @@ def extract_fields_from_class(
         ) from None
     if not issubclass(outputs_klass, outputs_type):
         raise ValueError(
-            f"The canonical form of {spec_type.__module__.split('.')[-1]} task definitions, "
-            f"{klass}, must inherit from {spec_type}"
+            f"When using the canonical form for {outputs_type.__module__.split('.')[-1]} "
+            f"task outputs {outputs_klass}, you must inherit from {outputs_type}"
         )
 
     output_helps, _ = parse_doc_string(outputs_klass.__doc__)
@@ -416,10 +428,12 @@ def make_task_def(
 
     spec_type._check_arg_refs(inputs, outputs)
 
+    # Check that the field attributes are valid after all fields have been set
+    # (especially the type)
     for inpt in inputs.values():
-        set_none_default_if_optional(inpt)
-    for outpt in inputs.values():
-        set_none_default_if_optional(outpt)
+        attrs.validate(inpt)
+    for outpt in outputs.values():
+        attrs.validate(outpt)
 
     if name is None and klass is not None:
         name = klass.__name__
@@ -459,10 +473,10 @@ def make_task_def(
             if getattr(arg, "path_template", False):
                 if is_optional(arg.type):
                     field_type = Path | bool | None
-                    # Will default to None and not be inserted into the command
+                    attrs_kwargs = {"default": None}
                 else:
                     field_type = Path | bool
-                    attrs_kwargs = {"default": True}
+                    attrs_kwargs = {"default": True}  # use the template by default
             elif is_optional(arg.type):
                 field_type = Path | None
             else:
@@ -988,12 +1002,10 @@ def check_explicit_fields_are_none(klass, inputs, outputs):
 
 def _get_attrs_kwargs(field: Field) -> dict[str, ty.Any]:
     kwargs = {}
-    if not hasattr(field, "default"):
-        kwargs["factory"] = nothing_factory
-    elif field.default is not NO_DEFAULT:
+    if field.default is not NO_DEFAULT:
         kwargs["default"] = field.default
-    elif is_optional(field.type):
-        kwargs["default"] = None
+    # elif is_optional(field.type):
+    #     kwargs["default"] = None
     else:
         kwargs["factory"] = nothing_factory
     if field.hash_eq:
@@ -1005,9 +1017,9 @@ def nothing_factory():
     return attrs.NOTHING
 
 
-def set_none_default_if_optional(field: Field) -> None:
-    if is_optional(field.type) and field.default is NO_DEFAULT:
-        field.default = None
+# def set_none_default_if_optional(field: Field) -> None:
+#     if is_optional(field.type) and field.default is NO_DEFAULT:
+#         field.default = None
 
 
 white_space_re = re.compile(r"\s+")
