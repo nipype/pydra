@@ -338,7 +338,9 @@ class TaskDef(ty.Generic[OutputsType]):
             ):
                 split_val = StateArray(value)
             else:
-                raise TypeError(f"Could not split {value} as it is not a sequence type")
+                raise TypeError(
+                    f"Could not split {value!r} as it is not a sequence type"
+                )
             split_inputs[name] = split_val
         split_def = attrs.evolve(self, **split_inputs)
         split_def._splitter = splitter

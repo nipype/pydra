@@ -9,6 +9,7 @@ import operator
 import subprocess as sp
 import pytest
 from fileformats.generic import File
+from pydra.engine.helpers import list_fields
 from pydra.engine.specs import ShellDef
 from ..submitter import Submitter
 from pydra.design import workflow, python
@@ -36,6 +37,10 @@ need_sge = pytest.mark.skipif(
     not (bool(shutil.which("qsub")) and bool(shutil.which("qacct"))),
     reason="sge not available",
 )
+
+
+def get_output_names(task):
+    return sorted(f.name for f in list_fields(task.Outputs))
 
 
 def run_no_submitter(

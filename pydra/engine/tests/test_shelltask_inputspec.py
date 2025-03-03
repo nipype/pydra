@@ -3,14 +3,10 @@ from pathlib import Path
 import attrs
 import pytest
 from pydra.engine.specs import ShellOutputs, ShellDef
-from pydra.engine.helpers import list_fields
 from fileformats.generic import File
 from pydra.design import shell
 from pydra.utils.typing import MultiInputObj
-
-
-def get_output_names(task):
-    return sorted(f.name for f in list_fields(task.Outputs))
+from .utils import get_output_names
 
 
 def test_shell_cmd_execargs_1():
