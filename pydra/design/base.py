@@ -362,8 +362,8 @@ def extract_fields_from_class(
 
     if not issubclass(klass, spec_type):
         raise ValueError(
-            f"The canonical form of {spec_type.__module__.split('.')[-1]} task definitions, "
-            f"{klass}, must inherit from {spec_type}"
+            f"When using the canonical form for {spec_type.__module__.split('.')[-1]} "
+            f"tasks, {klass} must inherit from {spec_type}"
         )
 
     inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
@@ -376,8 +376,8 @@ def extract_fields_from_class(
         ) from None
     if not issubclass(outputs_klass, outputs_type):
         raise ValueError(
-            f"The canonical form of {spec_type.__module__.split('.')[-1]} task definitions, "
-            f"{klass}, must inherit from {spec_type}"
+            f"When using the canonical form for {outputs_type.__module__.split('.')[-1]} "
+            f"task outputs {outputs_klass}, you must inherit from {outputs_type}"
         )
 
     output_helps, _ = parse_doc_string(outputs_klass.__doc__)
