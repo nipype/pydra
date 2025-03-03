@@ -69,6 +69,8 @@ def test_wf_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert wf._checksum == checksum_before
 
     assert 4 == results.outputs.out
@@ -89,6 +91,8 @@ def test_wf_1a_outpastuple(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 4 == results.outputs.out
 
 
@@ -104,6 +108,8 @@ def test_wf_1_call_subm(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert 4 == results.outputs.out
 
@@ -194,6 +200,8 @@ def test_wf_2(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 8 == results.outputs.out
 
 
@@ -212,6 +220,8 @@ def test_wf_2a(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert 8 == results.outputs.out
 
@@ -233,6 +243,8 @@ def test_wf_2b(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 8 == results.outputs.out
 
 
@@ -251,6 +263,8 @@ def test_wf_2c_multoutp(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking outputs from both nodes
     assert 6 == results.outputs.out_mult
@@ -273,6 +287,8 @@ def test_wf_2d_outpasdict(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # checking outputs from both nodes
     assert 6 == results.outputs.out_mult
     assert 8 == results.outputs.out_add2
@@ -292,6 +308,8 @@ def test_wf_3(plugin_dask_opt, tmpdir):
 
     with Submitter(worker=plugin_dask_opt) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert 4 == results.outputs.out
 
@@ -330,6 +348,8 @@ def test_wf_4(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 5 == results.outputs.out
 
 
@@ -350,6 +370,8 @@ def test_wf_4a(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 5 == results.outputs.out
 
 
@@ -367,6 +389,8 @@ def test_wf_5(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert 5 == results.outputs.out_sum
     assert 1 == results.outputs.out_sub
@@ -386,6 +410,8 @@ def test_wf_5a(plugin, tmpdir):
     wf = Workflow(x=3, y=2)
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert 5 == results.outputs.out_sum
     assert 1 == results.outputs.out_sub
@@ -407,6 +433,8 @@ def test_wf_6(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 6 == results.outputs.out1
     assert 8 == results.outputs.out2
 
@@ -427,6 +455,8 @@ def test_wf_6a(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 6 == results.outputs.out1
     assert 8 == results.outputs.out2
 
@@ -445,6 +475,8 @@ def test_wf_st_1(plugin, tmpdir):
     checksum_before = wf._checksum
     with Submitter(cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf._checksum == checksum_before
 
@@ -466,6 +498,8 @@ def test_wf_st_1_call_subm(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.outputs.out[0] == 3
@@ -573,6 +607,8 @@ def test_wf_st_noinput_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert wf._checksum == checksum_before
 
     assert results == []
@@ -591,6 +627,8 @@ def test_wf_ndst_1(plugin, tmpdir):
     checksum_before = wf._checksum
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf._checksum == checksum_before
 
@@ -613,6 +651,8 @@ def test_wf_ndst_updatespl_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.outputs.out == [3, 4]
 
@@ -631,6 +671,8 @@ def test_wf_ndst_updatespl_1a(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.outputs.out == [3, 4]
@@ -652,6 +694,8 @@ def test_wf_ndst_updateinp_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == [13, 14]
 
 
@@ -668,6 +712,8 @@ def test_wf_ndst_noinput_1(plugin, tmpdir):
     checksum_before = wf._checksum
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf._checksum == checksum_before
 
@@ -688,6 +734,8 @@ def test_wf_st_2(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.outputs.out[0] == 3
     assert results.outputs.out[1] == 4
@@ -705,6 +753,8 @@ def test_wf_ndst_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.outputs.out == [3, 4]
@@ -727,6 +777,8 @@ def test_wf_st_3(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     expected = [
         ({"wfst_3.x": 1, "wfst_3.y": 11}, 13),
@@ -769,6 +821,8 @@ def test_wf_ndst_3(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # expected: [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
     assert results.outputs.out == [13, 26]
 
@@ -786,6 +840,8 @@ def test_wf_st_4(plugin, tmpdir):
     wf = Workflow().split(("x", "y"), x=[1, 2], y=[11, 12]).combine("x")
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # expected: [
     #     ({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)
@@ -809,6 +865,8 @@ def test_wf_ndst_4(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # expected: [
     #     ({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)
     # ]
@@ -830,6 +888,8 @@ def test_wf_st_5(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out[0] == 13
     assert results.outputs.out[1] == 14
     assert results.outputs.out[2] == 24
@@ -849,6 +909,8 @@ def test_wf_ndst_5(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out[0] == 13
     assert results.outputs.out[1] == 14
@@ -870,6 +932,8 @@ def test_wf_st_6(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out[0][0] == 13
     assert results.outputs.out[0][1] == 24
@@ -893,6 +957,8 @@ def test_wf_ndst_6(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out[0] == [13, 24, 35]
     assert results.outputs.out[1] == [14, 26, 38]
 
@@ -911,6 +977,8 @@ def test_wf_ndst_7(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == [11, 22, 33]
 
 
@@ -927,6 +995,8 @@ def test_wf_ndst_8(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out[0] == [11, 22, 33]
     assert results.outputs.out[1] == [12, 24, 36]
@@ -945,6 +1015,8 @@ def test_wf_ndst_9(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out == [11, 12, 22, 24, 33, 36]
 
@@ -966,6 +1038,8 @@ def test_wf_3sernd_ndst_1(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # splitter from the first task should propagate to all tasks,
     # splitter_rpn should be the same in all tasks
@@ -1003,6 +1077,8 @@ def test_wf_3sernd_ndst_1a(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # splitter from the 1st task should propagate and the 2nd task should add one more
     # splitter_rpn for the 2nd and the 3rd task should be the same
@@ -1043,6 +1119,8 @@ def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
     with Submitter(worker=plugin_dask_opt) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert len(results) == 6
     assert results.outputs.out[0] == 39
     assert results.outputs.out[1] == 42
@@ -1067,6 +1145,8 @@ def test_wf_3nd_ndst_1(plugin_dask_opt, tmpdir):
     with Submitter(worker=plugin_dask_opt) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert len(results.outputs.out) == 6
     assert results.outputs.out == [39, 42, 52, 56, 65, 70]
 
@@ -1087,6 +1167,8 @@ def test_wf_3nd_st_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert len(results) == 2
     assert results.outputs.out[0][0] == 39
@@ -1114,6 +1196,8 @@ def test_wf_3nd_ndst_2(plugin, tmpdir):
     with Submitter(cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert len(results.outputs.out) == 2
     assert results.outputs.out[0] == [39, 52, 65]
     assert results.outputs.out[1] == [42, 56, 70]
@@ -1135,6 +1219,8 @@ def test_wf_3nd_st_3(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert len(results) == 3
     assert results.outputs.out[0][0] == 39
@@ -1162,6 +1248,8 @@ def test_wf_3nd_ndst_3(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert len(results.outputs.out) == 3
     assert results.outputs.out[0] == [39, 42]
     assert results.outputs.out[1] == [52, 56]
@@ -1184,6 +1272,8 @@ def test_wf_3nd_st_4(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert len(results) == 6
     assert results.outputs.out[0] == 39
@@ -1212,6 +1302,8 @@ def test_wf_3nd_ndst_4(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
     # assert wf.output_dir.exists()
 
     assert len(results.outputs.out) == 6
@@ -1234,6 +1326,8 @@ def test_wf_3nd_st_5(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert len(results) == 4
     assert results.outputs.out[0][0] == 27
@@ -1266,6 +1360,8 @@ def test_wf_3nd_ndst_5(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert len(results.outputs.out) == 4
     assert results.outputs.out[0] == [27, 28]
     assert results.outputs.out[1] == [117, 118]
@@ -1296,6 +1392,8 @@ def test_wf_3nd_ndst_6(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == [39, 56]
 
 
@@ -1317,6 +1415,8 @@ def test_wf_3nd_ndst_7(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out == [9, 16]
 
@@ -1378,6 +1478,8 @@ def test_wf_ndstLR_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # checking if the splitter is created properly
     assert wf.mult.state.splitter == ["_add2", "mult.y"]
     assert wf.mult.state.splitter_rpn == ["add2.x", "mult.y", "*"]
@@ -1404,6 +1506,8 @@ def test_wf_ndstLR_1a(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # checking if the splitter is created properly
     assert wf.mult.state.splitter == ["_add2", "mult.y"]
     assert wf.mult.state.splitter_rpn == ["add2.x", "mult.y", "*"]
@@ -1429,6 +1533,8 @@ def test_wf_ndstLR_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking if the splitter is created properly
     assert wf.addvar.state.splitter == ["_add2", ["addvar.b", "addvar.c"]]
@@ -1475,6 +1581,8 @@ def test_wf_ndstLR_2a(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # checking if the splitter is created properly
     assert wf.addvar.state.splitter == ["_add2", ["addvar.b", "addvar.c"]]
     assert wf.addvar.state.splitter_rpn == ["add2.x", "addvar.b", "addvar.c", "*", "*"]
@@ -1519,6 +1627,8 @@ def test_wf_ndstinner_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert wf.add2.state.splitter == "add2.x"
     assert wf.add2.state.splitter_rpn == ["add2.x"]
 
@@ -1542,6 +1652,8 @@ def test_wf_ndstinner_2(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert wf.mult.state.splitter == "mult.x"
     assert wf.mult.state.splitter_rpn == ["mult.x"]
 
@@ -1564,6 +1676,8 @@ def test_wf_ndstinner_3(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf.mult.state.splitter == ["mult.x", "mult.y"]
     assert wf.mult.state.splitter_rpn == ["mult.x", "mult.y", "*"]
@@ -1589,6 +1703,8 @@ def test_wf_ndstinner_4(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf.mult.state.splitter == "mult.x"
     assert wf.mult.state.splitter_rpn == ["mult.x"]
@@ -1618,6 +1734,8 @@ def test_wf_ndstinner_5(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf.mult.state.splitter == ["_list", ["mult.y", "mult.x"]]
     assert wf.mult.state.splitter_rpn == ["list.x", "mult.y", "mult.x", "*", "*"]
@@ -1693,6 +1811,8 @@ def test_wf_st_singl_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out[0] == 13
     assert results.outputs.out[1] == 24
 
@@ -1712,6 +1832,8 @@ def test_wf_ndst_singl_1(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out == [13, 24]
 
@@ -1733,6 +1855,8 @@ def test_wf_st_singl_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert len(results) == 3
     assert results.outputs.out[0] == 39
@@ -1757,6 +1881,8 @@ def test_wf_ndst_singl_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert len(results.outputs.out) == 3
     assert results.outputs.out == [39, 52, 65]
@@ -1785,6 +1911,8 @@ def test_wfasnd_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == 4
 
 
@@ -1809,6 +1937,8 @@ def test_wfasnd_wfinp_1(plugin, tmpdir):
     checksum_before = wf._checksum
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf._checksum == checksum_before
 
@@ -1835,6 +1965,8 @@ def test_wfasnd_wfndupdate(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out == 5
 
@@ -1866,6 +1998,8 @@ def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == 5
 
     # adding another layer of workflow
@@ -1878,6 +2012,8 @@ def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf_o)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out == 6
 
@@ -1903,6 +2039,8 @@ def test_wfasnd_st_1(plugin, tmpdir):
     checksum_before = wf._checksum
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert wf._checksum == checksum_before
 
@@ -1930,6 +2068,8 @@ def test_wfasnd_st_updatespl_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == [4, 6]
 
 
@@ -1953,6 +2093,8 @@ def test_wfasnd_ndst_1(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out == [4, 6]
 
@@ -1978,6 +2120,8 @@ def test_wfasnd_ndst_updatespl_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == [4, 6]
 
 
@@ -2001,6 +2145,8 @@ def test_wfasnd_wfst_1(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
     # assert wf.output_dir.exists()
 
     assert results.outputs.out[0] == 4
@@ -2031,6 +2177,8 @@ def test_wfasnd_st_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
     # assert wf.output_dir.exists()
 
     assert results.outputs.out == [4, 42]
@@ -2057,6 +2205,8 @@ def test_wfasnd_wfst_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
     # assert wf.output_dir.exists()
 
     assert results.outputs.out[0] == 4
@@ -2087,6 +2237,8 @@ def test_wfasnd_ndst_3(plugin, tmpdir):
 
     with Submitter(cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
     # assert wf.output_dir.exists()
 
     assert results.outputs.out == [4, 42]
@@ -2115,6 +2267,8 @@ def test_wfasnd_wfst_3(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
     # assert wf.output_dir.exists()
 
     assert results.outputs.out[0] == 4
@@ -2145,6 +2299,8 @@ def test_wfasnd_4(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == 6
 
 
@@ -2170,6 +2326,8 @@ def test_wfasnd_ndst_4(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out == [6, 8]
 
 
@@ -2194,6 +2352,8 @@ def test_wfasnd_wfst_4(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
     # assert wf.output_dir.exists()
 
     assert results.outputs.out[0] == 6
@@ -2219,6 +2379,8 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 8 == results.outputs.out
 
     shutil.rmtree(cache_dir)
@@ -2241,6 +2403,8 @@ def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert 8 == results.outputs.out
 
@@ -2267,6 +2431,8 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -2285,6 +2451,8 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
@@ -2321,6 +2489,8 @@ def test_wf_nostate_cachelocations_a(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -2339,6 +2509,8 @@ def test_wf_nostate_cachelocations_a(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
@@ -2376,6 +2548,8 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -2394,6 +2568,8 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out == results2.outputs.out_pr
@@ -2430,6 +2606,8 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out1
@@ -2447,6 +2625,8 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out2
@@ -2481,6 +2661,8 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out1
@@ -2498,6 +2680,8 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out2
@@ -2533,6 +2717,8 @@ def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -2549,6 +2735,8 @@ def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
         results2 = sub(wf2, rerun=True)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
@@ -2584,6 +2772,8 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -2601,6 +2791,8 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2, rerun=True)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
@@ -2640,6 +2832,8 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -2657,6 +2851,8 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2, rerun=True, propagate_rerun=False)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
@@ -2696,6 +2892,8 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(plugin, tmpd
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -2753,6 +2951,8 @@ def test_wf_nostate_nodecachelocations(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
 
+    assert not results1.errored, "\n".join(results1.errors["error message"])
+
     assert 12 == results1.outputs.out
 
     @workflow.define
@@ -2768,6 +2968,8 @@ def test_wf_nostate_nodecachelocations(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
 
     assert 12 == results2.outputs.out
 
@@ -2799,6 +3001,8 @@ def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
 
+    assert not results1.errored, "\n".join(results1.errors["error message"])
+
     assert 12 == results1.outputs.out
 
     @workflow.define
@@ -2814,6 +3018,8 @@ def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
 
     assert 12 == results2.outputs.out
 
@@ -2844,6 +3050,8 @@ def test_wf_state_cachelocations(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert results1.outputs.out[0] == 8
@@ -2863,6 +3071,8 @@ def test_wf_state_cachelocations(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert results2.outputs.out[0] == 8
@@ -2906,6 +3116,8 @@ def test_wf_state_cachelocations_forcererun(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert results1.outputs.out[0] == 8
@@ -2923,6 +3135,8 @@ def test_wf_state_cachelocations_forcererun(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
         results2 = sub(wf2, rerun=True)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert results2.outputs.out[0] == 8
@@ -2967,6 +3181,8 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert results1.outputs.out[0] == 8
@@ -2985,6 +3201,8 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert results2.outputs.out[0] == 8
@@ -3027,6 +3245,8 @@ def test_wf_state_n_nostate_cachelocations(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
 
+    assert not results1.errored, "\n".join(results1.errors["error message"])
+
     assert results1.outputs.out == 8
 
     @workflow.define
@@ -3042,6 +3262,8 @@ def test_wf_state_n_nostate_cachelocations(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
 
     assert results2.outputs.out[0] == 8
     assert results2.outputs.out[1] == 82
@@ -3075,6 +3297,8 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -3094,6 +3318,8 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1_empty
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
@@ -3129,6 +3355,8 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
 
+    assert not results1.errored, "\n".join(results1.errors["error message"])
+
     assert 8 == results1.outputs.out
 
     @workflow.define
@@ -3145,6 +3373,8 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
 
     assert 8 == results2.outputs.out
 
@@ -3176,6 +3406,8 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert results1.outputs.out == [8, 82]
@@ -3194,6 +3426,8 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 82]
@@ -3233,6 +3467,8 @@ def test_wf_ndstate_cachelocations_forcererun(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert results1.outputs.out == [8, 82]
@@ -3249,6 +3485,8 @@ def test_wf_ndstate_cachelocations_forcererun(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
         results2 = sub(wf2, rerun=True)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 82]
@@ -3286,6 +3524,8 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert results1.outputs.out == [8, 82]
@@ -3304,6 +3544,8 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 82]
@@ -3342,6 +3584,8 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert results1.outputs.out == [8, 82]
@@ -3360,6 +3604,8 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
         worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(wf2)
+
+    assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 10, 62, 82]
@@ -3397,6 +3643,8 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -3410,6 +3658,8 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results1.outputs.out
@@ -3441,6 +3691,8 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out[0]
@@ -3456,6 +3708,8 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
     t0 = time.time()
     with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
         results1 = sub(wf1)
+
+    assert not results1.errored, "\n".join(results1.errors["error message"])
     t2 = time.time() - t0
 
     assert 8 == results1.outputs.out[0]
@@ -3561,6 +3815,8 @@ def test_wf_lzoutall_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert 8 == results.outputs.out
 
 
@@ -3580,6 +3836,8 @@ def test_wf_lzoutall_1a(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out_all == {"out_add": 8, "out_sub": 4}
 
@@ -3601,6 +3859,8 @@ def test_wf_lzoutall_st_1(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out_add == [8, 62, 62, 602]
 
 
@@ -3620,6 +3880,8 @@ def test_wf_lzoutall_st_1a(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out_all == [
         {"out_add": 8, "out_sub": 4},
@@ -3645,6 +3907,8 @@ def test_wf_lzoutall_st_2(plugin, tmpdir):
 
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.outputs.out_add[0] == [8, 62]
     assert results.outputs.out_add[1] == [62, 602]
@@ -3674,6 +3938,8 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     assert results.outputs.out_all == [
         {"out_add": [8, 62], "out_sub": [4, 58]},
         {"out_add": [62, 602], "out_sub": [58, 598]},
@@ -3695,6 +3961,8 @@ def test_wf_resultfile_1(plugin, tmpdir):
     wf = Workflow(x="file_1.txt")
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking if the file exists and if it is in the Workflow directory
     wf_out = results.outputs.wf_out.fspath
@@ -3718,6 +3986,8 @@ def test_wf_resultfile_2(plugin, tmpdir):
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
+    assert not results.errored, "\n".join(results.errors["error message"])
+
     # checking if the file exists and if it is in the Workflow directory
     for ii, file in enumerate(results.outputs.wf_out):
         assert file.fspath.exists()
@@ -3739,6 +4009,8 @@ def test_wf_resultfile_3(plugin, tmpdir):
     wf = Workflow(x=file_list)
     with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking if the file exists and if it is in the Workflow directory
     for key, val in results.outputs.wf_out.items():
@@ -4505,6 +4777,8 @@ def test_duplicate_input_on_split_wf(tmpdir):
 
     with Submitter(worker="cf", n_procs=6) as sub:
         results = sub(wf)
+
+    assert not results.errored, "\n".join(results.errors["error message"])
 
     assert results.output.out1[0] == "test" and results.output.out1[0] == "test"
 
