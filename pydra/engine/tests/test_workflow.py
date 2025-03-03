@@ -1030,8 +1030,8 @@ def test_wf_3sernd_ndst_1(plugin, tmpdir):
     @workflow.define
     def Workflow(x, y):
         mult = workflow.add(Multiply().split(["x", "y"], x=x, y=y))
-        add2_1st = workflow.add(Add2(x=mult.out))
-        add2_2nd = workflow.add(Add2(x=add2_1st.out))
+        add2_1st = workflow.add(Add2(x=mult.out), name="add2_1st")
+        add2_2nd = workflow.add(Add2(x=add2_1st.out), name="add2_2nd")
         return add2_2nd.out
 
     wf = Workflow(x=[1, 2], y=[11, 12])
@@ -1068,9 +1068,9 @@ def test_wf_3sernd_ndst_1a(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2_1st = workflow.add(Add2().split("x", x=x))
+        add2_1st = workflow.add(Add2().split("x", x=x), name="add2_1st")
         mult = workflow.add(Multiply(x=add2_1st.out).split("y", y=y))
-        add2_2nd = workflow.add(Add2(x=mult.out))
+        add2_2nd = workflow.add(Add2(x=mult.out), name="add2_2nd")
         return add2_2nd.out
 
     wf = Workflow(x=[1, 2], y=[11, 12])
@@ -1108,8 +1108,8 @@ def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2(x=x))
-        add2y = workflow.add(Add2(x=y))
+        add2x = workflow.add(Add2(x=x), name="add2x")
+        add2y = workflow.add(Add2(x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
 
         return mult.out
@@ -1135,8 +1135,8 @@ def test_wf_3nd_ndst_1(plugin_dask_opt, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2().split("x", x=y))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2().split("x", x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
@@ -1158,8 +1158,8 @@ def test_wf_3nd_st_2(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2(x=x))
-        add2y = workflow.add(Add2(x=y))
+        add2x = workflow.add(Add2(x=x), name="add2x")
+        add2y = workflow.add(Add2(x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
@@ -1210,8 +1210,8 @@ def test_wf_3nd_st_3(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2(x=x))
-        add2y = workflow.add(Add2(x=y))
+        add2x = workflow.add(Add2(x=x), name="add2x")
+        add2y = workflow.add(Add2(x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
@@ -1238,8 +1238,8 @@ def test_wf_3nd_ndst_3(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2().split("x", x=y))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2().split("x", x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out).combine("add2y.x"))
         return mult.out
 
@@ -1263,8 +1263,8 @@ def test_wf_3nd_st_4(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2(x=x))
-        add2y = workflow.add(Add2(x=y))
+        add2x = workflow.add(Add2(x=x), name="add2x")
+        add2y = workflow.add(Add2(x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
@@ -1291,8 +1291,8 @@ def test_wf_3nd_ndst_4(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2().split("x", x=y))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2().split("x", x=y), name="add2y")
         mult = workflow.add(
             Multiply(x=add2x.out, y=add2y.out).combine(["add2x.x", "add2y.x"])
         )
@@ -1317,8 +1317,8 @@ def test_wf_3nd_st_5(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y, z):
-        add2x = workflow.add(Add2(x=x))
-        add2y = workflow.add(Add2(x=y))
+        add2x = workflow.add(Add2(x=x), name="add2x")
+        add2y = workflow.add(Add2(x=y), name="add2y")
         addvar = workflow.add(FunAddVar3(a=add2x.out, b=add2y.out, c=z))
         return addvar.out
 
@@ -1347,8 +1347,8 @@ def test_wf_3nd_ndst_5(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y, z):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2().split("x", x=y))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2().split("x", x=y), name="add2y")
         addvar = workflow.add(
             FunAddVar3(a=add2x.out, b=add2y.out).split("c", c=z).combine("add2x.x")
         )
@@ -1378,8 +1378,8 @@ def test_wf_3nd_ndst_6(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2().split("x", x=y))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2().split("x", x=y), name="add2y")
         mult = workflow.add(
             Multiply(x=add2x.out, y=add2y.out)
             .split(("_add2x", "_add2y"))
@@ -1404,8 +1404,8 @@ def test_wf_3nd_ndst_7(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2().split("x", x=x))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2().split("x", x=x), name="add2y")
         mult = workflow.add(
             Multiply(x=add2x.out, y=add2y.out).split(("_add2x", "_add2y"))
         )
@@ -1430,11 +1430,15 @@ def test_wf_3nd_8(tmpdir):
     @workflow.define(outputs=["out1", "out2", "out1a", "out2a"])
     def Workflow(zip):
 
-        iden2flds_1 = workflow.add(Identity2Flds(x2="Hoi").split("x1", x1=zip))
+        iden2flds_1 = workflow.add(
+            Identity2Flds(x2="Hoi").split("x1", x1=zip), name="iden2flds_1"
+        )
 
         identity = workflow.add(Identity(x=iden2flds_1.out1))
 
-        iden2flds_2 = workflow.add(Identity2Flds(x1=identity.out, x2=iden2flds_1.out2))
+        iden2flds_2 = workflow.add(
+            Identity2Flds(x1=identity.out, x2=iden2flds_1.out2), name="iden2flds_2"
+        )
 
         iden2flds_2a = workflow.add(
             Identity2Flds(
@@ -1846,8 +1850,8 @@ def test_wf_st_singl_2(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2(x=x))
-        add2y = workflow.add(Add2(x=y))
+        add2x = workflow.add(Add2(x=x), name="add2x")
+        add2y = workflow.add(Add2(x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
@@ -1872,8 +1876,8 @@ def test_wf_ndst_singl_2(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x, y):
-        add2x = workflow.add(Add2().split("x", x=x))
-        add2y = workflow.add(Add2(x=y))
+        add2x = workflow.add(Add2().split("x", x=x), name="add2x")
+        add2y = workflow.add(Add2(x=y), name="add2y")
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out))
         return mult.out
 
@@ -2285,8 +2289,8 @@ def test_wfasnd_4(plugin, tmpdir):
 
     @workflow.define
     def Wfnd(x):
-        add2_1st = workflow.add(Add2(x=x))
-        add2_2nd = workflow.add(Add2(x=add2_1st.out))
+        add2_1st = workflow.add(Add2(x=x), name="add2_1st")
+        add2_2nd = workflow.add(Add2(x=add2_1st.out), name="add2_2nd")
         return add2_2nd.out
 
     @workflow.define
@@ -2312,8 +2316,8 @@ def test_wfasnd_ndst_4(plugin, tmpdir):
 
     @workflow.define
     def Wfnd(x):
-        add2_1st = workflow.add(Add2().split(x=x))
-        add2_2nd = workflow.add(Add2(x=add2_1st.out))
+        add2_1st = workflow.add(Add2().split(x=x), name="add2_1st")
+        add2_2nd = workflow.add(Add2(x=add2_1st.out), name="add2_2nd")
         return add2_2nd.out
 
     @workflow.define
@@ -2339,8 +2343,8 @@ def test_wfasnd_wfst_4(plugin, tmpdir):
 
     @workflow.define
     def Wfnd(x):
-        add2_1st = workflow.add(Add2(x=x))
-        add2_2nd = workflow.add(Add2(x=add2_1st.out))
+        add2_1st = workflow.add(Add2(x=x), name="add2_1st")
+        add2_2nd = workflow.add(Add2(x=add2_1st.out), name="add2_2nd")
         return add2_2nd.out
 
     @workflow.define
@@ -3769,8 +3773,12 @@ def test_workflow_combine1(tmpdir):
     @workflow.define(outputs=["out_pow", "out_iden1", "out_iden2"])
     def Workflow1(a, b):
         power = workflow.add(Power().split(["a", "b"], a=a, b=b))
-        identity1 = workflow.add(Identity(x=power.out).combine("power.a"))
-        identity2 = workflow.add(Identity(x=identity1.out).combine("power.b"))
+        identity1 = workflow.add(
+            Identity(x=power.out).combine("power.a"), name="identity1"
+        )
+        identity2 = workflow.add(
+            Identity(x=identity1.out).combine("power.b"), name="identity2"
+        )
         return power.out, identity1.out, identity2.out
 
     wf1 = Workflow1(a=[1, 2], b=[2, 3])
@@ -4027,9 +4035,8 @@ def test_wf_upstream_error1(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
-
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
         return addvar2.out
 
     wf = Workflow(x="hi")  # TypeError for adding str and int
@@ -4048,9 +4055,9 @@ def test_wf_upstream_error2(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
         return addvar2.out
 
     wf = Workflow().split(
@@ -4072,9 +4079,9 @@ def test_wf_upstream_error3(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType().split("a", a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType().split("a", a=x), name="addvar1")
 
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
         return addvar2.out
 
     wf = Workflow(x=[1, "hi"])  # TypeError for adding str and int
@@ -4130,8 +4137,8 @@ def test_wf_upstream_error6(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
 
         return addvar2.out  # wf_out
 
@@ -4158,10 +4165,10 @@ def test_wf_upstream_error7(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
-        addvar3 = workflow.add(FunAddVarDefaultNoType(a=addvar2.out))
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
+        addvar3 = workflow.add(FunAddVarDefaultNoType(a=addvar2.out), name="addvar3")
         return addvar3.out
 
     wf = Workflow(x="hi")  # TypeError for adding str and int
@@ -4183,10 +4190,10 @@ def test_wf_upstream_error7a(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
-        addvar3 = workflow.add(FunAddVarDefaultNoType(a=addvar2.out))
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
+        addvar3 = workflow.add(FunAddVarDefaultNoType(a=addvar2.out), name="addvar3")
         return addvar3.out
 
     wf = Workflow(x="hi")  # TypeError for adding str and int
@@ -4207,10 +4214,10 @@ def test_wf_upstream_error7b(plugin, tmpdir):
 
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
-        addvar3 = workflow.add(FunAddVarDefaultNoType(a=addvar2.out))
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
+        addvar3 = workflow.add(FunAddVarDefaultNoType(a=addvar2.out), name="addvar3")
         return addvar2.out, addvar3.out  #
 
     wf = Workflow(x="hi")  # TypeError for adding str and int
@@ -4228,9 +4235,9 @@ def test_wf_upstream_error8(plugin, tmpdir):
 
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out))
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
         addtwo = workflow.add(FunAddTwo(a=addvar1.out))
         return addvar2.out, addtwo.out  #
 
@@ -4254,12 +4261,12 @@ def test_wf_upstream_error9(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
-        err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"))
-        follow_err = workflow.add(FunAddVarDefaultNoType(a=err.out))
+        err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"), name="err")
+        follow_err = workflow.add(FunAddVarDefaultNoType(a=err.out), name="follow_err")
 
-        addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out))
+        addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out), name="addtwo")
         workflow.add(FunAddVarDefaultNoType(a=addtwo.out))
         return follow_err.out  # out1
 
@@ -4283,13 +4290,13 @@ def test_wf_upstream_error9a(plugin, tmpdir):
 
     @workflow.define
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefault(a=x))
+        addvar1 = workflow.add(FunAddVarDefault(a=x), name="addvar1")
 
-        err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"))
+        err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"), name="err")
         workflow.add(FunAddVarDefault(a=err.out))
 
-        addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out))
-        addvar2 = workflow.add(FunAddVarDefault(a=addtwo.out))
+        addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out), name="addtwo")
+        addvar2 = workflow.add(FunAddVarDefault(a=addtwo.out), name="addvar2")
         return addvar2.out  # out1  # , ("out2", addtwo.out)])
 
     wf = Workflow(x=2)
@@ -4309,13 +4316,13 @@ def test_wf_upstream_error9b(plugin, tmpdir):
 
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
-        err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"))
-        follow_err = workflow.add(FunAddVarDefaultNoType(a=err.out))
+        err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"), name="err")
+        follow_err = workflow.add(FunAddVarDefaultNoType(a=err.out), name="follow_err")
 
-        addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out))
-        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addtwo.out))
+        addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out), name="addtwo")
+        addvar2 = workflow.add(FunAddVarDefaultNoType(a=addtwo.out), name="addvar2")
         return follow_err.out, addvar2.out
 
     wf = Workflow(x=2)
