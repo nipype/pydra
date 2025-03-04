@@ -32,7 +32,12 @@ from .helpers_file import template_update, template_update_single
 from . import helpers_state as hlpst
 from . import lazy
 from pydra.utils.hash import hash_function, Cache
-from pydra.utils.typing import StateArray, is_multi_input
+from pydra.utils.typing import (
+    StateArray,
+    is_multi_input,
+    MultiOutputObj,
+    MultiOutputFile,
+)
 from pydra.design.base import Field, Arg, Out, RequirementSet, NO_DEFAULT
 from pydra.design import shell
 
@@ -846,7 +851,17 @@ class ShellOutputs(TaskOutputs):
             else:
                 resolved_value = cls._resolve_value(fld, task)
             # Set the resolved value
-            setattr(outputs, fld.name, resolved_value)
+            try:
+                setattr(outputs, fld.name, resolved_value)
+            except FileNotFoundError as e:
+                if is_optional(fld.type):
+                    setattr(outputs, fld.name, None)
+                else:
+                    e.add_note(
+                        f"file system path provided to {fld.name!r}, {resolved_value}, "
+                        f"does not exist, this is likely due to an error in the task {task}"
+                    )
+                    raise
         return outputs
 
     @classmethod
@@ -1129,7 +1144,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
             # if False, nothing is added to the command.
             if value is True:
                 cmd_add.append(field.argstr)
-        elif is_multi_input(tp):
+        elif is_multi_input(tp) or tp is MultiOutputObj or tp is MultiOutputFile:
             # if the field is MultiInputObj, it is used to create a list of arguments
             for val in value or []:
                 cmd_add += self._format_arg(field, val)

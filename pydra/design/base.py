@@ -715,9 +715,9 @@ def make_converter(
         field_type, label=checker_label, superclass_auto_cast=True
     )
     converters = []
-    if field.type in (MultiInputObj, MultiInputFile):
+    if field_type in (MultiInputObj, MultiInputFile):
         converters.append(ensure_list)
-    elif field.type in (MultiOutputObj, MultiOutputFile):
+    elif field_type in (MultiOutputObj, MultiOutputFile):
         converters.append(from_list_if_single)
     if field.converter:
         converters.append(field.converter)

@@ -334,7 +334,11 @@ def _single_template_formatting(
         formatted_value = _element_formatting(
             template, val_dict, file_template, keep_extension=field.keep_extension
         )
-    return Path(formatted_value) if formatted_value is not None else formatted_value
+    if isinstance(formatted_value, list):
+        return [Path(val) for val in formatted_value]
+    elif isinstance(formatted_value, str):
+        return Path(formatted_value)
+    return None
 
 
 def _element_formatting(

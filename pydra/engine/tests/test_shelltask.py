@@ -3062,7 +3062,7 @@ def no_fsl():
 
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
-def test_fsl(data_tests_dir):
+def test_fsl(data_tests_dir, tmp_path):
     """mandatory field added to fields, value provided"""
 
     _xor_inputs = [
@@ -3232,7 +3232,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
         input: File = shell.arg(argstr="", help="input file")
 
         class Outputs(ShellOutputs):
-            output: File = shell.outarg(
+            output: File | None = shell.outarg(
                 argstr="",
                 path_template="out.txt",
                 help="dummy output",
@@ -3252,7 +3252,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
 
 def test_shell_cmd_non_existing_outputs_1(tmp_path):
     """Checking that non existing output files do not return a phantom path,
-    but return NOTHING instead"""
+    but return None instead"""
 
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
@@ -3264,25 +3264,24 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
         )
 
         class Outputs(ShellOutputs):
-            out_1: File = shell.outarg(
+            out_1: File | None = shell.out(
                 help="fictional output #1",
-                path_template="{out_name}_1.nii",
+                callable=lambda: "out_1.nii",
             )
-            out_2: File = shell.outarg(
+            out_2: File | None = shell.out(
                 help="fictional output #2",
-                path_template="{out_name}_2.nii",
+                callable=lambda: "out_2.nii",
             )
 
-    shelly = Shelly(
-        out_name="test",
-    )
-    outputs = shelly()
-    assert outputs.out_1 == attr.NOTHING and outputs.out_2 == attr.NOTHING
+    shelly = Shelly(out_name="test")
+    outputs = shelly(cache_dir=tmp_path)
+    assert outputs.out_1 is None
+    assert outputs.out_2 is None
 
 
 def test_shell_cmd_non_existing_outputs_2(tmp_path):
     """Checking that non existing output files do not return a phantom path,
-    but return NOTHING instead. This test has one existing and one non existing output file.
+    but return None instead. This test has one existing and one non existing output file.
     """
 
     @shell.define
@@ -3306,7 +3305,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
             )
 
     shelly = Shelly(out_name="test")
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     # the first output file is created
     assert outputs.out_1.fspath == next(tmp_path.iterdir()) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
@@ -3316,7 +3315,8 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
 
 def test_shell_cmd_non_existing_outputs_3(tmp_path):
     """Checking that non existing output files do not return a phantom path,
-    but return NOTHING instead. This test has an existing mandatory output and another non existing output file.
+    but return None instead. This test has an existing mandatory output and another
+    non existing output file.
     """
 
     @shell.define
@@ -3331,55 +3331,51 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
 
         class Outputs(ShellOutputs):
             out_1: File = shell.outarg(
-                help="fictional output #1",
-                path_template="{out_name}_1.nii",
+                help="real output #1",
+                default="{out_name}_1.nii",
             )
-            out_2: File = shell.outarg(
+            out_2: File | None = shell.outarg(
                 help="fictional output #2",
-                path_template="{out_name}_2.nii",
+                default="{out_name}_2.nii",
             )
 
     shelly = Shelly(out_name="test")
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     # the first output file is created
     assert outputs.out_1.fspath == next(tmp_path.iterdir()) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
-    assert outputs.out_2 == attr.NOTHING
+    assert outputs.out_2 is None
 
 
 def test_shell_cmd_non_existing_outputs_4(tmp_path):
     """Checking that non existing output files do not return a phantom path,
-    but return NOTHING instead. This test has an existing mandatory output and another non existing
+    but return None instead. This test has an existing mandatory output and another non existing
     mandatory output file."""
 
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = "touch"
         out_name: str = shell.arg(
-            help="""
-                        base name of the pretend outputs.
-                        """,
+            help="""base name of the pretend outputs.""",
             argstr="{out_name}_1.nii",
         )
 
         class Outputs(ShellOutputs):
             out_1: File = shell.outarg(
                 help="fictional output #1",
-                path_template="{out_name}_1.nii",
+                default="{out_name}_1.nii",
             )
             out_2: File = shell.outarg(
                 help="fictional output #2",
-                path_template="{out_name}_2.nii",
+                default="{out_name}_2.nii",
             )
 
-    shelly = Shelly(
-        out_name="test",
-    )
+    shelly = Shelly(out_name="test")
     # An exception should be raised because the second mandatory output does not exist
     with pytest.raises(Exception) as excinfo:
-        shelly()
+        shelly(cache_dir=tmp_path)
     assert "mandatory output for variable out_2 does not exist" == str(excinfo.value)
     # checking if the first output was created
     assert (next(tmp_path.iterdir()) / "test_1.nii").exists()
