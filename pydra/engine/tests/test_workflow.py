@@ -37,6 +37,7 @@ from .utils import (
 )
 from pydra.engine.submitter import Submitter
 from pydra.design import python, workflow
+import pydra.engine.core
 from pydra.utils import exc_info_matches
 
 
@@ -959,8 +960,7 @@ def test_wf_ndst_6(plugin, tmpdir):
 
     assert not results.errored, "\n".join(results.errors["error message"])
 
-    assert results.outputs.out[0] == [13, 24, 35]
-    assert results.outputs.out[1] == [14, 26, 38]
+    assert results.outputs.out == [[13, 24, 35], [14, 26, 38]]
 
 
 def test_wf_ndst_7(plugin, tmpdir):
@@ -3735,13 +3735,14 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
 def create_tasks():
     @workflow.define
     def Workflow(x):
-        t1 = workflow.add(Add2(x=x))
-        t2 = workflow.add(Multiply(x=t1.out, y=2))
+        t1 = workflow.add(Add2(x=x), name="t1")
+        t2 = workflow.add(Multiply(x=t1.out, y=2), name="t2")
         return t2.out
 
     wf = Workflow(x=1)
-    t1 = wf.name2obj["t1"]
-    t2 = wf.name2obj["t2"]
+    workflow_obj = pydra.engine.core.Workflow.construct(wf)
+    t1 = workflow_obj["t1"]
+    t2 = workflow_obj["t2"]
     return wf, t1, t2
 
 

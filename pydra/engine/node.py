@@ -1,18 +1,15 @@
 import typing as ty
-from copy import deepcopy, copy
+from copy import deepcopy
 from enum import Enum
 import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
 from pydra.engine.helpers import (
-    ensure_list,
     attrs_values,
     is_lazy,
-    create_checksum,
 )
-from pydra.utils.hash import hash_function
 from pydra.engine import helpers_state as hlpst
-from pydra.engine.state import State, StateIndex
+from pydra.engine.state import State
 
 if ty.TYPE_CHECKING:
     from .core import Workflow
@@ -172,51 +169,6 @@ class Node(ty.Generic[OutputType]):
             return ()
         return self._state.combiner
 
-    def _checksum_states(self, state_index: StateIndex = StateIndex()):
-        """
-        Calculate a checksum for the specific state or all of the states of the task.
-        Replaces state-arrays in the inputs fields with a specific values for states.
-        Used to recreate names of the task directories,
-
-        Parameters
-        ----------
-        state_index :
-            TODO
-
-        """
-        # if is_workflow(self) and self._definition._graph_checksums is attr.NOTHING:
-        #     self._definition._graph_checksums = {
-        #         nd.name: nd.checksum for nd in self.graph_sorted
-        #     }
-        from pydra.engine.specs import WorkflowDef
-
-        if state_index:
-            inputs_copy = copy(self._definition)
-            for key, ind in self.state.inputs_ind[state_index].items():
-                val = self._extract_input_el(
-                    inputs=self._definition, inp_nm=key.split(".")[1], ind=ind
-                )
-                setattr(inputs_copy, key.split(".")[1], val)
-            # setting files_hash again in case it was cleaned by setting specific element
-            # that might be important for outer splitter of input variable with big files
-            # the file can be changed with every single index even if there are only two files
-            input_hash = inputs_copy.hash
-            if isinstance(self._definition, WorkflowDef):
-                con_hash = hash_function(self._connections)
-                # TODO: hash list is not used
-                hash_list = [input_hash, con_hash]  # noqa: F841
-                checksum_ind = create_checksum(
-                    self.__class__.__name__, self._checksum_wf(input_hash)
-                )
-            else:
-                checksum_ind = create_checksum(self.__class__.__name__, input_hash)
-            return checksum_ind
-        else:
-            checksum_list = []
-            for ind in range(len(self.state.inputs_ind)):
-                checksum_list.append(self._checksum_states(state_index=ind))
-            return checksum_list
-
     def _check_if_outputs_have_been_used(self, msg):
         used = []
         if self._lzout:
@@ -286,24 +238,6 @@ class Node(ty.Generic[OutputType]):
                     # additional field name should be added to the list of fields
                     upstream_states[node.name][1].append(inpt_name)
         return upstream_states
-
-    def _extract_input_el(self, inputs, inp_nm, ind):
-        """
-        Extracting element of the inputs taking into account
-        container dimension of the specific element that can be set in self.state.cont_dim.
-        If input name is not in cont_dim, it is assumed that the input values has
-        a container dimension of 1, so only the most outer dim will be used for splitting.
-        If
-        """
-        if f"{self.name}.{inp_nm}" in self.state.cont_dim:
-            return list(
-                hlpst.flatten(
-                    ensure_list(getattr(inputs, inp_nm)),
-                    max_depth=self.state.cont_dim[f"{self.name}.{inp_nm}"],
-                )
-            )[ind]
-        else:
-            return getattr(inputs, inp_nm)[ind]
 
         # else:
         #     # todo it never gets here

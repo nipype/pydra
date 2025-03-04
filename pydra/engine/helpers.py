@@ -18,7 +18,7 @@ import cloudpickle as cp
 from fileformats.core import FileSet
 
 if ty.TYPE_CHECKING:
-    from .specs import TaskDef, Result, WorkflowOutputs
+    from .specs import TaskDef, Result, WorkflowOutputs, WorkflowDef
     from .core import Task
     from pydra.design.base import Field
 
@@ -26,6 +26,61 @@ if ty.TYPE_CHECKING:
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 
 DefType = ty.TypeVar("DefType", bound="TaskDef")
+
+
+def plot_workflow(
+    workflow_task: "WorkflowDef",
+    out_dir: Path,
+    type="simple",
+    export=None,
+    name=None,
+    output_dir=None,
+):
+    """creating a graph - dotfile and optionally exporting to other formats"""
+    from .core import Workflow
+
+    # Create output directory
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Construct the workflow object
+    wf = Workflow.construct(workflow_task)
+    graph = wf.graph
+    if not name:
+        name = f"graph_{wf._node.name}"
+    if type == "simple":
+        for task in graph.nodes:
+            wf.create_connections(task)
+        dotfile = graph.create_dotfile_simple(outdir=out_dir, name=name)
+    elif type == "nested":
+        for task in graph.nodes:
+            wf.create_connections(task)
+        dotfile = graph.create_dotfile_nested(outdir=out_dir, name=name)
+    elif type == "detailed":
+        # create connections with detailed=True
+        for task in graph.nodes:
+            wf.create_connections(task, detailed=True)
+        # adding wf outputs
+        for wf_out, lf in wf._connections:
+            graph.add_edges_description(
+                (wf._node.name, wf_out, lf._node.name, lf.field)
+            )
+        dotfile = graph.create_dotfile_detailed(outdir=out_dir, name=name)
+    else:
+        raise Exception(
+            f"type of the graph can be simple, detailed or nested, "
+            f"but {type} provided"
+        )
+    if not export:
+        return dotfile
+    else:
+        if export is True:
+            export = ["png"]
+        elif isinstance(export, str):
+            export = [export]
+        formatted_dot = []
+        for ext in export:
+            formatted_dot.append(graph.export_graph(dotfile=dotfile, ext=ext))
+        return dotfile, formatted_dot
 
 
 def attrs_fields(definition, exclude_names=()) -> list[attrs.Attribute]:

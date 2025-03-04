@@ -916,47 +916,6 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     )
         return graph
 
-    def create_dotfile(self, type="simple", export=None, name=None, output_dir=None):
-        """creating a graph - dotfile and optionally exporting to other formats"""
-        outdir = output_dir if output_dir is not None else self.cache_dir
-        graph = self.graph
-        if not name:
-            name = f"graph_{self._node.name}"
-        if type == "simple":
-            for task in graph.nodes:
-                self.create_connections(task)
-            dotfile = graph.create_dotfile_simple(outdir=outdir, name=name)
-        elif type == "nested":
-            for task in graph.nodes:
-                self.create_connections(task)
-            dotfile = graph.create_dotfile_nested(outdir=outdir, name=name)
-        elif type == "detailed":
-            # create connections with detailed=True
-            for task in graph.nodes:
-                self.create_connections(task, detailed=True)
-            # adding wf outputs
-            for wf_out, lf in self._connections:
-                graph.add_edges_description(
-                    (self._node.name, wf_out, lf._node.name, lf.field)
-                )
-            dotfile = graph.create_dotfile_detailed(outdir=outdir, name=name)
-        else:
-            raise Exception(
-                f"type of the graph can be simple, detailed or nested, "
-                f"but {type} provided"
-            )
-        if not export:
-            return dotfile
-        else:
-            if export is True:
-                export = ["png"]
-            elif isinstance(export, str):
-                export = [export]
-            formatted_dot = []
-            for ext in export:
-                formatted_dot.append(graph.export_graph(dotfile=dotfile, ext=ext))
-            return dotfile, formatted_dot
-
 
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""

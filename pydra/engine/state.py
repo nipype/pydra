@@ -1253,3 +1253,29 @@ class State:
             val = op["*"](val_ind)
             keys = [op_single]
             return val, keys
+
+    def _get_element(self, value: ty.Any, field_name: str, ind: int):
+        """
+        Extracting element of the inputs taking into account
+        container dimension of the specific element that can be set in self.state.cont_dim.
+        If input name is not in cont_dim, it is assumed that the input values has
+        a container dimension of 1, so only the most outer dim will be used for splitting.
+
+        Parameters
+        ----------
+        value : Any
+            inputs of the task
+        field_name : str
+            name of the input field
+        ind : int
+            index of the element
+        """
+        if f"{self.name}.{field_name}" in self.cont_dim:
+            return list(
+                hlpst.flatten(
+                    ensure_list(value),
+                    max_depth=self.cont_dim[f"{self.name}.{field_name}"],
+                )
+            )[ind]
+        else:
+            return value[ind]

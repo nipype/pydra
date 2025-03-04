@@ -690,24 +690,23 @@ class NodeExecution(ty.Generic[DefType]):
             return {None: self.node._definition}
         split_defs = {}
         for input_ind in self.node.state.inputs_ind:
-            inputs_dict = {}
+            resolved = {}
             for inp in set(self.node.input_names):
+                value = getattr(self.node._definition, inp)
+                if isinstance(value, LazyField):
+                    value = resolved[inp] = value._get_value(
+                        workflow=self.workflow,
+                        graph=self.graph,
+                        state_index=StateIndex(input_ind),
+                    )
                 if f"{self.node.name}.{inp}" in input_ind:
-                    value = getattr(self.node._definition, inp)
-                    if isinstance(value, LazyField):
-                        inputs_dict[inp] = value._get_value(
-                            workflow=self.workflow,
-                            graph=self.graph,
-                            state_index=StateIndex(input_ind),
-                        )
-                    else:
-                        inputs_dict[inp] = self.node._extract_input_el(
-                            inputs=self.node._definition,
-                            inp_nm=inp,
-                            ind=input_ind[f"{self.node.name}.{inp}"],
-                        )
+                    resolved[inp] = self.node.state._get_element(
+                        value=value,
+                        field_name=inp,
+                        ind=input_ind[f"{self.node.name}.{inp}"],
+                    )
             split_defs[StateIndex(input_ind)] = attrs.evolve(
-                self.node._definition, **inputs_dict
+                self.node._definition, **resolved
             )
         return split_defs
 

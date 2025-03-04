@@ -81,8 +81,7 @@ def test_task_numpyinput_1(tmp_path: Path):
     nn = Identity().split(x=[np.array([1, 2]), np.array([3, 4])])
     # checking the results
     outputs = nn(cache_dir=tmp_path)
-    assert (outputs.out[0] == np.array([1, 2])).all()
-    assert (outputs.out[1] == np.array([3, 4])).all()
+    assert (np.array(outputs.out) == np.array([[1, 2], [3, 4]])).all()
 
 
 def test_task_numpyinput_2(tmp_path: Path):
