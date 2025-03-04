@@ -509,7 +509,7 @@ class TaskDef(ty.Generic[OutputsType]):
 
             # Raise error if any required field is unset.
             if (
-                value
+                (value is None or value is False)
                 and field.requires
                 and not any(rs.satisfied(self) for rs in field.requires)
             ):
