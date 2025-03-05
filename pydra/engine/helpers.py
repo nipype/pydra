@@ -628,7 +628,7 @@ class PydraFileLock:
         return None
 
 
-def parse_format_string(fmtstr):
+def parse_format_string(fmtstr: str) -> set[str]:
     """Parse a argstr format string and return all keywords used in it."""
     identifier = r"[a-zA-Z_]\w*"
     attribute = rf"\.{identifier}"
@@ -645,6 +645,14 @@ def parse_format_string(fmtstr):
 
     all_keywords = re.findall(full_field, fmtstr)
     return set().union(*all_keywords) - {""}
+
+
+def fields_in_formatter(formatter: str | ty.Callable[..., str]) -> set[str]:
+    """Extract all field names from a formatter string or function."""
+    if isinstance(formatter, str):
+        return parse_format_string(formatter)
+    else:
+        return set(inspect.signature(formatter).parameters.keys())
 
 
 def ensure_list(obj, tuple2list=False):

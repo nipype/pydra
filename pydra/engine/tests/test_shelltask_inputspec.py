@@ -581,10 +581,12 @@ def test_shell_cmd_inputs_template_3(tmp_path):
 
             outA: File = shell.outarg(
                 help="outA",
+                argstr=None,
                 path_template="{inpA}_out",
             )
             outB: File = shell.outarg(
                 help="outB",
+                argstr=None,
                 path_template="{inpB}_out",
             )
 
@@ -615,11 +617,11 @@ def test_shell_cmd_inputs_template_3(tmp_path):
     )
     # checking if outA and outB in the output fields (outAB should not be)
     assert get_output_names(shelly) == [
-        "return_code",
-        "stdout",
-        "stderr",
         "outA",
         "outB",
+        "return_code",
+        "stderr",
+        "stdout",
     ]
 
 
@@ -634,10 +636,12 @@ def test_shell_cmd_inputs_template_3a():
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
+                argstr=None,
                 help="outA",
                 path_template="{inpA}_out",
             )
             outB: File = shell.outarg(
+                argstr=None,
                 help="outB",
                 path_template="{inpB}_out",
             )
@@ -669,11 +673,11 @@ def test_shell_cmd_inputs_template_3a():
     )
     # checking if outA and outB in the output fields (outAB should not be)
     assert get_output_names(shelly) == [
-        "return_code",
-        "stdout",
-        "stderr",
         "outA",
         "outB",
+        "return_code",
+        "stderr",
+        "stdout",
     ]
 
 
@@ -688,10 +692,12 @@ def test_shell_cmd_inputs_template_4():
     class Shelly(ShellDef["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
+                argstr=None,
                 help="outA",
                 path_template="{inpA}_out",
             )
-            outB: str = shell.arg(
+            outB: File | None = shell.outarg(
+                argstr=None,
                 help="outB",
                 path_template="{inpB}_out",
             )
@@ -703,7 +709,7 @@ def test_shell_cmd_inputs_template_4():
             help="inpA",
             argstr="",
         )
-        inpB: str = shell.arg(position=2, help="inpB", argstr="")
+        inpB: str | None = shell.arg(position=2, help="inpB", argstr="", default=None)
         outAB: str = shell.arg(
             position=-1,
             help="outAB",
@@ -715,11 +721,11 @@ def test_shell_cmd_inputs_template_4():
     # inpB is not provided so outB not in the command line
     assert shelly.cmdline == f"executable inpA -o {Path.cwd() / 'inpA_out'}"
     assert get_output_names(shelly) == [
-        "return_code",
-        "stdout",
-        "stderr",
         "outA",
         "outB",
+        "return_code",
+        "stderr",
+        "stdout",
     ]
 
 
@@ -775,19 +781,22 @@ def test_shell_cmd_inputs_template_6():
     # template can be formatted (the same way as for templates that has type=str)
     inpA = File.mock("inpA")
     shelly = Shelly(inpA=inpA)
-    assert shelly.cmdline == f"executable inpA -o {Path.cwd() / 'inpA_out'}"
+
+    inpA_path = Path.cwd() / "inpA"
+    outA_path = Path.cwd() / "inpA_out"
+    assert shelly.cmdline == f"executable {inpA_path} -o {outA_path}"
 
     # a string is provided for outA, so this should be used as the outA value
     shelly = Shelly(inpA=inpA, outA="outA")
-    assert shelly.cmdline == "executable inpA -o outA"
+    assert shelly.cmdline == f"executable {inpA_path} -o outA"
 
     # True is provided for outA, so the formatted template should be used as outA value
     shelly = Shelly(inpA=inpA, outA=True)
-    assert shelly.cmdline == f"executable inpA -o {Path.cwd() / 'inpA_out'}"
+    assert shelly.cmdline == f"executable {inpA_path} -o {outA_path}"
 
     # False is provided for outA, so the outA shouldn't be used
     shelly = Shelly(inpA=inpA, outA=False)
-    assert shelly.cmdline == "executable inpA"
+    assert shelly.cmdline == f"executable {inpA_path}"
 
 
 def test_shell_cmd_inputs_template_6a():
@@ -1262,6 +1271,7 @@ def test_shell_cmd_inputs_template_function_2():
         )
         inpB: int = shell.arg(
             help="inpB",
+            argstr=None,
         )
 
     shelly = Shelly(
@@ -1279,20 +1289,22 @@ def test_shell_cmd_inputs_denoise_image(
     """example from #279"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class DenoiseImage(ShellDef["DenoiseImage.Outputs"]):
         class Outputs(ShellOutputs):
 
-            correctedImage: File | None = shell.outarg(
+            correctedImage: File = shell.outarg(
                 help="""
                     The output consists of the noise corrected version of the input image.
                     Optionally, one can also output the estimated noise image. """,
                 path_template="{inputImageFilename}_out",
+                argstr=None,
             )
             noiseImage: File | None = shell.outarg(
                 help="""
                     The output consists of the noise corrected version of the input image.
                     Optionally, one can also output the estimated noise image. """,
                 path_template="{inputImageFilename}_noise",
+                argstr=None,
             )
 
         executable = "executable"
@@ -1334,17 +1346,12 @@ def test_shell_cmd_inputs_denoise_image(
             argstr="-s",
         )
         patch_radius: int = shell.arg(
-            default=1,
-            help="Patch radius. Default = 1x1x1",
-            argstr="-p",
+            default=1, help="Patch radius. Default = 1x1x1", argstr="-p", position=2
         )
         search_radius: int = shell.arg(
-            default=2,
-            help="Search radius. Default = 2x2x2.",
-            argstr="-r",
+            default=2, help="Search radius. Default = 2x2x2.", argstr="-r", position=3
         )
-        output: str | None = shell.arg(
-            default=None,
+        output: str = shell.arg(
             help="Combined output",
             argstr="-o [{correctedImage}, {noiseImage}]",
             position=-1,
@@ -1371,67 +1378,68 @@ def test_shell_cmd_inputs_denoise_image(
     my_input_file.write_text("content")
 
     # no input provided
-    shelly = Shelly(
+    denoise_image = DenoiseImage(
         executable="DenoiseImage",
     )
     with pytest.raises(Exception) as e:
-        shelly.cmdline
+        denoise_image.cmdline
     assert "mandatory" in str(e.value).lower()
 
     # input file name, noiseImage is not set, so using default value False
-    shelly = Shelly(
+    denoise_image = DenoiseImage(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
     )
     assert (
-        shelly.cmdline
+        denoise_image.cmdline
         == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o [{Path.cwd() / 'a_file_out.ext'}]"
     )
 
     # input file name, noiseImage is set to True, so template is used in the output
-    shelly = Shelly(
+    denoise_image = DenoiseImage(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
         noiseImage=True,
     )
     assert (
-        shelly.cmdline == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 "
+        denoise_image.cmdline
+        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 "
         f"-o [{Path.cwd() / 'a_file_out.ext'}, {str(Path.cwd() / 'a_file_noise.ext')}]"
     )
 
     # input file name and help_short
-    shelly = Shelly(
+    denoise_image = DenoiseImage(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
         help_short=True,
     )
     assert (
-        shelly.cmdline
+        denoise_image.cmdline
         == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -h -o [{Path.cwd() / 'a_file_out.ext'}]"
     )
 
-    assert get_output_names(shelly) == [
+    assert get_output_names(denoise_image) == [
         "return_code",
-        "stdout",
         "stderr",
+        "stdout",
         "correctedImage",
         "noiseImage",
     ]
 
     # adding image_dimensionality that has allowed_values [2, 3, 4]
-    shelly = Shelly(
+    denoise_image = DenoiseImage(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
         image_dimensionality=2,
     )
     assert (
-        shelly.cmdline
+        denoise_image.cmdline
         == f"DenoiseImage -d 2 -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o [{Path.cwd() / 'a_file_out.ext'}]"
     )
 
     # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised
     with pytest.raises(ValueError) as excinfo:
-        shelly = Shelly(
+        denoise_image = DenoiseImage(
             executable="DenoiseImage",
             inputImageFilename=my_input_file,
             image_dimensionality=5,

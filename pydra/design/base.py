@@ -220,6 +220,14 @@ class Field:
     def mandatory(self):
         return self.default is NO_DEFAULT
 
+    @requires.validator
+    def _requires_validator(self, _, value):
+        if value and self.type not in (ty.Any, bool) and not is_optional(self.type):
+            raise ValueError(
+                f"Fields with requirements must be of boolean or optional type, "
+                f"not type {self.type} ({self!r})"
+            )
+
 
 @attrs.define(kw_only=True)
 class Arg(Field):
@@ -262,8 +270,16 @@ class Arg(Field):
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
     readonly: bool = False
 
+    @xor.validator
+    def _xor_validator(self, _, value):
+        if value and self.type not in (ty.Any, bool) and not is_optional(self.type):
+            raise ValueError(
+                f"Fields that have 'xor' must be of boolean or optional type, "
+                f"not type {self.type} ({self!r})"
+            )
 
-@attrs.define(kw_only=True)
+
+@attrs.define(kw_only=True, slots=False)
 class Out(Field):
     """Base class for output fields of task definitions
 
@@ -473,10 +489,14 @@ def make_task_def(
             if getattr(arg, "path_template", False):
                 if is_optional(arg.type):
                     field_type = Path | bool | None
-                    attrs_kwargs = {"default": None}
+                    if arg.default is NO_DEFAULT:
+                        attrs_kwargs["default"] = True if arg.requires else None
+                        del attrs_kwargs["factory"]
                 else:
                     field_type = Path | bool
-                    attrs_kwargs = {"default": True}  # use the template by default
+                    if arg.default is NO_DEFAULT:
+                        attrs_kwargs["default"] = True  # use the template by default
+                        del attrs_kwargs["factory"]
             elif is_optional(arg.type):
                 field_type = Path | None
             else:

@@ -429,7 +429,7 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmp_path):
     shelly = Shelly(executable=cmd_exec)
 
     with pytest.raises(Exception) as excinfo:
-        shelly()
+        shelly(cache_dir=tmp_path)
     assert "mandatory" in str(excinfo.value)
 
 
@@ -647,7 +647,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
 
     shelly = Shelly(opt_t=cmd_t, opt_S=cmd_S)
     with pytest.raises(Exception) as excinfo:
-        shelly()
+        shelly(cache_dir=tmp_path)
     assert "is mutually exclusive" in str(excinfo.value)
 
 
@@ -712,7 +712,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
 
     shelly = Shelly(executable=cmd_exec, opt_t=cmd_t)
     with pytest.raises(Exception) as excinfo:
-        shelly()
+        shelly(cache_dir=tmp_path)
     assert "requires" in str(excinfo.value)
 
 
@@ -1302,7 +1302,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
     assert fspath.parent.parent == tmp_path
 
 
-def test_shell_cmd_inputspec_with_iterable():
+def test_shell_cmd_inputspec_with_iterable(tmp_path):
     """Test formatting of argstr with different iterable types."""
 
     @shell.define
@@ -1492,7 +1492,7 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
     assert outputs.stdout[1] == "hi\n"
 
 
-def test_shell_cmd_inputspec_typeval_1():
+def test_shell_cmd_inputspec_typeval_1(tmp_path):
     """customized input_spec with a type that doesn't match the value
     - raise an exception
     """
@@ -1511,7 +1511,7 @@ def test_shell_cmd_inputspec_typeval_1():
         Shelly()
 
 
-def test_shell_cmd_inputspec_typeval_2():
+def test_shell_cmd_inputspec_typeval_2(tmp_path):
     """customized input_spec (shorter syntax) with a type that doesn't match the value
     - raise an exception
     """
@@ -2188,7 +2188,7 @@ def test_shell_cmd_outputspec_5a(plugin, results_function, tmp_path):
     assert all([file.fspath.exists() for file in outputs.newfile])
 
 
-def test_shell_cmd_outputspec_5b_error():
+def test_shell_cmd_outputspec_5b_error(tmp_path):
     """
     customised output_spec, adding files to the output,
     using a function to collect output, the function is saved in the field metadata
@@ -2210,7 +2210,7 @@ def test_shell_cmd_outputspec_5b_error():
 
     shelly = Shelly()
     with pytest.raises(AttributeError, match="ble"):
-        shelly()
+        shelly(cache_dir=tmp_path)
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -2274,7 +2274,7 @@ def test_shell_cmd_outputspec_6(plugin, results_function, tmp_path):
     assert outputs.out1.fspath.exists()
 
 
-def test_shell_cmd_outputspec_6a():
+def test_shell_cmd_outputspec_6a(tmp_path):
     """
     providing output name by providing path_template
     (using shorter syntax)
@@ -2296,7 +2296,7 @@ def test_shell_cmd_outputspec_6a():
 
     shelly = Shelly(additional_args=args)
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
     assert outputs.out1.fspath.exists()
 
@@ -2439,7 +2439,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
         assert outputs.stderr_field[index] == f"stderr: {outputs.stderr}"
 
 
-def test_shell_cmd_outputspec_8b_error():
+def test_shell_cmd_outputspec_8b_error(tmp_path):
     """
     customised output_spec, adding Int to the output,
     requiring a function to collect output
@@ -2458,7 +2458,7 @@ def test_shell_cmd_outputspec_8b_error():
 
     shelly = Shelly().split("additional_args", args=args)
     with pytest.raises(Exception) as e:
-        shelly()
+        shelly(cache_dir=tmp_path)
     assert "has to have a callable" in str(e.value)
 
 
@@ -2603,7 +2603,7 @@ def test_shell_cmd_outputspec_wf_1(plugin, tmp_path):
     assert res.outputs.newfile.fspath.parent.parent == tmp_path
 
 
-def test_shell_cmd_inputspec_outputspec_1():
+def test_shell_cmd_inputspec_outputspec_1(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in templates
     """
@@ -2624,13 +2624,13 @@ def test_shell_cmd_inputspec_outputspec_1():
         file1=File.mock("new_file_1.txt"), file2=File.mock("new_file_2.txt")
     )
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
     assert outputs.newfile2.fspath.exists()
 
 
-def test_shell_cmd_inputspec_outputspec_1a():
+def test_shell_cmd_inputspec_outputspec_1a(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in templates,
     file2 is used in a template for newfile2, but it is not provided, so newfile2 is set to NOTHING
@@ -2653,14 +2653,14 @@ def test_shell_cmd_inputspec_outputspec_1a():
     )
     shelly.file1 = File.mock("new_file_1.txt")
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
     # newfile2 is not created, since file2 is not provided
-    assert outputs.newfile2 is attr.NOTHING
+    assert outputs.newfile2 is None
 
 
-def test_shell_cmd_inputspec_outputspec_2():
+def test_shell_cmd_inputspec_outputspec_2(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
     """
@@ -2695,13 +2695,13 @@ def test_shell_cmd_inputspec_outputspec_2():
         == ["newfile1", "newfile2", "return_code", "stderr", "stdout"]
     )
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
     assert outputs.newfile2.fspath.exists()
 
 
-def test_shell_cmd_inputspec_outputspec_2a():
+def test_shell_cmd_inputspec_outputspec_2a(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
     """
@@ -2739,7 +2739,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
         "stdout",
     ]
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert shelly._generated_output_names(outputs.stdout, outputs.stderr) == [
         "newfile1",
         "return_code",
@@ -2749,10 +2749,10 @@ def test_shell_cmd_inputspec_outputspec_2a():
 
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
-    assert outputs.newfile2 is attr.NOTHING
+    assert outputs.newfile2 is None
 
 
-def test_shell_cmd_inputspec_outputspec_3():
+def test_shell_cmd_inputspec_outputspec_3(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
     adding one additional input that is not in the template, but in the requires field,
@@ -2782,13 +2782,13 @@ def test_shell_cmd_inputspec_outputspec_3():
     shelly.file2 = File.mock("new_file_2.txt")
     shelly.additional_inp = 2
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
     assert outputs.newfile2.fspath.exists()
 
 
-def test_shell_cmd_inputspec_outputspec_3a():
+def test_shell_cmd_inputspec_outputspec_3a(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
     adding one additional input that is not in the template, but in the requires field,
@@ -2825,21 +2825,24 @@ def test_shell_cmd_inputspec_outputspec_3a():
         "stderr",
         "stdout",
     ]
-    assert shelly._generated_output_names == [
+
+    outputs = shelly(cache_dir=tmp_path)
+    assert shelly._generated_output_names(
+        stdout=outputs.stdout, stderr=outputs.stderr
+    ) == [
         "newfile1",
         "return_code",
         "stderr",
         "stdout",
     ]
 
-    outputs = shelly()
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
     # additional input not provided so no newfile2 set (even if the file was created)
-    assert outputs.newfile2 is attr.NOTHING
+    assert outputs.newfile2 is None
 
 
-def test_shell_cmd_inputspec_outputspec_4():
+def test_shell_cmd_inputspec_outputspec_4(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
     adding one additional input to the requires together with a list of the allowed values,
@@ -2850,11 +2853,11 @@ def test_shell_cmd_inputspec_outputspec_4():
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
-        additional_inp: int = shell.arg(help="additional inp")
+        additional_inp: int | None = shell.arg(help="additional inp", default=None)
 
         class Outputs(ShellOutputs):
 
-            newfile1: File = shell.outarg(
+            newfile1: File | None = shell.outarg(
                 path_template="{file1}",
                 help="newfile 1",
                 requires=["file1", ("additional_inp", [2, 3])],
@@ -2867,7 +2870,7 @@ def test_shell_cmd_inputspec_outputspec_4():
     shelly.additional_inp = 2
     # _generated_output_names should be the same as output_names
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert (
         get_output_names(shelly)
         == shelly._generated_output_names(outputs.stdout, outputs.stderr)
@@ -2878,7 +2881,7 @@ def test_shell_cmd_inputspec_outputspec_4():
     assert outputs.newfile1.fspath.exists()
 
 
-def test_shell_cmd_inputspec_outputspec_4a():
+def test_shell_cmd_inputspec_outputspec_4a(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
     adding one additional input to the requires together with a list of the allowed values,
@@ -2890,29 +2893,27 @@ def test_shell_cmd_inputspec_outputspec_4a():
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
-        additional_inp: int = shell.arg(help="additional inp")
+        additional_inp: int | None = shell.arg(help="additional inp", default=None)
 
         class Outputs(ShellOutputs):
 
-            newfile1: File = shell.outarg(
+            newfile1: File | None = shell.outarg(
                 path_template="{file1}",
                 help="newfile 1",
                 requires=["file1", ("additional_inp", [2, 3])],
             )
 
-    shelly = Shelly(
-        executable=cmd,
-    )
+    shelly = Shelly(executable=cmd)
     shelly.file1 = File.mock("new_file_1.txt")
     # the value is not in the list from requires
     shelly.additional_inp = 1
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
-    assert outputs.newfile1 is attr.NOTHING
+    assert outputs.newfile1 is None
 
 
-def test_shell_cmd_inputspec_outputspec_5():
+def test_shell_cmd_inputspec_outputspec_5(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires
     requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
@@ -2924,8 +2925,8 @@ def test_shell_cmd_inputspec_outputspec_5():
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
-        additional_inp_A: int = shell.arg(help="additional inp A")
-        additional_inp_B: str = shell.arg(help="additional inp B")
+        additional_inp_A: int | None = shell.arg(help="additional inp A", default=None)
+        additional_inp_B: str | None = shell.arg(help="additional inp B", default=None)
 
         class Outputs(ShellOutputs):
 
@@ -2945,12 +2946,12 @@ def test_shell_cmd_inputspec_outputspec_5():
     shelly.file1 = File.mock("new_file_1.txt")
     shelly.additional_inp_A = 2
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
 
 
-def test_shell_cmd_inputspec_outputspec_5a():
+def test_shell_cmd_inputspec_outputspec_5a(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires
     requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
@@ -2962,8 +2963,8 @@ def test_shell_cmd_inputspec_outputspec_5a():
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
-        additional_inp_A: str = shell.arg(help="additional inp A")
-        additional_inp_B: int = shell.arg(help="additional inp B")
+        additional_inp_A: str | None = shell.arg(help="additional inp A", default=None)
+        additional_inp_B: int | None = shell.arg(help="additional inp B", default=None)
 
         class Outputs(ShellOutputs):
 
@@ -2983,12 +2984,12 @@ def test_shell_cmd_inputspec_outputspec_5a():
     shelly.file1 = File.mock("new_file_1.txt")
     shelly.additional_inp_B = 2
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
 
 
-def test_shell_cmd_inputspec_outputspec_5b():
+def test_shell_cmd_inputspec_outputspec_5b(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires
     requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
@@ -3000,12 +3001,12 @@ def test_shell_cmd_inputspec_outputspec_5b():
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
-        additional_inp_A: str = shell.arg(help="additional inp A")
-        additional_inp_B: str = shell.arg(help="additional inp B")
+        additional_inp_A: str | None = shell.arg(help="additional inp A", default=None)
+        additional_inp_B: str | None = shell.arg(help="additional inp B", default=None)
 
         class Outputs(ShellOutputs):
 
-            newfile1: File = shell.outarg(
+            newfile1: File | None = shell.outarg(
                 path_template="{file1}",
                 help="newfile 1",
                 # requires is a list of list so it's treated as el[0] OR el[1] OR...
@@ -3020,13 +3021,13 @@ def test_shell_cmd_inputspec_outputspec_5b():
     )
     shelly.file1 = File.mock("new_file_1.txt")
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     assert outputs.stdout == ""
-    # neither additional_inp_A nor additional_inp_B is set, so newfile1 is NOTHING
-    assert outputs.newfile1 is attr.NOTHING
+    # neither additional_inp_A nor additional_inp_B is set, so newfile1 is None
+    assert outputs.newfile1 is None
 
 
-def test_shell_cmd_inputspec_outputspec_6_except():
+def test_shell_cmd_inputspec_outputspec_6_except(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires
     requires has invalid syntax - exception is raised
@@ -3053,7 +3054,7 @@ def test_shell_cmd_inputspec_outputspec_6_except():
     shelly.file1 = File.mock("new_file_1.txt")
 
     with pytest.raises(Exception, match="requires field can be"):
-        shelly()
+        shelly(cache_dir=tmp_path)
 
 
 def no_fsl():
@@ -3326,17 +3327,17 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
             help="""
             base name of the pretend outputs.
             """,
-            argstr="{out_name}_1.nii",
+            argstr=None,
         )
 
         class Outputs(ShellOutputs):
             out_1: File = shell.outarg(
                 help="real output #1",
-                default="{out_name}_1.nii",
+                path_template="{out_name}_1.nii",
             )
-            out_2: File | None = shell.outarg(
+            out_2: File | None = shell.out(
                 help="fictional output #2",
-                default="{out_name}_2.nii",
+                callable=lambda out_name: f"{out_name}_2.nii",
             )
 
     shelly = Shelly(out_name="test")
@@ -3363,20 +3364,22 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
         )
 
         class Outputs(ShellOutputs):
-            out_1: File = shell.outarg(
-                help="fictional output #1",
-                default="{out_name}_1.nii",
+            out_1: File = shell.out(
+                help="real output #1",
+                callable=lambda out_name: f"{out_name}_1.nii",
             )
-            out_2: File = shell.outarg(
+            out_2: File = shell.out(
                 help="fictional output #2",
-                default="{out_name}_2.nii",
+                callable=lambda out_name: f"{out_name}_2.nii",
             )
 
     shelly = Shelly(out_name="test")
     # An exception should be raised because the second mandatory output does not exist
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(
+        ValueError,
+        match=r"file system path provided to mandatory field .* does not exist",
+    ):
         shelly(cache_dir=tmp_path)
-    assert "mandatory output for variable out_2 does not exist" == str(excinfo.value)
     # checking if the first output was created
     assert (next(tmp_path.iterdir()) / "test_1.nii").exists()
 
@@ -3395,17 +3398,16 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
         )
 
         class Outputs(ShellOutputs):
-            out_list: MultiOutputFile = shell.outarg(
+            out_list: MultiOutputFile | None = shell.out(
                 help="fictional output #1",
-                path_template="{out_name}",
+                callable=lambda out_name: out_name,
             )
 
     shelly = Shelly(out_name=["test_1.nii", "test_2.nii"])
 
-    outputs = shelly()
-    # checking if the outputs are Nothing
-    assert outputs.out_list[0] == attr.NOTHING
-    assert outputs.out_list[1] == attr.NOTHING
+    # with pytest.raises(ValueError):
+    outputs = shelly(cache_dir=tmp_path)
+    assert outputs.out_list == None
 
 
 def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
@@ -3416,33 +3418,24 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = "touch"
         out_name: MultiInputObj = shell.arg(
-            help="""
-                        base name of the pretend outputs.
-                        """,
+            help="""base name of the pretend outputs.""",
             sep=" test_1_real.nii",  # hacky way of creating an extra file with that name
             argstr="...",
         )
 
         class Outputs(ShellOutputs):
-            out_list: MultiOutputFile = shell.outarg(
+            out_list: MultiOutputFile | None = shell.out(
                 help="fictional output #1",
-                path_template="{out_name}_real.nii",
+                callable=lambda out_name: f"{out_name}_real.nii",
             )
 
     shelly = Shelly(out_name=["test_1", "test_2"])
 
-    outputs = shelly()
+    outputs = shelly(cache_dir=tmp_path)
     # checking if the outputs are Nothing
-    assert outputs.out_list[0] == File(next(tmp_path.iterdir()) / "test_1_real.nii")
-    assert outputs.out_list[1] == attr.NOTHING
+    assert outputs.out_list == [File(next(tmp_path.iterdir()) / "test_1_real.nii")]
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Not sure what the desired behaviour for formatter 5 is. Field is declared as a list "
-        "but a string containing the formatted arg is passed instead."
-    )
-)
 def test_shellspec_formatter_1(tmp_path):
     """test the input callable 'formatter'."""
 
@@ -3549,7 +3542,11 @@ def test_shellspec_formatter_splitter_2(tmp_path):
             """,
             # When providing a formatter all other metadata options are discarded.
             formatter=formatter_1,
+            sep=" ",
         )
+
+        class Outputs(ShellOutputs):
+            pass
 
     in1 = ["in11", "in12"]
     shelly = Shelly(in2="in2").split("in1", in1=in1)
@@ -3588,20 +3585,23 @@ def test_shellcommand_error_msg(tmp_path):
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
 
-        executable = script_path
+        executable = str(script_path)
 
         in1: str = shell.arg(help="a dummy string", argstr="")
+
+        class Outputs(ShellOutputs):
+            pass
 
     shelly = Shelly(in1="hello")
 
     with pytest.raises(RuntimeError) as excinfo:
-        shelly()
+        shelly(cache_dir=tmp_path)
 
     path_str = str(script_path)
 
     assert (
         str(excinfo.value)
-        == f"""Error running 'err_msg' task with ['{path_str}', 'hello']:
+        == f"""Error running 'main' task with ['{path_str}', 'hello']:
 
 stderr:
 {path_str}: line 3: /command-that-doesnt-exist: No such file or directory

@@ -127,7 +127,7 @@ class arg(Arg):
             and issubclass(origin, ty.Sequence)
             and tp is not str
         ):
-            if sep is None:
+            if sep is None and not self.readonly:
                 raise ValueError(
                     f"A value to 'sep' must be provided when type is iterable {tp} "
                     f"for field {self.name!r}"
@@ -251,10 +251,10 @@ class outarg(arg, Out):
                     f"path_template ({value!r}) can only be provided when type is a FileSet, "
                     f"or union thereof, not {self.type!r}"
                 )
-            if self.argstr is None:
-                raise ValueError(
-                    f"path_template ({value!r}) can only be provided when argstr is not None"
-                )
+            # if self.argstr is None:
+            #     raise ValueError(
+            #         f"path_template ({value!r}) can only be provided when argstr is not None"
+            #     )
 
     @keep_extension.validator
     def _validate_keep_extension(self, attribute, value):

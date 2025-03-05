@@ -1036,9 +1036,26 @@ class TypeParser(ty.Generic[T]):
     get_args = staticmethod(get_args)
 
 
-def is_union(type_: type) -> bool:
-    """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form"""
-    return ty.get_origin(type_) in UNION_TYPES
+def is_union(type_: type, args: list[type] = None) -> bool:
+    """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form
+
+    Parameters
+    ----------
+    type_ : type
+        the type to check
+    args : list[type], optional
+        required arguments of the union to check, by default (None) any args will match
+
+    Returns
+    -------
+    is_union : bool
+        whether the type is a Union type
+    """
+    if ty.get_origin(type_) in UNION_TYPES:
+        if args is not None:
+            return ty.get_args(type_) == args
+        return True
+    return False
 
 
 def is_optional(type_: type) -> bool:

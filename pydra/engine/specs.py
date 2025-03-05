@@ -18,7 +18,7 @@ from attrs.converters import default_if_none
 import cloudpickle as cp
 from fileformats.generic import FileSet
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.typing import TypeParser, is_optional, optional_type
+from pydra.utils.typing import is_optional, optional_type
 from .helpers import (
     attrs_fields,
     attrs_values,
@@ -27,6 +27,7 @@ from .helpers import (
     position_sort,
     ensure_list,
     parse_format_string,
+    fields_in_formatter,
 )
 from .helpers_file import template_update, template_update_single
 from . import helpers_state as hlpst
@@ -35,6 +36,7 @@ from pydra.utils.hash import hash_function, Cache
 from pydra.utils.typing import (
     StateArray,
     is_multi_input,
+    is_fileset_or_union,
     MultiOutputObj,
     MultiOutputFile,
 )
@@ -481,8 +483,8 @@ class TaskDef(ty.Generic[OutputsType]):
         }
         return hash_function(sorted(field_hashes.items())), field_hashes
 
-    def _check_rules(self):
-        """Check if all rules are satisfied."""
+    def _rule_violations(self) -> list[str]:
+        """Check rules and returns a list of errors."""
 
         field: Arg
         errors = []
@@ -492,14 +494,18 @@ class TaskDef(ty.Generic[OutputsType]):
             if is_lazy(value):
                 continue
 
-            if value is attrs.NOTHING and not getattr(field, "path_template", False):
+            if (
+                value is attrs.NOTHING
+                and not getattr(field, "path_template", False)
+                and not field.readonly
+            ):
                 errors.append(f"Mandatory field {field.name!r} is not set")
 
             # Collect alternative fields associated with this field.
             if field.xor:
                 mutually_exclusive = {name: self[name] for name in field.xor}
                 are_set = [
-                    f"{n}={v!r}" for n, v in mutually_exclusive.items() if v is not None
+                    f"{n}={v!r}" for n, v in mutually_exclusive.items() if is_set(v)
                 ]
                 if len(are_set) > 1:
                     errors.append(
@@ -514,7 +520,15 @@ class TaskDef(ty.Generic[OutputsType]):
 
             # Raise error if any required field is unset.
             if (
-                (value is None or value is False)
+                not (
+                    value is None
+                    or value is False
+                    or (
+                        is_optional(field.type)
+                        and is_fileset_or_union(field.type)
+                        and value is True
+                    )
+                )
                 and field.requires
                 and not any(rs.satisfied(self) for rs in field.requires)
             ):
@@ -527,7 +541,14 @@ class TaskDef(ty.Generic[OutputsType]):
                 errors.append(
                     f"{field.name!r} requires{qualification} {[str(r) for r in field.requires]}"
                 )
-        if errors:
+        return errors
+
+    def _check_rules(self):
+        """Check if all rules are satisfied."""
+
+        attrs.validate(self)
+
+        if errors := self._rule_violations():
             raise ValueError(
                 f"Found the following errors in task {self} definition:\n"
                 + "\n".join(errors)
@@ -842,8 +863,8 @@ class ShellOutputs(TaskOutputs):
                 resolved_value = task.return_values[fld.name]
             # Get the corresponding value from the inputs if it exists, which will be
             # passed through to the outputs, to permit manual overrides
-            elif isinstance(fld, shell.outarg) and is_set(
-                getattr(task.definition, fld.name)
+            elif isinstance(fld, shell.outarg) and isinstance(
+                task.inputs[fld.name], Path
             ):
                 resolved_value = task.inputs[fld.name]
             elif is_set(fld.default):
@@ -853,15 +874,15 @@ class ShellOutputs(TaskOutputs):
             # Set the resolved value
             try:
                 setattr(outputs, fld.name, resolved_value)
-            except FileNotFoundError as e:
+            except FileNotFoundError:
                 if is_optional(fld.type):
                     setattr(outputs, fld.name, None)
                 else:
-                    e.add_note(
-                        f"file system path provided to {fld.name!r}, {resolved_value}, "
-                        f"does not exist, this is likely due to an error in the task {task}"
+                    raise ValueError(
+                        f"file system path(s) provided to mandatory field {fld.name!r},"
+                        f"{resolved_value}, does not exist, this is likely due to an "
+                        f"error in the {task.name!r} task"
                     )
-                    raise
         return outputs
 
     @classmethod
@@ -908,6 +929,8 @@ class ShellOutputs(TaskOutputs):
             # if a template is a function it has to be run first with the inputs as the only arg
             if callable(fld.path_template):
                 template = fld.path_template(inputs)
+            else:
+                template = fld.path_template
             inp_fields = re.findall(r"{(\w+)(?:\:[^\}]+)?}", template)
             for req in requirements:
                 req += inp_fields
@@ -996,9 +1019,6 @@ class ShellDef(TaskDef[ShellOutputsType]):
     def cmdline(self) -> str:
         """The equivalent command line that would be submitted if the task were run on
         the current working directory."""
-        # checking the inputs fields before returning the command line
-        self._check_resolved()
-        self._check_rules()
         # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
         cmd_args = self._command_args()
         cmdline = cmd_args[0]
@@ -1015,45 +1035,52 @@ class ShellDef(TaskDef[ShellOutputsType]):
     def _command_args(
         self,
         output_dir: Path | None = None,
-        input_updates: dict[str, ty.Any] | None = None,
+        value_updates: dict[str, ty.Any] | None = None,
         root: Path | None = None,
     ) -> list[str]:
         """Get command line arguments"""
         if output_dir is None:
             output_dir = Path.cwd()
         self._check_resolved()
-        inputs = attrs_values(self)
-        inputs.update(template_update(self, output_dir=output_dir))
-        if input_updates:
-            inputs.update(input_updates)
-        pos_args = []  # list for (position, command arg)
-        positions_provided = []
+        self._check_rules()
+        values = attrs_values(self)
+        template_values = template_update(self, output_dir=output_dir)
+        values.update(template_values)
+        if value_updates:
+            values.update(value_updates)
+        # Drop none/empty values and optional path fields that are set to false
         for field in list_fields(self):
-            name = field.name
-            value = inputs[name]
-            if value is None or is_multi_input(field.type) and value == []:
-                continue
-            if name == "executable":
-                pos_args.append(self._command_shelltask_executable(field, value))
-            elif name == "additional_args":
-                continue
-            else:
-                pos_val = self._command_pos_args(
-                    field=field,
-                    value=value,
-                    inputs=inputs,
-                    root=root,
-                    output_dir=output_dir,
-                    positions_provided=positions_provided,
-                )
-                if pos_val:
-                    pos_args.append(pos_val)
-
+            fld_value = values[field.name]
+            if fld_value is None or (is_multi_input(field.type) and fld_value == []):
+                del values[field.name]
+            if is_fileset_or_union(field.type) and type(fld_value) is bool:
+                assert field.path_template and field.name not in template_values
+                del values[field.name]
+        # Drop special fields that are added separately
+        del values["executable"]
+        del values["additional_args"]
+        # Add executable
+        pos_args = [
+            self._command_shelltask_executable(field, self.executable),
+        ]  # list for (position, command arg)
+        positions_provided = [0]
+        fields = {f.name: f for f in list_fields(self)}
+        for field_name in values:
+            pos_val = self._command_pos_args(
+                field=fields[field_name],
+                values=values,
+                root=root,
+                output_dir=output_dir,
+                positions_provided=positions_provided,
+            )
+            if pos_val:
+                pos_args.append(pos_val)
         # Sort command and arguments by position
         cmd_args = position_sort(pos_args)
         # pos_args values are each a list of arguments, so concatenate lists after sorting
         command_args = sum(cmd_args, [])
-        command_args += inputs["additional_args"]
+        # Append additional arguments to the end of the command
+        command_args += self.additional_args
         return command_args
 
     def _command_shelltask_executable(
@@ -1077,8 +1104,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
     def _command_pos_args(
         self,
         field: shell.arg,
-        value: ty.Any,
-        inputs: dict[str, ty.Any],
+        values: dict[str, ty.Any],
         output_dir: Path,
         positions_provided: list[str],
         root: Path | None = None,
@@ -1087,6 +1113,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
         Checking all additional input fields, setting pos to None, if position not set.
         Creating a list with additional parts of the command that comes from
         the specific field.
+
+        Parameters
+        ----------
         """
         if field.argstr is None and field.formatter is None:
             # assuming that input that has no argstr is not used in the command,
@@ -1105,11 +1134,12 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
             positions_provided.append(field.position)
 
+        value = values[field.name]
         if value and isinstance(value, str):
             if root:  # values from templates
                 value = value.replace(str(output_dir), f"{root}{output_dir}")
 
-        if field.readonly and value is not None:
+        if field.readonly and type(value) is not bool and value is not attrs.NOTHING:
             raise Exception(f"{field.name} is read only, the value can't be provided")
         elif value is None and not field.readonly and field.formatter is None:
             return None
@@ -1125,10 +1155,10 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 if argnm == "field":
                     call_args_val[argnm] = value
                 elif argnm == "inputs":
-                    call_args_val[argnm] = inputs
+                    call_args_val[argnm] = values
                 else:
-                    if argnm in inputs:
-                        call_args_val[argnm] = inputs[argnm]
+                    if argnm in values:
+                        call_args_val[argnm] = values[argnm]
                     else:
                         raise AttributeError(
                             f"arguments of the formatter function from {field.name} "
@@ -1147,13 +1177,16 @@ class ShellDef(TaskDef[ShellOutputsType]):
         elif is_multi_input(tp) or tp is MultiOutputObj or tp is MultiOutputFile:
             # if the field is MultiInputObj, it is used to create a list of arguments
             for val in value or []:
-                cmd_add += self._format_arg(field, val)
+                split_values = copy(values)
+                split_values[field.name] = val
+                cmd_add += self._format_arg(field, split_values)
         else:
-            cmd_add += self._format_arg(field, value)
+            cmd_add += self._format_arg(field, values)
         return field.position, cmd_add
 
-    def _format_arg(self, field: shell.arg, value: ty.Any) -> list[str]:
+    def _format_arg(self, field: shell.arg, values: dict[str, ty.Any]) -> list[str]:
         """Returning arguments used to specify the command args for a single inputs"""
+        value = values[field.name]
         if (
             field.argstr.endswith("...")
             and isinstance(value, ty.Iterable)
@@ -1164,11 +1197,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
             if "{" in field.argstr and "}" in field.argstr:
                 argstr_formatted_l = []
                 for val in value:
-                    argstr_f = argstr_formatting(
-                        field.argstr,
-                        self,
-                        value_updates={field.name: val},
-                    )
+                    split_values = copy(values)
+                    split_values[field.name] = val
+                    argstr_f = argstr_formatting(field.argstr, split_values)
                     argstr_formatted_l.append(f" {argstr_f}")
                 cmd_el_str = field.sep.join(argstr_formatted_l)
             else:  # argstr has a simple form, e.g. "-f", or "--f"
@@ -1182,7 +1213,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
             # if argstr has a more complex form, with "{input_field}"
             if "{" in field.argstr and "}" in field.argstr:
                 cmd_el_str = field.argstr.replace(f"{{{field.name}}}", str(value))
-                cmd_el_str = argstr_formatting(cmd_el_str, self)
+                cmd_el_str = argstr_formatting(cmd_el_str, values)
             else:  # argstr has a simple form, e.g. "-f", or "--f"
                 if value:
                     cmd_el_str = f"{field.argstr} {value}"
@@ -1205,6 +1236,37 @@ class ShellDef(TaskDef[ShellOutputsType]):
             elif is_set(self.Outputs._resolve_output_value(fld, stdout, stderr)):
                 output_names.append(fld.name)
         return output_names
+
+    def _rule_violations(self) -> list[str]:
+
+        errors = super()._rule_violations()
+        # if there is a value that has to be updated (e.g. single value from a list)
+        # getting all fields that should be formatted, i.e. {field_name}, ...
+        fields = list_fields(self)
+        available_template_names = [f.name for f in fields] + ["field", "inputs"]
+        for field in fields:
+            if field.argstr:
+                if unrecognised := [
+                    f
+                    for f in parse_format_string(field.argstr)
+                    if f not in available_template_names
+                ]:
+                    errors.append(
+                        f"Unrecognised field names in the argstr of {field.name} "
+                        f"({field.argstr}): {unrecognised}"
+                    )
+            if getattr(field, "path_template", None):
+                if unrecognised := [
+                    f
+                    for f in fields_in_formatter(field.path_template)
+                    if f not in available_template_names
+                ]:
+                    errors.append(
+                        f"Unrecognised field names in the path_template of {field.name} "
+                        f"({field.path_template}): {unrecognised}"
+                    )
+
+        return errors
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
 
@@ -1237,34 +1299,15 @@ def split_cmd(cmd: str | None):
     return cmd_args
 
 
-def argstr_formatting(
-    argstr: str, inputs: TaskDef[OutputsType], value_updates: dict[str, ty.Any] = None
-):
+def argstr_formatting(argstr: str, values: dict[str, ty.Any]):
     """formatting argstr that have form {field_name},
     using values from inputs and updating with value_update if provided
     """
     # if there is a value that has to be updated (e.g. single value from a list)
     # getting all fields that should be formatted, i.e. {field_name}, ...
-    inputs_dict = attrs_values(inputs)
-    if value_updates:
-        inputs_dict.update(value_updates)
     inp_fields = parse_format_string(argstr)
-    val_dict = {}
-    for fld_name in inp_fields:
-        fld_value = inputs_dict[fld_name]
-        fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
-        if fld_value is None or (
-            fld_value is False
-            and fld_attr.type is not bool
-            and TypeParser.matches_type(fld_attr.type, ty.Union[Path, bool])
-        ):
-            # if value is NOTHING, nothing should be added to the command
-            val_dict[fld_name] = ""
-        else:
-            val_dict[fld_name] = fld_value
-
     # formatting string based on the val_dict
-    argstr_formatted = argstr.format(**val_dict)
+    argstr_formatted = argstr.format(**{n: values.get(n, "") for n in inp_fields})
     # removing extra commas and spaces after removing the field that have NOTHING
     argstr_formatted = (
         argstr_formatted.replace("[ ", "[")

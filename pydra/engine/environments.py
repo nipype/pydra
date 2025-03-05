@@ -179,7 +179,7 @@ class Docker(Container):
             docker_args
             + [docker_img]
             + task.definition._command_args(
-                root=self.root, input_updates=input_updates
+                root=self.root, value_updates=input_updates
             ),
         )
         output = dict(zip(keys, values))
@@ -217,7 +217,7 @@ class Singularity(Container):
             singularity_args
             + [singularity_img]
             + task.definition._command_args(
-                root=self.root, input_updates=input_updates
+                root=self.root, value_updates=input_updates
             ),
         )
         output = dict(zip(keys, values))
