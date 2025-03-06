@@ -503,17 +503,17 @@ class NodeExecution(ty.Generic[DefType]):
     submitter: Submitter
 
     # List of tasks that were completed successfully
-    successful: dict[StateIndex | None, list["Task[DefType]"]]
+    successful: dict[StateIndex, list["Task[DefType]"]]
     # List of tasks that failed
-    errored: dict[StateIndex | None, "Task[DefType]"]
+    errored: dict[StateIndex, "Task[DefType]"]
     # List of tasks that couldn't be run due to upstream errors
-    unrunnable: dict[StateIndex | None, list["Task[DefType]"]]
+    unrunnable: dict[StateIndex, list["Task[DefType]"]]
     # List of tasks that are queued
-    queued: dict[StateIndex | None, "Task[DefType]"]
+    queued: dict[StateIndex, "Task[DefType]"]
     # List of tasks that are queued
-    running: dict[StateIndex | None, tuple["Task[DefType]", datetime]]
+    running: dict[StateIndex, tuple["Task[DefType]", datetime]]
     # List of tasks that are blocked on other tasks to complete before they can be run
-    blocked: dict[StateIndex | None, "Task[DefType]"]
+    blocked: dict[StateIndex, "Task[DefType]"] | None
 
     _tasks: dict[StateIndex | None, "Task[DefType]"] | None
 
@@ -532,7 +532,7 @@ class NodeExecution(ty.Generic[DefType]):
         self.submitter = submitter
         # Initialize the state dictionaries
         self._tasks = None
-        self.blocked = {}
+        self.blocked = None
         self.successful = {}
         self.errored = {}
         self.queued = {}
@@ -568,10 +568,13 @@ class NodeExecution(ty.Generic[DefType]):
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def task(self, index: StateIndex = StateIndex()) -> "Task | list[Task[DefType]]":
+    def task(
+        self, index: StateIndex = StateIndex()
+    ) -> "Task | StateArray[Task[DefType]]":
         """Get a task object for a given state index."""
-        self.tasks  # Ensure tasks are loaded
-        task_index = next(iter(self._tasks))
+        if not self.tasks:
+            return StateArray([])
+        task_index = next(iter(self._tasks)) if self._tasks else StateIndex()
         if len(task_index) > len(index):
             tasks = []
             for ind, task in self._tasks.items():
@@ -589,7 +592,7 @@ class NodeExecution(ty.Generic[DefType]):
             or self.errored
             or self.unrunnable
             or self.queued
-            or self.blocked
+            or self.blocked is not None
         )
 
     @property
@@ -730,7 +733,7 @@ class NodeExecution(ty.Generic[DefType]):
         runnable: list["Task[DefType]"] = []
         self.tasks  # Ensure tasks are loaded
         if not self.started:
-            assert self._tasks
+            assert self._tasks is not None
             self.blocked = copy(self._tasks)
         # Check to see if any blocked tasks are now runnable/unrunnable
         for index, task in list(self.blocked.items()):

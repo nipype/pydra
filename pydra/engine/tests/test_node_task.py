@@ -887,7 +887,7 @@ def test_task_state_3(plugin, tmp_path):
     assert state.splitter_rpn == ["NA.a"]
     assert nn.a == []
 
-    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
