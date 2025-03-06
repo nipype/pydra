@@ -1453,16 +1453,19 @@ def test_shell_cmd_inputs_denoise_image(
 @shell.define
 class SimpleXor(ShellDef["SimpleTaskXor.Outputs"]):
 
-    input_1: str = shell.arg(
+    input_1: str | None = shell.arg(
+        default=None,
         help="help",
         xor=("input_1", "input_2", "input_3"),
     )
-    input_2: bool = shell.arg(
+    input_2: bool | None = shell.arg(
+        default=None,
         help="help",
         argstr="--i2",
         xor=("input_1", "input_2", "input_3"),
     )
-    input_3: bool = shell.arg(
+    input_3: bool | None = shell.arg(
+        default=None,
         help="help",
         xor=("input_1", "input_2", "input_3"),
     )
@@ -1478,15 +1481,12 @@ def test_task_inputs_mandatory_with_xOR_one_mandatory_is_OK():
     """input definition with mandatory inputs"""
     simple_xor = SimpleXor()
     simple_xor.input_1 = "Input1"
-    simple_xor.input_2 = attrs.NOTHING
     simple_xor._check_rules()
 
 
 def test_task_inputs_mandatory_with_xOR_one_mandatory_out_3_is_OK():
     """input definition with mandatory inputs"""
     simple_xor = SimpleXor()
-    simple_xor.input_1 = attrs.NOTHING
-    simple_xor.input_2 = attrs.NOTHING
     simple_xor.input_3 = True
     simple_xor._check_rules()
 
@@ -1494,13 +1494,11 @@ def test_task_inputs_mandatory_with_xOR_one_mandatory_out_3_is_OK():
 def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
     """input definition with mandatory inputs"""
     simple_xor = SimpleXor()
-    simple_xor.input_1 = attrs.NOTHING
-    simple_xor.input_2 = attrs.NOTHING
-    with pytest.raises(Exception) as excinfo:
+    simple_xor.input_2 = False
+    with pytest.raises(
+        ValueError, match="At least one of the mutually exclusive fields"
+    ):
         simple_xor._check_rules()
-    assert "input_1 is mandatory" in str(excinfo.value)
-    assert "no alternative provided by ['input_2', 'input_3']" in str(excinfo.value)
-    assert excinfo.type is AttributeError
 
 
 def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
@@ -1509,10 +1507,10 @@ def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
     simple_xor.input_1 = "Input1"
     simple_xor.input_2 = True
 
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(
+        ValueError, match="Mutually exclusive fields .* are set together"
+    ):
         simple_xor._check_rules()
-    assert "input_1 is mutually exclusive with ['input_2']" in str(excinfo.value)
-    assert excinfo.type is AttributeError
 
 
 def test_task_inputs_mandatory_with_xOR_3_mandatories_raises_error():
@@ -1522,9 +1520,8 @@ def test_task_inputs_mandatory_with_xOR_3_mandatories_raises_error():
     simple_xor.input_2 = True
     simple_xor.input_3 = False
 
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(
+        ValueError,
+        match=r".*Mutually exclusive fields \(input_1='Input1', input_2=True\) are set together",
+    ):
         simple_xor._check_rules()
-    assert "input_1 is mutually exclusive with ['input_2', 'input_3']" in str(
-        excinfo.value
-    )
-    assert excinfo.type is AttributeError

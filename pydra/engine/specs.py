@@ -504,17 +504,14 @@ class TaskDef(ty.Generic[OutputsType]):
             # Collect alternative fields associated with this field.
             if field.xor:
                 mutually_exclusive = {name: self[name] for name in field.xor}
-                are_set = [
-                    f"{n}={v!r}" for n, v in mutually_exclusive.items() if is_set(v)
-                ]
+                are_set = [f"{n}={v!r}" for n, v in mutually_exclusive.items() if v]
                 if len(are_set) > 1:
                     errors.append(
-                        f"Mutually exclusive fields {field.xor} are set together: "
-                        + ", ".join(are_set)
+                        f"Mutually exclusive fields ({', '.join(are_set)}) are set together"
                     )
-                elif field.mandatory and not are_set:
+                elif not are_set:
                     errors.append(
-                        f"At least one of the mutually exclusive fields {field.xor} "
+                        f"At least one of the mutually exclusive fields ({', '.join(field.xor)}) "
                         f"should be set"
                     )
 
