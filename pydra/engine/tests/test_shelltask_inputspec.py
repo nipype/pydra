@@ -1319,10 +1319,12 @@ def test_shell_cmd_inputs_denoise_image(
             allowed_values=[2, 3, 4, None],
             default=None,
             argstr="-d",
+            position=1,
         )
         inputImageFilename: File = shell.arg(
             help="A scalar image is expected as input for noise correction.",
             argstr="-i",
+            position=2,
         )
         noise_model: str | None = shell.arg(
             default=None,
@@ -1344,12 +1346,13 @@ def test_shell_cmd_inputs_denoise_image(
                 The shrink factor, specified as a single integer, describes this
                 resampling. Shrink factor = 1 is the default. """,
             argstr="-s",
+            position=3,
         )
         patch_radius: int = shell.arg(
-            default=1, help="Patch radius. Default = 1x1x1", argstr="-p", position=2
+            default=1, help="Patch radius. Default = 1x1x1", argstr="-p", position=4
         )
         search_radius: int = shell.arg(
-            default=2, help="Search radius. Default = 2x2x2.", argstr="-r", position=3
+            default=2, help="Search radius. Default = 2x2x2.", argstr="-r", position=5
         )
         output: str = shell.arg(
             help="Combined output",
@@ -1419,11 +1422,11 @@ def test_shell_cmd_inputs_denoise_image(
     )
 
     assert get_output_names(denoise_image) == [
+        "correctedImage",
+        "noiseImage",
         "return_code",
         "stderr",
         "stdout",
-        "correctedImage",
-        "noiseImage",
     ]
 
     # adding image_dimensionality that has allowed_values [2, 3, 4]

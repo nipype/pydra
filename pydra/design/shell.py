@@ -236,7 +236,7 @@ class outarg(arg, Out):
     """
 
     path_template: str | None = attrs.field(default=None)
-    keep_extension: bool = attrs.field(default=False)
+    keep_extension: bool = attrs.field(default=True)
 
     @path_template.validator
     def _validate_path_template(self, attribute, value):
@@ -256,13 +256,13 @@ class outarg(arg, Out):
             #         f"path_template ({value!r}) can only be provided when argstr is not None"
             #     )
 
-    @keep_extension.validator
-    def _validate_keep_extension(self, attribute, value):
-        if value and self.path_template is None:
-            raise ValueError(
-                f"keep_extension ({value!r}) can only be provided when path_template "
-                f"is provided"
-            )
+    # @keep_extension.validator
+    # def _validate_keep_extension(self, attribute, value):
+    #     if value and self.path_template is None:
+    #         raise ValueError(
+    #             f"keep_extension ({value!r}) can only be provided when path_template "
+    #             f"is provided"
+    #         )
 
 
 @dataclass_transform(

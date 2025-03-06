@@ -8,12 +8,11 @@ import typing as ty
 from copy import copy
 import subprocess as sp
 from contextlib import contextmanager
-import attr
 from fileformats.generic import FileSet
 from pydra.engine.helpers import is_lazy, attrs_values, list_fields
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import TaskDef
+    from pydra.engine.specs import ShellDef
     from pydra.design import shell
 
 logger = logging.getLogger("pydra")
@@ -122,9 +121,9 @@ def template_update(
 
     """
 
-    inputs_dict_st = attrs_values(definition)
+    values = attrs_values(definition)
     if map_copyfiles is not None:
-        inputs_dict_st.update(map_copyfiles)
+        values.update(map_copyfiles)
 
     from pydra.design import shell
 
@@ -143,7 +142,7 @@ def template_update(
         dict_mod[fld.name] = template_update_single(
             field=fld,
             definition=definition,
-            input_values=inputs_dict_st,
+            values=values,
             output_dir=output_dir,
         )
     # adding elements from map_copyfiles to fields with templates
@@ -153,9 +152,9 @@ def template_update(
 
 
 def template_update_single(
-    field,
-    definition,
-    input_values: dict[str, ty.Any] = None,
+    field: "shell.outarg",
+    definition: "ShellDef",
+    values: dict[str, ty.Any] = None,
     output_dir: Path | None = None,
     spec_type: str = "input",
 ) -> Path | None:
@@ -167,17 +166,17 @@ def template_update_single(
     # the dictionary will be created from inputs object
     from pydra.utils.typing import TypeParser, OUTPUT_TEMPLATE_TYPES  # noqa
 
-    if input_values is None:
-        input_values = attrs_values(definition)
+    if values is None:
+        values = attrs_values(definition)
 
     if spec_type == "input":
-        inp_val_set = input_values[field.name]
-        if isinstance(inp_val_set, bool) and field.type in (Path, str):
+        field_value = values[field.name]
+        if isinstance(field_value, bool) and field.type in (Path, str):
             raise TypeError(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
-        if inp_val_set is not None and not is_lazy(inp_val_set):
-            inp_val_set = TypeParser(ty.Union[OUTPUT_TEMPLATE_TYPES])(inp_val_set)
+        if field_value is not None and not is_lazy(field_value):
+            field_value = TypeParser(ty.Union[OUTPUT_TEMPLATE_TYPES])(field_value)
     elif spec_type == "output":
         if not TypeParser.contains_type(FileSet, field.type):
             raise TypeError(
@@ -188,13 +187,13 @@ def template_update_single(
         raise TypeError(f"spec_type can be input or output, but {spec_type} provided")
     # for inputs that the value is set (so the template is ignored)
     if spec_type == "input":
-        if isinstance(inp_val_set, (Path, list)):
-            return inp_val_set
-        if inp_val_set is False:
+        if isinstance(field_value, (Path, list)):
+            return field_value
+        if field_value is False:
             # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
             return None
     # inputs_dict[field.name] is True or spec_type is output
-    value = _template_formatting(field, definition, input_values)
+    value = _template_formatting(field, definition, values)
     # changing path so it is in the output_dir
     if output_dir and value is not None:
         # should be converted to str, it is also used for input fields that should be str
@@ -206,7 +205,7 @@ def template_update_single(
         return None
 
 
-def _template_formatting(field, definition, input_values):
+def _template_formatting(field, definition, values):
     """Formatting the field template based on the values from inputs.
     Taking into account that the field with a template can be a MultiOutputFile
     and the field values needed in the template can be a list -
@@ -218,9 +217,9 @@ def _template_formatting(field, definition, input_values):
     ----------
     field : pydra.engine.helpers.Field
         field with a template
-    inputs : pydra.engine.helpers.Input
-        inputs object
-    inputs_dict_st : dict
+    definition : pydra.engine.specs.TaskDef
+        the task definition
+    values : dict
         dictionary with values from inputs object
 
     Returns
@@ -235,23 +234,17 @@ def _template_formatting(field, definition, input_values):
 
     # as default, we assume that keep_extension is True
     if isinstance(template, (tuple, list)):
-        formatted = [
-            _single_template_formatting(field, t, definition, input_values)
-            for t in template
-        ]
+        formatted = [_single_template_formatting(field, t, values) for t in template]
     else:
         assert isinstance(template, str)
-        formatted = _single_template_formatting(
-            field, template, definition, input_values
-        )
+        formatted = _single_template_formatting(field, template, values)
     return formatted
 
 
 def _single_template_formatting(
     field: "shell.outarg",
     template: str,
-    definition: "TaskDef",
-    input_values: dict[str, ty.Any],
+    values: dict[str, ty.Any],
 ) -> Path | None:
     from pydra.utils.typing import MultiInputObj, MultiOutputFile
 
@@ -274,29 +267,24 @@ def _single_template_formatting(
 
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
-        if fld_name not in input_values:
+        if fld_name not in values:
             raise AttributeError(f"{fld_name} is not provided in the input")
-        fld_value = input_values[fld_name]
-        if isinstance(fld_value, Path):  # Remove path
-            fld_value = fld_value.name
-        if fld_value is attr.NOTHING:
+        fld_value = values[fld_name]
+        if fld_value is None:
             # if value is NOTHING, nothing should be added to the command
-            return attr.NOTHING
-        else:
-            # checking for fields that can be treated as a file:
-            # have type File, or value that is path like (including str with extensions)
-            if isinstance(fld_value, os.PathLike) or (
-                isinstance(fld_value, str) and "." in fld_value
-            ):
-                if file_template:
-                    raise Exception(
-                        f"can't have multiple paths in {field.name} template,"
-                        f" but {template} provided"
-                    )
-                else:
-                    file_template = (fld_name, fld_value)
+            return None
+        # checking for fields that can be treated as a file:
+        # have type File, or value that is path like (including str with extensions)
+        if isinstance(fld_value, os.PathLike):
+            if file_template:
+                raise Exception(
+                    f"can't have multiple paths in {field.name} template,"
+                    f" but {template} provided"
+                )
             else:
-                val_dict[fld_name] = fld_value
+                file_template = (fld_name, fld_value)
+        else:
+            val_dict[fld_name] = fld_value
 
     # if field is MultiOutputFile and some elements from val_dict are lists,
     # each element of the list should be used separately in the template
