@@ -1449,11 +1449,11 @@ def test_argstr_formatting():
         class Outputs(ShellOutputs):
             pass
 
-    inputs = Defn(a1_field="1", b2_field=2.0, c3_field={"c": "3"}, d4_field=["4"])
+    values = dict(a1_field="1", b2_field=2.0, c3_field={"c": "3"}, d4_field=["4"])
     assert (
         argstr_formatting(
             "{a1_field} {b2_field:02f} -test {c3_field[c]} -me {d4_field[0]}",
-            inputs,
+            values,
         )
         == "1 2.000000 -test 3 -me 4"
     )

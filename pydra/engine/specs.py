@@ -503,13 +503,13 @@ class TaskDef(ty.Generic[OutputsType]):
 
             # Collect alternative fields associated with this field.
             if field.xor:
-                mutually_exclusive = {name: self[name] for name in field.xor}
+                mutually_exclusive = {name: self[name] for name in field.xor if name}
                 are_set = [f"{n}={v!r}" for n, v in mutually_exclusive.items() if v]
                 if len(are_set) > 1:
                     errors.append(
                         f"Mutually exclusive fields ({', '.join(are_set)}) are set together"
                     )
-                elif not are_set:
+                elif not are_set and None not in field.xor:
                     errors.append(
                         "At least one of the mutually exclusive fields should be set: "
                         + ", ".join(f"{n}={v!r}" for n, v in mutually_exclusive.items())
@@ -568,7 +568,7 @@ class TaskDef(ty.Generic[OutputsType]):
                     f"of {field} " + str(list(unrecognised))
                 )
         for inpt in inputs.values():
-            if unrecognised := set(inpt.xor) - input_names:
+            if unrecognised := inpt.xor - (input_names | {None}):
                 raise ValueError(
                     "'Unrecognised' field names in referenced in the xor "
                     f"of {inpt} " + str(list(unrecognised))

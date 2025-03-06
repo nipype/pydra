@@ -1125,7 +1125,7 @@ def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
             help="inpA",
             argstr="",
         )
-        inpStr: str = shell.arg(
+        inpStr: Path = shell.arg(
             position=2,
             help="inp str with extension",
             argstr="-i",

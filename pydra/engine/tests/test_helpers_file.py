@@ -393,13 +393,14 @@ def test_template_formatting(tmp_path: Path):
     field.name = "grad"
     field.argstr = "--grad"
     field.path_template = ("{in_file}.bvec", "{in_file}.bval")
-    inputs = Mock()
-    inputs_dict = {"in_file": "/a/b/c/file.txt", "grad": True}
+    field.keep_extension = False
+    definition = Mock()
+    values = {"in_file": Path("/a/b/c/file.txt"), "grad": True}
 
     assert template_update_single(
         field,
-        inputs,
-        input_values=inputs_dict,
+        definition,
+        values=values,
         output_dir=tmp_path,
         spec_type="input",
     ) == [tmp_path / "file.bvec", tmp_path / "file.bval"]

@@ -56,8 +56,10 @@ class arg(Arg):
         List of allowed values for the field.
     requires: list, optional
         List of field names that are required together with the field.
-    xor: list, optional
-        List of field names that are mutually exclusive with the field.
+    xor: list[str | None], optional
+        Names of args that are exclusive mutually exclusive, which must include
+        the name of the current field. If this list includes None, then none of the
+        fields need to be set.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional
@@ -192,8 +194,10 @@ class outarg(arg, Out):
         List of allowed values for the field.
     requires: list, optional
         List of field names that are required together with the field.
-    xor: list, optional
-        List of field names that are mutually exclusive with the field.
+    xor: list[str | None], optional
+        Names of args that are exclusive mutually exclusive, which must include
+        the name of the current field. If this list includes None, then none of the
+        fields need to be set.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional

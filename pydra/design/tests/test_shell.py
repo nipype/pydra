@@ -502,14 +502,14 @@ def Ls(request):
                 argstr="-T",
                 default=False,
                 requires=["long_format"],
-                xor=["date_format_str"],
+                xor=["complete_date", "date_format_str", None],
             )
             date_format_str: str | None = shell.arg(
                 help="format string for ",
                 argstr="-D",
                 default=None,
                 requires=["long_format"],
-                xor=["complete_date"],
+                xor=["complete_date", "date_format_str", None],
             )
 
             @shell.outputs
@@ -557,7 +557,7 @@ def Ls(request):
                     argstr="-T",
                     default=False,
                     requires=["long_format"],
-                    xor=["date_format_str"],
+                    xor=["complete_date", "date_format_str", None],
                 ),
                 "date_format_str": shell.arg(
                     type=str | None,
@@ -565,7 +565,7 @@ def Ls(request):
                     default=None,
                     argstr="-D",
                     requires=["long_format"],
-                    xor=["complete_date"],
+                    xor=["date_format_str", "complete_date", None],
                 ),
             },
             outputs={

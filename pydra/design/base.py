@@ -244,12 +244,14 @@ class Arg(Field):
         the default value for the field, by default it is NO_DEFAULT
     help: str
         A short description of the input field.
-    allowed_values: list, optional
-        List of allowed values for the field.
     requires: list, optional
         Names of the inputs that are required together with the field.
-    xor: list[str], optional
-        Names of the inputs that are mutually exclusive with the field.
+    allowed_values: Sequence, optional
+        List of allowed values for the field.
+    xor: Sequence[str | None], optional
+        Names of args that are exclusive mutually exclusive, which must include
+        the name of the current field. If this list includes None, then none of the
+        fields need to be set.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional
@@ -263,8 +265,8 @@ class Arg(Field):
         it is False
     """
 
-    allowed_values: tuple = attrs.field(default=(), converter=tuple)
-    xor: tuple[str] = attrs.field(default=(), converter=tuple)
+    allowed_values: frozenset = attrs.field(default=(), converter=frozenset)
+    xor: frozenset[str | None] = attrs.field(default=(), converter=frozenset)
     copy_mode: File.CopyMode = File.CopyMode.any
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
@@ -272,6 +274,11 @@ class Arg(Field):
 
     @xor.validator
     def _xor_validator(self, _, value):
+        for v in value:
+            if not isinstance(v, (str, type(None))):
+                raise ValueError(
+                    f"xor values must be strings or None, not {v} ({self!r})"
+                )
         if value and self.type not in (ty.Any, bool) and not is_optional(self.type):
             raise ValueError(
                 f"Fields that have 'xor' must be of boolean or optional type, "
