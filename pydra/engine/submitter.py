@@ -568,7 +568,7 @@ class NodeExecution(ty.Generic[DefType]):
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def task(
+    def get_tasks(
         self, index: StateIndex = StateIndex()
     ) -> "Task | StateArray[Task[DefType]]":
         """Get a task object for a given state index."""
@@ -740,7 +740,7 @@ class NodeExecution(ty.Generic[DefType]):
             pred: NodeExecution
             is_runnable = True
             for pred in graph.predecessors[self.node.name]:
-                pred_jobs = pred.task(index)
+                pred_jobs = pred.get_tasks(index)
                 if isinstance(pred_jobs, StateArray):
                     pred_inds = [j.state_index for j in pred_jobs]
                 else:

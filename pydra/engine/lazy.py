@@ -160,7 +160,7 @@ class LazyOutField(LazyField[T]):
         if state_index is None:
             state_index = StateIndex()
 
-        task = graph.node(self._node.name).task(state_index)
+        task = graph.node(self._node.name).get_tasks(state_index)
         _, split_depth = TypeParser.strip_splits(self._type)
 
         def get_nested(task: "Task[DefType]", depth: int):
