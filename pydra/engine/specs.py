@@ -511,8 +511,8 @@ class TaskDef(ty.Generic[OutputsType]):
                     )
                 elif not are_set:
                     errors.append(
-                        f"At least one of the mutually exclusive fields ({', '.join(field.xor)}) "
-                        f"should be set"
+                        "At least one of the mutually exclusive fields should be set: "
+                        + ", ".join(f"{n}={v!r}" for n, v in mutually_exclusive.items())
                     )
 
             # Raise error if any required field is unset.

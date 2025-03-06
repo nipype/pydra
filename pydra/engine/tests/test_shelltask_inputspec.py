@@ -1496,7 +1496,7 @@ def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
     simple_xor = SimpleXor()
     simple_xor.input_2 = False
     with pytest.raises(
-        ValueError, match="At least one of the mutually exclusive fields"
+        ValueError, match="At least one of the mutually exclusive fields should be set:"
     ):
         simple_xor._check_rules()
 
