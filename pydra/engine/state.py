@@ -256,13 +256,13 @@ class State:
                 names.append(token)
         return names
 
-    def depth(self, after_combine: bool = True) -> int:
+    def depth(self, before_combine: bool = True) -> int:
         """Return the number of splits of the state, i.e. the number nested
         state arrays to wrap around the type of lazy out fields
 
         Parameters
         ----------
-        after_combine : :obj:`bool`
+        before_combine : :obj:`bool`
             if True, the depth is after combining the fields, otherwise it is before
             any combinations
 
@@ -277,7 +277,7 @@ class State:
             (
                 s
                 if s in [".", "*"]
-                else (int(s not in self.combiner) if after_combine else 1)
+                else (1 if before_combine else int(s not in self.combiner))
             )
             for s in self.splitter_rpn
         ]
@@ -286,7 +286,9 @@ class State:
         for opr in include_rpn:
             if opr == ".":
                 assert len(stack) >= 2
-                stack.append(stack.pop() and stack.pop())
+                opr1 = stack.pop()
+                opr2 = stack.pop()
+                stack.append(opr1 and opr2)
             elif opr == "*":
                 assert len(stack) >= 2
                 stack.append(stack.pop() + stack.pop())
@@ -313,7 +315,7 @@ class State:
         state_array_depth = self.depth()
 
         # If there is a combination, it will get flattened into a single list
-        if self.depth(after_combine=False) > state_array_depth:
+        if self.depth(before_combine=True) > state_array_depth:
             type_ = list[type_]
 
         # Nest the uncombined state arrays around the type

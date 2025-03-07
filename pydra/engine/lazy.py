@@ -193,7 +193,7 @@ class LazyOutField(LazyField[T]):
             val = self._apply_cast(val)
             return val
 
-        if not self._node.state.depth(after_combine=False):
+        if not self._node.state.depth(before_combine=True):
             assert len(jobs) == 1
             return retrieve_from_job(jobs[0])
         elif not self._node.state.keys_final:  # all states are combined over
