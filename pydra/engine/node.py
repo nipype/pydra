@@ -69,6 +69,12 @@ class Node(ty.Generic[OutputType]):
         def __getattr__(self, name: str) -> ty.Any:
             return getattr(self._node._definition, name)
 
+        def __getstate__(self) -> ty.Dict[str, ty.Any]:
+            return {"_node": self._node}
+
+        def __setstate__(self, state: ty.Dict[str, ty.Any]) -> None:
+            super().__setattr__("_node", state["_node"])
+
         def __setattr__(self, name: str, value: ty.Any) -> None:
             setattr(self._node._definition, name, value)
             if is_lazy(value):

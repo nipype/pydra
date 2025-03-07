@@ -697,7 +697,7 @@ class NodeExecution(ty.Generic[DefType]):
             return {None: self.node._definition}
         split_defs = {}
         if self.state._inputs_ind is None:
-            self.state.prepare_states(self.node.inputs)
+            self.state.prepare_states(attrs_values(self.node._definition))
             self.state.prepare_inputs()
         for input_ind in self.node.state.inputs_ind:
             resolved = {}

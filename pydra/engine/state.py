@@ -978,6 +978,7 @@ class State:
         State Values
             specific elements from inputs that can be used running interfaces
         """
+        assert isinstance(inputs, dict)
         # checking if splitter and combiner have valid forms
         self.splitter_validation()
         self.combiner_validation()
