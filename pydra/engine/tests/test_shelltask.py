@@ -594,20 +594,18 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
     cmd_exec = "ls"
     cmd_t = True
 
-    @shell.define
+    @shell.define(xor=["opt_S", "opt_t"])
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd_exec
         opt_t: bool = shell.arg(
             position=1,
             help="opt t",
             argstr="-t",
-            xor=["opt_S"],
         )
         opt_S: bool = shell.arg(
             position=2,
             help="opt S",
             argstr="-S",
-            xor=["opt_t"],
         )
 
         class Outputs(ShellOutputs):
@@ -626,20 +624,18 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
     cmd_t = True
     cmd_S = True
 
-    @shell.define
+    @shell.define(xor=["opt_S", "opt_t"])
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd_exec
         opt_t: bool = shell.arg(
             position=1,
             help="opt t",
             argstr="-t",
-            xor=["opt_S"],
         )
         opt_S: bool = shell.arg(
             position=2,
             help="opt S",
             argstr="-S",
-            xor=["opt_t"],
         )
 
         class Outputs(ShellOutputs):
@@ -685,7 +681,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
     results_function(shelly, plugin=plugin, cache_dir=tmp_path)
 
 
-def test_shell_cmd_inputspec_6a_exception(plugin):
+def test_shell_cmd_inputspec_6a_exception(plugin, tmp_path):
     """checking requires in metadata:
     the required field is None, so the task works raises exception
     """
@@ -3066,21 +3062,21 @@ def no_fsl():
 def test_fsl(data_tests_dir, tmp_path):
     """mandatory field added to fields, value provided"""
 
-    _xor_inputs = [
-        "functional",
-        "reduce_bias",
-        "robust",
-        "padding",
-        "remove_eyes",
-        "surfaces",
-        "t2_guided",
-    ]
-
     def change_name(file):
         name, ext = os.path.splitext(file)
         return f"{name}_brain.{ext}"
 
-    @shell.define
+    @shell.define(
+        xor=[
+            "functional",
+            "reduce_bias",
+            "robust",
+            "padding",
+            "remove_eyes",
+            "surfaces",
+            "t2_guided",
+        ]
+    )
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = "bet"
         in_file: File = shell.arg(
@@ -3131,36 +3127,29 @@ def test_fsl(data_tests_dir, tmp_path):
         robust: bool = shell.arg(
             help="robust brain centre estimation (iterates BET several times)",
             argstr="-R",
-            xor=_xor_inputs,
         )
         padding: bool = shell.arg(
             help="improve BET if FOV is very small in Z (by temporarily padding end slices",
             argstr="-Z",
-            xor=_xor_inputs,
         )
         remove_eyes: bool = shell.arg(
             help="eye & optic nerve cleanup (can be useful in SIENA)",
             argstr="-S",
-            xor=_xor_inputs,
         )
         surfaces: bool = shell.arg(
             help="run bet2 and then betsurf to get additional skull and scalp surfaces (includes registrations)",
             argstr="-A",
-            xor=_xor_inputs,
         )
         t2_guided: ty.Union[File, str] = shell.arg(
             help="as with creating surfaces, when also feeding in non-brain-extracted T2 (includes registrations)",
             argstr="-A2",
-            xor=_xor_inputs,
         )
         functional: bool = shell.arg(
             argstr="-F",
-            xor=_xor_inputs,
             help="apply to 4D fMRI data",
         )
         reduce_bias: bool = shell.arg(
             argstr="-B",
-            xor=_xor_inputs,
             help="bias field and neck cleanup",
         )
 

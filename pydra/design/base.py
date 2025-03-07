@@ -248,10 +248,6 @@ class Arg(Field):
         Names of the inputs that are required together with the field.
     allowed_values: Sequence, optional
         List of allowed values for the field.
-    xor: Sequence[str | None], optional
-        Names of args that are exclusive mutually exclusive, which must include
-        the name of the current field. If this list includes None, then none of the
-        fields need to be set.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional
@@ -266,24 +262,10 @@ class Arg(Field):
     """
 
     allowed_values: frozenset = attrs.field(default=(), converter=frozenset)
-    xor: frozenset[str | None] = attrs.field(default=(), converter=frozenset)
     copy_mode: File.CopyMode = File.CopyMode.any
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
     readonly: bool = False
-
-    @xor.validator
-    def _xor_validator(self, _, value):
-        for v in value:
-            if not isinstance(v, (str, type(None))):
-                raise ValueError(
-                    f"xor values must be strings or None, not {v} ({self!r})"
-                )
-        if value and self.type not in (ty.Any, bool) and not is_optional(self.type):
-            raise ValueError(
-                f"Fields that have 'xor' must be of boolean or optional type, "
-                f"not type {self.type} ({self!r})"
-            )
 
 
 @attrs.define(kw_only=True, slots=False)
@@ -418,6 +400,7 @@ def make_task_def(
     name: str | None = None,
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
+    xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
 ):
     """Create a task definition class and its outputs definition class from the
     input and output fields provided to the decorator/function.
@@ -442,6 +425,10 @@ def make_task_def(
         The base classes for the task definition class, by default ()
     outputs_bases : ty.Sequence[type], optional
         The base classes for the outputs definition class, by default ()
+    xor: Sequence[str | None] | Sequence[Sequence[str | None]], optional
+        Names of args that are exclusive mutually exclusive, which must include
+        the name of the current field. If this list includes None, then none of the
+        fields need to be set.
 
     Returns
     -------
@@ -449,7 +436,15 @@ def make_task_def(
         The class created using the attrs package
     """
 
-    spec_type._check_arg_refs(inputs, outputs)
+    # Convert a single xor set into a set of xor sets
+    if not xor:
+        xor = frozenset()
+    elif all(isinstance(x, str) or x is None for x in xor):
+        xor = frozenset([frozenset(xor)])
+    else:
+        xor = frozenset(frozenset(x) for x in xor)
+
+    spec_type._check_arg_refs(inputs, outputs, xor)
 
     # Check that the field attributes are valid after all fields have been set
     # (especially the type)
@@ -521,6 +516,8 @@ def make_task_def(
                 **attrs_kwargs,
             ),
         )
+        # Store the xor sets for the class
+        klass._xor = xor
         klass.__annotations__[arg.name] = field_type
 
     # Create class using attrs package, will create attributes for all columns and

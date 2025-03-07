@@ -33,10 +33,6 @@ class arg(Arg):
         List of allowed values for the field.
     requires: list, optional
         Names of the inputs that are required together with the field.
-    xor: list[str | None], optional
-        Names of args that are exclusive mutually exclusive, which must include
-        the name of the current field. If this list includes None, then none of the
-        fields need to be set.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional
@@ -106,6 +102,7 @@ def define(
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
+    xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
 ) -> "PythonDef":
     """
     Create an interface for a function or a class.
@@ -120,6 +117,10 @@ def define(
         The outputs of the function or class.
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
+    xor: Sequence[str | None] | Sequence[Sequence[str | None]], optional
+        Names of args that are exclusive mutually exclusive, which must include
+        the name of the current field. If this list includes None, then none of the
+        fields need to be set.
 
     Returns
     -------
@@ -172,6 +173,7 @@ def define(
             klass=klass,
             bases=bases,
             outputs_bases=outputs_bases,
+            xor=xor,
         )
 
         return defn

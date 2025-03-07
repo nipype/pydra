@@ -1453,24 +1453,21 @@ def test_shell_cmd_inputs_denoise_image(
 # tests with XOR in input metadata
 
 
-@shell.define
+@shell.define(xor=("input_1", "input_2", "input_3"))
 class SimpleXor(ShellDef["SimpleTaskXor.Outputs"]):
 
     input_1: str | None = shell.arg(
         default=None,
         help="help",
-        xor=("input_1", "input_2", "input_3"),
     )
     input_2: bool | None = shell.arg(
         default=None,
         help="help",
         argstr="--i2",
-        xor=("input_1", "input_2", "input_3"),
     )
     input_3: bool | None = shell.arg(
         default=None,
         help="help",
-        xor=("input_1", "input_2", "input_3"),
     )
 
     @shell.outputs

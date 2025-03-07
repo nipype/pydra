@@ -56,10 +56,6 @@ class arg(Arg):
         List of allowed values for the field.
     requires: list, optional
         List of field names that are required together with the field.
-    xor: list[str | None], optional
-        Names of args that are exclusive mutually exclusive, which must include
-        the name of the current field. If this list includes None, then none of the
-        fields need to be set.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional
@@ -194,10 +190,6 @@ class outarg(arg, Out):
         List of allowed values for the field.
     requires: list, optional
         List of field names that are required together with the field.
-    xor: list[str | None], optional
-        Names of args that are exclusive mutually exclusive, which must include
-        the name of the current field. If this list includes None, then none of the
-        fields need to be set.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional
@@ -291,6 +283,7 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     name: str | None = None,
+    xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
 ) -> "ShellDef":
     """Create a task definition for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task definition or as a function that takes a
@@ -337,6 +330,10 @@ def define(
         as they appear in the template
     name: str | None
         The name of the returned class
+    xor: Sequence[str | None] | Sequence[Sequence[str | None]], optional
+        Names of args that are exclusive mutually exclusive, which must include
+        the name of the current field. If this list includes None, then none of the
+        fields need to be set.
 
     Returns
     -------
@@ -446,6 +443,7 @@ def define(
             klass=klass,
             bases=bases,
             outputs_bases=outputs_bases,
+            xor=xor,
         )
         return defn
 

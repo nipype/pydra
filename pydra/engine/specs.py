@@ -173,6 +173,11 @@ class TaskHooks:
 class TaskDef(ty.Generic[OutputsType]):
     """Base class for all task definitions"""
 
+    # Class attributes
+    _xor: frozenset[frozenset[str | None]] = (
+        frozenset()
+    )  # overwritten in derived classes
+
     # The following fields are used to store split/combine state information
     _splitter = attrs.field(default=None, init=False, repr=False)
     _combiner = attrs.field(default=None, init=False, repr=False)
@@ -501,20 +506,6 @@ class TaskDef(ty.Generic[OutputsType]):
             ):
                 errors.append(f"Mandatory field {field.name!r} is not set")
 
-            # Collect alternative fields associated with this field.
-            if field.xor:
-                mutually_exclusive = {name: self[name] for name in field.xor if name}
-                are_set = [f"{n}={v!r}" for n, v in mutually_exclusive.items() if v]
-                if len(are_set) > 1:
-                    errors.append(
-                        f"Mutually exclusive fields ({', '.join(are_set)}) are set together"
-                    )
-                elif not are_set and None not in field.xor:
-                    errors.append(
-                        "At least one of the mutually exclusive fields should be set: "
-                        + ", ".join(f"{n}={v!r}" for n, v in mutually_exclusive.items())
-                    )
-
             # Raise error if any required field is unset.
             if (
                 not (
@@ -538,6 +529,19 @@ class TaskDef(ty.Generic[OutputsType]):
                 errors.append(
                     f"{field.name!r} requires{qualification} {[str(r) for r in field.requires]}"
                 )
+        # Collect alternative fields associated with this field.
+        for xor_set in self._xor:
+            mutually_exclusive = {name: self[name] for name in xor_set if name}
+            are_set = [f"{n}={v!r}" for n, v in mutually_exclusive.items() if v]
+            if len(are_set) > 1:
+                errors.append(
+                    f"Mutually exclusive fields ({', '.join(are_set)}) are set together"
+                )
+            elif not are_set and None not in xor_set:
+                errors.append(
+                    "At least one of the mutually exclusive fields should be set: "
+                    + ", ".join(f"{n}={v!r}" for n, v in mutually_exclusive.items())
+                )
         return errors
 
     def _check_rules(self):
@@ -552,7 +556,12 @@ class TaskDef(ty.Generic[OutputsType]):
             )
 
     @classmethod
-    def _check_arg_refs(cls, inputs: list[Arg], outputs: list[Out]) -> None:
+    def _check_arg_refs(
+        cls,
+        inputs: list[Arg],
+        outputs: list[Out],
+        xor: frozenset[frozenset[str | None]],
+    ) -> None:
         """
         Checks if all fields referenced in requirements and xor are present in the inputs
         are valid field names
@@ -567,12 +576,22 @@ class TaskDef(ty.Generic[OutputsType]):
                     "'Unrecognised' field names in referenced in the requirements "
                     f"of {field} " + str(list(unrecognised))
                 )
-        for inpt in inputs.values():
-            if unrecognised := inpt.xor - (input_names | {None}):
+
+        for xor_set in xor:
+            if unrecognised := xor_set - (input_names | {None}):
                 raise ValueError(
-                    "'Unrecognised' field names in referenced in the xor "
-                    f"of {inpt} " + str(list(unrecognised))
+                    f"'Unrecognised' field names in referenced in the xor {xor_set} "
+                    + str(list(unrecognised))
                 )
+            for field_name in xor_set:
+                if field_name is None:  # i.e. none of the fields being set is valid
+                    continue
+                type_ = inputs[field_name].type
+                if type_ not in (ty.Any, bool) and not is_optional(type_):
+                    raise ValueError(
+                        f"Fields included in a 'xor' ({field.name!r}) must be of boolean "
+                        f"or optional types, not type {type_}"
+                    )
 
     def _check_resolved(self):
         """Checks that all the fields in the definition have been resolved"""
@@ -762,6 +781,8 @@ class WorkflowOutputs(TaskOutputs):
         for name, lazy_field in attrs_values(workflow.outputs).items():
             try:
                 val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
+                if isinstance(val_out, StateArray):
+                    val_out = list(val_out)  # implicitly combine state arrays
                 output_wf[name] = val_out
             except (ValueError, AttributeError):
                 output_wf[name] = None

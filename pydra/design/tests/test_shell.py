@@ -469,7 +469,7 @@ def test_interface_template_with_type_overrides():
 def Ls(request):
     if request.param == "static":
 
-        @shell.define
+        @shell.define(xor=["complete_date", "date_format_str", None])
         class Ls(ShellDef["Ls.Outputs"]):
             executable = "ls"
 
@@ -502,14 +502,12 @@ def Ls(request):
                 argstr="-T",
                 default=False,
                 requires=["long_format"],
-                xor=["complete_date", "date_format_str", None],
             )
             date_format_str: str | None = shell.arg(
                 help="format string for ",
                 argstr="-D",
                 default=None,
                 requires=["long_format"],
-                xor=["complete_date", "date_format_str", None],
             )
 
             @shell.outputs
