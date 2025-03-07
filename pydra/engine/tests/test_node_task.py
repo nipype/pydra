@@ -995,9 +995,7 @@ def test_task_state_6(plugin, tmp_path):
     assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
-
-    for i, expected in enumerate([3, 2, 33, 12]):
-        assert results.outputs.out[i] == expected
+    assert results.outputs.out == [3.0, 2.0, 33.0, 12.0]
 
 
 def test_task_state_6a(plugin, tmp_path):
@@ -1014,9 +1012,7 @@ def test_task_state_6a(plugin, tmp_path):
     assert not results.errored, "\n".join(results.errors["error message"])
 
     # checking the results
-
-    for i, expected in enumerate([3, 2, 33, 12]):
-        assert results.outputs.out[i] == expected
+    assert results.outputs.out == [3.0, 2.0, 33.0, 12.0]
 
 
 @pytest.mark.flaky(reruns=2)  # when dask

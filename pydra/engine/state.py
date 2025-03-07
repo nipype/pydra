@@ -3,7 +3,6 @@
 from copy import deepcopy
 import itertools
 from collections import OrderedDict
-from operator import itemgetter
 from functools import reduce
 import typing as ty
 from . import helpers_state as hlpst
@@ -41,7 +40,7 @@ class StateIndex:
         if indices is None:
             self.indices = OrderedDict()
         else:
-            self.indices = OrderedDict(sorted(indices.items()))
+            self.indices = OrderedDict(indices.items())
 
     def __len__(self) -> int:
         return len(self.indices)
@@ -53,13 +52,12 @@ class StateIndex:
         return self.indices[key]
 
     def __lt__(self, other: "StateIndex") -> bool:
-        if set(self.indices) != set(other.indices):
+        if list(self.indices) != list(other.indices):
             raise ValueError(
-                f"StateIndex {self} does not contain the same indices as {other}"
+                f"StateIndex {self} does not contain the same indices in the same order "
+                f"as {other}: {list(self.indices)} != {list(other.indices)}"
             )
-        return sorted(self.indices.items(), key=itemgetter(0)) < sorted(
-            other.indices.items(), key=itemgetter(0)
-        )
+        return tuple(self.indices.items()) < tuple(other.indices.items())
 
     def __repr__(self) -> str:
         return (
@@ -273,24 +271,29 @@ class State:
         int
             number of splits in the state (i.e. linked splits only add 1)
         """
-        depth = 0
+
+        # replace field names with 1 or 0 (1 if the field is included in the state)
+        include_rpn = [
+            (
+                s
+                if s in [".", "*"]
+                else (int(s not in self.combiner) if after_combine else 1)
+            )
+            for s in self.splitter_rpn
+        ]
+
         stack = []
-
-        def included(s):
-            return s not in self.combiner if after_combine else True
-
-        for spl in self.splitter_rpn:
-            if spl in [".", "*"]:
-                if spl == ".":
-                    depth += int(all(included(s) for s in stack))
-                else:
-                    assert spl == "*"
-                    depth += len([s for s in stack if included(s)])
-                stack = []
+        for opr in include_rpn:
+            if opr == ".":
+                assert len(stack) >= 2
+                stack.append(stack.pop() and stack.pop())
+            elif opr == "*":
+                assert len(stack) >= 2
+                stack.append(stack.pop() + stack.pop())
             else:
-                stack.append(spl)
-        remaining_stack = [s for s in stack if included(s)]
-        return depth + len(remaining_stack)
+                stack.append(opr)
+        assert len(stack) == 1
+        return stack[0]
 
     def nest_output_type(self, type_: type) -> type:
         """Nests a type of an output field in a combination of lists and state-arrays
