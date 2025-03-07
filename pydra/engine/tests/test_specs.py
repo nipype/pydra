@@ -40,7 +40,7 @@ def wf(workflow_task: WorkflowDef) -> Workflow:
     wf = Workflow.construct(workflow_task)
     for n in wf.nodes:
         if n._state:
-            n._state.prepare_states()
+            n._state.prepare_states(inputs=n.inputs)
             n._state.prepare_inputs()
     return wf
 

@@ -225,26 +225,6 @@ class Task(ty.Generic[DefType]):
         """
         return self._uid
 
-    def set_state(self, splitter, combiner=None):
-        """
-        Set a particular state on this task.
-
-        Parameters
-        ----------
-        splitter :
-            TODO
-        combiner :
-            TODO
-
-        """
-        if splitter is not None:
-            self.state = state.State(
-                name=self.name, splitter=splitter, combiner=combiner
-            )
-        else:
-            self.state = None
-        return self.state
-
     @property
     def output_names(self):
         """Get the names of the outputs from the task's output_spec
@@ -878,7 +858,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                                 node.state
                                 and f"{node.name}.{field.name}" in node.state.splitter
                             ):
-                                node._inner_cont_dim[f"{node.name}.{field.name}"] = 1
+                                node.state._inner_cont_dim[
+                                    f"{node.name}.{field.name}"
+                                ] = 1
                             # adding task_name: (task.state, [a field from the connection]
                             if lf._node.name not in other_states:
                                 other_states[lf._node.name] = (

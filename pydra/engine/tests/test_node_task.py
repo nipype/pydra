@@ -48,7 +48,7 @@ def get_state(task: TaskDef, name="NA") -> State:
     wf.add(task, name=name)
     node = wf[name]
     if node.state:
-        node.state.prepare_states()
+        node.state.prepare_states(inputs=node.inputs)
         node.state.prepare_inputs()
     return node.state
 

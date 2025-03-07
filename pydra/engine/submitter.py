@@ -212,7 +212,6 @@ class Submitter:
 
             state = State(
                 name="outer_split",
-                definition=task_def,
                 splitter=deepcopy(task_def._splitter),
                 combiner=deepcopy(task_def._combiner),
                 cont_dim=deepcopy(task_def._cont_dim),
@@ -697,6 +696,9 @@ class NodeExecution(ty.Generic[DefType]):
         if not self.node.state:
             return {None: self.node._definition}
         split_defs = {}
+        if self.state._inputs_ind is None:
+            self.state.prepare_states(self.node.inputs)
+            self.state.prepare_inputs()
         for input_ind in self.node.state.inputs_ind:
             resolved = {}
             for inp in set(self.node.input_names):

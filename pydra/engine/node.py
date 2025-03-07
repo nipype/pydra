@@ -140,7 +140,7 @@ class Node(ty.Generic[OutputType]):
     def cont_dim(self):
         # adding inner_cont_dim to the general container_dimension provided by the users
         cont_dim_all = deepcopy(self._cont_dim)
-        for k, v in self._inner_cont_dim.items():
+        for k, v in self.state._inner_cont_dim.items():
             cont_dim_all[k] = cont_dim_all.get(k, 1) + v
         return cont_dim_all
 
@@ -197,7 +197,6 @@ class Node(ty.Generic[OutputType]):
         if splitter or combiner or other_states:
             self._state = State(
                 self.name,
-                self._definition,
                 splitter=splitter,
                 other_states=other_states,
                 combiner=combiner,
@@ -228,7 +227,7 @@ class Node(ty.Generic[OutputType]):
                 node: Node = val._node
                 # variables that are part of inner splitters should be treated as a containers
                 if node.state and f"{node.name}.{inpt_name}" in node.state.splitter:
-                    node._inner_cont_dim[f"{node.name}.{inpt_name}"] = 1
+                    node.state._inner_cont_dim[f"{node.name}.{inpt_name}"] = 1
                 # adding task_name: (task.state, [a field from the connection]
                 if node.name not in upstream_states:
                     upstream_states[node.name] = (node.state, [inpt_name])

@@ -6,12 +6,8 @@ from collections import OrderedDict
 from functools import reduce
 import typing as ty
 from . import helpers_state as hlpst
-from .helpers import ensure_list, attrs_values
+from .helpers import ensure_list
 from pydra.utils.typing import StateArray, TypeParser
-
-# from .specs import BaseDef
-if ty.TYPE_CHECKING:
-    from .specs import TaskDef
 
 
 # TODO: move to State
@@ -196,7 +192,6 @@ class State:
     def __init__(
         self,
         name,
-        definition: "TaskDef",
         splitter=None,
         combiner=None,
         cont_dim=None,
@@ -219,12 +214,12 @@ class State:
 
         """
         self.name = name
-        self.definition = definition
         self.other_states = other_states
         self.splitter = splitter
         # temporary combiner
         self.combiner = combiner
         self.cont_dim = cont_dim or {}
+        self._inner_cont_dim = {}
         self._inputs_ind = None
         # if other_states, the connections have to be updated
         if self.other_states:
@@ -418,8 +413,9 @@ class State:
         (i.e. inputs that are relevant for current task, can be outputs from previous nodes)
         """
         if self._inputs_ind is None:
-            self.prepare_states()
-            self.prepare_inputs()
+            raise RuntimeError(
+                "inputs_ind is not set, please run prepare_states() on the state first"
+            )
         return self._inputs_ind
 
     @current_splitter.setter
@@ -987,11 +983,6 @@ class State:
         self.splitter_validation()
         self.combiner_validation()
         self.set_input_groups()
-        # container dimension for each input, specifies how nested the input is
-        if inputs is None:
-            inputs = {
-                f"{self.name}.{n}": v for n, v in attrs_values(self.definition).items()
-            }
         self.inputs = inputs
         if not self.cont_dim:
             self.cont_dim = cont_dim or {}
