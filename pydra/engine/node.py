@@ -181,16 +181,16 @@ class Node(ty.Generic[OutputType]):
         # Add node name to state's splitter, combiner and cont_dim loaded from the def
         splitter = deepcopy(
             self._definition._splitter
-        )  # these can be modified by the state
+        )  # these can be modified in state
         combiner = deepcopy(
             self._definition._combiner
-        )  # these can be modified by the state
+        )  # these can be modified in state
+        cont_dim = {}
         if splitter:
             splitter = hlpst.add_name_splitter(splitter, self.name)
         if combiner:
             combiner = hlpst.add_name_combiner(combiner, self.name)
         if self._definition._cont_dim:
-            cont_dim = {}
             for key, val in self._definition._cont_dim.items():
                 cont_dim[f"{self.name}.{key}"] = val
         other_states = self._get_upstream_states()
