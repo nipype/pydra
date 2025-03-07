@@ -3,10 +3,12 @@
 from copy import deepcopy
 import itertools
 from collections import OrderedDict
+from operator import itemgetter
 from functools import reduce
 import typing as ty
 from . import helpers_state as hlpst
 from .helpers import ensure_list, attrs_values
+from pydra.utils.typing import StateArray, TypeParser
 
 # from .specs import BaseDef
 if ty.TYPE_CHECKING:
@@ -47,6 +49,18 @@ class StateIndex:
     def __iter__(self) -> ty.Generator[str, None, None]:
         return iter(self.indices)
 
+    def __getitem__(self, key: str) -> int:
+        return self.indices[key]
+
+    def __lt__(self, other: "StateIndex") -> bool:
+        if set(self.indices) != set(other.indices):
+            raise ValueError(
+                f"StateIndex {self} does not contain the same indices as {other}"
+            )
+        return sorted(self.indices.items(), key=itemgetter(0)) < sorted(
+            other.indices.items(), key=itemgetter(0)
+        )
+
     def __repr__(self) -> str:
         return (
             "StateIndex(" + ", ".join(f"{n}={v}" for n, v in self.indices.items()) + ")"
@@ -79,6 +93,21 @@ class StateIndex:
         """
         return type(self)({k: v for k, v in self.indices.items() if k in state_names})
 
+    def missing(self, state_names: ty.Iterable[str]) -> ty.List[str]:
+        """Return the fields that are missing from the StateIndex
+
+        Parameters
+        ----------
+        fields : list[str]
+            the fields to check for
+
+        Returns
+        -------
+        list[str]
+            the fields that are missing from the StateIndex
+        """
+        return [f for f in state_names if f not in self.indices]
+
     def matches(self, other: "StateIndex") -> bool:
         """Check if the indices that are present in the other StateIndex match
 
@@ -92,6 +121,8 @@ class StateIndex:
         bool
             True if all the indices in the other StateIndex match
         """
+        if isinstance(other, dict):
+            other = StateIndex(other)
         if not set(self.indices).issuperset(other.indices):
             raise ValueError(
                 f"StateIndex {self} does not contain all the indices in {other}"
@@ -211,10 +242,6 @@ class State:
     @property
     def names(self):
         """Return the names of the states."""
-        # analysing states from connected tasks if inner_inputs
-        if not hasattr(self, "keys_final"):
-            self.prepare_states()
-            self.prepare_inputs()
         previous_states_keys = {
             f"_{v.name}": v.keys_final for v in self.inner_inputs.values()
         }
@@ -264,6 +291,41 @@ class State:
                 stack.append(spl)
         remaining_stack = [s for s in stack if included(s)]
         return depth + len(remaining_stack)
+
+    def nest_output_type(self, type_: type) -> type:
+        """Nests a type of an output field in a combination of lists and state-arrays
+        based on the state's splitter and combiner
+
+        Parameters
+        ----------
+        type_ : type
+            the type of the output field
+
+        Returns
+        -------
+        type
+            the nested type of the output field
+        """
+
+        state_array_depth = self.depth()
+
+        # If there is a combination, it will get flattened into a single list
+        if self.depth(after_combine=False) > state_array_depth:
+            type_ = list[type_]
+
+        # Nest the uncombined state arrays around the type
+        for _ in range(state_array_depth):
+            type_ = StateArray[type_]
+        return type_
+
+    @classmethod
+    def combine_state_arrays(cls, type_: type) -> type:
+        """Collapses (potentially nested) state array(s) into a single list"""
+        if TypeParser.get_origin(type_) is StateArray:
+            # Implicitly combine any remaining uncombined states into a single
+            # list
+            type_ = list[TypeParser.strip_splits(type_)[0]]
+        return type_
 
     @property
     def splitter(self):

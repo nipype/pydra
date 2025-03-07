@@ -6,7 +6,7 @@ import pickle
 import os
 from pathlib import Path
 from tempfile import mkdtemp
-from copy import copy
+from copy import copy, deepcopy
 from datetime import datetime
 from collections import defaultdict
 import attrs
@@ -211,16 +211,15 @@ class Submitter:
             from pydra.engine.specs import TaskDef
 
             state = State(
-                name="not-important",
+                name="outer_split",
                 definition=task_def,
-                splitter=task_def._splitter,
-                combiner=task_def._combiner,
+                splitter=deepcopy(task_def._splitter),
+                combiner=deepcopy(task_def._combiner),
             )
-            list_depth = 2 if state.depth(after_combine=False) != state.depth() else 1
 
             def wrap_type(tp):
-                for _ in range(list_depth):
-                    tp = list[tp]
+                tp = state.nest_output_type(tp)
+                tp = state.combine_state_arrays(tp)
                 return tp
 
             output_types = {
@@ -568,22 +567,27 @@ class NodeExecution(ty.Generic[DefType]):
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def get_tasks(
-        self, index: StateIndex = StateIndex()
-    ) -> "Task | StateArray[Task[DefType]]":
-        """Get a task object for a given state index."""
-        if not self.tasks:
-            return StateArray([])
-        task_index = next(iter(self._tasks)) if self._tasks else StateIndex()
-        if len(task_index) > len(index):
-            tasks = []
-            for ind, task in self._tasks.items():
-                if ind.matches(index):
-                    tasks.append(task)
-            return StateArray(tasks)
-        elif len(index) > len(task_index):
-            index = index.subset(task_index)
-        return self._tasks[index]
+    def matching_jobs(self, index: StateIndex = StateIndex()) -> "StateArray[Task]":
+        """Get the jobs that match a given state index.
+
+        Parameters
+        ----------
+        index : StateIndex, optional
+            The state index of the task to get, by default StateIndex()
+        """
+        matching = StateArray()
+        if self.tasks:
+            task_index = next(iter(self._tasks)) if self._tasks else StateIndex()
+            if len(task_index) > len(index):
+                # Select matching tasks and return them in nested state-array objects
+                for ind, task in self._tasks.items():
+                    if ind.matches(index):
+                        matching.append(task)
+            elif len(index) > len(task_index):
+                matching.append(
+                    self._tasks[index.subset(task_index)]
+                )  # Return a single task
+        return matching
 
     @property
     def started(self) -> bool:
@@ -740,11 +744,7 @@ class NodeExecution(ty.Generic[DefType]):
             pred: NodeExecution
             is_runnable = True
             for pred in graph.predecessors[self.node.name]:
-                pred_jobs = pred.get_tasks(index)
-                if isinstance(pred_jobs, StateArray):
-                    pred_inds = [j.state_index for j in pred_jobs]
-                else:
-                    pred_inds = [pred_jobs.state_index]
+                pred_inds = [j.state_index for j in pred.matching_jobs(index)]
                 if not all(i in pred.successful for i in pred_inds):
                     is_runnable = False
                     blocked = True

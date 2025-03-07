@@ -1033,7 +1033,7 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
     assert state.splitter_final is None
     assert state.splitter_rpn_final == []
 
-    with Submitter(worker=plugin_dask_opt, cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1147,7 +1147,7 @@ def test_task_state_comb_2(
     assert state.splitter_rpn == state_rpn
     assert state.combiner == state_combiner
 
-    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1161,18 +1161,7 @@ def test_task_state_comb_2(
     # it should give values of inputs that corresponds to the specific element
     # results_verb = nn.result(return_inputs=True)
 
-    if state.splitter_rpn_final:
-        for i, res in enumerate(expected):
-            assert results.outputs.out == res
-        # results_verb
-        # for i, res_l in enumerate(expected_val):
-        #     for j, res in enumerate(res_l):
-        #         assert (results_verb[i][j][0], results_verb[i][j][1].output.out) == res
-    # if the combiner is full expected is "a flat list"
-    else:
-        assert results.outputs.out == expected
-        # for i, res in enumerate(expected_val):
-        #     assert (results_verb[i][0], results_verb[i][1].output.out) == res
+    assert results.outputs.out == expected
 
 
 def test_task_state_comb_singl_1(plugin, tmp_path):

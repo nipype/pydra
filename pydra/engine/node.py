@@ -2,7 +2,6 @@ import typing as ty
 from copy import deepcopy
 from enum import Enum
 import attrs
-from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
 from pydra.engine.helpers import (
     attrs_values,
@@ -128,12 +127,7 @@ class Node(ty.Generic[OutputType]):
             # types based on the number of states the node is split over and whether
             # it has a combiner
             if self._state:
-                type_, _ = TypeParser.strip_splits(outpt._type)
-                if self._state.combiner:
-                    type_ = list[type_]
-                for _ in range(self._state.depth()):
-                    type_ = StateArray[type_]
-                outpt._type = type_
+                outpt._type = self._state.nest_output_type(outpt._type)
             # Flag the output lazy fields as being not typed checked (i.e. assigned to
             # another node's inputs) yet. This is used to prevent the user from changing
             # the type of the output after it has been accessed by connecting it to an

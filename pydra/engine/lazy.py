@@ -1,5 +1,6 @@
 import typing as ty
 import abc
+from operator import attrgetter
 import attrs
 from pydra.utils.typing import StateArray
 from pydra.utils.hash import hash_single
@@ -152,54 +153,60 @@ class LazyOutField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        from pydra.utils.typing import (
-            TypeParser,
-        )  # pylint: disable=import-outside-toplevel
         from pydra.engine.state import StateIndex
 
         if state_index is None:
             state_index = StateIndex()
 
-        task = graph.node(self._node.name).get_tasks(state_index)
-        _, split_depth = TypeParser.strip_splits(self._type)
+        jobs = sorted(
+            graph.node(self._node.name).matching_jobs(state_index),
+            key=attrgetter("state_index"),
+        )
 
-        def get_nested(task: "Task[DefType]", depth: int):
-            if isinstance(task, StateArray):
-                val = [get_nested(task=t, depth=depth - 1) for t in task]
-                if depth:
-                    val = StateArray[self._type](val)
-            else:
-                if task.errored:
-                    raise ValueError(
-                        f"Cannot retrieve value for {self._field} from {self._node.name} as "
-                        "the node errored"
-                    )
-                res = task.result()
-                if res is None:
-                    raise RuntimeError(
-                        f"Could not find results of '{task.name}' node in a sub-directory "
-                        f"named '{{{task.checksum}}}' in any of the cache locations.\n"
-                        + "\n".join(str(p) for p in set(task.cache_locations))
-                        + f"\n\nThis is likely due to hash changes in '{task.name}' node inputs. "
-                        f"Current values and hashes: {task.inputs}, "
-                        f"{task.definition._hash}\n\n"
-                        "Set loglevel to 'debug' in order to track hash changes "
-                        "throughout the execution of the workflow.\n\n "
-                        "These issues may have been caused by `bytes_repr()` methods "
-                        "that don't return stable hash values for specific object "
-                        "types across multiple processes (see bytes_repr() "
-                        '"singledispatch "function in pydra/utils/hash.py).'
-                        "You may need to write specific `bytes_repr()` "
-                        "implementations (see `pydra.utils.hash.register_serializer`) or a "
-                        "`__bytes_repr__()` dunder methods to handle one or more types in "
-                        "your interface inputs."
-                    )
-                val = res.get_output_field(self._field)
-                val = self._apply_cast(val)
+        def retrieve_from_job(job: "Task[DefType]") -> ty.Any:
+            if job.errored:
+                raise ValueError(
+                    f"Cannot retrieve value for {self._field} from {self._node.name} as "
+                    "the node errored"
+                )
+            res = job.result()
+            if res is None:
+                raise RuntimeError(
+                    f"Could not find results of '{job.name}' node in a sub-directory "
+                    f"named '{{{job.checksum}}}' in any of the cache locations.\n"
+                    + "\n".join(str(p) for p in set(job.cache_locations))
+                    + f"\n\nThis is likely due to hash changes in '{job.name}' node inputs. "
+                    f"Current values and hashes: {job.inputs}, "
+                    f"{job.definition._hash}\n\n"
+                    "Set loglevel to 'debug' in order to track hash changes "
+                    "throughout the execution of the workflow.\n\n "
+                    "These issues may have been caused by `bytes_repr()` methods "
+                    "that don't return stable hash values for specific object "
+                    "types across multiple processes (see bytes_repr() "
+                    '"singledispatch "function in pydra/utils/hash.py).'
+                    "You may need to write specific `bytes_repr()` "
+                    "implementations (see `pydra.utils.hash.register_serializer`) or a "
+                    "`__bytes_repr__()` dunder methods to handle one or more types in "
+                    "your interface inputs."
+                )
+            val = res.get_output_field(self._field)
+            val = self._apply_cast(val)
             return val
 
-        value = get_nested(task, depth=split_depth)
-        return value
+        if not self._node.state.depth(after_combine=False):
+            assert len(jobs) == 1
+            return retrieve_from_job(jobs[0])
+        elif not self._node.state.keys_final:  # all states are combined over
+            return [retrieve_from_job(j) for j in jobs]
+        elif self._node.state.combiner:
+            values = StateArray()
+            for ind in self._node.state.states_ind_final:
+                values.append(
+                    [retrieve_from_job(j) for j in jobs if j.state_index.matches(ind)]
+                )
+            return values
+        else:
+            return StateArray(retrieve_from_job(j) for j in jobs)
 
     @property
     def _source(self):

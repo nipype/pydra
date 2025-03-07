@@ -22,7 +22,7 @@ from pydra.engine.graph import DiGraph
 from pydra.engine import state
 from .lazy import LazyInField, LazyOutField
 from pydra.utils.hash import hash_function, Cache
-from pydra.utils.typing import TypeParser, StateArray
+from pydra.engine.state import State
 from .node import Node
 from datetime import datetime
 from fileformats.core import FileSet
@@ -710,8 +710,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                 )
             for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
                 # Automatically combine any uncombined state arrays into a single lists
-                if TypeParser.get_origin(outpt_lf._type) is StateArray:
-                    outpt_lf._type = list[TypeParser.strip_splits(outpt_lf._type)[0]]
+                outpt_lf._type = State.combine_state_arrays(outpt_lf._type)
                 setattr(outputs, outpt.name, outpt_lf)
         else:
             if unset_outputs := [
