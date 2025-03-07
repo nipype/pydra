@@ -10,7 +10,6 @@ from .helpers import ensure_list
 from pydra.utils.typing import StateArray, TypeParser
 
 
-# TODO: move to State
 op = {".": zip, "*": itertools.product}
 
 
