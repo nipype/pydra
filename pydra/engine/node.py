@@ -45,12 +45,12 @@ class Node(ty.Generic[OutputType]):
         init=False, default=None, eq=False, hash=False, repr=False
     )
     _state: State | None = attrs.field(init=False, default=NOT_SET)
-    _cont_dim: dict[str, int] | None = attrs.field(
-        init=False, default=None
-    )  # QUESTION: should this be included in the state?
-    _inner_cont_dim: dict[str, int] = attrs.field(
-        init=False, factory=dict
-    )  # QUESTION: should this be included in the state?
+    # _cont_dim: dict[str, int] | None = attrs.field(
+    #     init=False, default=None
+    # )  # QUESTION: should this be included in the state?
+    # _inner_cont_dim: dict[str, int] = attrs.field(
+    #     init=False, factory=dict
+    # )  # QUESTION: should this be included in the state?
 
     def __attrs_post_init__(self):
         self._set_state()
@@ -179,16 +179,20 @@ class Node(ty.Generic[OutputType]):
 
     def _set_state(self) -> None:
         # Add node name to state's splitter, combiner and cont_dim loaded from the def
-        splitter = self._definition._splitter
-        combiner = self._definition._combiner
+        splitter = deepcopy(
+            self._definition._splitter
+        )  # these can be modified by the state
+        combiner = deepcopy(
+            self._definition._combiner
+        )  # these can be modified by the state
         if splitter:
             splitter = hlpst.add_name_splitter(splitter, self.name)
         if combiner:
             combiner = hlpst.add_name_combiner(combiner, self.name)
         if self._definition._cont_dim:
-            self._cont_dim = {}
+            cont_dim = {}
             for key, val in self._definition._cont_dim.items():
-                self._cont_dim[f"{self.name}.{key}"] = val
+                cont_dim[f"{self.name}.{key}"] = val
         other_states = self._get_upstream_states()
         if splitter or combiner or other_states:
             self._state = State(
@@ -197,6 +201,7 @@ class Node(ty.Generic[OutputType]):
                 splitter=splitter,
                 other_states=other_states,
                 combiner=combiner,
+                cont_dim=cont_dim,
             )
             if combiner:
                 if not_split := [

@@ -544,6 +544,7 @@ class Task(ty.Generic[DefType]):
         details = ""
         for changed in hash_changes:
             field = getattr(attr.fields(type(self.definition)), changed)
+            hash_function(getattr(self.definition, changed))
             val = getattr(self.definition, changed)
             field_type = type(val)
             if inspect.isclass(field.type) and issubclass(field.type, FileSet):
@@ -570,7 +571,7 @@ class Task(ty.Generic[DefType]):
         if hash_changes:
             raise RuntimeError(
                 f"Input field hashes have changed during the execution of the "
-                f"'{self.name}' {type(self).__name__}.\n\n{details}"
+                f"'{self.name}' task of {type(self)} type.\n\n{details}"
             )
         logger.debug(
             "Input values and hashes for '%s' %s node:\n%s\n%s",
