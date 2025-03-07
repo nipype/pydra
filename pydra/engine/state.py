@@ -35,7 +35,7 @@ class StateIndex:
         if indices is None:
             self.indices = OrderedDict()
         else:
-            self.indices = OrderedDict(indices.items())
+            self.indices = OrderedDict(sorted(indices.items()))
 
     def __len__(self) -> int:
         return len(self.indices)
@@ -250,7 +250,7 @@ class State:
                 names.append(token)
         return names
 
-    def depth(self, before_combine: bool = True) -> int:
+    def depth(self, before_combine: bool = False) -> int:
         """Return the number of splits of the state, i.e. the number nested
         state arrays to wrap around the type of lazy out fields
 
