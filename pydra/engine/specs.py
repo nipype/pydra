@@ -535,7 +535,8 @@ class TaskDef(ty.Generic[OutputsType]):
             are_set = [f"{n}={v!r}" for n, v in mutually_exclusive.items() if v]
             if len(are_set) > 1:
                 errors.append(
-                    f"Mutually exclusive fields ({', '.join(are_set)}) are set together"
+                    f"Mutually exclusive fields ({', '.join(sorted(are_set))}) are set "
+                    "together"
                 )
             elif not are_set and None not in xor_set:
                 errors.append(
@@ -915,7 +916,7 @@ class ShellOutputs(TaskOutputs):
                 if default.exists():
                     return default
                 else:
-                    raise AttributeError(f"file {default} does not exist")
+                    raise FileNotFoundError(f"file {default} does not exist")
             else:
                 all_files = [Path(el) for el in glob(default.expanduser())]
                 if len(all_files) > 1:
@@ -923,7 +924,7 @@ class ShellOutputs(TaskOutputs):
                 elif len(all_files) == 1:
                     return all_files[0]
                 else:
-                    raise AttributeError(f"no file matches {default.name}")
+                    raise FileNotFoundError(f"no file matches {default.name}")
         return default
 
     @classmethod
@@ -1038,7 +1039,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
         """The equivalent command line that would be submitted if the task were run on
         the current working directory."""
         # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
-        cmd_args = self._command_args()
+        values = attrs_values(self)
+        values.update(template_update(self))
+        cmd_args = self._command_args(values=values)
         cmdline = cmd_args[0]
         for arg in cmd_args[1:]:
             # If there are spaces in the arg, and it is not enclosed by matching
@@ -1050,29 +1053,16 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 cmdline += " " + arg
         return cmdline
 
-    def _command_args(
-        self,
-        output_dir: Path | None = None,
-        value_updates: dict[str, ty.Any] | None = None,
-        root: Path | None = None,
-    ) -> list[str]:
+    def _command_args(self, values: dict[str, ty.Any]) -> list[str]:
         """Get command line arguments"""
-        if output_dir is None:
-            output_dir = Path.cwd()
         self._check_resolved()
         self._check_rules()
-        values = attrs_values(self)
-        template_values = template_update(self, output_dir=output_dir)
-        values.update(template_values)
-        if value_updates:
-            values.update(value_updates)
         # Drop none/empty values and optional path fields that are set to false
         for field in list_fields(self):
             fld_value = values[field.name]
             if fld_value is None or (is_multi_input(field.type) and fld_value == []):
                 del values[field.name]
             if is_fileset_or_union(field.type) and type(fld_value) is bool:
-                assert field.path_template and field.name not in template_values
                 del values[field.name]
         # Drop special fields that are added separately
         del values["executable"]
@@ -1087,8 +1077,6 @@ class ShellDef(TaskDef[ShellOutputsType]):
             pos_val = self._command_pos_args(
                 field=fields[field_name],
                 values=values,
-                root=root,
-                output_dir=output_dir,
                 positions_provided=positions_provided,
             )
             if pos_val:
@@ -1123,9 +1111,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         self,
         field: shell.arg,
         values: dict[str, ty.Any],
-        output_dir: Path,
         positions_provided: list[str],
-        root: Path | None = None,
     ) -> tuple[int, ty.Any]:
         """
         Checking all additional input fields, setting pos to None, if position not set.
@@ -1153,9 +1139,6 @@ class ShellDef(TaskDef[ShellOutputsType]):
             positions_provided.append(field.position)
 
         value = values[field.name]
-        if value and isinstance(value, str):
-            if root:  # values from templates
-                value = value.replace(str(output_dir), f"{root}{output_dir}")
 
         if field.readonly and type(value) is not bool and value is not attrs.NOTHING:
             raise Exception(f"{field.name} is read only, the value can't be provided")
@@ -1180,8 +1163,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
                     else:
                         raise AttributeError(
                             f"arguments of the formatter function from {field.name} "
-                            f"has to be in inputs or be field or output_dir, "
-                            f"but {argnm} is used"
+                            f"has to be in inputs or be field, but {argnm} is used"
                         )
             cmd_el_str = field.formatter(**call_args_val)
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")

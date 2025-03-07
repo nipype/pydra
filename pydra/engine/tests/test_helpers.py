@@ -239,7 +239,11 @@ def test_load_and_run_wf(tmpdir):
         multiply = workflow.add(Multiply(x=x, y=y))
         return multiply.out
 
-    task = Task(name="mult", definition=Workflow(x=2), submitter=Submitter(worker="cf"))
+    task = Task(
+        name="mult",
+        definition=Workflow(x=2),
+        submitter=Submitter(cache_dir=tmpdir, worker="cf"),
+    )
 
     with wf_pkl.open("wb") as fp:
         cp.dump(task, fp)

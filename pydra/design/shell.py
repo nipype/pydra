@@ -164,11 +164,16 @@ class out(Out):
         if value:
             if not callable(value):
                 raise ValueError(f"callable must be a function, not {value!r}")
-        elif not getattr(self, "path_template", None) and self.name not in [
-            "return_code",
-            "stdout",
-            "stderr",
-        ]:  # ShellOutputs.BASE_NAMES
+        elif (
+            self.default is NO_DEFAULT
+            and not getattr(self, "path_template", None)
+            and self.name
+            not in [
+                "return_code",
+                "stdout",
+                "stderr",
+            ]
+        ):  # ShellOutputs.BASE_NAMES
             raise ValueError(
                 "A shell output field must have either a callable or a path_template"
             )
@@ -239,8 +244,8 @@ class outarg(arg, Out):
         if value:
             if self.default not in (NO_DEFAULT, True, None):
                 raise ValueError(
-                    f"path_template ({value!r}) can only be provided when no default "
-                    f"({self.default!r}) is provided"
+                    f"path_template ({value!r}) can only be provided when there is no "
+                    f"default value provided ({self.default!r})"
                 )
             if not (is_fileset_or_union(self.type) or self.type is ty.Any):
                 raise ValueError(

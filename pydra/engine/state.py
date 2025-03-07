@@ -9,7 +9,6 @@ from . import helpers_state as hlpst
 from .helpers import ensure_list
 from pydra.utils.typing import StateArray, TypeParser
 
-
 op = {".": zip, "*": itertools.product}
 
 
@@ -966,7 +965,7 @@ class State:
 
     def prepare_states(
         self,
-        inputs: dict[str, ty.Any] | None = None,
+        inputs: dict[str, ty.Any],
         cont_dim: dict[str, int] | None = None,
     ):
         """
@@ -978,7 +977,6 @@ class State:
         State Values
             specific elements from inputs that can be used running interfaces
         """
-        assert isinstance(inputs, dict)
         # checking if splitter and combiner have valid forms
         self.splitter_validation()
         self.combiner_validation()

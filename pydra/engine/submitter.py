@@ -583,7 +583,7 @@ class NodeExecution(ty.Generic[DefType]):
                 for ind, task in self._tasks.items():
                     if ind.matches(index):
                         matching.append(task)
-            elif len(index) > len(task_index):
+            else:
                 matching.append(
                     self._tasks[index.subset(task_index)]
                 )  # Return a single task
@@ -691,29 +691,34 @@ class NodeExecution(ty.Generic[DefType]):
         return attrs.evolve(task_def, **resolved)
 
     def _split_definition(self) -> dict[StateIndex, "TaskDef[OutputType]"]:
-        """Split the definition into the different states it will be run over"""
+        """Split the definition into the different states it will be run over
+
+        Parameters
+        ----------
+        values : dict[str, Any]
+            The values to use for the split
+        """
         # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
         if not self.node.state:
             return {None: self.node._definition}
         split_defs = {}
-        if self.state._inputs_ind is None:
-            self.state.prepare_states(attrs_values(self.node._definition))
-            self.state.prepare_inputs()
+        self.state.prepare_states(self.node.state_values)
+        self.state.prepare_inputs()
         for input_ind in self.node.state.inputs_ind:
             resolved = {}
-            for inp in set(self.node.input_names):
-                value = getattr(self.node._definition, inp)
+            for inpt_name in set(self.node.input_names):
+                value = getattr(self._definition, inpt_name)
                 if isinstance(value, LazyField):
-                    value = resolved[inp] = value._get_value(
+                    value = resolved[inpt_name] = value._get_value(
                         workflow=self.workflow,
                         graph=self.graph,
                         state_index=StateIndex(input_ind),
                     )
-                if f"{self.node.name}.{inp}" in input_ind:
-                    resolved[inp] = self.node.state._get_element(
+                if f"{self.node.name}.{inpt_name}" in input_ind:
+                    resolved[inpt_name] = self.node.state._get_element(
                         value=value,
-                        field_name=inp,
-                        ind=input_ind[f"{self.node.name}.{inp}"],
+                        field_name=inpt_name,
+                        ind=input_ind[f"{self.node.name}.{inpt_name}"],
                     )
             split_defs[StateIndex(input_ind)] = attrs.evolve(
                 self.node._definition, **resolved

@@ -50,10 +50,11 @@ class Native(Environment):
 
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         keys = ["return_code", "stdout", "stderr"]
-        values = execute(task.definition._command_args())
+        cmd_args = task.definition._command_args(values=task.inputs)
+        values = execute(cmd_args)
         output = dict(zip(keys, values))
         if output["return_code"]:
-            msg = f"Error running '{task.name}' task with {task.definition._command_args()}:"
+            msg = f"Error running '{task.name}' task with {cmd_args}:"
             if output["stderr"]:
                 msg += "\n\nstderr:\n" + output["stderr"]
             if output["stdout"]:
@@ -113,7 +114,7 @@ class Container(Environment):
         from pydra.design import shell
 
         bindings: dict[str, tuple[str, str]] = {}
-        input_updates: dict[str, tuple[Path, ...]] = {}
+        value_updates: dict[str, tuple[Path, ...]] = {}
         if root is None:
             return bindings
         fld: shell.arg
@@ -142,7 +143,7 @@ class Container(Environment):
                 # that path relative to the location in the mount point in the container.
                 # If it is a more complex file-set with multiple paths, then it is converted
                 # into a tuple of paths relative to the base of the fileset.
-                input_updates[fld.name] = (
+                value_updates[fld.name] = (
                     env_path / fileset.name
                     if isinstance(fileset, os.PathLike)
                     else tuple(env_path / rel for rel in fileset.relative_fspaths)
@@ -151,7 +152,11 @@ class Container(Environment):
         # Add the cache directory to the list of mounts
         bindings[task.cache_dir] = (f"{self.root}/{task.cache_dir}", "rw")
 
-        return bindings, input_updates
+        # Update values with the new paths
+        values = copy(task.inputs)
+        values.update(value_updates)
+
+        return bindings, values
 
 
 class Docker(Container):
@@ -160,7 +165,7 @@ class Docker(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, input_updates = self.get_bindings(task=task, root=self.root)
+        mounts, values = self.get_bindings(task=task, root=self.root)
 
         docker_args = [
             "docker",
@@ -176,11 +181,7 @@ class Docker(Container):
         keys = ["return_code", "stdout", "stderr"]
 
         values = execute(
-            docker_args
-            + [docker_img]
-            + task.definition._command_args(
-                root=self.root, value_updates=input_updates
-            ),
+            docker_args + [docker_img] + task.definition._command_args(values=values),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:
@@ -197,7 +198,7 @@ class Singularity(Container):
     def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, input_updates = self.get_bindings(task=task, root=self.root)
+        mounts, values = self.get_bindings(task=task, root=self.root)
 
         # todo adding xargsy etc
         singularity_args = [
@@ -216,9 +217,7 @@ class Singularity(Container):
         values = execute(
             singularity_args
             + [singularity_img]
-            + task.definition._command_args(
-                root=self.root, value_updates=input_updates
-            ),
+            + task.definition._command_args(values=values),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:

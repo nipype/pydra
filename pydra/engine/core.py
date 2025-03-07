@@ -274,9 +274,7 @@ class Task(ty.Generic[DefType]):
         for fld in list_fields(self.definition):
             name = fld.name
             value = self._inputs[name]
-            if value is not attr.NOTHING and TypeParser.contains_type(
-                FileSet, fld.type
-            ):
+            if value and TypeParser.contains_type(FileSet, fld.type):
                 copied_value = copy_nested_files(
                     value=value,
                     dest_dir=self.output_dir,

@@ -21,13 +21,12 @@ from .utils import (
     FunFileList,
     Op4Var,
 )
-
-from pydra.engine.core import Task
 from pydra.engine.specs import TaskDef
 from pydra.engine.state import State
 from pydra.utils.typing import StateArray
 from pydra.engine.submitter import Submitter
 from pydra.engine.core import Workflow
+from pydra.engine.helpers import attrs_values
 
 
 @workflow.define
@@ -48,7 +47,7 @@ def get_state(task: TaskDef, name="NA") -> State:
     wf.add(task, name=name)
     node = wf[name]
     if node.state:
-        node.state.prepare_states(inputs=node.inputs)
+        node.state.prepare_states(node.state_values)
         node.state.prepare_inputs()
     return node.state
 
@@ -990,7 +989,7 @@ def test_task_state_6(plugin, tmp_path):
     assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
     assert state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 

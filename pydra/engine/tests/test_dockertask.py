@@ -131,7 +131,7 @@ def test_docker_outputspec_1(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_inputspec_1(tmp_path):
+def test_docker_inputspec_1(tmp_path, plugin):
     """a simple customized input definition for docker task"""
     filename = str(tmp_path / "file_pydra.txt")
     with open(filename, "w") as f:
@@ -154,7 +154,9 @@ def test_docker_inputspec_1(tmp_path):
 
     docky = Docky(file=filename)
 
-    outputs = docky(environment=Docker(image="busybox"), cache_dir=tmp_path)
+    outputs = docky(
+        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+    )
     assert outputs.stdout.strip() == "hello from pydra"
 
 
@@ -186,7 +188,7 @@ def test_docker_inputspec_1a(tmp_path):
 
     docky = Docky()
 
-    outputs = docky(environment=Docker(image="busybox"), cache_dir=tmp_path)
+    outputs = docky(cache_dir=tmp_path, environment=Docker(image="busybox"))
     assert outputs.stdout.strip() == "hello from pydra"
 
 
@@ -276,7 +278,9 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
     )
     assert docky.file2.fspath == filename_2
 
-    outputs = docky(environment=Docker(image="busybox"))
+    outputs = docky(
+        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+    )
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
 
@@ -319,7 +323,9 @@ def test_docker_inputspec_2a(plugin, tmp_path):
 
     docky = Docky(file2=filename_2)
 
-    outputs = docky(environment=Docker(image="busybox"))
+    outputs = docky(
+        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+    )
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
 
@@ -385,7 +391,9 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
 
     docky = Docky(orig_file=str(file))
 
-    outputs = docky(environment=Docker(image="busybox"), cache_dir=tmp_path)
+    outputs = docky(
+        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+    )
     assert outputs.stdout == ""
     out_file = outputs.out_file.fspath
     assert out_file.exists()
@@ -428,7 +436,9 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
 
     docky = Docky().split(file=[str(filename_1), str(filename_2)])
 
-    outputs = docky(environment=Docker(image="busybox"))
+    outputs = docky(
+        worker=plugin, cache_dir=tmp_path, environment=Docker(image="busybox")
+    )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
 
@@ -463,7 +473,9 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
     )
     docky = Docky().split(file=[str(file_1), str(file_2)])
 
-    outputs = docky(environment=Docker(image="busybox"))
+    outputs = docky(
+        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+    )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
 
@@ -503,7 +515,7 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
 
     wf = Workflow(file=filename)
 
-    outputs = wf()
+    outputs = wf(cache_dir=tmp_path)
     assert outputs.out.strip() == "hello from pydra"
 
 

@@ -109,6 +109,20 @@ class Node(ty.Generic[OutputType]):
         return tuple(attrs_values(self._definition).items())
 
     @property
+    def state_values(self) -> dict[str, ty.Any]:
+        """Get the values of the task definition, scoped by the name of the node to be
+        used in the state
+
+        Returns
+        -------
+        dict[str, Any]
+            The values of the task definition
+        """
+        return {
+            f"{self.name}.{n}": v for n, v in attrs_values(self._definition).items()
+        }
+
+    @property
     def lzout(self) -> OutputType:
         from pydra.engine.helpers import list_fields
 

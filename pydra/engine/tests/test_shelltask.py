@@ -1,4 +1,4 @@
-import attr
+from glob import glob
 import typing as ty
 import os
 import sys
@@ -181,7 +181,7 @@ def test_shell_cmd_6(plugin, tmp_path):
     cmd_args = [["nipype"], ["pydra"]]
     # separate command into exec + args
     shelly = shell.define("shelly")().split(
-        executable=cmd_exec, additional_args=cmd_args
+        ["executable", "additional_args"], executable=cmd_exec, additional_args=cmd_args
     )
 
     assert shelly.executable == ["echo", ["echo", "-n"]]
@@ -192,7 +192,7 @@ def test_shell_cmd_6(plugin, tmp_path):
     #     "echo -n nipype",
     #     "echo -n pydra",
     # ]
-    outputs = shelly(plugin=plugin)
+    outputs = shelly(cache_dir=tmp_path, plugin=plugin)
 
     assert outputs.stdout[0] == "nipype\n"
     assert outputs.stdout[1] == "pydra\n"
@@ -224,7 +224,11 @@ def test_shell_cmd_7(plugin, tmp_path):
     # separate command into exec + args
     shelly = (
         shell.define("shelly")()
-        .split(executable=cmd_exec, additional_args=cmd_args)
+        .split(
+            ["executable", "additional_args"],
+            executable=cmd_exec,
+            additional_args=cmd_args,
+        )
         .combine("additional_args")
     )
 
@@ -233,10 +237,7 @@ def test_shell_cmd_7(plugin, tmp_path):
 
     outputs = shelly(plugin=plugin)
 
-    assert outputs.stdout[0][0] == "nipype\n"
-    assert outputs.stdout[0][1] == "pydra"
-    assert outputs.stdout[1][0] == "nipype"
-    assert outputs.stdout[1][1] == "pydra"
+    assert outputs.stdout == [["nipype\n", "pydra\n"], ["nipype", "pydra"]]
 
 
 # tests with workflows
@@ -304,7 +305,7 @@ def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
     cmd_exec = "echo"
     cmd_opt = True
     cmd_opt_hello = "HELLO"
-    cmd_args = "from pydra"
+    cmd_args = ["from pydra"]
 
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
@@ -428,9 +429,8 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmp_path):
 
     shelly = Shelly(executable=cmd_exec)
 
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(ValueError, match="Mandatory field 'text' is not set"):
         shelly(cache_dir=tmp_path)
-    assert "mandatory" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -541,36 +541,14 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmp_path):
     assert outputs.stdout == "Hi\n"
 
 
-def test_shell_cmd_inputspec_4c_exception(plugin):
-    """mandatory field added to fields, value provided"""
-    cmd_exec = "echo"
-
-    # separate command into exec + args
-    with pytest.raises(
-        Exception, match=r"default value \('Hello'\) should not be set when the field"
-    ):
-
-        @shell.define
-        class Shelly(ShellDef["Shelly.Outputs"]):
-            executable = cmd_exec
-            text: str = shell.arg(
-                default="Hello",
-                position=1,
-                help="text",
-                argstr="",
-            )
-
-            class Outputs(ShellOutputs):
-                pass
-
-
 def test_shell_cmd_inputspec_4d_exception(plugin):
     """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
 
     # separate command into exec + args
     with pytest.raises(
-        Exception, match=r"default value \('Hello'\) should not be set together"
+        ValueError,
+        match=r"path_template \('exception'\) can only be provided when there is no default",
     ):
 
         @shell.define
@@ -603,6 +581,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
             argstr="-t",
         )
         opt_S: bool = shell.arg(
+            default=False,
             position=2,
             help="opt S",
             argstr="-S",
@@ -642,9 +621,8 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
             pass
 
     shelly = Shelly(opt_t=cmd_t, opt_S=cmd_S)
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(ValueError, match="Mutually exclusive fields"):
         shelly(cache_dir=tmp_path)
-    assert "is mutually exclusive" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -757,19 +735,21 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
     using name_tamplate in metadata
     """
     cmd = "touch"
-    args = ["newfile_tmp.txt"]
+    arg = "newfile_tmp.txt"
 
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
 
+        arg: str = shell.arg(argstr=None)
+
         class Outputs(ShellOutputs):
             out1: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
-    shelly = Shelly(executable=cmd, additional_args=args)
+    shelly = Shelly(executable=cmd, arg=arg)
 
     outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
     assert outputs.stdout == ""
@@ -778,39 +758,6 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
     # checking if the file is created in a good place
     assert out1.parent.parent == tmp_path
     assert out1.name == "newfile_tmp.txt"
-
-
-@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
-def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
-    """
-    providing output name using input_spec,
-    using name_tamplate in metadata
-    and changing the output name for output_spec using output_field_name
-    """
-    cmd = "touch"
-    args = File.mock("newfile_tmp.txt")
-
-    @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
-        executable = cmd
-
-        class Outputs(ShellOutputs):
-            out1: File = shell.outarg(
-                path_template="{args}",
-                output_field_name="out1_changed",
-                help="output file",
-            )
-
-    shelly = Shelly(
-        executable=cmd,
-        additional_args=args,
-    )
-
-    outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert outputs.stdout == ""
-    # checking if the file is created in a good place
-    assert outputs.out1_changed.fspath.parent.parent == tmp_path
-    assert outputs.out1_changed.fspath.name == "newfile_tmp.txt"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -850,19 +797,21 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
     using name_tamplate with txt extension (extension from args should be removed
     """
     cmd = "touch"
-    args = File.mock("newfile_tmp.txt")
+    arg = File.mock("newfile_tmp.txt")
 
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
 
+        arg = shell.arg(argstr=None)
+
         class Outputs(ShellOutputs):
             out1: File = shell.outarg(
-                path_template="{args}.txt",
+                path_template="{arg}.txt",
                 help="output file",
             )
 
-    shelly = Shelly(executable=cmd, additional_args=args)
+    shelly = Shelly(executable=cmd, arg=arg)
 
     outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
     assert outputs.stdout == ""
@@ -1169,6 +1118,9 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmp_path):
             help="list of files",
         )
 
+        class Outputs(ShellOutputs):
+            pass
+
     shelly = Shelly(
         files=files_list,
     )
@@ -1274,6 +1226,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
         )
         number: int = shell.arg(
             help="a number",
+            argstr=None,
         )
 
         class Outputs(ShellOutputs):
@@ -1324,7 +1277,7 @@ def test_shell_cmd_inputspec_with_iterable(tmp_path):
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
     """shelltask changes a file in place,
-    adding copyfile=True to the file-input from input_spec
+    adding copy_mode="copy" to the file-input from input_spec
     hardlink or copy in the output_dir should be created
     """
     file = tmp_path / "file_pydra.txt"
@@ -1337,16 +1290,14 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         orig_file: File = shell.arg(
-            position=1,
-            argstr="",
             help="orig file",
-            copyfile=True,
+            copy_mode="copy",
         )
 
         class Outputs(ShellOutputs):
-            out_file: File = shell.outarg(
-                path_template="{orig_file}",
+            out_file: File = shell.out(
                 help="output file",
+                callable=lambda orig_file: orig_file,
             )
 
     shelly = Shelly(executable=cmd, orig_file=str(file))
@@ -1386,8 +1337,8 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
         )
 
         class Outputs(ShellOutputs):
-            out_file: File = shell.outarg(
-                path_template="{orig_file}",
+            out_file: File = shell.out(
+                callable=lambda orig_file: orig_file,
                 help="output file",
             )
 
@@ -1418,51 +1369,6 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
         assert "hello from pydra\n" == f.read()
 
 
-@pytest.mark.xfail(
-    reason="not sure if we want to support input overwrite,"
-    "if we allow for this orig_file is changing, so does checksum,"
-    " and the results can't be found"
-)
-@pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
-def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
-    """shelltask changes a file in place,
-    copyfile is None for the file-input, so original filed is changed
-    """
-    file = tmp_path / "file_pydra.txt"
-    with open(file, "w") as f:
-        f.write("hello from pydra\n")
-
-    cmd = ["sed", "-is", "s/hello/hi/"]
-
-    @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
-        executable = cmd
-        orig_file: File = shell.arg(
-            position=1,
-            argstr="",
-            help="orig file",
-        )
-
-        class Outputs(ShellOutputs):
-            out_file: File = shell.outarg(
-                path_template="{orig_file}",
-                help="output file",
-            )
-
-    shelly = Shelly(
-        executable=cmd,
-        orig_file=str(file),
-    )
-
-    outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert outputs.stdout == ""
-    assert outputs.out_file.fspath.exists()
-    # the file is  not copied, it is changed in place
-    assert outputs.out_file == file
-    with open(outputs.out_file) as f:
-        assert "hi from pydra\n" == f.read()
-
-
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
     """adding state to the input from input_spec"""
@@ -1477,6 +1383,9 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
             help="text",
             argstr="",
         )
+
+        class Outputs(ShellOutputs):
+            pass
 
     # separate command into exec + args
     shelly = Shelly().split("text", text=hello)
@@ -1503,6 +1412,9 @@ def test_shell_cmd_inputspec_typeval_1(tmp_path):
             help="text",
         )
 
+        class Outputs(ShellOutputs):
+            pass
+
     with pytest.raises(TypeError):
         Shelly()
 
@@ -1518,6 +1430,9 @@ def test_shell_cmd_inputspec_typeval_2(tmp_path):
         executable = cmd_exec
 
         text: int = shell.arg(position=1, argstr="", help="text")
+
+        class Outputs(ShellOutputs):
+            pass
 
     with pytest.raises(TypeError):
         Shelly(text="hello")
@@ -1538,6 +1453,9 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
             help="text",
             argstr="",
         )
+
+        class Outputs(ShellOutputs):
+            pass
 
     # separate command into exec + args
     shelly = Shelly().split(text=["HELLO", "hi"])
@@ -1560,19 +1478,21 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
 
+        arg: File = shell.arg(argstr=None)
+
         class Outputs(ShellOutputs):
             out1: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
-    shelly = Shelly(executable=cmd).split(args=args)
+    shelly = Shelly(executable=cmd).split(arg=args)
 
     outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
     for i in range(len(args)):
         assert outputs.stdout[i] == ""
         assert outputs.out1[i].fspath.exists()
-        assert outputs.out1[i].fspath.parent.parent == tmp_path[i]
+        assert outputs.out1[i].fspath.parent.parent == tmp_path
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1597,14 +1517,16 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
             argstr="",
         )
 
+        class Outputs(ShellOutputs):
+            pass
+
     shelly = Shelly().split(file=[file_1, file_2])
 
     assert shelly.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
     outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    assert outputs.stdout[0] == "hello from pydra"
-    assert outputs.stdout[1] == "have a nice one"
+    assert outputs.stdout == ["hello from pydra", "have a nice one"]
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1633,8 +1555,8 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
         )
 
         class Outputs(ShellOutputs):
-            out_file: File = shell.outarg(
-                path_template="{orig_file}",
+            out_file: File = shell.out(
+                callable=lambda orig_file: orig_file,
                 help="output file",
             )
 
@@ -1648,7 +1570,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
         assert outputs.stdout[i] == ""
         assert outputs.out_file[i].fspath.exists()
         # the file is  copied, and than it is changed in place
-        assert outputs.out_file[i].fspath.parent.parent == tmp_path[i]
+        assert outputs.out_file[i].fspath.parent.parent == tmp_path
         with open(outputs.out_file[i]) as f:
             assert f"hi {txt_l[i]}\n" == f.read()
         # the original file is unchanged
@@ -1913,10 +1835,10 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
     for i in range(2):
         assert res.outputs.out1[i] == ""
         assert res.outputs.touch_file[i].fspath.exists()
-        assert res.outputs.touch_file[i].fspath.parent.parent == tmp_path[i]
+        assert res.outputs.touch_file[i].fspath.parent.parent == tmp_path
         assert res.outputs.out2[i] == ""
         assert res.outputs.cp_file[i].fspath.exists()
-        assert res.outputs.cp_file[i].fspath.parent.parent == tmp_path[i]
+        assert res.outputs.cp_file[i].fspath.parent.parent == tmp_path
 
 
 def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
@@ -1989,11 +1911,11 @@ def test_shell_cmd_outputspec_1(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output, providing specific pathname
     """
-    cmd = ["touch", File.mock("newfile_tmp.txt")]
+    cmd = ["touch", "newfile_tmp.txt"]
     Shelly = shell.define(
         cmd,
         outputs=[
-            shell.outarg(name="newfile", type=File, path_template="newfile_tmp.txt")
+            shell.out(name="newfile", type=File, callable=lambda: "newfile_tmp.txt")
         ],
     )
     shelly = Shelly()
@@ -2037,7 +1959,7 @@ def test_shell_cmd_outputspec_1b_exception(plugin, tmp_path):
         executable = cmd
 
         class Outputs(ShellOutputs):
-            newfile: File = shell.outarg(path_template="newfile_tmp_.txt")
+            newfile: File = shell.out(callable=lambda: "newfile_tmp_.txt")
 
     shelly = Shelly()
 
@@ -2083,14 +2005,13 @@ def test_shell_cmd_outputspec_2a_exception(plugin, tmp_path):
         executable = cmd
 
         class Outputs(ShellOutputs):
-            newfile: File = "newfile_*K.txt"
+            newfile: File = shell.out(default="newfile_*K.txt")
 
     shelly = Shelly()
 
-    with pytest.raises(Exception) as excinfo:
-        with Submitter(plugin=plugin) as sub:
-            shelly(submitter=sub)
-    assert "no file matches" in str(excinfo.value)
+    with pytest.raises(FileNotFoundError):
+        with Submitter(cache_dir=tmp_path, plugin=plugin) as sub:
+            sub(shelly)
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])

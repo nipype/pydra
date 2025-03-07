@@ -1,6 +1,5 @@
 import typing as ty
 import abc
-from operator import attrgetter
 import attrs
 from pydra.utils.typing import StateArray
 from pydra.utils.hash import hash_single
@@ -158,10 +157,7 @@ class LazyOutField(LazyField[T]):
         if state_index is None:
             state_index = StateIndex()
 
-        jobs = sorted(
-            graph.node(self._node.name).matching_jobs(state_index),
-            key=attrgetter("state_index"),
-        )
+        jobs = graph.node(self._node.name).matching_jobs(state_index)
 
         def retrieve_from_job(job: "Task[DefType]") -> ty.Any:
             if job.errored:

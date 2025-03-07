@@ -112,7 +112,9 @@ def copy_nested_files(
 
 # not sure if this might be useful for Function Task
 def template_update(
-    definition, output_dir: Path, map_copyfiles: dict[str, Path] | None = None
+    definition,
+    output_dir: Path | None = None,
+    map_copyfiles: dict[str, Path] | None = None,
 ):
     """
     Update all templates that are present in the input definition.
