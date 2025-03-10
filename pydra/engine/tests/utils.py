@@ -64,6 +64,8 @@ def run_submitter(
     """
     with Submitter(worker=plugin, cache_dir=cache_dir, environment=environment) as sub:
         results = sub(shell_def)
+    if results.errored:
+        raise RuntimeError(f"task {shell_def} failed:\n" + "\n".join(results.errors))
     return results.outputs
 
 

@@ -1,5 +1,6 @@
 import typing as ty
 import os
+from copy import copy
 from .helpers import execute
 from pathlib import Path
 from fileformats.generic import FileSet
@@ -128,14 +129,14 @@ class Container(Environment):
                         f"No support for generating bindings for {type(fileset)} types "
                         f"({fileset})"
                     )
-                copy = fld.copy_mode == FileSet.CopyMode.copy
+                copy_file = fld.copy_mode == FileSet.CopyMode.copy
 
                 host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
 
                 # Default to mounting paths as read-only, but respect existing modes
                 bindings[host_path] = (
                     env_path,
-                    "rw" if copy or isinstance(fld, shell.outarg) else "ro",
+                    "rw" if copy_file or isinstance(fld, shell.outarg) else "ro",
                 )
 
                 # Provide updated in-container paths to the command to be run. If a

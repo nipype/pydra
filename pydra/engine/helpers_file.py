@@ -159,7 +159,7 @@ def template_update_single(
     values: dict[str, ty.Any] = None,
     output_dir: Path | None = None,
     spec_type: str = "input",
-) -> Path | None:
+) -> Path | list[Path | None] | None:
     """Update a single template from the input_spec or output_spec
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
@@ -196,18 +196,19 @@ def template_update_single(
             return None
     # inputs_dict[field.name] is True or spec_type is output
     value = _template_formatting(field, definition, values)
-    # changing path so it is in the output_dir
     if output_dir and value is not None:
+        # changing path so it is in the output_dir
         # should be converted to str, it is also used for input fields that should be str
         if type(value) is list:
-            return [output_dir / val.name for val in value]
+            value = [output_dir / val.name for val in value]
         else:
-            return output_dir / value.name
-    else:
-        return None
+            value = output_dir / value.name
+    return value
 
 
-def _template_formatting(field, definition, values):
+def _template_formatting(
+    field: "shell.arg", definition: "ShellDef", values: dict[str, ty.Any]
+) -> Path | list[Path] | None:
     """Formatting the field template based on the values from inputs.
     Taking into account that the field with a template can be a MultiOutputFile
     and the field values needed in the template can be a list -
@@ -226,7 +227,7 @@ def _template_formatting(field, definition, values):
 
     Returns
     -------
-    formatted : str or list
+    formatted : Path or list[Path | None] or None
         formatted template
     """
     # if a template is a function it has to be run first with the inputs as the only arg
@@ -237,6 +238,8 @@ def _template_formatting(field, definition, values):
     # as default, we assume that keep_extension is True
     if isinstance(template, (tuple, list)):
         formatted = [_single_template_formatting(field, t, values) for t in template]
+        if any([val is None for val in formatted]):
+            return None
     else:
         assert isinstance(template, str)
         formatted = _single_template_formatting(field, template, values)

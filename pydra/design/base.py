@@ -8,7 +8,7 @@ from copy import copy
 from typing import Self
 import attrs.validators
 from attrs.converters import default_if_none
-from fileformats.generic import File
+from fileformats.generic import File, FileSet
 from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union, is_type
 from pydra.engine.helpers import (
     from_list_if_single,
@@ -58,6 +58,8 @@ def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
     if value is NO_DEFAULT or isinstance(value, attrs.Factory):
         return value
     if self_.type is ty.Callable and isinstance(value, ty.Callable):
+        return value
+    if isinstance(self_, Out) and TypeParser.contains_type(FileSet, self_.type):
         return value
     return TypeParser[self_.type](self_.type, label=self_.name)(value)
 

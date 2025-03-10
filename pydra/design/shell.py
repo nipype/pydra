@@ -3,6 +3,7 @@
 from __future__ import annotations
 import typing as ty
 import re
+import glob
 from collections import defaultdict
 import inspect
 from copy import copy
@@ -25,6 +26,7 @@ from pydra.design.base import (
 from pydra.utils.typing import (
     is_fileset_or_union,
     MultiInputObj,
+    TypeParser,
     is_optional,
     optional_type,
 )
@@ -439,6 +441,16 @@ def define(
             if inpt.position is None:
                 inpt.position = position_stack.pop(0)
 
+        # Convert string default values to callables that glob the files in the cwd
+        for outpt in parsed_outputs.values():
+            if (
+                isinstance(outpt, out)
+                and isinstance(outpt.default, str)
+                and TypeParser.contains_type(generic.FileSet, outpt.type)
+            ):
+                outpt.callable = GlobCallable(outpt.default)
+                outpt.default = NO_DEFAULT
+
         defn = make_task_def(
             ShellDef,
             ShellOutputs,
@@ -782,3 +794,16 @@ class _InputPassThrough:
 
     def __call__(self, inputs: ShellDef) -> ty.Any:
         return getattr(inputs, self.name)
+
+
+class GlobCallable:
+    """Callable that can be used to glob files"""
+
+    def __init__(self, pattern: str):
+        self.pattern = pattern
+
+    def __call__(self) -> generic.FileSet:
+        matches = glob.glob(self.pattern)
+        if not matches:
+            raise FileNotFoundError(f"No files found matching pattern: {self.pattern}")
+        return matches

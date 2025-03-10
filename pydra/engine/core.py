@@ -227,14 +227,8 @@ class Task(ty.Generic[DefType]):
 
     @property
     def output_names(self):
-        """Get the names of the outputs from the task's output_spec
-        (not everything has to be generated, see _generated_output_names).
-        """
+        """Get the names of the outputs from the task's output_spec"""
         return [f.name for f in attr.fields(self.definition.Outputs)]
-
-    @property
-    def _generated_output_names(self):
-        return self.output_names
 
     @property
     def can_resume(self):
@@ -286,7 +280,7 @@ class Task(ty.Generic[DefType]):
                     map_copyfiles[name] = copied_value
         self._inputs.update(
             template_update(
-                self.definition, self.output_dir, map_copyfiles=map_copyfiles
+                self.definition, output_dir=self.output_dir, map_copyfiles=map_copyfiles
             )
         )
         return self._inputs
