@@ -75,6 +75,7 @@ test = [
     "pytest-xdist <2.0",
     "pytest-rerunfailures",
     "pytest-timeout",
+    "pympler",
     "codecov",
     "fileformats-extras >=0.15a4",
     "numpy",
