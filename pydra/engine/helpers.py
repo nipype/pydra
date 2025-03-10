@@ -16,11 +16,14 @@ import attrs
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
 from fileformats.core import FileSet
+from pydra.utils.typing import StateArray
+
 
 if ty.TYPE_CHECKING:
     from .specs import TaskDef, Result, WorkflowOutputs, WorkflowDef
     from .core import Task
     from pydra.design.base import Field
+    from pydra.engine.lazy import LazyField
 
 
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
@@ -695,3 +698,27 @@ def is_lazy(obj):
     from pydra.engine.lazy import LazyField
 
     return isinstance(obj, LazyField)
+
+
+T = ty.TypeVar("T")
+U = ty.TypeVar("U")
+
+
+def state_array_support(
+    function: ty.Callable[T, U],
+) -> ty.Callable[T | StateArray[T], U | StateArray[U]]:
+    """
+    Decorator to convert a allow a function to accept and return StateArray objects,
+    where the function is applied to each element of the StateArray.
+    """
+
+    def state_array_wrapper(
+        value: "T | StateArray[T] | LazyField[T]",
+    ) -> "U | StateArray[U] | LazyField[U]":
+        if is_lazy(value):
+            return value
+        if isinstance(value, StateArray):
+            return StateArray(function(v) for v in value)
+        return function(value)
+
+    return state_array_wrapper

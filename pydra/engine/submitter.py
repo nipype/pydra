@@ -20,7 +20,7 @@ from .helpers import (
 from pydra.utils.hash import PersistentCache
 from .state import StateIndex
 from pydra.utils.typing import StateArray
-from pydra.engine.lazy import LazyField
+from pydra.engine.lazy import LazyField, LazyOutField
 from .audit import Audit
 from .core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
@@ -537,6 +537,10 @@ class NodeExecution(ty.Generic[DefType]):
         self.queued = {}
         self.running = {}  # Not used in logic, but may be useful for progress tracking
         self.unrunnable = defaultdict(list)
+        # Prepare the state to be run
+        if self.state:
+            self.state.prepare_states(self.node.state_values)
+            self.state.prepare_inputs()
         self.state_names = self.node.state.names if self.node.state else []
         self.workflow = workflow
         self.graph = None
@@ -566,6 +570,21 @@ class NodeExecution(ty.Generic[DefType]):
         if self._tasks is None:
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
+
+    def translate_index(self, index: StateIndex, lf: LazyOutField):
+        state_key = f"{lf._node.name}.{lf._field}"
+        try:
+            upstream_state = self.state.inner_inputs[state_key]
+        except KeyError:
+            state_index = StateIndex(index)
+        else:
+            state_index = StateIndex(
+                zip(
+                    upstream_state.keys_final,
+                    upstream_state.ind_l_final[index[state_key]],
+                )
+            )
+        return state_index
 
     def matching_jobs(self, index: StateIndex = StateIndex()) -> "StateArray[Task]":
         """Get the jobs that match a given state index.
@@ -702,23 +721,22 @@ class NodeExecution(ty.Generic[DefType]):
         if not self.node.state:
             return {None: self.node._definition}
         split_defs = {}
-        self.state.prepare_states(self.node.state_values)
-        self.state.prepare_inputs()
         for input_ind in self.node.state.inputs_ind:
             resolved = {}
             for inpt_name in set(self.node.input_names):
                 value = getattr(self._definition, inpt_name)
+                state_key = f"{self.node.name}.{inpt_name}"
                 if isinstance(value, LazyField):
                     value = resolved[inpt_name] = value._get_value(
                         workflow=self.workflow,
                         graph=self.graph,
-                        state_index=StateIndex(input_ind),
+                        state_index=input_ind,
                     )
-                if f"{self.node.name}.{inpt_name}" in input_ind:
+                elif state_key in input_ind:
                     resolved[inpt_name] = self.node.state._get_element(
                         value=value,
                         field_name=inpt_name,
-                        ind=input_ind[f"{self.node.name}.{inpt_name}"],
+                        ind=input_ind[state_key],
                     )
             split_defs[StateIndex(input_ind)] = attrs.evolve(
                 self.node._definition, **resolved

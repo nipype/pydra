@@ -27,14 +27,18 @@ class StateIndex:
 
     indices: OrderedDict[str, int]
 
-    def __init__(self, indices: dict[str, int] | None = None):
+    def __init__(
+        self, indices: dict[str, int] | ty.Sequence[tuple[str, int]] | None = None
+    ):
         # We used ordered dict here to ensure the keys are always in the same order
         # while OrderedDict is not strictly necessary for CPython 3.7+, we use it to
         # signal that the order of the keys is important
         if indices is None:
             self.indices = OrderedDict()
         else:
-            self.indices = OrderedDict(sorted(indices.items()))
+            if isinstance(indices, dict):
+                indices = indices.items()
+            self.indices = OrderedDict(sorted(indices))
 
     def __len__(self) -> int:
         return len(self.indices)

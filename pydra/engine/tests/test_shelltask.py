@@ -1674,9 +1674,11 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
     class Shelly1(ShellDef["Shelly1.Outputs"]):
         executable = "shelly"
 
+        arg: str = shell.arg(argstr=None)
+
         class Outputs(ShellOutputs):
             file: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
@@ -1700,12 +1702,12 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
             )
 
     @workflow.define(outputs=["touch_file", "out1", "cp_file", "out2"])
-    def Workflow(cmd1, cmd2, args):
+    def Workflow(cmd1, cmd2, arg):
 
         shelly1 = workflow.add(
             Shelly1(
                 executable=cmd1,
-                additional_args=args,
+                arg=arg,
             )
         )
         shelly2 = workflow.add(
@@ -1717,9 +1719,9 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
 
         return shelly1.file, shelly1.stdout, shelly2.out_file, shelly2.stdout
 
-    wf = Workflow(cmd1="touch", cmd2="cp", args=File.mock("newfile.txt"))
+    wf = Workflow(cmd1="touch", cmd2="cp", arg="newfile.txt")
 
-    with Submitter(plugin="debug") as sub:
+    with Submitter(plugin="debug", cache_dir=tmp_path) as sub:
         res = sub(wf)
 
     assert res.outputs.out1 == ""
@@ -1738,14 +1740,19 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
 
     @shell.define
     class Shelly1(ShellDef["Shelly1.Outputs"]):
+        executable = "shelly"
+        arg: str = shell.outarg(argstr=None)
+
         class Outputs(ShellOutputs):
+
             file: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
     @shell.define
     class Shelly2(ShellDef["Shelly2.Outputs"]):
+        executable = "shelly2"
         orig_file: str = shell.arg(
             position=1,
             help="output file",
@@ -1761,12 +1768,12 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
             )
 
     @workflow.define(outputs=["touch_file", "out1", "cp_file", "out2"])
-    def Workflow(cmd1, cmd2, args):
+    def Workflow(cmd1, cmd2, arg):
 
         shelly1 = workflow.add(
             Shelly1(
                 executable=cmd1,
-                additional_args=args,
+                arg=arg,
             )
         )
         shelly2 = workflow.add(
@@ -1778,7 +1785,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
 
         return shelly1.file, shelly1.stdout, shelly2.out_file, shelly2.stdout
 
-    wf = Workflow(cmd1="touch", cmd2="cp", args=File.mock("newfile.txt"))
+    wf = Workflow(cmd1="touch", cmd2="cp", arg="newfile.txt")
 
     with Submitter(plugin="debug") as sub:
         res = sub(wf)
@@ -1861,14 +1868,20 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
 
     @shell.define
     class Shelly1(ShellDef["Shelly1.Outputs"]):
+        executable = "shelly"
+
+        arg: str = shell.arg(argstr=None)
+
         class Outputs(ShellOutputs):
             file: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
     @shell.define
     class Shelly2(ShellDef["Shelly2.Outputs"]):
+        executable = "shelly2"
+
         orig_file: str = shell.arg(
             position=1,
             help="output file",
@@ -1889,7 +1902,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
         shelly1 = workflow.add(
             Shelly1(
                 executable=cmd1,
-            ).split("args", args=args)
+            ).split("arg", arg=args)
         )
         shelly2 = workflow.add(
             Shelly2(
@@ -1903,10 +1916,10 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
     wf = Workflow(
         cmd1="touch",
         cmd2="cp",
-        args=[File.mock("newfile_1.txt"), File.mock("newfile_2.txt")],
+        args=["newfile_1.txt", "newfile_2.txt"],
     )
 
-    with Submitter(plugin="debug") as sub:
+    with Submitter(plugin="debug", cache_dir=tmp_path) as sub:
         res = sub(wf)
 
     assert res.outputs.out1 == ["", ""]
@@ -3288,7 +3301,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
     # An exception should be raised because the second mandatory output does not exist
     with pytest.raises(
         ValueError,
-        match=r"file system path provided to mandatory field .* does not exist",
+        match=r"file system path\(s\) provided to mandatory field .* does not exist",
     ):
         shelly(cache_dir=tmp_path)
     # checking if the first output was created

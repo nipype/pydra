@@ -16,9 +16,9 @@ from typing import Self
 import attrs
 from attrs.converters import default_if_none
 import cloudpickle as cp
-from fileformats.generic import FileSet
+from fileformats.generic import FileSet, File
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.typing import is_optional, optional_type, MultiInputObj
+from pydra.utils.typing import is_optional, optional_type
 from .helpers import (
     attrs_fields,
     attrs_values,
@@ -28,6 +28,7 @@ from .helpers import (
     ensure_list,
     parse_format_string,
     fields_in_formatter,
+    state_array_support,
 )
 from .helpers_file import template_update, template_update_single
 from . import helpers_state as hlpst
@@ -1032,6 +1033,16 @@ class ShellOutputs(TaskOutputs):
 ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
+@state_array_support
+def additional_args_converter(value: ty.Any) -> list[str]:
+    """Convert additional arguments to a list of strings."""
+    if isinstance(value, str):
+        return shlex.split(value)
+    if not isinstance(value, ty.Sequence):
+        return [value]
+    return list(value)
+
+
 @attrs.define(kw_only=True, auto_attribs=False, eq=False)
 class ShellDef(TaskDef[ShellOutputsType]):
 
@@ -1039,10 +1050,12 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     BASE_NAMES = ["additional_args"]
 
-    additional_args: MultiInputObj[str] = shell.arg(
+    additional_args: list[str | File] = shell.arg(
         name="additional_args",
         default=attrs.Factory(list),
-        type=MultiInputObj[str],
+        converter=additional_args_converter,
+        type=list[str | File],
+        sep=" ",
         help="Additional free-form arguments to append to the end of the command.",
     )
 
