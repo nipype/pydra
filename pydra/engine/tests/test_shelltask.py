@@ -1,4 +1,3 @@
-from glob import glob
 import typing as ty
 import os
 import sys
@@ -7,7 +6,7 @@ from pathlib import Path
 import re
 import stat
 from pydra.engine.submitter import Submitter
-from pydra.design import shell, workflow
+from pydra.design import shell, workflow, python
 from pydra.engine.specs import (
     ShellOutputs,
     ShellDef,
@@ -248,8 +247,14 @@ def test_wf_shell_cmd_1(plugin, tmp_path):
 
     @workflow.define
     def Workflow(cmd1, cmd2):
-        shelly_pwd = workflow.add(shell.define(cmd1))
-        shelly_ls = workflow.add(shell.define(cmd2, additional_args=shelly_pwd.stdout))
+        shelly_pwd = workflow.add(shell.define(cmd1)())
+
+        @python.define
+        def StripAndListify(x: str) -> list[str]:
+            return [x.strip()]
+
+        listify = workflow.add(StripAndListify(x=shelly_pwd.stdout))
+        shelly_ls = workflow.add(shell.define(cmd2)(additional_args=listify.out))
         return shelly_ls.stdout
 
     wf = Workflow(cmd1="pwd", cmd2="ls")
@@ -1591,30 +1596,32 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = "touch"
 
+        arg: str = shell.arg()
+
         class Outputs(ShellOutputs):
             out1: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
-    @workflow.define
-    def Workflow(cmd, args):
+    @workflow.define(outputs=["out_f", "stdout"])
+    def Workflow(cmd, arg):
 
         shelly = workflow.add(
             Shelly(
                 executable=cmd,
-                additional_args=args,
+                arg=arg,
             )
         )
 
         return shelly.out1, shelly.stdout
 
-    wf = Workflow(cmd="touch", args=File.mock("newfile.txt"))
+    wf = Workflow(cmd="touch", arg="newfile.txt")
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin_dask_opt, cache_dir=tmp_path) as sub:
         res = sub(wf)
 
-    assert res.outputs.out == ""
+    assert res.outputs.stdout == ""
     assert res.outputs.out_f.fspath.exists()
     assert res.outputs.out_f.fspath.parent.parent == tmp_path
 
@@ -1628,25 +1635,27 @@ def test_wf_shell_cmd_2a(plugin, tmp_path):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = "shelly"
 
+        arg: str = shell.arg()
+
         class Outputs(ShellOutputs):
             out1: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
-    @workflow.define
-    def Workflow(cmd, args):
+    @workflow.define(outputs=["out_f", "out"])
+    def Workflow(cmd, arg):
 
         shelly = workflow.add(
             Shelly(
                 executable=cmd,
-                additional_args=args,
+                arg=arg,
             )
         )
 
         return shelly.out1, shelly.stdout
 
-    wf = Workflow(cmd="touch", args=(File.mock("newfile.txt"),))
+    wf = Workflow(cmd="touch", arg="newfile.txt")
 
     with Submitter(plugin="debug") as sub:
         res = sub(wf)
@@ -1673,6 +1682,9 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
 
     @shell.define
     class Shelly2(ShellDef["Shelly2.Outputs"]):
+
+        executable = "shelly2"
+
         orig_file: File = shell.arg(
             position=1,
             help="output file",
@@ -2491,7 +2503,7 @@ def test_shell_cmd_outputspec_wf_1(plugin, tmp_path):
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
 
-        executable = "placeholder"
+        executable = "shelly"
 
         class Outputs(ShellOutputs):
             newfile: File = shell.outarg(path_template="newfile_tmp.txt")

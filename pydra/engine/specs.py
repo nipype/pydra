@@ -18,7 +18,7 @@ from attrs.converters import default_if_none
 import cloudpickle as cp
 from fileformats.generic import FileSet
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.typing import is_optional, optional_type
+from pydra.utils.typing import is_optional, optional_type, MultiInputObj
 from .helpers import (
     attrs_fields,
     attrs_values,
@@ -1039,11 +1039,10 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     BASE_NAMES = ["additional_args"]
 
-    additional_args: list[str] = shell.arg(
+    additional_args: MultiInputObj[str] = shell.arg(
         name="additional_args",
         default=attrs.Factory(list),
-        type=list[str],
-        sep=" ",
+        type=MultiInputObj[str],
         help="Additional free-form arguments to append to the end of the command.",
     )
 

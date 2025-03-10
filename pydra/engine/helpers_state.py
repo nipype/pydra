@@ -629,7 +629,7 @@ def inputs_types_to_dict(name, inputs):
 
 
 def unwrap_splitter(
-    splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...]]
+    splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...]],
 ) -> ty.Iterable[str]:
     """Unwraps a splitter into a flat list of fields that are split over, i.e.
     [("a", "b"), "c"] -> ["a", "b", "c"]
