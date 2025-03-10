@@ -947,10 +947,10 @@ def parse_doc_string(doc_str: str) -> tuple[dict[str, str], dict[str, str] | lis
     for return_val, return_help in re.findall(r":return (\w+): (.*)", doc_str):
         output_helps[return_val] = return_help
     google_args_match = re.match(
-        r".*\n\s+Args:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+        r".*\n\s*Args:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
     )
     google_returns_match = re.match(
-        r".*\n\s+Returns:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+        r".*\n\s*Returns:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
     )
     if google_args_match:
         args_str = google_args_match.group(1)
@@ -967,12 +967,12 @@ def parse_doc_string(doc_str: str) -> tuple[dict[str, str], dict[str, str] | lis
             return_help = white_space_re.sub(" ", return_help).strip()
             output_helps[return_name] = return_help
     numpy_args_match = re.match(
-        r".*\n\s+Parameters\n\s*---------- *\n(.*)",
+        r".*\n\s+Parameters\n\s*----------\s*\n(.*)",
         doc_str,
         flags=re.DOTALL | re.MULTILINE,
     )
     numpy_returns_match = re.match(
-        r".*\n\s+Returns\n\s+------- *\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+        r".*\n\s+Returns\n\s*-------\s*\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
     )
     if numpy_args_match:
         args_str = numpy_args_match.group(1)
