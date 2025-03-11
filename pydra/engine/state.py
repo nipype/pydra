@@ -2,7 +2,6 @@
 
 from copy import deepcopy
 import itertools
-from collections import OrderedDict
 from functools import reduce
 import typing as ty
 from . import helpers_state as hlpst
@@ -13,117 +12,6 @@ op = {".": zip, "*": itertools.product}
 
 
 OutputsType = ty.TypeVar("OutputsType")
-
-
-class StateIndex:
-    """The collection of state indices that identifies a single element within the list
-    of tasks generated from a node
-
-    Parameters
-    ----------
-    indices : dict[str, int]
-        a dictionary of indices for each input field
-    """
-
-    indices: OrderedDict[str, int]
-
-    def __init__(
-        self, indices: dict[str, int] | ty.Sequence[tuple[str, int]] | None = None
-    ):
-        # We used ordered dict here to ensure the keys are always in the same order
-        # while OrderedDict is not strictly necessary for CPython 3.7+, we use it to
-        # signal that the order of the keys is important
-        if indices is None:
-            self.indices = OrderedDict()
-        else:
-            if isinstance(indices, dict):
-                indices = indices.items()
-            self.indices = OrderedDict(sorted(indices))
-
-    def __len__(self) -> int:
-        return len(self.indices)
-
-    def __iter__(self) -> ty.Generator[str, None, None]:
-        return iter(self.indices)
-
-    def __getitem__(self, key: str) -> int:
-        return self.indices[key]
-
-    def __lt__(self, other: "StateIndex") -> bool:
-        if list(self.indices) != list(other.indices):
-            raise ValueError(
-                f"StateIndex {self} does not contain the same indices in the same order "
-                f"as {other}: {list(self.indices)} != {list(other.indices)}"
-            )
-        return tuple(self.indices.items()) < tuple(other.indices.items())
-
-    def __repr__(self) -> str:
-        return (
-            "StateIndex(" + ", ".join(f"{n}={v}" for n, v in self.indices.items()) + ")"
-        )
-
-    def __hash__(self):
-        return hash(tuple(self.indices.items()))
-
-    def __eq__(self, other) -> bool:
-        return self.indices == other.indices
-
-    def __str__(self) -> str:
-        return "__".join(f"{n}-{i}" for n, i in self.indices.items())
-
-    def __bool__(self) -> bool:
-        return bool(self.indices)
-
-    def subset(self, state_names: ty.Iterable[str]) -> ty.Self:
-        """Create a new StateIndex with only the specified fields
-
-        Parameters
-        ----------
-        fields : list[str]
-            the fields to keep in the new StateIndex
-
-        Returns
-        -------
-        StateIndex
-            a new StateIndex with only the specified fields
-        """
-        return type(self)({k: v for k, v in self.indices.items() if k in state_names})
-
-    def missing(self, state_names: ty.Iterable[str]) -> ty.List[str]:
-        """Return the fields that are missing from the StateIndex
-
-        Parameters
-        ----------
-        fields : list[str]
-            the fields to check for
-
-        Returns
-        -------
-        list[str]
-            the fields that are missing from the StateIndex
-        """
-        return [f for f in state_names if f not in self.indices]
-
-    def matches(self, other: "StateIndex") -> bool:
-        """Check if the indices that are present in the other StateIndex match
-
-        Parameters
-        ----------
-        other : StateIndex
-            the other StateIndex to compare against
-
-        Returns
-        -------
-        bool
-            True if all the indices in the other StateIndex match
-        """
-        if isinstance(other, dict):
-            other = StateIndex(other)
-        if not set(self.indices).issuperset(other.indices):
-            raise ValueError(
-                f"StateIndex {self} does not contain all the indices in {other}"
-            )
-        return all(self.indices[k] == v for k, v in other.indices.items())
 
 
 class State:
@@ -1314,7 +1202,7 @@ class State:
             keys = [op_single]
             return val, keys
 
-    def _get_element(self, value: ty.Any, field_name: str, ind: int):
+    def _get_element(self, value: ty.Any, field_name: str, ind: int) -> ty.Any:
         """
         Extracting element of the inputs taking into account
         container dimension of the specific element that can be set in self.state.cont_dim.
@@ -1329,6 +1217,11 @@ class State:
             name of the input field
         ind : int
             index of the element
+
+        Returns
+        -------
+        Any
+            specific element of the input field
         """
         if f"{self.name}.{field_name}" in self.cont_dim:
             return list(

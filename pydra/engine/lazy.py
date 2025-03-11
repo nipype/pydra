@@ -9,7 +9,6 @@ if ty.TYPE_CHECKING:
     from .submitter import DiGraph, NodeExecution
     from .core import Task, Workflow
     from .specs import TaskDef
-    from .state import StateIndex
 
 
 T = ty.TypeVar("T")
@@ -49,7 +48,7 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
         self,
         workflow: "Workflow",
         graph: "DiGraph[NodeExecution]",
-        state_index: "StateIndex | None" = None,
+        state_index: int | None = None,
     ) -> ty.Any:
         """Return the value of a lazy field.
 
@@ -59,7 +58,7 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
             the workflow object
         graph: DiGraph[NodeExecution]
             the graph representing the execution state of the workflow
-        state_index : StateIndex, optional
+        state_index : int, optional
             the state index of the field to access
 
         Returns
@@ -95,7 +94,7 @@ class LazyInField(LazyField[T]):
         self,
         workflow: "Workflow",
         graph: "DiGraph[NodeExecution]",
-        state_index: "StateIndex | None" = None,
+        state_index: int | None = None,
     ) -> ty.Any:
         """Return the value of a lazy field.
 
@@ -105,7 +104,7 @@ class LazyInField(LazyField[T]):
             the workflow object
         graph: DiGraph[NodeExecution]
             the graph representing the execution state of the workflow
-        state_index : StateIndex, optional
+        state_index : int, optional
             the state index of the field to access
 
         Returns
@@ -134,7 +133,7 @@ class LazyOutField(LazyField[T]):
         self,
         workflow: "Workflow",
         graph: "DiGraph[NodeExecution]",
-        state_index: "StateIndex | None" = None,
+        state_index: int | None = None,
     ) -> ty.Any:
         """Return the value of a lazy field.
 
@@ -144,7 +143,7 @@ class LazyOutField(LazyField[T]):
             the workflow object
         graph: DiGraph[NodeExecution]
             the graph representing the execution state of the workflow
-        state_index : StateIndex, optional
+        state_index : int, optional
             the state index of the field to access
 
         Returns
@@ -152,10 +151,6 @@ class LazyOutField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        from pydra.engine.state import StateIndex
-
-        if state_index is None:
-            state_index = StateIndex()
 
         jobs = graph.node(self._node.name).matching_jobs(state_index)
 

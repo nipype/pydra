@@ -89,7 +89,7 @@ class Task(ty.Generic[DefType]):
     definition: DefType
     submitter: "Submitter | None"
     environment: "Environment | None"
-    state_index: state.StateIndex
+    state_index: int
     bindings: dict[str, ty.Any] | None = None  # Bindings for the task environment
 
     _inputs: dict[str, ty.Any] | None = None
@@ -100,7 +100,7 @@ class Task(ty.Generic[DefType]):
         submitter: "Submitter",
         name: str,
         environment: "Environment | None" = None,
-        state_index: "state.StateIndex | None" = None,
+        state_index: int | None = None,
         hooks: TaskHooks | None = None,
     ):
         """
@@ -119,9 +119,6 @@ class Task(ty.Generic[DefType]):
             3. No cache or other process -> start
             4. Two or more concurrent new processes get to start
         """
-
-        if state_index is None:
-            state_index = state.StateIndex()
 
         if not isinstance(definition, TaskDef):
             raise ValueError(

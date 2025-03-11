@@ -18,9 +18,8 @@ from .helpers import (
     attrs_values,
 )
 from pydra.utils.hash import PersistentCache
-from .state import StateIndex
 from pydra.utils.typing import StateArray
-from pydra.engine.lazy import LazyField, LazyOutField
+from pydra.engine.lazy import LazyField
 from .audit import Audit
 from .core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
@@ -502,19 +501,19 @@ class NodeExecution(ty.Generic[DefType]):
     submitter: Submitter
 
     # List of tasks that were completed successfully
-    successful: dict[StateIndex, list["Task[DefType]"]]
+    successful: dict[int, list["Task[DefType]"]]
     # List of tasks that failed
-    errored: dict[StateIndex, "Task[DefType]"]
+    errored: dict[int, "Task[DefType]"]
     # List of tasks that couldn't be run due to upstream errors
-    unrunnable: dict[StateIndex, list["Task[DefType]"]]
+    unrunnable: dict[int, list["Task[DefType]"]]
     # List of tasks that are queued
-    queued: dict[StateIndex, "Task[DefType]"]
+    queued: dict[int, "Task[DefType]"]
     # List of tasks that are queued
-    running: dict[StateIndex, tuple["Task[DefType]", datetime]]
+    running: dict[int, tuple["Task[DefType]", datetime]]
     # List of tasks that are blocked on other tasks to complete before they can be run
-    blocked: dict[StateIndex, "Task[DefType]"] | None
+    blocked: dict[int, "Task[DefType]"] | None
 
-    _tasks: dict[StateIndex | None, "Task[DefType]"] | None
+    _tasks: dict[int | None, "Task[DefType]"] | None
 
     workflow: "Workflow"
 
@@ -538,9 +537,12 @@ class NodeExecution(ty.Generic[DefType]):
         self.running = {}  # Not used in logic, but may be useful for progress tracking
         self.unrunnable = defaultdict(list)
         # Prepare the state to be run
-        if self.state:
+        if node.state:
+            self.state = deepcopy(node.state)
             self.state.prepare_states(self.node.state_values)
             self.state.prepare_inputs()
+        else:
+            self.state = None
         self.state_names = self.node.state.names if self.node.state else []
         self.workflow = workflow
         self.graph = None
@@ -562,50 +564,34 @@ class NodeExecution(ty.Generic[DefType]):
         return self.node._definition
 
     @property
-    def state(self) -> "State":
-        return self.node.state
-
-    @property
     def tasks(self) -> ty.Iterable["Task[DefType]"]:
         if self._tasks is None:
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def translate_index(self, index: StateIndex, lf: LazyOutField):
-        state_key = f"{lf._node.name}.{lf._field}"
-        try:
-            upstream_state = self.state.inner_inputs[state_key]
-        except KeyError:
-            state_index = StateIndex(index)
-        else:
-            state_index = StateIndex(
-                zip(
-                    upstream_state.keys_final,
-                    upstream_state.ind_l_final[index[state_key]],
-                )
-            )
-        return state_index
-
-    def matching_jobs(self, index: StateIndex = StateIndex()) -> "StateArray[Task]":
+    def matching_jobs(self, index: int | None = None) -> "StateArray[Task]":
         """Get the jobs that match a given state index.
 
         Parameters
         ----------
-        index : StateIndex, optional
-            The state index of the task to get, by default StateIndex()
+        index : int, optional
+            The index of the state of the task to get, by default None
+
+        Returns
+        -------
+        matching : StateArray[Task]
+            The tasks that match the given index
         """
         matching = StateArray()
         if self.tasks:
-            task_index = next(iter(self._tasks)) if self._tasks else StateIndex()
-            if len(task_index) > len(index):
+            try:
+                matching.append(self._tasks[index])
+            except KeyError:
                 # Select matching tasks and return them in nested state-array objects
                 for ind, task in self._tasks.items():
                     if ind.matches(index):
                         matching.append(task)
-            else:
-                matching.append(
-                    self._tasks[index.subset(task_index)]
-                )  # Return a single task
+
         return matching
 
     @property
@@ -684,7 +670,7 @@ class NodeExecution(ty.Generic[DefType]):
     def _resolve_lazy_inputs(
         self,
         task_def: "TaskDef",
-        state_index: "StateIndex | None" = None,
+        state_index: int | None = None,
     ) -> "TaskDef":
         """Resolves lazy fields in the task definition by replacing them with their
         actual values calculated by upstream jobs.
@@ -693,7 +679,7 @@ class NodeExecution(ty.Generic[DefType]):
         ----------
         task_def : TaskDef
             The definition to resolve the lazy fields of
-        state_index : StateIndex, optional
+        state_index : int, optional
             The state index for the workflow, by default None
 
         Returns
@@ -709,7 +695,7 @@ class NodeExecution(ty.Generic[DefType]):
                 )
         return attrs.evolve(task_def, **resolved)
 
-    def _split_definition(self) -> dict[StateIndex, "TaskDef[OutputType]"]:
+    def _split_definition(self) -> dict[int, "TaskDef[OutputType]"]:
         """Split the definition into the different states it will be run over
 
         Parameters
@@ -720,27 +706,25 @@ class NodeExecution(ty.Generic[DefType]):
         # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
         if not self.node.state:
             return {None: self.node._definition}
-        split_defs = {}
-        for input_ind in self.node.state.inputs_ind:
+        split_defs = []
+        for i, input_ind in enumerate(self.node.state.inputs_ind):
             resolved = {}
             for inpt_name in set(self.node.input_names):
                 value = getattr(self._definition, inpt_name)
                 state_key = f"{self.node.name}.{inpt_name}"
                 if isinstance(value, LazyField):
-                    value = resolved[inpt_name] = value._get_value(
+                    resolved[inpt_name] = value._get_value(
                         workflow=self.workflow,
                         graph=self.graph,
-                        state_index=input_ind,
+                        state_index=i,
                     )
                 elif state_key in input_ind:
                     resolved[inpt_name] = self.node.state._get_element(
                         value=value,
                         field_name=inpt_name,
-                        ind=input_ind[state_key],
+                        ind=i,
                     )
-            split_defs[StateIndex(input_ind)] = attrs.evolve(
-                self.node._definition, **resolved
-            )
+            split_defs.append(attrs.evolve(self.node._definition, **resolved))
         return split_defs
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Task[DefType]"]:
