@@ -879,9 +879,6 @@ class State:
         if self.other_states:
             st: State
             for nm, (st, _) in self.other_states.items():
-                # I think now this if is never used
-                if not hasattr(st, "states_ind"):
-                    st.prepare_states(self.inputs, cont_dim=cont_dim)
                 self.inputs.update(st.inputs)
                 self.cont_dim.update(st.cont_dim)
 

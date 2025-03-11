@@ -538,7 +538,7 @@ class NodeExecution(ty.Generic[DefType]):
         self.unrunnable = defaultdict(list)
         # Prepare the state to be run
         if node.state:
-            self.state = deepcopy(node.state)
+            self.state = node.state
             self.state.prepare_states(self.node.state_values)
             self.state.prepare_inputs()
         else:
@@ -564,34 +564,43 @@ class NodeExecution(ty.Generic[DefType]):
         return self.node._definition
 
     @property
-    def tasks(self) -> ty.Iterable["Task[DefType]"]:
+    def tasks(self) -> ty.Generator["Task[DefType]", None, None]:
         if self._tasks is None:
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def matching_jobs(self, index: int | None = None) -> "StateArray[Task]":
+    def get_jobs(
+        self, index: int | None = None, as_array: bool = False
+    ) -> "Task | StateArray[Task]":
         """Get the jobs that match a given state index.
 
         Parameters
         ----------
         index : int, optional
             The index of the state of the task to get, by default None
+        as_array : bool, optional
+            Whether to return the tasks in a state-array object, by default if the index
+            matches
 
         Returns
         -------
-        matching : StateArray[Task]
-            The tasks that match the given index
+        matching : Task | StateArray[Task]
+            The task or tasks that match the given index
         """
         matching = StateArray()
         if self.tasks:
             try:
-                matching.append(self._tasks[index])
+                task = self._tasks[index]
             except KeyError:
+                if index is None:
+                    return StateArray(self._tasks.values())
                 # Select matching tasks and return them in nested state-array objects
                 for ind, task in self._tasks.items():
-                    if ind.matches(index):
-                        matching.append(task)
-
+                    matching.append(task)
+            else:
+                if not as_array:
+                    return task
+                matching.append(task)
         return matching
 
     @property
@@ -657,7 +666,7 @@ class NodeExecution(ty.Generic[DefType]):
                 name=self.node.name,
             )
         else:
-            for index, split_defn in self._split_definition().items():
+            for index, split_defn in enumerate(self._split_definition()):
                 yield Task(
                     definition=split_defn,
                     submitter=self.submitter,
@@ -707,7 +716,7 @@ class NodeExecution(ty.Generic[DefType]):
         if not self.node.state:
             return {None: self.node._definition}
         split_defs = []
-        for i, input_ind in enumerate(self.node.state.inputs_ind):
+        for input_ind in self.node.state.inputs_ind:
             resolved = {}
             for inpt_name in set(self.node.input_names):
                 value = getattr(self._definition, inpt_name)
@@ -716,13 +725,13 @@ class NodeExecution(ty.Generic[DefType]):
                     resolved[inpt_name] = value._get_value(
                         workflow=self.workflow,
                         graph=self.graph,
-                        state_index=i,
+                        state_index=input_ind[state_key],
                     )
                 elif state_key in input_ind:
                     resolved[inpt_name] = self.node.state._get_element(
                         value=value,
                         field_name=inpt_name,
-                        ind=i,
+                        ind=input_ind[state_key],
                     )
             split_defs.append(attrs.evolve(self.node._definition, **resolved))
         return split_defs
@@ -754,7 +763,8 @@ class NodeExecution(ty.Generic[DefType]):
             pred: NodeExecution
             is_runnable = True
             for pred in graph.predecessors[self.node.name]:
-                pred_inds = [j.state_index for j in pred.matching_jobs(index)]
+                pred_jobs: StateArray[Task] = pred.get_jobs(index, as_array=True)
+                pred_inds = [j.state_index for j in pred_jobs]
                 if not all(i in pred.successful for i in pred_inds):
                     is_runnable = False
                     blocked = True

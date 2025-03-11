@@ -1089,6 +1089,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         self._check_resolved()
         self._check_rules()
         # Drop none/empty values and optional path fields that are set to false
+        values = copy(values)  # Create a copy so we can drop items from the dictionary
         for field in list_fields(self):
             fld_value = values[field.name]
             if fld_value is None or (is_multi_input(field.type) and fld_value == []):
@@ -1185,7 +1186,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
             call_args_val = {}
             for argnm in call_args.args:
                 if argnm == "field":
-                    call_args_val[argnm] = value
+                    call_args_val[argnm] = field
                 elif argnm == "inputs":
                     call_args_val[argnm] = values
                 else:
@@ -1223,31 +1224,31 @@ class ShellDef(TaskDef[ShellOutputsType]):
             and isinstance(value, ty.Iterable)
             and not isinstance(value, (str, bytes))
         ):
-            field.argstr = field.argstr.replace("...", "")
+            argstr = field.argstr.replace("...", "")
             # if argstr has a more complex form, with "{input_field}"
-            if "{" in field.argstr and "}" in field.argstr:
+            if "{" in argstr and "}" in argstr:
                 argstr_formatted_l = []
                 for val in value:
                     split_values = copy(values)
                     split_values[field.name] = val
-                    argstr_f = argstr_formatting(field.argstr, split_values)
+                    argstr_f = argstr_formatting(argstr, split_values)
                     argstr_formatted_l.append(f" {argstr_f}")
-                cmd_el_str = field.sep.join(argstr_formatted_l)
+                cmd_el_str = " ".join(argstr_formatted_l)
             else:  # argstr has a simple form, e.g. "-f", or "--f"
-                cmd_el_str = field.sep.join([f" {field.argstr} {val}" for val in value])
+                cmd_el_str = " ".join([f" {argstr} {val}" for val in value])
         else:
             # in case there are ... when input is not a list
-            field.argstr = field.argstr.replace("...", "")
+            argstr = field.argstr.replace("...", "")
             if isinstance(value, ty.Iterable) and not isinstance(value, (str, bytes)):
                 cmd_el_str = field.sep.join([str(val) for val in value])
                 value = cmd_el_str
             # if argstr has a more complex form, with "{input_field}"
-            if "{" in field.argstr and "}" in field.argstr:
-                cmd_el_str = field.argstr.replace(f"{{{field.name}}}", str(value))
+            if "{" in argstr and "}" in argstr:
+                cmd_el_str = argstr.replace(f"{{{field.name}}}", str(value))
                 cmd_el_str = argstr_formatting(cmd_el_str, values)
             else:  # argstr has a simple form, e.g. "-f", or "--f"
                 if value:
-                    cmd_el_str = f"{field.argstr} {value}"
+                    cmd_el_str = f"{argstr} {value}"
                 else:
                     cmd_el_str = ""
         return split_cmd(cmd_el_str)

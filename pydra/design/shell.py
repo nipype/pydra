@@ -28,7 +28,6 @@ from pydra.utils.typing import (
     MultiInputObj,
     TypeParser,
     is_optional,
-    optional_type,
 )
 
 if ty.TYPE_CHECKING:
@@ -85,7 +84,7 @@ class arg(Arg):
         If nothing is provided the field will be inserted between all fields with
         nonnegative positions and fields with negative positions.
     sep: str, optional
-        A separator if a list is provided as a value.
+        A separator if a sequence type is provided as a value, by default " ".
     container_path: bool, optional
         If True a path will be consider as a path inside the container (and not as a
         local path, by default it is False
@@ -99,44 +98,10 @@ class arg(Arg):
 
     argstr: str | None = ""
     position: int | None = None
-    sep: str | None = attrs.field()
+    sep: str = " "
     allowed_values: list | None = None
     container_path: bool = False  # IS THIS STILL USED??
     formatter: ty.Callable | None = None
-
-    @sep.default
-    def _sep_default(self):
-        return " " if self.type is tuple or ty.get_origin(self.type) is tuple else None
-
-    @sep.validator
-    def _validate_sep(self, _, sep):
-        if self.type is MultiInputObj:
-            tp = ty.Any
-        elif ty.get_origin(self.type) is MultiInputObj:
-            tp = ty.get_args(self.type)[0]
-        else:
-            tp = self.type
-        if is_optional(tp):
-            tp = optional_type(tp)
-        if tp is ty.Any:
-            return
-        origin = ty.get_origin(tp) or tp
-
-        if (
-            inspect.isclass(origin)
-            and issubclass(origin, ty.Sequence)
-            and tp is not str
-        ):
-            if sep is None and not self.readonly:
-                raise ValueError(
-                    f"A value to 'sep' must be provided when type is iterable {tp} "
-                    f"for field {self.name!r}"
-                )
-        elif sep is not None:
-            raise ValueError(
-                f"sep ({sep!r}) can only be provided when type is iterable {tp} "
-                f"for field {self.name!r}"
-            )
 
 
 @attrs.define(kw_only=True)

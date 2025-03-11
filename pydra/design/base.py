@@ -350,6 +350,8 @@ def extract_fields_from_class(
                 if not atr.help:
                     atr.help = helps.get(atr_name, "")
             elif atr_name in type_hints:
+                if atr_name.startswith("_"):
+                    continue
                 if atr_name in fields_dict:
                     fields_dict[atr_name].type = type_hints[atr_name]
                 elif auto_attribs:
@@ -361,6 +363,8 @@ def extract_fields_from_class(
                     )
         if auto_attribs:
             for atr_name, type_ in type_hints.items():
+                if atr_name.startswith("_"):
+                    continue
                 if atr_name not in list(fields_dict) + ["Task", "Outputs"]:
                     fields_dict[atr_name] = field_type(
                         name=atr_name, type=type_, help=helps.get(atr_name, "")

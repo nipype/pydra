@@ -5,6 +5,7 @@ import pytest
 from pathlib import Path
 import re
 import stat
+import attrs
 from pydra.engine.submitter import Submitter
 from pydra.design import shell, workflow, python
 from pydra.engine.specs import (
@@ -185,18 +186,9 @@ def test_shell_cmd_6(plugin, tmp_path):
 
     assert shelly.executable == ["echo", ["echo", "-n"]]
     assert shelly.additional_args == StateArray([["nipype"], ["pydra"]])
-    # assert shelly.cmdline == [
-    #     "echo nipype",
-    #     "echo pydra",
-    #     "echo -n nipype",
-    #     "echo -n pydra",
-    # ]
     outputs = shelly(cache_dir=tmp_path, plugin="debug")
 
-    assert outputs.stdout[0] == "nipype\n"
-    assert outputs.stdout[1] == "pydra\n"
-    assert outputs.stdout[2] == "nipype"
-    assert outputs.stdout[3] == "pydra"
+    assert outputs.stdout == ["nipype\n", "pydra\n", "nipype", "pydra"]
 
     assert (
         outputs.return_code[0]
@@ -919,7 +911,7 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
-            position=2,
+            position=1,
             help="new file",
             argstr="",
         )
@@ -960,7 +952,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
-            position=2,
+            position=1,
             help="new file",
             argstr="",
         )
@@ -996,7 +988,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
-            position=2,
+            position=1,
             help="new file",
             argstr="",
         )
@@ -1035,7 +1027,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
-            position=2,
+            position=1,
             help="new file",
             argstr="",
         )
@@ -1073,7 +1065,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
-            position=2,
+            position=1,
             help="new file",
             argstr="",
         )
@@ -1159,6 +1151,9 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
             argstr="",
             help="a file",
         )
+
+        class Outputs(ShellOutputs):
+            pass
 
     with pytest.raises(FileNotFoundError):
         Shelly(executable=cmd_exec, files=file_2)
@@ -1256,27 +1251,37 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
     assert fspath.parent.parent == tmp_path
 
 
-def test_shell_cmd_inputspec_with_iterable(tmp_path):
+def test_shell_cmd_inputspec_with_iterable():
     """Test formatting of argstr with different iterable types."""
 
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
         executable = "test"
-        iterable_1: ty.Iterable[int] = shell.arg(
+        iterable_1: list[int] = shell.arg(
             help="iterable input 1",
             argstr="--in1",
+            sep=" ",
         )
-        iterable_2: ty.Iterable[str] = shell.arg(
+        iterable_2: set[str] = shell.arg(
             help="iterable input 2",
-            argstr="--in2...",
+            argstr="--in2",
+            sep=" ",
         )
+        iterable_3: tuple[float, ...] = shell.arg(
+            help="iterable input 3",
+            argstr="--in3...",
+        )
+
+        class Outputs(ShellOutputs):
+            pass
 
     task = Shelly()
 
     for iterable_type in (list, tuple):
         task.iterable_1 = iterable_type(range(3))
-        task.iterable_2 = iterable_type(["bar", "foo"])
-        assert task.cmdline == "test --in1 0 1 2 --in2 bar --in2 foo"
+        task.iterable_2 = iterable_type(["foo"])
+        task.iterable_3 = iterable_type([1, 0])
+        assert task.cmdline == "test --in1 0 1 2 --in2 foo --in3 1.0 --in3 0.0"
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1804,14 +1809,19 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
 
     @shell.define
     class Shelly1(ShellDef["Shelly1.Outputs"]):
+        executable = "shelly1"
+
+        arg: str = shell.arg(argstr=None)
+
         class Outputs(ShellOutputs):
             file: File = shell.outarg(
-                path_template="{args}",
+                path_template="{arg}",
                 help="output file",
             )
 
     @shell.define
     class Shelly2(ShellDef["Shelly2.Outputs"]):
+        executable = "shelly2"
         orig_file: str = shell.arg(
             position=1,
             help="output file",
@@ -1827,12 +1837,12 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
             )
 
     @workflow.define(outputs=["touch_file", "out1", "cp_file", "out2"])
-    def Workflow(cmd1, cmd2, args):
+    def Workflow(cmd1, cmd2, arg):
 
         shelly1 = workflow.add(
             Shelly1(
                 executable=cmd1,
-                additional_args=args,
+                arg=arg,
             )
         )
         shelly2 = workflow.add(
@@ -1844,9 +1854,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
 
         return shelly1.file, shelly1.stdout, shelly2.out_file, shelly2.stdout
 
-    wf = Workflow(cmd1="touch", cmd2="cp").split(
-        args=[File.mock("newfile_1.txt"), File.mock("newfile_2.txt")]
-    )
+    wf = Workflow(cmd1="touch", cmd2="cp").split(arg=["newfile_1.txt", "newfile_2.txt"])
 
     with Submitter(plugin="debug", cache_dir=tmp_path) as sub:
         res = sub(wf)
@@ -3356,8 +3364,8 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
     shelly = Shelly(out_name=["test_1", "test_2"])
 
     outputs = shelly(cache_dir=tmp_path)
-    # checking if the outputs are Nothing
-    assert outputs.out_list == [File(next(tmp_path.iterdir()) / "test_1_real.nii")]
+    # checking if the outputs is None
+    assert outputs.out_list is None
 
 
 def test_shellspec_formatter_1(tmp_path):
@@ -3372,22 +3380,25 @@ def test_shellspec_formatter_1(tmp_path):
         class Shelly(ShellDef["Shelly.Outputs"]):
             executable = "exec"
             in1: str = shell.arg(
-                help="""
-                                just a dummy name
-                                """,
+                argstr=None,
+                help="""just a dummy name""",
             )
             in2: str = shell.arg(
-                help="""
-                                    just a dummy name
-                                    """,
+                argstr=None,
+                help="""just a dummy name""",
             )
+
             together: ty.List = shell.arg(
-                help="""
-                                    combines in1 and in2 into a list
-                                    """,
+                default=attrs.Factory(list),
+                help="""combines in1 and in2 into a list""",
                 # When providing a formatter all other metadata options are discarded.
                 formatter=formatter,
             )
+
+            class Outputs(ShellOutputs):
+                pass
+
+        return Shelly
 
     Shelly = make_shelly(formatter=formatter_1)
     shelly = Shelly(in1="i1", in2="i2")
@@ -3417,17 +3428,17 @@ def test_shellspec_formatter_1(tmp_path):
     with pytest.raises(Exception) as excinfo:
         shelly.cmdline
     assert (
-        "arguments of the formatter function from together has to be in inputs or be field or output_dir, but in3 is used"
+        "arguments of the formatter function from together has to be in inputs or be field, but in3 is used"
         == str(excinfo.value)
     )
 
     # checking if field value is accessible when None
-    def formatter_5(field):
-        assert field == "-t test"
+    def formatter_4(field):
+        assert isinstance(field, shell.arg)
         # formatter must return a string
-        return field
+        return "-t test"
 
-    Shelly = make_shelly(formatter_5)
+    Shelly = make_shelly(formatter_4)
 
     shelly = Shelly(
         in1="i1",
@@ -3435,17 +3446,6 @@ def test_shellspec_formatter_1(tmp_path):
         # together="-t test",
     )
     assert shelly.cmdline == "exec -t test"
-
-    # checking if field value is accessible when None
-    def formatter_4(field):
-        assert field is None
-        # formatter must return a string
-        return ""
-
-    Shelly = make_shelly(formatter_4)
-
-    shelly = Shelly(in1="i1", in2="i2")
-    assert shelly.cmdline == "exec"
 
 
 def test_shellspec_formatter_splitter_2(tmp_path):

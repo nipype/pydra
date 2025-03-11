@@ -152,7 +152,7 @@ class LazyOutField(LazyField[T]):
             the resolved value of the lazy-field
         """
 
-        jobs = graph.node(self._node.name).matching_jobs(state_index)
+        jobs = graph.node(self._node.name).get_jobs(state_index)
 
         def retrieve_from_job(job: "Task[DefType]") -> ty.Any:
             if job.errored:
@@ -184,7 +184,9 @@ class LazyOutField(LazyField[T]):
             val = self._apply_cast(val)
             return val
 
-        if not self._node.state or not self._node.state.depth(before_combine=True):
+        if not isinstance(jobs, StateArray):
+            return retrieve_from_job(jobs)
+        elif not self._node.state or not self._node.state.depth(before_combine=True):
             assert len(jobs) == 1
             return retrieve_from_job(jobs[0])
         elif not self._node.state.keys_final:  # all states are combined over
