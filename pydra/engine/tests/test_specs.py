@@ -97,12 +97,12 @@ def test_input_file_hash_1(tmp_path):
     def A(in_file: File) -> File:
         return in_file
 
-    assert A(in_file=outfile)._hash == "9644d3998748b339819c23ec6abec520"
+    assert A(in_file=outfile)._hash == "e708da65b720212c5ce9ed2c65aae59c"
 
     with open(outfile, "w") as fp:
         fp.write("test")
 
-    assert A(in_file=outfile)._hash == "9f7f9377ddef6d8c018f1bf8e89c208c"
+    assert A(in_file=outfile)._hash == "f726a193430352bb3b92dccf5eccff3a"
 
 
 def test_input_file_hash_2(tmp_path):
@@ -117,7 +117,7 @@ def test_input_file_hash_2(tmp_path):
 
     # checking specific hash value
     hash1 = A(in_file=file)._hash
-    assert hash1 == "179bd3cbdc747edc4957579376fe8c7d"
+    assert hash1 == "eba2fafb8df4bae94a7aa42bb159b778"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
@@ -146,7 +146,7 @@ def test_input_file_hash_2a(tmp_path):
 
     # checking specific hash value
     hash1 = A(in_file=file)._hash
-    assert hash1 == "179bd3cbdc747edc4957579376fe8c7d"
+    assert hash1 == "eba2fafb8df4bae94a7aa42bb159b778"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
@@ -234,7 +234,7 @@ def test_input_file_hash_4(tmp_path):
 
     # checking specific hash value
     hash1 = A(in_file=[[file, 3]])._hash
-    assert hash1 == "ffd7afe0ca9d4585518809a509244b4b"
+    assert hash1 == "b583e0fd5501d3bed9bf510ce2a9e379"
 
     # the same file, but int field changes
     hash1a = A(in_file=[[file, 5]])._hash
@@ -268,7 +268,7 @@ def test_input_file_hash_5(tmp_path):
 
     # checking specific hash value
     hash1 = A(in_file=[{"file": file, "int": 3}])._hash
-    assert hash1 == "ba884a74e33552854271f55b03e53947"
+    assert hash1 == "aa2d4b708ed0dd8340582a6514bfd5ce"
 
     # the same file, but int field changes
     hash1a = A(in_file=[{"file": file, "int": 5}])._hash

@@ -269,7 +269,6 @@ class TypeParser(ty.Generic[T]):
                         f"Mandatory field{self.label_str} of type {self.tp} was not "
                         "provided a value (i.e. a value that wasn't None) "
                     ) from None
-                self.coerce(obj)
                 raise TypeError(
                     f"Incorrect type for field{self.label_str}: {obj!r} is not of type "
                     f"{self.tp} (and cannot be coerced to it)"

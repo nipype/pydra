@@ -488,29 +488,25 @@ def test_type_coercion_fail2a():
 
 
 def test_type_coercion_fail3():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
         TypeParser(ty.Sequence, coercible=[(ty.Sequence, ty.Sequence)])(
             {"a": 1, "b": 2}
         )
-    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_coercion_fail4():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError, match=r"Cannot coerce \{'a': 1\} into"):
         TypeParser(ty.Sequence, coercible=[(ty.Any, ty.Any)])({"a": 1})
-    assert exc_info_matches(exc_info, "Cannot coerce {'a': 1} into")
 
 
 def test_type_coercion_fail5():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError, match="as 1 is not iterable"):
         TypeParser(ty.List[int], coercible=[(ty.Any, ty.Any)])(1)
-    assert exc_info_matches(exc_info, "as 1 is not iterable")
 
 
 def test_type_coercion_fail6():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError, match="is not a mapping type"):
         TypeParser(ty.List[ty.Dict[str, str]], coercible=[(ty.Any, ty.Any)])((1, 2, 3))
-    assert exc_info_matches(exc_info, "is not a mapping type")
 
 
 def test_type_coercion_realistic():

@@ -230,7 +230,8 @@ def test_load_and_run_exception_run(tmpdir):
     assert result_1.outputs.out == 2
 
 
-def test_load_and_run_wf(tmpdir):
+@pytest.mark.parametrize("worker", ["cf", "debug"])
+def test_load_and_run_wf(tmpdir, worker):
     """testing load_and_run for pickled task"""
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))
 
@@ -242,7 +243,7 @@ def test_load_and_run_wf(tmpdir):
     task = Task(
         name="mult",
         definition=Workflow(x=2),
-        submitter=Submitter(cache_dir=tmpdir, worker="cf"),
+        submitter=Submitter(cache_dir=tmpdir, worker=worker),
     )
 
     with wf_pkl.open("wb") as fp:

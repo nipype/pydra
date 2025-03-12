@@ -3,10 +3,12 @@ import os
 from copy import copy
 from .helpers import execute
 from pathlib import Path
+import logging
 from fileformats.generic import FileSet
 from pydra.engine.helpers import list_fields
 from pydra.utils.typing import TypeParser
 
+logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
@@ -121,34 +123,50 @@ class Container(Environment):
         fld: shell.arg
         for fld in list_fields(task.definition):
             if TypeParser.contains_type(FileSet, fld.type):
-                fileset: FileSet | None = task.inputs[fld.name]
-                if not fileset:
+                value: FileSet | None = task.inputs[fld.name]
+                if not value:
                     continue
-                if not isinstance(fileset, (os.PathLike, FileSet)):
-                    raise NotImplementedError(
-                        f"No support for generating bindings for {type(fileset)} types "
-                        f"({fileset})"
-                    )
+
                 copy_file = fld.copy_mode == FileSet.CopyMode.copy
 
-                host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
+                def map_path(fileset: os.PathLike | FileSet) -> Path:
+                    host_path, env_path = fileset.parent, Path(
+                        f"{root}{fileset.parent}"
+                    )
 
-                # Default to mounting paths as read-only, but respect existing modes
-                bindings[host_path] = (
-                    env_path,
-                    "rw" if copy_file or isinstance(fld, shell.outarg) else "ro",
-                )
+                    # Default to mounting paths as read-only, but respect existing modes
+                    bindings[host_path] = (
+                        env_path,
+                        "rw" if copy_file or isinstance(fld, shell.outarg) else "ro",
+                    )
+                    return (
+                        env_path / fileset.name
+                        if isinstance(fileset, os.PathLike)
+                        else tuple(env_path / rel for rel in fileset.relative_fspaths)
+                    )
 
                 # Provide updated in-container paths to the command to be run. If a
                 # fs-object, which resolves to a single path, just pass in the name of
                 # that path relative to the location in the mount point in the container.
                 # If it is a more complex file-set with multiple paths, then it is converted
                 # into a tuple of paths relative to the base of the fileset.
-                value_updates[fld.name] = (
-                    env_path / fileset.name
-                    if isinstance(fileset, os.PathLike)
-                    else tuple(env_path / rel for rel in fileset.relative_fspaths)
-                )
+                if TypeParser.matches(value, os.PathLike | FileSet):
+                    value_updates[fld.name] = map_path(value)
+                elif TypeParser.matches(value, ty.Sequence[FileSet | os.PathLike]):
+                    mapped_value = []
+                    for val in value:
+                        mapped_val = map_path(val)
+                        if isinstance(mapped_val, tuple):
+                            mapped_value.extend(mapped_val)
+                        else:
+                            mapped_value.append(mapped_val)
+                    value_updates[fld.name] = mapped_value
+                else:
+                    logger.debug(
+                        "No support for generating bindings for %s types " "(%s)",
+                        type(value),
+                        value,
+                    )
 
         # Add the cache directory to the list of mounts
         bindings[task.cache_dir] = (f"{self.root}/{task.cache_dir}", "rw")

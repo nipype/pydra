@@ -946,24 +946,19 @@ def test_audit_shellcommandtask(tmpdir):
 
 def test_audit_shellcommandtask_file(tmp_path):
     # sourcery skip: use-fstring-for-concatenation
-    import glob
-    import shutil
-
     # create test.txt file with "This is a test" in it in the tmpdir
     # create txt file in cwd
-    with open("test.txt", "w") as f:
+    test1_file = tmp_path / "test.txt"
+    test2_file = tmp_path / "test2.txt"
+    with open(test1_file, "w") as f:
         f.write("This is a test")
 
-    with open("test2.txt", "w") as f:
+    with open(test2_file, "w") as f:
         f.write("This is a test")
-
-    # copy the test.txt file to the tmpdir
-    shutil.copy("test.txt", tmp_path)
-    shutil.copy("test2.txt", tmp_path)
 
     cmd = "cat"
-    file_in = File(tmp_path / "test.txt")
-    file_in_2 = File(tmp_path / "test2.txt")
+    file_in = File(test1_file)
+    file_in_2 = File(test2_file)
     test_file_hash = hash_function(file_in)
     test_file_hash_2 = hash_function(file_in_2)
     Shelly = shell.define(

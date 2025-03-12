@@ -725,7 +725,7 @@ class NodeExecution(ty.Generic[DefType]):
                     resolved[inpt_name] = value._get_value(
                         workflow=self.workflow,
                         graph=self.graph,
-                        state_index=input_ind[state_key],
+                        state_index=input_ind.get(state_key),
                     )
                 elif state_key in input_ind:
                     resolved[inpt_name] = self.node.state._get_element(
@@ -786,7 +786,7 @@ class NodeExecution(ty.Generic[DefType]):
             if is_runnable:
                 runnable.append(self.blocked.pop(index))
         self.queued.update({t.state_index: t for t in runnable})
-        return runnable
+        return list(self.queued.values())
 
 
 async def prepare_runnable(runnable):
