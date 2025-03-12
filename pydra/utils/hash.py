@@ -646,13 +646,16 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
             indent = re.match(r"(\s*)", src).group(1)
             if indent:
                 src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
-            func_ast = ast.parse(src).body[0]
-            strip_annotations(func_ast)
-            if hasattr(func_ast, "args"):
-                yield dump_ast(func_ast.args)
-            if hasattr(func_ast, "body"):
-                for stmt in func_ast.body:
-                    yield dump_ast(stmt)
+            try:
+                func_ast = ast.parse(src).body[0]
+                strip_annotations(func_ast)
+                if hasattr(func_ast, "args"):
+                    yield dump_ast(func_ast.args)
+                if hasattr(func_ast, "body"):
+                    for stmt in func_ast.body:
+                        yield dump_ast(stmt)
+            except SyntaxError:
+                yield src.encode()
     yield b")"
 
 

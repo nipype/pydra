@@ -93,7 +93,7 @@ class Requirement:
         """Check if the requirement is satisfied by the inputs"""
         value = getattr(inputs, self.name)
         field = {f.name: f for f in list_fields(inputs)}[self.name]
-        if value is attrs.NOTHING or field.type is bool and value is False:
+        if value is None or field.type is bool and value is False:
             return False
         if self.allowed_values is None:
             return True
@@ -105,7 +105,7 @@ class Requirement:
             return value
         elif isinstance(value, str):
             return Requirement(value)
-        else:
+        elif isinstance(value, tuple):
             name, allowed_values = value
             if isinstance(allowed_values, str) or not isinstance(
                 allowed_values, ty.Collection
@@ -114,6 +114,11 @@ class Requirement:
                     f"allowed_values must be a collection of strings, not {allowed_values}"
                 )
             return Requirement(name, allowed_values)
+        else:
+            raise ValueError(
+                f"Requirements must be a input field name, a tuple of an input field "
+                f"name and allowed values or a Requirement object, not {value!r}"
+            )
 
     def __str__(self):
         if not self.allowed_values:
@@ -126,8 +131,21 @@ def requirements_converter(value: ty.Any) -> list[Requirement]:
     if isinstance(value, Requirement):
         return [value]
     elif isinstance(value, (str, tuple)):
-        return [Requirement.parse(value)]
-    return [Requirement.parse(v) for v in value]
+        try:
+            return [Requirement.parse(value)]
+        except ValueError as e:
+            e.add_note(
+                f"Parsing requirements specification {value!r} as a single requirement"
+            )
+            raise e
+    try:
+        return [Requirement.parse(v) for v in value]
+    except ValueError as e:
+        e.add_note(
+            f"Parsing requirements specification {value!r} as a set of concurrent "
+            "requirements (i.e. logical AND)"
+        )
+        raise e
 
 
 @attrs.define
@@ -166,8 +184,21 @@ def requires_converter(
 ) -> list[RequirementSet]:
     """Ensure the requires field is a tuple of tuples"""
     if isinstance(value, (str, tuple, Requirement)):
-        return [RequirementSet(value)]
-    return [RequirementSet(v) for v in value]
+        try:
+            return [RequirementSet(value)]
+        except ValueError as e:
+            e.add_note(
+                f"Parsing requirements set specification {value!r} as a single requirement set"
+            )
+            raise e
+    try:
+        return [RequirementSet(v) for v in value]
+    except ValueError as e:
+        e.add_note(
+            f"Parsing requirements set specification {value!r} as a set of alternative "
+            "requirements (i.e. logical OR)"
+        )
+        raise e
 
 
 @attrs.define(kw_only=True)
@@ -226,8 +257,8 @@ class Field:
     def _requires_validator(self, _, value):
         if value and self.type not in (ty.Any, bool) and not is_optional(self.type):
             raise ValueError(
-                f"Fields with requirements must be of boolean or optional type, "
-                f"not type {self.type} ({self!r})"
+                f"Fields with requirements must be of optional type (i.e. in union "
+                f"with None) or boolean, not type {self.type} ({self!r})"
             )
 
 

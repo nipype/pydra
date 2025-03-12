@@ -591,7 +591,7 @@ class TaskDef(ty.Generic[OutputsType]):
                 type_ = inputs[field_name].type
                 if type_ not in (ty.Any, bool) and not is_optional(type_):
                     raise ValueError(
-                        f"Fields included in a 'xor' ({field.name!r}) must be of boolean "
+                        f"Fields included in a 'xor' ({field_name!r}) must be of boolean "
                         f"or optional types, not type {type_}"
                     )
 

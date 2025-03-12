@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytest
 
 
@@ -8,9 +9,9 @@ except ImportError:
 
 
 @pytest.fixture(scope="package")
-def data_tests_dir():
-    test_nii = importlib_resources.files("pydra").joinpath(
+def data_tests_dir() -> Path:
+    data_dir = importlib_resources.files("pydra").joinpath(
         "engine", "tests", "data_tests"
     )
-    with importlib_resources.as_file(test_nii) as path:
+    with importlib_resources.as_file(data_dir) as path:
         yield path
