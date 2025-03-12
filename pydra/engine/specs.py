@@ -1233,9 +1233,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
                     split_values[field.name] = val
                     argstr_f = argstr_formatting(argstr, split_values)
                     argstr_formatted_l.append(f" {argstr_f}")
-                cmd_el_str = " ".join(argstr_formatted_l)
+                cmd_el_str = field.sep.join(argstr_formatted_l)
             else:  # argstr has a simple form, e.g. "-f", or "--f"
-                cmd_el_str = " ".join([f" {argstr} {val}" for val in value])
+                cmd_el_str = field.sep.join([f" {argstr} {val}" for val in value])
         else:
             # in case there are ... when input is not a list
             argstr = field.argstr.replace("...", "")
