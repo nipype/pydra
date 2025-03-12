@@ -3,6 +3,7 @@ import re
 import ast
 import inspect
 import types
+import sysconfig
 import sys
 import platformdirs
 import builtins
@@ -148,24 +149,27 @@ def get_builtin_type_names():
     return set(name for name, obj in vars(builtins).items() if isinstance(obj, type))
 
 
-def in_stdlib(obj: types.FunctionType | type) -> bool:
-    """Check if a type is in the standard library."""
+def in_stdlib(obj: types.FunctionType | type) -> str | bool:
+    """Check if a type is in the standard library and return the name of the module if
+    so."""
     module = inspect.getmodule(obj)
     if module is None:
         return False
     if module.__name__.startswith("builtins"):
-        return True
+        return "builtins"
     if module.__name__ == "types" and obj.__name__ not in dir(types):
         return False
-    return module.__name__.split(".")[-1] in STDLIB_MODULES
+    toplevel = module.__name__.split(".")[0]
+    if toplevel in STDLIB_MODULES:
+        return toplevel
+    return False
 
 
 def _stdlib_modules() -> frozenset[str]:
     """List all standard library modules."""
     std_lib_modules = set(sys.builtin_module_names)
-    for _, modname, ispkg in pkgutil.iter_modules():
-        if not ispkg:
-            std_lib_modules.add(modname)
+    std_lib_path = sysconfig.get_path("stdlib")
+    std_lib_modules.update(m[1] for m in pkgutil.iter_modules([std_lib_path]))
     return frozenset(std_lib_modules)
 
 
