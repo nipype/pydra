@@ -475,7 +475,10 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
             type_name = tp.__name__
         except AttributeError:
             type_name = tp._name
-        return f"{klass.__module__}.{type_name}".encode()
+        mod_path = ".".join(
+            p for p in klass.__module__.split(".") if not p.startswith("_")
+        )
+        return f"{mod_path}.{type_name}".encode()
 
     yield b"type:("
     origin = ty.get_origin(klass)
