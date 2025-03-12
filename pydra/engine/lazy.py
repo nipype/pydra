@@ -192,12 +192,15 @@ class LazyOutField(LazyField[T]):
         elif not self._node.state.keys_final:  # all states are combined over
             return [retrieve_from_job(j) for j in jobs]
         elif self._node.state.combiner:
-            values = StateArray()
-            for ind in self._node.state.states_ind_final:
-                values.append(
-                    [retrieve_from_job(j) for j in jobs if j.state_index.matches(ind)]
-                )
-            return values
+            sorted_values = {
+                frozenset(i.items()): [] for i in self._node.state.states_ind_final
+            }
+            assert len(jobs) == len(self._node.state.inputs_ind)
+            for ind, job in zip(self._node.state.inputs_ind, jobs):
+                sorted_values[
+                    frozenset((key, ind[key]) for key in self._node.state.keys_final)
+                ].append(retrieve_from_job(job))
+            return StateArray(sorted_values.values())
         else:
             return StateArray(retrieve_from_job(j) for j in jobs)
 
