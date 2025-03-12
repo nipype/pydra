@@ -684,7 +684,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin, tmp_path):
 
     shelly = Shelly(executable=cmd_exec, opt_t=cmd_t)
 
-    with pytest.raises(ValueError, match="'opt_t' requires \['opt_l'\]"):
+    with pytest.raises(ValueError, match=r"'opt_t' requires \['opt_l'\]"):
         shelly()
 
 

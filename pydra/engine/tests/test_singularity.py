@@ -93,6 +93,7 @@ def test_singularity_2a(plugin, tmp_path):
     ) as sub:
         res = sub(singu)
 
+    assert not res.errored, "\n".join(res.errors["error message"])
     assert res.outputs.stdout.strip() == " ".join(cmd_args)
     assert res.outputs.return_code == 0
 
