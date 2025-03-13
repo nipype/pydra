@@ -1,6 +1,7 @@
 import typing as ty
 import abc
 import attrs
+from typing import Self
 from pydra.utils.typing import StateArray
 from pydra.utils.hash import hash_single
 from . import node
@@ -68,11 +69,29 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
         """
         raise NotImplementedError("LazyField is an abstract class")
 
-    def split(self) -> "LazyField":
+    def split(self) -> Self:
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
         of the lazy field with StateArray to signify that it will be "split" across
         """
-        raise NotImplementedError("LazyField is an abstract class")
+        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+
+        # Modify the type of the lazy field to include the split across a state-array
+        inner_type, prev_split_depth = TypeParser.strip_splits(self._type)
+        assert prev_split_depth <= 1
+        if inner_type is ty.Any:
+            type_ = StateArray[ty.Any]
+        elif TypeParser.matches_type(inner_type, list):
+            item_type = TypeParser.get_item_type(inner_type)
+            type_ = StateArray[item_type]
+        else:
+            raise TypeError(
+                f"Cannot split non-sequence field {self}  of type {inner_type}"
+            )
+        if prev_split_depth:
+            type_ = StateArray[
+                type_
+            ]  # FIXME: This nesting of StateArray is probably unnecessary
+        return attrs.evolve(self, type=type_)
 
 
 @attrs.define(kw_only=True)
@@ -121,25 +140,6 @@ class LazyInField(LazyField[T]):
         value = workflow.inputs[self._field]
         value = self._apply_cast(value)
         return value
-
-    def split(self) -> "LazyField":
-        """ "Splits" the lazy field over an array of nodes by replacing the sequence type
-        of the lazy field with StateArray to signify that it will be "split" across
-        """
-        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
-
-        assert not isinstance(self, LazyInField)
-
-        if not TypeParser.matches_type(self.type, list):
-            raise TypeError(
-                f"Cannot split non-sequence field {self}  of type {self.type}"
-            )
-
-        return type(self)(
-            name=self.name,
-            field=self.field,
-            type=StateArray[TypeParser.get_item_type(self.type)],
-        )
 
 
 @attrs.define(kw_only=True)
@@ -214,50 +214,7 @@ class LazyOutField(LazyField[T]):
         elif not state or not state.depth(before_combine=True):
             assert len(jobs) == 1
             return retrieve_from_job(jobs[0])
-        # elif state.combiner and state.keys_final:
-        #     # We initialise it here rather than using a defaultdict to ensure the order
-        #     # of the keys matches how it is defined in the state so we can return the
-        #     # values in the correct order
-        #     sorted_values = {frozenset(i.items()): [] for i in state.states_ind_final}
-        #     # Iterate through the jobs and append the values to the correct final state
-        #     # key
-        #     for job in jobs:
-        #         state_key = frozenset(
-        #             (key, state.states_ind[job.state_index][key])
-        #             for key in state.keys_final
-        #         )
-        #         sorted_values[state_key].append(retrieve_from_job(job))
-        #     return StateArray(sorted_values.values())
-        # else:
         return [retrieve_from_job(j) for j in jobs]
-
-    def split(self) -> "LazyField":
-        """ "Splits" the lazy field over an array of nodes by replacing the sequence type
-        of the lazy field with StateArray to signify that it will be "split" across
-        """
-        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
-
-        # Modify the type of the lazy field to include the split across a state-array
-        inner_type, prev_split_depth = TypeParser.strip_splits(self.type)
-        assert prev_split_depth <= 1
-        if inner_type is ty.Any:
-            type_ = StateArray[ty.Any]
-        elif TypeParser.matches_type(inner_type, list):
-            item_type = TypeParser.get_item_type(inner_type)
-            type_ = StateArray[item_type]
-        else:
-            raise TypeError(
-                f"Cannot split non-sequence field {self}  of type {inner_type}"
-            )
-        if prev_split_depth:
-            type_ = StateArray[
-                type_
-            ]  # FIXME: This nesting of StateArray is probably unnecessary
-        return type(self)[type_](
-            name=self.name,
-            field=self.field,
-            type=type_,
-        )
 
     @property
     def _source(self):

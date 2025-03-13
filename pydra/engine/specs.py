@@ -345,7 +345,7 @@ class TaskDef(ty.Generic[OutputsType]):
         split_inputs = {}
         for name, value in inputs.items():
             if isinstance(value, lazy.LazyField):
-                split_val = value.split(splitter)
+                split_val = value.split()
             elif isinstance(value, ty.Iterable) and not isinstance(
                 value, (ty.Mapping, str)
             ):

@@ -536,16 +536,13 @@ class NodeExecution(ty.Generic[DefType]):
         self.queued = {}
         self.running = {}  # Not used in logic, but may be useful for progress tracking
         self.unrunnable = defaultdict(list)
-        # Prepare the state to be run
-        if node.state:
-            self.state = node.state
-            self.state.prepare_states(self.node.state_values)
-            self.state.prepare_inputs()
-        else:
-            self.state = None
         self.state_names = self.node.state.names if self.node.state else []
         self.workflow = workflow
         self.graph = None
+
+    @property
+    def state(self):
+        return self.node.state
 
     def __repr__(self):
         return (
@@ -566,7 +563,7 @@ class NodeExecution(ty.Generic[DefType]):
     @property
     def tasks(self) -> ty.Generator["Task[DefType]", None, None]:
         if self._tasks is None:
-            self._tasks = {t.state_index: t for t in self._generate_tasks()}
+            raise RuntimeError("Tasks have not been generated")
         return self._tasks.values()
 
     def get_jobs(self, final_index: int | None = None) -> "Task | StateArray[Task]":
@@ -586,14 +583,11 @@ class NodeExecution(ty.Generic[DefType]):
         if not self.tasks:  # No jobs, return empty state array
             return StateArray()
         if not self.node.state:  # Return the singular job
-            assert final_index is None
-            task = self._tasks[None]
-            return task
+            return self._tasks[None]
         if final_index is None:  # return all jobs in a state array
             return StateArray(self._tasks.values())
         if not self.node.state.combiner:  # Select the job that matches the index
-            task = self._tasks[final_index]
-            return task
+            return self._tasks[final_index]
         # Get a slice of the tasks that match the given index of the state array of the
         # combined values
         final_index = set(self.node.state.states_ind_final[final_index].items())
@@ -602,6 +596,38 @@ class NodeExecution(ty.Generic[DefType]):
             for i, ind in enumerate(self.node.state.states_ind)
             if set(ind.items()).issuperset(final_index)
         )
+
+    def start(self) -> None:
+        """Prepare the execution node so that it can be processed"""
+        self._tasks = {}
+        if self.state:
+            values = {}
+            for name, value in self.node.state_values.items():
+                if name in self.node.state.names and isinstance(value, LazyField):
+                    values[name] = value._get_value(
+                        workflow=self.workflow, graph=self.graph
+                    )
+            self.state.prepare_states(values)
+            self.state.prepare_inputs()
+            # Generate the tasks
+            for index, split_defn in enumerate(self._split_definition()):
+                self._tasks[index] = Task(
+                    definition=split_defn,
+                    submitter=self.submitter,
+                    environment=self.node._environment,
+                    name=self.node.name,
+                    hooks=self.node._hooks,
+                    state_index=index,
+                )
+        else:
+            self._tasks[None] = Task(
+                definition=self._resolve_lazy_inputs(task_def=self.node._definition),
+                submitter=self.submitter,
+                environment=self.node._environment,
+                hooks=self.node._hooks,
+                name=self.node.name,
+            )
+        self.blocked = copy(self._tasks)
 
     @property
     def started(self) -> bool:
@@ -655,26 +681,6 @@ class NodeExecution(ty.Generic[DefType]):
         return (self.unrunnable or self.errored) and not (
             self.successful or self.blocked or self.queued
         )
-
-    def _generate_tasks(self) -> ty.Iterable["Task[DefType]"]:
-        if not self.node.state:
-            yield Task(
-                definition=self._resolve_lazy_inputs(task_def=self.node._definition),
-                submitter=self.submitter,
-                environment=self.node._environment,
-                hooks=self.node._hooks,
-                name=self.node.name,
-            )
-        else:
-            for index, split_defn in enumerate(self._split_definition()):
-                yield Task(
-                    definition=split_defn,
-                    submitter=self.submitter,
-                    environment=self.node._environment,
-                    name=self.node.name,
-                    hooks=self.node._hooks,
-                    state_index=index,
-                )
 
     def _resolve_lazy_inputs(
         self,
@@ -754,10 +760,8 @@ class NodeExecution(ty.Generic[DefType]):
             List of tasks that are ready to run
         """
         runnable: list["Task[DefType]"] = []
-        self.tasks  # Ensure tasks are loaded
         if not self.started:
-            assert self._tasks is not None
-            self.blocked = copy(self._tasks)
+            self.start()
         # Check to see if any blocked tasks are now runnable/unrunnable
         for index, task in list(self.blocked.items()):
             pred: NodeExecution
