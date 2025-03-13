@@ -47,26 +47,17 @@ def plot_workflow(
 
     # Construct the workflow object
     wf = Workflow.construct(workflow_task)
-    graph = wf.graph
+
     if not name:
-        name = f"graph_{wf._node.name}"
+        name = f"graph_{type(workflow_task).__name__}"
     if type == "simple":
-        for task in graph.nodes:
-            wf.create_connections(task)
+        graph = wf.graph()
         dotfile = graph.create_dotfile_simple(outdir=out_dir, name=name)
     elif type == "nested":
-        for task in graph.nodes:
-            wf.create_connections(task)
+        graph = wf.graph()
         dotfile = graph.create_dotfile_nested(outdir=out_dir, name=name)
     elif type == "detailed":
-        # create connections with detailed=True
-        for task in graph.nodes:
-            wf.create_connections(task, detailed=True)
-        # adding wf outputs
-        for wf_out, lf in wf._connections:
-            graph.add_edges_description(
-                (wf._node.name, wf_out, lf._node.name, lf.field)
-            )
+        graph = wf.graph(detailed=True)
         dotfile = graph.create_dotfile_detailed(outdir=out_dir, name=name)
     else:
         raise Exception(

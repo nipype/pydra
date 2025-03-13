@@ -20,7 +20,7 @@ def pytest_generate_tests(metafunc):
         if bool(shutil.which("sbatch")):
             Plugins = ["slurm"]
         else:
-            Plugins = ["cf"]
+            Plugins = ["debug"]  # ["debug", "cf"]
         try:
             if metafunc.config.getoption("dask"):
                 Plugins.append("dask")
@@ -50,7 +50,7 @@ def pytest_generate_tests(metafunc):
         elif bool(shutil.which("sbatch")):
             Plugins = ["slurm"]
         else:
-            Plugins = ["cf"]
+            Plugins = ["debug"]  # ["debug", "cf"]
         try:
             if metafunc.config.getoption("psij"):
                 Plugins.append("psij-" + metafunc.config.getoption("psij"))

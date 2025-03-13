@@ -30,7 +30,7 @@ class Audit:
             Base configuration of auditing.
         messengers : :obj:`pydra.util.messenger.Messenger`
             or list of :class:`pydra.util.messenger.Messenger`, optional
-            Defify types of messenger used by Audit to send a message.
+            Taskify types of messenger used by Audit to send a message.
             Could be `PrintMessenger`, `FileMessenger`, or `RemoteRESTMessenger`.
         messenger_args : :obj:`dict`, optional
             Optional arguments for the `Messenger.send` method.

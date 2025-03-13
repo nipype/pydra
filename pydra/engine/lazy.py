@@ -151,7 +151,7 @@ class LazyOutField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-
+        state = self._node.state
         jobs = graph.node(self._node.name).get_jobs(state_index)
 
         def retrieve_from_job(job: "Task[DefType]") -> ty.Any:
@@ -184,25 +184,27 @@ class LazyOutField(LazyField[T]):
             val = self._apply_cast(val)
             return val
 
-        if not isinstance(jobs, StateArray):
+        if not isinstance(jobs, StateArray):  # single job
             return retrieve_from_job(jobs)
-        elif not self._node.state or not self._node.state.depth(before_combine=True):
+        elif not state or not state.depth(before_combine=True):
             assert len(jobs) == 1
             return retrieve_from_job(jobs[0])
-        elif not self._node.state.keys_final:  # all states are combined over
-            return [retrieve_from_job(j) for j in jobs]
-        elif self._node.state.combiner:
-            sorted_values = {
-                frozenset(i.items()): [] for i in self._node.state.states_ind_final
-            }
-            assert len(jobs) == len(self._node.state.inputs_ind)
-            for ind, job in zip(self._node.state.inputs_ind, jobs):
-                sorted_values[
-                    frozenset((key, ind[key]) for key in self._node.state.keys_final)
-                ].append(retrieve_from_job(job))
-            return StateArray(sorted_values.values())
-        else:
-            return StateArray(retrieve_from_job(j) for j in jobs)
+        # elif state.combiner and state.keys_final:
+        #     # We initialise it here rather than using a defaultdict to ensure the order
+        #     # of the keys matches how it is defined in the state so we can return the
+        #     # values in the correct order
+        #     sorted_values = {frozenset(i.items()): [] for i in state.states_ind_final}
+        #     # Iterate through the jobs and append the values to the correct final state
+        #     # key
+        #     for job in jobs:
+        #         state_key = frozenset(
+        #             (key, state.states_ind[job.state_index][key])
+        #             for key in state.keys_final
+        #         )
+        #         sorted_values[state_key].append(retrieve_from_job(job))
+        #     return StateArray(sorted_values.values())
+        # else:
+        return [retrieve_from_job(j) for j in jobs]
 
     @property
     def _source(self):

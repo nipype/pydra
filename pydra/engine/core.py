@@ -792,9 +792,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             node.graph = graph
         return graph
 
-    @property
-    def graph(self) -> DiGraph:
-        return self._create_graph(self.nodes, detailed=True)
+    def graph(self, detailed: bool = False) -> DiGraph:
+        return self._create_graph(self.nodes, detailed=detailed)
 
     def _create_graph(
         self, nodes: "list[Node | NodeExecution]", detailed: bool = False

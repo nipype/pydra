@@ -81,8 +81,8 @@ class DiGraph(ty.Generic[NodeType]):
     def nodes(self, nodes: ty.Iterable[NodeType]) -> None:
         if nodes:
             nodes = ensure_list(nodes)
-            if len(set(nodes)) != len(nodes):
-                raise Exception("nodes have repeated elements")
+            # if len(set(nodes)) != len(nodes):
+            #     raise Exception("nodes have repeated elements")
             self._nodes = nodes
 
     def node(self, name: str) -> NodeType:

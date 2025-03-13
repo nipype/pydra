@@ -11,7 +11,7 @@ from pydra.design import python
 sort_key = attrgetter("name")
 
 
-def test_interface_wrap_function():
+def test_interface_wrap_function(tmp_path):
     def func(a: int) -> float:
         """Sample function with inputs and outputs"""
         return a * 2
@@ -27,7 +27,7 @@ def test_interface_wrap_function():
     ]
     assert outputs == [python.out(name="out", type=float)]
     definition = SampleDef(a=1)
-    outputs = definition()
+    outputs = definition(cache_dir=tmp_path)
     assert outputs.out == 2.0
     with pytest.raises(TypeError):
         SampleDef(a=1.5)

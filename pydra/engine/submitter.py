@@ -569,39 +569,39 @@ class NodeExecution(ty.Generic[DefType]):
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def get_jobs(
-        self, index: int | None = None, as_array: bool = False
-    ) -> "Task | StateArray[Task]":
+    def get_jobs(self, final_index: int | None = None) -> "Task | StateArray[Task]":
         """Get the jobs that match a given state index.
 
         Parameters
         ----------
-        index : int, optional
-            The index of the state of the task to get, by default None
-        as_array : bool, optional
-            Whether to return the tasks in a state-array object, by default if the index
-            matches
+        final_index : int, optional
+            The index of the output state array (i.e. after any combinations) of the
+            job to get, by default None
 
         Returns
         -------
         matching : Task | StateArray[Task]
             The task or tasks that match the given index
         """
-        matching = StateArray()
-        if self.tasks:
-            try:
-                task = self._tasks[index]
-            except KeyError:
-                if index is None:
-                    return StateArray(self._tasks.values())
-                # Select matching tasks and return them in nested state-array objects
-                for ind, task in self._tasks.items():
-                    matching.append(task)
-            else:
-                if not as_array:
-                    return task
-                matching.append(task)
-        return matching
+        if not self.tasks:  # No jobs, return empty state array
+            return StateArray()
+        if not self.node.state:  # Return the singular job
+            assert final_index is None
+            task = self._tasks[None]
+            return task
+        if final_index is None:  # return all jobs in a state array
+            return StateArray(self._tasks.values())
+        if not self.node.state.combiner:  # Select the job that matches the index
+            task = self._tasks[final_index]
+            return task
+        # Get a slice of the tasks that match the given index of the state array of the
+        # combined values
+        final_index = set(self.node.state.states_ind_final[final_index].items())
+        return StateArray(
+            self._tasks[i]
+            for i, ind in enumerate(self.node.state.states_ind)
+            if set(ind.items()).issuperset(final_index)
+        )
 
     @property
     def started(self) -> bool:
@@ -762,9 +762,23 @@ class NodeExecution(ty.Generic[DefType]):
         for index, task in list(self.blocked.items()):
             pred: NodeExecution
             is_runnable = True
+            states_ind = (
+                list(self.node.state.states_ind[index].items())
+                if self.node.state
+                else []
+            )
             for pred in graph.predecessors[self.node.name]:
-                pred_jobs: StateArray[Task] = pred.get_jobs(index, as_array=True)
-                pred_inds = [j.state_index for j in pred_jobs]
+                if pred.node.state:
+                    pred_states_ind = {
+                        (k, i) for k, i in states_ind if k.startswith(pred.name + ".")
+                    }
+                    pred_inds = [
+                        i
+                        for i, ind in enumerate(pred.node.state.states_ind)
+                        if set(ind.items()).issuperset(pred_states_ind)
+                    ]
+                else:
+                    pred_inds = [None]
                 if not all(i in pred.successful for i in pred_inds):
                     is_runnable = False
                     blocked = True

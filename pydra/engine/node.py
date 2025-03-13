@@ -45,12 +45,6 @@ class Node(ty.Generic[OutputType]):
         init=False, default=None, eq=False, hash=False, repr=False
     )
     _state: State | None = attrs.field(init=False, default=NOT_SET)
-    # _cont_dim: dict[str, int] | None = attrs.field(
-    #     init=False, default=None
-    # )  # QUESTION: should this be included in the state?
-    # _inner_cont_dim: dict[str, int] = attrs.field(
-    #     init=False, factory=dict
-    # )  # QUESTION: should this be included in the state?
 
     def __attrs_post_init__(self):
         self._set_state()
