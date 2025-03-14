@@ -18,7 +18,6 @@ from .helpers import (
     attrs_values,
 )
 from pydra.utils.hash import PersistentCache
-from pydra.utils.typing import StateArray
 from pydra.engine.lazy import LazyField
 from .audit import Audit
 from .core import Task
@@ -536,7 +535,6 @@ class NodeExecution(ty.Generic[DefType]):
         self.queued = {}
         self.running = {}  # Not used in logic, but may be useful for progress tracking
         self.unrunnable = defaultdict(list)
-        self.state_names = self.node.state.names if self.node.state else []
         self.workflow = workflow
         self.graph = None
 
@@ -566,47 +564,19 @@ class NodeExecution(ty.Generic[DefType]):
             raise RuntimeError("Tasks have not been generated")
         return self._tasks.values()
 
-    def get_jobs(self, final_index: int | None = None) -> "Task | StateArray[Task]":
-        """Get the jobs that match a given state index.
-
-        Parameters
-        ----------
-        final_index : int, optional
-            The index of the output state array (i.e. after any combinations) of the
-            job to get, by default None
-
-        Returns
-        -------
-        matching : Task | StateArray[Task]
-            The task or tasks that match the given index
-        """
-        if not self.tasks:  # No jobs, return empty state array
-            return StateArray()
-        if not self.node.state:  # Return the singular job
-            return self._tasks[None]
-        if final_index is None:  # return all jobs in a state array
-            return StateArray(self._tasks.values())
-        if not self.node.state.combiner:  # Select the job that matches the index
-            return self._tasks[final_index]
-        # Get a slice of the tasks that match the given index of the state array of the
-        # combined values
-        final_index = set(self.node.state.states_ind_final[final_index].items())
-        return StateArray(
-            self._tasks[i]
-            for i, ind in enumerate(self.node.state.states_ind)
-            if set(ind.items()).issuperset(final_index)
-        )
-
     def start(self) -> None:
         """Prepare the execution node so that it can be processed"""
         self._tasks = {}
         if self.state:
             values = {}
             for name, value in self.node.state_values.items():
-                if name in self.node.state.names and isinstance(value, LazyField):
-                    values[name] = value._get_value(
-                        workflow=self.workflow, graph=self.graph
-                    )
+                if name in self.node.state.names:
+                    if isinstance(value, LazyField):
+                        values[name] = value._get_value(
+                            workflow=self.workflow, graph=self.graph
+                        )
+                    else:
+                        values[name] = value
             self.state.prepare_states(values)
             self.state.prepare_inputs()
             # Generate the tasks
