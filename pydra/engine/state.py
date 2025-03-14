@@ -378,6 +378,14 @@ class State:
         return self._prev_state_splitter_rpn_compact
 
     @property
+    def cont_dim_all(self):
+        # adding inner_cont_dim to the general container_dimension provided by the users
+        cont_dim_all = deepcopy(self.cont_dim)
+        for k, v in self._inner_cont_dim.items():
+            cont_dim_all[k] = cont_dim_all.get(k, 1) + v
+        return cont_dim_all
+
+    @property
     def combiner(self):
         """the combiner associated to the state."""
         return self._combiner
@@ -858,7 +866,6 @@ class State:
     def prepare_states(
         self,
         inputs: dict[str, ty.Any],
-        cont_dim: dict[str, int] | None = None,
     ):
         """
         Prepare a full list of state indices and state values.
@@ -874,8 +881,6 @@ class State:
         self.combiner_validation()
         self.set_input_groups()
         self.inputs = inputs
-        if not self.cont_dim:
-            self.cont_dim = cont_dim or {}
         if self.other_states:
             st: State
             for nm, (st, _) in self.other_states.items():
@@ -986,7 +991,7 @@ class State:
     def prepare_states_val(self):
         """Evaluate states values having states indices."""
         self.states_val = list(
-            hlpst.map_splits(self.states_ind, self.inputs, cont_dim=self.cont_dim)
+            hlpst.map_splits(self.states_ind, self.inputs, cont_dim=self.cont_dim_all)
         )
         return self.states_val
 
@@ -1156,7 +1161,7 @@ class State:
             var_ind, new_keys = previous_states_ind[term]
             shape = (len(var_ind),)
         else:
-            cont_dim = self.cont_dim.get(term, 1)
+            cont_dim = self.cont_dim_all.get(term, 1)
             shape = hlpst.input_shape(self.inputs[term], cont_dim=cont_dim)
             var_ind = range(reduce(lambda x, y: x * y, shape))
             new_keys = [term]
@@ -1177,7 +1182,7 @@ class State:
     def _single_op_splits(self, op_single):
         """splits function if splitter is a singleton"""
         shape = hlpst.input_shape(
-            self.inputs[op_single], cont_dim=self.cont_dim.get(op_single, 1)
+            self.inputs[op_single], cont_dim=self.cont_dim_all.get(op_single, 1)
         )
         val_ind = range(reduce(lambda x, y: x * y, shape))
         if op_single in self.inner_inputs:

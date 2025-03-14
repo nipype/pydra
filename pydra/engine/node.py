@@ -151,21 +151,6 @@ class Node(ty.Generic[OutputType]):
         return outputs
 
     @property
-    def cont_dim(self):
-        # adding inner_cont_dim to the general container_dimension provided by the users
-        cont_dim_all = deepcopy(self._cont_dim)
-        for k, v in self.state._inner_cont_dim.items():
-            cont_dim_all[k] = cont_dim_all.get(k, 1) + v
-        return cont_dim_all
-
-    @cont_dim.setter
-    def cont_dim(self, cont_dim):
-        if cont_dim is None:
-            self._cont_dim = {}
-        else:
-            self._cont_dim = cont_dim
-
-    @property
     def splitter(self):
         if not self._state:
             return ()
