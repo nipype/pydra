@@ -664,6 +664,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         constructor = input_values.pop("constructor")
         # Call the user defined constructor to set the outputs
         output_lazy_fields = constructor(**input_values)
+        if output_lazy_fields is None:
+            raise ValueError(
+                f"Constructor function for {definition} returned None, must a lazy field "
+                "or a tuple of lazy fields"
+            )
         # Check to see whether any mandatory inputs are not set
         for node in workflow.nodes:
             node._definition._check_rules()

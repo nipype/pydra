@@ -40,7 +40,6 @@ from pydra.design import python, workflow
 import pydra.engine.core
 from pydra.engine.core import Workflow
 from pydra.engine.helpers import plot_workflow
-from pydra.utils import exc_info_matches
 
 
 def test_wf_no_output(plugin: str, tmp_path: Path):
@@ -50,11 +49,8 @@ def test_wf_no_output(plugin: str, tmp_path: Path):
     def Worky(x):
         workflow.add(Add2(x=x))
 
-    worky = Worky(x=2)
-
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
-    assert "Worky output cannot be None" in str(excinfo.value)
+    with pytest.raises(ValueError, match="returned None"):
+        Workflow.construct(Worky(x=2))
 
 
 def test_wf_1(plugin: str, tmp_path: Path):
@@ -1312,13 +1308,11 @@ def test_wf_ndstLR_1a(plugin: str, tmp_path: Path):
     def Worky(x, y):
         add2 = workflow.add(Add2().split("x", x=x), name="add2")
         mult = workflow.add(
-            Multiply().split(["_add2", "y"], x=add2.out, y=y), name="mult"
+            Multiply(x=add2.out).split(["_add2", "y"], y=y), name="mult"
         )
         return mult.out
 
     worky = Worky(x=[1, 2], y=[11, 12])
-
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
 
     # checking if the splitter is created properly
     wf = Workflow.construct(worky)
@@ -1327,6 +1321,8 @@ def test_wf_ndstLR_1a(plugin: str, tmp_path: Path):
 
     # expected: [({"add2.x": 1, "mult.y": 11}, 33), ({"add2.x": 1, "mult.y": 12}, 36),
     #            ({"add2.x": 2, "mult.y": 11}, 44), ({"add2.x": 2, "mult.y": 12}, 48)]
+
+    outputs = worky(worker=plugin, cache_dir=tmp_path)
     assert outputs.out == [33, 36, 44, 48]
 
 
@@ -1339,7 +1335,9 @@ def test_wf_ndstLR_2(plugin: str, tmp_path: Path):
     @workflow.define
     def Worky(x, y, z):
         add2 = workflow.add(Add2().split("x", x=x), name="add2")
-        addvar = workflow.add(FunAddVar3(a=add2.out).split(["b", "c"], b=y, c=z))
+        addvar = workflow.add(
+            FunAddVar3(a=add2.out).split(["b", "c"], b=y, c=z), name="addvar"
+        )
         return addvar.out
 
     worky = Worky(x=[1, 2, 3], y=[10, 20], z=[100, 200])
@@ -1388,7 +1386,7 @@ def test_wf_ndstLR_2a(plugin: str, tmp_path: Path):
     def Worky(x, y, z):
         add2 = workflow.add(Add2().split("x", x=x), name="add2")
         addvar = workflow.add(
-            FunAddVar3(a=add2.out).split(["_add2", ["b", "c"]], b=y, c=z)
+            FunAddVar3(a=add2.out).split(["_add2", ["b", "c"]], b=y, c=z), name="addvar"
         )
 
         return addvar.out
@@ -2142,9 +2140,8 @@ def test_wf_nostate_cachedir(plugin: str, tmp_path: Path):
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachedir_relativepath(tmp_path, plugin):
     """worky with provided cache_dir as relative path"""
-    tmp_path.chdir()
-    cache_dir = "test_wf_cache_2"
-    tmp_path.mkdir(cache_dir)
+    cache_dir = tmp_path / "test_wf_cache_2"
+    cache_dir.mkdir()
 
     @workflow.define
     def Worky(x, y):
@@ -3570,11 +3567,11 @@ def test_workflow_combine2(tmp_path: Path):
 def test_wf_resultfile_1(plugin: str, tmp_path: Path):
     """workflow with a file in the result, file should be copied to the worky dir"""
 
-    @workflow.define
+    @workflow.define(outputs=["wf_out"])
     def Worky(x):
         writefile = workflow.add(FunWriteFile(filename=x))
 
-        return writefile.out  # wf_out
+        return writefile.out  #
 
     worky = Worky(x="file_1.txt")
     outputs = worky(worker=plugin, cache_dir=tmp_path)
