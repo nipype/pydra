@@ -570,7 +570,9 @@ class NodeExecution(ty.Generic[DefType]):
         if self.state:
             values = {}
             for name, value in self.node.state_values.items():
-                if name in self.node.state.names:
+                if name in self.node.state.current_splitter_rpn:
+                    if name in ("*", "."):
+                        continue
                     if isinstance(value, LazyField):
                         values[name] = value._get_value(
                             workflow=self.workflow, graph=self.graph
@@ -692,23 +694,20 @@ class NodeExecution(ty.Generic[DefType]):
         if not self.node.state:
             return {None: self.node._definition}
         split_defs = []
-        for input_ind in self.node.state.inputs_ind:
+        for index, vals in zip(self.node.state.inputs_ind, self.node.state.states_val):
             resolved = {}
             for inpt_name in set(self.node.input_names):
                 value = getattr(self._definition, inpt_name)
                 state_key = f"{self.node.name}.{inpt_name}"
-                if isinstance(value, LazyField):
-                    resolved[inpt_name] = value._get_value(
-                        workflow=self.workflow,
-                        graph=self.graph,
-                        state_index=input_ind.get(state_key),
-                    )
-                elif state_key in input_ind:
-                    resolved[inpt_name] = self.node.state._get_element(
-                        value=value,
-                        field_name=inpt_name,
-                        ind=input_ind[state_key],
-                    )
+                try:
+                    resolved[inpt_name] = vals[state_key]
+                except KeyError:
+                    if isinstance(value, LazyField):
+                        resolved[inpt_name] = value._get_value(
+                            workflow=self.workflow,
+                            graph=self.graph,
+                            state_index=index.get(state_key),
+                        )
             split_defs.append(attrs.evolve(self.node._definition, **resolved))
         return split_defs
 
@@ -736,21 +735,28 @@ class NodeExecution(ty.Generic[DefType]):
         for index, task in list(self.blocked.items()):
             pred: NodeExecution
             is_runnable = True
-            states_ind = (
-                list(self.node.state.states_ind[index].items())
-                if self.node.state
-                else []
-            )
+            # This is required for the commented-out code below
+            # states_ind = (
+            #     list(self.node.state.states_ind[index].items())
+            #     if self.node.state
+            #     else []
+            # )
             for pred in graph.predecessors[self.node.name]:
                 if pred.node.state:
-                    pred_states_ind = {
-                        (k, i) for k, i in states_ind if k.startswith(pred.name + ".")
-                    }
-                    pred_inds = [
-                        i
-                        for i, ind in enumerate(pred.node.state.states_ind)
-                        if set(ind.items()).issuperset(pred_states_ind)
-                    ]
+                    # FIXME: These should be the only predecessor jobs that are required to have
+                    # completed before the job can be run, however, due to how the state
+                    # is currently built, all predecessors are required to have completed.
+                    # If/when this is relaxed, then the following code should be used instead.
+                    #
+                    # pred_states_ind = {
+                    #     (k, i) for k, i in states_ind if k.startswith(pred.name + ".")
+                    # }
+                    # pred_inds = [
+                    #     i
+                    #     for i, ind in enumerate(pred.node.state.states_ind)
+                    #     if set(ind.items()).issuperset(pred_states_ind)
+                    # ]
+                    pred_inds = list(range(len(pred.node.state.states_ind)))
                 else:
                     pred_inds = [None]
                 if not all(i in pred.successful for i in pred_inds):

@@ -225,15 +225,15 @@ class Node(ty.Generic[OutputType]):
             ):
                 node: Node = val._node
                 # variables that are part of inner splitters should be treated as a containers
-                if node.state and f"{node.name}.{inpt_name}" in node.state.splitter:
-                    node.state._inner_cont_dim[f"{node.name}.{inpt_name}"] = 1
+                if node.state and f"{node.name}.{val._field}" in node.state.splitter:
+                    node.state._inner_cont_dim[f"{node.name}.{val._field}"] = 1
                 # adding task_name: (task.state, [a field from the connection]
                 if node.name not in upstream_states:
-                    upstream_states[node.name] = (node.state, [inpt_name])
+                    upstream_states[node.name] = (node.state, [val._field])
                 else:
                     # if the task already exist in other_state,
                     # additional field name should be added to the list of fields
-                    upstream_states[node.name][1].append(inpt_name)
+                    upstream_states[node.name][1].append(val._field)
         return upstream_states
 
         # else:

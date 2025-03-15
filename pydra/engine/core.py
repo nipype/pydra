@@ -844,7 +844,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                             # treated as a containers
                             if (
                                 node.state
-                                and f"{node.name}.{field.name}" in node.state.splitter
+                                and f"{node.name}.{field.name}"
+                                in node.state._current_splitter_rpn
                             ):
                                 node.state._inner_cont_dim[
                                     f"{node.name}.{field.name}"

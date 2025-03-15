@@ -885,7 +885,7 @@ class State:
             st: State
             for nm, (st, _) in self.other_states.items():
                 self.inputs.update(st.inputs)
-                self.cont_dim.update(st.cont_dim)
+                self.cont_dim.update(st.cont_dim_all)
 
         self.prepare_states_ind()
         self.prepare_states_val()
@@ -1225,11 +1225,11 @@ class State:
         Any
             specific element of the input field
         """
-        if f"{self.name}.{field_name}" in self.cont_dim:
+        if f"{self.name}.{field_name}" in self.cont_dim_all:
             return list(
                 hlpst.flatten(
                     ensure_list(value),
-                    max_depth=self.cont_dim[f"{self.name}.{field_name}"],
+                    max_depth=self.cont_dim_all[f"{self.name}.{field_name}"],
                 )
             )[ind]
         else:
