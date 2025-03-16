@@ -636,7 +636,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
         # Initialise the outputs of the workflow
         outputs = definition.Outputs(
-            **{f.name: attrs.NOTHING for f in attrs.fields(definition.Outputs)}
+            **{f.name: attrs.NOTHING for f in list_fields(definition.Outputs)}
         )
 
         # Initialise the lzin fields

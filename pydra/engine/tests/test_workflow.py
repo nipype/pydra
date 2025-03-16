@@ -389,7 +389,7 @@ def test_wf_st_1(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        add2 = workflow.add(Add2(x=x).split("x", x=x), name="add2")
+        add2 = workflow.add(Add2().split("x", x=x), name="add2")
 
         return add2.out
 
@@ -411,7 +411,7 @@ def test_wf_st_1_call_subm(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        add2 = workflow.add(Add2(x=x).split("x", x=x), name="add2")
+        add2 = workflow.add(Add2().split("x", x=x), name="add2")
 
         return add2.out
 
@@ -431,7 +431,7 @@ def test_wf_st_1_call_plug(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        add2 = workflow.add(Add2(x=x).split("x", x=x), name="add2")
+        add2 = workflow.add(Add2().split("x", x=x), name="add2")
 
         return add2.out
 
@@ -451,7 +451,7 @@ def test_wf_st_1_call_selfplug(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        add2 = workflow.add(Add2(x=x).split("x", x=x), name="add2")
+        add2 = workflow.add(Add2().split("x", x=x), name="add2")
         return add2.out
 
     worky = Worky(x=[1, 2])
@@ -471,7 +471,7 @@ def test_wf_st_1_call_noplug_nosubm(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        add2 = workflow.add(Add2(x=x).split("x", x=x), name="add2")
+        add2 = workflow.add(Add2().split("x", x=x), name="add2")
         return add2.out
 
     worky = Worky(x=[1, 2])
@@ -505,10 +505,9 @@ def test_wf_st_1_upd_inp_call(tmp_path, plugin):
         add2 = workflow.add(Add2(x=x), name="add2")
         return add2.out
 
-    worky = Worky().split("x", x=[11, 22])
-    outputs = worky(cache_dir=tmp_path, plugin=plugin)  # x=[1, 2]
-    assert outputs.out[0] == 3
-    assert outputs.out[1] == 4
+    worky = Worky().split("x", x=[1, 2])
+    outputs = worky(cache_dir=tmp_path, plugin=plugin)
+    assert outputs.out == [3, 4]
 
 
 def test_wf_st_noinput_1(plugin: str, tmp_path: Path):
@@ -516,7 +515,7 @@ def test_wf_st_noinput_1(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        add2 = workflow.add(Add2(x=x).split("x", x=x), name="add2")
+        add2 = workflow.add(Add2().split("x", x=x), name="add2")
         return add2.out
 
     worky = Worky(x=[])
@@ -524,7 +523,6 @@ def test_wf_st_noinput_1(plugin: str, tmp_path: Path):
     checksum_before = worky._hash
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    wf = Workflow.construct(worky)
     assert worky._hash == checksum_before
 
     assert outputs.out == []
@@ -750,18 +748,15 @@ def test_wf_st_5(plugin: str, tmp_path: Path):
     @workflow.define
     def Worky(x, y):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2(x=mult.out).split(["x", "y"], x=x, y=y), name="add2")
+        add2 = workflow.add(Add2(x=mult.out), name="add2")
 
         return add2.out
 
-    worky = Worky(x=[1, 2], y=[11, 12])
+    worky = Worky().split(x=[1, 2], y=[11, 12])
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    assert outputs.out[0] == 13
-    assert outputs.out[1] == 14
-    assert outputs.out[2] == 24
-    assert outputs.out[3] == 26
+    assert outputs.out == [13, 14, 24, 26]
 
 
 def test_wf_ndst_5(plugin: str, tmp_path: Path):
@@ -1122,7 +1117,7 @@ def test_wf_3nd_ndst_4(plugin: str, tmp_path: Path):
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    # assert wf["output_dir"].exists()
+    # assert outputs._output_dir.exists()
 
     assert len(outputs.out) == 6
     assert outputs.out == [39, 42, 52, 56, 65, 70]
@@ -1615,12 +1610,11 @@ def test_wf_st_singl_1(plugin: str, tmp_path: Path):
 
         return add2.out
 
-    worky = Worky().split("x", x=[1, 2], y=11).combine("x")
+    worky = Worky(y=11).split("x", x=[1, 2]).combine("x")
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    assert outputs.out[0] == 13
-    assert outputs.out[1] == 24
+    assert outputs.out == [13, 24]
 
 
 def test_wf_ndst_singl_1(plugin: str, tmp_path: Path):
@@ -1654,13 +1648,11 @@ def test_wf_st_singl_2(plugin: str, tmp_path: Path):
         mult = workflow.add(Multiply(x=add2x.out, y=add2y.out), name="mult")
         return mult.out
 
-    worky = Worky().split("x", x=[1, 2, 3], y=11)
+    worky = Worky(y=11).split("x", x=[1, 2, 3])
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    assert outputs.out[0] == 39
-    assert outputs.out[1] == 52
-    assert outputs.out[2] == 65
+    assert outputs.out == [39, 52, 65]
 
 
 def test_wf_ndst_singl_2(plugin: str, tmp_path: Path):
@@ -1699,7 +1691,7 @@ def test_wfasnd_1(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x))
+        wfnd = workflow.add(Wfnd(x=x))
         return wfnd.out
 
     worky = Worky(x=2)
@@ -1749,7 +1741,7 @@ def test_wfasnd_wfndupdate(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x))
+        wfnd = workflow.add(Wfnd(x=x))
         return wfnd.out
 
     worky = Worky(x=3)
@@ -1778,7 +1770,7 @@ def test_wfasnd_wfndupdate_rerun(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x))
+        wfnd = workflow.add(Wfnd(x=x))
         return wfnd.out
 
     worky = Worky(x=3)
@@ -1790,8 +1782,8 @@ def test_wfasnd_wfndupdate_rerun(plugin: str, tmp_path: Path):
     # adding another layer of workflow
     @workflow.define
     def WorkyO(x):
-        worky = workflow.add(Worky(x=3))
-        return wf["out"]
+        worky = workflow.add(Worky(x=x))
+        return worky.out
 
     wf_o = WorkyO(x=4)
 
@@ -1916,7 +1908,7 @@ def test_wfasnd_wfst_1(plugin: str, tmp_path: Path):
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    # assert wf["output_dir"].exists()
+    # assert outputs._output_dir.exists()
 
     assert outputs.out[0] == 4
     assert outputs.out[1] == 6
@@ -1939,14 +1931,14 @@ def test_wfasnd_st_2(plugin: str, tmp_path: Path):
     @workflow.define
     def Worky(x, y):
         wfnd = workflow.add(Wfnd(x=x, y=y))
-        add2 = workflow.add(Add2(x=wfnd.out), name="add2")
+        add2 = workflow.add(Add2().split(x=wfnd.out), name="add2")
         return add2.out
 
     worky = Worky(x=[2, 4], y=[1, 10])
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    # assert wf["output_dir"].exists()
+    # assert outputs._output_dir.exists()
 
     assert outputs.out == [4, 42]
 
@@ -1972,7 +1964,7 @@ def test_wfasnd_wfst_2(plugin: str, tmp_path: Path):
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    # assert wf["output_dir"].exists()
+    # assert outputs._output_dir.exists()
 
     assert outputs.out[0] == 4
     assert outputs.out[1] == 42
@@ -1995,14 +1987,14 @@ def test_wfasnd_ndst_3(plugin: str, tmp_path: Path):
     @workflow.define
     def Worky(x, y):
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        wfnd = workflow.add(Wfnd(mult.out))
+        wfnd = workflow.add(Wfnd(x=mult.out))
         return wfnd.out
 
     worky = Worky(x=[2, 4], y=[1, 10])
 
     outputs = worky(cache_dir=tmp_path, plugin=plugin)
 
-    # assert wf["output_dir"].exists()
+    # assert outputs._output_dir.exists()
 
     assert outputs.out == [4, 42]
 
@@ -2022,7 +2014,7 @@ def test_wfasnd_wfst_3(plugin: str, tmp_path: Path):
     def Worky(x, y):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
 
-        wfnd = workflow.add(Wfnd(mult.out))
+        wfnd = workflow.add(Wfnd(x=mult.out))
 
         return wfnd.out
 
@@ -2030,7 +2022,7 @@ def test_wfasnd_wfst_3(plugin: str, tmp_path: Path):
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    # assert wf["output_dir"].exists()
+    # assert outputs._output_dir.exists()
 
     assert outputs.out[0] == 4
     assert outputs.out[1] == 42
@@ -2107,10 +2099,9 @@ def test_wfasnd_wfst_4(plugin: str, tmp_path: Path):
 
     outputs = worky(worker=plugin, cache_dir=tmp_path)
 
-    # assert wf["output_dir"].exists()
+    # assert outputs._output_dir.exists()
 
-    assert outputs.out[0] == 6
-    assert outputs.out[1] == 8
+    assert outputs.out == [6, 8]
 
 
 # Testing caching
@@ -2271,7 +2262,7 @@ def test_wf_nostate_cachelocations_a(plugin: str, tmp_path: Path):
         # testing relative values (windows or slurm takes much longer to create worky itself)
         assert t2 < max(1, t1 - 1)
 
-    # checking if both wf["output_dir"] are created
+    # checking if both output_dirs are created
     assert results1.output_dir != results2.output_dir
 
 
@@ -3502,34 +3493,6 @@ def create_tasks():
     return worky, t1, t2
 
 
-def test_cache_propagation1(tmp_path, create_tasks):
-    """No cache set, all independent"""
-    worky, t1, t2 = create_tasks
-    worky(plugin="cf")
-    assert wf["cache_dir"] == t1.cache_dir == t2.cache_dir
-    worky.cache_dir = (tmp_path / "shared").strpath
-    worky(plugin="cf")
-    assert wf["cache_dir"] == t1.cache_dir == t2.cache_dir
-
-
-def test_cache_propagation2(tmp_path, create_tasks):
-    """Task explicitly states no inheriting"""
-    worky, t1, t2 = create_tasks
-    worky.cache_dir = (tmp_path / "shared").strpath
-    t2.allow_cache_override = False
-    worky(plugin="cf")
-    assert wf["cache_dir"] == t1.cache_dir != t2.cache_dir
-
-
-def test_cache_propagation3(tmp_path, create_tasks):
-    """Shared cache_dir with state"""
-    worky, t1, t2 = create_tasks
-    worky = wf["split"]("x", x=[1, 2])
-    worky.cache_dir = (tmp_path / "shared").strpath
-    worky(plugin="cf")
-    assert wf["cache_dir"] == t1.cache_dir == t2.cache_dir
-
-
 def test_workflow_combine1(tmp_path: Path):
     @workflow.define(outputs=["out_pow", "out_iden1", "out_iden2"])
     def Worky1(a, b):
@@ -3578,8 +3541,8 @@ def test_wf_resultfile_1(plugin: str, tmp_path: Path):
 
     # checking if the file exists and if it is in the Worky directory
     wf_out = outputs.wf_out.fspath
-    wf_out.exists()
-    assert wf_out == wf["output_dir"] / "file_1.txt"
+    assert wf_out.exists()
+    assert wf_out == outputs._output_dir / "file_1.txt"
 
 
 def test_wf_resultfile_2(plugin: str, tmp_path: Path):
@@ -3587,11 +3550,11 @@ def test_wf_resultfile_2(plugin: str, tmp_path: Path):
     all files should be copied to the worky dir
     """
 
-    @workflow.define
+    @workflow.define(outputs=["wf_out"])
     def Worky(x):
         writefile = workflow.add(FunWriteFileList(filename_list=x))
 
-        return writefile.out  # wf_out
+        return writefile.out  #
 
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     worky = Worky(x=file_list)
@@ -3600,7 +3563,7 @@ def test_wf_resultfile_2(plugin: str, tmp_path: Path):
     # checking if the file exists and if it is in the Worky directory
     for ii, file in enumerate(outputs.wf_out):
         assert file.fspath.exists()
-        assert file.fspath == wf["output_dir"] / file_list[ii]
+        assert file.fspath == outputs._output_dir / file_list[ii]
 
 
 def test_wf_resultfile_3(plugin: str, tmp_path: Path):
@@ -3608,11 +3571,11 @@ def test_wf_resultfile_3(plugin: str, tmp_path: Path):
     all files should be copied to the worky dir
     """
 
-    @workflow.define
+    @workflow.define(outputs=["wf_out"])
     def Worky(x):
         writefile = workflow.add(FunWriteFileList2Dict(filename_list=x))
 
-        return writefile.out  # wf_out
+        return writefile.out  #
 
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     worky = Worky(x=file_list)
@@ -3625,7 +3588,7 @@ def test_wf_resultfile_3(plugin: str, tmp_path: Path):
         else:
             assert val.fspath.exists()
             ii = int(key.split("_")[1])
-            assert val.fspath == wf["output_dir"] / file_list[ii]
+            assert val.fspath == outputs._output_dir / file_list[ii]
 
 
 def test_wf_upstream_error1(plugin: str, tmp_path: Path):
@@ -3714,7 +3677,7 @@ def test_wf_upstream_error5(plugin: str, tmp_path: Path):
     @workflow.define
     def WfMain(x):
         worky = workflow.add(Worky(x=x))
-        return wf["out"]
+        return worky.out
 
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
@@ -3739,7 +3702,7 @@ def test_wf_upstream_error6(plugin: str, tmp_path: Path):
     @workflow.define
     def WfMain(x):
         worky = workflow.add(Worky(x=x))
-        return wf["out"]
+        return worky.out
 
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
@@ -3794,6 +3757,7 @@ def test_wf_upstream_error7a(plugin: str, tmp_path: Path):
         worky(worker=plugin, cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
     assert "raised an error" in str(excinfo.value)
+
     assert wf["addvar1"]._errored is True
     assert wf["addvar2"]._errored == wf["addvar3"]._errored == ["addvar1"]
 
@@ -4404,10 +4368,10 @@ def test_duplicate_input_on_split_wf(tmp_path: Path):
     def printer(a):
         return a
 
-    @workflow.define
+    @workflow.define(outputs=["out1"])
     def Worky(text):
         printer1 = workflow.add(printer(a=text))
-        return printer1.out  # out1
+        return printer1.out  #
 
     worky = Worky().split(text=text)
 
@@ -4515,21 +4479,24 @@ def test_wf_state_arrays(tmp_path, plugin):
         A = workflow.add(  # Split over workflow input "x" on "scalar" input
             ListMultSum(
                 in_list=x,
-            ).split(scalar=x)
+            ).split(scalar=x),
+            name="A",
         )
 
         B = workflow.add(  # Worky is still split over "x", combined over "x" on out
             ListMultSum(
                 scalar=A.sum,
                 in_list=A.products,
-            ).combine("A.scalar")
+            ).combine("A.scalar"),
+            name="B",
         )
 
         C = workflow.add(  # Worky "
             ListMultSum(
                 scalar=y,
                 in_list=B.sum,
-            )
+            ),
+            name="C",
         )
 
         D = workflow.add(  # Worky is split again, this time over C.products
@@ -4537,11 +4504,13 @@ def test_wf_state_arrays(tmp_path, plugin):
                 in_list=x,
             )
             .split(scalar=C.products)
-            .combine("scalar")
+            .combine("scalar"),
+            name="D",
         )
 
         E = workflow.add(  # Worky is finally combined again into a single node
-            ListMultSum(scalar=y, in_list=D.sum)
+            ListMultSum(scalar=y, in_list=D.sum),
+            name="E",
         )
 
         return E.sum, E.products
@@ -4567,7 +4536,7 @@ def test_wf_input_typing_fail():
         MismatchInputWf(x=1, y=[1, 2, 3])
 
 
-def test_wf_output_typing_fail():
+def test_wf_output_typing_fail(tmp_path: Path):
 
     @workflow.define(outputs={"alpha": int, "beta": ty.List[int]})
     def MismatchOutputWf(x: int, y: ty.List[int]):
@@ -4579,12 +4548,17 @@ def test_wf_output_typing_fail():
         )
         return A.products, A.products
 
-    with pytest.raises(TypeError, match="don't match their declared types"):
-        MismatchOutputWf(x=1, y=[1, 2, 3])
+    worky = MismatchOutputWf(x=1, y=[1, 2, 3])
+
+    with pytest.raises(
+        TypeError,
+        match="Incorrect type for lazy field in 'alpha' field of MismatchOutputWf.Outputs interface",
+    ):
+        worky(cache_dir=tmp_path)
 
 
-def test_wf_input_output_typing():
-    @workflow.define(outputs={"alpha": int, "beta": ty.List[int]})
+def test_wf_input_output_typing(tmp_path: Path):
+    @workflow.define(outputs={"sum": int, "products": ty.List[int]})
     def Worky(x: int, y: ty.List[int]):
         A = workflow.add(  # Split over workflow input "x" on "scalar" input
             ListMultSum(
@@ -4594,6 +4568,6 @@ def test_wf_input_output_typing():
         )
         return A.sum, A.products
 
-    outputs = Worky(x=10, y=[1, 2, 3, 4])()
-    assert outputs.sum == 10
+    outputs = Worky(x=10, y=[1, 2, 3, 4])(cache_dir=tmp_path)
+    assert outputs.sum == 100
     assert outputs.products == [10, 20, 30, 40]

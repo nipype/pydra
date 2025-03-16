@@ -67,15 +67,29 @@ class TaskOutputs:
 
     RESERVED_FIELD_NAMES = ("inputs",)
 
+    _output_dir: Path = attrs.field(default=None, init=False, repr=False)
+
     @property
     def inputs(self):
         """The inputs object associated with a lazy-outputs object"""
         return self._get_node().inputs
 
     @classmethod
-    def _from_defaults(cls) -> Self:
-        """Create an output object from the default values of the fields"""
-        return cls(
+    def _from_task(cls, task: "Task[DefType]") -> Self:
+        """Collect the outputs of a task. This is just an abstract base method that
+        should be used by derived classes to set default values for the outputs.
+
+        Parameters
+        ----------
+        task : Task[DefType]
+            The task whose outputs are being collected.
+
+        Returns
+        -------
+        outputs : Outputs
+            The outputs of the task
+        """
+        outputs = cls(
             **{
                 f.name: (
                     f.default.factory()
@@ -83,8 +97,19 @@ class TaskOutputs:
                     else f.default
                 )
                 for f in attrs_fields(cls)
+                if not f.name.startswith("_")
             }
         )
+        outputs._output_dir = task.output_dir
+        return outputs
+
+    @property
+    def _results(self) -> "Result[Self]":
+        results_path = self._output_dir / "_task.pklz"
+        if not results_path.exists():
+            raise FileNotFoundError(f"Task results file {results_path} not found")
+        with open(results_path, "rb") as f:
+            return cp.load(f)
 
     def _get_node(self):
         try:
@@ -718,7 +743,7 @@ class PythonOutputs(TaskOutputs):
         outputs : Outputs
             The outputs of the task in dataclass
         """
-        outputs = cls._from_defaults()
+        outputs = super()._from_task(task)
         for name, val in task.return_values.items():
             setattr(outputs, name, val)
         return outputs
@@ -739,7 +764,7 @@ class PythonDef(TaskDef[PythonOutputsType]):
         # Run the actual function
         returned = self.function(**inputs)
         # Collect the outputs and save them into the task.return_values dictionary
-        task.return_values = {f.name: f.default for f in attrs.fields(self.Outputs)}
+        task.return_values = {f.name: f.default for f in list_fields(self.Outputs)}
         return_names = list(task.return_values)
         if returned is None:
             task.return_values = {nm: None for nm in return_names}
@@ -773,7 +798,7 @@ class WorkflowOutputs(TaskOutputs):
         outputs : Outputs
             The outputs of the task
         """
-        outputs = cls._from_defaults()
+        outputs = super()._from_task(task)
         # collecting outputs from tasks
         output_wf = {}
         lazy_field: lazy.LazyOutField
@@ -806,7 +831,9 @@ class WorkflowOutputs(TaskOutputs):
                             else "\n" + "\n".join(str(f) for f in err_files)
                         )
                     )
-        return attrs.evolve(outputs, **output_wf)
+        outputs = attrs.evolve(outputs, **output_wf)
+        outputs._output_dir = task.output_dir
+        return outputs
 
 
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
@@ -876,7 +903,7 @@ class ShellOutputs(TaskOutputs):
         outputs : ShellOutputs
             The outputs of the shell process
         """
-        outputs = cls._from_defaults()
+        outputs = super()._from_task(task)
         fld: shell.out
         for fld in list_fields(cls):
             if fld.name in ["return_code", "stdout", "stderr"]:
@@ -904,21 +931,6 @@ class ShellOutputs(TaskOutputs):
                         f"error in the {task.name!r} task"
                     )
         return outputs
-
-    # @classmethod
-    # def _from_defaults(cls) -> Self:
-    #     """Create an output object from the default values of the fields"""
-    #     defaults = {}
-    #     for field in attrs_fields(cls):
-    #         if isinstance(field.default, attrs.Factory):
-    #             defaults[field.name] = field.default.factory()
-    #         elif TypeParser.contains_type(FileSet, field.type):
-    #             # Will be set by the templating code
-    #             defaults[field.name] = attrs.NOTHING
-    #         else:
-    #             defaults[field.name] = field.default
-
-    #     return cls(**defaults)
 
     @classmethod
     def _resolve_default_value(cls, fld: shell.out, output_dir: Path) -> ty.Any:
