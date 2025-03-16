@@ -719,7 +719,9 @@ def test_shell_output_field_name_static():
         "x",
         "y",
     ]
-    assert sorted(a.name for a in attrs.fields(A.Outputs)) == [
+    assert sorted(
+        a.name for a in attrs.fields(A.Outputs) if not a.name.startswith("_")
+    ) == [
         "return_code",
         "stderr",
         "stdout",

@@ -866,6 +866,7 @@ class State:
     def prepare_states(
         self,
         inputs: dict[str, ty.Any],
+        cont_dim: dict[str, int] | None = None,
     ):
         """
         Prepare a full list of state indices and state values.
@@ -881,6 +882,8 @@ class State:
         self.combiner_validation()
         self.set_input_groups()
         self.inputs = inputs
+        if cont_dim is not None:
+            self.cont_dim = cont_dim
         if self.other_states:
             st: State
             for nm, (st, _) in self.other_states.items():

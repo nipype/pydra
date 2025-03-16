@@ -2855,8 +2855,7 @@ def test_wf_state_cachelocations(plugin: str, tmp_path: Path):
     # checking if the second worky didn't run again
     # checking all directories
 
-    for odir in worky2.output_dir:
-        assert not odir.exists()
+    assert results1.output_dir == results2.output_dir
 
 
 @pytest.mark.flaky(reruns=3)
