@@ -321,7 +321,7 @@ class Submitter:
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
             for task in tasks:
-                self.worker.run(task, rerun=rerun)
+                self.worker.run(task, rerun=rerun and self.propagate_rerun)
             tasks = self.get_runnable_tasks(exec_graph)
 
     async def expand_workflow_async(
@@ -418,9 +418,13 @@ class Submitter:
                         raise RuntimeError(msg)
             for task in tasks:
                 if task.is_async:
-                    await self.worker.run_async(task, rerun=rerun)
+                    await self.worker.run_async(
+                        task, rerun=rerun and self.propagate_rerun
+                    )
                 else:
-                    task_futures.add(self.worker.run(task, rerun=rerun))
+                    task_futures.add(
+                        self.worker.run(task, rerun=rerun and self.propagate_rerun)
+                    )
             task_futures = await self.worker.fetch_finished(task_futures)
             tasks = self.get_runnable_tasks(exec_graph)
 

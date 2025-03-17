@@ -172,7 +172,7 @@ class Task(ty.Generic[DefType]):
     @property
     def cache_locations(self):
         """Get the list of cache sources."""
-        return self._cache_locations + ensure_list(self.cache_dir)
+        return ensure_list(self.cache_dir) + self._cache_locations
 
     @cache_locations.setter
     def cache_locations(self, locations):

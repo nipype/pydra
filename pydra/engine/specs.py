@@ -19,6 +19,7 @@ import cloudpickle as cp
 from fileformats.generic import FileSet, File
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.typing import is_optional, optional_type
+from pydra.utils.hash import register_serializer, hash_single
 from .helpers import (
     attrs_fields,
     attrs_values,
@@ -1350,3 +1351,21 @@ def argstr_formatting(argstr: str, values: dict[str, ty.Any]):
         .strip()
     )
     return argstr_formatted
+
+
+@register_serializer
+def bytes_repr_task_def(obj: TaskDef, cache: Cache) -> ty.Iterator[bytes]:
+    yield f"task_def[{obj._task_type}]:(".encode()
+    for field in list_fields(obj):
+        yield f"{field.name}=".encode()
+        yield hash_single(getattr(obj, field.name), cache)
+        yield b","
+    yield b"_splitter="
+    yield hash_single(obj._splitter, cache)
+    yield b",_combiner="
+    yield hash_single(obj._combiner, cache)
+    yield b",_cont_dim="
+    yield hash_single(obj._cont_dim, cache)
+    yield b",_xor="
+    yield hash_single(obj._xor, cache)
+    yield b")"

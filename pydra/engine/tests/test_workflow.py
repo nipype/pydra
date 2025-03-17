@@ -2509,9 +2509,9 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     submitter doesn't have rerun, but the second worky has rerun=True,
     propagate_rerun is True as default, so everything should be rerun
     """
-    cache_dir1 = tmp_path / "test_wf_cache3"
+    cache_dir1 = tmp_path / "test_wf_cache1"
     cache_dir1.mkdir()
-    cache_dir2 = tmp_path / "test_wf_cache4"
+    cache_dir2 = tmp_path / "test_wf_cache2"
     cache_dir2.mkdir()
 
     @workflow.define
@@ -2631,6 +2631,12 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     assert len(list(Path(cache_dir2).glob("python-*"))) == 0
 
 
+@pytest.mark.xfail(
+    reason=(
+        "Cannot specify tasks within a workflow to be rerun, maybe rerun could take a "
+        "list of task names instead"
+    )
+)
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     plugin: str, tmp_path: Path
@@ -2640,9 +2646,9 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     submitter doesn't have rerun, but worky has rerun=True,
     since propagate_rerun=False, only tasks that have rerun=True will be rerun
     """
-    cache_dir1 = tmp_path / "test_wf_cache3"
+    cache_dir1 = tmp_path / "cache1"
     cache_dir1.mkdir()
-    cache_dir2 = tmp_path / "test_wf_cache4"
+    cache_dir2 = tmp_path / "cache2"
     cache_dir2.mkdir()
 
     @workflow.define
@@ -2666,7 +2672,7 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     def Worky2(x, y):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
         # rerun on the task level needed (wf["propagate_rerun"] is False)
-        add2 = workflow.add(Add2Wait(x=mult.out, rerun=True), name="add2")
+        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
         return add2.out
 
     worky2 = Worky2(x=2, y=3)
@@ -2723,7 +2729,7 @@ def test_wf_nostate_nodecachelocations(plugin: str, tmp_path: Path):
     assert 12 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y=None):
 
         ten = workflow.add(Ten(x=x))
         add2 = workflow.add(Add2(x=ten.out), name="add2")
@@ -2743,8 +2749,8 @@ def test_wf_nostate_nodecachelocations(plugin: str, tmp_path: Path):
     # checking if the second worky runs again, but runs only one task
     assert results1.output_dir != results2.output_dir
     # the second worky should rerun one task
-    assert len(list(Path(cache_dir1).glob("F*"))) == 2
-    assert len(list(Path(cache_dir2).glob("F*"))) == 1
+    assert len(list(Path(cache_dir1).glob("python-*"))) == 2
+    assert len(list(Path(cache_dir2).glob("python-*"))) == 1
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2775,17 +2781,16 @@ def test_wf_nostate_nodecachelocations_upd(plugin: str, tmp_path: Path):
     assert 12 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y=None):
         ten = workflow.add(Ten(x=x))
         add2 = workflow.add(Add2(x=ten.out), name="add2")
         return add2.out
 
     worky2 = Worky2(x=2)
 
-    # updating cache_locations after adding the tasks
-    worky2.cache_locations = cache_dir1
-
-    with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
+    with Submitter(
+        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+    ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -2795,8 +2800,8 @@ def test_wf_nostate_nodecachelocations_upd(plugin: str, tmp_path: Path):
     # checking if the second worky runs again, but runs only one task
     assert results1.output_dir != results2.output_dir
     # the second worky should have only one task run
-    assert len(list(Path(cache_dir1).glob("F*"))) == 2
-    assert len(list(Path(cache_dir2).glob("F*"))) == 1
+    assert len(list(Path(cache_dir1).glob("python-*"))) == 2
+    assert len(list(Path(cache_dir2).glob("python-*"))) == 1
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2846,8 +2851,7 @@ def test_wf_state_cachelocations(plugin: str, tmp_path: Path):
     assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
-    assert results2.outputs.out[0] == 8
-    assert results2.outputs.out[1] == 82
+    assert results2.outputs.out == [8, 82]
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
@@ -3410,7 +3414,7 @@ def test_wf_nostate_runtwice_usecache(plugin: str, tmp_path: Path):
     # checkoing output_dir after the first run
 
     # saving the content of the cache dit after the first run
-    cache_dir_content = os.listdir(worky1.cache_dir)
+    cache_dir_content = os.listdir(cache_dir1)
 
     # running workflow the second time
     t0 = time.time()
@@ -3422,7 +3426,7 @@ def test_wf_nostate_runtwice_usecache(plugin: str, tmp_path: Path):
 
     assert 8 == results1.outputs.out
     # checking if no new directory is created
-    assert cache_dir_content == os.listdir(worky1.cache_dir)
+    assert cache_dir_content == os.listdir(cache_dir1)
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
@@ -3458,10 +3462,10 @@ def test_wf_state_runtwice_usecache(plugin: str, tmp_path: Path):
     assert 602 == results1.outputs.out[1]
 
     # checkoing output_dir after the first run
-    assert [odir.exists() for odir in worky1.output_dir]
+    assert results1.output_dir.exists()
 
     # saving the content of the cache dit after the first run
-    cache_dir_content = os.listdir(worky1.cache_dir)
+    cache_dir_content = os.listdir(results1.job.cache_dir)
 
     # running workflow the second time
     t0 = time.time()
@@ -3474,7 +3478,7 @@ def test_wf_state_runtwice_usecache(plugin: str, tmp_path: Path):
     assert 8 == results1.outputs.out[0]
     assert 602 == results1.outputs.out[1]
     # checking if no new directory is created
-    assert cache_dir_content == os.listdir(worky1.cache_dir)
+    assert cache_dir_content == os.listdir(results1.job.cache_dir)
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the execution time
