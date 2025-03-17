@@ -205,11 +205,11 @@ class Node(ty.Generic[OutputType]):
                 if not_split := [
                     c
                     for c in combiner
-                    if not any(c in s for s in self.state.splitter_rpn)
+                    if not any(c in s for s in self.state.splitter_rpn) and "." not in c
                 ]:
                     raise ValueError(
                         f"Combiner fields {not_split} for Node {self.name!r} are not in the "
-                        f"splitter fields {self.state.splitter_rpn}"
+                        f"splitter  {self.state.splitter_rpn}"
                     )
         else:
             self._state = None

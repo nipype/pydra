@@ -34,10 +34,11 @@ DefType = ty.TypeVar("DefType", bound="TaskDef")
 def plot_workflow(
     workflow_task: "WorkflowDef",
     out_dir: Path,
-    type="simple",
-    export=None,
-    name=None,
-    output_dir=None,
+    plot_type: str = "simple",
+    export: ty.Sequence[str] | None = None,
+    name: str | None = None,
+    output_dir: Path | None = None,
+    lazy: ty.Sequence[str] | ty.Set[str] = (),
 ):
     """creating a graph - dotfile and optionally exporting to other formats"""
     from .core import Workflow
@@ -45,24 +46,24 @@ def plot_workflow(
     # Create output directory
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Construct the workflow object
-    wf = Workflow.construct(workflow_task)
+    # Construct the workflow object with all of the fields lazy
+    wf = Workflow.construct(workflow_task, lazy=lazy)
 
     if not name:
         name = f"graph_{type(workflow_task).__name__}"
-    if type == "simple":
+    if plot_type == "simple":
         graph = wf.graph()
         dotfile = graph.create_dotfile_simple(outdir=out_dir, name=name)
-    elif type == "nested":
+    elif plot_type == "nested":
         graph = wf.graph()
         dotfile = graph.create_dotfile_nested(outdir=out_dir, name=name)
-    elif type == "detailed":
+    elif plot_type == "detailed":
         graph = wf.graph(detailed=True)
         dotfile = graph.create_dotfile_detailed(outdir=out_dir, name=name)
     else:
         raise Exception(
             f"type of the graph can be simple, detailed or nested, "
-            f"but {type} provided"
+            f"but {plot_type} provided"
         )
     if not export:
         return dotfile

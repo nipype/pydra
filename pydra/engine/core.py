@@ -18,7 +18,7 @@ from typing import Self
 import attrs
 from filelock import SoftFileLock
 from pydra.engine.specs import TaskDef, WorkflowDef, TaskOutputs, WorkflowOutputs
-from pydra.engine.graph import DiGraph
+from pydra.engine.graph import DiGraph, INPUTS_NODE_NAME, OUTPUTS_NODE_NAME
 from pydra.engine import state
 from .lazy import LazyInField, LazyOutField
 from pydra.utils.hash import hash_function, Cache
@@ -598,16 +598,32 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
     @classmethod
     def construct(
-        cls, definition: WorkflowDef[WorkflowOutputsType], dont_cache: bool = False
+        cls,
+        definition: WorkflowDef[WorkflowOutputsType],
+        dont_cache: bool = False,
+        lazy: ty.Sequence[str] = (),
     ) -> Self:
-        """Construct a workflow from a definition, caching the constructed worklow"""
+        """Construct a workflow from a definition, caching the constructed worklow
+
+        Parameters
+        ----------
+        definition : WorkflowDef
+            The definition of the workflow to construct
+        dont_cache : bool, optional
+            Whether to cache the constructed workflow, by default False
+        lazy : Sequence[str], optional
+            The names of the inputs to the workflow to be considered lazy even if they
+            have values in the given definition, by default ()
+        """
 
         # Check the previously constructed workflows to see if a workflow has been
         # constructed for the given set of inputs, or a less-specific set (i.e. with a
         # super-set of lazy inputs), and use that if it exists
 
         non_lazy_vals = {
-            n: v for n, v in attrs_values(definition).items() if not is_lazy(v)
+            n: v
+            for n, v in attrs_values(definition).items()
+            if not is_lazy(v) and n not in lazy
         }
         non_lazy_keys = frozenset(non_lazy_vals)
         hash_cache = Cache()  # share the hash cache to avoid recalculations
@@ -821,56 +837,55 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         DiGraph
             The graph of the workflow
         """
-        graph: DiGraph = DiGraph()
+        graph: DiGraph = DiGraph(name=self.name)
         for node in nodes:
             graph.add_nodes(node)
         # TODO: create connection is run twice
         for node in nodes:
             other_states = {}
-            for field in attrs_fields(node.inputs):
+            for field in list_fields(node._definition):
                 lf = node._definition[field.name]
                 if isinstance(lf, LazyOutField):
                     # adding an edge to the graph if task id expecting output from a different task
-                    if lf._node.name != self.name:
-                        # checking if the connection is already in the graph
-                        if (graph.node(lf._node.name), node) not in graph.edges:
-                            graph.add_edges((graph.node(lf._node.name), node))
-                        if detailed:
-                            graph.add_edges_description(
-                                (node.name, field.name, lf._node.name, lf._field)
-                            )
-                        logger.debug("Connecting %s to %s", lf._node.name, node.name)
-                        # adding a state from the previous task to other_states
+
+                    # checking if the connection is already in the graph
+                    if (graph.node(lf._node.name), node) not in graph.edges:
+                        graph.add_edges((graph.node(lf._node.name), node))
+                    if detailed:
+                        graph.add_edges_description(
+                            (node.name, field.name, lf._node.name, lf._field)
+                        )
+                    logger.debug("Connecting %s to %s", lf._node.name, node.name)
+                    # adding a state from the previous task to other_states
+                    if (
+                        graph.node(lf._node.name).state
+                        and graph.node(lf._node.name).state.splitter_rpn_final
+                    ):
+                        # variables that are part of inner splitters should be
+                        # treated as a containers
                         if (
-                            graph.node(lf._node.name).state
-                            and graph.node(lf._node.name).state.splitter_rpn_final
+                            node.state
+                            and f"{node.name}.{field.name}"
+                            in node.state._current_splitter_rpn
                         ):
-                            # variables that are part of inner splitters should be
-                            # treated as a containers
-                            if (
-                                node.state
-                                and f"{node.name}.{field.name}"
-                                in node.state._current_splitter_rpn
-                            ):
-                                node.state._inner_cont_dim[
-                                    f"{node.name}.{field.name}"
-                                ] = 1
-                            # adding task_name: (task.state, [a field from the connection]
-                            if lf._node.name not in other_states:
-                                other_states[lf._node.name] = (
-                                    graph.node(lf._node.name).state,
-                                    [field.name],
-                                )
-                            else:
-                                # if the task already exist in other_state,
-                                # additional field name should be added to the list of fields
-                                other_states[lf._node.name][1].append(field.name)
-                    else:  # LazyField with the wf input
-                        # connections with wf input should be added to the detailed graph description
-                        if detailed:
-                            graph.add_edges_description(
-                                (node.name, field.name, lf._node.name, lf._field)
+                            node.state._inner_cont_dim[f"{node.name}.{field.name}"] = 1
+                        # adding task_name: (task.state, [a field from the connection]
+                        if lf._node.name not in other_states:
+                            other_states[lf._node.name] = (
+                                graph.node(lf._node.name).state,
+                                [field.name],
                             )
+                        else:
+                            # if the task already exist in other_state,
+                            # additional field name should be added to the list of fields
+                            other_states[lf._node.name][1].append(field.name)
+                elif (
+                    isinstance(lf, LazyInField) and detailed
+                ):  # LazyField with the wf input
+                    # connections with wf input should be added to the detailed graph description
+                    graph.add_edges_description(
+                        (node.name, field.name, INPUTS_NODE_NAME, lf._field)
+                    )
 
             # if task has connections state has to be recalculated
             if other_states:
@@ -890,6 +905,12 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         other_states=other_states,
                         combiner=combiner,
                     )
+        if detailed:
+            lf: LazyOutField
+            for outpt_name, lf in attrs_values(self.outputs).items():
+                graph.add_edges_description(
+                    (OUTPUTS_NODE_NAME, outpt_name, lf._node.name, lf._field)
+                )
         return graph
 
 

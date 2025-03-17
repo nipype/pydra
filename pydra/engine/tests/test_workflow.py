@@ -3896,7 +3896,7 @@ def exporting_graphs(worky, name, out_dir):
     print("\n png of a simple graph in: ", formatted_dot[0])
     # exporting nested graph
     dotfile_pr, formatted_dot = plot_workflow(
-        worky, out_dir, type="nested", export=["pdf", "png"], name=f"{name}_nest"
+        worky, out_dir, plot_type="nested", export=["pdf", "png"], name=f"{name}_nest"
     )
     assert len(formatted_dot) == 2
     assert formatted_dot[0] == dotfile_pr.with_suffix(".pdf")
@@ -3904,7 +3904,7 @@ def exporting_graphs(worky, name, out_dir):
     print("\n pdf of the nested graph in: ", formatted_dot[0])
     # detailed graph
     dotfile_pr, formatted_dot = plot_workflow(
-        worky, out_dir, type="detailed", export="pdf", name=f"{name}_det"
+        worky, out_dir, plot_type="detailed", export="pdf", name=f"{name}_det"
     )
     assert len(formatted_dot) == 1
     assert formatted_dot[0] == dotfile_pr.with_suffix(".pdf")
@@ -3948,7 +3948,9 @@ def test_graph_nested(tmp_path, splitter):
     worky = Worky().split(splitter, x=[1, 2])
 
     # nested graph (should have the same elements)
-    dotfile_n = plot_workflow(worky, tmp_path, type="nested", name="nested")
+    dotfile_n = plot_workflow(
+        worky, tmp_path, lazy=["x", "y"], plot_type="nested", name="nested"
+    )
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     assert "mult_1" in dotstr_n_lines
     assert "mult_2" in dotstr_n_lines
@@ -3970,10 +3972,12 @@ def test_graph_detailed(tmp_path, splitter):
     worky = Worky().split(splitter, x=[1, 2])
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, tmp_path, type="detailed", name="detailed")
+    dotfile_d = plot_workflow(
+        worky, tmp_path, plot_type="detailed", lazy=["x", "y"], name="detailed"
+    )
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
         in dotstr_d_lines
     )
     assert "struct_mult_1:out -> struct_add2:x;" in dotstr_d_lines
@@ -4005,7 +4009,7 @@ def test_graph_1st(tmp_path: Path):
     @workflow.define
     def Worky(x, y):
         mult_1 = workflow.add(Multiply(y=y).split("x", x=x), name="mult_1")
-        workflow.add(Multiply(x=x, y=x), name="mult_2")
+        workflow.add(Multiply(x=y, y=y), name="mult_2")
         add2 = workflow.add(Add2(x=mult_1.out), name="add2")
         return add2.out
 
@@ -4020,7 +4024,7 @@ def test_graph_1st(tmp_path: Path):
     assert "mult_1 -> add2 [color=blue]" in dotstr_s_lines
 
     # nested graph
-    dotfile_n = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile_n = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     assert "mult_1 [color=blue]" in dotstr_n_lines
     assert "mult_2" in dotstr_n_lines
@@ -4028,10 +4032,12 @@ def test_graph_1st(tmp_path: Path):
     assert "mult_1 -> add2 [color=blue]" in dotstr_n_lines
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(
+        worky, out_dir=tmp_path, lazy=["x", "y"], plot_type="detailed"
+    )
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
         in dotstr_d_lines
     )
     assert "struct_mult_1:out -> struct_add2:x;" in dotstr_d_lines
@@ -4065,7 +4071,7 @@ def test_graph_1st_cmb(tmp_path: Path):
     assert "add2 -> sum" in dotstr_s_lines
 
     # nested graph
-    dotfile_n = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile_n = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     assert "mult [color=blue]" in dotstr_n_lines
     assert "add2 [color=blue]" in dotstr_n_lines
@@ -4074,10 +4080,12 @@ def test_graph_1st_cmb(tmp_path: Path):
     assert "add2 -> sum" in dotstr_n_lines
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(
+        worky, out_dir=tmp_path, lazy=["x", "y"], plot_type="detailed"
+    )
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
         in dotstr_d_lines
     )
     assert "struct_mult:out -> struct_add2:x;" in dotstr_d_lines
@@ -4108,16 +4116,17 @@ def test_graph_2(tmp_path: Path):
     assert "wfnd [shape=box]" in dotstr_s_lines
 
     # nested graph
-    dotfile = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     assert "subgraph cluster_wfnd {" in dotstr_lines
     assert "add2" in dotstr_lines
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(worky, out_dir=tmp_path, lazy=["x"], plot_type="detailed")
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x}}"];' in dotstr_d_lines
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x}}"];'
+        in dotstr_d_lines
     )
 
     if DOT_FLAG:
@@ -4148,19 +4157,20 @@ def test_graph_2st(tmp_path: Path):
     assert "wfnd [shape=box, color=blue]" in dotstr_s_lines
 
     # nested graph
-    dotfile_s = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile_s = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_s_lines = dotfile_s.read_text().split("\n")
     assert "subgraph cluster_wfnd {" in dotstr_s_lines
     assert "color=blue" in dotstr_s_lines
     assert "add2" in dotstr_s_lines
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(worky, out_dir=tmp_path, lazy=["x"], plot_type="detailed")
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x}}"];' in dotstr_d_lines
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x}}"];'
+        in dotstr_d_lines
     )
-    assert "struct_wfnd:out -> struct_wf_out:out;" in dotstr_d_lines
+    assert "struct_wfnd:out -> struct_Worky_out:out;" in dotstr_d_lines
 
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
@@ -4191,17 +4201,19 @@ def test_graph_3(tmp_path: Path):
     assert "mult -> wfnd" in dotstr_s_lines
 
     # nested graph
-    dotfile_n = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile_n = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     assert "mult" in dotstr_n_lines
     assert "subgraph cluster_wfnd {" in dotstr_n_lines
     assert "add2" in dotstr_n_lines
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(
+        worky, out_dir=tmp_path, lazy=["x", "y"], plot_type="detailed"
+    )
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
         in dotstr_d_lines
     )
     assert "struct_mult:out -> struct_wfnd:x;" in dotstr_d_lines
@@ -4238,17 +4250,19 @@ def test_graph_3st(tmp_path: Path):
     assert "mult -> wfnd [color=blue]" in dotstr_s_lines
 
     # nested graph
-    dotfile_n = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile_n = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     assert "mult [color=blue]" in dotstr_n_lines
     assert "subgraph cluster_wfnd {" in dotstr_n_lines
     assert "add2" in dotstr_n_lines
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(
+        worky, out_dir=tmp_path, lazy=["x", "y"], plot_type="detailed"
+    )
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
         in dotstr_d_lines
     )
     assert "struct_mult:out -> struct_wfnd:x;" in dotstr_d_lines
@@ -4285,7 +4299,7 @@ def test_graph_4(tmp_path: Path):
     assert "mult -> wfnd" in dotstr_s_lines
 
     # nested graph
-    dotfile_n = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile_n = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     for el in ["mult", "add2_a", "add2_b"]:
         assert el in dotstr_n_lines
@@ -4294,13 +4308,15 @@ def test_graph_4(tmp_path: Path):
     assert "mult -> add2_a [lhead=cluster_wfnd]"
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(
+        worky, out_dir=tmp_path, lazy=["x", "y"], plot_type="detailed"
+    )
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
         in dotstr_d_lines
     )
-    assert "struct_wf:y -> struct_mult:y;" in dotstr_d_lines
+    assert "struct_Worky:y -> struct_mult:y;" in dotstr_d_lines
 
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
@@ -4334,7 +4350,7 @@ def test_graph_5(tmp_path: Path):
     assert "wfnd -> mult" in dotstr_s_lines
 
     # nested graph
-    dotfile_n = plot_workflow(worky, out_dir=tmp_path, type="nested")
+    dotfile_n = plot_workflow(worky, out_dir=tmp_path, plot_type="nested")
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     for el in ["mult", "add2_a", "add2_b"]:
         assert el in dotstr_n_lines
@@ -4343,13 +4359,15 @@ def test_graph_5(tmp_path: Path):
     assert "add2_b -> mult [ltail=cluster_wfnd]"
 
     # detailed graph
-    dotfile_d = plot_workflow(worky, out_dir=tmp_path, type="detailed")
+    dotfile_d = plot_workflow(
+        worky, out_dir=tmp_path, lazy=["x", "y"], plot_type="detailed"
+    )
     dotstr_d_lines = dotfile_d.read_text().split("\n")
     assert (
-        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        'struct_Worky [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
         in dotstr_d_lines
     )
-    assert "struct_wf:x -> struct_wfnd:x;" in dotstr_d_lines
+    assert "struct_Worky:x -> struct_wfnd:x;" in dotstr_d_lines
 
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"

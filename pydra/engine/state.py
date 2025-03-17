@@ -855,13 +855,17 @@ class State:
 
     def combiner_validation(self):
         """validating if the combiner is correct (after all states are connected)"""
-        if self.combiner:
+        if local_names := set(c for c in self.combiner if "." not in c):
             if not self.splitter:
                 raise hlpst.PydraStateError(
-                    "splitter has to be set before setting combiner"
+                    "splitter has to be set before setting combiner with field names "
+                    f"in the current node {list(local_names)}"
                 )
-            if set(self._combiner) - set(self.splitter_rpn):
-                raise hlpst.PydraStateError("all combiners have to be in the splitter")
+            if missing := local_names - set(self.splitter_rpn):
+                raise hlpst.PydraStateError(
+                    "all field names from the current node referenced in the combiner, "
+                    f"{list(missing)} are missing in the splitter"
+                )
 
     def prepare_states(
         self,
