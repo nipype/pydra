@@ -10,6 +10,7 @@ from .utils import (
     Add2,
     Add2Wait,
     Multiply,
+    Divide,
     # MultiplyList,
     # MultiplyMixed,
     Power,
@@ -2238,7 +2239,7 @@ def test_wf_nostate_cachelocations_a(plugin: str, tmp_path: Path):
     @workflow.define
     def Worky2(x, y):
 
-        mult = workflow.add(Multiply(x=x, y=y), name="mult")
+        mult = workflow.add(Divide(x=x, y=y), name="mult")
         add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
         return add2.out
 
@@ -2253,7 +2254,7 @@ def test_wf_nostate_cachelocations_a(plugin: str, tmp_path: Path):
     assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
 
-    assert 8 == results2.outputs.out
+    assert 2 == results2.outputs.out
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
@@ -2296,12 +2297,12 @@ def test_wf_nostate_cachelocations_b(plugin: str, tmp_path: Path):
 
     assert 8 == results1.outputs.out
 
-    @workflow.define("out_pr")
+    @workflow.define(outputs=["out", "out_pr"])
     def Worky2(x, y):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
         add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
-        return add2.out
+        return add2.out, add2.out
 
     worky2 = Worky2(x=2, y=3)
 
@@ -2553,8 +2554,8 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     assert results1.output_dir != results2.output_dir
 
     # everything has to be recomputed
-    assert len(list(Path(cache_dir1).glob("F*"))) == 2
-    assert len(list(Path(cache_dir2).glob("F*"))) == 2
+    assert len(list(Path(cache_dir1).glob("python-*"))) == 2
+    assert len(list(Path(cache_dir2).glob("python-*"))) == 2
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
@@ -2604,9 +2605,12 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=plugin,
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+        propagate_rerun=False,
     ) as sub:
-        results2 = sub(worky2, rerun=True, propagate_rerun=False)
+        results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
     t2 = time.time() - t0
@@ -2623,8 +2627,8 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
         assert t2 < max(1, t1 - 1)
 
     # tasks should not be recomputed
-    assert len(list(Path(cache_dir1).glob("F*"))) == 2
-    assert len(list(Path(cache_dir2).glob("F*"))) == 0
+    assert len(list(Path(cache_dir1).glob("python-*"))) == 2
+    assert len(list(Path(cache_dir2).glob("python-*"))) == 0
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2669,19 +2673,20 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=plugin,
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+        propagate_rerun=False,
     ) as sub:
-        results2 = sub(
-            worky2, rerun=True, propagate_rerun=False
-        )  # rerun will not be propagated to each task)
+        results2 = sub(worky2, rerun=True)  # rerun will not be propagated to each task)
     t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
 
     assert results1.output_dir != results2.output_dir
     # the second task should be recomputed
-    assert len(list(Path(cache_dir1).glob("F*"))) == 2
-    assert len(list(Path(cache_dir2).glob("F*"))) == 1
+    assert len(list(Path(cache_dir1).glob("python-*"))) == 2
+    assert len(list(Path(cache_dir2).glob("python-*"))) == 1
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
@@ -3140,8 +3145,8 @@ def test_wf_nostate_cachelocations_recompute(plugin: str, tmp_path: Path):
     assert results1.output_dir != results2.output_dir
 
     # the second worky should have only one task run
-    assert len(list(Path(cache_dir1).glob("F*"))) == 2
-    assert len(list(Path(cache_dir2).glob("F*"))) == 1
+    assert len(list(Path(cache_dir1).glob("python-*"))) == 2
+    assert len(list(Path(cache_dir2).glob("python-*"))) == 1
 
 
 @pytest.mark.flaky(reruns=3)
@@ -3590,7 +3595,7 @@ def test_wf_resultfile_3(plugin: str, tmp_path: Path):
             assert val.fspath == outputs._output_dir / file_list[ii]
 
 
-def test_wf_upstream_error1(plugin: str, tmp_path: Path):
+def test_wf_upstream_error1(tmp_path: Path):
     """workflow with two tasks, task2 dependent on an task1 which raised an error"""
 
     @workflow.define
@@ -3601,13 +3606,13 @@ def test_wf_upstream_error1(plugin: str, tmp_path: Path):
 
     worky = Worky(x="hi")  # TypeError for adding str and int
 
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
+    with pytest.raises(RuntimeError) as excinfo:
+        worky(worker="cf", cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
+    assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error2(plugin: str, tmp_path: Path):
+def test_wf_upstream_error2(tmp_path: Path):
     """task2 dependent on task1, task1 errors, workflow-level split on task 1
     goal - workflow finish running, one output errors but the other doesn't
     """
@@ -3624,9 +3629,9 @@ def test_wf_upstream_error2(plugin: str, tmp_path: Path):
     )  # workflow-level split TypeError for adding str and int
 
     with pytest.raises(Exception) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
+        worky(worker="cf", cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
+    assert "failed with errors" in str(excinfo.value)
 
 
 @pytest.mark.flaky(reruns=2)  # when slurm
@@ -3643,34 +3648,34 @@ def test_wf_upstream_error3(plugin: str, tmp_path: Path):
         return addvar2.out
 
     worky = Worky(x=[1, "hi"])  # TypeError for adding str and int
-    with pytest.raises(Exception) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
+    with pytest.raises(RuntimeError) as excinfo:
+        worky(worker="cf", cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
+    assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error4(plugin: str, tmp_path: Path):
+def test_wf_upstream_error4(tmp_path: Path):
     """workflow with one task, which raises an error"""
 
     @workflow.define
     def Worky(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
         return addvar1.out
 
     worky = Worky(x="hi")  # TypeError for adding str and int
     with pytest.raises(Exception) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
-    assert "raised an error" in str(excinfo.value)
+        worky(worker="cf", cache_dir=tmp_path)
+    assert "failed with errors" in str(excinfo.value)
     assert "addvar1" in str(excinfo.value)
 
 
-def test_wf_upstream_error5(plugin: str, tmp_path: Path):
+def test_wf_upstream_error5(tmp_path: Path):
     """nested workflow with one task, which raises an error"""
 
     @workflow.define
     def Worky(x):
-        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x))
+        addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
         return addvar1.out  # wf_out
 
     @workflow.define
@@ -3681,39 +3686,37 @@ def test_wf_upstream_error5(plugin: str, tmp_path: Path):
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
     with pytest.raises(Exception) as excinfo:
-        with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
-            sub(wf_main)
+        wf_main(worker="cf", cache_dir=tmp_path)
 
     assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
+    assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error6(plugin: str, tmp_path: Path):
+def test_wf_upstream_error6(tmp_path: Path):
     """nested workflow with two tasks, the first one raises an error"""
 
-    @workflow.define
+    @workflow.define(outputs=["wf_out"])
     def Worky(x):
         addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
         addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
 
-        return addvar2.out  # wf_out
+        return addvar2.out  #
 
     @workflow.define
     def WfMain(x):
         worky = workflow.add(Worky(x=x))
-        return worky.out
+        return worky.wf_out
 
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
-    with pytest.raises(Exception) as excinfo:
-        with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
-            sub(wf_main)
+    with pytest.raises(RuntimeError) as excinfo:
+        wf_main(worker="cf", cache_dir=tmp_path)
 
     assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
+    assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error7(plugin: str, tmp_path: Path):
+def test_wf_upstream_error7(tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the last task is set as the workflow output
@@ -3729,15 +3732,19 @@ def test_wf_upstream_error7(plugin: str, tmp_path: Path):
 
     worky = Worky(x="hi")  # TypeError for adding str and int
 
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
-    assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
-    assert wf["addvar1"]._errored is True
-    assert wf["addvar2"]._errored == wf["addvar3"]._errored == ["addvar1"]
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        results = sub(worky)
+    error_message = "".join(results.errors["error message"])
+    assert "addvar1" in error_message
+    assert "failed with errors" in error_message
+
+    graph = results.job.return_values["exec_graph"]
+    assert graph["addvar1"].has_errored is True
+    assert list(graph["addvar2"].unrunnable.values()) == [[graph["addvar1"]]]
+    assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error7a(plugin: str, tmp_path: Path):
+def test_wf_upstream_error7a(tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the second task is set as the workflow output
@@ -3752,16 +3759,19 @@ def test_wf_upstream_error7a(plugin: str, tmp_path: Path):
         return addvar3.out
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
-    assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        results = sub(worky)
+    error_message = "".join(results.errors["error message"])
+    assert "addvar1" in error_message
+    assert "failed with errors" in error_message
 
-    assert wf["addvar1"]._errored is True
-    assert wf["addvar2"]._errored == wf["addvar3"]._errored == ["addvar1"]
+    graph = results.job.return_values["exec_graph"]
+    assert graph["addvar1"].has_errored is True
+    assert list(graph["addvar2"].unrunnable.values()) == [[graph["addvar1"]]]
+    assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error7b(plugin: str, tmp_path: Path):
+def test_wf_upstream_error7b(tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the second and the third tasks are set as the workflow output
@@ -3776,15 +3786,19 @@ def test_wf_upstream_error7b(plugin: str, tmp_path: Path):
         return addvar2.out, addvar3.out  #
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
-    assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
-    assert wf["addvar1"]._errored is True
-    assert wf["addvar2"]._errored == wf["addvar3"]._errored == ["addvar1"]
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        results = sub(worky)
+    error_message = "".join(results.errors["error message"])
+    assert "addvar1" in error_message
+    assert "failed with errors" in error_message
+
+    graph = results.job.return_values["exec_graph"]
+    assert graph["addvar1"].has_errored is True
+    assert list(graph["addvar2"].unrunnable.values()) == [[graph["addvar1"]]]
+    assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error8(plugin: str, tmp_path: Path):
+def test_wf_upstream_error8(tmp_path: Path):
     """workflow with three tasks, the first one raises an error, so 2 others are removed"""
 
     @workflow.define(outputs=["out1", "out2"])
@@ -3792,17 +3806,21 @@ def test_wf_upstream_error8(plugin: str, tmp_path: Path):
         addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
 
         addvar2 = workflow.add(FunAddVarDefaultNoType(a=addvar1.out), name="addvar2")
-        addtwo = workflow.add(FunAddTwo(a=addvar1.out))
+        addtwo = workflow.add(FunAddTwo(a=addvar1.out), name="addtwo")
         return addvar2.out, addtwo.out  #
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        results = sub(worky)
+    error_message = "".join(results.errors["error message"])
+    assert "addvar1" in error_message
+    assert "failed with errors" in error_message
 
-    assert "addvar1" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
-    assert wf["addvar1"]._errored is True
-    assert wf["addvar2"]._errored == wf["addtwo"]._errored == ["addvar1"]
+    graph = results.job.return_values["exec_graph"]
+    assert graph["addvar1"].has_errored is True
+
+    assert list(graph["addvar2"].unrunnable.values()) == [[graph["addvar1"]]]
+    assert list(graph["addtwo"].unrunnable.values()) == [[graph["addvar1"]]]
 
 
 def test_wf_upstream_error9(plugin: str, tmp_path: Path):
@@ -3815,21 +3833,22 @@ def test_wf_upstream_error9(plugin: str, tmp_path: Path):
     @workflow.define
     def Worky(x):
         addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
-
         err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"), name="err")
         follow_err = workflow.add(FunAddVarDefaultNoType(a=err.out), name="follow_err")
-
         addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out), name="addtwo")
         workflow.add(FunAddVarDefaultNoType(a=addtwo.out))
         return follow_err.out  # out1
 
     worky = Worky(x=2)
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
-    assert "err" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
-    assert wf["err"]._errored is True
-    assert wf["follow_err"]._errored == ["err"]
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        results = sub(worky)
+    error_message = "".join(results.errors["error message"])
+    assert "err" in error_message
+    assert "failed with errors" in error_message
+
+    graph = results.job.return_values["exec_graph"]
+    assert graph["err"].has_errored is True
+    assert list(graph["follow_err"].unrunnable.values()) == [[graph["err"]]]
 
 
 def test_wf_upstream_error9a(plugin: str, tmp_path: Path):
@@ -3840,23 +3859,26 @@ def test_wf_upstream_error9a(plugin: str, tmp_path: Path):
     so the workflow finished clean
     """
 
-    @workflow.define
+    @workflow.define(outputs=["out1"])
     def Worky(x):
         addvar1 = workflow.add(FunAddVarDefault(a=x), name="addvar1")
-
         err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"), name="err")
-        workflow.add(FunAddVarDefault(a=err.out))
-
+        workflow.add(FunAddVarDefault(a=err.out), name="follow_err")
         addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out), name="addtwo")
         addvar2 = workflow.add(FunAddVarDefault(a=addtwo.out), name="addvar2")
-        return addvar2.out  # out1  # , ("out2", addtwo.out)])
+        return addvar2.out
 
     worky = Worky(x=2)
 
-    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
-        sub(worky)
-    assert wf["err"]._errored is True
-    assert wf["follow_err"]._errored == ["err"]
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        results = sub(worky)
+    error_message = "".join(results.errors["error message"])
+    assert "err" in error_message
+    assert "failed with errors" in error_message
+
+    graph = results.job.return_values["exec_graph"]
+    assert graph["err"].has_errored is True
+    assert list(graph["follow_err"].unrunnable.values()) == [[graph["err"]]]
 
 
 def test_wf_upstream_error9b(plugin: str, tmp_path: Path):
@@ -3869,21 +3891,23 @@ def test_wf_upstream_error9b(plugin: str, tmp_path: Path):
     @workflow.define(outputs=["out1", "out2"])
     def Worky(x):
         addvar1 = workflow.add(FunAddVarDefaultNoType(a=x), name="addvar1")
-
         err = workflow.add(FunAddVarNoType(a=addvar1.out, b="hi"), name="err")
         follow_err = workflow.add(FunAddVarDefaultNoType(a=err.out), name="follow_err")
-
         addtwo = workflow.add(FunAddTwoNoType(a=addvar1.out), name="addtwo")
         addvar2 = workflow.add(FunAddVarDefaultNoType(a=addtwo.out), name="addvar2")
         return follow_err.out, addvar2.out
 
     worky = Worky(x=2)
-    with pytest.raises(ValueError) as excinfo:
-        worky(worker=plugin, cache_dir=tmp_path)
-    assert "err" in str(excinfo.value)
-    assert "raised an error" in str(excinfo.value)
-    assert wf["err"]._errored is True
-    assert wf["follow_err"]._errored == ["err"]
+
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        results = sub(worky)
+    error_message = "".join(results.errors["error message"])
+    assert "err" in error_message
+    assert "failed with errors" in error_message
+
+    graph = results.job.return_values["exec_graph"]
+    assert graph["err"].has_errored is True
+    assert list(graph["follow_err"].unrunnable.values()) == [[graph["err"]]]
 
 
 def exporting_graphs(worky, name, out_dir):

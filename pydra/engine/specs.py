@@ -293,14 +293,10 @@ class TaskDef(ty.Generic[OutputsType]):
                         )
             raise
         if result.errored:
-            if isinstance(self, WorkflowDef) or self._splitter:
-                raise RuntimeError(f"Workflow {self} failed with errors")
-            else:
-                errors = result.errors
-                raise RuntimeError(
-                    f"Task {self} failed @ {errors['time of crash']} with the following errors:\n"
-                    + "\n".join(errors["error message"])
-                )
+            raise RuntimeError(
+                f"Task {self} failed @ {result.errors['time of crash']} with the "
+                "following errors:\n" + "\n".join(result.errors["error message"])
+            )
         return result.outputs
 
     def split(
@@ -697,6 +693,18 @@ class Result(ty.Generic[OutputsType]):
         with open(task_pkl, "rb") as f:
             return cp.load(f)
 
+    @property
+    def return_values(self):
+        return_values_pkl = self.output_dir / "_return_values.pklz"
+        if not return_values_pkl.exists():
+            return None
+        with open(return_values_pkl, "rb") as f:
+            return cp.load(f)
+
+    @property
+    def job(self):
+        return self.task
+
 
 @attrs.define(kw_only=True)
 class RuntimeSpec:
@@ -798,40 +806,37 @@ class WorkflowOutputs(TaskOutputs):
         outputs : Outputs
             The outputs of the task
         """
-        outputs = super()._from_task(task)
-        # collecting outputs from tasks
-        output_wf = {}
-        lazy_field: lazy.LazyOutField
+
         workflow: "Workflow" = task.return_values["workflow"]
         exec_graph: "DiGraph[NodeExecution]" = task.return_values["exec_graph"]
-        nodes_dict = {n.name: n for n in exec_graph.nodes}
-        for name, lazy_field in attrs_values(workflow.outputs).items():
-            try:
-                val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
-                if isinstance(val_out, StateArray):
-                    val_out = list(val_out)  # implicitly combine state arrays
-                output_wf[name] = val_out
-            except (ValueError, AttributeError):
-                output_wf[name] = None
-                node: "NodeExecution" = nodes_dict[lazy_field._node.name]
-                # checking if the tasks has predecessors that raises error
-                if isinstance(node.errored, list):
-                    raise ValueError(f"Tasks {node._errored} raised an error")
-                else:
-                    err_files = [(t.output_dir / "_error.pklz") for t in node.tasks]
-                    err_files = [f for f in err_files if f.exists()]
-                    if not err_files:
-                        raise
-                    raise ValueError(
-                        f"Task {lazy_field._node.name!r} raised an error, full crash report is "
-                        f"here: "
-                        + (
-                            str(err_files[0])
-                            if len(err_files) == 1
-                            else "\n" + "\n".join(str(f) for f in err_files)
-                        )
+
+        # Check for errors in any of the workflow nodes
+        if errored := [n for n in exec_graph.nodes if n.errored]:
+            errors = []
+            for node in errored:
+                for task in node.errored.values():
+                    result = task.result()
+                    errors.append(
+                        f"Task {node.name!r} failed @ {result.errors['time of crash']} "
+                        "with the following errors:\n"
+                        + "\n".join(result.errors["error message"])
                     )
-        outputs = attrs.evolve(outputs, **output_wf)
+            raise RuntimeError(
+                f"Workflow {workflow} failed with errors: " + "\n\n".join(errors)
+            )
+
+        # Retrieve values from the output fields
+        values = {}
+        lazy_field: lazy.LazyOutField
+        for name, lazy_field in attrs_values(workflow.outputs).items():
+            val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
+            if isinstance(val_out, StateArray):
+                val_out = list(val_out)  # implicitly combine state arrays
+            values[name] = val_out
+
+        # Set the values in the outputs object
+        outputs = super()._from_task(task)
+        outputs = attrs.evolve(outputs, **values)
         outputs._output_dir = task.output_dir
         return outputs
 

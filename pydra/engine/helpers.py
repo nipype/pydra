@@ -191,6 +191,7 @@ def save(
     task_path: Path,
     result: "Result | None" = None,
     task: "Task[DefType] | None" = None,
+    return_values: dict[str, ty.Any] | None = None,
     name_prefix: str = None,
 ) -> None:
     """
@@ -204,6 +205,8 @@ def save(
         Result to pickle and write
     task : :class:`~pydra.engine.core.TaskBase`
         Task to pickle and write
+    return_values : :obj:`dict`
+        Return values to pickle and write
     """
     from pydra.engine.core import is_workflow
 
@@ -232,6 +235,9 @@ def save(
                 cp.dump(result, fp)
         if task:
             with (task_path / f"{name_prefix}_task.pklz").open("wb") as fp:
+                cp.dump(task, fp)
+        if return_values:
+            with (task_path / f"{name_prefix}_return_values.pklz").open("wb") as fp:
                 cp.dump(task, fp)
 
 

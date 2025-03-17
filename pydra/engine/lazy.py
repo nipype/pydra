@@ -180,7 +180,7 @@ class LazyOutField(LazyField[T]):
         def retrieve_from_job(job: "Task[DefType]") -> ty.Any:
             if job.errored:
                 raise ValueError(
-                    f"Cannot retrieve value for {self._field} from {self._node.name} as "
+                    f"Cannot retrieve value for {self._field!r} from {self._node.name} as "
                     "the node errored"
                 )
             res = job.result()

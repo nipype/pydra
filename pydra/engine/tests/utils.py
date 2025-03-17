@@ -170,6 +170,11 @@ def Multiply(x: int, y: int) -> int:
 
 
 @python.define
+def Divide(x: int, y: int) -> int:
+    return x // y
+
+
+@python.define
 def MultiplyList(x: list, y: int) -> list:
     return x * y
 

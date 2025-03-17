@@ -99,6 +99,10 @@ class DiGraph(ty.Generic[NodeType]):
             except KeyError:
                 raise KeyError(f"Node {name!r} not found in graph") from None
 
+    def __getitem__(self, key):
+        """Get a node by its name."""
+        return self.node(key)
+
     @property
     def nodes_names_map(self) -> dict[str, NodeType]:
         """Get a map of node names to nodes."""

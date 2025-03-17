@@ -83,6 +83,7 @@ class Submitter:
     messenger_args: dict[str, ty.Any]
     clean_stale_locks: bool
     run_start_time: datetime | None
+    propagate_rerun: bool
 
     def __init__(
         self,
@@ -94,6 +95,7 @@ class Submitter:
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
+        propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
         **kwargs,
     ):
@@ -121,6 +123,7 @@ class Submitter:
 
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
+        self.propagate_rerun = propagate_rerun
         self.environment = environment if environment is not None else Native()
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
@@ -188,6 +191,8 @@ class Submitter:
         rerun : bool, optional
             Whether to force the re-computation of the task results even if existing
             results are found, by default False
+        propagate_rerun : bool, optional
+            Whether to propagate the rerun flag to all tasks in the workflow, by default True
 
         Returns
         -------
@@ -312,12 +317,12 @@ class Submitter:
         wf = workflow_task.definition.construct()
         # Generate the execution graph
         exec_graph = wf.execution_graph(submitter=self)
+        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
             for task in tasks:
                 self.worker.run(task, rerun=rerun)
             tasks = self.get_runnable_tasks(exec_graph)
-        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
 
     async def expand_workflow_async(
         self, workflow_task: "Task[WorkflowDef]", rerun: bool
@@ -333,6 +338,7 @@ class Submitter:
         wf = workflow_task.definition.construct()
         # Generate the execution graph
         exec_graph = wf.execution_graph(submitter=self)
+        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
         # keep track of pending futures
         task_futures = set()
         tasks = self.get_runnable_tasks(exec_graph)
@@ -417,7 +423,6 @@ class Submitter:
                     task_futures.add(self.worker.run(task, rerun=rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
             tasks = self.get_runnable_tasks(exec_graph)
-        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
 
     def __enter__(self):
         return self
@@ -467,7 +472,8 @@ class Submitter:
                 continue
             # since the list is sorted (breadth-first) we can stop
             # when we find a task that depends on any task that is already in tasks
-            if set(graph.predecessors[node.name]).intersection(not_started):
+            preds = set(graph.predecessors[node.name])
+            if preds.intersection(not_started):
                 break
             # Record if the node has not been started
             if not node.started:
@@ -619,6 +625,11 @@ class NodeExecution(ty.Generic[DefType]):
         # Check to see if any previously queued tasks have completed
         return not (self.queued or self.blocked or self.running)
 
+    @property
+    def has_errored(self) -> bool:
+        self.update_status()
+        return bool(self.errored)
+
     def update_status(self) -> None:
         """Updates the status of the tasks in the node."""
         if not self.started:
@@ -729,56 +740,80 @@ class NodeExecution(ty.Generic[DefType]):
             List of tasks that are ready to run
         """
         runnable: list["Task[DefType]"] = []
-        if not self.started:
-            self.start()
-        # Check to see if any blocked tasks are now runnable/unrunnable
-        for index, task in list(self.blocked.items()):
-            pred: NodeExecution
-            is_runnable = True
-            # This is required for the commented-out code below
-            # states_ind = (
-            #     list(self.node.state.states_ind[index].items())
-            #     if self.node.state
-            #     else []
-            # )
-            for pred in graph.predecessors[self.node.name]:
-                if pred.node.state:
-                    # FIXME: These should be the only predecessor jobs that are required to have
-                    # completed before the job can be run, however, due to how the state
-                    # is currently built, all predecessors are required to have completed.
-                    # If/when this is relaxed, then the following code should be used instead.
-                    #
-                    # pred_states_ind = {
-                    #     (k, i) for k, i in states_ind if k.startswith(pred.name + ".")
-                    # }
-                    # pred_inds = [
-                    #     i
-                    #     for i, ind in enumerate(pred.node.state.states_ind)
-                    #     if set(ind.items()).issuperset(pred_states_ind)
-                    # ]
-                    pred_inds = list(range(len(pred.node.state.states_ind)))
-                else:
-                    pred_inds = [None]
-                if not all(i in pred.successful for i in pred_inds):
-                    is_runnable = False
-                    blocked = True
-                    if pred_errored := [i for i in pred_inds if i in pred.errored]:
-                        self.unrunnable[index].extend(
-                            [pred.errored[i] for i in pred_errored]
-                        )
-                        blocked = False
-                    if pred_unrunnable := [
-                        i for i in pred_inds if i in pred.unrunnable
-                    ]:
-                        self.unrunnable[index].extend(
-                            [pred.unrunnable[i] for i in pred_unrunnable]
-                        )
-                        blocked = False
-                    if not blocked:
-                        del self.blocked[index]
-                    break
-            if is_runnable:
-                runnable.append(self.blocked.pop(index))
+        predecessors: list["Task[DefType]"] = graph.predecessors[self.node.name]
+
+        # If there is a split, we need to wait for all predecessor nodes to finish
+        # In theory, if the current splitter splits an already split state we should
+        # only need to wait for the direct predecessor jobs to finish, however, this
+        # would require a deep refactor of the State class as we need the whole state
+        # in order to assign consistent state indices across the new split
+
+        # FIXME: The branch for handling partially completed/errored/unrunnable
+        # predecessor nodes can't be used until the State class can be partially
+        # initialised with lazy-fields.
+        if True:  # self.node.splitter:
+            if unrunnable := [p for p in predecessors if p.errored or p.unrunnable]:
+                self.unrunnable = {None: unrunnable}
+                self.blocked = {}
+                assert self.done
+            else:
+                if all(p.done for p in predecessors):
+                    if not self.started:
+                        self.start()
+                    if self.node.state is None:
+                        inds = [None]
+                    else:
+                        inds = list(range(len(self.node.state.states_ind)))
+                    if self.blocked:
+                        for i in inds:
+                            runnable.append(self.blocked.pop(i))
+        else:
+            if not self.started:
+                self.start()
+
+            # Check to see if any blocked tasks are now runnable/unrunnable
+            for index, task in list(self.blocked.items()):
+                pred: NodeExecution
+                is_runnable = True
+                states_ind = (
+                    list(self.node.state.states_ind[index].items())
+                    if self.node.state
+                    else []
+                )
+                for pred in predecessors:
+                    if pred.node.state:
+                        pred_states_ind = {
+                            (k, i)
+                            for k, i in states_ind
+                            if k.startswith(pred.name + ".")
+                        }
+                        pred_inds = [
+                            i
+                            for i, ind in enumerate(pred.node.state.states_ind)
+                            if set(ind.items()).issuperset(pred_states_ind)
+                        ]
+                    else:
+                        pred_inds = [None]
+                    if not all(i in pred.successful for i in pred_inds):
+                        is_runnable = False
+                        blocked = True
+                        if pred_errored := [
+                            pred.errored[i] for i in pred_inds if i in pred.errored
+                        ]:
+                            self.unrunnable[index].extend(pred_errored)
+                            blocked = False
+                        if pred_unrunnable := [
+                            pred.unrunnable[i]
+                            for i in pred_inds
+                            if i in pred.unrunnable
+                        ]:
+                            self.unrunnable[index].extend(pred_unrunnable)
+                            blocked = False
+                        if not blocked:
+                            del self.blocked[index]
+                        break
+                if is_runnable:
+                    runnable.append(self.blocked.pop(index))
         self.queued.update({t.state_index: t for t in runnable})
         return list(self.queued.values())
 
