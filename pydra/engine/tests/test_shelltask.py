@@ -733,7 +733,8 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
     using name_tamplate in metadata
     """
     cmd = "touch"
-    arg = "newfile_tmp.txt"
+    arg = tmp_path / "newfile_tmp.txt"
+    cache_dir = tmp_path / "cache"
 
     @shell.define
     class Shelly(ShellDef["Shelly.Outputs"]):
@@ -749,12 +750,12 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, arg=arg)
 
-    outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
+    outputs = results_function(shelly, plugin=plugin, cache_dir=cache_dir)
     assert outputs.stdout == ""
     out1 = outputs.out1.fspath
     assert out1.exists()
     # checking if the file is created in a good place
-    assert out1.parent.parent == tmp_path
+    assert out1.parent.parent == cache_dir
     assert out1.name == "newfile_tmp.txt"
 
 
@@ -2715,11 +2716,11 @@ def test_shell_cmd_inputspec_outputspec_3(tmp_path):
             )
 
     shelly = Shelly(executable=cmd)
-    shelly.file1 = "new_file_1.txt"
-    shelly.file2 = "new_file_2.txt"
+    shelly.file1 = tmp_path / "new_file_1.txt"
+    shelly.file2 = tmp_path / "new_file_2.txt"
     shelly.additional_inp = 2
 
-    outputs = shelly(cache_dir=tmp_path)
+    outputs = shelly(cache_dir=tmp_path / "cache")
     assert outputs.stdout == ""
     assert outputs.newfile1.fspath.exists()
     assert outputs.newfile2.fspath.exists()
@@ -2946,9 +2947,9 @@ def test_shell_cmd_inputspec_outputspec_5b(tmp_path):
             )
 
     shelly = Shelly(executable=cmd)
-    shelly.file1 = "new_file_1.txt"
+    shelly.file1 = tmp_path / "new_file_1.txt"
 
-    outputs = shelly(cache_dir=tmp_path)
+    outputs = shelly(cache_dir=tmp_path / "cache")
     assert outputs.stdout == ""
     # neither additional_inp_A nor additional_inp_B is set, so newfile1 is None
     assert outputs.newfile1 is None
