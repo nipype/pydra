@@ -145,7 +145,13 @@ def define(
             name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                WorkflowDef, WorkflowOutputs, klass, arg, out, auto_attribs
+                WorkflowDef,
+                WorkflowOutputs,
+                klass,
+                arg,
+                out,
+                auto_attribs,
+                skip_fields=["constructor"],
             )
         else:
             if not inspect.isfunction(wrapped):

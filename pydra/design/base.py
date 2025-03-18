@@ -334,6 +334,7 @@ def extract_fields_from_class(
     arg_type: type[Arg],
     out_type: type[Out],
     auto_attribs: bool,
+    skip_fields: ty.Iterable[str] = (),
 ) -> tuple[dict[str, Arg], dict[str, Out]]:
     """Extract the input and output fields from an existing class
 
@@ -348,6 +349,8 @@ def extract_fields_from_class(
     auto_attribs : bool
         Whether to assume that all attribute annotations should be interpreted as
         fields or not
+    skip_fields : Iterable[str], optional
+        The names of attributes to skip when extracting the fields, by default ()
 
     Returns
     -------
@@ -364,10 +367,15 @@ def extract_fields_from_class(
         fields_dict = {}
         # Get fields defined in base classes if present
         for field in list_fields(klass):
-            fields_dict[field.name] = field
+            if field.name not in skip_fields:
+                fields_dict[field.name] = field
         type_hints = ty.get_type_hints(klass)
         for atr_name in dir(klass):
-            if atr_name in ["Task", "Outputs"] or atr_name.startswith("__"):
+            if (
+                atr_name in ["Task", "Outputs"]
+                or atr_name in skip_fields
+                or atr_name.startswith("__")
+            ):
                 continue
             try:
                 atr = getattr(klass, atr_name)
@@ -394,7 +402,7 @@ def extract_fields_from_class(
                     )
         if auto_attribs:
             for atr_name, type_ in type_hints.items():
-                if atr_name.startswith("_"):
+                if atr_name.startswith("_") or atr_name in skip_fields:
                     continue
                 if atr_name not in list(fields_dict) + ["Task", "Outputs"]:
                     fields_dict[atr_name] = field_type(
