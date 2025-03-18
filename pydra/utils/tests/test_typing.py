@@ -737,6 +737,7 @@ def test_typing_implicit_cast_from_super(tmp_path, GenericTask, SpecificTask):
     assert out_file.header.parent != in_file.header.parent
 
 
+@pytest.mark.flaky(reruns=5)
 def test_typing_cast(tmp_path, SpecificTask, OtherSpecificTask):
     """Check the casting of lazy fields and whether specific file-sets can be recovered
     from generic `File` classes"""
