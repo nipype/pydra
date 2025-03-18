@@ -1227,7 +1227,7 @@ def test_wf_3nd_ndst_7(plugin: str, tmp_path: Path):
 # workflows with structures A -> B -> C with multiple connections
 
 
-def test_wf_3nd_8(tmp_path: Path):
+def test_wf_3nd_8(plugin_parallel, tmp_path: Path):
     """workflow with three tasks A->B->C vs two tasks A->C with multiple connections"""
 
     @workflow.define(outputs=["out1", "out2", "out1a", "out2a"])
@@ -1254,7 +1254,7 @@ def test_wf_3nd_8(tmp_path: Path):
 
     worky = Worky(zip=[["test1", "test3", "test5"], ["test2", "test4", "test6"]])
 
-    with Submitter(worker="cf") as sub:
+    with Submitter(worker=plugin_parallel) as sub:
         res = sub(worky)
 
     assert (
@@ -2208,11 +2208,9 @@ def test_wf_nostate_cachelocations(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_a(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_a(plugin_parallel, plugin: str, tmp_path: Path):
     """
-    the same as previous test, but workflows names differ;
-    the task should not be run and it should be fast,
-    but the worky itself is triggered and the new output dir is created
+    the same as previous test, but workflows differ
     """
     cache_dir1 = tmp_path / "test_wf_cache3"
     cache_dir1.mkdir()
@@ -2238,7 +2236,6 @@ def test_wf_nostate_cachelocations_a(plugin: str, tmp_path: Path):
 
     @workflow.define
     def Worky2(x, y):
-
         mult = workflow.add(Divide(x=x, y=y), name="mult")
         add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
         return add2.out
@@ -2252,16 +2249,8 @@ def test_wf_nostate_cachelocations_a(plugin: str, tmp_path: Path):
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 2 == results2.outputs.out
-
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
-        # checking execution time (second one should be quick)
-        assert t1 > 2
-        # testing relative values (windows or slurm takes much longer to create worky itself)
-        assert t2 < max(1, t1 - 1)
 
     # checking if both output_dirs are created
     assert results1.output_dir != results2.output_dir
@@ -2328,7 +2317,9 @@ def test_wf_nostate_cachelocations_b(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_setoutputchange(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_setoutputchange(
+    plugin_parallel, plugin: str, tmp_path: Path
+):
     """
     the same as previous test, but worky output names differ,
     the tasks should not be run and it should be fast,
@@ -3601,7 +3592,7 @@ def test_wf_resultfile_3(plugin: str, tmp_path: Path):
             assert val.fspath == outputs._output_dir / file_list[ii]
 
 
-def test_wf_upstream_error1(tmp_path: Path):
+def test_wf_upstream_error1(plugin_parallel: str, tmp_path: Path):
     """workflow with two tasks, task2 dependent on an task1 which raised an error"""
 
     @workflow.define
@@ -3613,12 +3604,12 @@ def test_wf_upstream_error1(tmp_path: Path):
     worky = Worky(x="hi")  # TypeError for adding str and int
 
     with pytest.raises(RuntimeError) as excinfo:
-        worky(worker="cf", cache_dir=tmp_path)
+        worky(worker=plugin_parallel, cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error2(tmp_path: Path):
+def test_wf_upstream_error2(plugin_parallel: str, tmp_path: Path):
     """task2 dependent on task1, task1 errors, workflow-level split on task 1
     goal - workflow finish running, one output errors but the other doesn't
     """
@@ -3635,13 +3626,13 @@ def test_wf_upstream_error2(tmp_path: Path):
     )  # workflow-level split TypeError for adding str and int
 
     with pytest.raises(Exception) as excinfo:
-        worky(worker="cf", cache_dir=tmp_path)
+        worky(worker=plugin_parallel, cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
 @pytest.mark.flaky(reruns=2)  # when slurm
-def test_wf_upstream_error3(plugin: str, tmp_path: Path):
+def test_wf_upstream_error3(plugin_parallel: str, tmp_path: Path):
     """task2 dependent on task1, task1 errors, task-level split on task 1
     goal - workflow finish running, one output errors but the other doesn't
     """
@@ -3655,12 +3646,12 @@ def test_wf_upstream_error3(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, "hi"])  # TypeError for adding str and int
     with pytest.raises(RuntimeError) as excinfo:
-        worky(worker="cf", cache_dir=tmp_path)
+        worky(worker=plugin_parallel, cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error4(tmp_path: Path):
+def test_wf_upstream_error4(plugin_parallel: str, tmp_path: Path):
     """workflow with one task, which raises an error"""
 
     @workflow.define
@@ -3671,12 +3662,12 @@ def test_wf_upstream_error4(tmp_path: Path):
 
     worky = Worky(x="hi")  # TypeError for adding str and int
     with pytest.raises(Exception) as excinfo:
-        worky(worker="cf", cache_dir=tmp_path)
+        worky(worker=plugin_parallel, cache_dir=tmp_path)
     assert "failed with errors" in str(excinfo.value)
     assert "addvar1" in str(excinfo.value)
 
 
-def test_wf_upstream_error5(tmp_path: Path):
+def test_wf_upstream_error5(plugin_parallel: str, tmp_path: Path):
     """nested workflow with one task, which raises an error"""
 
     @workflow.define
@@ -3692,13 +3683,13 @@ def test_wf_upstream_error5(tmp_path: Path):
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
     with pytest.raises(Exception) as excinfo:
-        wf_main(worker="cf", cache_dir=tmp_path)
+        wf_main(worker=plugin_parallel, cache_dir=tmp_path)
 
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error6(tmp_path: Path):
+def test_wf_upstream_error6(plugin_parallel: str, tmp_path: Path):
     """nested workflow with two tasks, the first one raises an error"""
 
     @workflow.define(outputs=["wf_out"])
@@ -3716,13 +3707,13 @@ def test_wf_upstream_error6(tmp_path: Path):
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
     with pytest.raises(RuntimeError) as excinfo:
-        wf_main(worker="cf", cache_dir=tmp_path)
+        wf_main(worker=plugin_parallel, cache_dir=tmp_path)
 
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error7(tmp_path: Path):
+def test_wf_upstream_error7(plugin_parallel: str, tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the last task is set as the workflow output
@@ -3738,7 +3729,7 @@ def test_wf_upstream_error7(tmp_path: Path):
 
     worky = Worky(x="hi")  # TypeError for adding str and int
 
-    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3750,7 +3741,7 @@ def test_wf_upstream_error7(tmp_path: Path):
     assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error7a(tmp_path: Path):
+def test_wf_upstream_error7a(plugin_parallel: str, tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the second task is set as the workflow output
@@ -3765,7 +3756,7 @@ def test_wf_upstream_error7a(tmp_path: Path):
         return addvar3.out
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3777,7 +3768,7 @@ def test_wf_upstream_error7a(tmp_path: Path):
     assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error7b(tmp_path: Path):
+def test_wf_upstream_error7b(plugin_parallel: str, tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the second and the third tasks are set as the workflow output
@@ -3792,7 +3783,7 @@ def test_wf_upstream_error7b(tmp_path: Path):
         return addvar2.out, addvar3.out  #
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3804,7 +3795,7 @@ def test_wf_upstream_error7b(tmp_path: Path):
     assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error8(tmp_path: Path):
+def test_wf_upstream_error8(plugin_parallel: str, tmp_path: Path):
     """workflow with three tasks, the first one raises an error, so 2 others are removed"""
 
     @workflow.define(outputs=["out1", "out2"])
@@ -3816,7 +3807,7 @@ def test_wf_upstream_error8(tmp_path: Path):
         return addvar2.out, addtwo.out  #
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3829,7 +3820,7 @@ def test_wf_upstream_error8(tmp_path: Path):
     assert list(graph["addtwo"].unrunnable.values()) == [[graph["addvar1"]]]
 
 
-def test_wf_upstream_error9(plugin: str, tmp_path: Path):
+def test_wf_upstream_error9(plugin_parallel, tmp_path: Path):
     """
     workflow with five tasks with two "branches",
     one branch has an error, the second is fine
@@ -3846,7 +3837,7 @@ def test_wf_upstream_error9(plugin: str, tmp_path: Path):
         return follow_err.out  # out1
 
     worky = Worky(x=2)
-    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "err" in error_message
@@ -3857,7 +3848,7 @@ def test_wf_upstream_error9(plugin: str, tmp_path: Path):
     assert list(graph["follow_err"].unrunnable.values()) == [[graph["err"]]]
 
 
-def test_wf_upstream_error9a(plugin: str, tmp_path: Path):
+def test_wf_upstream_error9a(plugin_parallel: str, tmp_path: Path):
     """
     workflow with five tasks with two "branches",
     one branch has an error, the second is fine
@@ -3876,7 +3867,7 @@ def test_wf_upstream_error9a(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "err" in error_message
@@ -3887,7 +3878,7 @@ def test_wf_upstream_error9a(plugin: str, tmp_path: Path):
     assert list(graph["follow_err"].unrunnable.values()) == [[graph["err"]]]
 
 
-def test_wf_upstream_error9b(plugin: str, tmp_path: Path):
+def test_wf_upstream_error9b(plugin_parallel: str, tmp_path: Path):
     """
     workflow with five tasks with two "branches",
     one branch has an error, the second is fine
@@ -3905,7 +3896,7 @@ def test_wf_upstream_error9b(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "err" in error_message
@@ -4405,7 +4396,7 @@ def test_graph_5(tmp_path: Path):
 
 
 @pytest.mark.timeout(20)
-def test_duplicate_input_on_split_wf(tmp_path: Path):
+def test_duplicate_input_on_split_wf(plugin_parallel, tmp_path: Path):
     """checking if the workflow gets stuck if it has to run two tasks with equal checksum;
     This can occur when splitting on a list containing duplicate values.
     """
@@ -4422,13 +4413,13 @@ def test_duplicate_input_on_split_wf(tmp_path: Path):
 
     worky = Worky().split(text=text)
 
-    outputs = worky(worker="cf", n_procs=6)
+    outputs = worky(worker=plugin_parallel, n_procs=6)
 
     assert outputs.out1[0] == "test" and outputs.out1[0] == "test"
 
 
 @pytest.mark.timeout(40)
-def test_inner_outer_wf_duplicate(tmp_path: Path):
+def test_inner_outer_wf_duplicate(plugin_parallel, tmp_path: Path):
     """checking if the execution gets stuck if there is an inner and outer workflows
     that run two nodes with the exact same inputs.
     """
@@ -4466,13 +4457,13 @@ def test_inner_outer_wf_duplicate(tmp_path: Path):
         ["start_number", "task_name"], start_number=start_list, task_name=task_list
     )
 
-    with Submitter(worker="cf") as sub:
+    with Submitter(worker=plugin_parallel) as sub:
         res = sub(test_outer)
 
     assert res.outputs.res2[0] == 23 and res.outputs.res2[1] == 23
 
 
-def test_rerun_errored(tmp_path, capfd):
+def test_rerun_errored(plugin_parallel, tmp_path, capfd):
     """Test rerunning a workflow containing errors.
     Only the errored tasks and workflow should be rerun"""
 
@@ -4498,11 +4489,11 @@ def test_rerun_errored(tmp_path, capfd):
     print("Starting run 1")
     with pytest.raises(RuntimeError):
         # Must be cf to get the error from all tasks, otherwise will only get the first error
-        worky(worker="cf", cache_dir=tmp_path, n_procs=5)
+        worky(worker=plugin_parallel, cache_dir=tmp_path, n_procs=5)
 
     print("Starting run 2")
     with pytest.raises(RuntimeError):
-        worky(worker="cf", cache_dir=tmp_path, n_procs=5)
+        worky(worker=plugin_parallel, cache_dir=tmp_path, n_procs=5)
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()

@@ -20,7 +20,7 @@ def pytest_generate_tests(metafunc):
         if bool(shutil.which("sbatch")):
             Plugins = ["slurm"]
         else:
-            Plugins = ["debug"]  # ["debug", "cf"]
+            Plugins = ["debug", "cf"]
         try:
             if metafunc.config.getoption("dask"):
                 Plugins.append("dask")
@@ -50,7 +50,7 @@ def pytest_generate_tests(metafunc):
         elif bool(shutil.which("sbatch")):
             Plugins = ["slurm"]
         else:
-            Plugins = ["debug"]  # ["debug", "cf"]
+            Plugins = ["debug", "cf"]
         try:
             if metafunc.config.getoption("psij"):
                 Plugins.append("psij-" + metafunc.config.getoption("psij"))
@@ -62,6 +62,30 @@ def pytest_generate_tests(metafunc):
         except ValueError:
             pass
         metafunc.parametrize("plugin", Plugins)
+
+    if "plugin_parallel" in metafunc.fixturenames:
+        use_dask = False
+        try:
+            use_dask = metafunc.config.getoption("dask")
+        except ValueError:
+            pass
+        if use_dask:
+            Plugins = []
+        elif bool(shutil.which("sbatch")):
+            Plugins = ["slurm"]
+        else:
+            Plugins = ["cf"]
+        try:
+            if metafunc.config.getoption("psij"):
+                Plugins.append("psij-" + metafunc.config.getoption("psij"))
+                if (
+                    bool(shutil.which("sbatch"))
+                    and metafunc.config.getoption("psij") == "slurm"
+                ):
+                    Plugins.remove("slurm")
+        except ValueError:
+            pass
+        metafunc.parametrize("plugin_parallel", Plugins)
 
 
 # For debugging in IDE's don't catch raised exceptions and let the IDE
