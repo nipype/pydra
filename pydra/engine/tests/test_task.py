@@ -1360,7 +1360,7 @@ def test_traceback_wf(tmpdir):
         return fun_error.out
 
     wf = Workflow(x_list=[3, 4])
-    with pytest.raises(RuntimeError, match="Node 'fun_error' failed.*") as exinfo:
+    with pytest.raises(RuntimeError, match="Task 'fun_error' failed.*") as exinfo:
         with Submitter(worker="cf", cache_dir=tmpdir) as sub:
             sub(wf, raise_errors=True)
 
