@@ -440,6 +440,11 @@
                 <span class="n">input_helps</span><span class="o">=</span><span class="n">input_helps</span><span class="p">,</span>
                 <span class="n">output_helps</span><span class="o">=</span><span class="n">output_helps</span><span class="p">,</span>
             <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;function&quot;</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The argument &#39;function&#39; is reserved for a field to hold the function &quot;</span>
+                <span class="s2">&quot;to be wrapped&quot;</span>
+            <span class="p">)</span>
 
         <span class="n">parsed_inputs</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg</span><span class="p">(</span>
             <span class="n">name</span><span class="o">=</span><span class="s2">&quot;function&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">function</span><span class="p">,</span> <span class="n">hash_eq</span><span class="o">=</span><span class="kc">True</span>

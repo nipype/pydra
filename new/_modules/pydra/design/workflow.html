@@ -450,6 +450,12 @@
                 <span class="n">output_helps</span><span class="o">=</span><span class="n">output_helps</span><span class="p">,</span>
             <span class="p">)</span>
 
+        <span class="k">if</span> <span class="s2">&quot;constructor&quot;</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The argument &#39;constructor&#39; is reserved and cannot be used as an &quot;</span>
+                <span class="s2">&quot;argument name&quot;</span>
+            <span class="p">)</span>
+
         <span class="n">parsed_inputs</span><span class="p">[</span><span class="s2">&quot;constructor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg</span><span class="p">(</span>
             <span class="n">name</span><span class="o">=</span><span class="s2">&quot;constructor&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">hash_eq</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">constructor</span>
         <span class="p">)</span>

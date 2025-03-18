@@ -664,6 +664,12 @@
                 <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ShellOutputs</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">ShellOutputs</span><span class="o">.</span><span class="n">BASE_NAMES</span><span class="p">}</span>
             <span class="p">)</span>
 
+        <span class="k">if</span> <span class="s2">&quot;executable&quot;</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The argument &#39;executable&#39; is reserved for a field to hold the command &quot;</span>
+                <span class="s2">&quot;to be run&quot;</span>
+            <span class="p">)</span>
+
         <span class="c1"># Update the inputs (overriding inputs from base classes) with the executable</span>
         <span class="c1"># and the output argument fields</span>
         <span class="n">parsed_inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
