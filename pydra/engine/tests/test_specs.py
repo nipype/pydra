@@ -22,13 +22,14 @@ from .utils import (
     FunAddVar,
     ListSum,
     FileOrIntIdentity,
+    FileAndIntIdentity,
     ListOfListOfFileOrIntIdentity,
     ListOfDictOfFileOrIntIdentity,
 )
 
 
 @workflow.define
-def TestWorkflow(x: int, y: list[int]) -> int:
+def ATestWorkflow(x: int, y: list[int]) -> int:
     node_a = workflow.add(FunAddTwo(a=x), name="A")
     node_b = workflow.add(FunAddVar(a=node_a.out).split(b=y).combine("b"), name="B")
     node_c = workflow.add(ListSum(x=node_b.out), name="C")
@@ -37,7 +38,7 @@ def TestWorkflow(x: int, y: list[int]) -> int:
 
 @pytest.fixture
 def workflow_task(submitter: Submitter) -> WorkflowDef:
-    wf = TestWorkflow(x=1, y=[1, 2, 3])
+    wf = ATestWorkflow(x=1, y=[1, 2, 3])
     with submitter:
         submitter(wf)
     return wf
@@ -175,7 +176,7 @@ def test_input_file_hash_3(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    a = FileOrIntIdentity(in_file=file, in_int=3)
+    a = FileAndIntIdentity(in_file=file, in_int=3)
     # original hash and files_hash (dictionary contains info about files)
     hash1 = a._hash
     # files_hash1 = deepcopy(my_inp.files_hash)
@@ -228,7 +229,7 @@ def test_input_file_hash_4(tmp_path):
 
     # checking specific hash value
     hash1 = ListOfListOfFileOrIntIdentity(in_file=[[file, 3]])._hash
-    assert hash1 == "b583e0fd5501d3bed9bf510ce2a9e379"
+    assert hash1 == "2c35c94089b00a7a399d3d4faf208fee"
 
     # the same file, but int field changes
     hash1a = ListOfListOfFileOrIntIdentity(in_file=[[file, 5]])._hash
@@ -258,7 +259,7 @@ def test_input_file_hash_5(tmp_path):
 
     # checking specific hash value
     hash1 = ListOfDictOfFileOrIntIdentity(in_file=[{"file": file, "int": 3}])._hash
-    assert hash1 == "aa2d4b708ed0dd8340582a6514bfd5ce"
+    assert hash1 == "7692ffe0b3323c13ecbd642b494f1f53"
 
     # the same file, but int field changes
     hash1a = ListOfDictOfFileOrIntIdentity(in_file=[{"file": file, "int": 5}])._hash

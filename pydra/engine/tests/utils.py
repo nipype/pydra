@@ -197,6 +197,11 @@ def FileOrIntIdentity(in_file: ty.Union[File, int]) -> File:
 
 
 @python.define
+def FileAndIntIdentity(in_file: File, in_int: int) -> File:
+    return in_file, in_int
+
+
+@python.define
 def ListOfListOfFileOrIntIdentity(
     in_file: ty.List[ty.List[ty.Union[int, File]]],
 ) -> ty.List[ty.List[ty.Union[int, File]]]:

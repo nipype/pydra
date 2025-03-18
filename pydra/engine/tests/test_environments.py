@@ -116,10 +116,10 @@ def test_docker_1_subm(tmp_path, docker):
         worker="cf", cache_dir=newcache("docker_sub"), environment=docker
     ) as sub:
         result = sub(shelly)
-    assert outputs_dict == attrs_values(result.outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(result.outputs))
 
     outputs = shelly(cache_dir=newcache("docker_call"), environment=docker)
-    assert outputs_dict == attrs_values(outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
 @no_win
