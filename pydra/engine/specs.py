@@ -303,7 +303,7 @@ class TaskDef(ty.Generic[OutputsType]):
             raise RuntimeError(
                 f"Task {self} failed @ {time_of_crash} with the "
                 "following errors:\n"
-                + "\n".join(error_message)
+                + error_message
                 + (
                     "To inspect, please load the pickled task object from here: "
                     f"{result.output_dir}/_task.pklz"
