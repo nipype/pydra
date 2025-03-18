@@ -426,7 +426,13 @@
             <span class="n">name</span> <span class="o">=</span> <span class="n">klass</span><span class="o">.</span><span class="vm">__name__</span>
             <span class="n">check_explicit_fields_are_none</span><span class="p">(</span><span class="n">klass</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span><span class="p">)</span>
             <span class="n">parsed_inputs</span><span class="p">,</span> <span class="n">parsed_outputs</span> <span class="o">=</span> <span class="n">extract_fields_from_class</span><span class="p">(</span>
-                <span class="n">WorkflowDef</span><span class="p">,</span> <span class="n">WorkflowOutputs</span><span class="p">,</span> <span class="n">klass</span><span class="p">,</span> <span class="n">arg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">auto_attribs</span>
+                <span class="n">WorkflowDef</span><span class="p">,</span>
+                <span class="n">WorkflowOutputs</span><span class="p">,</span>
+                <span class="n">klass</span><span class="p">,</span>
+                <span class="n">arg</span><span class="p">,</span>
+                <span class="n">out</span><span class="p">,</span>
+                <span class="n">auto_attribs</span><span class="p">,</span>
+                <span class="n">skip_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;constructor&quot;</span><span class="p">],</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
