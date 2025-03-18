@@ -662,8 +662,12 @@ def fields_in_formatter(formatter: str | ty.Callable[..., str]) -> set[str]:
     """Extract all field names from a formatter string or function."""
     if isinstance(formatter, str):
         return parse_format_string(formatter)
-    else:
+    elif isinstance(formatter, ty.Sequence):
+        return set().union(*[fields_in_formatter(f) for f in formatter])
+    elif isinstance(formatter, ty.Callable):
         return set(inspect.signature(formatter).parameters.keys())
+    else:
+        raise ValueError(f"Unsupported formatter type: {type(formatter)} ({formatter})")
 
 
 def ensure_list(obj, tuple2list=False):

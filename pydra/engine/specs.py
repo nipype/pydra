@@ -298,16 +298,13 @@ class TaskDef(ty.Generic[OutputsType]):
                 time_of_crash = result.errors["time of crash"]
                 error_message = "\n".join(result.errors["error message"])
             else:
-                time_of_crash = "UNKNOWN"
+                time_of_crash = "UNKNOWN-TIME"
                 error_message = "NOT RETRIEVED"
             raise RuntimeError(
                 f"Task {self} failed @ {time_of_crash} with the "
-                "following errors:\n"
-                + error_message
-                + (
-                    "To inspect, please load the pickled task object from here: "
-                    f"{result.output_dir}/_task.pklz"
-                )
+                f"following errors:\n{error_message}\n"
+                "To inspect, please load the pickled task object from here: "
+                f"{result.output_dir}/_task.pklz"
             )
         return result.outputs
 
@@ -835,9 +832,9 @@ class WorkflowOutputs(TaskOutputs):
                         time_of_crash = "UNKNOWN-TIME"
                         error_message = "NOT RETRIEVED"
                     errors.append(
-                        f"Task {node.name!r} failed @ {time_of_crash} "
-                        f"running {node._definition} with the following errors:\n{error_message}"
-                        "To inspect, please load the pickled task object from here: "
+                        f"Task {node.name!r} failed @ {time_of_crash} running "
+                        f"{node._definition} with the following errors:\n{error_message}"
+                        "\nTo inspect, please load the pickled task object from here: "
                         f"{result.output_dir}/_task.pklz"
                     )
             raise RuntimeError(
