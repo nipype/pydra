@@ -435,7 +435,7 @@ class Task(ty.Generic[DefType]):
         if _result:
             if _result.errored:
                 self._errored = True
-                raise ValueError(f"Task {self.name!r} raised an error")
+                raise ValueError(f"Task {self.name!r} failed")
             else:
                 return True
         return False
