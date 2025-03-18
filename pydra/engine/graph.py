@@ -3,6 +3,7 @@
 from copy import copy
 from pathlib import Path
 import typing as ty
+from collections import Counter
 import subprocess as sp
 
 from .helpers import ensure_list
@@ -83,9 +84,14 @@ class DiGraph(ty.Generic[NodeType]):
     @nodes.setter
     def nodes(self, nodes: ty.Iterable[NodeType]) -> None:
         if nodes:
-            nodes = ensure_list(nodes)
-            # if len(set(nodes)) != len(nodes):
-            #     raise Exception("nodes have repeated elements")
+            if duplicate_names := [
+                n
+                for n, c in Counter(nd.name for nd in ensure_list(nodes)).items()
+                if c > 1
+            ]:
+                raise ValueError(
+                    f"Duplicate node names found in graph: {duplicate_names}"
+                )
             self._nodes = nodes
 
     def node(self, name: str) -> NodeType:
@@ -402,7 +408,7 @@ class DiGraph(ty.Generic[NodeType]):
 
         dotstr = "digraph G {\n"
         for nd in self.nodes:
-            if is_workflow(nd._definition):
+            if is_workflow(getattr(nd, "_definition", None)):
                 if nd.state:
                     # adding color for wf with a state
                     dotstr += f"{nd.name} [shape=box, color=blue]\n"
@@ -502,7 +508,7 @@ class DiGraph(ty.Generic[NodeType]):
         wf_asnd = {}
         dotstr = ""
         for nd in nodes:
-            if is_workflow(nd._definition):
+            if is_workflow(getattr(nd, "_definition", None)):
                 nd_graph = nd._definition.construct().graph()
                 wf_asnd[nd.name] = nd_graph
                 # for task in nd_graph.nodes:

@@ -104,16 +104,14 @@ def test_state_2_err():
 
 
 def test_state_3_err():
-    with pytest.raises(PydraStateError) as exinfo:
+    with pytest.raises(PydraStateError, match="combiner has to be a string or a list"):
         State(name="NA", splitter=["a", "b"], combiner=("a", "b"))
-    assert "combiner has to be a string or a list" == str(exinfo.value)
 
 
 def test_state_4_err():
     st = State(name="NA", splitter="a", combiner=["a", "b"])
-    with pytest.raises(PydraStateError) as exinfo:
+    with pytest.raises(PydraStateError, match="are not in the splitter") as exinfo:
         st.combiner_validation()
-    assert "all combiners have to be in the splitter" in str(exinfo.value)
 
 
 def test_state_5_err():

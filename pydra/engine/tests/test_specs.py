@@ -38,10 +38,6 @@ def workflow_task(submitter: Submitter) -> WorkflowDef:
 @pytest.fixture
 def wf(workflow_task: WorkflowDef) -> Workflow:
     wf = Workflow.construct(workflow_task)
-    for n in wf.nodes:
-        if n._state:
-            n._state.prepare_states(inputs=n.state_values)
-            n._state.prepare_inputs()
     return wf
 
 
@@ -52,7 +48,13 @@ def submitter(tmp_path) -> Submitter:
 
 @pytest.fixture
 def graph(wf: Workflow, submitter: Submitter) -> DiGraph[NodeExecution]:
-    return wf.execution_graph(submitter=submitter)
+    graph = wf.execution_graph(submitter=submitter)
+    for node in graph.nodes:
+        if node.state:
+            node.state.prepare_states(inputs=node.node.state_values)
+            node.state.prepare_inputs()
+        node.start()
+    return graph
 
 
 @pytest.fixture

@@ -4,6 +4,7 @@ import sys
 import typing as ty
 from pathlib import Path
 import tempfile
+import traceback
 from unittest.mock import Mock
 import pytest
 from pydra.design import python
@@ -24,6 +25,12 @@ from .utils import (
     MyHeader,
 )
 from pydra.utils import exc_info_matches
+
+
+def exc_to_str(exc_info):
+    return "".join(
+        traceback.format_exception(exc_info.type, exc_info.value, exc_info.tb)
+    )
 
 
 def lz(tp: ty.Type):
@@ -488,25 +495,27 @@ def test_type_coercion_fail2a():
 
 
 def test_type_coercion_fail3():
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError, match="Incorrect type for field"):
         TypeParser(ty.Sequence, coercible=[(ty.Sequence, ty.Sequence)])(
             {"a": 1, "b": 2}
         )
 
 
 def test_type_coercion_fail4():
-    with pytest.raises(TypeError, match=r"Cannot coerce \{'a': 1\} into"):
+    with pytest.raises(TypeError, match="Incorrect type for field"):
         TypeParser(ty.Sequence, coercible=[(ty.Any, ty.Any)])({"a": 1})
 
 
 def test_type_coercion_fail5():
-    with pytest.raises(TypeError, match="as 1 is not iterable"):
+    with pytest.raises(TypeError) as excinfo:
         TypeParser(ty.List[int], coercible=[(ty.Any, ty.Any)])(1)
+    assert "as 1 is not iterable" in exc_to_str(excinfo)
 
 
 def test_type_coercion_fail6():
-    with pytest.raises(TypeError, match="is not a mapping type"):
+    with pytest.raises(TypeError) as excinfo:
         TypeParser(ty.List[ty.Dict[str, str]], coercible=[(ty.Any, ty.Any)])((1, 2, 3))
+    assert "is not a mapping type" in exc_to_str(excinfo)
 
 
 def test_type_coercion_realistic():

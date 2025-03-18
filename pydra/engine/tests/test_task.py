@@ -1360,15 +1360,16 @@ def test_traceback_wf(tmpdir):
         return fun_error.out
 
     wf = Workflow(x_list=[3, 4])
-    with pytest.raises(Exception, match="Task 'fun_error' raised an error.*") as exinfo:
+    with pytest.raises(RuntimeError, match="Node 'fun_error' failed.*") as exinfo:
         with Submitter(worker="cf", cache_dir=tmpdir) as sub:
             sub(wf, raise_errors=True)
 
     # getting error file from the error message
-    error_file_match = (
-        str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0].strip()
+    output_dir_match = Path(
+        str(exinfo.value).split("here: ")[-1].split("_task.pklz")[0].strip()
     )
-    error_file = Path(error_file_match) / "_error.pklz"
+    assert output_dir_match.exists()
+    error_file = output_dir_match / "_error.pklz"
     # checking if the file exists
     assert error_file.exists()
     # reading error message from the pickle file
@@ -1378,14 +1379,14 @@ def test_traceback_wf(tmpdir):
     assert "in FunError" in error_tb[-2]
 
 
-def test_rerun_errored(tmpdir, capfd):
+def test_rerun_errored(tmp_path, capfd):
     """Test rerunning a task containing errors.
     Only the errored tasks should be rerun"""
 
     @python.define
     def PassOdds(x):
         if x % 2 == 0:
-            print(f"x={x} -> x%2 = {bool(x % 2)} (error)\n")
+            print(f"x={x} -> x%2 = {bool(x % 2)} (even error)\n")
             raise Exception("even error")
         else:
             print(f"x={x} -> x%2 = {bool(x % 2)}\n")
@@ -1394,9 +1395,9 @@ def test_rerun_errored(tmpdir, capfd):
     pass_odds = PassOdds().split("x", x=[1, 2, 3, 4, 5])
 
     with pytest.raises(Exception):
-        pass_odds(cache_dir=tmpdir, worker="cf")
+        pass_odds(cache_dir=tmp_path, worker="cf")
     with pytest.raises(Exception):
-        pass_odds(cache_dir=tmpdir, worker="cf")
+        pass_odds(cache_dir=tmp_path, worker="cf")
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()
@@ -1405,9 +1406,9 @@ def test_rerun_errored(tmpdir, capfd):
     errors_found = 0
 
     for line in stdout_lines:
-        if "x%2" in line:
+        if "-> x%2" in line:
             tasks_run += 1
-        if "(error)" in line:
+        if "(even error)" in line:
             errors_found += 1
 
     # There should have been 5 messages of the form "x%2 = XXX" after calling task() the first time

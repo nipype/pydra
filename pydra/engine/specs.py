@@ -296,7 +296,12 @@ class TaskDef(ty.Generic[OutputsType]):
         if result.errored:
             raise RuntimeError(
                 f"Task {self} failed @ {result.errors['time of crash']} with the "
-                "following errors:\n" + "\n".join(result.errors["error message"])
+                "following errors:\n"
+                + "\n".join(result.errors["error message"])
+                + (
+                    "To inspect, please load the pickled task object from here: "
+                    f"{result.output_dir}/_task.pklz"
+                )
             )
         return result.outputs
 
@@ -815,15 +820,17 @@ class WorkflowOutputs(TaskOutputs):
         if errored := [n for n in exec_graph.nodes if n.errored]:
             errors = []
             for node in errored:
-                for task in node.errored.values():
-                    result = task.result()
+                for node_task in node.errored.values():
+                    result = node_task.result()
                     errors.append(
-                        f"Task {node.name!r} failed @ {result.errors['time of crash']} "
-                        "with the following errors:\n"
+                        f"Node {node.name!r} failed @ {result.errors['time of crash']} "
+                        f"running {node._definition} with the following errors:\n"
                         + "\n".join(result.errors["error message"])
+                        + "To inspect, please load the pickled task object from here: "
+                        f"{result.output_dir}/_task.pklz"
                     )
             raise RuntimeError(
-                f"Workflow {workflow} failed with errors: " + "\n\n".join(errors)
+                f"Workflow {task!r} failed with errors:\n\n" + "\n\n".join(errors)
             )
 
         # Retrieve values from the output fields

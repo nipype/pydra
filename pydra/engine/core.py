@@ -681,20 +681,25 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         constructor = input_values.pop("constructor")
         # Call the user defined constructor to set the outputs
         output_lazy_fields = constructor(**input_values)
-        if output_lazy_fields is None and all(
-            v is attrs.NOTHING for v in fields_values(outputs).values()
-        ):
-            raise ValueError(
-                f"Constructor function for {definition} returned None, must a lazy field "
-                "or a tuple of lazy fields"
-            )
-        elif unset_outputs := [
-            n for n, v in fields_values(outputs).items() if v is attrs.NOTHING
-        ]:
-            raise ValueError(
-                f"Mandatory outputs {unset_outputs} are not set by the "
-                f"constructor of {workflow!r}"
-            )
+        if all(v is attrs.NOTHING for v in fields_values(outputs).values()):
+            if output_lazy_fields is None:
+                raise ValueError(
+                    f"Constructor function for {definition} returned None, must a lazy field "
+                    "or a tuple of lazy fields"
+                )
+        else:  # Outputs are set explicitly in the outputs object
+            if output_lazy_fields is not None:
+                raise ValueError(
+                    f"Constructor function for {definition} must not return anything "
+                    "if any of the outputs are already set explicitly"
+                )
+            if unset_outputs := [
+                n for n, v in fields_values(outputs).items() if v is attrs.NOTHING
+            ]:
+                raise ValueError(
+                    f"Mandatory outputs {unset_outputs} are not set by the "
+                    f"constructor of {workflow!r}"
+                )
         # Check to see whether any mandatory inputs are not set
         for node in workflow.nodes:
             node._definition._check_rules()
