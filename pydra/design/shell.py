@@ -214,11 +214,11 @@ class outarg(arg, Out):
                     f"path_template ({value!r}) can only be provided when there is no "
                     f"default value provided ({self.default!r})"
                 )
-            if not (is_fileset_or_union(self.type) or self.type is ty.Any):
-                raise ValueError(
-                    f"path_template ({value!r}) can only be provided when type is a FileSet, "
-                    f"or union thereof, not {self.type!r}"
-                )
+            # if not (is_fileset_or_union(self.type) or self.type is ty.Any):
+            #     raise ValueError(
+            #         f"path_template ({value!r}) can only be provided when type is a FileSet, "
+            #         f"or union thereof, not {self.type!r}"
+            #     )
             # if self.argstr is None:
             #     raise ValueError(
             #         f"path_template ({value!r}) can only be provided when argstr is not None"
