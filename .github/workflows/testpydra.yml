@@ -80,7 +80,7 @@ jobs:
 
       - name: Pytest
         run: |
-          pytest -vs -n auto --doctest-modules \
+          pytest -vs -n auto pydra --doctest-modules \
                  --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
 
       - name: Upload to codecov

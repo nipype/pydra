@@ -4467,14 +4467,11 @@ def test_rerun_errored(plugin_parallel, tmp_path, capfd):
     """Test rerunning a workflow containing errors.
     Only the errored tasks and workflow should be rerun"""
 
-    class EvenException(Exception):
-        pass
-
     @python.define
     def PassOdds(x):
         if x % 2 == 0:
             print(f"x={x}, running x%2 = {x % 2} (even error)\n")
-            raise EvenException("even error")
+            raise ValueError("even error")
         else:
             print(f"x={x}, running x%2 = {x % 2}\n")
             return x
@@ -4497,9 +4494,6 @@ def test_rerun_errored(plugin_parallel, tmp_path, capfd):
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()
-
-    with open("/Users/tclose/Desktop/pytest-stdout.txt", "w") as f:
-        f.write(out)
 
     tasks_run = 0
     errors_found = 0

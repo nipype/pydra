@@ -818,8 +818,7 @@ class NodeExecution(ty.Generic[DefType]):
                         break
                 if is_runnable:
                     runnable.append(self.blocked.pop(index))
-        self.queued.update({t.state_index: t for t in runnable})
-        return list(self.queued.values())
+        return runnable
 
 
 async def prepare_runnable(runnable):

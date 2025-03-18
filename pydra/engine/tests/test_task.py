@@ -1395,9 +1395,9 @@ def test_rerun_errored(tmp_path, capfd):
     pass_odds = PassOdds().split("x", x=[1, 2, 3, 4, 5])
 
     with pytest.raises(Exception):
-        pass_odds(cache_dir=tmp_path, worker="cf")
+        pass_odds(cache_dir=tmp_path, worker="cf", n_procs=3)
     with pytest.raises(Exception):
-        pass_odds(cache_dir=tmp_path, worker="cf")
+        pass_odds(cache_dir=tmp_path, worker="cf", n_procs=3)
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()

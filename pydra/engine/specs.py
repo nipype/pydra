@@ -294,10 +294,16 @@ class TaskDef(ty.Generic[OutputsType]):
                         )
             raise
         if result.errored:
+            if result.errors:
+                time_of_crash = result.errors["time of crash"]
+                error_message = "\n".join(result.errors["error message"])
+            else:
+                time_of_crash = "UNKNOWN"
+                error_message = "NOT RETRIEVED"
             raise RuntimeError(
-                f"Task {self} failed @ {result.errors['time of crash']} with the "
+                f"Task {self} failed @ {time_of_crash} with the "
                 "following errors:\n"
-                + "\n".join(result.errors["error message"])
+                + "\n".join(error_message)
                 + (
                     "To inspect, please load the pickled task object from here: "
                     f"{result.output_dir}/_task.pklz"
