@@ -383,6 +383,12 @@ def define(
                 {n: getattr(ShellOutputs, n) for n in ShellOutputs.BASE_NAMES}
             )
 
+        if "executable" in parsed_inputs:
+            raise ValueError(
+                "The argument 'executable' is reserved for a field to hold the command "
+                "to be run"
+            )
+
         # Update the inputs (overriding inputs from base classes) with the executable
         # and the output argument fields
         parsed_inputs.update(

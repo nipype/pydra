@@ -1,6 +1,7 @@
 from operator import attrgetter
 from copy import copy
 from unittest.mock import Mock
+import pytest
 import attrs
 from pydra.engine.lazy import LazyInField, LazyOutField
 import typing as ty
@@ -72,6 +73,15 @@ def test_workflow():
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
+
+
+def test_constructor_arg_fail():
+
+    with pytest.raises(ValueError, match="The argument 'constructor' is reserved"):
+
+        @workflow.define
+        def MyTestWorkflow(constructor: ty.Callable) -> ty.Callable:
+            return constructor
 
 
 def test_shell_workflow():

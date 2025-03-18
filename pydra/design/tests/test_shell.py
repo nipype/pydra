@@ -66,6 +66,13 @@ def test_interface_template():
     Cp.Outputs(out_path=File.mock("in-path.txt"))
 
 
+def test_executable_arg_fail():
+
+    with pytest.raises(ValueError, match="The argument 'executable' is reserved"):
+
+        shell.define("my-cmd <executable>")
+
+
 def test_interface_template_w_types_and_path_template_ext():
 
     TrimPng = shell.define("trim-png <in_image:image/png> <out|out_image:image/png>")

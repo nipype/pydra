@@ -33,6 +33,15 @@ def test_interface_wrap_function(tmp_path):
         SampleDef(a=1.5)
 
 
+def test_function_arg_fail():
+
+    with pytest.raises(ValueError, match="The argument 'function' is reserved"):
+
+        @python.define
+        def func(function: ty.Callable) -> ty.Callable:
+            return function
+
+
 def test_interface_wrap_function_with_default():
     def func(a: int, k: float = 2.0) -> float:
         """Sample function with inputs and outputs"""

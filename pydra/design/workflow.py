@@ -169,6 +169,12 @@ def define(
                 output_helps=output_helps,
             )
 
+        if "constructor" in parsed_inputs:
+            raise ValueError(
+                "The argument 'constructor' is reserved and cannot be used as an "
+                "argument name"
+            )
+
         parsed_inputs["constructor"] = arg(
             name="constructor", type=ty.Callable, hash_eq=True, default=constructor
         )

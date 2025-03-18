@@ -159,6 +159,11 @@ def define(
                 input_helps=input_helps,
                 output_helps=output_helps,
             )
+        if "function" in parsed_inputs:
+            raise ValueError(
+                "The argument 'function' is reserved for a field to hold the function "
+                "to be wrapped"
+            )
 
         parsed_inputs["function"] = arg(
             name="function", type=ty.Callable, default=function, hash_eq=True
