@@ -1686,13 +1686,13 @@ def test_wfasnd_1(plugin: str, tmp_path: Path):
     """
 
     @workflow.define
-    def Wfnd(x):
+    def Wfnd1(x):
         add2 = workflow.add(Add2(x=x), name="add2")
         return add2.out
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x=x))
+        wfnd = workflow.add(Wfnd1(x=x))
         return wfnd.out
 
     worky = Worky(x=2)
@@ -1709,13 +1709,13 @@ def test_wfasnd_wfinp_1(plugin: str, tmp_path: Path):
     """
 
     @workflow.define
-    def Wfnd(x):
+    def Wfnd1A(x):
         add2 = workflow.add(Add2(x=x), name="add2")
         return add2.out
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x=x))
+        wfnd = workflow.add(Wfnd1A(x=x))
         return wfnd.out
 
     worky = Worky(x=2)
@@ -1896,13 +1896,13 @@ def test_wfasnd_wfst_1(plugin: str, tmp_path: Path):
     """
 
     @workflow.define
-    def Wfnd(x):
+    def Wfnd1B(x):
         add2 = workflow.add(Add2(x=x), name="add2")
         return add2.out
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x=x))
+        wfnd = workflow.add(Wfnd1B(x=x))
         return wfnd.out
 
     worky = Worky().split("x", x=[2, 4])
@@ -2062,14 +2062,14 @@ def test_wfasnd_ndst_4(plugin: str, tmp_path: Path):
     """
 
     @workflow.define
-    def Wfnd(x):
+    def Wfnd4(x):
         add2_1st = workflow.add(Add2().split(x=x), name="add2_1st")
         add2_2nd = workflow.add(Add2(x=add2_1st.out), name="add2_2nd")
         return add2_2nd.out
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x=x))
+        wfnd = workflow.add(Wfnd4(x=x))
         return wfnd.out
 
     worky = Worky(x=[2, 4])
@@ -2086,14 +2086,14 @@ def test_wfasnd_wfst_4(plugin: str, tmp_path: Path):
     """
 
     @workflow.define
-    def Wfnd(x):
+    def Wfnd4A(x):
         add2_1st = workflow.add(Add2(x=x), name="add2_1st")
         add2_2nd = workflow.add(Add2(x=add2_1st.out), name="add2_2nd")
         return add2_2nd.out
 
     @workflow.define
     def Worky(x):
-        wfnd = workflow.add(Wfnd(x=x))
+        wfnd = workflow.add(Wfnd4A(x=x))
         return wfnd.out
 
     worky = Worky().split("x", x=[2, 4])
@@ -3504,7 +3504,7 @@ def create_tasks():
 def test_workflow_combine1(tmp_path: Path):
     @workflow.define(outputs=["out_pow", "out_iden1", "out_iden2"])
     def Worky1(a, b):
-        power = workflow.add(Power().split(["a", "b"], a=a, b=b))
+        power = workflow.add(Power().split(["a", "b"], a=a, b=b), name="power")
         identity1 = workflow.add(
             Identity(x=power.out).combine("power.a"), name="identity1"
         )
@@ -3524,7 +3524,9 @@ def test_workflow_combine1(tmp_path: Path):
 def test_workflow_combine2(tmp_path: Path):
     @workflow.define(outputs=["out_pow", "out_iden"])
     def Worky1(a, b):
-        power = workflow.add(Power().split(["a", "b"], a=a, b=b).combine("a"))
+        power = workflow.add(
+            Power().split(["a", "b"], a=a, b=b).combine("a"), name="power"
+        )
         identity = workflow.add(Identity(x=power.out).combine("power.b"))
         return power.out, identity.out
 
@@ -4487,11 +4489,11 @@ def test_rerun_errored(tmp_path, capfd):
             return x
 
     @workflow.define
-    def Worky(x):
+    def WorkyPassOdds(x):
         pass_odds = workflow.add(PassOdds().split("x", x=x))
         return pass_odds.out
 
-    worky = Worky(x=[1, 2, 3, 4, 5])
+    worky = WorkyPassOdds(x=[1, 2, 3, 4, 5])
 
     print("Starting run 1")
     with pytest.raises(RuntimeError):
