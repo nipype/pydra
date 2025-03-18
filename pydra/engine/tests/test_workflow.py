@@ -4480,10 +4480,10 @@ def test_rerun_errored(tmp_path, capfd):
     @python.define
     def PassOdds(x):
         if x % 2 == 0:
-            print(f"x%2 = {x % 2} (error)\n")
+            print(f"x={x}, x%2 = {x % 2} (error)\n")
             raise EvenException("even error")
         else:
-            print(f"x%2 = {x % 2}\n")
+            print(f"x={x}, x%2 = {x % 2}\n")
             return x
 
     @workflow.define
@@ -4493,9 +4493,12 @@ def test_rerun_errored(tmp_path, capfd):
 
     worky = Worky(x=[1, 2, 3, 4, 5])
 
+    print("Starting run 1")
     with pytest.raises(RuntimeError):
         # Must be cf to get the error from all tasks, otherwise will only get the first error
         worky(worker="cf", cache_dir=tmp_path, n_procs=5)
+
+    print("Starting run 2")
     with pytest.raises(RuntimeError):
         worky(worker="cf", cache_dir=tmp_path, n_procs=5)
 

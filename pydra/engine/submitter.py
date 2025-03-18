@@ -417,7 +417,7 @@ class Submitter:
                             )
                         raise RuntimeError(msg)
             for task in tasks:
-                if task.is_async:
+                if task.is_async:  # Only workflows at this stage
                     await self.worker.run_async(
                         task, rerun=rerun and self.propagate_rerun
                     )
