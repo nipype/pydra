@@ -107,6 +107,11 @@ def list_fields(definition: "type[TaskDef] | TaskDef") -> list["Field"]:
     ]
 
 
+def fields_values(obj, **kwargs) -> dict[str, ty.Any]:
+    """Get the values of an attrs object."""
+    return {f.name: getattr(obj, f.name) for f in list_fields(obj)}
+
+
 def fields_dict(definition: "type[TaskDef] | TaskDef") -> dict[str, "Field"]:
     """Returns the fields of a definition in a dictionary"""
     return {f.name: f for f in list_fields(definition)}

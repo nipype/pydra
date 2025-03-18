@@ -4482,10 +4482,10 @@ def test_rerun_errored(tmp_path, capfd):
     @python.define
     def PassOdds(x):
         if x % 2 == 0:
-            print(f"x={x}, x%2 = {x % 2} (error)\n")
+            print(f"x={x}, running x%2 = {x % 2} (even error)\n")
             raise EvenException("even error")
         else:
-            print(f"x={x}, x%2 = {x % 2}\n")
+            print(f"x={x}, running x%2 = {x % 2}\n")
             return x
 
     @workflow.define
@@ -4507,13 +4507,16 @@ def test_rerun_errored(tmp_path, capfd):
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()
 
+    with open("/Users/tclose/Desktop/pytest-stdout.txt", "w") as f:
+        f.write(out)
+
     tasks_run = 0
     errors_found = 0
 
     for line in stdout_lines:
-        if "x%2" in line:
+        if "running x%2" in line:
             tasks_run += 1
-        if "(error)" in line:
+        if "(even error)" in line:
             errors_found += 1
 
     # There should have been 5 messages of the form "x%2 = XXX" after calling task() the first time
