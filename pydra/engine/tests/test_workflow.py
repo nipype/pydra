@@ -4413,7 +4413,7 @@ def test_duplicate_input_on_split_wf(plugin_parallel, tmp_path: Path):
 
     worky = Worky().split(text=text)
 
-    outputs = worky(worker=plugin_parallel, n_procs=6)
+    outputs = worky(worker=plugin_parallel)
 
     assert outputs.out1[0] == "test" and outputs.out1[0] == "test"
 
@@ -4486,11 +4486,11 @@ def test_rerun_errored(plugin_parallel, tmp_path, capfd):
     print("Starting run 1")
     with pytest.raises(RuntimeError):
         # Must be cf to get the error from all tasks, otherwise will only get the first error
-        worky(worker=plugin_parallel, cache_dir=tmp_path, n_procs=5)
+        worky(worker=plugin_parallel, cache_dir=tmp_path)
 
     print("Starting run 2")
     with pytest.raises(RuntimeError):
-        worky(worker=plugin_parallel, cache_dir=tmp_path, n_procs=5)
+        worky(worker=plugin_parallel, cache_dir=tmp_path)
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()
