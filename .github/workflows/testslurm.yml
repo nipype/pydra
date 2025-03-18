@@ -54,7 +54,7 @@ jobs:
     - name: Run pytest
       run: |
         docker exec slurm bash -c "find /pydra -name '*.py'"
-        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_workflow.py pydra/engine/tests/test_submitter.py --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
+        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_workflow.py /pydra/engine/tests/test_submitter.py --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
     - name: Upload to codecov
       run: |
         docker exec slurm bash -c "pip install urllib3==1.26.6"
