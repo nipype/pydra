@@ -341,6 +341,7 @@ class Submitter:
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
         # keep track of pending futures
         task_futures = set()
+        futured = set()
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
             if not tasks and not task_futures:
@@ -421,10 +422,11 @@ class Submitter:
                     await self.worker.run_async(
                         task, rerun=rerun and self.propagate_rerun
                     )
-                else:
+                elif task.checksum not in futured:
                     task_futures.add(
                         self.worker.run(task, rerun=rerun and self.propagate_rerun)
                     )
+                    futured.add(task.checksum)
             task_futures = await self.worker.fetch_finished(task_futures)
             tasks = self.get_runnable_tasks(exec_graph)
 
@@ -818,7 +820,8 @@ class NodeExecution(ty.Generic[DefType]):
                         break
                 if is_runnable:
                     runnable.append(self.blocked.pop(index))
-        return runnable
+        self.queued.update({t.state_index: t for t in runnable})
+        return list(self.queued.values())
 
 
 async def prepare_runnable(runnable):

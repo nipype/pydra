@@ -16,7 +16,15 @@ from pydra.engine.core import Workflow
 from pydra.engine.node import Node
 from pydra.engine.submitter import Submitter, NodeExecution, DiGraph
 from pydra.design import python, workflow
-from .utils import Foo, FunAddTwo, FunAddVar, ListSum
+from .utils import (
+    Foo,
+    FunAddTwo,
+    FunAddVar,
+    ListSum,
+    FileOrIntIdentity,
+    ListOfListOfFileOrIntIdentity,
+    ListOfDictOfFileOrIntIdentity,
+)
 
 
 @workflow.define
@@ -95,16 +103,16 @@ def test_input_file_hash_1(tmp_path):
     outfile = tmp_path / "test.file"
     outfile.touch()
 
-    @python.define
-    def A(in_file: File) -> File:
-        return in_file
-
-    assert A(in_file=outfile)._hash == "e708da65b720212c5ce9ed2c65aae59c"
+    assert (
+        FileOrIntIdentity(in_file=outfile)._hash == "e708da65b720212c5ce9ed2c65aae59c"
+    )
 
     with open(outfile, "w") as fp:
         fp.write("test")
 
-    assert A(in_file=outfile)._hash == "f726a193430352bb3b92dccf5eccff3a"
+    assert (
+        FileOrIntIdentity(in_file=outfile)._hash == "f726a193430352bb3b92dccf5eccff3a"
+    )
 
 
 def test_input_file_hash_2(tmp_path):
@@ -113,26 +121,22 @@ def test_input_file_hash_2(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    @python.define
-    def A(in_file: File) -> File:
-        return in_file
-
     # checking specific hash value
-    hash1 = A(in_file=file)._hash
+    hash1 = FileOrIntIdentity(in_file=file)._hash
     assert hash1 == "eba2fafb8df4bae94a7aa42bb159b778"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = A(in_file=file_diffname)._hash
+    hash2 = FileOrIntIdentity(in_file=file_diffname)._hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash3 = A(in_file=file_diffcontent)._hash
+    hash3 = FileOrIntIdentity(in_file=file_diffcontent)._hash
     assert hash1 != hash3
 
 
@@ -142,30 +146,26 @@ def test_input_file_hash_2a(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    @python.define
-    def A(in_file: ty.Union[File, int]) -> File:
-        return in_file
-
     # checking specific hash value
-    hash1 = A(in_file=file)._hash
+    hash1 = FileOrIntIdentity(in_file=file)._hash
     assert hash1 == "eba2fafb8df4bae94a7aa42bb159b778"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = A(in_file=file_diffname)._hash
+    hash2 = FileOrIntIdentity(in_file=file_diffname)._hash
     assert hash1 == hash2
 
     # checking if string is also accepted
-    hash3 = A(in_file=str(file))._hash
+    hash3 = FileOrIntIdentity(in_file=str(file))._hash
     assert hash3 == hash1
 
     # checking if different content (the same name) affects the hash
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash4 = A(in_file=file_diffcontent)._hash
+    hash4 = FileOrIntIdentity(in_file=file_diffcontent)._hash
     assert hash1 != hash4
 
 
@@ -175,16 +175,12 @@ def test_input_file_hash_3(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    @python.define
-    def A(in_file: File, in_int: int) -> File:
-        return in_file, in_int
-
-    a = A(in_file=file, in_int=3)
+    a = FileOrIntIdentity(in_file=file, in_int=3)
     # original hash and files_hash (dictionary contains info about files)
     hash1 = a._hash
     # files_hash1 = deepcopy(my_inp.files_hash)
     # file name should be in files_hash1[in_file]
-    filename = str(Path(file))
+    # filename = str(Path(file))
     # assert filename in files_hash1["in_file"]
 
     # changing int input
@@ -230,23 +226,19 @@ def test_input_file_hash_4(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    @python.define
-    def A(in_file: ty.List[ty.List[ty.Union[int, File]]]) -> File:
-        return in_file
-
     # checking specific hash value
-    hash1 = A(in_file=[[file, 3]])._hash
+    hash1 = ListOfListOfFileOrIntIdentity(in_file=[[file, 3]])._hash
     assert hash1 == "b583e0fd5501d3bed9bf510ce2a9e379"
 
     # the same file, but int field changes
-    hash1a = A(in_file=[[file, 5]])._hash
+    hash1a = ListOfListOfFileOrIntIdentity(in_file=[[file, 5]])._hash
     assert hash1 != hash1a
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = A(in_file=[[file_diffname, 3]])._hash
+    hash2 = ListOfListOfFileOrIntIdentity(in_file=[[file_diffname, 3]])._hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
@@ -254,7 +246,7 @@ def test_input_file_hash_4(tmp_path):
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash3 = A(in_file=[[file_diffcontent, 3]])._hash
+    hash3 = ListOfListOfFileOrIntIdentity(in_file=[[file_diffcontent, 3]])._hash
     assert hash1 != hash3
 
 
@@ -264,23 +256,21 @@ def test_input_file_hash_5(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    @python.define
-    def A(in_file: ty.List[ty.Dict[ty.Any, ty.Union[File, int]]]) -> File:
-        return in_file
-
     # checking specific hash value
-    hash1 = A(in_file=[{"file": file, "int": 3}])._hash
+    hash1 = ListOfDictOfFileOrIntIdentity(in_file=[{"file": file, "int": 3}])._hash
     assert hash1 == "aa2d4b708ed0dd8340582a6514bfd5ce"
 
     # the same file, but int field changes
-    hash1a = A(in_file=[{"file": file, "int": 5}])._hash
+    hash1a = ListOfDictOfFileOrIntIdentity(in_file=[{"file": file, "int": 5}])._hash
     assert hash1 != hash1a
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
-    hash2 = A(in_file=[{"file": file_diffname, "int": 3}])._hash
+    hash2 = ListOfDictOfFileOrIntIdentity(
+        in_file=[{"file": file_diffname, "int": 3}]
+    )._hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
@@ -288,7 +278,9 @@ def test_input_file_hash_5(tmp_path):
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
-    hash3 = A(in_file=[{"file": file_diffcontent, "int": 3}])._hash
+    hash3 = ListOfDictOfFileOrIntIdentity(
+        in_file=[{"file": file_diffcontent, "int": 3}]
+    )._hash
     assert hash1 != hash3
 
 
