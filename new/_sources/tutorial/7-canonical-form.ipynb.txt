@@ -79,6 +79,7 @@
     "    def function(a, b):\n",
     "        return a + b, a / b\n",
     "\n",
+    "\n",
     "pprint(fields_dict(CanonicalPythonDef))\n",
     "pprint(fields_dict(CanonicalPythonDef.Outputs))"
    ]
@@ -127,6 +128,7 @@
     "    def function(a, b):\n",
     "        return a + b, a / b\n",
     "\n",
+    "\n",
     "pprint(fields_dict(CanonicalPythonDef))\n",
     "pprint(fields_dict(CanonicalPythonDef.Outputs))"
    ]
@@ -174,7 +176,7 @@
     "            result = os.stat(out_file)\n",
     "            return result.st_size\n",
     "\n",
-    "        out_file: generic.File\n",
+    "        copied: generic.FsObject = shell.outarg(path_template=\"copied\")\n",
     "        out_file_size: int = shell.out(callable=get_file_size)\n",
     "\n",
     "\n",
@@ -200,6 +202,7 @@
    "source": [
     "from pydra.design import python, workflow\n",
     "from pydra.engine.specs import WorkflowDef, WorkflowOutputs\n",
+    "\n",
     "\n",
     "# Example python task definitions\n",
     "@python.define\n",

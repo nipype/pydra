@@ -298,7 +298,8 @@
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">python</span>
 
-<span class="c1"># Note that we use CamelCase as the return of the is a class</span>
+
+<span class="c1"># Note that we use PascalCase because the object returned by the decorator is actually a class</span>
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">MyFirstTaskDef</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
@@ -326,7 +327,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+gce2fe375
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev382+g9f47e000
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -346,6 +347,7 @@ A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+g
 <span class="k">def</span> <span class="nf">NamedOutputTaskDef</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">-</span> <span class="n">b</span>
+
 
 <span class="n">named_output_task</span> <span class="o">=</span> <span class="n">NamedOutputTaskDef</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
@@ -391,12 +393,12 @@ NamedOutputTaskDefOutputs(c=3, d=1)
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">python</span>
 
-<span class="c1"># Note that we use CamelCase as the function is translated to a class</span>
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">MyTypedTask</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
+
 
 <span class="k">try</span><span class="p">:</span>
     <span class="c1"># 1.5 is not an integer so this should raise a TypeError</span>
@@ -430,7 +432,8 @@ Type error caught: Incorrect type for field in &#39;a&#39; field of MyTypedTask 
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
 <span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">fields_dict</span>
 
-<span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
+
+<span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
 <span class="k">def</span> <span class="nf">DocStrDef</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing</span>
 
@@ -445,6 +448,7 @@ Type error caught: Incorrect type for field in &#39;a&#39; field of MyTypedTask 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
+
 <span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">DocStrDef</span><span class="p">))</span>
 <span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">DocStrDef</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
@@ -455,10 +459,11 @@ Type error caught: Incorrect type for field in &#39;a&#39; field of MyTypedTask 
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-{&#39;a&#39;: arg(name=&#39;a&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#39;First input to be inputted&#39;, requires=[], converter=None, validator=None, hash_eq=False, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
- &#39;b&#39;: arg(name=&#39;b&#39;, type=&lt;class &#39;float&#39;&gt;, default=NO_DEFAULT, help=&#39;Second input&#39;, requires=[], converter=None, validator=None, hash_eq=False, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
- &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function DocStrDef at 0x7fac9edd7240&gt;, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=True, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
-{&#39;out&#39;: out(name=&#39;out&#39;, type=tuple[float, float], default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False)}
+{&#39;a&#39;: arg(name=&#39;a&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#39;First input to be inputted&#39;, requires=[], converter=None, validator=None, hash_eq=False, allowed_values=frozenset(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
+ &#39;b&#39;: arg(name=&#39;b&#39;, type=&lt;class &#39;float&#39;&gt;, default=NO_DEFAULT, help=&#39;Second input&#39;, requires=[], converter=None, validator=None, hash_eq=False, allowed_values=frozenset(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
+ &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function DocStrDef at 0x7ff323f01440&gt;, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=True, allowed_values=frozenset(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
+{&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=NO_DEFAULT, help=&#39;Sum of a and b&#39;, requires=[], converter=None, validator=None, hash_eq=False),
+ &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=NO_DEFAULT, help=&#39;Product of a and b&#39;, requires=[], converter=None, validator=None, hash_eq=False)}
 </pre></div></div>
 </div>
 </section>

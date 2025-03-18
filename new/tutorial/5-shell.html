@@ -290,7 +290,7 @@
 <h1>Shell-tasks<a class="headerlink" href="#Shell-tasks" title="Permalink to this heading">¶</a></h1>
 <section id="Command-line-templates">
 <h2>Command-line templates<a class="headerlink" href="#Command-line-templates" title="Permalink to this heading">¶</a></h2>
-<p>Shell task specs can be defined using from string templates that resemble the command-line usage examples typically used in in-line help. Therefore, they can be quick and intuitive way to specify a shell task. For example, a simple spec for the copy command <code class="docutils literal notranslate"><span class="pre">cp</span></code> that omits optional flags,</p>
+<p>Shell task specs can be defined using string templates that resemble the command-line usage examples typically used in in-line help. Therefore, they can be quick and intuitive way to specify a shell task. For example, a simple spec for the copy command <code class="docutils literal notranslate"><span class="pre">cp</span></code> that omits optional flags,</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
@@ -337,7 +337,7 @@
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Command-line to be run: cp /tmp/tmp98d06997/in.txt /tmp/tmp98d06997/out.txt
+Command-line to be run: cp /tmp/tmpqzyxg7he/in.txt /tmp/tmpqzyxg7he/out.txt
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -345,7 +345,7 @@ Command-line to be run: cp /tmp/tmp98d06997/in.txt /tmp/tmp98d06997/out.txt
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+gce2fe375
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev382+g9f47e000
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -353,7 +353,7 @@ A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+g
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Contents of copied file (&#39;/tmp/tmp98d06997/out.txt&#39;): &#39;Contents to be copied&#39;
+Contents of copied file (&#39;/tmp/tmpqzyxg7he/out.txt&#39;): &#39;Contents to be copied&#39;
 </pre></div></div>
 </div>
 <p>If paths to output files are not provided in the parameterisation, it will default to the name of the field</p>
@@ -371,7 +371,7 @@ Contents of copied file (&#39;/tmp/tmp98d06997/out.txt&#39;): &#39;Contents to b
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-cp /tmp/tmp98d06997/in.txt /home/runner/work/pydra/pydra/new-docs/source/tutorial/destination
+cp /tmp/tmpqzyxg7he/in.txt /home/runner/work/pydra/pydra/new-docs/source/tutorial/destination
 </pre></div></div>
 </div>
 <section id="Defifying-types">
@@ -430,15 +430,15 @@ trim-png /mock/png.png /path/to/output.png
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-{&#39;additional_args&#39;: arg(name=&#39;additional_args&#39;, type=list[str], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
- &#39;executable&#39;: arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;cp&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;in_fs_objects&#39;: arg(name=&#39;in_fs_objects&#39;, type=pydra.utils.typing.MultiInputObj[fileformats.generic.fsobject.FsObject], default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=1, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;int_arg&#39;: arg(name=&#39;int_arg&#39;, type=int | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--int-arg&#39;, position=5, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=2, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=False),
- &#39;recursive&#39;: arg(name=&#39;recursive&#39;, type=&lt;class &#39;bool&#39;&gt;, default=False, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;-R&#39;, position=3, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;text_arg&#39;: arg(name=&#39;text_arg&#39;, type=str | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--text-arg&#39;, position=4, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;tuple_arg&#39;: arg(name=&#39;tuple_arg&#39;, type=pydra.utils.typing.MultiInputObj[tuple[int, str]], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--tuple-arg&#39;, position=6, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None)}
-{&#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=2, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=False),
+{&#39;additional_args&#39;: arg(name=&#39;additional_args&#39;, type=list[str | fileformats.generic.file.File], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=&lt;function state_array_support.&lt;locals&gt;.state_array_wrapper at 0x7fdfe6dff100&gt;, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;executable&#39;: arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;cp&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;in_fs_objects&#39;: arg(name=&#39;in_fs_objects&#39;, type=pydra.utils.typing.MultiInputObj[fileformats.generic.fsobject.FsObject], default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=1, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;int_arg&#39;: arg(name=&#39;int_arg&#39;, type=int | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--int-arg&#39;, position=5, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=2, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=True),
+ &#39;recursive&#39;: arg(name=&#39;recursive&#39;, type=&lt;class &#39;bool&#39;&gt;, default=False, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;-R&#39;, position=3, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;text_arg&#39;: arg(name=&#39;text_arg&#39;, type=str | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--text-arg&#39;, position=4, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;tuple_arg&#39;: arg(name=&#39;tuple_arg&#39;, type=pydra.utils.typing.MultiInputObj[tuple[int, str]], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--tuple-arg&#39;, position=6, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None)}
+{&#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=2, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=True),
  &#39;return_code&#39;: out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, hash_eq=False, callable=None),
  &#39;stderr&#39;: out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None),
  &#39;stdout&#39;: out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None)}
@@ -473,11 +473,73 @@ trim-png /mock/png.png /path/to/output.png
 </pre></div></div>
 </div>
 </section>
+</section>
+<section id="Path-templates-for-output-files">
+<h2>Path templates for output files<a class="headerlink" href="#Path-templates-for-output-files" title="Permalink to this heading">¶</a></h2>
+<p>By default, when an output file argument is defined, a <code class="docutils literal notranslate"><span class="pre">path_template</span></code> attribute will be assigned to the field based on its name and extension (if applicable). For example, the <code class="docutils literal notranslate"><span class="pre">zipped</span></code> output field in the following Gzip command will be assigned a <code class="docutils literal notranslate"><span class="pre">path_template</span></code> of <code class="docutils literal notranslate"><span class="pre">out_file.gz</span></code></p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
+<span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">File</span>
+
+<span class="n">Gzip</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;gzip &lt;out|out_file:application/gzip&gt; &lt;in_files+&gt;&quot;</span><span class="p">)</span>
+<span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">&quot;/a/file.txt&quot;</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gzip</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+gzip /home/runner/work/pydra/pydra/new-docs/source/tutorial/out_file.gz /a/file.txt
+</pre></div></div>
+</div>
+<p>However, if this needs to be specified it can be by using the <code class="docutils literal notranslate"><span class="pre">$</span></code> operator, e.g.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Gzip</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;gzip &lt;out|out_file:application/gzip$zipped.gz&gt; &lt;in_files+&gt;&quot;</span><span class="p">)</span>
+<span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">&quot;/a/file.txt&quot;</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gzip</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+gzip /home/runner/work/pydra/pydra/new-docs/source/tutorial/zipped.gz /a/file.txt
+</pre></div></div>
+</div>
+<p>To give the field a path_template of <code class="docutils literal notranslate"><span class="pre">archive.gz</span></code> when it is written on the command line. Note that this value can always be overridden when the task is initialised, e.g.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">&quot;/a/file.txt&quot;</span><span class="p">),</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">&quot;/path/to/archive.gz&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gzip</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+gzip /path/to/archive.gz /a/file.txt
+</pre></div></div>
+</div>
 <section id="Additional-field-attributes">
 <h3>Additional field attributes<a class="headerlink" href="#Additional-field-attributes" title="Permalink to this heading">¶</a></h3>
 <p>Additional attributes of the fields in the template can be specified by providing <code class="docutils literal notranslate"><span class="pre">shell.arg</span></code> or <code class="docutils literal notranslate"><span class="pre">shell.outarg</span></code> fields to the <code class="docutils literal notranslate"><span class="pre">inputs</span></code> and <code class="docutils literal notranslate"><span class="pre">outputs</span></code> keyword arguments to the define</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
@@ -488,12 +550,14 @@ trim-png /mock/png.png /path/to/output.png
         <span class="s2">&quot;--int-arg &lt;int_arg:int?&gt; &quot;</span>
         <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str&gt; &quot;</span>
     <span class="p">),</span>
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;recursive&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
-        <span class="n">help</span><span class="o">=</span><span class="p">(</span>
-            <span class="s2">&quot;If source_file designates a directory, cp copies the directory and &quot;</span>
-            <span class="s2">&quot;the entire subtree connected at that point.&quot;</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;recursive&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
+            <span class="n">help</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;If source_file designates a directory, cp copies the directory and &quot;</span>
+                <span class="s2">&quot;the entire subtree connected at that point.&quot;</span>
+            <span class="p">)</span>
         <span class="p">)</span>
-    <span class="p">)},</span>
+    <span class="p">},</span>
     <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
         <span class="s2">&quot;out_dir&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">),</span>
         <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
@@ -511,17 +575,17 @@ trim-png /mock/png.png /path/to/output.png
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-{&#39;additional_args&#39;: arg(name=&#39;additional_args&#39;, type=list[str], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
- &#39;executable&#39;: arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;cp&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;in_fs_objects&#39;: arg(name=&#39;in_fs_objects&#39;, type=tuple[fileformats.generic.fsobject.FsObject, ...], default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=1, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
- &#39;int_arg&#39;: arg(name=&#39;int_arg&#39;, type=int | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--int-arg&#39;, position=4, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=False),
- &#39;out_file&#39;: outarg(name=&#39;out_file&#39;, type=fileformats.generic.file.File | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_file&#39;, keep_extension=False),
- &#39;recursive&#39;: arg(name=&#39;recursive&#39;, type=&lt;class &#39;bool&#39;&gt;, default=False, help=&#39;If source_file designates a directory, cp copies the directory and the entire subtree connected at that point.&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;-R&#39;, position=2, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;text_arg&#39;: arg(name=&#39;text_arg&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--text-arg&#39;, position=3, sep=None, allowed_values=None, container_path=False, formatter=None),
- &#39;tuple_arg&#39;: arg(name=&#39;tuple_arg&#39;, type=tuple[int, str], default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--tuple-arg&#39;, position=5, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None)}
-{&#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=False),
- &#39;out_file&#39;: outarg(name=&#39;out_file&#39;, type=fileformats.generic.file.File | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_file&#39;, keep_extension=False),
+{&#39;additional_args&#39;: arg(name=&#39;additional_args&#39;, type=list[str | fileformats.generic.file.File], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=&lt;function state_array_support.&lt;locals&gt;.state_array_wrapper at 0x7fdfe6dff100&gt;, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;executable&#39;: arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;cp&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;in_fs_objects&#39;: arg(name=&#39;in_fs_objects&#39;, type=tuple[fileformats.generic.fsobject.FsObject, ...], default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=1, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;int_arg&#39;: arg(name=&#39;int_arg&#39;, type=int | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--int-arg&#39;, position=4, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=True),
+ &#39;out_file&#39;: outarg(name=&#39;out_file&#39;, type=fileformats.generic.file.File | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_file&#39;, keep_extension=True),
+ &#39;recursive&#39;: arg(name=&#39;recursive&#39;, type=&lt;class &#39;bool&#39;&gt;, default=False, help=&#39;If source_file designates a directory, cp copies the directory and the entire subtree connected at that point.&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;-R&#39;, position=2, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;text_arg&#39;: arg(name=&#39;text_arg&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--text-arg&#39;, position=3, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None),
+ &#39;tuple_arg&#39;: arg(name=&#39;tuple_arg&#39;, type=tuple[int, str], default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;--tuple-arg&#39;, position=5, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None)}
+{&#39;out_dir&#39;: outarg(name=&#39;out_dir&#39;, type=&lt;class &#39;fileformats.generic.directory.Directory&#39;&gt;, default=NO_DEFAULT, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_dir&#39;, keep_extension=True),
+ &#39;out_file&#39;: outarg(name=&#39;out_file&#39;, type=fileformats.generic.file.File | None, default=None, help=&#39;&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=&#39;out_file&#39;, keep_extension=True),
  &#39;return_code&#39;: out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, hash_eq=False, callable=None),
  &#39;stderr&#39;: out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None),
  &#39;stdout&#39;: out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None)}
@@ -532,13 +596,14 @@ trim-png /mock/png.png /path/to/output.png
 <h3>Callable outptus<a class="headerlink" href="#Callable-outptus" title="Permalink to this heading">¶</a></h3>
 <p>In addition to outputs that are specified to the tool on the command line, outputs can be derived from the outputs of the tool by providing a Python function that can take the output directory and inputs as arguments and return the output value. Callables can be either specified in the <code class="docutils literal notranslate"><span class="pre">callable</span></code> attribute of the <code class="docutils literal notranslate"><span class="pre">shell.out</span></code> field, or in a dictionary mapping the output name to the callable</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">File</span>
+
 
 <span class="c1"># Arguments to the callable function can be one of</span>
 <span class="k">def</span> <span class="nf">get_file_size</span><span class="p">(</span><span class="n">out_file</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -582,12 +647,13 @@ Size of the output file is: 256
 </ul>
 <p>To make workflows that use the interface type-checkable, the canonical form of a shell task dataclass should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Def</span></code> parameterized by its nested Outputs class, and the <code class="docutils literal notranslate"><span class="pre">Outputs</span></code> nested class should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Outputs</span></code>. Arguments that are provided None values are not included in the command line, so optional arguments should be typed as one of these equivalent forms <code class="docutils literal notranslate"><span class="pre">ty.Union[T,</span> <span class="pre">None]</span></code>, <code class="docutils literal notranslate"><span class="pre">ty.Optional[T]</span></code> or <code class="docutils literal notranslate"><span class="pre">T</span> <span class="pre">|</span> <span class="pre">None</span></code> and have a default of <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">MultiInputObj</span>
 <span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">FsObject</span><span class="p">,</span> <span class="n">Directory</span>
+
 
 <span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
 <span class="k">class</span> <span class="nc">Cp</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">[</span><span class="s2">&quot;Cp.Outputs&quot;</span><span class="p">]):</span>
@@ -603,7 +669,7 @@ Size of the output file is: 256
     <span class="nd">@shell</span><span class="o">.</span><span class="n">outputs</span>
     <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">ShellOutputs</span><span class="p">):</span>
         <span class="n">out_dir</span><span class="p">:</span> <span class="n">Directory</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">path_template</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{out_dir}</span><span class="s2">&quot;</span><span class="p">)</span>
-<br/></pre></div>
+</pre></div>
 </div>
 </div>
 </section>
@@ -612,7 +678,7 @@ Size of the output file is: 256
 <h2>Dynamic definitions<a class="headerlink" href="#Dynamic-definitions" title="Permalink to this heading">¶</a></h2>
 <p>In some cases, it is required to generate the definition for a task dynamically, which can be done by just providing the executable to <code class="docutils literal notranslate"><span class="pre">shell.define</span></code> and specifying all inputs and outputs explicitly</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">File</span>
@@ -624,21 +690,19 @@ Size of the output file is: 256
         <span class="s2">&quot;in_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
     <span class="p">},</span>
     <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span>
-            <span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">1</span>
-        <span class="p">),</span>
+        <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
         <span class="s2">&quot;out_file_size&quot;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
             <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;size of the output directory&quot;</span><span class="p">,</span>
             <span class="s2">&quot;callable&quot;</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">,</span>
-        <span class="p">}</span>
+        <span class="p">},</span>
     <span class="p">},</span>
 <span class="p">)</span>
 
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ACommand input fields: </span><span class="si">{</span><span class="n">list_fields</span><span class="p">(</span><span class="n">ACommand</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ACommand input fields: </span><span class="si">{</span><span class="n">list_fields</span><span class="p">(</span><span class="n">ACommand</span><span class="o">.</span><span class="n">Outputs</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<br/></pre></div>
+</pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -646,8 +710,8 @@ Size of the output file is: 256
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-ACommand input fields: [arg(name=&#39;in_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=None, allowed_values=None, container_path=False, formatter=None), arg(name=&#39;additional_args&#39;, type=list[str], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None), outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=False), arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;a-command&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=None, allowed_values=None, container_path=False, formatter=None)]
-ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=None, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=False), out(name=&#39;out_file_size&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#39;size of the output directory&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=&lt;function get_file_size at 0x7fe6e87c2520&gt;), out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None)]
+ACommand input fields: [arg(name=&#39;in_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-2, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None), arg(name=&#39;additional_args&#39;, type=list[str | fileformats.generic.file.File], default=Factory(factory=&lt;class &#39;list&#39;&gt;, takes_self=False), help=&#39;Additional free-form arguments to append to the end of the command.&#39;, requires=[], converter=&lt;function state_array_support.&lt;locals&gt;.state_array_wrapper at 0x7fdfe6dff100&gt;, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=None, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None), outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=True), arg(name=&#39;executable&#39;, type=typing.Union[str, typing.Sequence[str]], default=&#39;a-command&#39;, help=&#34;the first part of the command, can be a string, e.g. &#39;ls&#39;, or a list, e.g. [&#39;ls&#39;, &#39;-l&#39;, &#39;dirname&#39;]&#34;, requires=[], converter=None, validator=&lt;min_len validator for 1&gt;, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=0, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None)]
+ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;fileformats.generic.file.File&#39;&gt;, default=NO_DEFAULT, help=&#39;output file&#39;, requires=[], converter=None, validator=None, hash_eq=False, copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False, argstr=&#39;&#39;, position=-1, sep=&#39; &#39;, allowed_values=None, container_path=False, formatter=None, path_template=None, keep_extension=True), out(name=&#39;out_file_size&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#39;size of the output directory&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=&lt;function get_file_size at 0x7fdfdffc6340&gt;), out(name=&#39;return_code&#39;, type=&lt;class &#39;int&#39;&gt;, default=NO_DEFAULT, help=&#34;The process&#39; exit code.&#34;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None), out(name=&#39;stderr&#39;, type=&lt;class &#39;str&#39;&gt;, default=NO_DEFAULT, help=&#39;The standard error stream produced by the command.&#39;, requires=[], converter=None, validator=None, hash_eq=False, callable=None)]
 </pre></div></div>
 </div>
 </section>
@@ -713,6 +777,9 @@ ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;file
 <li><a class="reference internal" href="#Defifying-types">Defifying types</a></li>
 <li><a class="reference internal" href="#Flags-and-options">Flags and options</a></li>
 <li><a class="reference internal" href="#Defaults">Defaults</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#Path-templates-for-output-files">Path templates for output files</a><ul>
 <li><a class="reference internal" href="#Additional-field-attributes">Additional field attributes</a></li>
 <li><a class="reference internal" href="#Callable-outptus">Callable outptus</a></li>
 </ul>

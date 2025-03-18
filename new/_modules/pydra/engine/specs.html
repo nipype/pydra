@@ -297,9 +297,10 @@
 <span class="kn">import</span> <span class="nn">attrs</span>
 <span class="kn">from</span> <span class="nn">attrs.converters</span> <span class="kn">import</span> <span class="n">default_if_none</span>
 <span class="kn">import</span> <span class="nn">cloudpickle</span> <span class="k">as</span> <span class="nn">cp</span>
-<span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">FileSet</span>
+<span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">FileSet</span><span class="p">,</span> <span class="n">File</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.messenger</span> <span class="kn">import</span> <span class="n">AuditFlag</span><span class="p">,</span> <span class="n">Messenger</span>
-<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">TypeParser</span><span class="p">,</span> <span class="n">is_optional</span><span class="p">,</span> <span class="n">optional_type</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">is_optional</span><span class="p">,</span> <span class="n">optional_type</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.hash</span> <span class="kn">import</span> <span class="n">register_serializer</span><span class="p">,</span> <span class="n">hash_single</span>
 <span class="kn">from</span> <span class="nn">.helpers</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">attrs_fields</span><span class="p">,</span>
     <span class="n">attrs_values</span><span class="p">,</span>
@@ -308,22 +309,28 @@
     <span class="n">position_sort</span><span class="p">,</span>
     <span class="n">ensure_list</span><span class="p">,</span>
     <span class="n">parse_format_string</span><span class="p">,</span>
+    <span class="n">fields_in_formatter</span><span class="p">,</span>
+    <span class="n">state_array_support</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.helpers_file</span> <span class="kn">import</span> <span class="n">template_update</span><span class="p">,</span> <span class="n">template_update_single</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">helpers_state</span> <span class="k">as</span> <span class="n">hlpst</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">lazy</span>
 <span class="kn">from</span> <span class="nn">pydra.utils.hash</span> <span class="kn">import</span> <span class="n">hash_function</span><span class="p">,</span> <span class="n">Cache</span>
-<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">StateArray</span><span class="p">,</span> <span class="n">MultiInputObj</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">StateArray</span><span class="p">,</span>
+    <span class="n">is_multi_input</span><span class="p">,</span>
+    <span class="n">is_fileset_or_union</span><span class="p">,</span>
+    <span class="n">MultiOutputObj</span><span class="p">,</span>
+    <span class="n">MultiOutputFile</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">pydra.design.base</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">Arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">,</span> <span class="n">RequirementSet</span><span class="p">,</span> <span class="n">NO_DEFAULT</span>
 <span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
-<span class="kn">from</span> <span class="nn">pydra.engine.lazy</span> <span class="kn">import</span> <span class="n">LazyInField</span><span class="p">,</span> <span class="n">LazyOutField</span>
 
 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Task</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.graph</span> <span class="kn">import</span> <span class="n">DiGraph</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.submitter</span> <span class="kn">import</span> <span class="n">NodeExecution</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Workflow</span>
-    <span class="kn">from</span> <span class="nn">pydra.engine.state</span> <span class="kn">import</span> <span class="n">StateIndex</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.environments</span> <span class="kn">import</span> <span class="n">Environment</span>
     <span class="kn">from</span> <span class="nn">pydra.engine.workers</span> <span class="kn">import</span> <span class="n">Worker</span>
 
@@ -342,15 +349,29 @@
 
     <span class="n">RESERVED_FIELD_NAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;inputs&quot;</span><span class="p">,)</span>
 
+    <span class="n">_output_dir</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The inputs object associated with a lazy-outputs object&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_node</span><span class="p">()</span><span class="o">.</span><span class="n">inputs</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">_from_defaults</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an output object from the default values of the fields&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_from_task</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[DefType]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect the outputs of a task. This is just an abstract base method that</span>
+<span class="sd">        should be used by derived classes to set default values for the outputs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        task : Task[DefType]</span>
+<span class="sd">            The task whose outputs are being collected.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        outputs : Outputs</span>
+<span class="sd">            The outputs of the task</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="o">**</span><span class="p">{</span>
                 <span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="p">(</span>
                     <span class="n">f</span><span class="o">.</span><span class="n">default</span><span class="o">.</span><span class="n">factory</span><span class="p">()</span>
@@ -358,8 +379,19 @@
                     <span class="k">else</span> <span class="n">f</span><span class="o">.</span><span class="n">default</span>
                 <span class="p">)</span>
                 <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">attrs_fields</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span>
             <span class="p">}</span>
         <span class="p">)</span>
+        <span class="n">outputs</span><span class="o">.</span><span class="n">_output_dir</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">output_dir</span>
+        <span class="k">return</span> <span class="n">outputs</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_results</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Result[Self]&quot;</span><span class="p">:</span>
+        <span class="n">results_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_dir</span> <span class="o">/</span> <span class="s2">&quot;_task.pklz&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">results_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Task results file </span><span class="si">{</span><span class="n">results_path</span><span class="si">}</span><span class="s2"> not found&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">results_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_get_node</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
@@ -449,6 +481,11 @@
 <span class="k">class</span> <span class="nc">TaskDef</span><span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Generic</span><span class="p">[</span><span class="n">OutputsType</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all task definitions&quot;&quot;&quot;</span>
 
+    <span class="c1"># Class attributes</span>
+    <span class="n">_xor</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="nb">frozenset</span><span class="p">()</span>
+    <span class="p">)</span>  <span class="c1"># overwritten in derived classes</span>
+
     <span class="c1"># The following fields are used to store split/combine state information</span>
     <span class="n">_splitter</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">_combiner</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -514,7 +551,6 @@
                 <span class="n">cache_locations</span><span class="o">=</span><span class="n">cache_locations</span><span class="p">,</span>
                 <span class="n">messenger_args</span><span class="o">=</span><span class="n">messenger_args</span><span class="p">,</span>
                 <span class="n">messengers</span><span class="o">=</span><span class="n">messengers</span><span class="p">,</span>
-                <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span><span class="p">,</span>
                 <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
                 <span class="n">worker</span><span class="o">=</span><span class="n">worker</span><span class="p">,</span>
                 <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -522,6 +558,7 @@
                 <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span>
                     <span class="bp">self</span><span class="p">,</span>
                     <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
+                    <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span><span class="p">,</span>
                 <span class="p">)</span>
         <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="c1"># Catch any inadvertent passing of task definition parameters to the</span>
@@ -538,14 +575,18 @@
                         <span class="p">)</span>
             <span class="k">raise</span>
         <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">WorkflowDef</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_splitter</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Workflow </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> failed with errors&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">:</span>
+                <span class="n">time_of_crash</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;time of crash&quot;</span><span class="p">]</span>
+                <span class="n">error_message</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;error message&quot;</span><span class="p">])</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">errors</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> failed @ </span><span class="si">{</span><span class="n">errors</span><span class="p">[</span><span class="s1">&#39;time of crash&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> with following errors:</span><span class="se">\n</span><span class="s2">&quot;</span>
-                    <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;error message&quot;</span><span class="p">])</span>
-                <span class="p">)</span>
+                <span class="n">time_of_crash</span> <span class="o">=</span> <span class="s2">&quot;UNKNOWN-TIME&quot;</span>
+                <span class="n">error_message</span> <span class="o">=</span> <span class="s2">&quot;NOT RETRIEVED&quot;</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> failed @ </span><span class="si">{</span><span class="n">time_of_crash</span><span class="si">}</span><span class="s2"> with the &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;following errors:</span><span class="se">\n</span><span class="si">{</span><span class="n">error_message</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="s2">&quot;To inspect, please load the pickled task object from here: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">/_task.pklz&quot;</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span>
 
 <div class="viewcode-block" id="TaskDef.split"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.TaskDef.split">[docs]</a>    <span class="k">def</span> <span class="nf">split</span><span class="p">(</span>
@@ -615,13 +656,15 @@
         <span class="n">split_inputs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">inputs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">lazy</span><span class="o">.</span><span class="n">LazyField</span><span class="p">):</span>
-                <span class="n">split_val</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">splitter</span><span class="p">)</span>
+                <span class="n">split_val</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
                 <span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Mapping</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
             <span class="p">):</span>
                 <span class="n">split_val</span> <span class="o">=</span> <span class="n">StateArray</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not split </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2"> as it is not a sequence type&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Could not split </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2"> as it is not a sequence type&quot;</span>
+                <span class="p">)</span>
             <span class="n">split_inputs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">split_val</span>
         <span class="n">split_def</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">split_inputs</span><span class="p">)</span>
         <span class="n">split_def</span><span class="o">.</span><span class="n">_splitter</span> <span class="o">=</span> <span class="n">splitter</span>
@@ -757,43 +800,8 @@
         <span class="p">}</span>
         <span class="k">return</span> <span class="n">hash_function</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">field_hashes</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span> <span class="n">field_hashes</span>
 
-    <span class="k">def</span> <span class="nf">_resolve_lazy_inputs</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">workflow_inputs</span><span class="p">:</span> <span class="s2">&quot;WorkflowDef&quot;</span><span class="p">,</span>
-        <span class="n">graph</span><span class="p">:</span> <span class="s2">&quot;DiGraph[NodeExecution]&quot;</span><span class="p">,</span>
-        <span class="n">state_index</span><span class="p">:</span> <span class="s2">&quot;StateIndex | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolves lazy fields in the task definition by replacing them with their</span>
-<span class="sd">        actual values.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        workflow : Workflow</span>
-<span class="sd">            The workflow the task is part of</span>
-<span class="sd">        graph : DiGraph[NodeExecution]</span>
-<span class="sd">            The execution graph of the workflow</span>
-<span class="sd">        state_index : StateIndex, optional</span>
-<span class="sd">            The state index for the workflow, by default None</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        Self</span>
-<span class="sd">            The task definition with all lazy fields resolved</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">pydra.engine.state</span> <span class="kn">import</span> <span class="n">StateIndex</span>
-
-        <span class="k">if</span> <span class="n">state_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">state_index</span> <span class="o">=</span> <span class="n">StateIndex</span><span class="p">()</span>
-        <span class="n">resolved</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">LazyInField</span><span class="p">):</span>
-                <span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">_get_value</span><span class="p">(</span><span class="n">workflow_inputs</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">LazyOutField</span><span class="p">):</span>
-                <span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">_get_value</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">state_index</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">resolved</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_check_rules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if all rules are satisfied.&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">_rule_violations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check rules and returns a list of errors.&quot;&quot;&quot;</span>
 
         <span class="n">field</span><span class="p">:</span> <span class="n">Arg</span>
         <span class="n">errors</span> <span class="o">=</span> <span class="p">[]</span>
@@ -803,29 +811,24 @@
             <span class="k">if</span> <span class="n">is_lazy</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
                 <span class="k">continue</span>
 
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="s2">&quot;path_template&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">value</span> <span class="ow">is</span> <span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span>
+                <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="s2">&quot;path_template&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">readonly</span>
+            <span class="p">):</span>
                 <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mandatory field </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not set&quot;</span><span class="p">)</span>
-
-            <span class="c1"># Collect alternative fields associated with this field.</span>
-            <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">xor</span><span class="p">:</span>
-                <span class="n">mutually_exclusive</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="bp">self</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">xor</span><span class="p">}</span>
-                <span class="n">are_set</span> <span class="o">=</span> <span class="p">[</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">mutually_exclusive</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="p">]</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">are_set</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                    <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Mutually exclusive fields </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">xor</span><span class="si">}</span><span class="s2"> are set together: &quot;</span>
-                        <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">are_set</span><span class="p">)</span>
-                    <span class="p">)</span>
-                <span class="k">elif</span> <span class="n">field</span><span class="o">.</span><span class="n">mandatory</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">are_set</span><span class="p">:</span>
-                    <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;At least one of the mutually exclusive fields </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">xor</span><span class="si">}</span><span class="s2"> &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;should be set&quot;</span>
-                    <span class="p">)</span>
 
             <span class="c1"># Raise error if any required field is unset.</span>
             <span class="k">if</span> <span class="p">(</span>
-                <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">not</span> <span class="p">(</span>
+                    <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span>
+                    <span class="ow">or</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">False</span>
+                    <span class="ow">or</span> <span class="p">(</span>
+                        <span class="n">is_optional</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="n">is_fileset_or_union</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">True</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
                 <span class="ow">and</span> <span class="n">field</span><span class="o">.</span><span class="n">requires</span>
                 <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">rs</span><span class="o">.</span><span class="n">satisfied</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">for</span> <span class="n">rs</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">requires</span><span class="p">)</span>
             <span class="p">):</span>
@@ -838,14 +841,40 @@
                 <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> requires</span><span class="si">{</span><span class="n">qualification</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">field</span><span class="o">.</span><span class="n">requires</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
-        <span class="k">if</span> <span class="n">errors</span><span class="p">:</span>
+        <span class="c1"># Collect alternative fields associated with this field.</span>
+        <span class="k">for</span> <span class="n">xor_set</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_xor</span><span class="p">:</span>
+            <span class="n">mutually_exclusive</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="bp">self</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">xor_set</span> <span class="k">if</span> <span class="n">name</span><span class="p">}</span>
+            <span class="n">are_set</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">mutually_exclusive</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">are_set</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Mutually exclusive fields (</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">are_set</span><span class="p">))</span><span class="si">}</span><span class="s2">) are set &quot;</span>
+                    <span class="s2">&quot;together&quot;</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="n">are_set</span> <span class="ow">and</span> <span class="kc">None</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">xor_set</span><span class="p">:</span>
+                <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="s2">&quot;At least one of the mutually exclusive fields should be set: &quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">mutually_exclusive</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">errors</span>
+
+    <span class="k">def</span> <span class="nf">_check_rules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if all rules are satisfied.&quot;&quot;&quot;</span>
+
+        <span class="n">attrs</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">errors</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rule_violations</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Found the following errors in task </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> definition:</span><span class="se">\n</span><span class="s2">&quot;</span>
                 <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
             <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">_check_arg_refs</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Arg</span><span class="p">],</span> <span class="n">outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Out</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_check_arg_refs</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Arg</span><span class="p">],</span>
+        <span class="n">outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Out</span><span class="p">],</span>
+        <span class="n">xor</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Checks if all fields referenced in requirements and xor are present in the inputs</span>
 <span class="sd">        are valid field names</span>
@@ -860,12 +889,22 @@
                     <span class="s2">&quot;&#39;Unrecognised&#39; field names in referenced in the requirements &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;of </span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2"> &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">unrecognised</span><span class="p">))</span>
                 <span class="p">)</span>
-        <span class="k">for</span> <span class="n">inpt</span> <span class="ow">in</span> <span class="n">inputs</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">unrecognised</span> <span class="o">:=</span> <span class="nb">set</span><span class="p">(</span><span class="n">inpt</span><span class="o">.</span><span class="n">xor</span><span class="p">)</span> <span class="o">-</span> <span class="n">input_names</span><span class="p">:</span>
+
+        <span class="k">for</span> <span class="n">xor_set</span> <span class="ow">in</span> <span class="n">xor</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">unrecognised</span> <span class="o">:=</span> <span class="n">xor_set</span> <span class="o">-</span> <span class="p">(</span><span class="n">input_names</span> <span class="o">|</span> <span class="p">{</span><span class="kc">None</span><span class="p">}):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;&#39;Unrecognised&#39; field names in referenced in the xor &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;of </span><span class="si">{</span><span class="n">inpt</span><span class="si">}</span><span class="s2"> &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">unrecognised</span><span class="p">))</span>
+                    <span class="sa">f</span><span class="s2">&quot;&#39;Unrecognised&#39; field names in referenced in the xor </span><span class="si">{</span><span class="n">xor_set</span><span class="si">}</span><span class="s2"> &quot;</span>
+                    <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">unrecognised</span><span class="p">))</span>
                 <span class="p">)</span>
+            <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">xor_set</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">field_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># i.e. none of the fields being set is valid</span>
+                    <span class="k">continue</span>
+                <span class="n">type_</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span><span class="o">.</span><span class="n">type</span>
+                <span class="k">if</span> <span class="n">type_</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">type_</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Fields included in a &#39;xor&#39; (</span><span class="si">{</span><span class="n">field_name</span><span class="si">!r}</span><span class="s2">) must be of boolean &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;or optional types, not type </span><span class="si">{</span><span class="n">type_</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_check_resolved</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks that all the fields in the definition have been resolved&quot;&quot;&quot;</span>
@@ -942,7 +981,19 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">task_pkl</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">task_pkl</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span></div>
+            <span class="k">return</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">return_values</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">return_values_pkl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">/</span> <span class="s2">&quot;_return_values.pklz&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">return_values_pkl</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">return_values_pkl</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">job</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span></div>
 
 
 <div class="viewcode-block" id="RuntimeSpec"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.RuntimeSpec">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -990,7 +1041,7 @@
 <span class="sd">        outputs : Outputs</span>
 <span class="sd">            The outputs of the task in dataclass</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_from_defaults</span><span class="p">()</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_from_task</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="nb">setattr</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">outputs</span></div>
@@ -1004,14 +1055,14 @@
 
     <span class="n">_task_type</span> <span class="o">=</span> <span class="s2">&quot;python&quot;</span>
 
-    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[PythonDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[PythonDef]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Prepare the inputs to the function</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="k">del</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span>
         <span class="c1"># Run the actual function</span>
         <span class="n">returned</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="o">**</span><span class="n">inputs</span><span class="p">)</span>
         <span class="c1"># Collect the outputs and save them into the task.return_values dictionary</span>
-        <span class="n">task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">f</span><span class="o">.</span><span class="n">default</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">attrs</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Outputs</span><span class="p">)}</span>
+        <span class="n">task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">f</span><span class="o">.</span><span class="n">default</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Outputs</span><span class="p">)}</span>
         <span class="n">return_names</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">returned</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="n">nm</span><span class="p">:</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">nm</span> <span class="ow">in</span> <span class="n">return_names</span><span class="p">}</span>
@@ -1045,38 +1096,46 @@
 <span class="sd">        outputs : Outputs</span>
 <span class="sd">            The outputs of the task</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_from_defaults</span><span class="p">()</span>
-        <span class="c1"># collecting outputs from tasks</span>
-        <span class="n">output_wf</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">lazy_field</span><span class="p">:</span> <span class="n">lazy</span><span class="o">.</span><span class="n">LazyOutField</span>
+
         <span class="n">workflow</span><span class="p">:</span> <span class="s2">&quot;Workflow&quot;</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;workflow&quot;</span><span class="p">]</span>
         <span class="n">exec_graph</span><span class="p">:</span> <span class="s2">&quot;DiGraph[NodeExecution]&quot;</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;exec_graph&quot;</span><span class="p">]</span>
-        <span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">}</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">lazy_field</span> <span class="ow">in</span> <span class="n">attrs_values</span><span class="p">(</span><span class="n">workflow</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">val_out</span> <span class="o">=</span> <span class="n">lazy_field</span><span class="o">.</span><span class="n">_get_value</span><span class="p">(</span><span class="n">exec_graph</span><span class="p">)</span>
-                <span class="n">output_wf</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">val_out</span>
-            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
-                <span class="n">output_wf</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="n">node</span><span class="p">:</span> <span class="s2">&quot;NodeExecution&quot;</span> <span class="o">=</span> <span class="n">nodes_dict</span><span class="p">[</span><span class="n">lazy_field</span><span class="o">.</span><span class="n">_node</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
-                <span class="c1"># checking if the tasks has predecessors that raises error</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">errored</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tasks </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">_errored</span><span class="si">}</span><span class="s2"> raised an error&quot;</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">err_files</span> <span class="o">=</span> <span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">/</span> <span class="s2">&quot;_error.pklz&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">tasks</span><span class="p">]</span>
-                    <span class="n">err_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">err_files</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">exists</span><span class="p">()]</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">err_files</span><span class="p">:</span>
-                        <span class="k">raise</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="n">lazy_field</span><span class="o">.</span><span class="n">_node</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> raised an error, full crash report is &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;here: &quot;</span>
-                        <span class="o">+</span> <span class="p">(</span>
-                            <span class="nb">str</span><span class="p">(</span><span class="n">err_files</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-                            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">err_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-                            <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">err_files</span><span class="p">)</span>
-                        <span class="p">)</span>
+
+        <span class="c1"># Check for errors in any of the workflow nodes</span>
+        <span class="k">if</span> <span class="n">errored</span> <span class="o">:=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span> <span class="k">if</span> <span class="n">n</span><span class="o">.</span><span class="n">errored</span><span class="p">]:</span>
+            <span class="n">errors</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">errored</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">node_task</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">errored</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="n">result</span> <span class="o">=</span> <span class="n">node_task</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">:</span>
+                        <span class="n">time_of_crash</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;time of crash&quot;</span><span class="p">]</span>
+                        <span class="n">error_message</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;error message&quot;</span><span class="p">])</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">time_of_crash</span> <span class="o">=</span> <span class="s2">&quot;UNKNOWN-TIME&quot;</span>
+                        <span class="n">error_message</span> <span class="o">=</span> <span class="s2">&quot;NOT RETRIEVED&quot;</span>
+                    <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> failed @ </span><span class="si">{</span><span class="n">time_of_crash</span><span class="si">}</span><span class="s2"> running &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">_definition</span><span class="si">}</span><span class="s2"> with the following errors:</span><span class="se">\n</span><span class="si">{</span><span class="n">error_message</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">To inspect, please load the pickled task object from here: &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">/_task.pklz&quot;</span>
                     <span class="p">)</span>
-        <span class="k">return</span> <span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="o">**</span><span class="n">output_wf</span><span class="p">)</span></div>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Workflow </span><span class="si">{</span><span class="n">task</span><span class="si">!r}</span><span class="s2"> failed with errors:</span><span class="se">\n\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Retrieve values from the output fields</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">lazy_field</span><span class="p">:</span> <span class="n">lazy</span><span class="o">.</span><span class="n">LazyOutField</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">lazy_field</span> <span class="ow">in</span> <span class="n">attrs_values</span><span class="p">(</span><span class="n">workflow</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">val_out</span> <span class="o">=</span> <span class="n">lazy_field</span><span class="o">.</span><span class="n">_get_value</span><span class="p">(</span><span class="n">workflow</span><span class="o">=</span><span class="n">workflow</span><span class="p">,</span> <span class="n">graph</span><span class="o">=</span><span class="n">exec_graph</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val_out</span><span class="p">,</span> <span class="n">StateArray</span><span class="p">):</span>
+                <span class="n">val_out</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">val_out</span><span class="p">)</span>  <span class="c1"># implicitly combine state arrays</span>
+            <span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">val_out</span>
+
+        <span class="c1"># Set the values in the outputs object</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_from_task</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="o">**</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">outputs</span><span class="o">.</span><span class="n">_output_dir</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">output_dir</span>
+        <span class="k">return</span> <span class="n">outputs</span></div>
 
 
 <span class="n">WorkflowOutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">WorkflowOutputs</span><span class="p">)</span>
@@ -1091,13 +1150,13 @@
 
     <span class="n">_constructed</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the workflow.&quot;&quot;&quot;</span>
-        <span class="n">task</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+        <span class="n">task</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">rerun</span><span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_run_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_run_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[WorkflowDef]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the workflow asynchronously.&quot;&quot;&quot;</span>
-        <span class="k">await</span> <span class="n">task</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow_async</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">task</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow_async</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">rerun</span><span class="p">)</span>
 
 <div class="viewcode-block" id="WorkflowDef.construct"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.WorkflowDef.construct">[docs]</a>    <span class="k">def</span> <span class="nf">construct</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Workflow&quot;</span><span class="p">:</span>
         <span class="kn">from</span> <span class="nn">pydra.engine.core</span> <span class="kn">import</span> <span class="n">Workflow</span>
@@ -1146,15 +1205,15 @@
 <span class="sd">        outputs : ShellOutputs</span>
 <span class="sd">            The outputs of the shell process</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_from_defaults</span><span class="p">()</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_from_task</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
         <span class="n">fld</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span>
         <span class="k">for</span> <span class="n">fld</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">fld</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;return_code&quot;</span><span class="p">,</span> <span class="s2">&quot;stdout&quot;</span><span class="p">,</span> <span class="s2">&quot;stderr&quot;</span><span class="p">]:</span>
                 <span class="n">resolved_value</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
             <span class="c1"># Get the corresponding value from the inputs if it exists, which will be</span>
             <span class="c1"># passed through to the outputs, to permit manual overrides</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">)</span> <span class="ow">and</span> <span class="n">is_set</span><span class="p">(</span>
-                <span class="nb">getattr</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">definition</span><span class="p">,</span> <span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">task</span><span class="o">.</span><span class="n">inputs</span><span class="p">[</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">],</span> <span class="n">Path</span>
             <span class="p">):</span>
                 <span class="n">resolved_value</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">inputs</span><span class="p">[</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
             <span class="k">elif</span> <span class="n">is_set</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">default</span><span class="p">):</span>
@@ -1162,7 +1221,17 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">resolved_value</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_resolve_value</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">task</span><span class="p">)</span>
             <span class="c1"># Set the resolved value</span>
-            <span class="nb">setattr</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">resolved_value</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">resolved_value</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">type</span><span class="p">):</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;file system path(s) provided to mandatory field </span><span class="si">{</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">resolved_value</span><span class="si">}</span><span class="s2">&#39;, does not exist, this is likely due to an &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;error in the </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> task&quot;</span>
+                    <span class="p">)</span>
         <span class="k">return</span> <span class="n">outputs</span>
 
     <span class="nd">@classmethod</span>
@@ -1177,7 +1246,7 @@
                 <span class="k">if</span> <span class="n">default</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
                     <span class="k">return</span> <span class="n">default</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;file </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2"> does not exist&quot;</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;file </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2"> does not exist&quot;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">all_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">Path</span><span class="p">(</span><span class="n">el</span><span class="p">)</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">glob</span><span class="p">(</span><span class="n">default</span><span class="o">.</span><span class="n">expanduser</span><span class="p">())]</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_files</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -1185,7 +1254,7 @@
                 <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
                     <span class="k">return</span> <span class="n">all_files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;no file matches </span><span class="si">{</span><span class="n">default</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;no file matches </span><span class="si">{</span><span class="n">default</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">default</span>
 
     <span class="nd">@classmethod</span>
@@ -1209,6 +1278,8 @@
             <span class="c1"># if a template is a function it has to be run first with the inputs as the only arg</span>
             <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">path_template</span><span class="p">):</span>
                 <span class="n">template</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">path_template</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">template</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">path_template</span>
             <span class="n">inp_fields</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;{(\w+)(?:\:[^\}]+)?}&quot;</span><span class="p">,</span> <span class="n">template</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">requirements</span><span class="p">:</span>
                 <span class="n">req</span> <span class="o">+=</span> <span class="n">inp_fields</span>
@@ -1227,51 +1298,63 @@
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_required_fields_satisfied</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">task</span><span class="o">.</span><span class="n">definition</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fld</span><span class="o">.</span><span class="n">path_template</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fld</span><span class="o">.</span><span class="n">path_template</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">template_update_single</span><span class="p">(</span>
                 <span class="n">fld</span><span class="p">,</span>
                 <span class="n">definition</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">definition</span><span class="p">,</span>
                 <span class="n">output_dir</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">output_dir</span><span class="p">,</span>
                 <span class="n">spec_type</span><span class="o">=</span><span class="s2">&quot;output&quot;</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">fld</span><span class="o">.</span><span class="n">callable</span><span class="p">:</span>
-            <span class="n">callable_</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">callable</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">callable</span><span class="p">,</span> <span class="nb">staticmethod</span><span class="p">):</span>
-                <span class="c1"># In case callable is defined as a static method,</span>
-                <span class="c1"># retrieve the function wrapped in the descriptor.</span>
-                <span class="n">callable_</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">callable</span><span class="o">.</span><span class="vm">__func__</span>
-            <span class="n">call_args</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">callable_</span><span class="p">)</span>
-            <span class="n">call_args_val</span> <span class="o">=</span> <span class="p">{}</span>
-            <span class="k">for</span> <span class="n">argnm</span> <span class="ow">in</span> <span class="n">call_args</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span>
-                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">fld</span>
-                <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;output_dir&quot;</span><span class="p">:</span>
-                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">output_dir</span>
-                <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;inputs&quot;</span><span class="p">:</span>
-                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">inputs</span>
-                <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;stdout&quot;</span><span class="p">:</span>
-                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;stdout&quot;</span><span class="p">]</span>
-                <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;stderr&quot;</span><span class="p">:</span>
-                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;stderr&quot;</span><span class="p">]</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">inputs</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span>
-                    <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                        <span class="n">e</span><span class="o">.</span><span class="n">add_note</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;arguments of the callable function from </span><span class="si">{</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;has to be in inputs or be field or output_dir, &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;but </span><span class="si">{</span><span class="n">argnm</span><span class="si">}</span><span class="s2"> is used&quot;</span>
-                        <span class="p">)</span>
-                        <span class="k">raise</span>
-            <span class="k">return</span> <span class="n">callable_</span><span class="p">(</span><span class="o">**</span><span class="n">call_args_val</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Metadata for &#39;</span><span class="si">{</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;, does not not contain any of the required fields &quot;</span>
-                <span class="sa">f</span><span class="s1">&#39;(&quot;callable&quot;, &quot;output_file_template&quot; or &quot;value&quot;): </span><span class="si">{</span><span class="n">fld</span><span class="si">}</span><span class="s1">.&#39;</span>
-            <span class="p">)</span></div>
+        <span class="k">assert</span> <span class="n">fld</span><span class="o">.</span><span class="n">callable</span><span class="p">,</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Output field &#39;</span><span class="si">{</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;, does not not contain any of the required fields &quot;</span>
+            <span class="sa">f</span><span class="s1">&#39;(&quot;callable&quot;, &quot;output_file_template&quot; or &quot;value&quot;): </span><span class="si">{</span><span class="n">fld</span><span class="si">}</span><span class="s1">.&#39;</span>
+        <span class="p">)</span>
+        <span class="n">callable_</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">callable</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">callable</span><span class="p">,</span> <span class="nb">staticmethod</span><span class="p">):</span>
+            <span class="c1"># In case callable is defined as a static method,</span>
+            <span class="c1"># retrieve the function wrapped in the descriptor.</span>
+            <span class="n">callable_</span> <span class="o">=</span> <span class="n">fld</span><span class="o">.</span><span class="n">callable</span><span class="o">.</span><span class="vm">__func__</span>
+        <span class="n">call_args</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">callable_</span><span class="p">)</span>
+        <span class="n">call_args_val</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">argnm</span> <span class="ow">in</span> <span class="n">call_args</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span>
+                <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">fld</span>
+            <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;output_dir&quot;</span><span class="p">:</span>
+                <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">output_dir</span>
+            <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;executable&quot;</span><span class="p">:</span>
+                <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">definition</span><span class="o">.</span><span class="n">executable</span>
+            <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;inputs&quot;</span><span class="p">:</span>
+                <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">inputs</span>
+            <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;stdout&quot;</span><span class="p">:</span>
+                <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;stdout&quot;</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;stderr&quot;</span><span class="p">:</span>
+                <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;stderr&quot;</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;self&quot;</span><span class="p">:</span>
+                <span class="k">pass</span>  <span class="c1"># If the callable is a class</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">inputs</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span>
+                <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">e</span><span class="o">.</span><span class="n">add_note</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;arguments of the callable function from </span><span class="si">{</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;has to be in inputs or be field or output_dir, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;but </span><span class="si">{</span><span class="n">argnm</span><span class="si">!r}</span><span class="s2"> is used&quot;</span>
+                    <span class="p">)</span>
+                    <span class="k">raise</span>
+        <span class="k">return</span> <span class="n">callable_</span><span class="p">(</span><span class="o">**</span><span class="n">call_args_val</span><span class="p">)</span></div>
 
 
 <span class="n">ShellOutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">ShellOutputs</span><span class="p">)</span>
+
+
+<span class="nd">@state_array_support</span>
+<span class="k">def</span> <span class="nf">additional_args_converter</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert additional arguments to a list of strings.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">shlex</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ShellDef"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.ShellDef">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -1281,17 +1364,18 @@
 
     <span class="n">BASE_NAMES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;additional_args&quot;</span><span class="p">]</span>
 
-    <span class="n">additional_args</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
+    <span class="n">additional_args</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">File</span><span class="p">]</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
         <span class="n">name</span><span class="o">=</span><span class="s2">&quot;additional_args&quot;</span><span class="p">,</span>
         <span class="n">default</span><span class="o">=</span><span class="n">attrs</span><span class="o">.</span><span class="n">Factory</span><span class="p">(</span><span class="nb">list</span><span class="p">),</span>
-        <span class="nb">type</span><span class="o">=</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">converter</span><span class="o">=</span><span class="n">additional_args_converter</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">File</span><span class="p">],</span>
         <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
         <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Additional free-form arguments to append to the end of the command.&quot;</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="n">RESERVED_FIELD_NAMES</span> <span class="o">=</span> <span class="n">TaskDef</span><span class="o">.</span><span class="n">RESERVED_FIELD_NAMES</span> <span class="o">+</span> <span class="p">(</span><span class="s2">&quot;cmdline&quot;</span><span class="p">,)</span>
 
-    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[ShellDef]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[ShellDef]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the shell command.&quot;&quot;&quot;</span>
         <span class="n">task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
 
@@ -1299,10 +1383,10 @@
     <span class="k">def</span> <span class="nf">cmdline</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The equivalent command line that would be submitted if the task were run on</span>
 <span class="sd">        the current working directory.&quot;&quot;&quot;</span>
-        <span class="c1"># checking the inputs fields before returning the command line</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_check_resolved</span><span class="p">()</span>
         <span class="c1"># Skip the executable, which can be a multi-part command, e.g. &#39;docker run&#39;.</span>
-        <span class="n">cmd_args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_command_args</span><span class="p">()</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">values</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">template_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()))</span>
+        <span class="n">cmd_args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_command_args</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">)</span>
         <span class="n">cmdline</span> <span class="o">=</span> <span class="n">cmd_args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">cmd_args</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
             <span class="c1"># If there are spaces in the arg, and it is not enclosed by matching</span>
@@ -1314,48 +1398,41 @@
                 <span class="n">cmdline</span> <span class="o">+=</span> <span class="s2">&quot; &quot;</span> <span class="o">+</span> <span class="n">arg</span>
         <span class="k">return</span> <span class="n">cmdline</span>
 
-    <span class="k">def</span> <span class="nf">_command_args</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">input_updates</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">root</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">_command_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get command line arguments&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">output_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">output_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_resolved</span><span class="p">()</span>
-        <span class="n">inputs</span> <span class="o">=</span> <span class="n">attrs_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">template_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">))</span>
-        <span class="k">if</span> <span class="n">input_updates</span><span class="p">:</span>
-            <span class="n">inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">input_updates</span><span class="p">)</span>
-        <span class="n">pos_args</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># list for (position, command arg)</span>
-        <span class="n">positions_provided</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_rules</span><span class="p">()</span>
+        <span class="c1"># Drop none/empty values and optional path fields that are set to false</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>  <span class="c1"># Create a copy so we can drop items from the dictionary</span>
         <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="n">name</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;executable&quot;</span><span class="p">:</span>
-                <span class="n">pos_args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_command_shelltask_executable</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
-            <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;additional_args&quot;</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">pos_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_command_pos_args</span><span class="p">(</span>
-                    <span class="n">field</span><span class="o">=</span><span class="n">field</span><span class="p">,</span>
-                    <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
-                    <span class="n">inputs</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span>
-                    <span class="n">root</span><span class="o">=</span><span class="n">root</span><span class="p">,</span>
-                    <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">,</span>
-                    <span class="n">positions_provided</span><span class="o">=</span><span class="n">positions_provided</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">pos_val</span><span class="p">:</span>
-                    <span class="n">pos_args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pos_val</span><span class="p">)</span>
-
+            <span class="n">fld_value</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">fld_value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">is_multi_input</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fld_value</span> <span class="o">==</span> <span class="p">[]):</span>
+                <span class="k">del</span> <span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">is_fileset_or_union</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="n">fld_value</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">bool</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="c1"># Drop special fields that are added separately</span>
+        <span class="k">del</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;executable&quot;</span><span class="p">]</span>
+        <span class="k">del</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;additional_args&quot;</span><span class="p">]</span>
+        <span class="c1"># Add executable</span>
+        <span class="n">pos_args</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_command_shelltask_executable</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">executable</span><span class="p">),</span>
+        <span class="p">]</span>  <span class="c1"># list for (position, command arg)</span>
+        <span class="n">positions_provided</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">{</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)}</span>
+        <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="n">pos_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_command_pos_args</span><span class="p">(</span>
+                <span class="n">field</span><span class="o">=</span><span class="n">fields</span><span class="p">[</span><span class="n">field_name</span><span class="p">],</span>
+                <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span>
+                <span class="n">positions_provided</span><span class="o">=</span><span class="n">positions_provided</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">pos_val</span><span class="p">:</span>
+                <span class="n">pos_args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pos_val</span><span class="p">)</span>
         <span class="c1"># Sort command and arguments by position</span>
         <span class="n">cmd_args</span> <span class="o">=</span> <span class="n">position_sort</span><span class="p">(</span><span class="n">pos_args</span><span class="p">)</span>
         <span class="c1"># pos_args values are each a list of arguments, so concatenate lists after sorting</span>
         <span class="n">command_args</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">cmd_args</span><span class="p">,</span> <span class="p">[])</span>
-        <span class="n">command_args</span> <span class="o">+=</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;additional_args&quot;</span><span class="p">]</span>
+        <span class="c1"># Append additional arguments to the end of the command</span>
+        <span class="n">command_args</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">additional_args</span>
         <span class="k">return</span> <span class="n">command_args</span>
 
     <span class="k">def</span> <span class="nf">_command_shelltask_executable</span><span class="p">(</span>
@@ -1379,16 +1456,16 @@
     <span class="k">def</span> <span class="nf">_command_pos_args</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span>
-        <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span>
-        <span class="n">inputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">],</span>
-        <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">],</span>
         <span class="n">positions_provided</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-        <span class="n">root</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Checking all additional input fields, setting pos to None, if position not set.</span>
 <span class="sd">        Creating a list with additional parts of the command that comes from</span>
 <span class="sd">        the specific field.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">field</span><span class="o">.</span><span class="n">formatter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># assuming that input that has no argstr is not used in the command,</span>
@@ -1407,11 +1484,9 @@
 
             <span class="n">positions_provided</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">position</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">value</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">root</span><span class="p">:</span>  <span class="c1"># values from templates</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">output_dir</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">root</span><span class="si">}{</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">readonly</span> <span class="ow">and</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">readonly</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">bool</span> <span class="ow">and</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">attrs</span><span class="o">.</span><span class="n">NOTHING</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> is read only, the value can&#39;t be provided&quot;</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">readonly</span> <span class="ow">and</span> <span class="n">field</span><span class="o">.</span><span class="n">formatter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
@@ -1425,17 +1500,16 @@
             <span class="n">call_args_val</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">argnm</span> <span class="ow">in</span> <span class="n">call_args</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span>
-                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span>
                 <span class="k">elif</span> <span class="n">argnm</span> <span class="o">==</span> <span class="s2">&quot;inputs&quot;</span><span class="p">:</span>
-                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">inputs</span>
+                    <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">argnm</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">:</span>
-                        <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">argnm</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+                        <span class="n">call_args_val</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">argnm</span><span class="p">]</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
                             <span class="sa">f</span><span class="s2">&quot;arguments of the formatter function from </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;has to be in inputs or be field or output_dir, &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;but </span><span class="si">{</span><span class="n">argnm</span><span class="si">}</span><span class="s2"> is used&quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;has to be in inputs or be field, but </span><span class="si">{</span><span class="n">argnm</span><span class="si">}</span><span class="s2"> is used&quot;</span>
                         <span class="p">)</span>
             <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">formatter</span><span class="p">(</span><span class="o">**</span><span class="n">call_args_val</span><span class="p">)</span>
             <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">cmd_el_str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;  &quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
@@ -1446,65 +1520,83 @@
             <span class="c1"># if False, nothing is added to the command.</span>
             <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
                 <span class="n">cmd_add</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">tp</span><span class="p">)</span> <span class="ow">is</span> <span class="n">MultiInputObj</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">is_multi_input</span><span class="p">(</span><span class="n">tp</span><span class="p">)</span> <span class="ow">or</span> <span class="n">tp</span> <span class="ow">is</span> <span class="n">MultiOutputObj</span> <span class="ow">or</span> <span class="n">tp</span> <span class="ow">is</span> <span class="n">MultiOutputFile</span><span class="p">:</span>
             <span class="c1"># if the field is MultiInputObj, it is used to create a list of arguments</span>
             <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span> <span class="ow">or</span> <span class="p">[]:</span>
-                <span class="n">cmd_add</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_arg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+                <span class="n">split_values</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+                <span class="n">split_values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+                <span class="n">cmd_add</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_arg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">split_values</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">cmd_add</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_arg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="n">cmd_add</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_arg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">field</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">cmd_add</span>
 
-    <span class="k">def</span> <span class="nf">_format_arg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">_format_arg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returning arguments used to specify the command args for a single inputs&quot;&quot;&quot;</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
             <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">)</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">))</span>
         <span class="p">):</span>
-            <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
             <span class="c1"># if argstr has a more complex form, with &quot;{input_field}&quot;</span>
-            <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">argstr</span><span class="p">:</span>
                 <span class="n">argstr_formatted_l</span> <span class="o">=</span> <span class="p">[]</span>
                 <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
-                    <span class="n">argstr_f</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span>
-                        <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">value_updates</span><span class="o">=</span><span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">val</span><span class="p">}</span>
-                    <span class="p">)</span>
+                    <span class="n">split_values</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+                    <span class="n">split_values</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+                    <span class="n">argstr_f</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span><span class="n">argstr</span><span class="p">,</span> <span class="n">split_values</span><span class="p">)</span>
                     <span class="n">argstr_formatted_l</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">argstr_f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">argstr_formatted_l</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>  <span class="c1"># argstr has a simple form, e.g. &quot;-f&quot;, or &quot;--f&quot;</span>
-                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">])</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">])</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># in case there are ... when input is not a list</span>
-            <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">argstr</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)):</span>
                 <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">])</span>
                 <span class="n">value</span> <span class="o">=</span> <span class="n">cmd_el_str</span>
             <span class="c1"># if argstr has a more complex form, with &quot;{input_field}&quot;</span>
-            <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">:</span>
-                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">{{</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
-                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;{&quot;</span> <span class="ow">in</span> <span class="n">argstr</span> <span class="ow">and</span> <span class="s2">&quot;}&quot;</span> <span class="ow">in</span> <span class="n">argstr</span><span class="p">:</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">argstr</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">{{</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+                <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="n">argstr_formatting</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>  <span class="c1"># argstr has a simple form, e.g. &quot;-f&quot;, or &quot;--f&quot;</span>
                 <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
-                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">argstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">cmd_el_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="k">return</span> <span class="n">split_cmd</span><span class="p">(</span><span class="n">cmd_el_str</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_generated_output_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stdout</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">stderr</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a list of all outputs that will be generated by the task.</span>
-<span class="sd">        Takes into account the task input and the requires list for the output fields.</span>
-<span class="sd">        TODO: should be in all Output specs?</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># checking the input (if all mandatory fields are provided, etc.)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_check_rules</span><span class="p">()</span>
-        <span class="n">output_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;return_code&quot;</span><span class="p">,</span> <span class="s2">&quot;stdout&quot;</span><span class="p">,</span> <span class="s2">&quot;stderr&quot;</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">fld</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="c1"># assuming that field should have either default or metadata, but not both</span>
-            <span class="k">if</span> <span class="n">is_set</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">default</span><span class="p">):</span>
-                <span class="n">output_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">is_set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Outputs</span><span class="o">.</span><span class="n">_resolve_output_value</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span><span class="p">)):</span>
-                <span class="n">output_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fld</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">output_names</span>
+    <span class="k">def</span> <span class="nf">_rule_violations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+
+        <span class="n">errors</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_rule_violations</span><span class="p">()</span>
+        <span class="c1"># if there is a value that has to be updated (e.g. single value from a list)</span>
+        <span class="c1"># getting all fields that should be formatted, i.e. {field_name}, ...</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="n">list_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">available_template_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="s2">&quot;field&quot;</span><span class="p">,</span> <span class="s2">&quot;inputs&quot;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">unrecognised</span> <span class="o">:=</span> <span class="p">[</span>
+                    <span class="n">f</span>
+                    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">parse_format_string</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">f</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">available_template_names</span>
+                <span class="p">]:</span>
+                    <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Unrecognised field names in the argstr of </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">argstr</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="n">unrecognised</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="s2">&quot;path_template&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">unrecognised</span> <span class="o">:=</span> <span class="p">[</span>
+                    <span class="n">f</span>
+                    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fields_in_formatter</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">path_template</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">f</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">available_template_names</span>
+                <span class="p">]:</span>
+                    <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Unrecognised field names in the path_template of </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">path_template</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="n">unrecognised</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">errors</span>
 
     <span class="n">DEFAULT_COPY_COLLATION</span> <span class="o">=</span> <span class="n">FileSet</span><span class="o">.</span><span class="n">CopyCollation</span><span class="o">.</span><span class="n">adjacent</span></div>
 
@@ -1537,34 +1629,15 @@
     <span class="k">return</span> <span class="n">cmd_args</span></div>
 
 
-<div class="viewcode-block" id="argstr_formatting"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.argstr_formatting">[docs]</a><span class="k">def</span> <span class="nf">argstr_formatting</span><span class="p">(</span>
-    <span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">],</span> <span class="n">value_updates</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="p">):</span>
+<div class="viewcode-block" id="argstr_formatting"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.argstr_formatting">[docs]</a><span class="k">def</span> <span class="nf">argstr_formatting</span><span class="p">(</span><span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;formatting argstr that have form {field_name},</span>
 <span class="sd">    using values from inputs and updating with value_update if provided</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># if there is a value that has to be updated (e.g. single value from a list)</span>
     <span class="c1"># getting all fields that should be formatted, i.e. {field_name}, ...</span>
-    <span class="k">if</span> <span class="n">value_updates</span><span class="p">:</span>
-        <span class="n">inputs</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
-        <span class="n">inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">value_updates</span><span class="p">)</span>
     <span class="n">inp_fields</span> <span class="o">=</span> <span class="n">parse_format_string</span><span class="p">(</span><span class="n">argstr</span><span class="p">)</span>
-    <span class="n">val_dict</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">fld_name</span> <span class="ow">in</span> <span class="n">inp_fields</span><span class="p">:</span>
-        <span class="n">fld_value</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="n">fld_name</span><span class="p">]</span>
-        <span class="n">fld_attr</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">inputs</span><span class="p">)),</span> <span class="n">fld_name</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">fld_value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="n">fld_value</span> <span class="ow">is</span> <span class="kc">False</span>
-            <span class="ow">and</span> <span class="n">fld_attr</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">bool</span>
-            <span class="ow">and</span> <span class="n">TypeParser</span><span class="o">.</span><span class="n">matches_type</span><span class="p">(</span><span class="n">fld_attr</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Union</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="nb">bool</span><span class="p">])</span>
-        <span class="p">):</span>
-            <span class="c1"># if value is NOTHING, nothing should be added to the command</span>
-            <span class="n">val_dict</span><span class="p">[</span><span class="n">fld_name</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">val_dict</span><span class="p">[</span><span class="n">fld_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">fld_value</span>
-
     <span class="c1"># formatting string based on the val_dict</span>
-    <span class="n">argstr_formatted</span> <span class="o">=</span> <span class="n">argstr</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">val_dict</span><span class="p">)</span>
+    <span class="n">argstr_formatted</span> <span class="o">=</span> <span class="n">argstr</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">inp_fields</span><span class="p">})</span>
     <span class="c1"># removing extra commas and spaces after removing the field that have NOTHING</span>
     <span class="n">argstr_formatted</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">argstr_formatted</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;[ &quot;</span><span class="p">,</span> <span class="s2">&quot;[&quot;</span><span class="p">)</span>
@@ -1574,6 +1647,24 @@
         <span class="o">.</span><span class="n">strip</span><span class="p">()</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">argstr_formatted</span></div>
+
+
+<div class="viewcode-block" id="bytes_repr_task_def"><a class="viewcode-back" href="../../../reference/api.html#pydra.engine.specs.bytes_repr_task_def">[docs]</a><span class="nd">@register_serializer</span>
+<span class="k">def</span> <span class="nf">bytes_repr_task_def</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="n">TaskDef</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="n">Cache</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterator</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+    <span class="k">yield</span> <span class="sa">f</span><span class="s2">&quot;task_def[</span><span class="si">{</span><span class="n">obj</span><span class="o">.</span><span class="n">_task_type</span><span class="si">}</span><span class="s2">]:(&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">list_fields</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">=&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+        <span class="k">yield</span> <span class="n">hash_single</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">),</span> <span class="n">cache</span><span class="p">)</span>
+        <span class="k">yield</span> <span class="sa">b</span><span class="s2">&quot;,&quot;</span>
+    <span class="k">yield</span> <span class="sa">b</span><span class="s2">&quot;_splitter=&quot;</span>
+    <span class="k">yield</span> <span class="n">hash_single</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_splitter</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+    <span class="k">yield</span> <span class="sa">b</span><span class="s2">&quot;,_combiner=&quot;</span>
+    <span class="k">yield</span> <span class="n">hash_single</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_combiner</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+    <span class="k">yield</span> <span class="sa">b</span><span class="s2">&quot;,_cont_dim=&quot;</span>
+    <span class="k">yield</span> <span class="n">hash_single</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_cont_dim</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+    <span class="k">yield</span> <span class="sa">b</span><span class="s2">&quot;,_xor=&quot;</span>
+    <span class="k">yield</span> <span class="n">hash_single</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_xor</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+    <span class="k">yield</span> <span class="sa">b</span><span class="s2">&quot;)&quot;</span></div>
 </pre></div>
         </article>
       </div>

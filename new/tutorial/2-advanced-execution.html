@@ -296,6 +296,7 @@
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">nest_asyncio</span>
+
 <span class="n">nest_asyncio</span><span class="o">.</span><span class="n">apply</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -325,7 +326,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+gce2fe375
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev382+g9f47e000
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -333,7 +334,7 @@ A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+g
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375/run-cache/python-db220e60910684fecc13e32d80ad7991&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, definition=TenToThePower(p=3, function=&lt;function TenToThePower at 0x7f8e008b8860&gt;))
+Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev382+g9f47e000/run-cache/python-db220e60910684fecc13e32d80ad7991&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, definition=TenToThePower(p=3, function=&lt;function TenToThePower at 0x7f3484131e40&gt;))
 </pre></div></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">Result</span></code> object contains</p>
@@ -442,17 +443,17 @@ Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375
 <span class="n">nifti_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">Nifti1</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">nifti_dir</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
 
 <span class="n">VOX_SIZES</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
-    <span class="p">]</span>
+    <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
+<span class="p">]</span>
 
 <span class="n">mrgrid_varying_vox</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
     <span class="p">(</span><span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
@@ -552,7 +553,7 @@ Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375
 
 <span class="c1"># Instantiate the task definition, &quot;splitting&quot; over all NIfTI files in the test directory</span>
 <span class="c1"># by splitting the &quot;input&quot; input field over all files in the directory</span>
-<span class="n">mrgrid</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">nifti_file</span><span class="p">,</span> <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">,</span> <span class="n">voxel</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span><span class="mf">0.5</span><span class="p">,</span><span class="mf">0.5</span><span class="p">))</span>
+<span class="n">mrgrid</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">nifti_file</span><span class="p">,</span> <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">,</span> <span class="n">voxel</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">))</span>
 
 <span class="c1"># Run the task to resample all NIfTI files</span>
 <span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">Docker</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">&quot;mrtrix3/mrtrix3&quot;</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">))</span>
@@ -567,7 +568,7 @@ Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-ImageFormat(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375/run-cache/shell-d66e009db9370f2b0ca910019d0dd5f8/out_file.mif&#39;)
+ImageFormat(&#39;/home/runner/.cache/pydra/0.25.dev382+g9f47e000/run-cache/shell-29ed07515aadbd592ddadd20f9308f01/out_file.mif&#39;)
 </pre></div></div>
 </div>
 <p>Of course for this to work Docker needs to work and be configured for <a class="reference external" href="https://docs.docker.com/engine/install/linux-postinstall/">sudo-less execution</a>. See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>
@@ -588,20 +589,27 @@ ImageFormat(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375/run-cache/shell
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">platform</span>
 
+
 <span class="k">def</span> <span class="nf">notify_task_completion</span><span class="p">(</span><span class="n">task</span><span class="p">:</span> <span class="n">Task</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Result</span><span class="p">):</span>
     <span class="c1"># Print a message to the terminal</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Task completed! Results are stored in </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">output_dir</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="c1"># Platform-specific notifications</span>
     <span class="k">if</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;Darwin&quot;</span><span class="p">:</span>  <span class="c1"># macOS</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s1">&#39;osascript -e </span><span class="se">\&#39;</span><span class="s1">display notification &quot;Task has completed successfully!&quot; with title &quot;Task Notification&quot;</span><span class="se">\&#39;</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span>
+            <span class="s1">&#39;osascript -e </span><span class="se">\&#39;</span><span class="s1">display notification &quot;Task has completed successfully!&quot; &#39;</span>
+            <span class="s1">&#39;with title &quot;Task Notification&quot;</span><span class="se">\&#39;</span><span class="s1">&#39;</span>
+        <span class="p">)</span>
     <span class="k">elif</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;Linux&quot;</span><span class="p">:</span>  <span class="c1"># Linux</span>
         <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s1">&#39;notify-send &quot;Task Notification&quot; &quot;Task has completed successfully!&quot;&#39;</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;Windows&quot;</span><span class="p">:</span>  <span class="c1"># Windows</span>
         <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s1">&#39;msg * &quot;Task has completed successfully!&quot;&#39;</span><span class="p">)</span>
 
+
 <span class="c1"># Run the task to resample all NIfTI files</span>
-<span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span><span class="n">hooks</span><span class="o">=</span><span class="n">TaskHooks</span><span class="p">(</span><span class="n">post_run</span><span class="o">=</span><span class="n">notify_task_completion</span><span class="p">),</span> <span class="n">cache_dir</span><span class="o">=</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">())</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="n">TaskHooks</span><span class="p">(</span><span class="n">post_run</span><span class="o">=</span><span class="n">notify_task_completion</span><span class="p">),</span> <span class="n">cache_dir</span><span class="o">=</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
+<span class="p">)</span>
 
 <span class="c1"># Print the locations of the output files</span>
 <span class="n">pprint</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">out_file</span><span class="p">)</span>
@@ -613,8 +621,8 @@ ImageFormat(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375/run-cache/shell
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Task completed! Results are stored in &#39;/tmp/tmpjofxso20/shell-d66e009db9370f2b0ca910019d0dd5f8&#39;
-ImageFormat(&#39;/tmp/tmpjofxso20/shell-d66e009db9370f2b0ca910019d0dd5f8/out_file.mif&#39;)
+Task completed! Results are stored in &#39;/tmp/tmpvuvyf1ps/shell-29ed07515aadbd592ddadd20f9308f01&#39;
+ImageFormat(&#39;/tmp/tmpvuvyf1ps/shell-29ed07515aadbd592ddadd20f9308f01/out_file.mif&#39;)
 </pre></div></div>
 </div>
 </section>

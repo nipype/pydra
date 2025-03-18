@@ -284,6 +284,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 <span class="kn">import</span> <span class="nn">typing</span> <span class="k">as</span> <span class="nn">ty</span>
 <span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">glob</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
@@ -294,7 +295,7 @@
 <span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">generic</span>
 <span class="kn">from</span> <span class="nn">fileformats.core.exceptions</span> <span class="kn">import</span> <span class="n">FormatRecognitionError</span>
 <span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">attrs_values</span>
-<span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">pydra.design.base</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Arg</span><span class="p">,</span>
     <span class="n">Out</span><span class="p">,</span>
     <span class="n">check_explicit_fields_are_none</span><span class="p">,</span>
@@ -306,8 +307,8 @@
 <span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">is_fileset_or_union</span><span class="p">,</span>
     <span class="n">MultiInputObj</span><span class="p">,</span>
+    <span class="n">TypeParser</span><span class="p">,</span>
     <span class="n">is_optional</span><span class="p">,</span>
-    <span class="n">optional_type</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
@@ -337,8 +338,6 @@
 <span class="sd">        List of allowed values for the field.</span>
 <span class="sd">    requires: list, optional</span>
 <span class="sd">        List of field names that are required together with the field.</span>
-<span class="sd">    xor: list, optional</span>
-<span class="sd">        List of field names that are mutually exclusive with the field.</span>
 <span class="sd">    copy_mode: File.CopyMode, optional</span>
 <span class="sd">        The mode of copying the file, by default it is File.CopyMode.any</span>
 <span class="sd">    copy_collation: File.CopyCollation, optional</span>
@@ -366,7 +365,7 @@
 <span class="sd">        If nothing is provided the field will be inserted between all fields with</span>
 <span class="sd">        nonnegative positions and fields with negative positions.</span>
 <span class="sd">    sep: str, optional</span>
-<span class="sd">        A separator if a list is provided as a value.</span>
+<span class="sd">        A separator if a sequence type is provided as a value, by default &quot; &quot;.</span>
 <span class="sd">    container_path: bool, optional</span>
 <span class="sd">        If True a path will be consider as a path inside the container (and not as a</span>
 <span class="sd">        local path, by default it is False</span>
@@ -380,42 +379,10 @@
 
     <span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
     <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">()</span>
+    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span>
     <span class="n">allowed_values</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">container_path</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># IS THIS STILL USED??</span>
-    <span class="n">formatter</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="nd">@sep</span><span class="o">.</span><span class="n">default</span>
-    <span class="k">def</span> <span class="nf">_sep_default</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s2">&quot; &quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="nb">tuple</span> <span class="ow">or</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">tuple</span> <span class="k">else</span> <span class="kc">None</span>
-
-    <span class="nd">@sep</span><span class="o">.</span><span class="n">validator</span>
-    <span class="k">def</span> <span class="nf">_validate_sep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">sep</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="ow">is</span> <span class="n">MultiInputObj</span><span class="p">:</span>
-            <span class="n">tp</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_args</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">tp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span>
-        <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">tp</span><span class="p">):</span>
-            <span class="n">tp</span> <span class="o">=</span> <span class="n">optional_type</span><span class="p">(</span><span class="n">tp</span><span class="p">)</span>
-        <span class="n">origin</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">tp</span><span class="p">)</span> <span class="ow">or</span> <span class="n">tp</span>
-
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">origin</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">origin</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">tp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">str</span>
-        <span class="p">):</span>
-            <span class="k">if</span> <span class="n">sep</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;A value to &#39;sep&#39; must be provided when type is iterable </span><span class="si">{</span><span class="n">tp</span><span class="si">}</span><span class="s2"> &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;for field </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">sep</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;sep (</span><span class="si">{</span><span class="n">sep</span><span class="si">!r}</span><span class="s2">) can only be provided when type is iterable </span><span class="si">{</span><span class="n">tp</span><span class="si">}</span><span class="s2"> &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;for field </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">&quot;</span>
-            <span class="p">)</span></div>
+    <span class="n">formatter</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="out"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.shell.out">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -432,12 +399,32 @@
 <span class="sd">        passed) or any input field name (a specific input field will be sent).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="nb">callable</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="nb">callable</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Set type from return annotation of callable if not set</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_type_hints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;return&quot;</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_type_hints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;return&quot;</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span>
+
+    <span class="nd">@callable</span><span class="o">.</span><span class="n">validator</span>
+    <span class="k">def</span> <span class="nf">_callable_validator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;callable must be a function, not </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="n">NO_DEFAULT</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;path_template&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+            <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span>
+                <span class="s2">&quot;return_code&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;stdout&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;stderr&quot;</span><span class="p">,</span>
+            <span class="p">]</span>
+        <span class="p">):</span>  <span class="c1"># ShellOutputs.BASE_NAMES</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;A shell output field must have either a callable or a path_template&quot;</span>
+            <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="outarg"><a class="viewcode-back" href="../../../reference/api.html#pydra.design.shell.outarg">[docs]</a><span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -456,8 +443,6 @@
 <span class="sd">        List of allowed values for the field.</span>
 <span class="sd">    requires: list, optional</span>
 <span class="sd">        List of field names that are required together with the field.</span>
-<span class="sd">    xor: list, optional</span>
-<span class="sd">        List of field names that are mutually exclusive with the field.</span>
 <span class="sd">    copy_mode: File.CopyMode, optional</span>
 <span class="sd">        The mode of copying the file, by default it is File.CopyMode.any</span>
 <span class="sd">    copy_collation: File.CopyCollation, optional</span>
@@ -500,28 +485,33 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">path_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-    <span class="n">keep_extension</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">keep_extension</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
     <span class="nd">@path_template</span><span class="o">.</span><span class="n">validator</span>
     <span class="k">def</span> <span class="nf">_validate_path_template</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">value</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">default</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">NO_DEFAULT</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;path_template (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when no default &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">default</span><span class="si">!r}</span><span class="s2">) is provided&quot;</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="n">value</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_fileset_or_union</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;path_template (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when type is a FileSet, &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;or union thereof, not </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="si">!r}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">default</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">NO_DEFAULT</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;path_template (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when there is no &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;default value provided (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">default</span><span class="si">!r}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span></div>
+            <span class="c1"># if not (is_fileset_or_union(self.type) or self.type is ty.Any):</span>
+            <span class="c1">#     raise ValueError(</span>
+            <span class="c1">#         f&quot;path_template ({value!r}) can only be provided when type is a FileSet, &quot;</span>
+            <span class="c1">#         f&quot;or union thereof, not {self.type!r}&quot;</span>
+            <span class="c1">#     )</span>
+            <span class="c1"># if self.argstr is None:</span>
+            <span class="c1">#     raise ValueError(</span>
+            <span class="c1">#         f&quot;path_template ({value!r}) can only be provided when argstr is not None&quot;</span>
+            <span class="c1">#     )</span>
 
-    <span class="nd">@keep_extension</span><span class="o">.</span><span class="n">validator</span>
-    <span class="k">def</span> <span class="nf">_validate_keep_extension</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">value</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">path_template</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;keep_extension (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when path_template &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;is provided&quot;</span>
-            <span class="p">)</span></div>
+    <span class="c1"># @keep_extension.validator</span>
+    <span class="c1"># def _validate_keep_extension(self, attribute, value):</span>
+    <span class="c1">#     if value and self.path_template is None:</span>
+    <span class="c1">#         raise ValueError(</span>
+    <span class="c1">#             f&quot;keep_extension ({value!r}) can only be provided when path_template &quot;</span>
+    <span class="c1">#             f&quot;is provided&quot;</span>
+    <span class="c1">#         )</span>
 
 
 <span class="nd">@dataclass_transform</span><span class="p">(</span>
@@ -546,6 +536,7 @@
     <span class="n">outputs_bases</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">type</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
     <span class="n">auto_attribs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">xor</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(),</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ShellDef&quot;</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a task definition for a shell command. Can be used either as a decorator on</span>
 <span class="sd">    the &quot;canonical&quot; dataclass-form of a task definition or as a function that takes a</span>
@@ -592,6 +583,10 @@
 <span class="sd">        as they appear in the template</span>
 <span class="sd">    name: str | None</span>
 <span class="sd">        The name of the returned class</span>
+<span class="sd">    xor: Sequence[str | None] | Sequence[Sequence[str | None]], optional</span>
+<span class="sd">        Names of args that are exclusive mutually exclusive, which must include</span>
+<span class="sd">        the name of the current field. If this list includes None, then none of the</span>
+<span class="sd">        fields need to be set.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -631,15 +626,12 @@
                 <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span><span class="p">,</span> <span class="n">klass</span><span class="p">,</span> <span class="n">arg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">auto_attribs</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;wrapped must be a class or a string, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
             <span class="n">klass</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">input_helps</span><span class="p">,</span> <span class="n">output_helps</span> <span class="o">=</span> <span class="p">{},</span> <span class="p">{}</span>
-
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-                <span class="n">wrapped</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
 
             <span class="n">executable</span><span class="p">,</span> <span class="n">inferred_inputs</span><span class="p">,</span> <span class="n">inferred_outputs</span> <span class="o">=</span> <span class="n">parse_command_line_template</span><span class="p">(</span>
                 <span class="n">wrapped</span><span class="p">,</span>
@@ -655,6 +647,7 @@
                 <span class="n">input_helps</span><span class="o">=</span><span class="n">input_helps</span><span class="p">,</span>
                 <span class="n">output_helps</span><span class="o">=</span><span class="n">output_helps</span><span class="p">,</span>
             <span class="p">)</span>
+
             <span class="k">if</span> <span class="n">name</span><span class="p">:</span>
                 <span class="n">class_name</span> <span class="o">=</span> <span class="n">name</span>
             <span class="k">else</span><span class="p">:</span>
@@ -694,6 +687,16 @@
             <span class="k">if</span> <span class="n">inpt</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">inpt</span><span class="o">.</span><span class="n">position</span> <span class="o">=</span> <span class="n">position_stack</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
+        <span class="c1"># Convert string default values to callables that glob the files in the cwd</span>
+        <span class="k">for</span> <span class="n">outpt</span> <span class="ow">in</span> <span class="n">parsed_outputs</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">outpt</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">outpt</span><span class="o">.</span><span class="n">default</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">TypeParser</span><span class="o">.</span><span class="n">contains_type</span><span class="p">(</span><span class="n">generic</span><span class="o">.</span><span class="n">FileSet</span><span class="p">,</span> <span class="n">outpt</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="n">outpt</span><span class="o">.</span><span class="n">callable</span> <span class="o">=</span> <span class="n">GlobCallable</span><span class="p">(</span><span class="n">outpt</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+                <span class="n">outpt</span><span class="o">.</span><span class="n">default</span> <span class="o">=</span> <span class="n">NO_DEFAULT</span>
+
         <span class="n">defn</span> <span class="o">=</span> <span class="n">make_task_def</span><span class="p">(</span>
             <span class="n">ShellDef</span><span class="p">,</span>
             <span class="n">ShellOutputs</span><span class="p">,</span>
@@ -703,6 +706,7 @@
             <span class="n">klass</span><span class="o">=</span><span class="n">klass</span><span class="p">,</span>
             <span class="n">bases</span><span class="o">=</span><span class="n">bases</span><span class="p">,</span>
             <span class="n">outputs_bases</span><span class="o">=</span><span class="n">outputs_bases</span><span class="p">,</span>
+            <span class="n">xor</span><span class="o">=</span><span class="n">xor</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">defn</span>
 
@@ -728,8 +732,10 @@
     <span class="c1"># If wrapped is provided (i.e. this is not being used as a decorator), return the</span>
     <span class="c1"># interface class</span>
     <span class="k">if</span> <span class="n">wrapped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;wrapped must be a class or a string, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;wrapped must be a class, a string or a list, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">make</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">make</span></div>
 
@@ -797,10 +803,13 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="k">assert</span> <span class="n">outputs</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="n">outputs</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">parts</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">template</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">tokens</span> <span class="o">=</span> <span class="n">template</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tokens</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
     <span class="n">executable</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">start_args_index</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">part</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;&lt;&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">part</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">):</span>
             <span class="k">break</span>
         <span class="n">executable</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
@@ -809,11 +818,10 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found no executable in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">executable</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
         <span class="n">executable</span> <span class="o">=</span> <span class="n">executable</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">args_str</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="n">start_args_index</span><span class="p">:])</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">args_str</span><span class="p">:</span>
+    <span class="n">tokens</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="n">start_args_index</span><span class="p">:]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">tokens</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">executable</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span>
-    <span class="n">tokens</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\s+&quot;</span><span class="p">,</span> <span class="n">args_str</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
-    <span class="n">arg_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|=[^&gt;]+)?)&gt;&quot;</span>
+    <span class="n">arg_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|(?:=|\$)[^&gt;]+)?)&gt;&quot;</span>
     <span class="n">opt_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;--?[a-zA-Z0-9_]+&quot;</span>
     <span class="n">arg_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">arg_pattern</span><span class="p">)</span>
     <span class="n">opt_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">opt_pattern</span><span class="p">)</span>
@@ -907,7 +915,16 @@
                 <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">Factory</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
             <span class="k">elif</span> <span class="s2">&quot;=&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
                 <span class="n">name</span><span class="p">,</span> <span class="n">default</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">default</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(&#39;|</span><span class="se">\&quot;</span><span class="s2">).*\1&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span> <span class="k">else</span> <span class="nb">eval</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="s2">&quot;$&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+                <span class="n">name</span><span class="p">,</span> <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;$&quot;</span><span class="p">)</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;path_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">path_template</span>
+                <span class="k">if</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">outarg</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Path templates can only be used with output fields, not </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
             <span class="k">if</span> <span class="s2">&quot;:&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
                 <span class="n">name</span><span class="p">,</span> <span class="n">type_str</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
                 <span class="n">type_</span> <span class="o">=</span> <span class="n">from_type_str</span><span class="p">(</span><span class="n">type_str</span><span class="p">)</span>
@@ -925,7 +942,7 @@
                 <span class="c1"># Add field to outputs with the same name as the input</span>
                 <span class="n">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">type_</span><span class="p">,</span> <span class="s2">&quot;callable&quot;</span><span class="p">:</span> <span class="n">_InputPassThrough</span><span class="p">(</span><span class="n">name</span><span class="p">)})</span>
             <span class="c1"># If name contains a &#39;.&#39;, treat it as a file template and strip it from the name</span>
-            <span class="k">if</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="n">outarg</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="n">outarg</span> <span class="ow">and</span> <span class="s2">&quot;path_template&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwds</span><span class="p">:</span>
                 <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span>
                 <span class="k">if</span> <span class="n">is_fileset_or_union</span><span class="p">(</span><span class="n">type_</span><span class="p">):</span>
                     <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">type_</span><span class="p">):</span>
@@ -935,6 +952,10 @@
                     <span class="k">if</span> <span class="n">ext_type</span><span class="o">.</span><span class="n">ext</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span> <span class="o">+</span> <span class="n">ext_type</span><span class="o">.</span><span class="n">ext</span>
                 <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;path_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">path_template</span>
+            <span class="c1"># Set the default value to None if the field is optional and no default is</span>
+            <span class="c1"># provided</span>
+            <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">type_</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;default&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwds</span><span class="p">:</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="n">option</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field_type</span><span class="p">,</span> <span class="n">kwds</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -954,7 +975,7 @@
             <span class="n">option</span> <span class="o">=</span> <span class="n">token</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Found unknown token &#39;</span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">&#39; in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Found unknown token </span><span class="si">{</span><span class="n">token</span><span class="si">!r}</span><span class="s2"> in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
     <span class="n">remaining_pos</span> <span class="o">=</span> <span class="n">remaining_positions</span><span class="p">(</span><span class="n">arguments</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">arguments</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
@@ -1019,6 +1040,19 @@
 
     <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">ShellDef</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">GlobCallable</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Callable that can be used to glob files&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span> <span class="o">=</span> <span class="n">pattern</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">generic</span><span class="o">.</span><span class="n">FileSet</span><span class="p">:</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">matches</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No files found matching pattern: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">matches</span>
 </pre></div>
         </article>
       </div>

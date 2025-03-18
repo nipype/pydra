@@ -36,6 +36,7 @@
    "source": [
     "# This is needed to run parallel workflows in Jupyter notebooks\n",
     "import nest_asyncio\n",
+    "\n",
     "nest_asyncio.apply()"
    ]
   },
@@ -126,14 +127,14 @@
    "outputs": [],
    "source": [
     "# This workflow will fail because we are trying to divide by 0\n",
-    "wf = UnsafeDivisionWorkflow(a=10, b=5).split(denominator=[3, 2 ,0])\n",
+    "wf = UnsafeDivisionWorkflow(a=10, b=5).split(denominator=[3, 2, 0])\n",
     "\n",
     "if __name__ == \"__main__\":\n",
     "    try:\n",
     "        with Submitter(worker=\"cf\") as sub:\n",
     "            result = sub(wf)\n",
     "    except Exception as e:\n",
-    "        print(e)\n"
+    "        print(e)"
    ]
   },
   {
@@ -156,7 +157,9 @@
     "from pprint import pprint\n",
     "from pydra.tasks.testing import Divide\n",
     "\n",
-    "with open(default_run_cache_dir / Divide(x=15, y=0)._checksum / \"_error.pklz\", \"rb\") as f:\n",
+    "with open(\n",
+    "    default_run_cache_dir / Divide(x=15, y=0)._checksum / \"_error.pklz\", \"rb\"\n",
+    ") as f:\n",
     "    error = cp.load(f)\n",
     "\n",
     "pprint(error)"
@@ -196,12 +199,12 @@
     "from pydra.engine.submitter import Submitter\n",
     "from pydra.tasks.testing import SafeDivisionWorkflow\n",
     "\n",
-    "wf = SafeDivisionWorkflow(a=10, b=5).split(denominator=[3, 2 ,0])\n",
+    "wf = SafeDivisionWorkflow(a=10, b=5).split(denominator=[3, 2, 0])\n",
     "\n",
     "if __name__ == \"__main__\":\n",
     "    with Submitter(worker=\"cf\") as sub:\n",
     "        result = sub(wf)\n",
-    "    \n",
+    "\n",
     "print(f\"Workflow completed successfully, results saved in: {result.output_dir}\")"
    ]
   },
@@ -229,9 +232,10 @@
     "        result = cp.load(f)\n",
     "    if result.outputs is not None:\n",
     "        for field_name in result.outputs:\n",
-    "            if result.outputs[field_name] == float('nan'):\n",
-    "                print(f\"Task {task_cache_dir.name!r} produced a NaN value for {field_name!r}\")\n",
-    "    "
+    "            if result.outputs[field_name] == float(\"nan\"):\n",
+    "                print(\n",
+    "                    f\"Task {task_cache_dir.name!r} produced a NaN value for {field_name!r}\"\n",
+    "                )"
    ]
   }
  ],

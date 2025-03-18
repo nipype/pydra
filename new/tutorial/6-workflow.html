@@ -298,6 +298,7 @@
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">python</span>
 
+
 <span class="c1"># Example python task definitions</span>
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
@@ -331,6 +332,7 @@ returned by the workflow should be returned in a tuple.</p>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
 <span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">image</span><span class="p">,</span> <span class="n">video</span>
+
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">ShellWorkflow</span><span class="p">(</span>
@@ -371,6 +373,7 @@ returned by the workflow should be returned in a tuple.</p>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">Sum</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
     <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">SplitWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
@@ -448,6 +451,7 @@ returned by the workflow should be returned in a tuple.</p>
 <span class="k">def</span> <span class="nf">Subtract</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">x</span> <span class="o">-</span> <span class="n">y</span>
 
+
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">RecursiveNestedWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
     <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
@@ -486,6 +490,7 @@ returned by the workflow should be returned in a tuple.</p>
     <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 
+
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">TypeErrorWorkflow</span><span class="p">(</span>
     <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
@@ -507,7 +512,9 @@ returned by the workflow should be returned in a tuple.</p>
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">handbrake</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
-            <span class="n">QuicktimeHandbrake</span><span class="p">(</span><span class="n">in_video</span><span class="o">=</span><span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span><span class="p">),</span>
+            <span class="n">QuicktimeHandbrake</span><span class="p">(</span>
+                <span class="n">in_video</span><span class="o">=</span><span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span>
+            <span class="p">),</span>
         <span class="p">)</span>  <span class="c1"># This will raise a TypeError because the input video is an Mp4</span>
     <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
         <span class="n">handbrake</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
@@ -689,7 +696,7 @@ returned by the workflow should be returned in a tuple.</p>
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+gce2fe375
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev382+g9f47e000
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -697,7 +704,7 @@ A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+g
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/home/runner/.cache/pydra/0.25.dev266+gce2fe375/run-cache/workflow-07129632a8541f6d416e58485ca41008/out_image.mif&#39;))
+ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/home/runner/.cache/pydra/0.25.dev382+g9f47e000/run-cache/workflow-07129632a8541f6d416e58485ca41008/out_image.mif&#39;))
 </pre></div></div>
 </div>
 <p>See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>

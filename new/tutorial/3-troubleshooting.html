@@ -301,6 +301,7 @@
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># This is needed to run parallel workflows in Jupyter notebooks</span>
 <span class="kn">import</span> <span class="nn">nest_asyncio</span>
+
 <span class="n">nest_asyncio</span><span class="o">.</span><span class="n">apply</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -330,7 +331,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev266+gce2fe375
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev382+g9f47e000
 </pre></div></div>
 </div>
 <p>This allows the secondary processes to import the script without executing it. Without such a block Pydra will lock up and not process the workflow. On Linux this is not an issue due to the way that processes are forked, but is good practice in any case for code portability.</p>
@@ -356,7 +357,7 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># This workflow will fail because we are trying to divide by 0</span>
-<span class="n">wf</span> <span class="o">=</span> <span class="n">UnsafeDivisionWorkflow</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">denominator</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span> <span class="p">,</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">wf</span> <span class="o">=</span> <span class="n">UnsafeDivisionWorkflow</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">denominator</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
 
 <span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
@@ -364,7 +365,7 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
             <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">wf</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-<br/></pre></div>
+</pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -383,9 +384,9 @@ Traceback (most recent call last):
   File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 205, in unpickle_and_run
     return task.run(rerun=rerun)
            ^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, line 372, in run
-    self.definition._run(self)
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, line 731, in _run
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, line 344, in run
+    self.definition._run(self, rerun)
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, line 782, in _run
     returned = self.function(**inputs)
                ^^^^^^^^^^^^^^^^^^^^^^^
   File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/tasks/testing/__init__.py&#34;, line 11, in Divide
@@ -413,7 +414,7 @@ Traceback (most recent call last):
 ZeroDivisionError: float division by zero
 
 Task execution failed
-Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.25.dev266+gce2fe375/run-cache/workflow-52ef1cfb178c4718b58e4dbffb0025e2/_error.pklz
+Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.25.dev382+g9f47e000/run-cache/workflow-62777a3cb462e2454201a0aca6d31a38/_error.pklz
 </pre></div></div>
 </div>
 <p>The error pickle files can be loaded using the <code class="docutils literal notranslate"><span class="pre">cloudpickle</span></code> library, noting that it is important to use the same Python version to load the files that was used to run the Pydra workflow</p>
@@ -426,7 +427,9 @@ Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.
 <span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
 <span class="kn">from</span> <span class="nn">pydra.tasks.testing</span> <span class="kn">import</span> <span class="n">Divide</span>
 
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">default_run_cache_dir</span> <span class="o">/</span> <span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">_checksum</span> <span class="o">/</span> <span class="s2">&quot;_error.pklz&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span>
+    <span class="n">default_run_cache_dir</span> <span class="o">/</span> <span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">_checksum</span> <span class="o">/</span> <span class="s2">&quot;_error.pklz&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
     <span class="n">error</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
 
 <span class="n">pprint</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
@@ -441,11 +444,11 @@ Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.
 {&#39;error message&#39;: [&#39;Traceback (most recent call last):\n&#39;,
                    &#39;  File &#39;
                    &#39;&#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, &#39;
-                   &#39;line 372, in run\n&#39;
-                   &#39;    self.definition._run(self)\n&#39;,
+                   &#39;line 344, in run\n&#39;
+                   &#39;    self.definition._run(self, rerun)\n&#39;,
                    &#39;  File &#39;
                    &#39;&#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, &#39;
-                   &#39;line 731, in _run\n&#39;
+                   &#39;line 782, in _run\n&#39;
                    &#39;    returned = self.function(**inputs)\n&#39;
                    &#39;               ^^^^^^^^^^^^^^^^^^^^^^^\n&#39;,
                    &#39;  File &#39;
@@ -456,7 +459,7 @@ Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.
                    &#39;ZeroDivisionError: float division by zero\n&#39;],
  &#39;login name&#39;: &#39;runner&#39;,
  &#39;name with checksum&#39;: &#39;python-e126e9583a239ed19de120df484c689f&#39;,
- &#39;time of crash&#39;: &#39;20250223-233050&#39;}
+ &#39;time of crash&#39;: &#39;20250318-211714&#39;}
 </pre></div></div>
 </div>
 </section>
@@ -474,7 +477,7 @@ all the task dirs in your cache root to find the issue.</p>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.submitter</span> <span class="kn">import</span> <span class="n">Submitter</span>
 <span class="kn">from</span> <span class="nn">pydra.tasks.testing</span> <span class="kn">import</span> <span class="n">SafeDivisionWorkflow</span>
 
-<span class="n">wf</span> <span class="o">=</span> <span class="n">SafeDivisionWorkflow</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">denominator</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span> <span class="p">,</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">wf</span> <span class="o">=</span> <span class="n">SafeDivisionWorkflow</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">denominator</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
 
 <span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
     <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">&quot;cf&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
@@ -489,7 +492,7 @@ all the task dirs in your cache root to find the issue.</p>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev266+gce2fe375/run-cache/workflow-3d154cc2b527e104d2217b1af36077b5
+Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev382+g9f47e000/run-cache/workflow-f4a2c8a232bb0a06370eeeb041ee3a42
 </pre></div></div>
 </div>
 <p>To find the task directory where the issue first surfaced, iterate through every task cache dir and check the results for <code class="docutils literal notranslate"><span class="pre">float(&quot;inf&quot;)</span></code>s</p>
@@ -507,8 +510,10 @@ Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.2
         <span class="n">result</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">==</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;nan&#39;</span><span class="p">):</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="n">task_cache_dir</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> produced a NaN value for </span><span class="si">{</span><span class="n">field_name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">outputs</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">==</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">):</span>
+                <span class="nb">print</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Task </span><span class="si">{</span><span class="n">task_cache_dir</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> produced a NaN value for </span><span class="si">{</span><span class="n">field_name</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
 </pre></div>
 </div>
 </div>

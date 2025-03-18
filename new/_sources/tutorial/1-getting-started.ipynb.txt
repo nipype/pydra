@@ -33,7 +33,7 @@
     "from pprint import pprint\n",
     "import json\n",
     "\n",
-    "JSON_CONTENTS = {'a': True, 'b': 'two', 'c': 3, 'd': [7, 0.55, 6]}\n",
+    "JSON_CONTENTS = {\"a\": True, \"b\": \"two\", \"c\": 3, \"d\": [7, 0.55, 6]}\n",
     "\n",
     "test_dir = Path(mkdtemp())\n",
     "json_file = test_dir / \"test.json\"\n",
@@ -78,6 +78,7 @@
    "outputs": [],
    "source": [
     "import nest_asyncio\n",
+    "\n",
     "nest_asyncio.apply()"
    ]
   },
@@ -88,8 +89,7 @@
     "\n",
     "## Running your first task\n",
     "\n",
-    "Pre-defined task definitions are installed under the `pydra.tasks.*` namespace by separate\n",
-    "task packages (e.g. `pydra-fsl`, `pydra-ants`, ...). To use a pre-defined task definition\n",
+    "Pydra allows you to install independent packages with pre-defined tasks (e.g., `pydra-fsl`, `pydra-ants`). The task from the packages are installed under the `pydra.tasks.*`. You always have access to `pydra.tasks.common`, in addition `pydra-mrtrix3.v3_0` was also installed for this tutorial. To use a pre-defined task definition\n",
     "\n",
     "* import the class from the `pydra.tasks.*` package it is in\n",
     "* instantiate it with appropriate parameters\n",
@@ -155,7 +155,9 @@
     "\n",
     "# Instantiate the task definition, \"splitting\" over all NIfTI files in the test directory\n",
     "# by splitting the \"input\" input field over all files in the directory\n",
-    "mrgrid = MrGrid(operation=\"regrid\", voxel=(0.5,0.5,0.5)).split(in_file=nifti_dir.iterdir())\n",
+    "mrgrid = MrGrid(operation=\"regrid\", voxel=(0.5, 0.5, 0.5)).split(\n",
+    "    in_file=nifti_dir.iterdir()\n",
+    ")\n",
     "\n",
     "# Run the task to resample all NIfTI files\n",
     "outputs = mrgrid()\n",
@@ -236,8 +238,12 @@
    "source": [
     "from pydra.tasks.mrtrix3.v3_0 import MrGrid\n",
     "\n",
-    "if __name__ == \"__main__\":  # <-- Add this block to allow the script to imported by subprocesses\n",
-    "    mrgrid = MrGrid(operation=\"regrid\", voxel=(0.5,0.5,0.5)).split(in_file=nifti_dir.iterdir())\n",
+    "if (\n",
+    "    __name__ == \"__main__\"\n",
+    "):  # <-- Add this block to allow the script to imported by subprocesses\n",
+    "    mrgrid = MrGrid(operation=\"regrid\", voxel=(0.5, 0.5, 0.5)).split(\n",
+    "        in_file=nifti_dir.iterdir()\n",
+    "    )\n",
     "    outputs = mrgrid(worker=\"cf\", n_procs=4)  # <-- Select the \"cf\" worker here\n",
     "    print(\"\\n\".join(str(p) for p in outputs.out_file))"
    ]
@@ -268,7 +274,7 @@
     "reused.\n",
     "\n",
     "This cache will grow as more runs are called, therefore care needs to be taken to ensure\n",
-    "there is enough space on the target disk. Since the cache will be constantly To specify\n",
+    "there is enough space on the target disk.\n",
     "a different location for this cache, simply provide the `cache_root` keyword argument to the execution call"
    ]
   },
@@ -302,10 +308,7 @@
     "my_cache_dir = Path(\"~/new-pydra-cache\").expanduser()\n",
     "my_cache_dir.mkdir(exist_ok=True)\n",
     "\n",
-    "outputs = mrgrid(\n",
-    "    cache_dir=my_cache_dir,\n",
-    "    cache_locations=[default_run_cache_dir]\n",
-    ")\n",
+    "outputs = mrgrid(cache_dir=my_cache_dir, cache_locations=[default_run_cache_dir])\n",
     "\n",
     "print(outputs)"
    ]
