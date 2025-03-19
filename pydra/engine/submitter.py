@@ -459,9 +459,10 @@ class Submitter:
                 tasks = self.get_runnable_tasks(exec_graph)
         finally:
             if errors:
+                all_errors = "\n\n".join(errors)
                 raise RuntimeError(
                     f"Workflow task {workflow_task} failed with errors"
-                    f":\n\n{'\n\n'.join(errors)}"
+                    f":\n{all_errors}"
                 )
 
     def __enter__(self):
