@@ -49,11 +49,12 @@ class Worker(metaclass=abc.ABCMeta):
         pass
 
     async def run_async(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
+        assert self.is_async, "Worker is not asynchronous"
         if task.is_async:  # only for workflows at this stage and the foreseeable
             # These jobs are run in the primary process but farm out the workflows jobs
             return await task.run_async(rerun=rerun)
         else:
-            return self.run(task=task, rerun=rerun)
+            return await self.run(task=task, rerun=rerun)
 
     def close(self):
         """Close this worker."""
