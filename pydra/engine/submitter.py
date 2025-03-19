@@ -444,11 +444,13 @@ class Submitter:
                     try:
                         task_future.result()
                     except Exception:
-                        error_msg = re.match(
+                        error_msg = format_exc()
+                        if match := re.match(
                             r'.*"""(.*)""".*',
-                            format_exc(),
+                            error_msg,
                             flags=re.DOTALL | re.MULTILINE,
-                        ).group(1)
+                        ):
+                            error_msg = match.group(1)
                         task = futured[task_future.get_name()]
                         task_name = task.name
                         if task.state_index is not None:
