@@ -127,9 +127,10 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
         return obj
     if is_lazy(obj):
         return obj
-    obj = list(obj)
-    if len(obj) == 1:
-        return obj[0]
+    if isinstance(obj, ty.Sequence) and not isinstance(obj, str):
+        obj = list(obj)
+        if len(obj) == 1:
+            return obj[0]
     return obj
 
 
