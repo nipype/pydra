@@ -11,7 +11,7 @@ from pydra.design import python
 from fileformats.generic import File
 from pydra.engine.lazy import LazyOutField
 from pydra.design import workflow
-from ..typing import TypeParser, MultiInputObj
+from pydra.utils.typing import TypeParser, MultiInputObj
 from fileformats.application import Json, Yaml, Xml
 from .utils import (
     GenericFuncTask,

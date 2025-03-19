@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 
-from ..submitter import Submitter
+from pydra.engine.submitter import Submitter
 from pydra.design import python, workflow
 from .utils import Identity
 from pydra.utils.hash import hash_function

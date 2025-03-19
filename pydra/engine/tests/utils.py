@@ -11,7 +11,7 @@ import pytest
 from fileformats.generic import File
 from pydra.engine.helpers import list_fields
 from pydra.engine.specs import ShellDef
-from ..submitter import Submitter
+from pydra.engine.submitter import Submitter
 from pydra.design import workflow, python
 
 if ty.TYPE_CHECKING:

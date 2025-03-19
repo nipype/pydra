@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import typing as ty
 
-from ..submitter import Submitter
+from pydra.engine.submitter import Submitter
 from pydra.design import python, workflow
 from fileformats.generic import File, Directory
 

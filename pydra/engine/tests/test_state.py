@@ -1,9 +1,9 @@
 import pytest
 
-from ..state import State
+from pydra.engine.state import State
 from pydra.design import python
 from pydra.engine.specs import PythonDef, PythonOutputs
-from ..helpers_state import PydraStateError, add_name_splitter
+from pydra.engine.helpers_state import PydraStateError, add_name_splitter
 
 
 @pytest.mark.parametrize(

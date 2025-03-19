@@ -1,4 +1,4 @@
-from ..graph import DiGraph
+from pydra.engine.graph import DiGraph
 from .utils import DOT_FLAG
 import pytest
 

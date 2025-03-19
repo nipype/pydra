@@ -10,7 +10,7 @@ import json
 import glob as glob
 from pydra.design import python, shell, workflow
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from ..task import AuditFlag
+from pydra.engine.task import AuditFlag
 from pydra.engine.specs import argstr_formatting, ShellDef, ShellOutputs, TaskHooks
 from pydra.engine.helpers import list_fields, print_help
 from pydra.engine.submitter import Submitter

@@ -1,7 +1,12 @@
 from contextlib import redirect_stdout
 import io
 import pytest
-from ..messenger import PrintMessenger, FileMessenger, collect_messages, make_message
+from pydra.utils.messenger import (
+    PrintMessenger,
+    FileMessenger,
+    collect_messages,
+    make_message,
+)
 
 
 def test_print_messenger():

@@ -12,7 +12,7 @@ from pydra.engine.core import Task
 from pydra.design import workflow
 from fileformats.generic import Directory, File
 from .utils import Multiply, RaiseXeq1
-from ..helpers import (
+from pydra.engine.helpers import (
     get_available_cpus,
     save,
     load_and_run,
