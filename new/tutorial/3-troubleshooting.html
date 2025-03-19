@@ -331,7 +331,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev385+g6b1feb58
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev386+g01a66f4f
 </pre></div></div>
 </div>
 <p>This allows the secondary processes to import the script without executing it. Without such a block Pydra will lock up and not process the workflow. On Linux this is not an issue due to the way that processes are forked, but is good practice in any case for code portability.</p>
@@ -374,14 +374,14 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
 Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-10&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py:189&gt; exception=ZeroDivisionError(&#39;float division by zero&#39;)&gt;
+future: &lt;Task finished name=&#39;Task-10&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py:192&gt; exception=ZeroDivisionError(&#39;float division by zero&#39;)&gt;
 concurrent.futures.process._RemoteTraceback:
 &#34;&#34;&#34;
 Traceback (most recent call last):
   File &#34;/usr/share/miniconda/lib/python3.12/concurrent/futures/process.py&#34;, line 264, in _process_worker
     r = call_item.fn(*call_item.args, **call_item.kwargs)
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 205, in unpickle_and_run
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 207, in uncloudpickle_and_run
     return task.run(rerun=rerun)
            ^^^^^^^^^^^^^^^^^^^^^
   File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, line 344, in run
@@ -401,7 +401,7 @@ Traceback (most recent call last):
   File &#34;/usr/share/miniconda/lib/python3.12/asyncio/tasks.py&#34;, line 316, in __step_run_and_handle_result
     result = coro.throw(exc)
              ^^^^^^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 197, in run
+  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 199, in run
     return await self.loop.run_in_executor(
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File &#34;/usr/share/miniconda/lib/python3.12/asyncio/futures.py&#34;, line 289, in __await__
@@ -414,7 +414,7 @@ Traceback (most recent call last):
 ZeroDivisionError: float division by zero
 
 Task execution failed
-Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.25.dev385+g6b1feb58/run-cache/workflow-62777a3cb462e2454201a0aca6d31a38/_error.pklz
+Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.25.dev386+g01a66f4f/run-cache/workflow-62777a3cb462e2454201a0aca6d31a38/_error.pklz
 </pre></div></div>
 </div>
 <p>The error pickle files can be loaded using the <code class="docutils literal notranslate"><span class="pre">cloudpickle</span></code> library, noting that it is important to use the same Python version to load the files that was used to run the Pydra workflow</p>
@@ -459,7 +459,7 @@ Full crash report for &#39;Split&#39; task is here: /home/runner/.cache/pydra/0.
                    &#39;ZeroDivisionError: float division by zero\n&#39;],
  &#39;login name&#39;: &#39;runner&#39;,
  &#39;name with checksum&#39;: &#39;python-e126e9583a239ed19de120df484c689f&#39;,
- &#39;time of crash&#39;: &#39;20250318-224849&#39;}
+ &#39;time of crash&#39;: &#39;20250319-011015&#39;}
 </pre></div></div>
 </div>
 </section>
@@ -492,7 +492,7 @@ all the task dirs in your cache root to find the issue.</p>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev385+g6b1feb58/run-cache/workflow-f4a2c8a232bb0a06370eeeb041ee3a42
+Workflow completed successfully, results saved in: /home/runner/.cache/pydra/0.25.dev386+g01a66f4f/run-cache/workflow-f4a2c8a232bb0a06370eeeb041ee3a42
 </pre></div></div>
 </div>
 <p>To find the task directory where the issue first surfaced, iterate through every task cache dir and check the results for <code class="docutils literal notranslate"><span class="pre">float(&quot;inf&quot;)</span></code>s</p>
