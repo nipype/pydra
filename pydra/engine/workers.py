@@ -36,6 +36,7 @@ class Worker(metaclass=abc.ABCMeta):
     """A base class for execution of tasks."""
 
     plugin_name: str
+    loop: asyncio.AbstractEventLoop
 
     def __init__(self, loop=None):
         """Initialize the worker."""
@@ -48,10 +49,11 @@ class Worker(metaclass=abc.ABCMeta):
         pass
 
     async def run_async(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
-        if task.is_async:
+        if task.is_async:  # only for workflows at this stage and the foreseeable
+            # These jobs are run in the primary process but farm out the workflows jobs
             return await task.run_async(rerun=rerun)
         else:
-            return task.run(rerun=rerun)
+            return self.run(task=task, rerun=rerun)
 
     def close(self):
         """Close this worker."""
@@ -175,7 +177,8 @@ class ConcurrentFuturesWorker(Worker):
     plugin_name = "cf"
 
     n_procs: int
-    loop: cf.ProcessPoolExecutor
+    loop: asyncio.AbstractEventLoop
+    pool: cf.ProcessPoolExecutor
 
     def __init__(self, n_procs: int | None = None):
         """Initialize Worker."""
@@ -193,13 +196,12 @@ class ConcurrentFuturesWorker(Worker):
     ) -> "Result":
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        task_pkl = cp.dumps(task)
         return await self.loop.run_in_executor(
-            self.pool, self.unpickle_and_run, task_pkl, rerun
+            self.pool, self.uncloudpickle_and_run, cp.dumps(task), rerun
         )
 
     @classmethod
-    def unpickle_and_run(cls, task_pkl: Path, rerun: bool) -> "Result":
+    def uncloudpickle_and_run(cls, task_pkl: bytes, rerun: bool) -> "Result":
         """Unpickle and run a task."""
         task: Task[DefType] = cp.loads(task_pkl)
         return task.run(rerun=rerun)

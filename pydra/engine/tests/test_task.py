@@ -1344,7 +1344,7 @@ def test_traceback(tmpdir):
     assert "in FunError" in error_tb[-2]
 
 
-def test_traceback_wf(tmpdir):
+def test_traceback_wf(plugin_parallel: str, tmp_path: Path):
     """checking if the error raised in a function is properly returned by a workflow;
     checking if there is an error filename in the error message that contains
     full traceback including the line in the python function
@@ -1361,7 +1361,7 @@ def test_traceback_wf(tmpdir):
 
     wf = Workflow(x_list=[3, 4])
     with pytest.raises(RuntimeError, match="Task 'fun_error' failed.*") as exinfo:
-        with Submitter(worker="cf", cache_dir=tmpdir) as sub:
+        with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
             sub(wf, raise_errors=True)
 
     # getting error file from the error message
