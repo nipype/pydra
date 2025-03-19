@@ -65,7 +65,9 @@ class Worker(metaclass=abc.ABCMeta):
         """Return whether the worker is asynchronous."""
         return inspect.iscoroutinefunction(self.run)
 
-    async def fetch_finished(self, futures):
+    async def fetch_finished(
+        self, futures
+    ) -> tuple[set[asyncio.Task], set[asyncio.Task]]:
         """
         Awaits asyncio's :class:`asyncio.Task` until one is finished.
 
@@ -78,6 +80,8 @@ class Worker(metaclass=abc.ABCMeta):
         -------
         pending : set
             Pending asyncio :class:`asyncio.Task`.
+        done: set
+            Completed asyncio :class:`asyncio.Task`
 
         """
         done = set()
@@ -92,11 +96,8 @@ class Worker(metaclass=abc.ABCMeta):
         except ValueError:
             # nothing pending!
             pending = set()
-        # ensure exceptions are raised from completed tasks
-        for task in done:
-            task.result()
         logger.debug(f"Tasks finished: {len(done)}")
-        return pending
+        return pending, done
 
 
 class DistributedWorker(Worker):
@@ -149,7 +150,7 @@ class DistributedWorker(Worker):
         self._jobs -= len(done)
         logger.debug(f"Tasks finished: {len(done)}")
         # ensure pending + unqueued tasks persist
-        return pending.union(unqueued)
+        return pending.union(unqueued), done
 
 
 class DebugWorker(Worker):

@@ -567,7 +567,9 @@ def make_task_def(
 
     # Create class using attrs package, will create attributes for all columns and
     # parameters
-    attrs_klass = attrs.define(auto_attribs=False, kw_only=True, eq=False)(klass)
+    attrs_klass = attrs.define(auto_attribs=False, kw_only=True, eq=False, repr=False)(
+        klass
+    )
 
     return attrs_klass
 

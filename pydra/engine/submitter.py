@@ -2,9 +2,11 @@
 
 import asyncio
 import typing as ty
+import re
 import pickle
 import os
 from pathlib import Path
+from traceback import format_exc
 from tempfile import mkdtemp
 from copy import copy, deepcopy
 from datetime import datetime
@@ -341,94 +343,126 @@ class Submitter:
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
         # keep track of pending futures
         task_futures = set()
-        futured = set()
+        futured: dict[str, Task[DefType]] = {}
         tasks = self.get_runnable_tasks(exec_graph)
-        while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
-            if not tasks and not task_futures:
-                # it's possible that task_futures is empty, but not able to get any
-                # tasks from graph_copy (using get_runnable_tasks)
-                # this might be related to some delays saving the files
-                # so try to get_runnable_tasks for another minute
-                ii = 0
-                while not tasks and any(not n.done for n in exec_graph.nodes):
-                    tasks = self.get_runnable_tasks(exec_graph)
-                    ii += 1
-                    # don't block the event loop!
-                    await asyncio.sleep(1)
-                    if ii > 10:
-                        not_done = "\n".join(
-                            (
-                                f"{n.name}: started={bool(n.started)}, "
-                                f"blocked={list(n.blocked)}, queued={list(n.queued)}"
+        errors = []
+        try:
+            while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
+                if not tasks and not task_futures:
+                    # it's possible that task_futures is empty, but not able to get any
+                    # tasks from graph_copy (using get_runnable_tasks)
+                    # this might be related to some delays saving the files
+                    # so try to get_runnable_tasks for another minute
+                    ii = 0
+                    while not tasks and any(not n.done for n in exec_graph.nodes):
+                        tasks = self.get_runnable_tasks(exec_graph)
+                        ii += 1
+                        # don't block the event loop!
+                        await asyncio.sleep(1)
+                        if ii > 10:
+                            not_done = "\n".join(
+                                (
+                                    f"{n.name}: started={bool(n.started)}, "
+                                    f"blocked={list(n.blocked)}, queued={list(n.queued)}"
+                                )
+                                for n in exec_graph.nodes
+                                if not n.done
                             )
-                            for n in exec_graph.nodes
-                            if not n.done
-                        )
-                        msg = (
-                            "Something has gone wrong when retrieving the predecessor "
-                            f"results. Not able to get any more tasks but he following "
-                            f"nodes of the {wf.name!r} workflow are not done:\n{not_done}\n\n"
-                        )
-                        not_done = [n for n in exec_graph.nodes if not n.done]
-                        msg += "\n" + ", ".join(
-                            f"{t.name}: {t.done}" for t in not_done[0].queued.values()
-                        )
-                        # Get blocked tasks and the predecessors they are blocked on
-                        outstanding: dict[Task[DefType], list[Task[DefType]]] = {
-                            t: [
-                                p for p in exec_graph.predecessors[t.name] if not p.done
-                            ]
-                            for t in exec_graph.sorted_nodes
-                        }
+                            msg = (
+                                "Something has gone wrong when retrieving the predecessor "
+                                f"results. Not able to get any more tasks but he following "
+                                f"nodes of the {wf.name!r} workflow are not done:"
+                                f"\n{not_done}\n\n"
+                            )
+                            not_done = [n for n in exec_graph.nodes if not n.done]
+                            msg += "\n" + ", ".join(
+                                f"{t.name}: {t.done}"
+                                for t in not_done[0].queued.values()
+                            )
+                            # Get blocked tasks and the predecessors they are blocked on
+                            outstanding: dict[Task[DefType], list[Task[DefType]]] = {
+                                t: [
+                                    p
+                                    for p in exec_graph.predecessors[t.name]
+                                    if not p.done
+                                ]
+                                for t in exec_graph.sorted_nodes
+                            }
 
-                        hashes_have_changed = False
-                        for task, blocked_on in outstanding.items():
-                            if not blocked_on:
-                                continue
-                            msg += f"- '{task.name}' node blocked due to\n"
-                            for pred in blocked_on:
-                                if (
-                                    pred.checksum
-                                    != wf.inputs._graph_checksums[pred.name]
-                                ):
-                                    msg += (
-                                        f"    - hash changes in '{pred.name}' node inputs. "
-                                        f"Current values and hashes: {pred.inputs}, "
-                                        f"{pred.inputs._hashes}\n"
-                                    )
-                                    hashes_have_changed = True
-                                elif pred not in outstanding:
-                                    msg += (
-                                        f"    - undiagnosed issues in '{pred.name}' node, "
-                                        "potentially related to file-system access issues "
-                                    )
-                            msg += "\n"
-                        if hashes_have_changed:
-                            msg += (
-                                "Set loglevel to 'debug' in order to track hash changes "
-                                "throughout the execution of the workflow.\n\n "
-                                "These issues may have been caused by `bytes_repr()` methods "
-                                "that don't return stable hash values for specific object "
-                                "types across multiple processes (see bytes_repr() "
-                                '"singledispatch "function in pydra/utils/hash.py).'
-                                "You may need to write specific `bytes_repr()` "
-                                "implementations (see `pydra.utils.hash.register_serializer`) "
-                                "or `__bytes_repr__()` dunder methods to handle one "
-                                "or more types in your interface inputs."
-                            )
-                        raise RuntimeError(msg)
-            for task in tasks:
-                if task.is_async:  # Only workflows at this stage
-                    await self.worker.run_async(
-                        task, rerun=rerun and self.propagate_rerun
-                    )
-                elif task.checksum not in futured:
-                    task_futures.add(
-                        self.worker.run(task, rerun=rerun and self.propagate_rerun)
-                    )
-                    futured.add(task.checksum)
-            task_futures = await self.worker.fetch_finished(task_futures)
-            tasks = self.get_runnable_tasks(exec_graph)
+                            hashes_have_changed = False
+                            for task, blocked_on in outstanding.items():
+                                if not blocked_on:
+                                    continue
+                                msg += f"- '{task.name}' node blocked due to\n"
+                                for pred in blocked_on:
+                                    if (
+                                        pred.checksum
+                                        != wf.inputs._graph_checksums[pred.name]
+                                    ):
+                                        msg += (
+                                            f"    - hash changes in '{pred.name}' node "
+                                            f"inputs. Current values and hashes: "
+                                            f"{pred.inputs}, {pred.inputs._hashes}\n"
+                                        )
+                                        hashes_have_changed = True
+                                    elif pred not in outstanding:
+                                        msg += (
+                                            f"    - undiagnosed issues in '{pred.name}' "
+                                            "node, potentially related to file-system "
+                                            "access issues "
+                                        )
+                                msg += "\n"
+                            if hashes_have_changed:
+                                msg += (
+                                    "Set loglevel to 'debug' in order to track hash "
+                                    "changes throughout the execution of the workflow."
+                                    "\n\n These issues may have been caused by "
+                                    "`bytes_repr()` methods that don't return stable "
+                                    "hash values for specific object types across "
+                                    "multiple processes (see bytes_repr() "
+                                    '"singledispatch "function in pydra/utils/hash.py).'
+                                    "You may need to write specific `bytes_repr()` "
+                                    "implementations (see `pydra.utils.hash.register_serializer`) "
+                                    "or `__bytes_repr__()` dunder methods to handle one "
+                                    "or more types in your interface inputs."
+                                )
+                            raise RuntimeError(msg)
+                for task in tasks:
+                    if task.is_async:  # Only workflows at this stage
+                        await self.worker.run_async(
+                            task, rerun=rerun and self.propagate_rerun
+                        )
+                    elif task.checksum not in futured:
+                        asyncio_task = asyncio.Task(
+                            self.worker.run(task, rerun=rerun and self.propagate_rerun),
+                            name=task.checksum,
+                        )
+                        task_futures.add(asyncio_task)
+                        futured[task.checksum] = task
+                task_futures, completed = await self.worker.fetch_finished(task_futures)
+                for task_future in completed:
+                    try:
+                        task_future.result()
+                    except Exception:
+                        error_msg = re.match(
+                            r'.*"""(.*)""".*',
+                            format_exc(),
+                            flags=re.DOTALL | re.MULTILINE,
+                        ).group(1)
+                        task = futured[task_future.get_name()]
+                        task_name = task.name
+                        if task.state_index:
+                            task_name += f"({task.state_index})"
+                        errors.append(
+                            f"Job {task_name!r}, {task.definition!r}, errored:{error_msg}"
+                        )
+                tasks = self.get_runnable_tasks(exec_graph)
+        finally:
+            if errors:
+                raise RuntimeError(
+                    f"Workflow task {workflow_task} failed with errors"
+                    f":\n\n{'\n\n'.join(errors)}"
+                )
 
     def __enter__(self):
         return self

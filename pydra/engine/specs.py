@@ -62,7 +62,7 @@ def is_set(value: ty.Any) -> bool:
     return value not in (attrs.NOTHING, NO_DEFAULT)
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class TaskOutputs:
     """Base class for all output definitions"""
 
@@ -166,6 +166,15 @@ class TaskOutputs:
                 other_values[field.name] = hash_function(other_values[field.name])
         return values == other_values
 
+    def __repr__(self) -> str:
+        """A string representation of the task definition"""
+        fields_str = ", ".join(
+            f"{f.name}={getattr(self, f.name)!r}"
+            for f in list_fields(self)
+            if getattr(self, f.name) != f.default
+        )
+        return f"{self.__class__.__name__}({fields_str})"
+
 
 OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 
@@ -196,7 +205,7 @@ class TaskHooks:
             setattr(self, val, donothing)
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class TaskDef(ty.Generic[OutputsType]):
     """Base class for all task definitions"""
 
@@ -429,6 +438,15 @@ class TaskDef(ty.Generic[OutputsType]):
         combined_def = copy(self)
         combined_def._combiner = combiner
         return combined_def
+
+    def __repr__(self) -> str:
+        """A string representation of the task definition"""
+        fields_str = ", ".join(
+            f"{f.name}={getattr(self, f.name)!r}"
+            for f in list_fields(self)
+            if getattr(self, f.name) != f.default
+        )
+        return f"{self.__class__.__name__}({fields_str})"
 
     def __iter__(self) -> ty.Generator[str, None, None]:
         """Iterate through all the names in the definition"""
@@ -740,7 +758,7 @@ class RuntimeSpec:
     network: bool = False
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonOutputs(TaskOutputs):
 
     @classmethod
@@ -769,7 +787,7 @@ class PythonOutputs(TaskOutputs):
 PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonDef(TaskDef[PythonOutputsType]):
 
     _task_type = "python"
@@ -798,7 +816,7 @@ class PythonDef(TaskDef[PythonOutputsType]):
             )
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class WorkflowOutputs(TaskOutputs):
 
     @classmethod
@@ -860,7 +878,7 @@ class WorkflowOutputs(TaskOutputs):
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     _task_type = "workflow"
@@ -891,7 +909,7 @@ STDOUT_HELP = """The standard output stream produced by the command."""
 STDERR_HELP = """The standard error stream produced by the command."""
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class ShellOutputs(TaskOutputs):
     """Output definition of a generic shell process."""
 
@@ -1076,7 +1094,7 @@ def additional_args_converter(value: ty.Any) -> list[str]:
     return list(value)
 
 
-@attrs.define(kw_only=True, auto_attribs=False, eq=False)
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class ShellDef(TaskDef[ShellOutputsType]):
 
     _task_type = "shell"
