@@ -451,7 +451,7 @@ class Submitter:
                         ).group(1)
                         task = futured[task_future.get_name()]
                         task_name = task.name
-                        if task.state_index:
+                        if task.state_index is not None:
                             task_name += f"({task.state_index})"
                         errors.append(
                             f"Job {task_name!r}, {task.definition!r}, errored:{error_msg}"
@@ -462,7 +462,7 @@ class Submitter:
                 all_errors = "\n\n".join(errors)
                 raise RuntimeError(
                     f"Workflow task {workflow_task} failed with errors"
-                    f":\n{all_errors}"
+                    f":\n\n{all_errors}\n\nSee output directory for details: {workflow_task.output_dir}"
                 )
 
     def __enter__(self):

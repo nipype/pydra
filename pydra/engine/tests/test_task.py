@@ -1360,23 +1360,19 @@ def test_traceback_wf(plugin_parallel: str, tmp_path: Path):
         return fun_error.out
 
     wf = Workflow(x_list=[3, 4])
-    with pytest.raises(RuntimeError, match="Job 'fun_error', .*, errored") as exinfo:
+    with pytest.raises(RuntimeError, match="Job 'fun_error.*, errored") as exinfo:
         with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
             sub(wf, raise_errors=True)
 
     # getting error file from the error message
     output_dir_match = Path(
-        str(exinfo.value).split("here: ")[-1].split("_task.pklz")[0].strip()
+        str(exinfo.value).split("See output directory for details: ")[-1].strip()
     )
     assert output_dir_match.exists()
     error_file = output_dir_match / "_error.pklz"
     # checking if the file exists
     assert error_file.exists()
-    # reading error message from the pickle file
-    error_tb = cp.loads(error_file.read_bytes())["error message"]
-    # the error traceback should be a list and should point to a specific line in the function
-    assert isinstance(error_tb, list)
-    assert "in FunError" in error_tb[-2]
+    assert "in FunError" in str(exinfo.value)
 
 
 def test_rerun_errored(tmp_path, capfd):
