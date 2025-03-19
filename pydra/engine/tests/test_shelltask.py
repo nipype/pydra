@@ -2481,7 +2481,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
     assert get_output_names(shelly) == ["resultsDir", "return_code", "stderr", "stdout"]
     cache_dir = tmp_path / "cache"
     outputs = results_function(shelly, plugin=plugin, cache_dir=cache_dir)
-    output_dir = next(cache_dir.iterdir())
+    output_dir = next(p for p in cache_dir.iterdir() if p.name.startswith("python-"))
     assert (output_dir / Path("test")).exists()
     assert get_lowest_directory(outputs.resultsDir) == get_lowest_directory(
         output_dir / Path("test")
@@ -3263,7 +3263,11 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
     cache_dir = tmp_path / "cache"
     outputs = shelly(cache_dir=cache_dir)
     # the first output file is created
-    assert outputs.out_1.fspath == next(cache_dir.iterdir()) / "test_1.nii"
+    assert (
+        outputs.out_1.fspath
+        == next(p for p in cache_dir.iterdir() if p.name.startswith("shell-")())
+        / "test_1.nii"
+    )
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
     assert outputs.out_2 is None
