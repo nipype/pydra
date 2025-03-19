@@ -2254,8 +2254,11 @@ def test_shell_cmd_outputspec_6a(tmp_path):
 
 
 @pytest.mark.xfail(
-    sys.version_info >= (3, 11) and platform.system() == "Linux",
-    reason="Fails on Python >= 3.11 on Ubuntu (presumably a typing thing with that version of Python)",
+    sys.version_info[:3] == (3, 11, 5),
+    reason=(
+        "Fails on Python 3.11.5 (presumably a typing thing with that specific "
+        "version of Python)"
+    ),
 )
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
@@ -2476,8 +2479,9 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
 
     shelly = Shelly(resultsDir="test")
     assert get_output_names(shelly) == ["resultsDir", "return_code", "stderr", "stdout"]
-    outputs = results_function(shelly, plugin=plugin, cache_dir=tmp_path)
-    output_dir = next(tmp_path.iterdir())
+    cache_dir = tmp_path / "cache"
+    outputs = results_function(shelly, plugin=plugin, cache_dir=cache_dir)
+    output_dir = next(cache_dir.iterdir())
     assert (output_dir / Path("test")).exists()
     assert get_lowest_directory(outputs.resultsDir) == get_lowest_directory(
         output_dir / Path("test")
@@ -3256,9 +3260,10 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
             )
 
     shelly = Shelly(out_name="test")
-    outputs = shelly(cache_dir=tmp_path)
+    cache_dir = tmp_path / "cache"
+    outputs = shelly(cache_dir=cache_dir)
     # the first output file is created
-    assert outputs.out_1.fspath == next(tmp_path.iterdir()) / "test_1.nii"
+    assert outputs.out_1.fspath == next(cache_dir.iterdir()) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
     assert outputs.out_2 is None
@@ -3292,9 +3297,10 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
 
     shelly = Shelly(out_name="test")
 
-    outputs = shelly(cache_dir=tmp_path)
+    cache_dir = tmp_path / "cache"
+    outputs = shelly(cache_dir=cache_dir)
     # the first output file is created
-    assert outputs.out_1.fspath == next(tmp_path.iterdir()) / "test_1.nii"
+    assert outputs.out_1.fspath == next(cache_dir.iterdir()) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
     assert outputs.out_2 is None
@@ -3325,13 +3331,14 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
 
     shelly = Shelly(out_name="test")
     # An exception should be raised because the second mandatory output does not exist
+    cache_dir = tmp_path / "cache"
     with pytest.raises(
         ValueError,
         match=r"file system path\(s\) provided to mandatory field .* does not exist",
     ):
-        shelly(cache_dir=tmp_path)
+        shelly(cache_dir=cache_dir)
     # checking if the first output was created
-    assert (next(tmp_path.iterdir()) / "test_1.nii").exists()
+    assert (next(cache_dir.iterdir()) / "test_1.nii").exists()
 
 
 def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
