@@ -1,6 +1,11 @@
-import pickle
+import cloudpickle as cp
 import sys
+from pathlib import Path
 from pydra.engine.helpers import load_and_run
+
+# To avoid issues when running pytest, where the namespace package "pydra" is dropped in
+# the pickling process due to it being run from inside the source tree
+sys.path.append(str(Path(__file__).parent.parent))
 
 
 def run_pickled(*file_paths, rerun=False):
@@ -8,7 +13,7 @@ def run_pickled(*file_paths, rerun=False):
 
     for file_path in file_paths:
         with open(file_path, "rb") as file:
-            loaded_objects.append(pickle.load(file))
+            loaded_objects.append(cp.load(file))
 
     if len(loaded_objects) == 1:
         result = loaded_objects[0](rerun=rerun)

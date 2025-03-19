@@ -7,7 +7,7 @@ NO_ET=TRUE
 docker pull $DOCKER_IMAGE
 
 # Start image
-docker run -itd -h slurmctl --cap-add sys_admin -d --name slurm -v $PKG_DIR:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
+docker run --rm -itd -h slurmctl --cap-add sys_admin -d --name slurm -v $PKG_DIR:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
 
 # Display previous jobs with sacct
 echo "Allowing ports/daemons time to start" && sleep 10

@@ -10,6 +10,13 @@ from unittest.mock import patch
 import pytest
 from pydra.design import workflow
 from fileformats.generic import Directory
+from pydra.engine.core import Task
+from pydra.engine.submitter import Submitter
+from pydra.engine.workers import DebugWorker
+from pydra.design import python
+from pathlib import Path
+from datetime import datetime
+from pydra.engine.specs import Result
 from .utils import (
     need_sge,
     need_slurm,
@@ -17,13 +24,6 @@ from .utils import (
     BasicWorkflowWithThreadCount,
     BasicWorkflowWithThreadCountConcurrent,
 )
-from ..core import Task
-from ..submitter import Submitter
-from ..workers import DebugWorker
-from pydra.design import python
-from pathlib import Path
-from datetime import datetime
-from pydra.engine.specs import Result
 
 
 @python.define

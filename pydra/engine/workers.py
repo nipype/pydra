@@ -974,16 +974,13 @@ class PsijWorker(Worker):
         -------
         None
         """
-        import pickle
-        from pathlib import Path
-
         jex = self.psij.JobExecutor.get_instance(self.subtype)
         absolute_path = Path(__file__).parent
 
         cache_dir = task.cache_dir
         file_path = cache_dir / "runnable_function.pkl"
         with open(file_path, "wb") as file:
-            pickle.dump(task.run, file)
+            cp.dump(task.run, file)
         func_path = absolute_path / "run_pickled.py"
         spec = self.make_spec("python", [func_path, file_path])
 
