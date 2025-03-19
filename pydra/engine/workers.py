@@ -51,7 +51,8 @@ class Worker(metaclass=abc.ABCMeta):
     async def run_async(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
         assert self.is_async, "Worker is not asynchronous"
         if task.is_async:  # only for workflows at this stage and the foreseeable
-            # These jobs are run in the primary process but farm out the workflows jobs
+            # These jobs are run in the primary process but potentially farm out
+            # workflow jobs to other processes/job-schedulers
             return await task.run_async(rerun=rerun)
         else:
             return await self.run(task=task, rerun=rerun)
@@ -91,6 +92,9 @@ class Worker(metaclass=abc.ABCMeta):
         except ValueError:
             # nothing pending!
             pending = set()
+        # ensure exceptions are raised from completed tasks
+        for task in done:
+            task.result()
         logger.debug(f"Tasks finished: {len(done)}")
         return pending
 
