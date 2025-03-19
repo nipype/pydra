@@ -26,8 +26,7 @@ import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
 import fileformats.core.exceptions
-from . import user_cache_dir, add_exc_note
-from .misc import in_stdlib
+from pydra.utils.misc import in_stdlib, user_cache_dir, add_exc_note
 
 logger = logging.getLogger("pydra")
 

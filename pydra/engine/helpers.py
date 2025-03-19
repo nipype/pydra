@@ -20,8 +20,8 @@ from pydra.utils.typing import StateArray
 
 
 if ty.TYPE_CHECKING:
-    from .specs import TaskDef, Result, WorkflowOutputs, WorkflowDef
-    from .core import Task
+    from pydra.engine.specs import TaskDef, Result, WorkflowOutputs, WorkflowDef
+    from pydra.engine.core import Task
     from pydra.design.base import Field
     from pydra.engine.lazy import LazyField
 
@@ -41,7 +41,7 @@ def plot_workflow(
     lazy: ty.Sequence[str] | ty.Set[str] = (),
 ):
     """creating a graph - dotfile and optionally exporting to other formats"""
-    from .core import Workflow
+    from pydra.engine.core import Workflow
 
     # Create output directory
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -117,7 +117,7 @@ def fields_dict(definition: "type[TaskDef] | TaskDef") -> dict[str, "Field"]:
     return {f.name: f for f in list_fields(definition)}
 
 
-# from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
+# from pydra.engine.specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
 
 
 def from_list_if_single(obj: ty.Any) -> ty.Any:
@@ -252,7 +252,7 @@ def copyfile_workflow(
     wf_path: os.PathLike, outputs: "WorkflowOutputs"
 ) -> "WorkflowOutputs":
     """if file in the wf results, the file will be copied to the workflow directory"""
-    from .helpers_file import copy_nested_files
+    from pydra.engine.helpers_file import copy_nested_files
 
     for field in attrs_fields(outputs):
         value = getattr(outputs, field.name)
@@ -278,7 +278,7 @@ def gather_runtime_info(fname):
         A runtime object containing the collected information.
 
     """
-    from .specs import Runtime
+    from pydra.engine.specs import Runtime
 
     runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None, cpu_peak_percent=None)
 
@@ -526,7 +526,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
         The path to the pickled result file
     """
 
-    from .specs import Result
+    from pydra.engine.specs import Result
 
     try:
         task: Task[DefType] = load_task(task_pkl=task_pkl)

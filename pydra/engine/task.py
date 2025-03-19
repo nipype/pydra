@@ -44,18 +44,18 @@ from __future__ import annotations
 import attrs
 import json
 from pathlib import Path
-from .core import Task
+from pydra.engine.core import Task
 from pydra.utils.messenger import AuditFlag
-from .specs import (
+from pydra.engine.specs import (
     PythonDef,
     ShellDef,
     attrs_fields,
 )
-from .helpers import (
+from pydra.engine.helpers import (
     attrs_values,
 )
 from pydra.engine.helpers_file import is_local_file
-from .environments import Native
+from pydra.engine.environments import Native
 
 
 class PythonTask(Task):

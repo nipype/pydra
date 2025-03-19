@@ -12,9 +12,9 @@ from pathlib import Path
 from shutil import copyfile, which
 import cloudpickle as cp
 import concurrent.futures as cf
-from .core import Task
-from .specs import TaskDef
-from .helpers import (
+from pydra.engine.core import Task
+from pydra.engine.specs import TaskDef
+from pydra.engine.helpers import (
     get_available_cpus,
     read_and_display_async,
     save,
@@ -27,7 +27,7 @@ import random
 logger = logging.getLogger("pydra.worker")
 
 if ty.TYPE_CHECKING:
-    from .specs import Result
+    from pydra.engine.specs import Result
 
 DefType = ty.TypeVar("DefType", bound="TaskDef")
 

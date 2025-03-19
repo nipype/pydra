@@ -20,18 +20,18 @@ from filelock import SoftFileLock
 from pydra.engine.specs import TaskDef, WorkflowDef, TaskOutputs, WorkflowOutputs
 from pydra.engine.graph import DiGraph, INPUTS_NODE_NAME, OUTPUTS_NODE_NAME
 from pydra.engine import state
-from .lazy import LazyInField, LazyOutField
+from pydra.engine.lazy import LazyInField, LazyOutField
 from pydra.utils.hash import hash_function, Cache
 from pydra.engine.state import State
-from .node import Node
+from pydra.engine.node import Node
 from datetime import datetime
 from fileformats.core import FileSet
-from .specs import (
+from pydra.engine.specs import (
     RuntimeSpec,
     Result,
     TaskHooks,
 )
-from .helpers import (
+from pydra.engine.helpers import (
     attrs_fields,
     attrs_values,
     fields_values,
@@ -43,7 +43,7 @@ from .helpers import (
     is_lazy,
     ensure_list,
 )
-from .helpers_file import copy_nested_files, template_update
+from pydra.engine.helpers_file import copy_nested_files, template_update
 from pydra.utils.messenger import AuditFlag
 from pydra.engine.environments import Environment
 

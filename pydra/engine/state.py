@@ -4,8 +4,8 @@ from copy import deepcopy
 import itertools
 from functools import reduce
 import typing as ty
-from . import helpers_state as hlpst
-from .helpers import ensure_list
+from pydra.engine import helpers_state as hlpst
+from pydra.engine.helpers import ensure_list
 from pydra.utils.typing import StateArray, TypeParser
 
 op = {".": zip, "*": itertools.product}

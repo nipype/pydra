@@ -22,9 +22,7 @@ from pydra.utils.typing import (
     StateArray,
 )
 from .utils import run_no_submitter, run_submitter, no_win, get_output_names
-import sys
 import platform
-import pytest
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)

@@ -4,12 +4,12 @@ import attrs
 from typing import Self
 from pydra.utils.typing import StateArray
 from pydra.utils.hash import hash_single
-from . import node
+from pydra.engine import node
 
 if ty.TYPE_CHECKING:
-    from .submitter import DiGraph, NodeExecution
-    from .core import Task, Workflow
-    from .specs import TaskDef
+    from pydra.engine.submitter import DiGraph, NodeExecution
+    from pydra.engine.core import Task, Workflow
+    from pydra.engine.specs import TaskDef
 
 
 T = ty.TypeVar("T")
@@ -73,7 +73,9 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
         of the lazy field with StateArray to signify that it will be "split" across
         """
-        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+        from pydra.utils.typing import (
+            TypeParser,
+        )  # pylint: disable=import-outside-toplevel
 
         # Modify the type of the lazy field to include the split across a state-array
         inner_type, prev_split_depth = TypeParser.strip_splits(self._type)

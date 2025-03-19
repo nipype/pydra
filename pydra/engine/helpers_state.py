@@ -4,7 +4,7 @@ import itertools
 from copy import deepcopy
 import logging
 import typing as ty
-from .helpers import ensure_list, attrs_values
+from pydra.engine.helpers import ensure_list, attrs_values
 
 logger = logging.getLogger("pydra")
 

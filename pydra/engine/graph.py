@@ -6,7 +6,7 @@ import typing as ty
 from collections import Counter
 import subprocess as sp
 
-from .helpers import ensure_list
+from pydra.engine.helpers import ensure_list
 
 
 NodeType = ty.TypeVar("NodeType")
@@ -404,7 +404,7 @@ class DiGraph(ty.Generic[NodeType]):
 
     def create_dotfile_simple(self, outdir, name="graph"):
         """creates a simple dotfile (no nested structure)"""
-        from .core import is_workflow
+        from pydra.engine.core import is_workflow
 
         dotstr = "digraph G {\n"
         for nd in self.nodes:
@@ -503,7 +503,7 @@ class DiGraph(ty.Generic[NodeType]):
         return dotfile
 
     def _create_dotfile_single_graph(self, nodes, edges):
-        from .core import is_workflow
+        from pydra.engine.core import is_workflow
 
         wf_asnd = {}
         dotstr = ""

@@ -1,7 +1,7 @@
 import typing as ty
 import os
 from copy import copy
-from .helpers import execute
+from pydra.engine.helpers import execute
 from pathlib import Path
 import logging
 from fileformats.generic import FileSet

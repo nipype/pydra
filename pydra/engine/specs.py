@@ -20,7 +20,7 @@ from fileformats.generic import FileSet, File
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.typing import is_optional, optional_type
 from pydra.utils.hash import register_serializer, hash_single
-from .helpers import (
+from pydra.engine.helpers import (
     attrs_fields,
     attrs_values,
     is_lazy,
@@ -31,9 +31,9 @@ from .helpers import (
     fields_in_formatter,
     state_array_support,
 )
-from .helpers_file import template_update, template_update_single
-from . import helpers_state as hlpst
-from . import lazy
+from pydra.engine.helpers_file import template_update, template_update_single
+from pydra.engine import helpers_state as hlpst
+from pydra.engine import lazy
 from pydra.utils.hash import hash_function, Cache
 from pydra.utils.typing import (
     StateArray,

@@ -38,7 +38,7 @@ class Audit:
             If True, the local context.jsonld file is used, otherwise the one from github is used.
 
         """
-        from .helpers import ensure_list
+        from pydra.engine.helpers import ensure_list
 
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
@@ -97,7 +97,7 @@ class Audit:
     def finalize_audit(self, result):
         """End auditing."""
         if self.audit_check(AuditFlag.RESOURCE):
-            from .helpers import gather_runtime_info
+            from pydra.engine.helpers import gather_runtime_info
 
             self.resource_monitor.stop()
             result.runtime = gather_runtime_info(self.resource_monitor.fname)
@@ -184,7 +184,7 @@ class Audit:
 
     def audit_task(self, task: "Task"):
         import subprocess as sp
-        from .helpers import list_fields
+        from pydra.engine.helpers import list_fields
 
         label = task.name
 

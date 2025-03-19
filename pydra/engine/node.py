@@ -2,7 +2,7 @@ import typing as ty
 from copy import deepcopy
 from enum import Enum
 import attrs
-from . import lazy
+from pydra.engine import lazy
 from pydra.engine.helpers import (
     attrs_values,
     is_lazy,
@@ -11,8 +11,8 @@ from pydra.engine import helpers_state as hlpst
 from pydra.engine.state import State
 
 if ty.TYPE_CHECKING:
-    from .core import Workflow
-    from .environments import Environment
+    from pydra.engine.core import Workflow
+    from pydra.engine.environments import Environment
     from pydra.engine.specs import TaskDef, TaskOutputs, TaskHooks
 
 

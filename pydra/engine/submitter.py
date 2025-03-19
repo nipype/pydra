@@ -12,30 +12,30 @@ from copy import copy, deepcopy
 from datetime import datetime
 from collections import defaultdict
 import attrs
-from .workers import Worker, WORKERS
-from .graph import DiGraph
-from .helpers import (
+from pydra.engine.workers import Worker, WORKERS
+from pydra.engine.graph import DiGraph
+from pydra.engine.helpers import (
     get_open_loop,
     list_fields,
     attrs_values,
 )
 from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField
-from .audit import Audit
-from .core import Task
+from pydra.engine.audit import Audit
+from pydra.engine.core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils import default_run_cache_dir
 from pydra.design import workflow
-from .state import State
+from pydra.engine.state import State
 import logging
 
 logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
-    from .node import Node
-    from .specs import WorkflowDef, TaskDef, TaskOutputs, TaskHooks, Result
-    from .core import Workflow
-    from .environments import Environment
+    from pydra.engine.node import Node
+    from pydra.engine.specs import WorkflowDef, TaskDef, TaskOutputs, TaskHooks, Result
+    from pydra.engine.core import Workflow
+    from pydra.engine.environments import Environment
 
 
 DefType = ty.TypeVar("DefType", bound="TaskDef")
@@ -107,7 +107,7 @@ class Submitter:
         if worker is None:
             worker = "debug"
 
-        from . import check_latest_version
+        from pydra.engine import check_latest_version
 
         if Task._etelemetry_version_data is None:
             Task._etelemetry_version_data = check_latest_version()
@@ -258,24 +258,24 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
-        try:
-            self.run_start_time = datetime.now()
-            if self.worker.is_async:  # Only workflow tasks can be async
-                self.loop.run_until_complete(self.worker.run_async(task, rerun=rerun))
-            else:
-                self.worker.run(task, rerun=rerun)
-        except Exception as e:
-            msg = (
-                f"Full crash report for {type(task_def).__name__!r} task is here: "
-                + str(task.output_dir / "_error.pklz")
-            )
-            if raise_errors:
-                e.add_note(msg)
-                raise e
-            else:
-                logger.error("\nTask execution failed\n%s", msg)
-        finally:
-            self.run_start_time = None
+        # try:
+        self.run_start_time = datetime.now()
+        if self.worker.is_async:  # Only workflow tasks can be async
+            self.loop.run_until_complete(self.worker.run_async(task, rerun=rerun))
+        else:
+            self.worker.run(task, rerun=rerun)
+        # except Exception as e:
+        #     msg = (
+        #         f"Full crash report for {type(task_def).__name__!r} task is here: "
+        #         + str(task.output_dir / "_error.pklz")
+        #     )
+        #     if raise_errors:
+        #         e.add_note(msg)
+        #         raise e
+        #     else:
+        #         logger.error("\nTask execution failed\n%s", msg)
+        # finally:
+        #     self.run_start_time = None
         PersistentCache().clean_up()
         result = task.result()
         if result is None:
