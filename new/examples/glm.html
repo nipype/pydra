@@ -790,49 +790,10 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/new-docs/source/outputs/6_glm&#39;)
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev387+gf20fc232
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-2&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py:193&gt; exception=NameError(&#34;name &#39;fetch_openneuro_dataset_index&#39; is not defined&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/usr/share/miniconda/lib/python3.12/concurrent/futures/process.py&#34;, line 264, in _process_worker
-    r = call_item.fn(*call_item.args, **call_item.kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 208, in uncloudpickle_and_run
-    return task.run(rerun=rerun)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/core.py&#34;, line 344, in run
-    self.definition._run(self, rerun)
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/specs.py&#34;, line 782, in _run
-    returned = self.function(**inputs)
-               ^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/tmp/ipykernel_5157/3719594497.py&#34;, line 3, in GetOpenneuroDataset
-    _, urls = fetch_openneuro_dataset_index()
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-NameError: name &#39;fetch_openneuro_dataset_index&#39; is not defined
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/tasks.py&#34;, line 316, in __step_run_and_handle_result
-    result = coro.throw(exc)
-             ^^^^^^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/engine/workers.py&#34;, line 200, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/futures.py&#34;, line 289, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/tasks.py&#34;, line 385, in __wakeup
-    future.result()
-  File &#34;/usr/share/miniconda/lib/python3.12/asyncio/futures.py&#34;, line 202, in result
-    raise self._exception.with_traceback(self._exception_tb)
-NameError: name &#39;fetch_openneuro_dataset_index&#39; is not defined
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev389+g60c7856f
 
 Task execution failed
-Full crash report for &#39;FullWorkflow&#39; task is here: /home/runner/.cache/pydra/0.25.dev387+gf20fc232/run-cache/workflow-5e57994820190d04dc389af87d6d1fa4/_error.pklz
+Full crash report for &#39;FullWorkflow&#39; task is here: /home/runner/.cache/pydra/0.25.dev389+g60c7856f/run-cache/workflow-5e57994820190d04dc389af87d6d1fa4/_error.pklz
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -840,7 +801,7 @@ Full crash report for &#39;FullWorkflow&#39; task is here: /home/runner/.cache/p
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev387+gf20fc232/run-cache/workflow-5e57994820190d04dc389af87d6d1fa4&#39;), outputs=None, runtime=None, errored=True, definition=FullWorkflow(output_dir=PosixPath(&#39;/home/runner/work/pydra/pydra/new-docs/source/outputs/6_glm&#39;), n_subjects=1, contrast=&#39;StopSuccess - Go&#39;, exclusion_patterns=None, constructor=&lt;function FullWorkflow at 0x7f35320c8720&gt;))
+Result(output_dir=PosixPath(&#39;/home/runner/.cache/pydra/0.25.dev389+g60c7856f/run-cache/workflow-5e57994820190d04dc389af87d6d1fa4&#39;), outputs=None, runtime=None, errored=True, definition=FullWorkflow(output_dir=PosixPath(&#39;/home/runner/work/pydra/pydra/new-docs/source/outputs/6_glm&#39;), n_subjects=1, contrast=&#39;StopSuccess - Go&#39;, exclusion_patterns=None, constructor=&lt;function FullWorkflow at 0x7f03511b1f80&gt;))
 </pre></div></div>
 </div>
 </section>
