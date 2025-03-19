@@ -258,24 +258,24 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
-        # try:
-        self.run_start_time = datetime.now()
-        if self.worker.is_async:  # Only workflow tasks can be async
-            self.loop.run_until_complete(self.worker.run_async(task, rerun=rerun))
-        else:
-            self.worker.run(task, rerun=rerun)
-        # except Exception as e:
-        #     msg = (
-        #         f"Full crash report for {type(task_def).__name__!r} task is here: "
-        #         + str(task.output_dir / "_error.pklz")
-        #     )
-        #     if raise_errors:
-        #         e.add_note(msg)
-        #         raise e
-        #     else:
-        #         logger.error("\nTask execution failed\n%s", msg)
-        # finally:
-        #     self.run_start_time = None
+        try:
+            self.run_start_time = datetime.now()
+            if self.worker.is_async:  # Only workflow tasks can be async
+                self.loop.run_until_complete(self.worker.run_async(task, rerun=rerun))
+            else:
+                self.worker.run(task, rerun=rerun)
+        except Exception as e:
+            msg = (
+                f"Full crash report for {type(task_def).__name__!r} task is here: "
+                + str(task.output_dir / "_error.pklz")
+            )
+            if raise_errors:
+                e.add_note(msg)
+                raise e
+            else:
+                logger.error("\nTask execution failed\n%s", msg)
+        finally:
+            self.run_start_time = None
         PersistentCache().clean_up()
         result = task.result()
         if result is None:

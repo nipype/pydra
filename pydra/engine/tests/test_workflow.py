@@ -4463,7 +4463,7 @@ def test_inner_outer_wf_duplicate(plugin_parallel, tmp_path: Path):
     assert res.outputs.res2[0] == 23 and res.outputs.res2[1] == 23
 
 
-def test_rerun_errored(plugin_parallel, tmp_path, capfd):
+def test_rerun_errored(tmp_path, capfd):
     """Test rerunning a workflow containing errors.
     Only the errored tasks and workflow should be rerun"""
 
@@ -4486,11 +4486,11 @@ def test_rerun_errored(plugin_parallel, tmp_path, capfd):
     print("Starting run 1")
     with pytest.raises(RuntimeError):
         # Must be cf to get the error from all tasks, otherwise will only get the first error
-        worky(worker=plugin_parallel, cache_dir=tmp_path)
+        worky(worker="cf", cache_dir=tmp_path)
 
     print("Starting run 2")
     with pytest.raises(RuntimeError):
-        worky(worker=plugin_parallel, cache_dir=tmp_path)
+        worky(worker="cf", cache_dir=tmp_path)
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()
