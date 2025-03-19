@@ -1360,7 +1360,7 @@ def test_traceback_wf(plugin_parallel: str, tmp_path: Path):
         return fun_error.out
 
     wf = Workflow(x_list=[3, 4])
-    with pytest.raises(RuntimeError, match="Task 'fun_error' failed.*") as exinfo:
+    with pytest.raises(RuntimeError, match="Job 'fun_error', .*, errored") as exinfo:
         with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
             sub(wf, raise_errors=True)
 
