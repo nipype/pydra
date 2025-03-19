@@ -51,8 +51,8 @@ jobs:
     needs: ['build']
     strategy:
       matrix:
-        os: [ubuntu-latest]  # [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.11']  # ['3.11', '3.12', '3.13']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11', '3.12', '3.13']
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -388,11 +388,6 @@ jobs:
       with:
         name: docs
         path: docs-build
-    - name: Download new docs
-      uses: actions/download-artifact@v4
-      with:
-        name: docs
-        path: docs-build/new
     - name: Check for GHPAGES_DEPLOY_KEY token
       id: deployable
       if: github.event_name == 'release'
