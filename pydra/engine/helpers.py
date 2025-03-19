@@ -187,7 +187,7 @@ def load_result(checksum, cache_locations):
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
             if result_file.exists() and result_file.stat().st_size > 0:
-                return cp.loads(result_file.read_bytes())
+                return cp.load(result_file)
             return None
     return None
 
@@ -573,7 +573,7 @@ def load_task(task_pkl: Path | str) -> "Task[DefType]":
     """loading a task from a pickle file, settings proper input for the specific ind"""
     if isinstance(task_pkl, str):
         task_pkl = Path(task_pkl)
-    task = cp.loads(task_pkl.read_bytes())
+    task = cp.load(task_pkl)
     return task
 
 
