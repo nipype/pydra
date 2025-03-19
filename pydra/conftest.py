@@ -23,18 +23,13 @@ def pytest_generate_tests(metafunc):
             Plugins = ["debug", "cf"]
         try:
             if metafunc.config.getoption("dask"):
-                Plugins.append("dask")
+                Plugins = ["dask"]
         except ValueError:
             # Called as --pyargs, so --dask isn't available
             pass
         try:
             if metafunc.config.getoption("psij"):
-                Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if (
-                    bool(shutil.which("sbatch"))
-                    and metafunc.config.getoption("psij") == "slurm"
-                ):
-                    Plugins.remove("slurm")
+                Plugins = ["psij-" + metafunc.config.getoption("psij")]
         except ValueError:
             pass
         metafunc.parametrize("plugin_dask_opt", Plugins)
@@ -53,12 +48,7 @@ def pytest_generate_tests(metafunc):
             Plugins = ["debug", "cf"]
         try:
             if metafunc.config.getoption("psij"):
-                Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if (
-                    bool(shutil.which("sbatch"))
-                    and metafunc.config.getoption("psij") == "slurm"
-                ):
-                    Plugins.remove("slurm")
+                Plugins = ["psij-" + metafunc.config.getoption("psij")]
         except ValueError:
             pass
         metafunc.parametrize("plugin", Plugins)
@@ -77,12 +67,7 @@ def pytest_generate_tests(metafunc):
             Plugins = ["cf"]
         try:
             if metafunc.config.getoption("psij"):
-                Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if (
-                    bool(shutil.which("sbatch"))
-                    and metafunc.config.getoption("psij") == "slurm"
-                ):
-                    Plugins.remove("slurm")
+                Plugins = ["psij-" + metafunc.config.getoption("psij")]
         except ValueError:
             pass
         metafunc.parametrize("plugin_parallel", Plugins)
