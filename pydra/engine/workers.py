@@ -253,6 +253,8 @@ class SlurmWorker(DistributedWorker):
             ind = None
             uid = task.uid
         else:
+            assert isinstance(task, tuple), f"Expecting a task or a tuple, not {task!r}"
+            assert len(task) == 2, f"Expecting a tuple of length 2, not {task!r}"
             ind = task[0]
             cache_dir = task[-1].cache_dir
             uid = f"{task[-1].uid}_{ind}"
