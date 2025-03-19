@@ -135,7 +135,7 @@ jobs:
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
   test-psijslurm:
-    # needs: ['build']
+    needs: ['build']
     strategy:
       matrix:
         python-version: [3.11.5]
