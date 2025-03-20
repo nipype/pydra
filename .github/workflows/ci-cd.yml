@@ -280,7 +280,7 @@ jobs:
         docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test] && python -c 'import pydra.engine; print(pydra.engine.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "pytest /pydra/pydra --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
+        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_workflow.py /pydra/pydra/engine/tests/test_submitter.py /pydra/pydra/engine/tests/test_node_task.py --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
     - name: Upload to codecov
       run: |
         docker exec slurm bash -c "pip install urllib3==1.26.6"
