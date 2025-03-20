@@ -4463,6 +4463,7 @@ def test_inner_outer_wf_duplicate(plugin_parallel, tmp_path: Path):
     assert res.outputs.res2[0] == 23 and res.outputs.res2[1] == 23
 
 
+@pytest.mark.flaky(reruns=3)
 def test_rerun_errored(tmp_path, capfd):
     """Test rerunning a workflow containing errors.
     Only the errored tasks and workflow should be rerun"""

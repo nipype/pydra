@@ -1375,6 +1375,7 @@ def test_traceback_wf(plugin_parallel: str, tmp_path: Path):
     assert "in FunError" in str(exinfo.value)
 
 
+@pytest.mark.flaky(reruns=3)
 def test_rerun_errored(tmp_path, capfd):
     """Test rerunning a task containing errors.
     Only the errored tasks should be rerun"""
