@@ -101,7 +101,7 @@ jobs:
           pip install -e ".[test,dask]"
       - name: Run tests for Dask
         run: |
-          pytest -v pydra/engine/test_submitter.py --dask --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -v pydra/engine/test_submitter.py --rootdir pydra --dask --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
@@ -158,7 +158,7 @@ jobs:
       - name: Install pydra (test)
         run: pip install -e ".[test]"
       - name: Pytest
-        run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/engine/tests/test_singularity.py pydra/engine/tests/test_environments.py
+        run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/engine/tests/test_singularity.py pydra/engine/tests/test_environments.py --rootdir pydra
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
@@ -203,7 +203,7 @@ jobs:
         docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.engine.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --with-psij --only-slurm --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
+        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --rootdir /pydra/pydra --with-psij --only-slurm --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
     - name: Upload to codecov
       run: |
         docker exec slurm bash -c "pip install urllib3==1.26.6"
