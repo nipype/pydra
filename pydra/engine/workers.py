@@ -48,7 +48,7 @@ class Worker(metaclass=abc.ABCMeta):
         """Return coroutine for task execution."""
         pass
 
-    async def run_async(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
+    async def submit(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
         assert self.is_async, "Worker is not asynchronous"
         if task.is_async:  # only for workflows at this stage and the foreseeable
             # These jobs are run in the primary process but potentially farm out

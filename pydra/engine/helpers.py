@@ -543,7 +543,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
     try:
         if task.submitter.worker.is_async:
             task.submitter.loop.run_until_complete(
-                task.submitter.worker.run_async(task, rerun=rerun)
+                task.submitter.worker.submit(task, rerun=rerun)
             )
         else:
             task.submitter.worker.run(task, rerun=rerun)

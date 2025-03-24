@@ -261,7 +261,7 @@ class Submitter:
         try:
             self.run_start_time = datetime.now()
             if self.worker.is_async:  # Only workflow tasks can be async
-                self.loop.run_until_complete(self.worker.run_async(task, rerun=rerun))
+                self.loop.run_until_complete(self.worker.submit(task, rerun=rerun))
             else:
                 self.worker.run(task, rerun=rerun)
         except Exception as e:
@@ -429,7 +429,7 @@ class Submitter:
                             raise RuntimeError(msg)
                 for task in tasks:
                     if task.is_async:  # Only workflows at this stage
-                        await self.worker.run_async(
+                        await self.worker.submit(
                             task, rerun=rerun and self.propagate_rerun
                         )
                     elif task.checksum not in futured:
