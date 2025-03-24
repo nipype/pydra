@@ -101,7 +101,7 @@ jobs:
           pip install -e ".[test,dask]"
       - name: Run tests for Dask
         run: |
-          pytest -v pydra/engine/test_submitter.py --rootdir pydra --dask --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -v --dask pydra/engine/tests/test_submitter.py --rootdir pydra --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
