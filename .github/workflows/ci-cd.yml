@@ -174,7 +174,7 @@ jobs:
         docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.engine.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --with-psij --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/"
+        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --with-psij --only-slurm --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
     - name: Upload to codecov
       run: |
         docker exec slurm bash -c "pip install urllib3==1.26.6"

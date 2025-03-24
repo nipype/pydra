@@ -12,6 +12,11 @@ def pytest_addoption(parser):
         action="store_true",
         help="run with psij workers in test matrix",
     )
+    parser.addoption(
+        "--only-slurm",
+        action="store_true",
+        help="only run tests with slurm workers",
+    )
 
 
 def pytest_generate_tests(metafunc):
@@ -19,7 +24,7 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("worker", ["debug", "cf"])
 
     if "any_worker" in metafunc.fixturenames:
-        available_workers = ["debug", "cf"]
+
         try:
             use_dask = metafunc.config.getoption("dask")
         except ValueError:
@@ -28,13 +33,18 @@ def pytest_generate_tests(metafunc):
             use_psij = metafunc.config.getoption("with-psij")
         except ValueError:
             use_psij = False
+        try:
+            only_slurm = metafunc.config.getoption("only-slurm")
+        except ValueError:
+            only_slurm = False
+        available_workers = ["debug", "cf"] if not only_slurm else []
         if use_dask:
             available_workers.append("dask")
         if bool(shutil.which("sbatch")):
             available_workers.append("slurm")
             if use_psij:
                 available_workers.append("psij-slurm")
-        if use_psij:
+        if use_psij and not only_slurm:
             available_workers.append("psij-local")
         metafunc.parametrize("any_worker", available_workers)
 
