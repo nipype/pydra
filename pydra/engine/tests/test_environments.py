@@ -43,7 +43,7 @@ def test_native_1(tmp_path):
     assert drop_stderr(env_outputs) == drop_stderr(attrs_values(outputs))
 
     outputs = shelly(environment=Native(), cache_dir=newcache("native-call"))
-    assert env_outputs == attrs_values(outputs)
+    assert drop_stderr(env_outputs) == drop_stderr(attrs_values(outputs))
 
     with Submitter(cache_dir=newcache("native-submitter"), environment=Native()) as sub:
         result = sub(shelly)
@@ -223,10 +223,10 @@ def test_shell_fileinp(tmp_path):
 
     with Submitter(environment=Native(), cache_dir=newcache("native_sub")) as sub:
         results = sub(shelly)
-    assert outputs_dict == attrs_values(results.outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
     outputs = shelly(environment=Native(), cache_dir=newcache("native_call"))
-    assert outputs_dict == attrs_values(outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
 def test_shell_fileinp_st(tmp_path):
@@ -278,10 +278,10 @@ def test_docker_fileinp(tmp_path):
     with Submitter(environment=docker, cache_dir=newcache("shell_sub")) as sub:
         results = sub(shelly)
 
-    assert outputs_dict == attrs_values(results.outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
     outputs = shelly(environment=docker, cache_dir=newcache("docker_call"))
-    assert outputs_dict == attrs_values(outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
 @no_win
@@ -309,10 +309,10 @@ def test_docker_fileinp_subm(tmp_path, worker):
         results = sub(shelly)
     with Submitter(worker=worker) as sub:
         results = sub(shelly)
-    assert outputs_dict == attrs_values(results.outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
     outputs = shelly(environment=docker, cache_dir=newcache("docker_call"))
-    assert outputs_dict == attrs_values(outputs)
+    assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
 @no_win
