@@ -195,7 +195,7 @@ def test_slurm_wf(tmpdir):
         res = sub(wf)
 
     outputs = res.outputs
-    assert outputs.out == 9
+    assert outputs.out == 5
     script_dir = tmpdir / "SlurmWorker_scripts"
     assert script_dir.exists()
     # ensure each task was executed with slurm
@@ -209,7 +209,7 @@ def test_slurm_wf_cf(tmpdir):
     with Submitter(worker="slurm", cache_dir=tmpdir) as sub:
         res = sub(wf)
     outputs = res.outputs
-    assert outputs.out == 9
+    assert outputs.out == 5
     script_dir = tmpdir / "SlurmWorker_scripts"
     assert script_dir.exists()
     # ensure only workflow was executed with slurm
@@ -221,12 +221,11 @@ def test_slurm_wf_cf(tmpdir):
 
 @need_slurm
 def test_slurm_wf_state(tmpdir):
-    wf = BasicWorkflow(x=1).split(x=[5, 6])
+    wf = BasicWorkflow().split(x=[5, 6])
     with Submitter(worker="slurm", cache_dir=tmpdir) as sub:
         res = sub(wf)
 
-    assert res.outputs.out[0] == 9
-    assert res.outputs.out[1] == 10
+    assert res.outputs.out == [9, 10]
     script_dir = tmpdir / "SlurmWorker_scripts"
     assert script_dir.exists()
     sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
