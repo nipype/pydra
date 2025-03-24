@@ -49,7 +49,7 @@ class Worker(metaclass=abc.ABCMeta):
         pass
 
     async def submit(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
-        assert self.is_async, "Worker is not asynchronous"
+        assert self.is_async, "Worker is not asynchronous, task should just be `run()`"
         if task.is_async:  # only for workflows at this stage and the foreseeable
             # These jobs are run in the primary process but potentially farm out
             # workflow jobs to other processes/job-schedulers

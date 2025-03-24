@@ -260,10 +260,7 @@ class Submitter:
         )
         try:
             self.run_start_time = datetime.now()
-            if self.worker.is_async:  # Only workflow tasks can be async
-                self.loop.run_until_complete(self.worker.submit(task, rerun=rerun))
-            else:
-                self.worker.run(task, rerun=rerun)
+            self.submit(task, rerun=rerun)
         except Exception as e:
             msg = (
                 f"Full crash report for {type(task_def).__name__!r} task is here: "
@@ -289,6 +286,22 @@ class Submitter:
                 )
             raise RuntimeError(f"Task {task} has no result in {str(task.output_dir)!r}")
         return result
+
+    def submit(self, task: "Task[DefType]", rerun: bool = False) -> None:
+        """Submit a task to the worker.
+
+        Parameters
+        ----------
+        task : :obj:`~pydra.engine.core.Task`
+            The task to submit
+        rerun : bool, optional
+            Whether to force the re-computation of the task results even if existing
+            results are found, by default False
+        """
+        if self.worker.is_async:  # Only workflow tasks can be async
+            self.loop.run_until_complete(self.worker.submit(task, rerun=rerun))
+        else:
+            self.worker.run(task, rerun=rerun)
 
     def __getstate__(self):
         state = self.__dict__.copy()

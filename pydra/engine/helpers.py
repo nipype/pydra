@@ -541,12 +541,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
 
     resultfile = task.output_dir / "_result.pklz"
     try:
-        if task.submitter.worker.is_async:
-            task.submitter.loop.run_until_complete(
-                task.submitter.worker.submit(task, rerun=rerun)
-            )
-        else:
-            task.submitter.worker.run(task, rerun=rerun)
+        task.submitter.submit(task, rerun=rerun)
     except Exception as e:
         # creating result and error files if missing
         errorfile = task.output_dir / "_error.pklz"
