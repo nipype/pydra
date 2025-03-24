@@ -19,22 +19,23 @@ def pytest_addoption(parser):
     )
 
 
+@pytest.fixture(scope="session", params=["debug", "cf"])
+def worker(request):
+    return request.param
+
+
 def pytest_generate_tests(metafunc):
-    if "worker" in metafunc.fixturenames:
-        metafunc.parametrize("worker", ["debug", "cf"])
-
     if "any_worker" in metafunc.fixturenames:
-
         try:
             use_dask = metafunc.config.getoption("dask")
         except ValueError:
             use_dask = False
         try:
-            use_psij = metafunc.config.getoption("with-psij")
+            use_psij = metafunc.config.getoption("with_psij")
         except ValueError:
             use_psij = False
         try:
-            only_slurm = metafunc.config.getoption("only-slurm")
+            only_slurm = metafunc.config.getoption("only_slurm")
         except ValueError:
             only_slurm = False
         available_workers = ["debug", "cf"] if not only_slurm else []
