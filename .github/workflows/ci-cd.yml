@@ -281,7 +281,7 @@ jobs:
         path: docs/build/html
 
   deploy:
-    needs: [build-docs, test, test-dask, test-slurm]
+    needs: [build-docs, test, test-dask, test-singularity, test-slurm]
     runs-on: ubuntu-latest
     steps:
     - name: Download dist
