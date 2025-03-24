@@ -7,7 +7,7 @@ construction, and allows tasks to be run in environments that are isolated from 
 host system, and that have specific software dependencies.
 
 The environment a task runs within is specified by the ``environment`` argument passed
-to the execution call (e.g. ``my_task(plugin="cf", environment="docker")``) or in the
+to the execution call (e.g. ``my_task(worker="cf", environment="docker")``) or in the
 ``workflow.add()`` call in workflow constructors.
 
 Specifying at execution

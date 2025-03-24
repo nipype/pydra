@@ -230,7 +230,6 @@ def test_load_and_run_exception_run(tmpdir):
     assert result_1.outputs.out == 2
 
 
-@pytest.mark.parametrize("worker", ["cf", "debug"])
 def test_load_and_run_wf(tmpdir, worker):
     """testing load_and_run for pickled task"""
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))

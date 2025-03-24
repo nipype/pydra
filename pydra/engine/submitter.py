@@ -139,7 +139,7 @@ class Submitter:
                     worker_cls = WORKERS[self.worker_name]
                 except KeyError:
                     raise NotImplementedError(
-                        f"No worker for '{self.worker_name}' plugin"
+                        f"No worker for '{self.worker_name}' worker"
                     )
             else:
                 try:

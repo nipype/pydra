@@ -8,7 +8,7 @@ import typing as ty
 import os
 from unittest.mock import patch
 import pytest
-from pydra.design import workflow
+from pydra.design import workflow, shell
 from fileformats.generic import Directory
 from pydra.engine.core import Task
 from pydra.engine.submitter import Submitter
@@ -17,9 +17,11 @@ from pydra.design import python
 from pathlib import Path
 from datetime import datetime
 from pydra.engine.specs import Result
+from pydra.engine.environments import Singularity
 from .utils import (
     need_sge,
     need_slurm,
+    need_singularity,
     BasicWorkflow,
     BasicWorkflowWithThreadCount,
     BasicWorkflowWithThreadCountConcurrent,
@@ -32,13 +34,13 @@ def SleepAddOne(x):
     return x + 1
 
 
-def test_callable_wf(plugin, tmpdir):
+def test_callable_wf(any_worker, tmpdir):
     wf = BasicWorkflow(x=5)
     outputs = wf(cache_dir=tmpdir)
     assert outputs.out == 9
     del wf, outputs
 
-    # providing plugin
+    # providing any_worker
     wf = BasicWorkflow(x=5)
     outputs = wf(worker="cf")
     assert outputs.out == 9
@@ -58,12 +60,12 @@ def test_callable_wf(plugin, tmpdir):
     # providing submitter
     wf = BasicWorkflow(x=5)
 
-    with Submitter(workflow=plugin, cache_dir=tmpdir) as sub:
+    with Submitter(workflow=any_worker, cache_dir=tmpdir) as sub:
         res = sub(wf)
     assert res.outputs.out == 9
 
 
-def test_concurrent_wf(plugin, tmpdir):
+def test_concurrent_wf(any_worker, tmpdir):
     # concurrent workflow
     # A --> C
     # B --> D
@@ -77,7 +79,7 @@ def test_concurrent_wf(plugin, tmpdir):
 
     wf = Workflow(x=5, y=10)
 
-    with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
     assert not results.errored, " ".join(results.errors["error message"])
@@ -109,7 +111,7 @@ def test_concurrent_wf_nprocs(tmpdir):
     assert outputs.out2 == 12
 
 
-def test_wf_in_wf(plugin, tmpdir):
+def test_wf_in_wf(any_worker, tmpdir):
     """WF(A --> SUBWF(A --> B) --> B)"""
 
     # workflow task
@@ -128,7 +130,7 @@ def test_wf_in_wf(plugin, tmpdir):
 
     wf = WfInWf(x=3)
 
-    with Submitter(worker=plugin, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
         results = sub(wf)
 
     assert not results.errored, " ".join(results.errors["error message"])
@@ -137,7 +139,7 @@ def test_wf_in_wf(plugin, tmpdir):
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
-def test_wf2(plugin_dask_opt, tmpdir):
+def test_wf2(any_worker, tmpdir):
     """workflow as a node
     workflow-node with one task and no splitter
     """
@@ -154,14 +156,14 @@ def test_wf2(plugin_dask_opt, tmpdir):
 
     wf = Workflow(x=2)
 
-    with Submitter(worker=plugin_dask_opt, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
         res = sub(wf)
 
     assert res.outputs.out == 3
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
-def test_wf_with_state(plugin_dask_opt, tmpdir):
+def test_wf_with_state(any_worker, tmpdir):
     @workflow.define
     def Workflow(x):
         taska = workflow.add(SleepAddOne(x=x), name="taska")
@@ -170,7 +172,7 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
 
     wf = Workflow().split(x=[1, 2, 3])
 
-    with Submitter(cache_dir=tmpdir, worker=plugin_dask_opt) as sub:
+    with Submitter(cache_dir=tmpdir, worker=any_worker) as sub:
         res = sub(wf)
 
     assert res.outputs.out[0] == 3
@@ -179,7 +181,7 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
 
 
 def test_debug_wf():
-    # Use serial plugin to execute workflow instead of CF
+    # Use serial any_worker to execute workflow instead of CF
     wf = BasicWorkflow(x=5)
     outputs = wf(worker="debug")
     assert outputs.out == 9
@@ -300,6 +302,29 @@ def test_slurm_args_2(tmpdir):
             sub(task)
 
 
+@need_singularity
+@need_slurm
+@pytest.mark.skip(reason="TODO, xfail incorrect")
+@pytest.mark.xfail(
+    reason="slurm can complain if the number of submitted jobs exceeds the limit"
+)
+@pytest.mark.parametrize("n", [10, 50, 100])
+def test_singularity_st_2(tmp_path, n):
+    """splitter over args (checking bigger splitters if slurm available)"""
+    args_n = list(range(n))
+    image = "docker://alpine"
+    Singu = shell.define("echo")
+    singu = Singu().split("args", args=args_n)
+    with Submitter(
+        worker="slurm", environment=Singularity(image=image), cache_dir=tmp_path
+    ) as sub:
+        res = sub(singu)
+
+    assert "1" in res.outputs.stdout[1]
+    assert str(n - 1) in res.outputs.stdout[-1]
+    assert res.outputs.return_code[0] == res.outputs.return_code[1] == 0
+
+
 @python.define
 def sleep(x, job_name_part):
     time.sleep(x)
@@ -409,7 +434,7 @@ def test_sge_wf(tmpdir):
 @need_sge
 def test_sge_wf_cf(tmp_path):
     """testing the SGEWorker can submit SGE tasks while the workflow
-    uses the concurrent futures plugin"""
+    uses the concurrent futures any_worker"""
     # submit entire workflow as single job executing with cf worker
     wf = BasicWorkflow(x=1)
     with Submitter(worker="sge", cache_dir=tmp_path) as sub:
@@ -660,7 +685,7 @@ def test_byo_worker(tmp_path):
 
 def test_bad_builtin_worker():
 
-    with pytest.raises(NotImplementedError, match="No worker for 'bad-worker' plugin"):
+    with pytest.raises(NotImplementedError, match="No worker for 'bad-worker' worker"):
         Submitter(worker="bad-worker")
 
 

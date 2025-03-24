@@ -1,24 +1,9 @@
-import shutil
-import subprocess as sp
-import pytest
 from pydra.engine.submitter import Submitter
 from pydra.engine.specs import ShellDef, ShellOutputs
 from pydra.design import shell, workflow
 from fileformats.generic import File
 from pydra.engine.environments import Singularity
-
-
-need_docker = pytest.mark.skipif(
-    shutil.which("docker") is None or sp.call(["docker", "info"]),
-    reason="no docker available",
-)
-need_singularity = pytest.mark.skipif(
-    shutil.which("singularity") is None, reason="no singularity available"
-)
-
-need_slurm = pytest.mark.skipif(
-    not bool(shutil.which("sbatch")), reason="no singularity available"
-)
+from .utils import need_singularity
 
 
 @need_singularity
@@ -55,7 +40,7 @@ def test_singularity_2_nosubm(tmp_path):
 
 
 @need_singularity
-def test_singularity_2(plugin, tmp_path):
+def test_singularity_2(worker, tmp_path):
     """a command with arguments, cmd and args given as executable
     using submitter
     """
@@ -67,7 +52,7 @@ def test_singularity_2(plugin, tmp_path):
     assert singu.cmdline == " ".join(cmd)
 
     with Submitter(
-        worker=plugin, environment=Singularity(image=image), cache_dir=tmp_path
+        worker=worker, environment=Singularity(image=image), cache_dir=tmp_path
     ) as sub:
         res = sub(singu)
     assert not res.errored, "\n".join(res.errors["error message"])
@@ -76,7 +61,7 @@ def test_singularity_2(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_2a(plugin, tmp_path):
+def test_singularity_2a(worker, tmp_path):
     """a command with arguments, using executable and args
     using submitter
     """
@@ -102,7 +87,7 @@ def test_singularity_2a(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_st_1(plugin, tmp_path):
+def test_singularity_st_1(worker, tmp_path):
     """commands without arguments in container
     splitter = executable
     """
@@ -112,7 +97,7 @@ def test_singularity_st_1(plugin, tmp_path):
     singu = Singu().split("executable", executable=cmd)
 
     outputs = singu(
-        plugin=plugin,
+        worker=worker,
         environment=Singularity(image=image, xargs=["--fakeroot"]),
         cache_dir=tmp_path,
     )
@@ -122,34 +107,11 @@ def test_singularity_st_1(plugin, tmp_path):
     assert outputs.return_code == [0, 0, 0]
 
 
-@need_singularity
-@need_slurm
-@pytest.mark.skip(reason="TODO, xfail incorrect")
-@pytest.mark.xfail(
-    reason="slurm can complain if the number of submitted jobs exceeds the limit"
-)
-@pytest.mark.parametrize("n", [10, 50, 100])
-def test_singularity_st_2(tmp_path, n):
-    """splitter over args (checking bigger splitters if slurm available)"""
-    args_n = list(range(n))
-    image = "docker://alpine"
-    Singu = shell.define("echo")
-    singu = Singu().split("args", args=args_n)
-    with Submitter(
-        plugin="slurm", environment=Singularity(image=image), cache_dir=tmp_path
-    ) as sub:
-        res = sub(singu)
-
-    assert "1" in res.outputs.stdout[1]
-    assert str(n - 1) in res.outputs.stdout[-1]
-    assert res.outputs.return_code[0] == res.outputs.return_code[1] == 0
-
-
 # tests with customized output_spec
 
 
 @need_singularity
-def test_singularity_outputspec_1(plugin, tmp_path):
+def test_singularity_outputspec_1(worker, tmp_path):
     """
     customised output_spec, adding files to the output, providing specific pathname
     output_path is automatically added to the bindings
@@ -177,7 +139,7 @@ def test_singularity_outputspec_1(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_inputspec_1(plugin, tmp_path):
+def test_singularity_inputspec_1(worker, tmp_path):
     """a simple customized input definition for singularity task"""
     filename = str((tmp_path / "file_pydra.txt"))
     with open(filename, "w") as f:
@@ -206,7 +168,7 @@ def test_singularity_inputspec_1(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_inputspec_1a(plugin, tmp_path):
+def test_singularity_inputspec_1a(worker, tmp_path):
     """a simple customized input definition for singularity task
     a default value is used
     """
@@ -237,7 +199,7 @@ def test_singularity_inputspec_1a(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_inputspec_2(plugin, tmp_path):
+def test_singularity_inputspec_2(worker, tmp_path):
     """a customized input definition with two fields for singularity task"""
     filename_1 = tmp_path / "file_pydra.txt"
     with open(filename_1, "w") as f:
@@ -278,7 +240,7 @@ def test_singularity_inputspec_2(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_inputspec_2a_except(plugin, tmp_path):
+def test_singularity_inputspec_2a_except(worker, tmp_path):
     """a customized input definition with two fields
     first one uses a default, and second doesn't - raises a dataclass exception
     """
@@ -320,7 +282,7 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_inputspec_2a(plugin, tmp_path):
+def test_singularity_inputspec_2a(worker, tmp_path):
     """a customized input definition with two fields
     first one uses a default value,
     this is fine even if the second field is not using any defaults
@@ -364,7 +326,7 @@ def test_singularity_inputspec_2a(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
+def test_singularity_cmd_inputspec_copyfile_1(worker, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=True to the file-input from input_spec
     hardlink or copy in the output_dir should be created
@@ -444,7 +406,7 @@ def test_singularity_inputspec_state_1(tmp_path):
 
 
 @need_singularity
-def test_singularity_inputspec_state_1b(plugin, tmp_path):
+def test_singularity_inputspec_state_1b(worker, tmp_path):
     """a customised input definition for a singularity file with a splitter,
     files from the input definition have the same path in the local os and the container,
     so hash is calculated and the test works fine
@@ -481,7 +443,7 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_wf_inputspec_1(plugin, tmp_path):
+def test_singularity_wf_inputspec_1(worker, tmp_path):
     """a customized input definition for workflow with singularity tasks"""
     filename = tmp_path / "file_pydra.txt"
     with open(filename, "w") as f:
@@ -517,7 +479,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
+def test_singularity_wf_state_inputspec_1(worker, tmp_path):
     """a customized input definition for workflow with singularity tasks that has a state"""
     file_1 = tmp_path / "file_pydra.txt"
     file_2 = tmp_path / "file_nice.txt"
@@ -553,7 +515,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
 
     wf = Workflow(cmd=cmd).split("file", file=filename)
 
-    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
         res = sub(wf)
 
     assert [o.strip() for o in res.outputs.out] == [
@@ -563,7 +525,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
+def test_singularity_wf_ndst_inputspec_1(worker, tmp_path):
     """a customized input definition for workflow with singularity tasks with states"""
     file_1 = tmp_path / "file_pydra.txt"
     file_2 = tmp_path / "file_nice.txt"
@@ -599,7 +561,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
 
     wf = Workflow(cmd=cmd, files=filename)
 
-    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
         res = sub(wf)
 
     assert [o.strip() for o in res.outputs.out] == [

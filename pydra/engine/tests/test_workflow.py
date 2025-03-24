@@ -43,7 +43,7 @@ from pydra.engine.core import Workflow
 from pydra.engine.helpers import plot_workflow
 
 
-def test_wf_no_output(plugin: str, tmp_path: Path):
+def test_wf_no_output(worker: str, tmp_path: Path):
     """Raise error when output isn't set with set_output"""
 
     @workflow.define
@@ -54,7 +54,7 @@ def test_wf_no_output(plugin: str, tmp_path: Path):
         Workflow.construct(Worky(x=2))
 
 
-def test_wf_1(plugin: str, tmp_path: Path):
+def test_wf_1(worker: str, tmp_path: Path):
     """workflow with one task and no splitter"""
 
     @workflow.define
@@ -65,7 +65,7 @@ def test_wf_1(plugin: str, tmp_path: Path):
     worky = Worky(x=2)
 
     checksum_before = worky._hash
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     Workflow.construct(worky)
     assert worky._hash == checksum_before
@@ -73,7 +73,7 @@ def test_wf_1(plugin: str, tmp_path: Path):
     assert 4 == outputs.out
 
 
-def test_wf_1a_outpastuple(plugin: str, tmp_path: Path):
+def test_wf_1a_outpastuple(worker: str, tmp_path: Path):
     """workflow with one task and no splitter
     set_output takes a tuple
     """
@@ -85,12 +85,12 @@ def test_wf_1a_outpastuple(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 4 == outputs.out
 
 
-def test_wf_1_call_subm(plugin: str, tmp_path: Path):
+def test_wf_1_call_subm(worker: str, tmp_path: Path):
     """using wf["__call_"] with submitter"""
 
     @workflow.define
@@ -100,13 +100,13 @@ def test_wf_1_call_subm(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 4 == outputs.out
 
 
-def test_wf_1_call_plug(plugin: str, tmp_path: Path):
-    """using wf["__call_"] with plugin"""
+def test_wf_1_call_plug(worker: str, tmp_path: Path):
+    """using wf["__call_"] with worker"""
 
     @workflow.define
     def Worky(x):
@@ -115,13 +115,13 @@ def test_wf_1_call_plug(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    outputs = worky(plugin=plugin)
+    outputs = worky(worker=worker)
 
     assert 4 == outputs.out
 
 
-def test_wf_1_call_noplug_nosubm(plugin: str, tmp_path: Path):
-    """using wf["__call_"] without plugin or submitter"""
+def test_wf_1_call_noplug_nosubm(worker: str, tmp_path: Path):
+    """using wf["__call_"] without worker or submitter"""
 
     @workflow.define
     def Worky(x):
@@ -135,7 +135,7 @@ def test_wf_1_call_noplug_nosubm(plugin: str, tmp_path: Path):
     assert 4 == outputs.out
 
 
-def test_wf_1_upd_in_run(tmp_path, plugin):
+def test_wf_1_upd_in_run(tmp_path, worker):
     """Updating input in __call__"""
 
     @workflow.define
@@ -145,11 +145,11 @@ def test_wf_1_upd_in_run(tmp_path, plugin):
 
     worky = Worky(x=1)
     worky.x = 2
-    outputs = worky(cache_dir=tmp_path, plugin=plugin)
+    outputs = worky(cache_dir=tmp_path, worker=worker)
     assert 4 == outputs.out
 
 
-def test_wf_2(plugin: str, tmp_path: Path):
+def test_wf_2(worker: str, tmp_path: Path):
     """workflow with 2 tasks, no splitter"""
 
     @workflow.define
@@ -160,12 +160,12 @@ def test_wf_2(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 8 == outputs.out
 
 
-def test_wf_2a(plugin: str, tmp_path: Path):
+def test_wf_2a(worker: str, tmp_path: Path):
     """workflow with 2 tasks, no splitter
     creating add2_task first (before calling add method),
     """
@@ -178,12 +178,12 @@ def test_wf_2a(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 8 == outputs.out
 
 
-def test_wf_2b(plugin: str, tmp_path: Path):
+def test_wf_2b(worker: str, tmp_path: Path):
     """workflow with 2 tasks, no splitter
     creating add2_task first (before calling add method),
     adding inputs.x after add method
@@ -197,12 +197,12 @@ def test_wf_2b(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 8 == outputs.out
 
 
-def test_wf_2c_multoutp(plugin: str, tmp_path: Path):
+def test_wf_2c_multoutp(worker: str, tmp_path: Path):
     """workflow with 2 tasks, no splitter
     setting multiple outputs for the workflow
     """
@@ -215,14 +215,14 @@ def test_wf_2c_multoutp(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking outputs from both nodes
     assert 6 == outputs.out_mult
     assert 8 == outputs.out_add2
 
 
-def test_wf_2d_outpasdict(plugin: str, tmp_path: Path):
+def test_wf_2d_outpasdict(worker: str, tmp_path: Path):
     """workflow with 2 tasks, no splitter
     setting multiple outputs using a dictionary
     """
@@ -235,7 +235,7 @@ def test_wf_2d_outpasdict(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking outputs from both nodes
     assert 6 == outputs.out_mult
@@ -243,7 +243,7 @@ def test_wf_2d_outpasdict(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3(plugin_dask_opt, tmp_path: Path):
+def test_wf_3(worker, tmp_path: Path):
     """testing None value for an input"""
 
     @workflow.define
@@ -254,13 +254,13 @@ def test_wf_3(plugin_dask_opt, tmp_path: Path):
 
     worky = Worky(x=2, y=None)
 
-    outputs = worky(worker=plugin_dask_opt, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 4 == outputs.out
 
 
 @pytest.mark.xfail(reason="the task error doesn't propagate")
-def test_wf_3a_exception(plugin: str, tmp_path: Path):
+def test_wf_3a_exception(worker: str, tmp_path: Path):
     """testinh worky without set input, attr.NOTHING should be set
     and the function should raise an exception
     """
@@ -274,10 +274,10 @@ def test_wf_3a_exception(plugin: str, tmp_path: Path):
     worky = Worky(x=2, y=attr.NOTHING)
 
     with pytest.raises(TypeError, match="unsupported"):
-        worky(worker=plugin, cache_dir=tmp_path)
+        worky(worker=worker, cache_dir=tmp_path)
 
 
-def test_wf_4(plugin: str, tmp_path: Path):
+def test_wf_4(worker: str, tmp_path: Path):
     """worky with a task that doesn't set one input and use the function default value"""
 
     @workflow.define
@@ -288,12 +288,12 @@ def test_wf_4(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 5 == outputs.out
 
 
-def test_wf_4a(plugin: str, tmp_path: Path):
+def test_wf_4a(worker: str, tmp_path: Path):
     """worky with a task that doesn't set one input,
     the unset input is send to the task input,
     so the task should use the function default value
@@ -307,12 +307,12 @@ def test_wf_4a(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 5 == outputs.out
 
 
-def test_wf_5(plugin: str, tmp_path: Path):
+def test_wf_5(worker: str, tmp_path: Path):
     """worky with two outputs connected to the task outputs
     one set_output
     """
@@ -324,13 +324,13 @@ def test_wf_5(plugin: str, tmp_path: Path):
 
     worky = Worky(x=3, y=2)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 5 == outputs.out_sum
     assert 1 == outputs.out_sub
 
 
-def test_wf_5a(plugin: str, tmp_path: Path):
+def test_wf_5a(worker: str, tmp_path: Path):
     """worky with two outputs connected to the task outputs,
     set_output set twice
     """
@@ -341,13 +341,13 @@ def test_wf_5a(plugin: str, tmp_path: Path):
         return addsub.sum, addsub.sub
 
     worky = Worky(x=3, y=2)
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 5 == outputs.out_sum
     assert 1 == outputs.out_sub
 
 
-def test_wf_6(plugin: str, tmp_path: Path):
+def test_wf_6(worker: str, tmp_path: Path):
     """worky with two tasks and two outputs connected to both tasks,
     one set_output
     """
@@ -360,13 +360,13 @@ def test_wf_6(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 6 == outputs.out1
     assert 8 == outputs.out2
 
 
-def test_wf_6a(plugin: str, tmp_path: Path):
+def test_wf_6a(worker: str, tmp_path: Path):
     """worky with two tasks and two outputs connected to both tasks,
     set_output used twice
     """
@@ -379,13 +379,13 @@ def test_wf_6a(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 6 == outputs.out1
     assert 8 == outputs.out2
 
 
-def test_wf_st_1(plugin: str, tmp_path: Path):
+def test_wf_st_1(worker: str, tmp_path: Path):
     """Worky with one task, a splitter for the workflow"""
 
     @workflow.define
@@ -397,7 +397,7 @@ def test_wf_st_1(plugin: str, tmp_path: Path):
     worky = Worky(x=[1, 2])
 
     checksum_before = worky._hash
-    outputs = worky(cache_dir=tmp_path, plugin=plugin)
+    outputs = worky(cache_dir=tmp_path, worker=worker)
 
     Workflow.construct(worky)
     assert worky._hash == checksum_before
@@ -407,7 +407,7 @@ def test_wf_st_1(plugin: str, tmp_path: Path):
     assert outputs.out[1] == 4
 
 
-def test_wf_st_1_call_subm(plugin: str, tmp_path: Path):
+def test_wf_st_1_call_subm(worker: str, tmp_path: Path):
     """Worky with one task, a splitter for the workflow"""
 
     @workflow.define
@@ -418,16 +418,16 @@ def test_wf_st_1_call_subm(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert outputs.out[0] == 3
     assert outputs.out[1] == 4
 
 
-def test_wf_st_1_call_plug(plugin: str, tmp_path: Path):
+def test_wf_st_1_call_plug(worker: str, tmp_path: Path):
     """Worky with one task, a splitter for the workflow
-    using Worky.__call__(plugin)
+    using Worky.__call__(worker)
     """
 
     @workflow.define
@@ -438,16 +438,16 @@ def test_wf_st_1_call_plug(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2])
 
-    outputs = worky(plugin=plugin)
+    outputs = worky(worker=worker)
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert outputs.out[0] == 3
     assert outputs.out[1] == 4
 
 
-def test_wf_st_1_call_selfplug(plugin: str, tmp_path: Path):
+def test_wf_st_1_call_selfplug(worker: str, tmp_path: Path):
     """Worky with one task, a splitter for the workflow
-    using Worky.__call__() and using self.plugin
+    using Worky.__call__() and using self.worker
     """
 
     @workflow.define
@@ -464,9 +464,9 @@ def test_wf_st_1_call_selfplug(plugin: str, tmp_path: Path):
     assert outputs.out[1] == 4
 
 
-def test_wf_st_1_call_noplug_nosubm(plugin: str, tmp_path: Path):
+def test_wf_st_1_call_noplug_nosubm(worker: str, tmp_path: Path):
     """Worky with one task, a splitter for the workflow
-    using Worky.__call__()  without plugin and submitter
+    using Worky.__call__()  without worker and submitter
     (a submitter should be created within the __call__ function)
     """
 
@@ -484,7 +484,7 @@ def test_wf_st_1_call_noplug_nosubm(plugin: str, tmp_path: Path):
     assert outputs.out[1] == 4
 
 
-def test_wf_st_1_inp_in_call(tmp_path, plugin):
+def test_wf_st_1_inp_in_call(tmp_path, worker):
     """Defining input in __call__"""
 
     @workflow.define
@@ -493,12 +493,12 @@ def test_wf_st_1_inp_in_call(tmp_path, plugin):
         return add2.out
 
     worky = Worky().split("x", x=[1, 2])
-    outputs = worky(cache_dir=tmp_path, plugin=plugin)  #
+    outputs = worky(cache_dir=tmp_path, worker=worker)  #
     assert outputs.out[0] == 3
     assert outputs.out[1] == 4
 
 
-def test_wf_st_1_upd_inp_call(tmp_path, plugin):
+def test_wf_st_1_upd_inp_call(tmp_path, worker):
     """Updating input in __call___"""
 
     @workflow.define
@@ -507,11 +507,11 @@ def test_wf_st_1_upd_inp_call(tmp_path, plugin):
         return add2.out
 
     worky = Worky().split("x", x=[1, 2])
-    outputs = worky(cache_dir=tmp_path, plugin=plugin)
+    outputs = worky(cache_dir=tmp_path, worker=worker)
     assert outputs.out == [3, 4]
 
 
-def test_wf_st_noinput_1(plugin: str, tmp_path: Path):
+def test_wf_st_noinput_1(worker: str, tmp_path: Path):
     """Worky with one task, a splitter for the workflow"""
 
     @workflow.define
@@ -522,14 +522,14 @@ def test_wf_st_noinput_1(plugin: str, tmp_path: Path):
     worky = Worky(x=[])
 
     checksum_before = worky._hash
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert worky._hash == checksum_before
 
     assert outputs.out == []
 
 
-def test_wf_ndst_1(plugin: str, tmp_path: Path):
+def test_wf_ndst_1(worker: str, tmp_path: Path):
     """workflow with one task, a splitter on the task level"""
 
     @workflow.define
@@ -540,7 +540,7 @@ def test_wf_ndst_1(plugin: str, tmp_path: Path):
     worky = Worky(x=[1, 2])
 
     checksum_before = worky._hash
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert worky._hash == checksum_before
@@ -549,7 +549,7 @@ def test_wf_ndst_1(plugin: str, tmp_path: Path):
     assert outputs.out == [3, 4]
 
 
-def test_wf_ndst_updatespl_1(plugin: str, tmp_path: Path):
+def test_wf_ndst_updatespl_1(worker: str, tmp_path: Path):
     """workflow with one task,
     a splitter on the task level is added *after* calling add
     """
@@ -561,13 +561,13 @@ def test_wf_ndst_updatespl_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert outputs.out == [3, 4]
 
 
-def test_wf_ndst_updatespl_1a(plugin: str, tmp_path: Path):
+def test_wf_ndst_updatespl_1a(worker: str, tmp_path: Path):
     """workflow with one task (initialize before calling add),
     a splitter on the task level is added *after* calling add
     """
@@ -579,13 +579,13 @@ def test_wf_ndst_updatespl_1a(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert outputs.out == [3, 4]
 
 
-def test_wf_ndst_updateinp_1(plugin: str, tmp_path: Path):
+def test_wf_ndst_updateinp_1(worker: str, tmp_path: Path):
     """workflow with one task,
     a splitter on the task level,
     updating input of the task after calling add
@@ -598,12 +598,12 @@ def test_wf_ndst_updateinp_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [13, 14]
 
 
-def test_wf_ndst_noinput_1(plugin: str, tmp_path: Path):
+def test_wf_ndst_noinput_1(worker: str, tmp_path: Path):
     """workflow with one task, a splitter on the task level"""
 
     @workflow.define
@@ -614,7 +614,7 @@ def test_wf_ndst_noinput_1(plugin: str, tmp_path: Path):
     worky = Worky(x=[])
 
     checksum_before = worky._hash
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert worky._hash == checksum_before
@@ -622,7 +622,7 @@ def test_wf_ndst_noinput_1(plugin: str, tmp_path: Path):
     assert outputs.out == []
 
 
-def test_wf_st_2(plugin: str, tmp_path: Path):
+def test_wf_st_2(worker: str, tmp_path: Path):
     """workflow with one task, splitters and combiner for workflow"""
 
     @workflow.define
@@ -633,14 +633,14 @@ def test_wf_st_2(plugin: str, tmp_path: Path):
 
     worky = Worky().split("x", x=[1, 2]).combine(combiner="x")
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert outputs.out[0] == 3
     assert outputs.out[1] == 4
 
 
-def test_wf_ndst_2(plugin: str, tmp_path: Path):
+def test_wf_ndst_2(worker: str, tmp_path: Path):
     """workflow with one task, splitters and combiner on the task level"""
 
     @workflow.define
@@ -650,7 +650,7 @@ def test_wf_ndst_2(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert outputs.out == [3, 4]
@@ -659,7 +659,7 @@ def test_wf_ndst_2(plugin: str, tmp_path: Path):
 # workflows with structures A -> B
 
 
-def test_wf_st_3(plugin: str, tmp_path: Path):
+def test_wf_st_3(worker: str, tmp_path: Path):
     """workflow with 2 tasks, splitter on worky level"""
 
     @workflow.define
@@ -671,7 +671,7 @@ def test_wf_st_3(plugin: str, tmp_path: Path):
 
     worky = Worky().split(("x", "y"), x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     expected = [
         ({"wfst_3.x": 1, "wfst_3.y": 11}, 13),
@@ -686,7 +686,7 @@ def test_wf_st_3(plugin: str, tmp_path: Path):
         assert outputs.out[i] == res[1]
 
 
-def test_wf_ndst_3(plugin: str, tmp_path: Path):
+def test_wf_ndst_3(worker: str, tmp_path: Path):
     """Test workflow with 2 tasks, splitter on a task level"""
 
     @workflow.define
@@ -697,13 +697,13 @@ def test_wf_ndst_3(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
     assert outputs.out == [13, 26]
 
 
-def test_wf_st_4(plugin: str, tmp_path: Path):
+def test_wf_st_4(worker: str, tmp_path: Path):
     """workflow with two tasks, scalar splitter and combiner for the workflow"""
 
     @workflow.define
@@ -714,7 +714,7 @@ def test_wf_st_4(plugin: str, tmp_path: Path):
         return add2.out
 
     worky = Worky().split(("x", "y"), x=[1, 2], y=[11, 12]).combine("x")
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [
     #     ({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)
@@ -723,7 +723,7 @@ def test_wf_st_4(plugin: str, tmp_path: Path):
     assert outputs.out[1] == 26
 
 
-def test_wf_ndst_4(plugin: str, tmp_path: Path):
+def test_wf_ndst_4(worker: str, tmp_path: Path):
     """workflow with two tasks, scalar splitter and combiner on tasks level"""
 
     @workflow.define
@@ -735,7 +735,7 @@ def test_wf_ndst_4(plugin: str, tmp_path: Path):
 
     worky = Worky(a=[1, 2], b=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # expected: [
     #     ({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)
@@ -743,7 +743,7 @@ def test_wf_ndst_4(plugin: str, tmp_path: Path):
     assert outputs.out == [13, 26]
 
 
-def test_wf_st_5(plugin: str, tmp_path: Path):
+def test_wf_st_5(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter and no combiner"""
 
     @workflow.define
@@ -755,12 +755,12 @@ def test_wf_st_5(plugin: str, tmp_path: Path):
 
     worky = Worky().split(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [13, 14, 24, 26]
 
 
-def test_wf_ndst_5(plugin: str, tmp_path: Path):
+def test_wf_ndst_5(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter on tasks level and no combiner"""
 
     @workflow.define
@@ -771,7 +771,7 @@ def test_wf_ndst_5(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out[0] == 13
     assert outputs.out[1] == 14
@@ -779,7 +779,7 @@ def test_wf_ndst_5(plugin: str, tmp_path: Path):
     assert outputs.out[3] == 26
 
 
-def test_wf_st_6(plugin: str, tmp_path: Path):
+def test_wf_st_6(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter and combiner for the workflow"""
 
     @workflow.define
@@ -791,7 +791,7 @@ def test_wf_st_6(plugin: str, tmp_path: Path):
 
     worky = Worky().split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("x")
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out[0][0] == 13
     assert outputs.out[0][1] == 24
@@ -801,7 +801,7 @@ def test_wf_st_6(plugin: str, tmp_path: Path):
     assert outputs.out[1][2] == 38
 
 
-def test_wf_ndst_6(plugin: str, tmp_path: Path):
+def test_wf_ndst_6(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter and combiner on tasks level"""
 
     @workflow.define
@@ -812,12 +812,12 @@ def test_wf_ndst_6(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [[13, 24, 35], [14, 26, 38]]
 
 
-def test_wf_ndst_7(plugin: str, tmp_path: Path):
+def test_wf_ndst_7(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter and (full) combiner for first node only"""
 
     @workflow.define
@@ -828,12 +828,12 @@ def test_wf_ndst_7(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=11)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [11, 22, 33]
 
 
-def test_wf_ndst_8(plugin: str, tmp_path: Path):
+def test_wf_ndst_8(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter and (partial) combiner for first task only"""
 
     @workflow.define
@@ -846,12 +846,12 @@ def test_wf_ndst_8(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [[11, 22, 33], [12, 24, 36]]
 
 
-def test_wf_ndst_9(plugin: str, tmp_path: Path):
+def test_wf_ndst_9(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter and (full) combiner for first task only"""
 
     @workflow.define
@@ -864,7 +864,7 @@ def test_wf_ndst_9(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [11, 12, 22, 24, 33, 36]
 
@@ -872,7 +872,7 @@ def test_wf_ndst_9(plugin: str, tmp_path: Path):
 # workflows with structures A ->  B -> C
 
 
-def test_wf_3sernd_ndst_1(plugin: str, tmp_path: Path):
+def test_wf_3sernd_ndst_1(worker: str, tmp_path: Path):
     """workflow with three "serial" tasks, checking if the splitter is propagating"""
 
     @workflow.define
@@ -884,7 +884,7 @@ def test_wf_3sernd_ndst_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # splitter from the first task should propagate to all tasks,
     # splitter_rpn should be the same in all tasks
@@ -902,7 +902,7 @@ def test_wf_3sernd_ndst_1(plugin: str, tmp_path: Path):
     assert outputs.out == [15, 16, 26, 28]
 
 
-def test_wf_3sernd_ndst_1a(plugin: str, tmp_path: Path):
+def test_wf_3sernd_ndst_1a(worker: str, tmp_path: Path):
     """
     workflow with three "serial" tasks, checking if the splitter is propagating
     first task has a splitter that propagates to the 2nd task,
@@ -918,7 +918,7 @@ def test_wf_3sernd_ndst_1a(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # splitter from the 1st task should propagate and the 2nd task should add one more
     # splitter_rpn for the 2nd and the 3rd task should be the same
@@ -939,7 +939,7 @@ def test_wf_3sernd_ndst_1a(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3nd_st_1(plugin_dask_opt, tmp_path: Path):
+def test_wf_3nd_st_1(worker, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the workflow level
     """
@@ -954,7 +954,7 @@ def test_wf_3nd_st_1(plugin_dask_opt, tmp_path: Path):
 
     worky = Worky().split(["x", "y"], x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin_dask_opt, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out[0] == 39
     assert outputs.out[1] == 42
@@ -962,7 +962,7 @@ def test_wf_3nd_st_1(plugin_dask_opt, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3nd_ndst_1(plugin_dask_opt, tmp_path: Path):
+def test_wf_3nd_ndst_1(worker, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the tasks levels
     """
@@ -976,13 +976,13 @@ def test_wf_3nd_ndst_1(plugin_dask_opt, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin_dask_opt, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert len(outputs.out) == 6
     assert outputs.out == [39, 42, 52, 56, 65, 70]
 
 
-def test_wf_3nd_st_2(plugin: str, tmp_path: Path):
+def test_wf_3nd_st_2(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter and partial combiner on the workflow level
     """
@@ -996,7 +996,7 @@ def test_wf_3nd_st_2(plugin: str, tmp_path: Path):
 
     worky = Worky().split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("x")
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out[0][0] == 39
     assert outputs.out[0][1] == 52
@@ -1006,7 +1006,7 @@ def test_wf_3nd_st_2(plugin: str, tmp_path: Path):
     assert outputs.out[1][2] == 70
 
 
-def test_wf_3nd_ndst_2(plugin: str, tmp_path: Path):
+def test_wf_3nd_ndst_2(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter and partial combiner on the tasks levels
     """
@@ -1022,13 +1022,13 @@ def test_wf_3nd_ndst_2(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert len(outputs.out) == 2
     assert outputs.out == [[39, 52, 65], [42, 56, 70]]
 
 
-def test_wf_3nd_st_3(plugin: str, tmp_path: Path):
+def test_wf_3nd_st_3(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter and partial combiner (from the second task) on the workflow level
     """
@@ -1042,7 +1042,7 @@ def test_wf_3nd_st_3(plugin: str, tmp_path: Path):
 
     worky = Worky().split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("y")
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out[0][0] == 39
     assert outputs.out[0][1] == 42
@@ -1052,7 +1052,7 @@ def test_wf_3nd_st_3(plugin: str, tmp_path: Path):
     assert outputs.out[2][1] == 70
 
 
-def test_wf_3nd_ndst_3(plugin: str, tmp_path: Path):
+def test_wf_3nd_ndst_3(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter and partial combiner (from the second task) on the tasks levels
     """
@@ -1068,7 +1068,7 @@ def test_wf_3nd_ndst_3(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert len(outputs.out) == 3
     assert outputs.out[0] == [39, 42]
@@ -1076,7 +1076,7 @@ def test_wf_3nd_ndst_3(plugin: str, tmp_path: Path):
     assert outputs.out[2] == [65, 70]
 
 
-def test_wf_3nd_st_4(plugin: str, tmp_path: Path):
+def test_wf_3nd_st_4(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter and full combiner on the workflow level
     """
@@ -1090,7 +1090,7 @@ def test_wf_3nd_st_4(plugin: str, tmp_path: Path):
 
     worky = Worky().split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine(["x", "y"])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out[0] == 39
     assert outputs.out[1] == 42
@@ -1100,7 +1100,7 @@ def test_wf_3nd_st_4(plugin: str, tmp_path: Path):
     assert outputs.out[5] == 70
 
 
-def test_wf_3nd_ndst_4(plugin: str, tmp_path: Path):
+def test_wf_3nd_ndst_4(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter and full combiner on the tasks levels
     """
@@ -1116,7 +1116,7 @@ def test_wf_3nd_ndst_4(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # assert outputs._output_dir.exists()
 
@@ -1124,7 +1124,7 @@ def test_wf_3nd_ndst_4(plugin: str, tmp_path: Path):
     assert outputs.out == [39, 42, 52, 56, 65, 70]
 
 
-def test_wf_3nd_st_5(plugin: str, tmp_path: Path):
+def test_wf_3nd_st_5(worker: str, tmp_path: Path):
     """workflow with three tasks (A->C, B->C) and three fields in the splitter,
     splitter and partial combiner (from the second task) on the workflow level
     """
@@ -1140,7 +1140,7 @@ def test_wf_3nd_st_5(plugin: str, tmp_path: Path):
         Worky().split(["x", "y", "z"], x=[2, 3], y=[11, 12], z=[10, 100]).combine("y")
     )
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out[0][0] == 27
     assert outputs.out[0][1] == 28
@@ -1152,7 +1152,7 @@ def test_wf_3nd_st_5(plugin: str, tmp_path: Path):
     assert outputs.out[3][1] == 119
 
 
-def test_wf_3nd_ndst_5(plugin: str, tmp_path: Path):
+def test_wf_3nd_ndst_5(worker: str, tmp_path: Path):
     """workflow with three tasks (A->C, B->C) and three fields in the splitter,
     all tasks have splitters and the last one has a partial combiner (from the 2nd)
     """
@@ -1169,7 +1169,7 @@ def test_wf_3nd_ndst_5(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[2, 3], y=[11, 12], z=[10, 100])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert len(outputs.out) == 4
     assert outputs.out[0] == [27, 28]
@@ -1180,7 +1180,7 @@ def test_wf_3nd_ndst_5(plugin: str, tmp_path: Path):
     # checking all directories
 
 
-def test_wf_3nd_ndst_6(plugin: str, tmp_path: Path):
+def test_wf_3nd_ndst_6(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     the third one uses scalar splitter from the previous ones and a combiner
     """
@@ -1198,12 +1198,12 @@ def test_wf_3nd_ndst_6(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [39, 56]
 
 
-def test_wf_3nd_ndst_7(plugin: str, tmp_path: Path):
+def test_wf_3nd_ndst_7(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     the third one uses scalar splitter from the previous ones
     """
@@ -1219,7 +1219,7 @@ def test_wf_3nd_ndst_7(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [9, 16]
 
@@ -1227,7 +1227,7 @@ def test_wf_3nd_ndst_7(plugin: str, tmp_path: Path):
 # workflows with structures A -> B -> C with multiple connections
 
 
-def test_wf_3nd_8(plugin_parallel, tmp_path: Path):
+def test_wf_3nd_8(tmp_path: Path):
     """workflow with three tasks A->B->C vs two tasks A->C with multiple connections"""
 
     @workflow.define(outputs=["out1", "out2", "out1a", "out2a"])
@@ -1254,7 +1254,7 @@ def test_wf_3nd_8(plugin_parallel, tmp_path: Path):
 
     worky = Worky(zip=[["test1", "test3", "test5"], ["test2", "test4", "test6"]])
 
-    with Submitter(worker=plugin_parallel) as sub:
+    with Submitter(worker="cf") as sub:
         res = sub(worky)
 
     assert (
@@ -1268,7 +1268,7 @@ def test_wf_3nd_8(plugin_parallel, tmp_path: Path):
 # workflows with Left and Right part in splitters A -> B (L&R parts of the splitter)
 
 
-def test_wf_ndstLR_1(plugin: str, tmp_path: Path):
+def test_wf_ndstLR_1(worker: str, tmp_path: Path):
     """Test workflow with 2 tasks, splitters on tasks levels
     The second task has its own simple splitter
     and the  Left part from the first task should be added
@@ -1282,7 +1282,7 @@ def test_wf_ndstLR_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[11, 12])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking if the splitter is created properly
     wf = Workflow.construct(worky)
@@ -1294,7 +1294,7 @@ def test_wf_ndstLR_1(plugin: str, tmp_path: Path):
     assert outputs.out == [33, 36, 44, 48]
 
 
-def test_wf_ndstLR_1a(plugin: str, tmp_path: Path):
+def test_wf_ndstLR_1a(worker: str, tmp_path: Path):
     """Test workflow with 2 tasks, splitters on tasks levels
     The second task has splitter that has Left part (from previous state)
     and the Right part (it's own splitter)
@@ -1318,11 +1318,11 @@ def test_wf_ndstLR_1a(plugin: str, tmp_path: Path):
     # expected: [({"add2.x": 1, "mult.y": 11}, 33), ({"add2.x": 1, "mult.y": 12}, 36),
     #            ({"add2.x": 2, "mult.y": 11}, 44), ({"add2.x": 2, "mult.y": 12}, 48)]
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
     assert outputs.out == [33, 36, 44, 48]
 
 
-def test_wf_ndstLR_2(plugin: str, tmp_path: Path):
+def test_wf_ndstLR_2(worker: str, tmp_path: Path):
     """Test workflow with 2 tasks, splitters on tasks levels
     The second task has its own outer splitter
     and the  Left part from the first task should be added
@@ -1338,7 +1338,7 @@ def test_wf_ndstLR_2(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[10, 20], z=[100, 200])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking if the splitter is created properly
     wf = Workflow.construct(worky)
@@ -1372,7 +1372,7 @@ def test_wf_ndstLR_2(plugin: str, tmp_path: Path):
     ]
 
 
-def test_wf_ndstLR_2a(plugin: str, tmp_path: Path):
+def test_wf_ndstLR_2a(worker: str, tmp_path: Path):
     """Test workflow with 2 tasks, splitters on tasks levels
     The second task has splitter that has Left part (from previous state)
     and the Right part (it's own outer splitter)
@@ -1389,7 +1389,7 @@ def test_wf_ndstLR_2a(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=[10, 20], z=[100, 200])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking if the splitter is created properly
     wf = Workflow.construct(worky)
@@ -1426,7 +1426,7 @@ def test_wf_ndstLR_2a(plugin: str, tmp_path: Path):
 # workflows with inner splitters A -> B (inner spl)
 
 
-def test_wf_ndstinner_1(plugin: str, tmp_path: Path):
+def test_wf_ndstinner_1(worker: str, tmp_path: Path):
     """workflow with 2 tasks,
     the second task has inner splitter
     """
@@ -1443,13 +1443,13 @@ def test_wf_ndstinner_1(plugin: str, tmp_path: Path):
     assert wf["add2"].state.splitter == "add2.x"
     assert wf["add2"].state.splitter_rpn == ["add2.x"]
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out_list == [1, 2, 3]
     assert outputs.out == [3, 4, 5]
 
 
-def test_wf_ndstinner_2(plugin: str, tmp_path: Path):
+def test_wf_ndstinner_2(worker: str, tmp_path: Path):
     """workflow with 2 tasks,
     the second task has two inputs and inner splitter from one of the input
     """
@@ -1462,7 +1462,7 @@ def test_wf_ndstinner_2(plugin: str, tmp_path: Path):
 
     worky = Worky(x=1, y=10)  #
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert wf["mult"].state.splitter == "mult.x"
@@ -1472,7 +1472,7 @@ def test_wf_ndstinner_2(plugin: str, tmp_path: Path):
     assert outputs.out == [10, 20, 30]
 
 
-def test_wf_ndstinner_3(plugin: str, tmp_path: Path):
+def test_wf_ndstinner_3(worker: str, tmp_path: Path):
     """workflow with 2 tasks,
     the second task has two inputs and outer splitter that includes an inner field
     """
@@ -1485,7 +1485,7 @@ def test_wf_ndstinner_3(plugin: str, tmp_path: Path):
 
     worky = Worky(x=1, y=[10, 100])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert wf["mult"].state.splitter == ["mult.x", "mult.y"]
@@ -1495,7 +1495,7 @@ def test_wf_ndstinner_3(plugin: str, tmp_path: Path):
     assert outputs.out == [10, 100, 20, 200, 30, 300]
 
 
-def test_wf_ndstinner_4(plugin: str, tmp_path: Path):
+def test_wf_ndstinner_4(worker: str, tmp_path: Path):
     """workflow with 3 tasks,
     the second task has two inputs and inner splitter from one of the input,
     the third task has no its own splitter
@@ -1510,7 +1510,7 @@ def test_wf_ndstinner_4(plugin: str, tmp_path: Path):
 
     worky = Worky(x=1, y=10)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert wf["mult"].state.splitter == "mult.x"
@@ -1522,7 +1522,7 @@ def test_wf_ndstinner_4(plugin: str, tmp_path: Path):
     assert outputs.out == [12, 22, 32]
 
 
-def test_wf_ndstinner_5(plugin: str, tmp_path: Path):
+def test_wf_ndstinner_5(worker: str, tmp_path: Path):
     """workflow with 3 tasks,
     the second task has two inputs and inner splitter from one of the input,
     (inner input come from the first task that has its own splitter,
@@ -1539,7 +1539,7 @@ def test_wf_ndstinner_5(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=[10, 100], b=[3, 5])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert wf["mult"].state.splitter == ["_list", ["mult.y", "mult.x"]]
@@ -1601,7 +1601,7 @@ def test_wf_ndstinner_5(plugin: str, tmp_path: Path):
 # workflow that have some single values as the input
 
 
-def test_wf_st_singl_1(plugin: str, tmp_path: Path):
+def test_wf_st_singl_1(worker: str, tmp_path: Path):
     """workflow with two tasks, only one input is in the splitter and combiner"""
 
     @workflow.define
@@ -1613,12 +1613,12 @@ def test_wf_st_singl_1(plugin: str, tmp_path: Path):
 
     worky = Worky(y=11).split("x", x=[1, 2]).combine("x")
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [13, 24]
 
 
-def test_wf_ndst_singl_1(plugin: str, tmp_path: Path):
+def test_wf_ndst_singl_1(worker: str, tmp_path: Path):
     """workflow with two tasks, outer splitter and combiner on tasks level;
     only one input is part of the splitter, the other is a single value
     """
@@ -1631,12 +1631,12 @@ def test_wf_ndst_singl_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2], y=11)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [13, 24]
 
 
-def test_wf_st_singl_2(plugin: str, tmp_path: Path):
+def test_wf_st_singl_2(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the workflow level
     only one input is part of the splitter, the other is a single value
@@ -1651,12 +1651,12 @@ def test_wf_st_singl_2(plugin: str, tmp_path: Path):
 
     worky = Worky(y=11).split("x", x=[1, 2, 3])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [39, 52, 65]
 
 
-def test_wf_ndst_singl_2(plugin: str, tmp_path: Path):
+def test_wf_ndst_singl_2(worker: str, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the tasks levels
     only one input is part of the splitter, the other is a single value
@@ -1671,7 +1671,7 @@ def test_wf_ndst_singl_2(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[1, 2, 3], y=11)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert len(outputs.out) == 3
     assert outputs.out == [39, 52, 65]
@@ -1680,7 +1680,7 @@ def test_wf_ndst_singl_2(plugin: str, tmp_path: Path):
 # workflows with structures worky(A)
 
 
-def test_wfasnd_1(plugin: str, tmp_path: Path):
+def test_wfasnd_1(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task and no splitter
     """
@@ -1697,12 +1697,12 @@ def test_wfasnd_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == 4
 
 
-def test_wfasnd_wfinp_1(plugin: str, tmp_path: Path):
+def test_wfasnd_wfinp_1(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task and no splitter
     input set for the main workflow
@@ -1721,7 +1721,7 @@ def test_wfasnd_wfinp_1(plugin: str, tmp_path: Path):
     worky = Worky(x=2)
 
     checksum_before = worky._hash
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert worky._hash == checksum_before
@@ -1729,7 +1729,7 @@ def test_wfasnd_wfinp_1(plugin: str, tmp_path: Path):
     assert outputs.out == 4
 
 
-def test_wfasnd_wfndupdate(plugin: str, tmp_path: Path):
+def test_wfasnd_wfndupdate(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task and no splitter
     wfasnode input is updated to use the main workflow input
@@ -1747,12 +1747,12 @@ def test_wfasnd_wfndupdate(plugin: str, tmp_path: Path):
 
     worky = Worky(x=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == 5
 
 
-def test_wfasnd_wfndupdate_rerun(plugin: str, tmp_path: Path):
+def test_wfasnd_wfndupdate_rerun(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task and no splitter
     wfasnode is run first and later is
@@ -1766,7 +1766,7 @@ def test_wfasnd_wfndupdate_rerun(plugin: str, tmp_path: Path):
 
     wfnd = Wfnd(x=2)
 
-    with Submitter(worker=plugin, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
         sub(wfnd)
 
     @workflow.define
@@ -1776,7 +1776,7 @@ def test_wfasnd_wfndupdate_rerun(plugin: str, tmp_path: Path):
 
     worky = Worky(x=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == 5
 
@@ -1788,12 +1788,12 @@ def test_wfasnd_wfndupdate_rerun(plugin: str, tmp_path: Path):
 
     wf_o = WorkyO(x=4)
 
-    outputs = wf_o(worker=plugin, cache_dir=tmp_path)
+    outputs = wf_o(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == 6
 
 
-def test_wfasnd_st_1(plugin: str, tmp_path: Path):
+def test_wfasnd_st_1(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task,
     splitter for wfnd
@@ -1812,7 +1812,7 @@ def test_wfasnd_st_1(plugin: str, tmp_path: Path):
     worky = Worky(x=[2, 4])
 
     checksum_before = worky._hash
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     wf = Workflow.construct(worky)
     assert worky._hash == checksum_before
@@ -1820,7 +1820,7 @@ def test_wfasnd_st_1(plugin: str, tmp_path: Path):
     assert outputs.out == [4, 6]
 
 
-def test_wfasnd_st_updatespl_1(plugin: str, tmp_path: Path):
+def test_wfasnd_st_updatespl_1(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task,
     splitter for wfnd is set after add
@@ -1838,12 +1838,12 @@ def test_wfasnd_st_updatespl_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[2, 4])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [4, 6]
 
 
-def test_wfasnd_ndst_1(plugin: str, tmp_path: Path):
+def test_wfasnd_ndst_1(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task,
     splitter for node
@@ -1861,12 +1861,12 @@ def test_wfasnd_ndst_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[2, 4])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [4, 6]
 
 
-def test_wfasnd_ndst_updatespl_1(plugin: str, tmp_path: Path):
+def test_wfasnd_ndst_updatespl_1(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task,
     splitter for node added after add
@@ -1884,12 +1884,12 @@ def test_wfasnd_ndst_updatespl_1(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[2, 4])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [4, 6]
 
 
-def test_wfasnd_wfst_1(plugin: str, tmp_path: Path):
+def test_wfasnd_wfst_1(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with one task,
     splitter for the main workflow
@@ -1907,7 +1907,7 @@ def test_wfasnd_wfst_1(plugin: str, tmp_path: Path):
 
     worky = Worky().split("x", x=[2, 4])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # assert outputs._output_dir.exists()
 
@@ -1918,7 +1918,7 @@ def test_wfasnd_wfst_1(plugin: str, tmp_path: Path):
 # workflows with structures worky(A) -> B
 
 
-def test_wfasnd_st_2(plugin: str, tmp_path: Path):
+def test_wfasnd_st_2(worker: str, tmp_path: Path):
     """workflow as a node,
     the main workflow has two tasks,
     splitter for wfnd
@@ -1937,14 +1937,14 @@ def test_wfasnd_st_2(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[2, 4], y=[1, 10])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # assert outputs._output_dir.exists()
 
     assert outputs.out == [4, 42]
 
 
-def test_wfasnd_wfst_2(plugin: str, tmp_path: Path):
+def test_wfasnd_wfst_2(worker: str, tmp_path: Path):
     """workflow as a node,
     the main workflow has two tasks,
     splitter for the main workflow
@@ -1963,7 +1963,7 @@ def test_wfasnd_wfst_2(plugin: str, tmp_path: Path):
 
     worky = Worky().split(("x", "y"), x=[2, 4], y=[1, 10])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # assert outputs._output_dir.exists()
 
@@ -1974,7 +1974,7 @@ def test_wfasnd_wfst_2(plugin: str, tmp_path: Path):
 # workflows with structures A -> worky(B)
 
 
-def test_wfasnd_ndst_3(plugin: str, tmp_path: Path):
+def test_wfasnd_ndst_3(worker: str, tmp_path: Path):
     """workflow as the second node,
     the main workflow has two tasks,
     splitter for the first task
@@ -1993,14 +1993,14 @@ def test_wfasnd_ndst_3(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[2, 4], y=[1, 10])
 
-    outputs = worky(cache_dir=tmp_path, plugin=plugin)
+    outputs = worky(cache_dir=tmp_path, worker=worker)
 
     # assert outputs._output_dir.exists()
 
     assert outputs.out == [4, 42]
 
 
-def test_wfasnd_wfst_3(plugin: str, tmp_path: Path):
+def test_wfasnd_wfst_3(worker: str, tmp_path: Path):
     """workflow as the second node,
     the main workflow has two tasks,
     splitter for the main workflow
@@ -2021,7 +2021,7 @@ def test_wfasnd_wfst_3(plugin: str, tmp_path: Path):
 
     worky = Worky().split(("x", "y"), x=[2, 4], y=[1, 10])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # assert outputs._output_dir.exists()
 
@@ -2032,7 +2032,7 @@ def test_wfasnd_wfst_3(plugin: str, tmp_path: Path):
 # workflows with structures wfns(A->B)
 
 
-def test_wfasnd_4(plugin: str, tmp_path: Path):
+def test_wfasnd_4(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with two tasks and no splitter
     """
@@ -2050,12 +2050,12 @@ def test_wfasnd_4(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == 6
 
 
-def test_wfasnd_ndst_4(plugin: str, tmp_path: Path):
+def test_wfasnd_ndst_4(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with two tasks,
     splitter for node
@@ -2074,12 +2074,12 @@ def test_wfasnd_ndst_4(plugin: str, tmp_path: Path):
 
     worky = Worky(x=[2, 4])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert outputs.out == [6, 8]
 
 
-def test_wfasnd_wfst_4(plugin: str, tmp_path: Path):
+def test_wfasnd_wfst_4(worker: str, tmp_path: Path):
     """workflow as a node
     workflow-node with two tasks,
     splitter for the main workflow
@@ -2098,7 +2098,7 @@ def test_wfasnd_wfst_4(plugin: str, tmp_path: Path):
 
     worky = Worky().split("x", x=[2, 4])
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # assert outputs._output_dir.exists()
 
@@ -2109,7 +2109,7 @@ def test_wfasnd_wfst_4(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachedir(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachedir(worker: str, tmp_path: Path):
     """worky with provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_wf_cache_1"
     cache_dir.mkdir()
@@ -2122,7 +2122,7 @@ def test_wf_nostate_cachedir(plugin: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 8 == outputs.out
 
@@ -2130,7 +2130,7 @@ def test_wf_nostate_cachedir(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachedir_relativepath(tmp_path, plugin):
+def test_wf_nostate_cachedir_relativepath(tmp_path, worker):
     """worky with provided cache_dir as relative path"""
     cache_dir = tmp_path / "test_wf_cache_2"
     cache_dir.mkdir()
@@ -2143,7 +2143,7 @@ def test_wf_nostate_cachedir_relativepath(tmp_path, plugin):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     assert 8 == outputs.out
 
@@ -2151,7 +2151,7 @@ def test_wf_nostate_cachedir_relativepath(tmp_path, plugin):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_dir;
     the second worky has cache_locations and should not recompute the results
@@ -2170,7 +2170,7 @@ def test_wf_nostate_cachelocations(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2189,7 +2189,7 @@ def test_wf_nostate_cachelocations(plugin: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2200,7 +2200,7 @@ def test_wf_nostate_cachelocations(plugin: str, tmp_path: Path):
 
     # checking execution time (for unix and cf)
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
 
@@ -2208,7 +2208,7 @@ def test_wf_nostate_cachelocations(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_a(plugin_parallel, plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
     """
     the same as previous test, but workflows differ
     """
@@ -2226,7 +2226,7 @@ def test_wf_nostate_cachelocations_a(plugin_parallel, plugin: str, tmp_path: Pat
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2244,7 +2244,7 @@ def test_wf_nostate_cachelocations_a(plugin_parallel, plugin: str, tmp_path: Pat
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2257,7 +2257,7 @@ def test_wf_nostate_cachelocations_a(plugin_parallel, plugin: str, tmp_path: Pat
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_b(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_b(worker: str, tmp_path: Path):
     """
     the same as previous test, but the 2nd workflows has two outputs
     (connected to the same task output);
@@ -2278,7 +2278,7 @@ def test_wf_nostate_cachelocations_b(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2297,7 +2297,7 @@ def test_wf_nostate_cachelocations_b(plugin: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2307,7 +2307,7 @@ def test_wf_nostate_cachelocations_b(plugin: str, tmp_path: Path):
     assert 8 == results2.outputs.out == results2.outputs.out_pr
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # execution time for second run should be much shorter
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
@@ -2317,9 +2317,7 @@ def test_wf_nostate_cachelocations_b(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_setoutputchange(
-    plugin_parallel, plugin: str, tmp_path: Path
-):
+def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
     """
     the same as previous test, but worky output names differ,
     the tasks should not be run and it should be fast,
@@ -2340,7 +2338,7 @@ def test_wf_nostate_cachelocations_setoutputchange(
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2358,7 +2356,7 @@ def test_wf_nostate_cachelocations_setoutputchange(
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2368,7 +2366,7 @@ def test_wf_nostate_cachelocations_setoutputchange(
     assert 8 == results2.outputs.out2
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking execution time (the second worky should be fast, nodes do not have to rerun)
         assert t1 > 2
         # testing relative values (windows or slurm takes much longer to create worky itself)
@@ -2379,7 +2377,7 @@ def test_wf_nostate_cachelocations_setoutputchange(
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_setoutputchange_a(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path):
     """
     the same as previous test, but worky names and output names differ,
     """
@@ -2397,7 +2395,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin: str, tmp_path: Path
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2415,7 +2413,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin: str, tmp_path: Path
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2425,7 +2423,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin: str, tmp_path: Path
     assert 8 == results2.outputs.out2
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         assert t1 > 2
         # testing relative values (windows or slurm takes much longer to create worky itself)
         assert t2 < max(1, t1 - 1)
@@ -2435,7 +2433,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin: str, tmp_path: Path
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_forcererun(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_dir;
     the second worky has cache_locations,
@@ -2455,7 +2453,7 @@ def test_wf_nostate_cachelocations_forcererun(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2473,7 +2471,7 @@ def test_wf_nostate_cachelocations_forcererun(plugin: str, tmp_path: Path):
     worky2 = Worky2(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir2) as sub:
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -2482,7 +2480,7 @@ def test_wf_nostate_cachelocations_forcererun(plugin: str, tmp_path: Path):
     assert 8 == results2.outputs.out
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking execution time
         assert t1 > 2
         assert t2 > 2
@@ -2493,7 +2491,7 @@ def test_wf_nostate_cachelocations_forcererun(plugin: str, tmp_path: Path):
 
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
-    plugin: str, tmp_path: Path
+    worker: str, tmp_path: Path
 ):
     """
     Two identical wfs with provided cache_dir and cache_locations for the second one;
@@ -2514,7 +2512,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2532,7 +2530,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2, rerun=True)
 
@@ -2549,14 +2547,14 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     assert len(list(Path(cache_dir2).glob("python-*"))) == 2
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # runtime for recomputed workflows should be about the same
         assert abs(t1 - t2) < t1 / 2
 
 
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
-    plugin: str, tmp_path: Path
+    worker: str, tmp_path: Path
 ):
     """
     Two identical wfs with provided cache_dir and cache_locations for the second one;
@@ -2578,7 +2576,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2596,7 +2594,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
 
     t0 = time.time()
     with Submitter(
-        worker=plugin,
+        worker=worker,
         cache_dir=cache_dir2,
         cache_locations=cache_dir1,
         propagate_rerun=False,
@@ -2612,7 +2610,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     assert results1.output_dir != results2.output_dir
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
@@ -2630,7 +2628,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
 )
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
-    plugin: str, tmp_path: Path
+    worker: str, tmp_path: Path
 ):
     """
     Two identical wfs with provided cache_dir, and cache_locations for the second worky;
@@ -2651,7 +2649,7 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2670,7 +2668,7 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
 
     t0 = time.time()
     with Submitter(
-        worker=plugin,
+        worker=worker,
         cache_dir=cache_dir2,
         cache_locations=cache_dir1,
         propagate_rerun=False,
@@ -2686,14 +2684,14 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     assert len(list(Path(cache_dir2).glob("python-*"))) == 1
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 > 2
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_nodecachelocations(plugin: str, tmp_path: Path):
+def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with different input, but the second node has the same input;
     the second worky has cache_locations and should recompute the worky,
@@ -2712,7 +2710,7 @@ def test_wf_nostate_nodecachelocations(plugin: str, tmp_path: Path):
 
     worky1 = Worky1(x=3)
 
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2729,7 +2727,7 @@ def test_wf_nostate_nodecachelocations(plugin: str, tmp_path: Path):
     worky2 = Worky2(x=2)
 
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2745,7 +2743,7 @@ def test_wf_nostate_nodecachelocations(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_nodecachelocations_upd(plugin: str, tmp_path: Path):
+def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     """
     Two wfs with different input, but the second node has the same input;
     the second worky has cache_locations (set after adding tasks) and should recompute,
@@ -2764,7 +2762,7 @@ def test_wf_nostate_nodecachelocations_upd(plugin: str, tmp_path: Path):
 
     worky1 = Worky1(x=3)
 
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2780,7 +2778,7 @@ def test_wf_nostate_nodecachelocations_upd(plugin: str, tmp_path: Path):
     worky2 = Worky2(x=2)
 
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2796,7 +2794,7 @@ def test_wf_nostate_nodecachelocations_upd(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_state_cachelocations(plugin: str, tmp_path: Path):
+def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_dir;
     the second worky has cache_locations and should not recompute the results
@@ -2815,7 +2813,7 @@ def test_wf_state_cachelocations(plugin: str, tmp_path: Path):
     worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2835,7 +2833,7 @@ def test_wf_state_cachelocations(plugin: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2845,7 +2843,7 @@ def test_wf_state_cachelocations(plugin: str, tmp_path: Path):
     assert results2.outputs.out == [8, 82]
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
@@ -2859,7 +2857,7 @@ def test_wf_state_cachelocations(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_state_cachelocations_forcererun(plugin: str, tmp_path: Path):
+def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_dir;
     the second worky has cache_locations,
@@ -2879,7 +2877,7 @@ def test_wf_state_cachelocations_forcererun(plugin: str, tmp_path: Path):
     worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2898,7 +2896,7 @@ def test_wf_state_cachelocations_forcererun(plugin: str, tmp_path: Path):
     worky2 = Worky2().split(("x", "y"), x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir2) as sub:
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -2908,7 +2906,7 @@ def test_wf_state_cachelocations_forcererun(plugin: str, tmp_path: Path):
     assert results2.outputs.out[1] == 82
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 > 2
@@ -2920,7 +2918,7 @@ def test_wf_state_cachelocations_forcererun(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_state_cachelocations_updateinp(plugin: str, tmp_path: Path):
+def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_dir;
     the second worky has cache_locations and should not recompute the results
@@ -2941,7 +2939,7 @@ def test_wf_state_cachelocations_updateinp(plugin: str, tmp_path: Path):
     worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2960,7 +2958,7 @@ def test_wf_state_cachelocations_updateinp(plugin: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2971,7 +2969,7 @@ def test_wf_state_cachelocations_updateinp(plugin: str, tmp_path: Path):
     assert results2.outputs.out[1] == 82
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
@@ -2983,7 +2981,7 @@ def test_wf_state_cachelocations_updateinp(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_state_n_nostate_cachelocations(plugin: str, tmp_path: Path):
+def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with provided cache_dir, the first one has no state, the second has;
     the second worky has cache_locations and should not recompute only one element
@@ -3001,7 +2999,7 @@ def test_wf_state_n_nostate_cachelocations(plugin: str, tmp_path: Path):
 
     worky1 = Worky1(x=2, y=3)
 
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3018,7 +3016,7 @@ def test_wf_state_n_nostate_cachelocations(plugin: str, tmp_path: Path):
     worky2 = Worky2().split(("x", "y"), x=[2, 20], y=[3, 4])
 
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3028,7 +3026,7 @@ def test_wf_state_n_nostate_cachelocations(plugin: str, tmp_path: Path):
     assert results2.outputs.out[1] == 82
 
 
-def test_wf_nostate_cachelocations_updated(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_dir;
     the second worky has cache_locations in init,
@@ -3051,7 +3049,7 @@ def test_wf_nostate_cachelocations_updated(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3071,7 +3069,7 @@ def test_wf_nostate_cachelocations_updated(plugin: str, tmp_path: Path):
     t0 = time.time()
     # changing cache_locations to non-existing dir
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1_empty
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1_empty
     ) as sub:
         results2 = sub(worky2)
 
@@ -3081,7 +3079,7 @@ def test_wf_nostate_cachelocations_updated(plugin: str, tmp_path: Path):
     assert 8 == results2.outputs.out
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 > 2
@@ -3091,7 +3089,7 @@ def test_wf_nostate_cachelocations_updated(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_cachelocations_recompute(plugin: str, tmp_path: Path):
+def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
     """
     Two wfs with the same inputs but slightly different graph;
     the second worky should recompute the results,
@@ -3110,7 +3108,7 @@ def test_wf_nostate_cachelocations_recompute(plugin: str, tmp_path: Path):
 
     worky1 = Worky1(x=2, y=3)
 
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3128,7 +3126,7 @@ def test_wf_nostate_cachelocations_recompute(plugin: str, tmp_path: Path):
     worky2 = Worky2(x=2, y=3)
 
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3145,7 +3143,7 @@ def test_wf_nostate_cachelocations_recompute(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_ndstate_cachelocations(plugin: str, tmp_path: Path):
+def test_wf_ndstate_cachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node states;
     the second worky has cache_locations and should not recompute the results
@@ -3164,7 +3162,7 @@ def test_wf_ndstate_cachelocations(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3183,7 +3181,7 @@ def test_wf_ndstate_cachelocations(plugin: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3193,14 +3191,14 @@ def test_wf_ndstate_cachelocations(plugin: str, tmp_path: Path):
     assert results2.outputs.out == [8, 82]
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_ndstate_cachelocations_forcererun(plugin: str, tmp_path: Path):
+def test_wf_ndstate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node states;
     the second worky has cache_locations,
@@ -3220,7 +3218,7 @@ def test_wf_ndstate_cachelocations_forcererun(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3238,7 +3236,7 @@ def test_wf_ndstate_cachelocations_forcererun(plugin: str, tmp_path: Path):
     worky2 = Worky2(x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir2) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir2) as sub:
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -3247,7 +3245,7 @@ def test_wf_ndstate_cachelocations_forcererun(plugin: str, tmp_path: Path):
     assert results2.outputs.out == [8, 82]
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 > 2
@@ -3258,7 +3256,7 @@ def test_wf_ndstate_cachelocations_forcererun(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_ndstate_cachelocations_updatespl(plugin: str, tmp_path: Path):
+def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node state (that is set after adding the node!);
     the second worky has cache_locations and should not recompute the results
@@ -3277,7 +3275,7 @@ def test_wf_ndstate_cachelocations_updatespl(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3296,7 +3294,7 @@ def test_wf_ndstate_cachelocations_updatespl(plugin: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3306,7 +3304,7 @@ def test_wf_ndstate_cachelocations_updatespl(plugin: str, tmp_path: Path):
     assert results2.outputs.out == [8, 82]
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
@@ -3318,7 +3316,7 @@ def test_wf_ndstate_cachelocations_updatespl(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_ndstate_cachelocations_recompute(plugin: str, tmp_path: Path):
+def test_wf_ndstate_cachelocations_recompute(worker: str, tmp_path: Path):
     """
     Two wfs (with nodes with states) with provided cache_dir;
     the second worky has cache_locations and should not recompute the results
@@ -3337,7 +3335,7 @@ def test_wf_ndstate_cachelocations_recompute(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=[2, 20], y=[3, 4])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3356,7 +3354,7 @@ def test_wf_ndstate_cachelocations_recompute(plugin: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=plugin, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3366,7 +3364,7 @@ def test_wf_ndstate_cachelocations_recompute(plugin: str, tmp_path: Path):
     assert results2.outputs.out == [8, 10, 62, 82]
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 > 2
@@ -3378,7 +3376,7 @@ def test_wf_ndstate_cachelocations_recompute(plugin: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_nostate_runtwice_usecache(plugin: str, tmp_path: Path):
+def test_wf_nostate_runtwice_usecache(worker: str, tmp_path: Path):
     """
     running workflow (without state) twice,
     the second run should use the results from the first one
@@ -3395,7 +3393,7 @@ def test_wf_nostate_runtwice_usecache(plugin: str, tmp_path: Path):
     worky1 = Worky1(x=2, y=3)
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3409,7 +3407,7 @@ def test_wf_nostate_runtwice_usecache(plugin: str, tmp_path: Path):
 
     # running workflow the second time
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3420,13 +3418,13 @@ def test_wf_nostate_runtwice_usecache(plugin: str, tmp_path: Path):
     assert cache_dir_content == os.listdir(cache_dir1)
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
 
 
-def test_wf_state_runtwice_usecache(plugin: str, tmp_path: Path):
+def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
     """
     running workflow with a state twice,
     the second run should use the results from the first one
@@ -3443,7 +3441,7 @@ def test_wf_state_runtwice_usecache(plugin: str, tmp_path: Path):
     worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 30])
 
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3460,7 +3458,7 @@ def test_wf_state_runtwice_usecache(plugin: str, tmp_path: Path):
 
     # running workflow the second time
     t0 = time.time()
-    with Submitter(worker=plugin, cache_dir=cache_dir1) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3471,7 +3469,7 @@ def test_wf_state_runtwice_usecache(plugin: str, tmp_path: Path):
     # checking if no new directory is created
     assert cache_dir_content == os.listdir(results1.job.cache_dir)
     # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and plugin == "cf":
+    if not sys.platform.startswith("win") and worker == "cf":
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
@@ -3528,7 +3526,7 @@ def test_workflow_combine2(tmp_path: Path):
     assert outputs.out_iden == [[1, 4], [1, 8]]
 
 
-def test_wf_resultfile_1(plugin: str, tmp_path: Path):
+def test_wf_resultfile_1(worker: str, tmp_path: Path):
     """workflow with a file in the result, file should be copied to the worky dir"""
 
     @workflow.define(outputs=["wf_out"])
@@ -3538,7 +3536,7 @@ def test_wf_resultfile_1(plugin: str, tmp_path: Path):
         return writefile.out  #
 
     worky = Worky(x="file_1.txt")
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking if the file exists and if it is in the Worky directory
     wf_out = outputs.wf_out.fspath
@@ -3546,7 +3544,7 @@ def test_wf_resultfile_1(plugin: str, tmp_path: Path):
     assert wf_out == outputs._output_dir / "file_1.txt"
 
 
-def test_wf_resultfile_2(plugin: str, tmp_path: Path):
+def test_wf_resultfile_2(worker: str, tmp_path: Path):
     """workflow with a list of files in the worky result,
     all files should be copied to the worky dir
     """
@@ -3559,7 +3557,7 @@ def test_wf_resultfile_2(plugin: str, tmp_path: Path):
 
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     worky = Worky(x=file_list)
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking if the file exists and if it is in the Worky directory
     for ii, file in enumerate(outputs.wf_out):
@@ -3567,7 +3565,7 @@ def test_wf_resultfile_2(plugin: str, tmp_path: Path):
         assert file.fspath == outputs._output_dir / file_list[ii]
 
 
-def test_wf_resultfile_3(plugin: str, tmp_path: Path):
+def test_wf_resultfile_3(worker: str, tmp_path: Path):
     """workflow with a dictionaries of files in the worky result,
     all files should be copied to the worky dir
     """
@@ -3580,7 +3578,7 @@ def test_wf_resultfile_3(plugin: str, tmp_path: Path):
 
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     worky = Worky(x=file_list)
-    outputs = worky(worker=plugin, cache_dir=tmp_path)
+    outputs = worky(worker=worker, cache_dir=tmp_path)
 
     # checking if the file exists and if it is in the Worky directory
     for key, val in outputs.wf_out.items():
@@ -3592,7 +3590,7 @@ def test_wf_resultfile_3(plugin: str, tmp_path: Path):
             assert val.fspath == outputs._output_dir / file_list[ii]
 
 
-def test_wf_upstream_error1(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error1(tmp_path: Path):
     """workflow with two tasks, task2 dependent on an task1 which raised an error"""
 
     @workflow.define
@@ -3604,12 +3602,12 @@ def test_wf_upstream_error1(plugin_parallel: str, tmp_path: Path):
     worky = Worky(x="hi")  # TypeError for adding str and int
 
     with pytest.raises(RuntimeError) as excinfo:
-        worky(worker=plugin_parallel, cache_dir=tmp_path)
+        worky(worker="cf", cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error2(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error2(tmp_path: Path):
     """task2 dependent on task1, task1 errors, workflow-level split on task 1
     goal - workflow finish running, one output errors but the other doesn't
     """
@@ -3626,13 +3624,13 @@ def test_wf_upstream_error2(plugin_parallel: str, tmp_path: Path):
     )  # workflow-level split TypeError for adding str and int
 
     with pytest.raises(Exception) as excinfo:
-        worky(worker=plugin_parallel, cache_dir=tmp_path)
+        worky(worker="cf", cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
 @pytest.mark.flaky(reruns=2)  # when slurm
-def test_wf_upstream_error3(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error3(tmp_path: Path):
     """task2 dependent on task1, task1 errors, task-level split on task 1
     goal - workflow finish running, one output errors but the other doesn't
     """
@@ -3646,12 +3644,12 @@ def test_wf_upstream_error3(plugin_parallel: str, tmp_path: Path):
 
     worky = Worky(x=[1, "hi"])  # TypeError for adding str and int
     with pytest.raises(RuntimeError) as excinfo:
-        worky(worker=plugin_parallel, cache_dir=tmp_path)
+        worky(worker="cf", cache_dir=tmp_path)
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error4(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error4(tmp_path: Path):
     """workflow with one task, which raises an error"""
 
     @workflow.define
@@ -3662,12 +3660,12 @@ def test_wf_upstream_error4(plugin_parallel: str, tmp_path: Path):
 
     worky = Worky(x="hi")  # TypeError for adding str and int
     with pytest.raises(Exception) as excinfo:
-        worky(worker=plugin_parallel, cache_dir=tmp_path)
+        worky(worker="cf", cache_dir=tmp_path)
     assert "failed with errors" in str(excinfo.value)
     assert "addvar1" in str(excinfo.value)
 
 
-def test_wf_upstream_error5(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error5(tmp_path: Path):
     """nested workflow with one task, which raises an error"""
 
     @workflow.define
@@ -3683,13 +3681,13 @@ def test_wf_upstream_error5(plugin_parallel: str, tmp_path: Path):
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
     with pytest.raises(Exception) as excinfo:
-        wf_main(worker=plugin_parallel, cache_dir=tmp_path)
+        wf_main(worker="cf", cache_dir=tmp_path)
 
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error6(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error6(tmp_path: Path):
     """nested workflow with two tasks, the first one raises an error"""
 
     @workflow.define(outputs=["wf_out"])
@@ -3707,13 +3705,13 @@ def test_wf_upstream_error6(plugin_parallel: str, tmp_path: Path):
     wf_main = WfMain(x="hi")  # TypeError for adding str and int
 
     with pytest.raises(RuntimeError) as excinfo:
-        wf_main(worker=plugin_parallel, cache_dir=tmp_path)
+        wf_main(worker="cf", cache_dir=tmp_path)
 
     assert "addvar1" in str(excinfo.value)
     assert "failed with errors" in str(excinfo.value)
 
 
-def test_wf_upstream_error7(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error7(tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the last task is set as the workflow output
@@ -3729,7 +3727,7 @@ def test_wf_upstream_error7(plugin_parallel: str, tmp_path: Path):
 
     worky = Worky(x="hi")  # TypeError for adding str and int
 
-    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3741,7 +3739,7 @@ def test_wf_upstream_error7(plugin_parallel: str, tmp_path: Path):
     assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error7a(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error7a(tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the second task is set as the workflow output
@@ -3756,7 +3754,7 @@ def test_wf_upstream_error7a(plugin_parallel: str, tmp_path: Path):
         return addvar3.out
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3768,7 +3766,7 @@ def test_wf_upstream_error7a(plugin_parallel: str, tmp_path: Path):
     assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error7b(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error7b(tmp_path: Path):
     """
     workflow with three sequential tasks, the first task raises an error
     the second and the third tasks are set as the workflow output
@@ -3783,7 +3781,7 @@ def test_wf_upstream_error7b(plugin_parallel: str, tmp_path: Path):
         return addvar2.out, addvar3.out  #
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3795,7 +3793,7 @@ def test_wf_upstream_error7b(plugin_parallel: str, tmp_path: Path):
     assert list(graph["addvar3"].unrunnable.values()) == [[graph["addvar2"]]]
 
 
-def test_wf_upstream_error8(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error8(tmp_path: Path):
     """workflow with three tasks, the first one raises an error, so 2 others are removed"""
 
     @workflow.define(outputs=["out1", "out2"])
@@ -3807,7 +3805,7 @@ def test_wf_upstream_error8(plugin_parallel: str, tmp_path: Path):
         return addvar2.out, addtwo.out  #
 
     worky = Worky(x="hi")  # TypeError for adding str and int
-    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "addvar1" in error_message
@@ -3820,7 +3818,7 @@ def test_wf_upstream_error8(plugin_parallel: str, tmp_path: Path):
     assert list(graph["addtwo"].unrunnable.values()) == [[graph["addvar1"]]]
 
 
-def test_wf_upstream_error9(plugin_parallel, tmp_path: Path):
+def test_wf_upstream_error9(tmp_path: Path):
     """
     workflow with five tasks with two "branches",
     one branch has an error, the second is fine
@@ -3837,7 +3835,7 @@ def test_wf_upstream_error9(plugin_parallel, tmp_path: Path):
         return follow_err.out  # out1
 
     worky = Worky(x=2)
-    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "err" in error_message
@@ -3848,7 +3846,7 @@ def test_wf_upstream_error9(plugin_parallel, tmp_path: Path):
     assert list(graph["follow_err"].unrunnable.values()) == [[graph["err"]]]
 
 
-def test_wf_upstream_error9a(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error9a(tmp_path: Path):
     """
     workflow with five tasks with two "branches",
     one branch has an error, the second is fine
@@ -3867,7 +3865,7 @@ def test_wf_upstream_error9a(plugin_parallel: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "err" in error_message
@@ -3878,7 +3876,7 @@ def test_wf_upstream_error9a(plugin_parallel: str, tmp_path: Path):
     assert list(graph["follow_err"].unrunnable.values()) == [[graph["err"]]]
 
 
-def test_wf_upstream_error9b(plugin_parallel: str, tmp_path: Path):
+def test_wf_upstream_error9b(tmp_path: Path):
     """
     workflow with five tasks with two "branches",
     one branch has an error, the second is fine
@@ -3896,7 +3894,7 @@ def test_wf_upstream_error9b(plugin_parallel: str, tmp_path: Path):
 
     worky = Worky(x=2)
 
-    with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+    with Submitter(worker="cf", cache_dir=tmp_path) as sub:
         results = sub(worky)
     error_message = "".join(results.errors["error message"])
     assert "err" in error_message
@@ -4396,7 +4394,7 @@ def test_graph_5(tmp_path: Path):
 
 
 @pytest.mark.timeout(20)
-def test_duplicate_input_on_split_wf(plugin_parallel, tmp_path: Path):
+def test_duplicate_input_on_split_wf(tmp_path: Path):
     """checking if the workflow gets stuck if it has to run two tasks with equal checksum;
     This can occur when splitting on a list containing duplicate values.
     """
@@ -4413,13 +4411,13 @@ def test_duplicate_input_on_split_wf(plugin_parallel, tmp_path: Path):
 
     worky = Worky().split(text=text)
 
-    outputs = worky(worker=plugin_parallel)
+    outputs = worky(worker="cf")
 
     assert outputs.out1[0] == "test" and outputs.out1[0] == "test"
 
 
 @pytest.mark.timeout(40)
-def test_inner_outer_wf_duplicate(plugin_parallel, tmp_path: Path):
+def test_inner_outer_wf_duplicate(tmp_path: Path):
     """checking if the execution gets stuck if there is an inner and outer workflows
     that run two nodes with the exact same inputs.
     """
@@ -4457,7 +4455,7 @@ def test_inner_outer_wf_duplicate(plugin_parallel, tmp_path: Path):
         ["start_number", "task_name"], start_number=start_list, task_name=task_list
     )
 
-    with Submitter(worker=plugin_parallel) as sub:
+    with Submitter(worker="cf") as sub:
         res = sub(test_outer)
 
     assert res.outputs.res2[0] == 23 and res.outputs.res2[1] == 23
@@ -4511,7 +4509,7 @@ def test_rerun_errored(tmp_path, capfd):
     assert errors_found == 4
 
 
-def test_wf_state_arrays(tmp_path, plugin):
+def test_wf_state_arrays(tmp_path, worker):
     @workflow.define(outputs={"alpha": int, "beta": ty.List[int]})
     def Worky(x: ty.List[int], y: int):
 
@@ -4556,7 +4554,7 @@ def test_wf_state_arrays(tmp_path, plugin):
 
     worky = Worky(x=[1, 2, 3, 4], y=10)
 
-    outputs = worky(cache_dir=tmp_path, plugin=plugin)
+    outputs = worky(cache_dir=tmp_path, worker=worker)
     assert outputs.alpha == 3000000
     assert outputs.beta == [100000, 400000, 900000, 1600000]
 

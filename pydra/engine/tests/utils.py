@@ -46,23 +46,23 @@ def get_output_names(task):
 def run_no_submitter(
     shell_def: ShellDef,
     cache_dir: Path | None = None,
-    plugin: str | None = None,
+    worker: str | None = None,
     environment: "Environment | None" = None,
 ):
     """helper function to return result when running without submitter"""
-    return shell_def(worker=plugin, cache_dir=cache_dir, environment=environment)
+    return shell_def(worker=worker, cache_dir=cache_dir, environment=environment)
 
 
 def run_submitter(
     shell_def: ShellDef,
     cache_dir: Path | None = None,
-    plugin: str | None = None,
+    worker: str | None = None,
     environment: "Environment | None" = None,
 ):
     """helper function to return result when running with submitter
-    with specific plugin
+    with specific worker
     """
-    with Submitter(worker=plugin, cache_dir=cache_dir, environment=environment) as sub:
+    with Submitter(worker=worker, cache_dir=cache_dir, environment=environment) as sub:
         results = sub(shell_def)
     if results.errored:
         raise RuntimeError(f"task {shell_def} failed:\n" + "\n".join(results.errors))

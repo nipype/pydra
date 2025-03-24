@@ -23,12 +23,12 @@ pytestmark = pytest.mark.skip()
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
-def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir):
+def test_boutiques_1(maskfile, worker, results_function, tmpdir, data_tests_dir):
     """simple task to run fsl.bet using BoshTask"""
     btask = boutiques.define(zenodo_id="1482743")
     btask.infile = data_tests_dir / "test.nii.gz"
     btask.maskfile = maskfile
-    res = btask(plugin, cache_dir=tmpdir)
+    res = btask(worker, cache_dir=tmpdir)
 
     assert res.output.return_code == 0
 
@@ -92,7 +92,7 @@ def test_boutiques_spec_2(data_tests_dir):
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
+def test_boutiques_wf_1(maskfile, worker, tmpdir, infile):
     """wf with one task that runs fsl.bet using BoshTask"""
 
     @workflow.define
@@ -107,7 +107,7 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
         return bet.outfile
 
     wf = Workflow(maskfile=maskfile, infile=infile)
-    wf(plugin=plugin, cache_dir=tmpdir)
+    wf(worker=worker, cache_dir=tmpdir)
 
     res = wf.result()
     assert res.output.outfile.name == "test_brain.nii.gz"
@@ -121,7 +121,7 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_2(maskfile, plugin, tmpdir, infile):
+def test_boutiques_wf_2(maskfile, worker, tmpdir, infile):
     """wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
 
     @workflow.define(outputs=["outfile_bet", "out_stat", "out"])
@@ -143,7 +143,7 @@ def test_boutiques_wf_2(maskfile, plugin, tmpdir, infile):
         cat = workflow.add(shell.define("cat <file>")(file=stat.output))
         return bet.outfile, stat.output, cat.stdout
 
-    res = Workflow(maskfile=maskfile, infile=infile)(plugin=plugin, cache_dir=tmpdir)
+    res = Workflow(maskfile=maskfile, infile=infile)(worker=worker, cache_dir=tmpdir)
     assert res.output.outfile_bet.name == "test_brain.nii.gz"
     assert res.output.outfile_bet.exists()
 

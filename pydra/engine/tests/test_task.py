@@ -1176,12 +1176,12 @@ def test_shell_cmd(tmpdir):
 
 
 def test_functask_callable(tmpdir):
-    # no submitter or plugin
+    # no submitter or worker
     foo = FunAddTwo(a=1)
     outputs = foo()
     assert outputs.out == 3
 
-    # plugin
+    # worker
     bar = FunAddTwo(a=2)
     outputs = bar(worker="cf", cache_dir=tmpdir)
     assert outputs.out == 4
@@ -1344,7 +1344,7 @@ def test_traceback(tmpdir):
     assert "in FunError" in error_tb[-2]
 
 
-def test_traceback_wf(plugin_parallel: str, tmp_path: Path):
+def test_traceback_wf(tmp_path: Path):
     """checking if the error raised in a function is properly returned by a workflow;
     checking if there is an error filename in the error message that contains
     full traceback including the line in the python function
@@ -1361,7 +1361,7 @@ def test_traceback_wf(plugin_parallel: str, tmp_path: Path):
 
     wf = Workflow(x_list=[3, 4])
     with pytest.raises(RuntimeError, match="Job 'fun_error.*, errored") as exinfo:
-        with Submitter(worker=plugin_parallel, cache_dir=tmp_path) as sub:
+        with Submitter(worker="cf", cache_dir=tmp_path) as sub:
             sub(wf, raise_errors=True)
 
     # getting error file from the error message

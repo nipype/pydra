@@ -55,6 +55,36 @@ jobs:
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Set env for singularity
+        run: echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
+      - name: Disable etelemetry
+        run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
+      - name: Setup Singularity
+        uses: actions/checkout@v4
+        with:
+          repository: hpcng/singularity
+          ref: 'v3.7.1'
+          path: 'singularity'
+      - name: Setup GO
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.13'
+      - name: Install OS deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install flawfinder squashfs-tools uuid-dev libuuid1 libffi-dev libssl-dev libssl1.1 \
+          libarchive-dev libgpgme11-dev libseccomp-dev wget gcc make pkg-config -y
+      - name: Build
+        run: |
+          cd singularity
+          ./mconfig --without-suid -p /usr/local/
+          make -C ./builddir
+          sudo make -C ./builddir install
+          cd ..
+      - name: Echo singularity version
+        run: |
+          echo ${{ github.ref }}
+          singularity --version
       - name: Fetch repository
         uses: actions/checkout@v4
       - name: Fetch tags
@@ -66,14 +96,12 @@ jobs:
       - name: Update pip
         run: python -m pip install --upgrade pip
       - name: Install Pydra
-        run: pip install .[test]
+        run: pip install .[test,psij,dask]
       - name: Print version
         run: python -c "import pydra.engine; print(pydra.engine.__version__)"
-      - name: Disable etelemetry
-        run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Pytest
         run: |
-          pytest -vs -n auto pydra --doctest-modules --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -vs -n auto pydra --doctest-modules --with-psij --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
@@ -101,43 +129,15 @@ jobs:
           pip install -e ".[test,dask]"
       - name: Run tests for Dask
         run: |
-          pytest -v --dask pydra/engine --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -v --dask pydra/engine/test_submitter.py --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
-  test-psijlocal:
+  test-slurm:
     needs: ['build']
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ['3.11']
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-      - name: Fetch tags
-        run: git fetch --prune --unshallow
-      - name: Setup Python version ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies for PSI/J
-        run: |
-          pip install -e ".[test, psij]"
-      - name: Run tests for PSI/J
-        run: |
-          pytest --color=yes -vs --psij=local -n auto pydra/engine --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
-      - name: Upload to codecov
-        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
-
-  test-psijslurm:
-    needs: ['build']
-    strategy:
-      matrix:
-        python-version: [3.11.5]
+        python-version: [3.11.7]
       fail-fast: false
     runs-on: ubuntu-latest
     env:
@@ -174,112 +174,7 @@ jobs:
         docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.engine.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "pytest --color=yes -vs -n auto --psij=slurm --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/engine/tests/test_workflow.py /pydra/pydra/engine/tests/test_submitter.py /pydra/pydra/engine/tests/test_node_task.py -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
-    - name: Upload to codecov
-      run: |
-        docker exec slurm bash -c "pip install urllib3==1.26.6"
-        docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
-        docker rm -f slurm
-
-  test-singularity:
-    needs: ['build']
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        python-version: ['3.11', '3.12', '3.13']
-      fail-fast: False
-    steps:
-      - name: Set env
-        run: |
-          echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
-          echo "NO_ET=TRUE" >> $GITHUB_ENV
-      - name: Setup Singularity
-        uses: actions/checkout@v4
-        with:
-          repository: hpcng/singularity
-          ref: 'v3.7.1'
-          path: 'singularity'
-      - name: Setup GO
-        uses: actions/setup-go@v5
-        with:
-          go-version: '^1.13'
-      - name: Install OS deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install flawfinder squashfs-tools uuid-dev libuuid1 libffi-dev libssl-dev libssl1.1 \
-          libarchive-dev libgpgme11-dev libseccomp-dev wget gcc make pkg-config -y
-      - name: Build
-        run: |
-          cd singularity
-          ./mconfig --without-suid -p /usr/local/
-          make -C ./builddir
-          sudo make -C ./builddir install
-          cd ..
-      - name: Echo singularity version
-        run: |
-          echo ${{ github.ref }}
-          singularity --version
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Update build tools
-        run: python -m pip install --upgrade pip
-      - name: Checkout Pydra repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-      - name: Fetch tags
-        run: git fetch --prune --unshallow
-      - name: Install pydra (test)
-        run: pip install -e ".[test]"
-      - name: Pytest
-        run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/engine/tests/test_singularity.py pydra/engine/tests/test_environments.py
-      - name: Upload to codecov
-        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
-
-  test-slurm:
-    needs: ['build']
-    strategy:
-      matrix:
-        python-version: [3.11.5]
-      fail-fast: false
-    runs-on: ubuntu-latest
-    env:
-      DOCKER_IMAGE: adi611/docker-centos7-slurm:23.02.1
-    steps:
-    - name: Disable etelemetry
-      run: echo "NO_ET=TRUE" >> $GITHUB_ENV
-    - uses: actions/checkout@v4
-    - name: Fetch tags
-      run: git fetch --prune --unshallow
-    - name: Pull docker image
-      run: |
-        docker pull $DOCKER_IMAGE
-        # Have image running in the background
-        docker run `bash <(curl -s https://codecov.io/env)` -itd -h slurmctl --cap-add sys_admin -d --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
-    - name: Display previous jobs with sacct
-      run: |
-        echo "Allowing ports/daemons time to start" && sleep 10
-        docker exec slurm bash -c "sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
-        docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
-        if [ $? -ne 0 ]; then
-            echo "Slurm docker image error"
-            exit 1
-        fi
-    - name: Setup Python
-      run: |
-        docker exec slurm bash -c "echo $NO_ET"
-        docker exec slurm bash -c "ls -la && echo list top level dir"
-        docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
-        if [[ "${{ matrix.python-version }}" == "3.11.5" ]]; then
-            docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v 3.11.5"
-        fi
-        docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
-        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test] && python -c 'import pydra.engine; print(pydra.engine.__version__)'"
-    - name: Run pytest
-      run: |
-        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_workflow.py /pydra/pydra/engine/tests/test_submitter.py /pydra/pydra/engine/tests/test_node_task.py --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
+        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --with-psij --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/"
     - name: Upload to codecov
       run: |
         docker exec slurm bash -c "pip install urllib3==1.26.6"
@@ -357,7 +252,7 @@ jobs:
         path: docs/build/html
 
   deploy:
-    needs: [build-docs, test, test-dask, test-psijlocal, test-psijslurm, test-singularity, test-slurm]
+    needs: [build-docs, test, test-dask, test-slurm]
     runs-on: ubuntu-latest
     steps:
     - name: Download dist

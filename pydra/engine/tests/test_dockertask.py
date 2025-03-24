@@ -11,7 +11,7 @@ from .utils import no_win, need_docker, run_submitter, run_no_submitter
 
 @no_win
 @need_docker
-def test_docker_1_nosubm():
+def test_docker_1_nosubm(tmp_path):
     """simple command in a container, a default bindings and working directory is added
     no submitter
     """
@@ -21,7 +21,7 @@ def test_docker_1_nosubm():
     docky_task = Task(
         definition=docky,
         name="docky",
-        submitter=Submitter(environment=Docker(image="busybox")),
+        submitter=Submitter(environment=Docker(image="busybox"), cache_dir=tmp_path),
     )
     assert docky_task.environment.image == "busybox"
     assert docky_task.environment.tag == "latest"
@@ -35,7 +35,7 @@ def test_docker_1_nosubm():
 
 @no_win
 @need_docker
-def test_docker_1(plugin):
+def test_docker_1(worker, tmp_path):
     """simple command in a container, a default bindings and working directory is added
     using submitter
     """
@@ -43,7 +43,7 @@ def test_docker_1(plugin):
     Docky = shell.define(cmd)
     docky = Docky()
 
-    with Submitter(environment=Docker(image="busybox")) as sub:
+    with Submitter(cache_dir=tmp_path, environment=Docker(image="busybox")) as sub:
         res = sub(docky)
 
     assert res.outputs.stdout == "root\n"
@@ -53,7 +53,7 @@ def test_docker_1(plugin):
 @no_win
 @need_docker
 @pytest.mark.parametrize("run_function", [run_no_submitter, run_submitter])
-def test_docker_2(run_function, plugin, tmp_path):
+def test_docker_2(run_function, worker, tmp_path):
     """a command with arguments, cmd and args given as executable
     with and without submitter
     """
@@ -62,7 +62,7 @@ def test_docker_2(run_function, plugin, tmp_path):
     docky = Docky()
     # cmdline doesn't know anything about docker
     assert docky.cmdline == cmdline
-    outputs = run_function(docky, tmp_path, plugin, environment=Docker(image="busybox"))
+    outputs = run_function(docky, tmp_path, worker, environment=Docker(image="busybox"))
     assert outputs.stdout.strip() == " ".join(cmdline.split()[1:])
     assert outputs.return_code == 0
 
@@ -70,7 +70,7 @@ def test_docker_2(run_function, plugin, tmp_path):
 @no_win
 @need_docker
 @pytest.mark.parametrize("run_function", [run_no_submitter, run_submitter])
-def test_docker_2a(run_function, plugin, tmp_path):
+def test_docker_2a(run_function, worker, tmp_path):
     """a command with arguments, using executable and args
     using submitter
     """
@@ -81,7 +81,7 @@ def test_docker_2a(run_function, plugin, tmp_path):
     assert docky.executable == cmd
     assert docky.cmdline == " ".join(cmd)
 
-    outputs = run_function(docky, tmp_path, plugin, environment=Docker(image="busybox"))
+    outputs = run_function(docky, tmp_path, worker, environment=Docker(image="busybox"))
     assert outputs.stdout.strip() == " ".join(cmd[1:])
     assert outputs.return_code == 0
 
@@ -92,7 +92,7 @@ def test_docker_2a(run_function, plugin, tmp_path):
 @no_win
 @need_docker
 @pytest.mark.parametrize("run_function", [run_no_submitter, run_submitter])
-def test_docker_st_1(run_function, plugin, tmp_path):
+def test_docker_st_1(run_function, worker, tmp_path):
     """commands without arguments in container
     splitter = executable
     """
@@ -100,7 +100,7 @@ def test_docker_st_1(run_function, plugin, tmp_path):
     Docky = shell.define("docky")  # cmd is just a placeholder
     docky = Docky().split(executable=cmd)
 
-    outputs = run_function(docky, tmp_path, plugin, environment=Docker(image="busybox"))
+    outputs = run_function(docky, tmp_path, worker, environment=Docker(image="busybox"))
     assert (
         outputs.stdout[0]
         == f"/mnt/pydra{tmp_path}/{attrs.evolve(docky, executable=cmd[0])._checksum}\n"
@@ -114,7 +114,7 @@ def test_docker_st_1(run_function, plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_outputspec_1(plugin, tmp_path):
+def test_docker_outputspec_1(worker, tmp_path):
     """
     customised output_spec, adding files to the output, providing specific pathname
     output_path is automatically added to the bindings
@@ -122,7 +122,7 @@ def test_docker_outputspec_1(plugin, tmp_path):
     Docky = shell.define("touch <out|newfile$newfile_tmp.txt>")
     docky = Docky()
 
-    outputs = docky(plugin=plugin, environment=Docker(image="ubuntu"))
+    outputs = docky(worker=worker, environment=Docker(image="ubuntu"))
     assert outputs.stdout == ""
 
 
@@ -131,7 +131,7 @@ def test_docker_outputspec_1(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_inputspec_1(tmp_path, plugin):
+def test_docker_inputspec_1(tmp_path, worker):
     """a simple customized input definition for docker task"""
     filename = str(tmp_path / "file_pydra.txt")
     with open(filename, "w") as f:
@@ -155,7 +155,7 @@ def test_docker_inputspec_1(tmp_path, plugin):
     docky = Docky(file=filename)
 
     outputs = docky(
-        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
     )
     assert outputs.stdout.strip() == "hello from pydra"
 
@@ -194,7 +194,7 @@ def test_docker_inputspec_1a(tmp_path):
 
 @no_win
 @need_docker
-def test_docker_inputspec_2(plugin, tmp_path):
+def test_docker_inputspec_2(worker, tmp_path):
     """a customized input definition with two fields for docker task"""
     filename_1 = tmp_path / "file_pydra.txt"
     with open(filename_1, "w") as f:
@@ -239,7 +239,7 @@ def test_docker_inputspec_2(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_inputspec_2a_except(plugin, tmp_path):
+def test_docker_inputspec_2a_except(worker, tmp_path):
     """a customized input definition with two fields
     first one uses a default, and second doesn't - raises a dataclass exception
     """
@@ -279,14 +279,14 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
     assert docky.file2.fspath == filename_2
 
     outputs = docky(
-        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
     )
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
 
 @no_win
 @need_docker
-def test_docker_inputspec_2a(plugin, tmp_path):
+def test_docker_inputspec_2a(worker, tmp_path):
     """a customized input definition with two fields
     first one uses a default value
     this is fine even if the second field is not using any defaults
@@ -324,7 +324,7 @@ def test_docker_inputspec_2a(plugin, tmp_path):
     docky = Docky(file2=filename_2)
 
     outputs = docky(
-        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
     )
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
@@ -332,7 +332,7 @@ def test_docker_inputspec_2a(plugin, tmp_path):
 @no_win
 @need_docker
 @pytest.mark.xfail(reason="'docker' not in /proc/1/cgroup on ubuntu; TODO")
-def test_docker_inputspec_3(plugin, tmp_path):
+def test_docker_inputspec_3(worker, tmp_path):
     """input file is in the container, so metadata["container_path"]: True,
     the input will be treated as a str"""
     filename = "/proc/1/cgroup"
@@ -364,7 +364,7 @@ def test_docker_inputspec_3(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
+def test_docker_cmd_inputspec_copyfile_1(worker, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=True to the file-input from input_spec
     hardlink or copy in the output_dir should be created
@@ -392,7 +392,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
     docky = Docky(orig_file=str(file))
 
     outputs = docky(
-        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
     )
     assert outputs.stdout == ""
     out_file = outputs.out_file.fspath
@@ -408,7 +408,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_inputspec_state_1(plugin, tmp_path):
+def test_docker_inputspec_state_1(worker, tmp_path):
     """a customised input definition for a docker file with a splitter,
     splitter is on files
     """
@@ -437,7 +437,7 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
     docky = Docky().split(file=[str(filename_1), str(filename_2)])
 
     outputs = docky(
-        worker=plugin, cache_dir=tmp_path, environment=Docker(image="busybox")
+        worker=worker, cache_dir=tmp_path, environment=Docker(image="busybox")
     )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
@@ -445,7 +445,7 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_inputspec_state_1b(plugin, tmp_path):
+def test_docker_inputspec_state_1b(worker, tmp_path):
     """a customised input definition for a docker file with a splitter,
     files from the input definition have the same path in the local os and the container,
     so hash is calculated and the test works fine
@@ -474,7 +474,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
     docky = Docky().split(file=[str(file_1), str(file_2)])
 
     outputs = docky(
-        cache_dir=tmp_path, worker=plugin, environment=Docker(image="busybox")
+        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
     )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
@@ -482,7 +482,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_wf_inputspec_1(plugin, tmp_path):
+def test_docker_wf_inputspec_1(worker, tmp_path):
     """a customized input definition for workflow with docker tasks"""
     filename = tmp_path / "file_pydra.txt"
     with open(filename, "w") as f:
@@ -521,7 +521,7 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_wf_state_inputspec_1(plugin, tmp_path):
+def test_docker_wf_state_inputspec_1(worker, tmp_path):
     """a customized input definition for workflow with docker tasks that has a state"""
     file_1 = tmp_path / "file_pydra.txt"
     file_2 = tmp_path / "file_nice.txt"
@@ -565,7 +565,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
 
 @no_win
 @need_docker
-def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
+def test_docker_wf_ndst_inputspec_1(worker, tmp_path):
     """a customized input definition for workflow with docker tasks with states"""
     file_1 = tmp_path / "file_pydra.txt"
     file_2 = tmp_path / "file_nice.txt"

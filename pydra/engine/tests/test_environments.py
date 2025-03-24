@@ -152,7 +152,7 @@ def test_singularity_1(tmp_path):
 
 @no_win
 @need_singularity
-def test_singularity_1_subm(tmp_path, plugin):
+def test_singularity_1_subm(tmp_path, worker):
     """docker env with submitter: simple command, no arguments"""
 
     def newcache(x):
@@ -171,7 +171,7 @@ def test_singularity_1_subm(tmp_path, plugin):
     outputs_dict = sing.execute(shelly_job)
 
     with Submitter(
-        worker=plugin, environment=sing, cache_dir=newcache("singu_sub")
+        worker=worker, environment=sing, cache_dir=newcache("singu_sub")
     ) as sub:
         results = sub(shelly)
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
@@ -286,7 +286,7 @@ def test_docker_fileinp(tmp_path):
 
 @no_win
 @need_docker
-def test_docker_fileinp_subm(tmp_path, plugin):
+def test_docker_fileinp_subm(tmp_path, worker):
     """docker env with a submitter: task with a file in the command/input"""
 
     def newcache(x):
@@ -304,10 +304,10 @@ def test_docker_fileinp_subm(tmp_path, plugin):
     outputs_dict = docker.execute(shelly_job)
 
     with Submitter(
-        environment=docker, cache_dir=newcache("docker_sub"), worker=plugin
+        environment=docker, cache_dir=newcache("docker_sub"), worker=worker
     ) as sub:
         results = sub(shelly)
-    with Submitter(worker=plugin) as sub:
+    with Submitter(worker=worker) as sub:
         results = sub(shelly)
     assert outputs_dict == attrs_values(results.outputs)
 
