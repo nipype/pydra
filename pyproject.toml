@@ -61,7 +61,7 @@ doc = [
     "pandoc",
     "pydra-mrtrix3 >=3.0.4a17",
     "scipy",
-    "sphinx ==6.2.1",
+    "sphinx",
     "sphinx-argparse",
     "sphinx-click",
     "sphinx_rtd_theme",
