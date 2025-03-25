@@ -36,18 +36,19 @@ def pytest_generate_tests(metafunc):
         try:
             only_worker = metafunc.config.getoption("only_worker")
         except ValueError:
-            pass
-        else:
-            return [only_worker]
-        available_workers = ["debug", "cf"]
-        if with_dask:
-            available_workers.append("dask")
-        if bool(shutil.which("sbatch")):
-            available_workers.append("slurm")
+            available_workers = ["debug", "cf"]
+            if with_dask:
+                available_workers.append("dask")
+            if bool(shutil.which("sbatch")):
+                available_workers.append("slurm")
+                if with_psij:
+                    available_workers.append("psij-slurm")
             if with_psij:
-                available_workers.append("psij-slurm")
-        if with_psij:
-            available_workers.append("psij-local")
+                available_workers.append("psij-local")
+        else:
+            available_workers = [only_worker]
+        # Set the available workers as a parameter to the
+        # test function
         metafunc.parametrize("any_worker", available_workers)
 
 
