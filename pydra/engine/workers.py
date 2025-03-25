@@ -110,48 +110,6 @@ class DistributedWorker(Worker):
         """Maximum number of concurrently running jobs."""
         self._jobs = 0
 
-    async def fetch_finished(self, futures):
-        """
-        Awaits asyncio's :class:`asyncio.Task` until one is finished.
-
-        Limits number of submissions based on
-        py:attr:`DistributedWorker.max_jobs`.
-
-        Parameters
-        ----------
-        futures : set of asyncio awaitables
-            Task execution coroutines or asyncio :class:`asyncio.Task`
-
-        Returns
-        -------
-        pending : set
-            Pending asyncio :class:`asyncio.Task`.
-
-        """
-        done, unqueued = set(), set()
-        job_slots = self.max_jobs - self._jobs if self.max_jobs else float("inf")
-        if len(futures) > job_slots:
-            # convert to list to simplify indexing
-            logger.warning(f"Reducing queued jobs due to max jobs ({self.max_jobs})")
-            futures = list(futures)
-            futures, unqueued = set(futures[:job_slots]), set(futures[job_slots:])
-        try:
-            self._jobs += len(futures)
-            done, pending = await asyncio.wait(
-                [
-                    asyncio.create_task(f) if not isinstance(f, asyncio.Task) else f
-                    for f in futures
-                ],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-        except ValueError:
-            # nothing pending!
-            pending = set()
-        self._jobs -= len(done)
-        logger.debug(f"Tasks finished: {len(done)}")
-        # ensure pending + unqueued tasks persist
-        return pending.union(unqueued), done
-
 
 class DebugWorker(Worker):
     """A worker to execute linearly."""

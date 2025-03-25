@@ -61,6 +61,8 @@ class Submitter:
         The execution environment to use, by default None
     cache_locations : list[os.PathLike], optional
         Alternate cache locations to check for pre-computed results, by default None
+    max_concurrent: int | float, optional
+        Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
     audit_flags : AuditFlag, optional
         Auditing configuration, by default AuditFlag.NONE
     messengers : list, optional
@@ -83,6 +85,7 @@ class Submitter:
     audit_flags: AuditFlag
     messengers: ty.Iterable[Messenger]
     messenger_args: dict[str, ty.Any]
+    max_concurrent: int | float
     clean_stale_locks: bool
     run_start_time: datetime | None
     propagate_rerun: bool
@@ -97,6 +100,7 @@ class Submitter:
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
+        max_concurrent: int | float = float("inf"),
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
         **kwargs,
@@ -126,6 +130,14 @@ class Submitter:
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
         self.propagate_rerun = propagate_rerun
+        if max_concurrent < 1 or (
+            isinstance(max_concurrent, float) and max_concurrent != float("inf")
+        ):
+            raise ValueError(
+                "'max_concurrent' arg must be a positive integer or float('inf'), "
+                f"not {max_concurrent}"
+            )
+        self.max_concurrent = max_concurrent
         self.environment = environment if environment is not None else Native()
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
@@ -261,16 +273,16 @@ class Submitter:
         try:
             self.run_start_time = datetime.now()
             self.submit(task, rerun=rerun)
-        except Exception as e:
-            msg = (
+        except Exception as exc:
+            error_msg = (
                 f"Full crash report for {type(task_def).__name__!r} task is here: "
                 + str(task.output_dir / "_error.pklz")
             )
-            if raise_errors:
-                e.add_note(msg)
-                raise e
+            exc.add_note(error_msg)
+            if raise_errors or not task.result():
+                raise exc
             else:
-                logger.error("\nTask execution failed\n%s", msg)
+                logger.error("\nTask execution failed\n%s", error_msg)
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()
@@ -536,6 +548,13 @@ class Submitter:
                 not_started.add(node)
             tasks.extend(node.get_runnable_tasks(graph))
         self._check_locks(tasks)
+        if len(tasks) > self.max_concurrent:
+            logger.info(
+                "Reducing number of tasks to run concurrently from %d to %d",
+                len(tasks),
+                self.max_concurrent,
+            )
+            tasks = tasks[: self.max_concurrent]
         return tasks
 
     @property
