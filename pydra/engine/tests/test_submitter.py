@@ -33,9 +33,7 @@ logger = logging.getLogger("pydra.worker")
 
 @python.define
 def SleepAddOne(x):
-    print(f"Sleeping for a second before adding 1 to {x} at {datetime.now()}")
     time.sleep(1)
-    print(f"adding 1 to {x} at {datetime.now()}")
     return x + 1
 
 
