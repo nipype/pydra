@@ -241,8 +241,8 @@ def test_slurm_wf_state(tmpdir):
     assert len(sdirs) == 2 * len(wf.x)
 
 
-# @need_slurm
-# @pytest.mark.flaky(reruns=3)
+@need_slurm
+@pytest.mark.flaky(reruns=3)
 def test_slurm_max_jobs(tmp_path):
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x, y):

@@ -36,6 +36,8 @@ def pytest_generate_tests(metafunc):
         try:
             only_worker = metafunc.config.getoption("only_worker")
         except ValueError:
+            only_worker = None
+        if only_worker is None:
             available_workers = ["debug", "cf"]
             if with_dask:
                 available_workers.append("dask")
