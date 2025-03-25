@@ -1066,8 +1066,8 @@ class PsijFluxWorker(PsijWorker):
     """A worker to execute tasks using PSI/J using SLURM."""
 
     subtype = "flux"
-    plugin_name = f"psij-{subtype}"    
-    
+    plugin_name = f"psij-{subtype}"
+
 
 WORKERS = {
     w.plugin_name: w
