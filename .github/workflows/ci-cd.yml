@@ -66,23 +66,24 @@ jobs:
       - name: Update pip
         run: python -m pip install --upgrade pip
       - name: Install Pydra
-        run: pip install .[test,psij,dask]
+        run: pip install .[test]
       - name: Print version
         run: python -c "import pydra.engine; print(pydra.engine.__version__)"
       - name: Disable etelemetry
         run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Pytest
         run: |
-          pytest -vs -n auto pydra --doctest-modules --with-psij --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -vs -n auto pydra --doctest-modules --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
-  test-dask:
+  test-worker:
     needs: ['build']
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         python-version: ['3.11', '3.12', '3.13']
+        worker: ["psij-local", "dask"]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -96,12 +97,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dependencies for Dask
+      - name: Install package
         run: |
-          pip install -e ".[test,dask]"
+          pip install -e ".[test,dask,psij]"
       - name: Run tests for Dask
         run: |
-          pytest -v pydra/engine/tests/test_submitter.py --only-worker=dask --rootdir pydra --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -v pydra/engine/tests/test_submitter.py --only-worker=${{ matrix.worker }} --rootdir pydra --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
