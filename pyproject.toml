@@ -83,7 +83,6 @@ test = [
     "psutil",
     "python-dateutil",
     "tornado",
-    "boutiques",
     "pympler",
 ]
 tutorial = [
