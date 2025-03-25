@@ -18,5 +18,4 @@ sphinx:
 # Install extra requirements for the documentation.
 python:
   install:
-    - method: pip
-      path: 'empty-docs'
+    - requirements: empty-docs/requirements.txt
