@@ -1,4 +1,5 @@
 """Execution workers."""
+
 import asyncio
 import sys
 import json
@@ -127,23 +128,25 @@ class DistributedWorker(Worker):
 class SerialWorker(Worker):
     """A worker to execute linearly."""
 
+    plugin_name = "serial"
+
     def __init__(self, **kwargs):
         """Initialize worker."""
         logger.debug("Initialize SerialWorker")
 
-    def run_el(self, interface, rerun=False, **kwargs):
+    def run_el(self, interface, rerun=False, environment=None, **kwargs):
         """Run a task."""
-        return self.exec_serial(interface, rerun=rerun)
+        return self.exec_serial(interface, rerun=rerun, environment=environment)
 
     def close(self):
         """Return whether the task is finished."""
 
-    async def exec_serial(self, runnable, rerun=False):
+    async def exec_serial(self, runnable, rerun=False, environment=None):
         if isinstance(runnable, TaskBase):
-            return runnable._run(rerun)
+            return runnable._run(rerun, environment=environment)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, _ = runnable
-            return load_and_run(task_main_pkl, ind, rerun)
+            return load_and_run(task_main_pkl, ind, rerun, environment=environment)
 
     async def fetch_finished(self, futures):
         await asyncio.gather(*futures)
@@ -156,6 +159,8 @@ class SerialWorker(Worker):
 class ConcurrentFuturesWorker(Worker):
     """A worker to execute in parallel using Python's concurrent futures."""
 
+    plugin_name = "cf"
+
     def __init__(self, n_procs=None):
         """Initialize Worker."""
         super().__init__()
@@ -165,19 +170,21 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, runnable, rerun=False, **kwargs):
+    def run_el(self, runnable, rerun=False, environment=None, **kwargs):
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        return self.exec_as_coro(runnable, rerun=rerun)
+        return self.exec_as_coro(runnable, rerun=rerun, environment=environment)
 
-    async def exec_as_coro(self, runnable, rerun=False):
+    async def exec_as_coro(self, runnable, rerun=False, environment=None):
         """Run a task (coroutine wrapper)."""
         if isinstance(runnable, TaskBase):
-            res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
+            res = await self.loop.run_in_executor(
+                self.pool, runnable._run, rerun, environment
+            )
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
-                self.pool, load_and_run, task_main_pkl, ind, rerun
+                self.pool, load_and_run, task_main_pkl, ind, rerun, environment
             )
         return res
 
@@ -189,6 +196,7 @@ class ConcurrentFuturesWorker(Worker):
 class SlurmWorker(DistributedWorker):
     """A worker to execute tasks on SLURM systems."""
 
+    plugin_name = "slurm"
     _cmd = "sbatch"
     _sacct_re = re.compile(
         "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
@@ -215,7 +223,7 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
         self.error = {}
 
-    def run_el(self, runnable, rerun=False):
+    def run_el(self, runnable, rerun=False, environment=None):
         """Worker submission API."""
         script_dir, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
@@ -364,6 +372,8 @@ class SlurmWorker(DistributedWorker):
 class SGEWorker(DistributedWorker):
     """A worker to execute tasks on SLURM systems."""
 
+    plugin_name = "sge"
+
     _cmd = "qsub"
     _sacct_re = re.compile(
         "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
@@ -443,7 +453,7 @@ class SGEWorker(DistributedWorker):
         self.default_qsub_args = default_qsub_args
         self.max_mem_free = max_mem_free
 
-    def run_el(self, runnable, rerun=False):
+    def run_el(self, runnable, rerun=False):  # TODO: add env
         """Worker submission API."""
         (
             script_dir,
@@ -857,6 +867,8 @@ class DaskWorker(Worker):
     This is an experimental implementation with limited testing.
     """
 
+    plugin_name = "dask"
+
     def __init__(self, **kwargs):
         """Initialize Worker."""
         super().__init__()
@@ -895,7 +907,7 @@ class DaskWorker(Worker):
 class PsijWorker(Worker):
     """A worker to execute tasks using PSI/J."""
 
-    def __init__(self, subtype, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize PsijWorker.
 
@@ -1036,14 +1048,37 @@ class PsijWorker(Worker):
         pass
 
 
+class PsijLocalWorker(PsijWorker):
+    """A worker to execute tasks using PSI/J on the local machine."""
+
+    subtype = "local"
+    plugin_name = f"psij-{subtype}"
+
+
+class PsijSlurmWorker(PsijWorker):
+    """A worker to execute tasks using PSI/J using SLURM."""
+
+    subtype = "slurm"
+    plugin_name = f"psij-{subtype}"
+
+
+class PsijFluxWorker(PsijWorker):
+    """A worker to execute tasks using PSI/J using SLURM."""
+
+    subtype = "flux"
+    plugin_name = f"psij-{subtype}"    
+    
+
 WORKERS = {
-    "serial": SerialWorker,
-    "cf": ConcurrentFuturesWorker,
-    "slurm": SlurmWorker,
-    "dask": DaskWorker,
-    "sge": SGEWorker,
-    **{
-        "psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype)
-        for subtype in ["local", "slurm", "flux"]
-    },
+    w.plugin_name: w
+    for w in (
+        SerialWorker,
+        ConcurrentFuturesWorker,
+        SlurmWorker,
+        DaskWorker,
+        SGEWorker,
+        PsijLocalWorker,
+        PsijSlurmWorker,
+        PsijFluxWorker,
+    )
 }

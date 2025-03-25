@@ -3,10 +3,11 @@ import subprocess as sp
 import pytest
 import attr
 
-from ..task import SingularityTask, DockerTask, ShellCommandTask
+from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec
+from ..specs import ShellOutSpec, SpecInfo, File, ShellSpec
+from ..environments import Singularity
 
 
 need_docker = pytest.mark.skipif(
@@ -29,18 +30,18 @@ def test_singularity_1_nosubm(tmp_path):
     """
     cmd = "pwd"
     image = "docker://alpine"
-    singu = SingularityTask(
-        name="singu", executable=cmd, image=image, cache_dir=tmp_path
+    singu = ShellCommandTask(
+        name="singu",
+        executable=cmd,
+        environment=Singularity(image=image),
+        cache_dir=tmp_path,
     )
-    assert singu.inputs.image == "docker://alpine"
-    assert singu.inputs.container == "singularity"
-    assert (
-        singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {cmd}"
-    )
+    assert singu.environment.image == "docker://alpine"
+    assert isinstance(singu.environment, Singularity)
+    assert singu.cmdline == cmd
 
     res = singu()
-    assert "output_pydra" in res.output.stdout
+    assert "/mnt/pydra" in res.output.stdout
     assert res.output.return_code == 0
 
 
@@ -51,13 +52,13 @@ def test_singularity_2_nosubm(tmp_path):
     """
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
-    singu = SingularityTask(
-        name="singu", executable=cmd, image=image, cache_dir=tmp_path
+    singu = ShellCommandTask(
+        name="singu",
+        executable=cmd,
+        environment=Singularity(image=image),
+        cache_dir=tmp_path,
     )
-    assert (
-        singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
-    )
+    assert singu.cmdline == " ".join(cmd)
 
     res = singu()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
@@ -71,42 +72,18 @@ def test_singularity_2(plugin, tmp_path):
     """
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
-    singu = SingularityTask(
-        name="singu", executable=cmd, image=image, cache_dir=tmp_path
+
+    singu = ShellCommandTask(
+        name="singu",
+        executable=cmd,
+        environment=Singularity(image=image),
+        cache_dir=tmp_path,
     )
-    assert (
-        singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
-    )
+    assert singu.cmdline == " ".join(cmd)
 
     with Submitter(plugin=plugin) as sub:
         singu(submitter=sub)
     res = singu.result()
-    assert res.output.stdout.strip() == " ".join(cmd[1:])
-    assert res.output.return_code == 0
-
-
-@need_singularity
-def test_singularity_2_singuflag(plugin, tmp_path):
-    """a command with arguments, cmd and args given as executable
-    using ShellComandTask with container_info=("singularity", image)
-    """
-    cmd = ["echo", "hail", "pydra"]
-    image = "docker://alpine"
-    shingu = ShellCommandTask(
-        name="shingu",
-        executable=cmd,
-        container_info=("singularity", image),
-        cache_dir=tmp_path,
-    )
-    assert (
-        shingu.cmdline
-        == f"singularity exec -B {shingu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
-    )
-
-    with Submitter(plugin=plugin) as sub:
-        shingu(submitter=sub)
-    res = shingu.result()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
 
@@ -120,100 +97,19 @@ def test_singularity_2a(plugin, tmp_path):
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
     image = "docker://alpine"
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
         executable=cmd_exec,
         args=cmd_args,
-        image=image,
+        environment=Singularity(image=image),
         cache_dir=tmp_path,
     )
-    assert (
-        singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {cmd_exec} {' '.join(cmd_args)}"
-    )
+    assert singu.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
     with Submitter(plugin=plugin) as sub:
         singu(submitter=sub)
     res = singu.result()
     assert res.output.stdout.strip() == " ".join(cmd_args)
-    assert res.output.return_code == 0
-
-
-@need_singularity
-@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
-def test_singularity_3(plugin, tmp_path):
-    """a simple command in container with bindings,
-    creating directory in tmp dir and checking if it is in the container
-    """
-    # creating a new directory
-    (tmp_path / "new_dir").mkdir()
-    cmd = ["ls", "/tmp_dir"]
-    image = "docker://alpine"
-    singu = SingularityTask(
-        name="singu", executable=cmd, image=image, cache_dir=tmp_path
-    )
-    # binding tmp directory to the container
-    singu.inputs.bindings = [(str(tmp_path), "/tmp_dir", "ro")]
-
-    with Submitter(plugin=plugin) as sub:
-        singu(submitter=sub)
-
-    res = singu.result()
-    assert "new_dir\n" in res.output.stdout
-    assert res.output.return_code == 0
-
-
-@need_singularity
-@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
-def test_singularity_3_singuflag(plugin, tmp_path):
-    """a simple command in container with bindings,
-    creating directory in tmp dir and checking if it is in the container
-    using ShellComandTask with container_info=("singularity", image)
-    """
-    # creating a new directory
-    (tmp_path / "new_dir").mkdir()
-    cmd = ["ls", "/tmp_dir"]
-    image = "docker://alpine"
-    shingu = SingularityTask(
-        name="singu",
-        executable=cmd,
-        container_info=("singularity", image),
-        cache_dir=tmp_path,
-    )
-    # binding tmp directory to the container
-    shingu.inputs.bindings = [(str(tmp_path), "/tmp_dir", "ro")]
-
-    with Submitter(plugin=plugin) as sub:
-        shingu(submitter=sub)
-
-    res = shingu.result()
-    assert "new_dir\n" in res.output.stdout
-    assert res.output.return_code == 0
-
-
-@need_singularity
-@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
-def test_singularity_3_singuflagbind(plugin, tmp_path):
-    """a simple command in container with bindings,
-    creating directory in tmp dir and checking if it is in the container
-    using ShellComandTask with container_info=("singularity", image, bindings)
-    """
-    # creating a new directory
-    (tmp_path / "new_dir").mkdir()
-    cmd = ["ls", "/tmp_dir"]
-    image = "docker://alpine"
-    shingu = SingularityTask(
-        name="singu",
-        executable=cmd,
-        container_info=("singularity", image, [(str(tmp_path), "/tmp_dir", "ro")]),
-        cache_dir=tmp_path,
-    )
-
-    with Submitter(plugin=plugin) as sub:
-        shingu(submitter=sub)
-
-    res = shingu.result()
-    assert "new_dir\n" in res.output.stdout
     assert res.output.return_code == 0
 
 
@@ -227,154 +123,39 @@ def test_singularity_st_1(plugin, tmp_path):
     """
     cmd = ["pwd", "ls"]
     image = "docker://alpine"
-    singu = SingularityTask(name="singu", image=image, cache_dir=tmp_path).split(
-        "executable", executable=cmd
-    )
+    singu = ShellCommandTask(
+        name="singu", environment=Singularity(image=image), cache_dir=tmp_path
+    ).split("executable", executable=cmd)
     assert singu.state.splitter == "singu.executable"
 
     res = singu(plugin=plugin)
-    assert "/output_pydra" in res[0].output.stdout
+    assert "/mnt/pydra" in res[0].output.stdout
     assert res[1].output.stdout == ""
     assert res[0].output.return_code == res[1].output.return_code == 0
 
 
 @need_singularity
-def test_singularity_st_2(plugin, tmp_path):
-    """command with arguments in docker, checking the distribution
-    splitter = image
-    """
-    cmd = ["cat", "/etc/issue"]
-    image = ["docker://alpine", "docker://ubuntu"]
-    singu = SingularityTask(name="singu", executable=cmd, cache_dir=tmp_path).split(
-        "image", image=image
-    )
-    assert singu.state.splitter == "singu.image"
-
-    res = singu(plugin=plugin)
-    assert "Alpine" in res[0].output.stdout
-    assert "Ubuntu" in res[1].output.stdout
-    assert res[0].output.return_code == res[1].output.return_code == 0
-
-
-@need_singularity
-def test_singularity_st_3(plugin, tmp_path):
-    """outer splitter image and executable"""
-    cmd = ["pwd", ["cat", "/etc/issue"]]
-    image = ["docker://alpine", "docker://ubuntu"]
-    singu = SingularityTask(name="singu", cache_dir=tmp_path).split(
-        ["image", "executable"], executable=cmd, image=image
-    )
-    assert singu.state.splitter == ["singu.image", "singu.executable"]
-    res = singu(plugin=plugin)
-
-    assert "/output_pydra" in res[0].output.stdout
-    assert "Alpine" in res[1].output.stdout
-    assert "/output_pydra" in res[2].output.stdout
-    assert "Ubuntu" in res[3].output.stdout
-
-
-@need_singularity
 @need_slurm
+@pytest.mark.skip(reason="TODO, xfail incorrect")
 @pytest.mark.xfail(
     reason="slurm can complain if the number of submitted jobs exceeds the limit"
 )
 @pytest.mark.parametrize("n", [10, 50, 100])
-def test_singularity_st_4(tmp_path, n):
+def test_singularity_st_2(tmp_path, n):
     """splitter over args (checking bigger splitters if slurm available)"""
     args_n = list(range(n))
     image = "docker://alpine"
-    singu = SingularityTask(
-        name="singu", executable="echo", image=image, cache_dir=tmp_path
+    singu = ShellCommandTask(
+        name="singu",
+        executable="echo",
+        environment=Singularity(image=image),
+        cache_dir=tmp_path,
     ).split("args", args=args_n)
     assert singu.state.splitter == "singu.args"
     res = singu(plugin="slurm")
     assert "1" in res[1].output.stdout
     assert str(n - 1) in res[-1].output.stdout
     assert res[0].output.return_code == res[1].output.return_code == 0
-
-
-@need_singularity
-@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
-def test_wf_singularity_1(plugin, tmp_path):
-    """a workflow with two connected task
-    the first one read the file that is bounded to the container,
-    the second uses echo
-    """
-    with open((tmp_path / "file_pydra.txt"), "w") as f:
-        f.write("hello from pydra")
-
-    image = "docker://alpine"
-    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"], cache_dir=tmp_path)
-    wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
-    wf.inputs.cmd2 = ["echo", "message from the previous task:"]
-    wf.add(
-        SingularityTask(
-            name="singu_cat",
-            image=image,
-            executable=wf.lzin.cmd1,
-            bindings=[(str(tmp_path), "/tmp_dir", "ro")],
-            strip=True,
-        )
-    )
-    wf.add(
-        SingularityTask(
-            name="singu_echo",
-            image=image,
-            executable=wf.lzin.cmd2,
-            args=wf.singu_cat.lzout.stdout,
-            strip=True,
-        )
-    )
-    wf.set_output([("out", wf.singu_echo.lzout.stdout)])
-
-    with Submitter(plugin=plugin) as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
-    assert res.output.out == "message from the previous task: hello from pydra"
-
-
-@need_docker
-@need_singularity
-@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
-def test_wf_singularity_1a(plugin, tmp_path):
-    """a workflow with two connected task - using both containers: Docker and Singul.
-    the first one read the file that is bounded to the container,
-    the second uses echo
-    """
-    with open((tmp_path / "file_pydra.txt"), "w") as f:
-        f.write("hello from pydra")
-
-    image_sing = "docker://alpine"
-    image_doc = "ubuntu"
-    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"], cache_dir=tmp_path)
-    wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
-    wf.inputs.cmd2 = ["echo", "message from the previous task:"]
-    wf.add(
-        SingularityTask(
-            name="singu_cat",
-            image=image_sing,
-            executable=wf.lzin.cmd1,
-            bindings=[(str(tmp_path), "/tmp_dir", "ro")],
-            strip=True,
-        )
-    )
-    wf.add(
-        DockerTask(
-            name="singu_echo",
-            image=image_doc,
-            executable=wf.lzin.cmd2,
-            args=wf.singu_cat.lzout.stdout,
-            strip=True,
-        )
-    )
-    wf.set_output([("out", wf.singu_echo.lzout.stdout)])
-
-    with Submitter(plugin=plugin) as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
-    assert res.output.out == "message from the previous task: hello from pydra"
 
 
 # tests with customized output_spec
@@ -394,9 +175,9 @@ def test_singularity_outputspec_1(plugin, tmp_path):
         fields=[("newfile", File, "newfile_tmp.txt")],
         bases=(ShellOutSpec,),
     )
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         output_spec=my_output_spec,
         cache_dir=tmp_path,
@@ -439,12 +220,12 @@ def test_singularity_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         file=filename,
         input_spec=my_input_spec,
@@ -480,12 +261,12 @@ def test_singularity_inputspec_1a(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         input_spec=my_input_spec,
         strip=True,
@@ -537,12 +318,12 @@ def test_singularity_inputspec_2(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         file1=filename_1,
         input_spec=my_input_spec,
@@ -597,12 +378,12 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         file2=filename_2,
         input_spec=my_input_spec,
@@ -657,12 +438,12 @@ def test_singularity_inputspec_2a(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         file2=filename_2,
         input_spec=my_input_spec,
@@ -714,12 +495,12 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         input_spec=my_input_spec,
         orig_file=str(file),
@@ -739,7 +520,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
 
 
 @need_singularity
-def test_singularity_inputspec_state_1(plugin, tmp_path):
+def test_singularity_inputspec_state_1(tmp_path):
     """a customised input spec for a singularity file with a splitter,
     splitter is on files
     """
@@ -770,12 +551,12 @@ def test_singularity_inputspec_state_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         input_spec=my_input_spec,
         strip=True,
@@ -820,12 +601,12 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=cmd,
         input_spec=my_input_spec,
         strip=True,
@@ -863,16 +644,16 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
         input_spec=my_input_spec,
@@ -919,15 +700,15 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
     wf.inputs.cmd = cmd
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
         input_spec=my_input_spec,
@@ -976,16 +757,16 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(SingularitySpec,),
+        bases=(ShellSpec,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    singu = SingularityTask(
+    singu = ShellCommandTask(
         name="singu",
-        image=image,
+        environment=Singularity(image=image),
         executable=wf.lzin.cmd,
         input_spec=my_input_spec,
         strip=True,

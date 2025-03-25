@@ -1,4 +1,5 @@
 """Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
+
 from copy import copy
 from pathlib import Path
 import subprocess as sp
@@ -498,7 +499,7 @@ class DiGraph:
         return dotstr
 
     def export_graph(self, dotfile, ext="png"):
-        """exporting dotfile to other format, equires the dot command"""
+        """exporting dotfile to other formats requires the dot command"""
         available_ext = [
             "bmp",
             "canon",

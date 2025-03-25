@@ -3,6 +3,7 @@ import typing as ty
 import os
 import attrs
 from copy import deepcopy
+import time
 
 from ..specs import (
     BaseSpec,
@@ -11,9 +12,7 @@ from ..specs import (
     Runtime,
     Result,
     ShellSpec,
-    ContainerSpec,
-    DockerSpec,
-    SingularitySpec,
+    # ContainerSpec,
     LazyIn,
     LazyOut,
     LazyField,
@@ -27,7 +26,7 @@ import pytest
 
 def test_basespec():
     spec = BaseSpec()
-    assert spec.hash == "06fe829a5dca34cc5f0710b454c24808"
+    assert spec.hash == "0b1d98df22ecd1733562711c205abca2"
 
 
 def test_runtime():
@@ -51,35 +50,6 @@ def test_shellspec():
     spec = ShellSpec(executable="ls")  # (executable, args)
     assert hasattr(spec, "executable")
     assert hasattr(spec, "args")
-
-
-container_attrs = ["image", "container", "container_xargs"]
-
-
-def test_container():
-    with pytest.raises(TypeError):
-        spec = ContainerSpec()
-    spec = ContainerSpec(
-        executable="ls", image="busybox", container="docker"
-    )  # (execute, args, image, cont)
-    assert all([hasattr(spec, attr) for attr in container_attrs])
-    assert hasattr(spec, "executable")
-
-
-def test_docker():
-    with pytest.raises(TypeError):
-        spec = DockerSpec(executable="ls")
-    spec = DockerSpec(executable="ls", image="busybox")
-    assert all(hasattr(spec, attr) for attr in container_attrs)
-    assert getattr(spec, "container") == "docker"
-
-
-def test_singularity():
-    with pytest.raises(TypeError):
-        spec = SingularitySpec()
-    spec = SingularitySpec(executable="ls", image="busybox")
-    assert all(hasattr(spec, attr) for attr in container_attrs)
-    assert getattr(spec, "container") == "singularity"
 
 
 class NodeTesting:
@@ -154,7 +124,10 @@ def test_lazy_getvale():
     lf = LazyIn(task=tn)
     with pytest.raises(Exception) as excinfo:
         lf.inp_c
-    assert str(excinfo.value) == "Task tn has no input attribute inp_c"
+    assert (
+        str(excinfo.value)
+        == "Task 'tn' has no input attribute 'inp_c', available: 'inp_a', 'inp_b'"
+    )
 
 
 def test_input_file_hash_1(tmp_path):
@@ -163,14 +136,14 @@ def test_input_file_hash_1(tmp_path):
     fields = [("in_file", ty.Any)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
-    assert inputs(in_file=outfile).hash == "02e248cb7ca3628af6b97aa27723b623"
+    assert inputs(in_file=outfile).hash == "9a106eb2830850834d9b5bf098d5fa85"
 
     with open(outfile, "w") as fp:
         fp.write("test")
     fields = [("in_file", File)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
-    assert inputs(in_file=outfile).hash == "c1156e9576b0266f23c30771bf59482a"
+    assert inputs(in_file=outfile).hash == "02fa5f6f1bbde7f25349f54335e1adaf"
 
 
 def test_input_file_hash_2(tmp_path):
@@ -184,7 +157,7 @@ def test_input_file_hash_2(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "73745b60b45052d6020918fce5801581"
+    assert hash1 == "aaa50d60ed33d3a316d58edc882a34c3"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
@@ -194,6 +167,7 @@ def test_input_file_hash_2(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
@@ -214,7 +188,7 @@ def test_input_file_hash_2a(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "73745b60b45052d6020918fce5801581"
+    assert hash1 == "aaa50d60ed33d3a316d58edc882a34c3"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
@@ -224,6 +198,7 @@ def test_input_file_hash_2a(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
@@ -232,7 +207,7 @@ def test_input_file_hash_2a(tmp_path):
 
     # checking if string is also accepted
     hash4 = inputs(in_file=str(file)).hash
-    assert hash4 == "aaee75d79f1bc492619fabfa68cb3c69"
+    assert hash4 == "800af2b5b334c9e3e5c40c0e49b7ffb5"
 
 
 def test_input_file_hash_3(tmp_path):
@@ -265,6 +240,7 @@ def test_input_file_hash_3(tmp_path):
     # assert id(files_hash1["in_file"][filename]) == id(files_hash2["in_file"][filename])
 
     # recreating the file
+    time.sleep(2)  # ensure mtime is different
     with open(file, "w") as f:
         f.write("hello")
 
@@ -305,7 +281,7 @@ def test_input_file_hash_4(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=[[file, 3]]).hash
-    assert hash1 == "b8d8255b923b7bb8817da16e6ec57fae"
+    assert hash1 == "0693adbfac9f675af87e900065b1de00"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[[file, 5]]).hash
@@ -319,6 +295,7 @@ def test_input_file_hash_4(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # need the mtime to be different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
@@ -341,7 +318,7 @@ def test_input_file_hash_5(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=[{"file": file, "int": 3}]).hash
-    assert hash1 == "dedaf3899cce99d19238c2efb1b19a89"
+    assert hash1 == "56e6e2c9f3bdf0cd5bd3060046dea480"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[{"file": file, "int": 5}]).hash
@@ -355,6 +332,7 @@ def test_input_file_hash_5(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")

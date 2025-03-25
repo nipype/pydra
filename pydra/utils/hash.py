@@ -1,15 +1,16 @@
 """Generic object hashing dispatch"""
-import os
 
-# import stat
+import sys
+import os
 import struct
+from datetime import datetime
 import typing as ty
+import types
+from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
 import logging
-
-# from pathlib import Path
 from typing import (
     Dict,
     Iterator,
@@ -17,7 +18,10 @@ from typing import (
     Sequence,
     Set,
 )
+from filelock import SoftFileLock
 import attrs.exceptions
+from fileformats.core.fileset import FileSet, MockMixin
+from . import user_cache_dir, add_exc_note
 
 logger = logging.getLogger("pydra")
 
@@ -51,19 +55,157 @@ __all__ = (
 )
 
 Hash = NewType("Hash", bytes)
-Cache = NewType("Cache", Dict[int, Hash])
+CacheKey = NewType("CacheKey", ty.Tuple[ty.Hashable, ...])
 
 
-class UnhashableError(ValueError):
-    """Error for objects that cannot be hashed"""
+def location_converter(path: ty.Union[Path, str, None]) -> Path:
+    if path is None:
+        path = PersistentCache.location_default()
+    path = Path(path)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except FileExistsError:
+        raise ValueError(
+            f"provided path to persistent cache {path} is a file not a directory"
+        ) from None
+    return path
 
 
-def hash_function(obj):
+@attrs.define
+class PersistentCache:
+    """Persistent cache in which to store computationally expensive hashes between nodes
+    and workflow/task runs. It does this in via the `get_or_calculate_hash` method, which
+    takes a locally unique key (e.g. file-system path + mtime) and a function to
+    calculate the hash if it isn't present in the persistent store.
+
+    The locally unique key is hashed (cheaply) using hashlib cryptography and this
+    "local hash" is use to name the entry of the (potentially expensive) hash of the
+    object itself (e.g. the contents of a file). This entry is saved as a text file
+    within a user-specific cache directory (see `platformdirs.user_cache_dir`), with
+    the name of the file being the "local hash" of the key and the contents of the
+    file being the "globally unique hash" of the object itself.
+
+    Parameters
+    ----------
+    location: Path
+        the directory in which to store the hashes cache
+    """
+
+    location: Path = attrs.field(converter=location_converter)  # type: ignore[misc]
+    cleanup_period: int = attrs.field()
+    _hashes: ty.Dict[CacheKey, Hash] = attrs.field(factory=dict)
+
+    # Set the location of the persistent hash cache
+    LOCATION_ENV_VAR = "PYDRA_HASH_CACHE"
+    CLEANUP_ENV_VAR = "PYDRA_HASH_CACHE_CLEANUP_PERIOD"
+
+    @classmethod
+    def location_default(cls):
+        try:
+            location = os.environ[cls.LOCATION_ENV_VAR]
+        except KeyError:
+            location = user_cache_dir / "hashes"
+        return location
+
+    # the default needs to be an instance method
+    @location.default
+    def _location_default(self):
+        return self.location_default()
+
+    @cleanup_period.default
+    def cleanup_period_default(self):
+        return int(os.environ.get(self.CLEANUP_ENV_VAR, 30))
+
+    def get_or_calculate_hash(self, key: CacheKey, calculate_hash: ty.Callable) -> Hash:
+        """Check whether key is present in the persistent cache store and return it if so.
+        Otherwise use `calculate_hash` to generate the hash and save it in the persistent
+        store.
+
+        Parameters
+        ----------
+        key : CacheKey
+            locally unique key (e.g. to the host) used to lookup the corresponding hash
+            in the persistent store
+        calculate_hash : ty.Callable
+            function to calculate the hash if it isn't present in the persistent store
+
+        Returns
+        -------
+        Hash
+            the hash corresponding to the key, which is either retrieved from the persistent
+            store or calculated using `calculate_hash` if not present
+        """
+        try:
+            return self._hashes[key]
+        except KeyError:
+            pass
+        key_path = self.location / blake2b(str(key).encode()).hexdigest()
+        with SoftFileLock(key_path.with_suffix(".lock")):
+            if key_path.exists():
+                return Hash(key_path.read_bytes())
+            hsh = calculate_hash()
+            key_path.write_bytes(hsh)
+            self._hashes[key] = Hash(hsh)
+        return Hash(hsh)
+
+    def clean_up(self):
+        """Cleans up old hash caches that haven't been accessed in the last 30 days"""
+        now = datetime.now()
+        for path in self.location.iterdir():
+            if path.name.endswith(".lock"):
+                continue
+            days = (now - datetime.fromtimestamp(path.lstat().st_atime)).days
+            if days > self.cleanup_period:
+                path.unlink()
+
+    @classmethod
+    def from_path(
+        cls, path: ty.Union[Path, str, "PersistentCache", None]
+    ) -> "PersistentCache":
+        if isinstance(path, PersistentCache):
+            return path
+        return PersistentCache(path)
+
+
+@attrs.define
+class Cache:
+    """Cache for hashing objects, used to avoid infinite recursion caused by circular
+    references between objects, and to store hashes of objects that have already been
+    hashed to avoid recomputation.
+
+    This concept is extended to persistent caching of hashes for certain object types,
+    for which calculating the hash is a potentially expensive operation (e.g.
+    File/Directory types). For these classes the `bytes_repr` override function yields a
+    "locally unique cache key" (e.g. file-system path + mtime) as the first item of its
+    iterator.
+    """
+
+    persistent: ty.Optional[PersistentCache] = attrs.field(
+        default=None,
+        converter=PersistentCache.from_path,  # type: ignore[misc]
+    )
+    _hashes: ty.Dict[int, Hash] = attrs.field(factory=dict)
+
+    def __getitem__(self, object_id: int) -> Hash:
+        return self._hashes[object_id]
+
+    def __setitem__(self, object_id: int, hsh: Hash):
+        self._hashes[object_id] = hsh
+
+    def __contains__(self, object_id):
+        return object_id in self._hashes
+
+
+def hash_function(obj, **kwargs):
     """Generate hash of object."""
-    return hash_object(obj).hex()
+    return hash_object(obj, **kwargs).hex()
 
 
-def hash_object(obj: object) -> Hash:
+def hash_object(
+    obj: object,
+    cache: ty.Optional[Cache] = None,
+    persistent_cache: ty.Union[PersistentCache, Path, None] = None,
+) -> Hash:
     """Hash an object
 
     Constructs a byte string that uniquely identifies the object,
@@ -72,10 +214,22 @@ def hash_object(obj: object) -> Hash:
     Base Python types are implemented, including recursive lists and
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
+    if cache is None:
+        cache = Cache(persistent=persistent_cache)
     try:
-        return hash_single(obj, Cache({}))
+        return hash_single(obj, cache)
     except Exception as e:
-        raise UnhashableError(f"Cannot hash object {obj!r}") from e
+        tp = type(obj)
+        add_exc_note(
+            e,
+            (
+                f"and therefore cannot hash `{obj!r}` of type "
+                f"`{tp.__module__}.{tp.__name__}`. Consider implementing a "
+                "specific `bytes_repr()`(see pydra.utils.hash.register_serializer) "
+                "or a `__bytes_repr__()` dunder methods for this type"
+            ),
+        )
+        raise e
 
 
 def hash_single(obj: object, cache: Cache) -> Hash:
@@ -88,22 +242,80 @@ def hash_single(obj: object, cache: Cache) -> Hash:
     if objid not in cache:
         # Handle recursion by putting a dummy value in the cache
         cache[objid] = Hash(b"\x00")
-        h = blake2b(digest_size=16, person=b"pydra-hash")
-        for chunk in bytes_repr(obj, cache):
-            h.update(chunk)
-        hsh = cache[objid] = Hash(h.digest())
+        bytes_it = bytes_repr(obj, cache)
+        # Pop first element from the bytes_repr iterator and check whether it is a
+        # "local cache key" (e.g. file-system path + mtime tuple) or the first bytes
+        # chunk
+
+        def calc_hash(first: ty.Optional[bytes] = None) -> Hash:
+            """
+            Calculate the hash of the object
+
+            Parameters
+            ----------
+            first : ty.Optional[bytes]
+                the first bytes chunk from the bytes_repr iterator, passed if the first
+                chunk wasn't a local cache key
+            """
+            h = blake2b(digest_size=16, person=b"pydra-hash")
+            # We want to use the first chunk that was popped to check for a cache-key
+            # if present
+            if first is not None:
+                h.update(first)
+            for chunk in bytes_it:  # Note that `bytes_it` is in outer scope
+                h.update(chunk)
+            return Hash(h.digest())
+
+        # Read the first item of the bytes_repr iterator and check to see whether it yields
+        # a "cache-key" tuple instead of a bytes chunk for the type of the object to be cached
+        # (e.g. file-system path + mtime for fileformats.core.FileSet objects). If it
+        # does, use that key to check the persistent cache for a precomputed hash and
+        # return it if it is, otherwise calculate the hash and store it in the persistent
+        # cache with that hash of that key (not to be confused with the hash of the
+        # object that is saved/retrieved).
+        first = next(bytes_it)
+        if isinstance(first, tuple):
+            tp = type(obj)
+            key = (
+                tp.__module__,
+                tp.__name__,
+            ) + first
+            hsh = cache.persistent.get_or_calculate_hash(key, calc_hash)
+        else:
+            # If the first item is a bytes chunk (i.e. the object type doesn't have an
+            # associated 'cache-key'), then simply calculate the hash of the object,
+            # passing the first chunk to the `calc_hash` function so it can be included
+            # in the hash calculation
+            hsh = calc_hash(first=first)
         logger.debug("Hash of %s object is %s", obj, hsh)
+        cache[objid] = hsh
     return cache[objid]
 
 
 @runtime_checkable
 class HasBytesRepr(Protocol):
     def __bytes_repr__(self, cache: Cache) -> Iterator[bytes]:
-        ...  # pragma: no cover
+        pass  # pragma: no cover
 
 
 @singledispatch
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
+    """Default implementation of hashing for generic objects. Single dispatch is used
+    to provide hooks for class-specific implementations
+
+    Parameters
+    ----------
+    obj: object
+        the object to hash
+    cache : Cache
+        a dictionary object used to store a cache of previously cached objects to
+        handle circular object references
+
+    Yields
+    -------
+    bytes
+        unique representation of the object in a series of bytes
+    """
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
     dct: Dict[str, ty.Any]
@@ -257,6 +469,40 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
     yield b")"
 
 
+if sys.version_info >= (3, 10):
+    register_serializer(types.UnionType)(bytes_repr_type)
+
+
+@register_serializer(FileSet)
+def bytes_repr_fileset(
+    fileset: FileSet, cache: Cache
+) -> Iterator[ty.Union[CacheKey, bytes]]:
+    fspaths = sorted(fileset.fspaths)
+    # Yield the cache key for the fileset, which is a tuple of the file-system paths
+    # and their mtime. Is used to store persistent cache of the fileset hashes
+    # to avoid recomputation between calls
+    yield CacheKey(
+        tuple(repr(p) for p in fspaths)  # type: ignore[arg-type]
+        + tuple(p.lstat().st_mtime_ns for p in fspaths)
+    )
+    cls = type(fileset)
+    yield f"{cls.__module__}.{cls.__name__}:".encode()
+    for key, chunk_iter in fileset.byte_chunks():
+        yield (",'" + key + "'=").encode()
+        yield from chunk_iter
+
+
+# Need to disable the mtime cache key for mocked filesets. Used in doctests
+@register_serializer(MockMixin)
+def bytes_repr_mock_fileset(
+    mock_fileset: MockMixin, cache: Cache
+) -> Iterator[ty.Union[CacheKey, bytes]]:
+    cls = type(mock_fileset)
+    yield f"{cls.__module__}.{cls.__name__}:".encode()
+    for key, _ in mock_fileset.byte_chunks():
+        yield (",'" + key + "'").encode()
+
+
 @register_serializer(list)
 @register_serializer(tuple)
 def bytes_repr_seq(obj: Sequence, cache: Cache) -> Iterator[bytes]:
@@ -281,7 +527,7 @@ def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[byte
     .. code-block:: python
 
         >>> from pydra.utils.hash import bytes_repr_mapping_contents, Cache
-        >>> generator = bytes_repr_mapping_contents({"a": 1, "b": 2}, Cache({}))
+        >>> generator = bytes_repr_mapping_contents({"a": 1, "b": 2}, Cache())
         >>> b''.join(generator)
         b'str:1:a=...str:1:b=...'
     """
@@ -299,7 +545,7 @@ def bytes_repr_sequence_contents(seq: Sequence, cache: Cache) -> Iterator[bytes]
     .. code-block:: python
 
         >>> from pydra.utils.hash import bytes_repr_sequence_contents, Cache
-        >>> generator = bytes_repr_sequence_contents([1, 2], Cache({}))
+        >>> generator = bytes_repr_sequence_contents([1, 2], Cache())
         >>> list(generator)
         [b'\x6d...', b'\xa3...']
     """
@@ -320,39 +566,3 @@ if HAVE_NUMPY:
 
 
 NUMPY_CHUNK_LEN = 8192
-
-
-# class MtimeCachingHash:
-#     """Hashing object that stores a cache of hash values for PathLikes
-
-#     The cache only stores values for PathLikes pointing to existing files,
-#     and the mtime is checked to validate the cache. If the mtime differs,
-#     the old hash is discarded and a new mtime-tagged hash is stored.
-
-#     The cache can grow without bound; we may want to consider using an LRU
-#     cache.
-#     """
-
-#     def __init__(self) -> None:
-#         self.cache: ty.Dict[os.PathLike, ty.Tuple[float, Hash]] = {}
-
-#     def __call__(self, obj: object) -> Hash:
-#         if isinstance(obj, os.PathLike):
-#             path = Path(obj)
-#             try:
-#                 stat_res = path.stat()
-#                 mode, mtime = stat_res.st_mode, stat_res.st_mtime
-#             except FileNotFoundError:
-#                 # Only attempt to cache existing files
-#                 pass
-#             else:
-#                 if stat.S_ISREG(mode) and obj in self.cache:
-#                     # Cache (and hash) the actual object, as different pathlikes will have
-#                     # different serializations
-#                     save_mtime, save_hash = self.cache[obj]
-#                     if mtime == save_mtime:
-#                         return save_hash
-#                     new_hash = hash_object(obj)
-#                     self.cache[obj] = (mtime, new_hash)
-#                     return new_hash
-#         return hash_object(obj)

@@ -4323,7 +4323,7 @@ def test_fsl(data_tests_dir):
                         "help_string": "bias field and neck cleanup",
                     },
                 ),
-            )
+            ),
             # ("number_classes", int, attr.ib(metadata={"help_string": 'number of tissue-type classes', "argstr": '-n',
             #                                            "allowed_values": {"min_val": 1, "max_val": 10}})),
             # ("output_biasfield", bool,
@@ -4345,6 +4345,102 @@ def test_fsl(data_tests_dir):
     assert shelly.inputs.executable == "bet"
     assert shelly.cmdline == f"bet {in_file} {out_file}"
     # res = shelly(plugin="cf")
+
+
+def test_shell_cmd_optional_output_file1(tmp_path):
+    """
+    Test to see that 'unused' doesn't complain about not having an output passed to it
+    """
+    my_cp_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "input",
+                attr.ib(
+                    type=File, metadata={"argstr": "", "help_string": "input file"}
+                ),
+            ),
+            (
+                "output",
+                attr.ib(
+                    type=Path,
+                    metadata={
+                        "argstr": "",
+                        "output_file_template": "out.txt",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+            (
+                "unused",
+                attr.ib(
+                    type=ty.Union[Path, bool],
+                    default=False,
+                    metadata={
+                        "argstr": "--not-used",
+                        "output_file_template": "out.txt",
+                        "help_string": "dummy output",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_cp = ShellCommandTask(
+        name="my_cp",
+        executable="cp",
+        input_spec=my_cp_spec,
+    )
+    file1 = tmp_path / "file1.txt"
+    file1.write_text("foo")
+    result = my_cp(input=file1, unused=False)
+    assert result.output.output.fspath.read_text() == "foo"
+
+
+def test_shell_cmd_optional_output_file2(tmp_path):
+    """
+    Test to see that 'unused' doesn't complain about not having an output passed to it
+    """
+    my_cp_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "input",
+                attr.ib(
+                    type=File, metadata={"argstr": "", "help_string": "input file"}
+                ),
+            ),
+            (
+                "output",
+                attr.ib(
+                    type=ty.Union[Path, bool],
+                    default=False,
+                    metadata={
+                        "argstr": "",
+                        "output_file_template": "out.txt",
+                        "help_string": "dummy output",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_cp = ShellCommandTask(
+        name="my_cp",
+        executable="cp",
+        input_spec=my_cp_spec,
+    )
+    file1 = tmp_path / "file1.txt"
+    file1.write_text("foo")
+    result = my_cp(input=file1, output=True)
+    assert result.output.output.fspath.read_text() == "foo"
+
+    file2 = tmp_path / "file2.txt"
+    file2.write_text("bar")
+    with pytest.raises(RuntimeError):
+        my_cp(input=file2, output=False)
 
 
 def test_shell_cmd_non_existing_outputs_1(tmp_path):
@@ -4815,7 +4911,7 @@ def test_shellspec_formatter_1(tmp_path):
         == str(excinfo.value)
     )
 
-    # chcking if field value is accessible when None
+    # checking if field value is accessible when None
     def formatter_5(field):
         assert field == "-t test"
         # formatter must return a string
@@ -4832,7 +4928,7 @@ def test_shellspec_formatter_1(tmp_path):
     )
     assert shelly.cmdline == "exec -t test"
 
-    # chcking if field value is accessible when None
+    # checking if field value is accessible when None
     def formatter_4(field):
         assert field is None
         # formatter must return a string

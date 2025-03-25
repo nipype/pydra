@@ -1,8 +1,15 @@
 import os
 import shutil
 import attr
+import typing as ty
 import numpy as np
+import time
+from unittest import mock
+from pathlib import Path
 import pytest
+import time
+from fileformats.generic import File
+import pydra.mark
 
 from .utils import (
     fun_addtwo,
@@ -133,21 +140,7 @@ def test_task_init_3a(
 
 
 def test_task_init_4():
-    """task with interface and inputs. splitter set using split method"""
-    nn = fun_addtwo(name="NA")
-    nn.split(splitter="a", a=[3, 5])
-    assert np.allclose(nn.inputs.a, [3, 5])
-
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
-
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
-    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
-
-
-def test_task_init_4a():
-    """task with a splitter and inputs set in the split method"""
+    """task with interface splitter and inputs set in the split method"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a", a=[3, 5])
     assert np.allclose(nn.inputs.a, [3, 5])
@@ -320,6 +313,7 @@ def test_task_init_7(tmp_path):
     output_dir1 = nn1.output_dir
 
     # changing the content of the file
+    time.sleep(2)  # need the mtime to be different
     file2 = tmp_path / "file2.txt"
     with open(file2, "w") as f:
         f.write("from pydra")
@@ -1574,3 +1568,98 @@ def test_task_state_cachelocations_updated(plugin, tmp_path):
     # both workflows should be run
     assert all([dir.exists() for dir in nn.output_dir])
     assert all([dir.exists() for dir in nn2.output_dir])
+
+
+def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
+    """
+    Two identical tasks with provided cache_dir that use file as an input;
+    the second task has cache_locations and should not recompute the results
+    """
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+
+    input1 = input_dir / "input1.txt"
+    input1.write_text("test")
+    input2 = input_dir / "input2.txt"
+    input2.write_text("test")
+
+    nn = fun_file(name="NA", filename=input1, cache_dir=cache_dir)
+    with Submitter(plugin=plugin_dask_opt) as sub:
+        sub(nn)
+
+    nn2 = fun_file(
+        name="NA", filename=input2, cache_dir=cache_dir2, cache_locations=cache_dir
+    )
+    with Submitter(plugin=plugin_dask_opt) as sub:
+        sub(nn2)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == "test"
+
+    # checking if the second task didn't run the interface again
+    assert nn.output_dir.exists()
+    assert not nn2.output_dir.exists()
+
+
+class OverriddenContentsFile(File):
+    """A class for testing purposes, to that enables you to override the contents
+    of the file to allow you to check whether the persistent cache is used."""
+
+    def __init__(
+        self,
+        fspaths: ty.Iterator[Path],
+        contents: ty.Optional[bytes] = None,
+        metadata: ty.Dict[str, ty.Any] = None,
+    ):
+        super().__init__(fspaths, metadata=metadata)
+        self._contents = contents
+
+    def byte_chunks(self, **kwargs) -> ty.Generator[ty.Tuple[str, bytes], None, None]:
+        if self._contents is not None:
+            yield (str(self.fspath), iter([self._contents]))
+        else:
+            yield from super().byte_chunks(**kwargs)
+
+    @property
+    def contents(self):
+        if self._contents is not None:
+            return self._contents
+        return super().contents
+
+
+def test_task_files_persistentcache(tmp_path):
+    """
+    Two identical tasks with provided cache_dir that use file as an input;
+    the second task has cache_locations and should not recompute the results
+    """
+    test_file_path = tmp_path / "test_file.txt"
+    test_file_path.write_bytes(b"foo")
+    cache_dir = tmp_path / "cache-dir"
+    cache_dir.mkdir()
+    test_file = OverriddenContentsFile(test_file_path)
+
+    @pydra.mark.task
+    def read_contents(x: OverriddenContentsFile) -> bytes:
+        return x.contents
+
+    assert (
+        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
+        == b"foo"
+    )
+    test_file._contents = b"bar"
+    # should return result from the first run using the persistent cache
+    assert (
+        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
+        == b"foo"
+    )
+    time.sleep(2)  # Windows has a 2-second resolution for mtime
+    test_file_path.touch()  # update the mtime to invalidate the persistent cache value
+    assert (
+        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
+        == b"bar"
+    )  # returns the overridden value

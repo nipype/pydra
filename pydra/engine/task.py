@@ -38,6 +38,9 @@ Implement processing nodes.
       <https://colab.research.google.com/drive/1RRV1gHbGJs49qQB1q1d5tQEycVRtuhw6>`__
 
 """
+
+from __future__ import annotations
+
 import platform
 import re
 import attr
@@ -55,21 +58,18 @@ from .specs import (
     SpecInfo,
     ShellSpec,
     ShellOutSpec,
-    ContainerSpec,
-    DockerSpec,
-    SingularitySpec,
     attr_fields,
 )
 from .helpers import (
     ensure_list,
-    execute,
     position_sort,
     argstr_formatting,
     output_from_inputfields,
     parse_copyfile,
 )
-from .helpers_file import template_update, is_local_file
+from .helpers_file import template_update
 from ..utils.typing import TypeParser
+from .environments import Native
 
 
 class FunctionTask(TaskBase):
@@ -195,7 +195,7 @@ class FunctionTask(TaskBase):
 
         self.output_spec = output_spec
 
-    def _run_task(self):
+    def _run_task(self, environment=None):
         inputs = attr.asdict(self.inputs, recurse=False)
         del inputs["_func"]
         self.output_ = None
@@ -223,33 +223,6 @@ class ShellCommandTask(TaskBase):
     input_spec = None
     output_spec = None
 
-    def __new__(cls, container_info=None, *args, **kwargs):
-        if not container_info:
-            return super().__new__(cls)
-
-        if len(container_info) == 2:
-            type_cont, image = container_info
-        else:
-            raise Exception(
-                f"container_info has to have 2 elements, but {container_info} provided"
-            )
-
-        if type_cont == "docker":
-            # changing base class of spec if user defined
-            if "input_spec" in kwargs:
-                kwargs["input_spec"].bases = (DockerSpec,)
-            return DockerTask(image=image, *args, **kwargs)
-        elif type_cont == "singularity":
-            # changing base class of spec if user defined
-            if "input_spec" in kwargs:
-                kwargs["input_spec"].bases = (SingularitySpec,)
-            return SingularityTask(image=image, *args, **kwargs)
-        else:
-            raise Exception(
-                f"first element of container_info has to be "
-                f"docker or singularity, but {container_info[0]} provided"
-            )
-
     def __init__(
         self,
         audit_flags: AuditFlag = AuditFlag.NONE,
@@ -262,6 +235,7 @@ class ShellCommandTask(TaskBase):
         output_spec: ty.Optional[SpecInfo] = None,
         rerun=False,
         strip=False,
+        environment=Native(),
         **kwargs,
     ):
         """
@@ -329,9 +303,33 @@ class ShellCommandTask(TaskBase):
             rerun=rerun,
         )
         self.strip = strip
+        self.environment = environment
+        self.bindings = {}
+        self.inputs_mod_root = {}
 
-    @property
-    def command_args(self):
+    def get_bindings(self, root: str | None = None) -> dict[str, tuple[str, str]]:
+        """Return bindings necessary to run task in an alternative root.
+
+        This is primarily intended for contexts when a task is going
+        to be run in a container with mounted volumes.
+
+        Arguments
+        ---------
+        root: str
+
+        Returns
+        -------
+        bindings: dict
+          Mapping from paths in the host environment to the target environment
+        """
+
+        if root is None:
+            return {}
+        else:
+            self._prepare_bindings(root=root)
+            return self.bindings
+
+    def command_args(self, root=None):
         """Get command line arguments"""
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
@@ -339,15 +337,12 @@ class ShellCommandTask(TaskBase):
             raise NotImplementedError
 
         modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
-        if modified_inputs is not None:
-            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        for field_name, field_value in modified_inputs.items():
+            setattr(self.inputs, field_name, field_value)
 
         pos_args = []  # list for (position, command arg)
         self._positions_provided = []
-        for field in attr_fields(
-            self.inputs,
-            exclude_names=("container", "image", "container_xargs"),
-        ):
+        for field in attr_fields(self.inputs):
             name, meta = field.name, field.metadata
             if (
                 getattr(self.inputs, name) is attr.NOTHING
@@ -362,7 +357,10 @@ class ShellCommandTask(TaskBase):
                 if pos_val:
                     pos_args.append(pos_val)
             else:
-                pos_val = self._command_pos_args(field)
+                if name in modified_inputs:
+                    pos_val = self._command_pos_args(field, root=root)
+                else:
+                    pos_val = self._command_pos_args(field)
                 if pos_val:
                     pos_args.append(pos_val)
 
@@ -399,7 +397,7 @@ class ShellCommandTask(TaskBase):
         else:
             return pos, ensure_list(value, tuple2list=True)
 
-    def _command_pos_args(self, field):
+    def _command_pos_args(self, field, root=None):
         """
         Checking all additional input fields, setting pos to None, if position not set.
         Creating a list with additional parts of the command that comes from
@@ -428,6 +426,13 @@ class ShellCommandTask(TaskBase):
             pos += 1 if pos >= 0 else -1
 
         value = self._field_value(field, check_file=True)
+
+        if value:
+            if field.name in self.inputs_mod_root:
+                value = self.inputs_mod_root[field.name]
+            elif root:  # values from templates
+                value = value.replace(str(self.output_dir), f"{root}{self.output_dir}")
+
         if field.metadata.get("readonly", False) and value is not None:
             raise Exception(f"{field.name} is read only, the value can't be provided")
         elif (
@@ -519,13 +524,9 @@ class ShellCommandTask(TaskBase):
         self.inputs.check_fields_input_spec()
         if self.state:
             raise NotImplementedError
-        if isinstance(self, ContainerTask):
-            command_args = self.container_args + self.command_args
-        else:
-            command_args = self.command_args
-        # Skip the executable, which can be a multipart command, e.g. 'docker run'.
-        cmdline = command_args[0]
-        for arg in command_args[1:]:
+        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
+        cmdline = self.command_args()[0]
+        for arg in self.command_args()[1:]:
             # If there are spaces in the arg, and it is not enclosed by matching
             # quotes, add quotes to escape the space. Not sure if this should
             # be expanded to include other special characters apart from spaces
@@ -535,318 +536,34 @@ class ShellCommandTask(TaskBase):
                 cmdline += " " + arg
         return cmdline
 
-    def _run_task(self):
-        self.output_ = None
-        if isinstance(self, ContainerTask):
-            args = self.container_args + self.command_args
-        else:
-            args = self.command_args
-        if args:
-            # removing empty strings
-            args = [str(el) for el in args if el not in ["", " "]]
-            keys = ["return_code", "stdout", "stderr"]
-            values = execute(args, strip=self.strip)
-            self.output_ = dict(zip(keys, values))
-            if self.output_["return_code"]:
-                msg = f"Error running '{self.name}' task with {args}:"
-                if self.output_["stderr"]:
-                    msg += "\n\nstderr:\n" + self.output_["stderr"]
-                if self.output_["stdout"]:
-                    msg += "\n\nstdout:\n" + self.output_["stdout"]
-                raise RuntimeError(msg)
+    def _run_task(self, environment=None):
+        if environment is None:
+            environment = self.environment
+        self.output_ = environment.execute(self)
+
+    def _prepare_bindings(self, root: str):
+        """Prepare input files to be passed to the task
+
+        This updates the ``bindings`` attribute of the current task to make files available
+        in an ``Environment``-defined ``root``.
+        """
+        for fld in attr_fields(self.inputs):
+            if TypeParser.contains_type(FileSet, fld.type):
+                fileset = getattr(self.inputs, fld.name)
+                copy = parse_copyfile(fld)[0] == FileSet.CopyMode.copy
+
+                host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
+
+                # Default to mounting paths as read-only, but respect existing modes
+                old_mode = self.bindings.get(host_path, ("", "ro"))[1]
+                self.bindings[host_path] = (env_path, "rw" if copy else old_mode)
+
+                # Provide in-container paths without type-checking
+                self.inputs_mod_root[fld.name] = tuple(
+                    env_path / rel for rel in fileset.relative_fspaths
+                )
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
-
-
-class ContainerTask(ShellCommandTask):
-    """Extend shell command task for containerized execution."""
-
-    def __init__(
-        self,
-        name,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
-        messenger_args=None,
-        messengers=None,
-        output_cpath="/output_pydra",
-        output_spec: ty.Optional[SpecInfo] = None,
-        rerun=False,
-        strip=False,
-        **kwargs,
-    ):
-        """
-        Initialize this task.
-
-        Parameters
-        ----------
-        name : :obj:`str`
-            Name of this task.
-        audit_flags : :obj:`pydra.utils.messenger.AuditFlag`
-            Auditing configuration
-        cache_dir : :obj:`os.pathlike`
-            Cache directory
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
-        messenger_args :
-            TODO
-        messengers :
-            TODO
-        output_cpath : :obj:`str`
-            Output path within the container filesystem.
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
-        strip : :obj:`bool`
-            TODO
-
-        """
-        if input_spec is None:
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
-        self.output_cpath = Path(output_cpath)
-        self.bindings = {}
-        super().__init__(
-            name=name,
-            input_spec=input_spec,
-            output_spec=output_spec,
-            audit_flags=audit_flags,
-            messengers=messengers,
-            messenger_args=messenger_args,
-            cache_dir=cache_dir,
-            strip=strip,
-            rerun=rerun,
-            **kwargs,
-        )
-
-    def _field_value(self, field, check_file=False):
-        """
-        Checking value of the specific field, if value is not set, None is returned.
-        If check_file is True, checking if field is a local file
-        and settings bindings if needed.
-        """
-        value = super()._field_value(field)
-        if value and check_file and is_local_file(field):
-            # changing path to the cpath (the directory should be mounted)
-            lpath = Path(str(value))
-            cdir = self.bind_paths()[lpath.parent][0]
-            cpath = cdir.joinpath(lpath.name)
-            value = str(cpath)
-        return value
-
-    def container_check(self, container_type):
-        """Get container-specific CLI arguments."""
-        if self.inputs.container is None:
-            raise AttributeError("Container software is not specified")
-        elif self.inputs.container != container_type:
-            raise AttributeError(
-                f"Container type should be {container_type}, but {self.inputs.container} given"
-            )
-        if self.inputs.image is attr.NOTHING:
-            raise AttributeError("Container image is not specified")
-
-    def bind_paths(self):
-        """Get bound mount points
-
-        Returns
-        -------
-        mount points: dict
-            mapping from local path to tuple of container path + mode
-        """
-        self._check_inputs()
-        return {**self.bindings, **{self.output_dir: (self.output_cpath, "rw")}}
-
-    def binds(self, opt):
-        """
-        Specify mounts to bind from local filesystems to container and working directory.
-
-        Uses py:meth:`bind_paths`
-
-        """
-        bargs = []
-        for lpath, (cpath, mode) in self.bind_paths().items():
-            bargs.extend([opt, f"{lpath}:{cpath}:{mode}"])
-        return bargs
-
-    def _check_inputs(self):
-        fields = attr_fields(self.inputs)
-        for fld in fields:
-            if TypeParser.contains_type(FileSet, fld.type):
-                assert not fld.metadata.get(
-                    "container_path"
-                )  # <-- Is container_path necessary, container paths should just be typed PurePath
-                if fld.name == "image":  # <-- What is the image about?
-                    continue
-                fileset = getattr(self.inputs, fld.name)
-                copy_mode, _ = parse_copyfile(fld)
-                container_path = Path(f"/pydra_inp_{fld.name}")
-                self.bindings[fileset.parent] = (
-                    container_path,
-                    "rw" if copy_mode == FileSet.CopyMode.copy else "ro",
-                )
-
-    SUPPORTED_COPY_MODES = FileSet.CopyMode.any - FileSet.CopyMode.symlink
-
-
-class DockerTask(ContainerTask):
-    """Extend shell command task for containerized execution with the Docker Engine."""
-
-    init = False
-
-    def __init__(
-        self,
-        name=None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
-        messenger_args=None,
-        messengers=None,
-        output_cpath="/output_pydra",
-        output_spec: ty.Optional[SpecInfo] = None,
-        rerun=False,
-        strip=False,
-        **kwargs,
-    ):
-        """
-        Initialize this task.
-
-        Parameters
-        ----------
-        name : :obj:`str`
-            Name of this task.
-        audit_flags : :obj:`pydra.utils.messenger.AuditFlag`
-            Auditing configuration
-        cache_dir : :obj:`os.pathlike`
-            Cache directory
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
-        messenger_args :
-            TODO
-        messengers :
-            TODO
-        output_cpath : :obj:`str`
-            Output path within the container filesystem.
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
-        strip : :obj:`bool`
-            TODO
-
-        """
-        if not self.init:
-            if input_spec is None:
-                input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
-            super().__init__(
-                name=name,
-                input_spec=input_spec,
-                output_spec=output_spec,
-                audit_flags=audit_flags,
-                messengers=messengers,
-                messenger_args=messenger_args,
-                cache_dir=cache_dir,
-                strip=strip,
-                output_cpath=output_cpath,
-                rerun=rerun,
-                **kwargs,
-            )
-            self.inputs.container_xargs = ["--rm"]
-            self.init = True
-
-    @property
-    def container_args(self):
-        """Get container-specific CLI arguments, returns a list if the task has a state"""
-        if is_lazy(self.inputs):
-            raise Exception("can't return container_args, self.inputs has LazyFields")
-        self.container_check("docker")
-        if self.state:
-            raise NotImplementedError
-
-        cargs = ["docker", "run"]
-        if self.inputs.container_xargs is not None:
-            cargs.extend(self.inputs.container_xargs)
-
-        cargs.extend(self.binds("-v"))
-        cargs.extend(["-w", str(self.output_cpath)])
-        cargs.append(self.inputs.image)
-
-        return cargs
-
-
-class SingularityTask(ContainerTask):
-    """Extend shell command task for containerized execution with Singularity."""
-
-    init = False
-
-    def __init__(
-        self,
-        name=None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
-        messenger_args=None,
-        messengers=None,
-        output_spec: ty.Optional[SpecInfo] = None,
-        rerun=False,
-        strip=False,
-        **kwargs,
-    ):
-        """
-        Initialize this task.
-
-        Parameters
-        ----------
-        name : :obj:`str`
-            Name of this task.
-        audit_flags : :obj:`pydra.utils.messenger.AuditFlag`
-            Auditing configuration
-        cache_dir : :obj:`os.pathlike`
-            Cache directory
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
-        messenger_args :
-            TODO
-        messengers :
-            TODO
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
-        strip : :obj:`bool`
-            TODO
-
-        """
-        if not self.init:
-            if input_spec is None:
-                input_spec = SpecInfo(
-                    name="Inputs", fields=[], bases=(SingularitySpec,)
-                )
-            super().__init__(
-                name=name,
-                input_spec=input_spec,
-                output_spec=output_spec,
-                audit_flags=audit_flags,
-                messengers=messengers,
-                messenger_args=messenger_args,
-                cache_dir=cache_dir,
-                strip=strip,
-                rerun=rerun,
-                **kwargs,
-            )
-            self.init = True
-
-    @property
-    def container_args(self):
-        """Get container-specific CLI arguments."""
-        if is_lazy(self.inputs):
-            raise Exception("can't return container_args, self.inputs has LazyFields")
-        self.container_check("singularity")
-        if self.state:
-            raise NotImplementedError
-
-        cargs = ["singularity", "exec"]
-
-        if self.inputs.container_xargs is not None:
-            cargs.extend(self.inputs.container_xargs)
-
-        cargs.extend(self.binds("-B"))
-        cargs.extend(["--pwd", str(self.output_cpath)])
-        cargs.append(self.inputs.image)
-        return cargs
 
 
 def split_cmd(cmd: str):
