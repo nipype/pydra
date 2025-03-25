@@ -5,15 +5,15 @@
 # Required
 version: 2
 
-# Build with Python 3.9 on the latest version of Ubuntu.
+# Build with Python 3.11 on the latest version of Ubuntu.
 build:
   os: ubuntu-22.04
   tools:
-    python: '3.9'
+    python: '3.11'
 
 # Build documentation in the docs/ directory with Sphinx.
 sphinx:
-  configuration: docs/conf.py
+  configuration: empty-docs/conf.py
 
 # Install extra requirements for the documentation.
 python:
