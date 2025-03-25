@@ -77,7 +77,7 @@ jobs:
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
-  test-worker:
+  test-workers:
     needs: ['build']
     strategy:
       matrix:
