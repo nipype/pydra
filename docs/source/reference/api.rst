@@ -32,12 +32,3 @@ Specification classes
    :members:
    :undoc-members:
    :show-inheritance:
-
-
-Task classes
-------------
-
-.. automodule:: pydra.engine.task
-   :members:
-   :undoc-members:
-   :show-inheritance:

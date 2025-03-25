@@ -14,7 +14,7 @@ except ImportError:
     import importlib.resources as importlib_resources  # type: ignore
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.task import Task
+    from pydra.engine.core import Task
 
 
 class Audit:

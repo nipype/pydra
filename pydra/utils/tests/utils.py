@@ -1,6 +1,6 @@
 from fileformats.generic import File, BinaryFile
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
-from pydra.engine.task import ShellDef
+from pydra.engine.specs import ShellDef
 from pydra.engine import specs
 from pydra.design import shell, python
 

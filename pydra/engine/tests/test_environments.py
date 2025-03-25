@@ -5,7 +5,7 @@ from pydra.engine.submitter import Submitter
 from fileformats.generic import File
 from pydra.design import shell
 from pydra.engine.core import Task
-from pydra.engine.task import ShellDef
+from pydra.engine.specs import ShellDef
 from pydra.engine.helpers import attrs_values
 from .utils import no_win, need_docker, need_singularity
 import pytest
