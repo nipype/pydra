@@ -220,7 +220,7 @@ jobs:
       with:
         fail_ci_if_error: true
         token: ${{ secrets.CODECOV_TOKEN }}
-        files: /pydra/cov.xml
+        files: ./cov.xml
 
   # test-sge:
   #   needs: ['build']
