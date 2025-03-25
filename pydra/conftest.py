@@ -6,16 +6,15 @@ os.environ["NO_ET"] = "true"
 
 
 def pytest_addoption(parser):
-    parser.addoption("--dask", action="store_true", help="run all combinations")
+    parser.addoption("--with-dask", action="store_true", help="run all combinations")
     parser.addoption(
         "--with-psij",
         action="store_true",
         help="run with psij workers in test matrix",
     )
     parser.addoption(
-        "--only-slurm",
-        action="store_true",
-        help="only run tests with slurm workers",
+        "--only-worker",
+        help="only run tests with provided worker",
     )
 
 
@@ -27,25 +26,27 @@ def worker(request):
 def pytest_generate_tests(metafunc):
     if "any_worker" in metafunc.fixturenames:
         try:
-            use_dask = metafunc.config.getoption("dask")
+            with_dask = metafunc.config.getoption("with_dask")
         except ValueError:
-            use_dask = False
+            with_dask = False
         try:
-            use_psij = metafunc.config.getoption("with_psij")
+            with_psij = metafunc.config.getoption("with_psij")
         except ValueError:
-            use_psij = False
+            with_psij = False
         try:
-            only_slurm = metafunc.config.getoption("only_slurm")
+            only_worker = metafunc.config.getoption("only_worker")
         except ValueError:
-            only_slurm = False
-        available_workers = ["debug", "cf"] if not only_slurm else []
-        if use_dask:
+            pass
+        else:
+            return [only_worker]
+        available_workers = ["debug", "cf"]
+        if with_dask:
             available_workers.append("dask")
         if bool(shutil.which("sbatch")):
             available_workers.append("slurm")
-            if use_psij:
+            if with_psij:
                 available_workers.append("psij-slurm")
-        if use_psij and not only_slurm:
+        if with_psij:
             available_workers.append("psij-local")
         metafunc.parametrize("any_worker", available_workers)
 
