@@ -74,8 +74,13 @@ jobs:
       - name: Pytest
         run: |
           pytest -vs -n auto pydra --doctest-modules --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
-      - name: Upload to codecov
-        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      # - name: Upload to codecov
+      #   run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
   test-workers:
     needs: ['build']
@@ -103,8 +108,11 @@ jobs:
       - name: Run tests for Dask
         run: |
           pytest -v pydra/engine/tests/test_submitter.py --only-worker=${{ matrix.worker }} --rootdir pydra --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
-      - name: Upload to codecov
-        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-singularity:
     needs: ['build']
@@ -160,8 +168,11 @@ jobs:
         run: pip install -e ".[test]"
       - name: Pytest
         run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/engine/tests/test_singularity.py pydra/engine/tests/test_environments.py --rootdir pydra
-      - name: Upload to codecov
-        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-slurm:
     needs: ['build']
@@ -206,11 +217,16 @@ jobs:
     - name: Run pytest
       run: |
         docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --rootdir /pydra/pydra --only-worker=${{ matrix.worker }} --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
-    - name: Upload to codecov
-      run: |
-        docker exec slurm bash -c "pip install urllib3==1.26.6"
-        docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
-        docker rm -f slurm
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v2
+      with:
+        fail_ci_if_error: true
+        token: ${{ secrets.CODECOV_TOKEN }}
+    # - name: Upload to codecov
+    #   run: |
+    #     docker exec slurm bash -c "pip install urllib3==1.26.6"
+    #     docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
+    #     docker rm -f slurm
 
   # test-sge:
   #   needs: ['build']
