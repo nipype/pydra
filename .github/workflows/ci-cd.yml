@@ -79,8 +79,6 @@ jobs:
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
-      # - name: Upload to codecov
-      #   run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
 
   test-workers:
     needs: ['build']
@@ -222,11 +220,7 @@ jobs:
       with:
         fail_ci_if_error: true
         token: ${{ secrets.CODECOV_TOKEN }}
-    # - name: Upload to codecov
-    #   run: |
-    #     docker exec slurm bash -c "pip install urllib3==1.26.6"
-    #     docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
-    #     docker rm -f slurm
+        files: /pydra/cov.xml
 
   # test-sge:
   #   needs: ['build']
