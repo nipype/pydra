@@ -230,42 +230,77 @@ jobs:
   #     fail-fast: false
   #   runs-on: ubuntu-latest
   #   env:
-  #     DOCKER_IMAGE: kgutwin/simple-sge
+  #     VERSION: 1.8.1
   #   steps:
   #   - name: Disable etelemetry
   #     run: echo "NO_ET=TRUE" >> $GITHUB_ENV
   #   - uses: actions/checkout@v4
   #   - name: Fetch tags
   #     run: git fetch --prune --unshallow
-  #   - name: Pull docker image
+  #   - name: Set up Python ${{ matrix.python-version }}
+  #     uses: actions/setup-python@v5
+  #     with:
+  #       python-version: ${{ matrix.python-version }}
+  #   - name: Install SGE
   #     run: |
-  #       docker pull $DOCKER_IMAGE
-  #       # Have image running in the background
-  #       docker run `bash <(curl -s https://codecov.io/env)` -itd -h sgectl --cap-add sys_admin -d --name sge -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
-  #   - name: Configure SGE
+  #       mkdir -p /sge-build
+  #       cd /sge-build
+  #       wget -c https://github.com/sge-network/sge/archive/refs/tags/v${{ env.VERSION }}.tar.gz
+  #       tar zxvf v${{ env.VERSION }}.tar.gz
+  #       cd v${{ env.VERSION }}
+  #       mkdir -p /opt/sge
+  #       useradd -r -m -U -d /home/sgeadmin -s /bin/bash -c "Docker SGE Admin" sgeadmin
+  #       usermod -a -G sudo sgeadmin
+  #       sh scripts/bootstrap.sh && ./aimk -no-qmon -no-qtcsh && ./aimk -man
+  #       echo Y | ./scripts/distinst -local -allall -libs -noexit
+  #       cd /opt/sge
+  #       touch bin/lx-amd64/{qmon,qtcsh}
+  #       ln -s /opt/sge/default/common/settings.sh /etc/profile.d/sge_settings.sh
+  #       echo . /etc/profile.d/sge_settings.sh >> /etc/bash.bashrc
+  #       chmod a+x /root/boot-sge.sh
+  #       apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+  #   - name: Boot SGE
   #     run: |
-  #       echo "Allowing ports/daemons time to start" && sleep 10
-  #       docker exec sge bash -c "source /etc/profile.d/sge_settings.sh && qconf -as sgectl"
-  #       docker exec sge bash -c "source /etc/profile.d/sge_settings.sh && qconf -mattr queue slots 4 all.q"
-  #       docker exec sge bash -c "source /etc/profile.d/sge_settings.sh && qstat"
-  #   - name: Setup Python
-  #     run: |
-  #       docker exec sge bash -c "echo $NO_ET"
-  #       docker exec sge bash -c "ls -la && echo list top level dir"
-  #       docker exec sge bash -c "ls -la /pydra && echo list pydra dir"
-  #       if [[ "${{ matrix.python-version }}" == "3.11.5" ]]; then
-  #           docker exec sge bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v 3.11.5"
+  #       cd /opt/sge
+  #       ./inst_sge -m -x -s -auto util/install_modules/inst_template.conf
+  #       . /etc/profile.d/sge_settings.sh
+  #       cd $HOME
+  #       qconf -as `hostname`
+  #       qconf -mattr queue shell_start_mode unix_behavior all.q
+  #       update_conf() {
+  #           TMPF=`mktemp`
+  #           cat > $TMPF <<EOF
+  #       #!/bin/sh
+  #       sed -ri "$1" \$1
+  #       EOF
+  #           chmod a+x $TMPF
+  #           EDITOR="$TMPF" qconf -m$2
+  #           rm -f $TMPF
+  #       }
+  #       # allow root to qsub (yes, it's a security hole but it simplifies the container)
+  #       update_conf "/min_/s/100/0/; s/posix_compliant/unix_behavior/" conf
+
+  #       # shrink scheduling interval for faster response
+  #       update_conf "/schedule_interval/s/[0-9]+:[0-9]+:[0-9]+/0:0:2/" sconf
+
+  #       # finalize
+  #       if [ -z "$1" ]; then
+  #           exec /bin/bash
+  #       else
+  #           exec "$@"
   #       fi
-  #       docker exec sge bash -c "pyenv global ${{ matrix.python-version }}"
-  #       docker exec sge bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.engine.__version__)'"
+  #   - name: Install Pydra
+  #     run: |
+  #       pip install --upgrade pip && pip install -e .[test] && python -c 'import pydra.engine; print(pydra.engine.__version__)'
   #   - name: Run pytest
   #     run: |
-  #       docker exec sge bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --rootdir /pydra/pydra --only-worker=sge --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
-  #   - name: Upload to codecov
-  #     run: |
-  #       docker exec sge bash -c "pip install urllib3==1.26.6"
-  #       docker exec sge bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
-  #       docker rm -f sge
+  #       pytest pydra/engine/tests/test_submitter.py --rootdir . --only-worker=sge --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+  #   - name: Upload coverage to Codecov
+  #     uses: codecov/codecov-action@v2
+  #     with:
+  #       fail_ci_if_error: true
+  #       token: ${{ secrets.CODECOV_TOKEN }}
+  #       files: ./cov.xml
 
   build-docs:
     needs: ['build']

@@ -377,14 +377,6 @@ def _element_formatting(
     return formatted_value
 
 
-def is_local_file(f):
-    from pydra.utils.typing import TypeParser
-
-    return "container_path" not in f.metadata and TypeParser.contains_type(
-        FileSet, f.type
-    )
-
-
 class MountIndentifier:
     """Used to check the mount type that given file paths reside on in order to determine
     features that can be used (e.g. symlinks)"""
