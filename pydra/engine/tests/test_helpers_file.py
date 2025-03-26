@@ -394,12 +394,12 @@ def test_template_formatting(tmp_path: Path):
     field.argstr = "--grad"
     field.path_template = ("{in_file}.bvec", "{in_file}.bval")
     field.keep_extension = False
-    definition = Mock()
+    task = Mock()
     values = {"in_file": Path("/a/b/c/file.txt"), "grad": True}
 
     assert template_update_single(
         field,
-        definition,
+        task,
         values=values,
         output_dir=tmp_path,
         spec_type="input",

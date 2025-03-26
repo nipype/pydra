@@ -26,8 +26,8 @@ def test_interface_wrap_function(tmp_path):
         python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
     ]
     assert outputs == [python.out(name="out", type=float)]
-    definition = SampleDef(a=1)
-    outputs = definition(cache_dir=tmp_path)
+    task = SampleDef(a=1)
+    outputs = task(cache_dir=tmp_path)
     assert outputs.out == 2.0
     with pytest.raises(TypeError):
         SampleDef(a=1.5)

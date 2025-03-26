@@ -54,7 +54,7 @@ MultiInputFile = MultiInputObj[generic.File]
 
 
 # Since we can't create a NewType from a type union, we add a dummy type to the union
-# so we can detect the MultiOutput in the input/output definition creation
+# so we can detect the MultiOutput in the input/output task creation
 class MultiOutputType:
     pass
 

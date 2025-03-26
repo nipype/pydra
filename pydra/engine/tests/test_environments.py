@@ -33,7 +33,7 @@ def test_native_1(tmp_path):
     assert shelly.cmdline == cmd
 
     shelly_job = Job(
-        definition=shelly,
+        task=shelly,
         submitter=Submitter(cache_dir=newcache("native-task")),
         name="native",
     )
@@ -65,7 +65,7 @@ def test_docker_1(tmp_path):
     assert shelly.cmdline == cmd
 
     shelly_job = Job(
-        definition=shelly,
+        task=shelly,
         submitter=Submitter(cache_dir=newcache("docker")),
         name="docker",
     )
@@ -105,7 +105,7 @@ def test_docker_1_subm(tmp_path, docker):
     docker = Docker(image="busybox")
     shelly = shell.define(cmd)()
     shelly_job = Job(
-        definition=shelly,
+        task=shelly,
         submitter=Submitter(cache_dir=newcache("docker")),
         name="docker",
     )
@@ -135,7 +135,7 @@ def test_singularity_1(tmp_path):
     Shelly = shell.define(cmd)
     shelly = Shelly()
     shelly_job = Job(
-        definition=shelly,
+        task=shelly,
         submitter=Submitter(cache_dir=newcache("singu")),
         name="singu",
     )
@@ -163,7 +163,7 @@ def test_singularity_1_subm(tmp_path, worker):
     Shelly = shell.define(cmd)
     shelly = Shelly()
     shelly_job = Job(
-        definition=shelly,
+        task=shelly,
         submitter=Submitter(cache_dir=newcache("singu")),
         name="singu",
     )
@@ -200,7 +200,7 @@ def shelly_with_input_factory(filename, executable) -> ShellTask:
 
 def make_job(task: ShellTask, tempdir: Path, name: str):
     return Job(
-        definition=task,
+        task=task,
         submitter=Submitter(cache_dir=makedir(tempdir, name)),
         name=name,
     )

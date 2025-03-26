@@ -13,7 +13,7 @@ from shutil import copyfile, which
 import cloudpickle as cp
 import concurrent.futures as cf
 from pydra.engine.core import Job
-from pydra.engine.specs import TaskDef
+from pydra.engine.specs import Task
 from pydra.engine.helpers import (
     get_available_cpus,
     read_and_display_async,
@@ -29,7 +29,7 @@ logger = logging.getLogger("pydra.worker")
 if ty.TYPE_CHECKING:
     from pydra.engine.specs import Result
 
-TaskType = ty.TypeVar("TaskType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
 class Worker(metaclass=abc.ABCMeta):
@@ -901,7 +901,7 @@ class PsijWorker(Worker):
 
         Parameters
         ----------
-        definition : psij.JobDef
+        task : psij.JobDef
             PSI/J job specification.
         attributes : any
             Job attributes.

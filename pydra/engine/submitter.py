@@ -33,12 +33,12 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.node import Node
-    from pydra.engine.specs import WorkflowTask, TaskDef, TaskOutputs, TaskHooks, Result
+    from pydra.engine.specs import WorkflowTask, Task, TaskOutputs, TaskHooks, Result
     from pydra.engine.core import Workflow
     from pydra.engine.environments import Environment
 
 
-TaskType = ty.TypeVar("TaskType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="Task")
 OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
 
 # Used to flag development mode of Audit
@@ -185,7 +185,7 @@ class Submitter:
 
     def __call__(
         self,
-        task_def: "TaskDef[OutputType]",
+        task: "Task[OutputType]",
         hooks: "TaskHooks | None" = None,
         raise_errors: bool | None = None,
         rerun: bool = False,
@@ -194,8 +194,8 @@ class Submitter:
 
         Parameters
         ----------
-        task_def : :obj:`~pydra.engine.specs.TaskDef`
-            The task definition to run
+        task : :obj:`~pydra.engine.specs.Task`
+            The task to run
         hooks : :obj:`~pydra.engine.specs.TaskHooks`, optional
             Job hooks, callable functions called as the job is setup and torn down,
             by default no functions are called at the hooks
@@ -222,16 +222,16 @@ class Submitter:
                 f"'raise_errors' must be a boolean or None, not {type(raise_errors)}"
             )
 
-        task_def._check_rules()
+        task._check_rules()
         # If the outer job is split, create an implicit workflow to hold the split nodes
-        if task_def._splitter:
-            from pydra.engine.specs import TaskDef
+        if task._splitter:
+            from pydra.engine.specs import Task
 
             state = State(
                 name="outer_split",
-                splitter=deepcopy(task_def._splitter),
-                combiner=deepcopy(task_def._combiner),
-                cont_dim=deepcopy(task_def._cont_dim),
+                splitter=deepcopy(task._splitter),
+                combiner=deepcopy(task._combiner),
+                cont_dim=deepcopy(task._cont_dim),
             )
 
             def wrap_type(tp):
@@ -240,22 +240,20 @@ class Submitter:
                 return tp
 
             output_types = {
-                o.name: wrap_type(o.type) for o in list_fields(task_def.Outputs)
+                o.name: wrap_type(o.type) for o in list_fields(task.Outputs)
             }
 
             @workflow.define(outputs=output_types)
-            def Split(
-                defn: TaskDef, output_types: dict, environment: Environment | None
-            ):
+            def Split(defn: Task, output_types: dict, environment: Environment | None):
                 node = workflow.add(defn, environment=environment, hooks=hooks)
                 return tuple(getattr(node, o) for o in output_types)
 
-            task_def = Split(
-                defn=task_def, output_types=output_types, environment=self.environment
+            task = Split(
+                defn=task, output_types=output_types, environment=self.environment
             )
 
             environment = None
-        elif task_def._combiner:
+        elif task._combiner:
             raise ValueError(
                 f"Job {self} is marked for combining, but not splitting. "
                 "Use the `split` method to split the job before combining."
@@ -264,7 +262,7 @@ class Submitter:
             environment = self.environment
 
         job = Job(
-            task_def,
+            task,
             submitter=self,
             name="main",
             environment=environment,
@@ -275,7 +273,7 @@ class Submitter:
             self.submit(job, rerun=rerun)
         except Exception as exc:
             error_msg = (
-                f"Full crash report for {type(task_def).__name__!r} job is here: "
+                f"Full crash report for {type(task).__name__!r} job is here: "
                 + str(job.output_dir / "_error.pklz")
             )
             exc.add_note(error_msg)
@@ -341,7 +339,7 @@ class Submitter:
 
         """
         # Construct the workflow
-        wf = workflow_task.definition.construct()
+        wf = workflow_task.task.construct()
         # Generate the execution graph
         exec_graph = wf.execution_graph(submitter=self)
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
@@ -362,7 +360,7 @@ class Submitter:
         job : :obj:`~pydra.engine.core.Job[WorkflowTask]`
             Workflow Job object
         """
-        wf = workflow_task.definition.construct()
+        wf = workflow_task.task.construct()
         # Generate the execution graph
         exec_graph = wf.execution_graph(submitter=self)
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
@@ -481,7 +479,7 @@ class Submitter:
                         if job.state_index is not None:
                             task_name += f"({job.state_index})"
                         errors.append(
-                            f"Job {task_name!r}, {job.definition!r}, errored:{error_msg}"
+                            f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
                         )
                 tasks = self.get_runnable_tasks(exec_graph)
         finally:
@@ -636,8 +634,8 @@ class NodeExecution(ty.Generic[TaskType]):
         return self.node.inputs
 
     @property
-    def _definition(self) -> "Node":
-        return self.node._definition
+    def _task(self) -> "Node":
+        return self.node._task
 
     @property
     def tasks(self) -> ty.Generator["Job[TaskType]", None, None]:
@@ -663,9 +661,9 @@ class NodeExecution(ty.Generic[TaskType]):
             self.state.prepare_states(values)
             self.state.prepare_inputs()
             # Generate the tasks
-            for index, split_defn in enumerate(self._split_definition()):
+            for index, split_defn in enumerate(self._split_task()):
                 self._tasks[index] = Job(
-                    definition=split_defn,
+                    task=split_defn,
                     submitter=self.submitter,
                     environment=self.node._environment,
                     name=self.node.name,
@@ -674,7 +672,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 )
         else:
             self._tasks[None] = Job(
-                definition=self._resolve_lazy_inputs(task_def=self.node._definition),
+                task=self._resolve_lazy_inputs(task=self.node._task),
                 submitter=self.submitter,
                 environment=self.node._environment,
                 hooks=self.node._hooks,
@@ -742,34 +740,34 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def _resolve_lazy_inputs(
         self,
-        task_def: "TaskDef",
+        task: "Task",
         state_index: int | None = None,
-    ) -> "TaskDef":
-        """Resolves lazy fields in the task definition by replacing them with their
+    ) -> "Task":
+        """Resolves lazy fields in the task by replacing them with their
         actual values calculated by upstream jobs.
 
         Parameters
         ----------
-        task_def : TaskDef
-            The definition to resolve the lazy fields of
+        task : Task
+            The task to resolve the lazy fields of
         state_index : int, optional
             The state index for the workflow, by default None
 
         Returns
         -------
-        TaskDef
-            The task definition with all lazy fields resolved
+        Task
+            The task with all lazy fields resolved
         """
         resolved = {}
-        for name, value in attrs_values(task_def).items():
+        for name, value in attrs_values(task).items():
             if isinstance(value, LazyField):
                 resolved[name] = value._get_value(
                     workflow=self.workflow, graph=self.graph, state_index=state_index
                 )
-        return attrs.evolve(task_def, **resolved)
+        return attrs.evolve(task, **resolved)
 
-    def _split_definition(self) -> dict[int, "TaskDef[OutputType]"]:
-        """Split the definition into the different states it will be run over
+    def _split_task(self) -> dict[int, "Task[OutputType]"]:
+        """Split the task into the different states it will be run over
 
         Parameters
         ----------
@@ -778,12 +776,12 @@ class NodeExecution(ty.Generic[TaskType]):
         """
         # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
         if not self.node.state:
-            return {None: self.node._definition}
+            return {None: self.node._task}
         split_defs = []
         for index, vals in zip(self.node.state.inputs_ind, self.node.state.states_val):
             resolved = {}
             for inpt_name in set(self.node.input_names):
-                value = getattr(self._definition, inpt_name)
+                value = getattr(self._task, inpt_name)
                 state_key = f"{self.node.name}.{inpt_name}"
                 try:
                     resolved[inpt_name] = vals[state_key]
@@ -794,7 +792,7 @@ class NodeExecution(ty.Generic[TaskType]):
                             graph=self.graph,
                             state_index=index.get(state_key),
                         )
-            split_defs.append(attrs.evolve(self.node._definition, **resolved))
+            split_defs.append(attrs.evolve(self.node._task, **resolved))
         return split_defs
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:

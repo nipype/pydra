@@ -301,7 +301,7 @@ def test_wf_lzin_split(tmp_path):
     assert outputs.out == [1, 2, 3]
 
 
-def test_task_def_repr():
+def test_task_repr():
     @python.define(outputs=["x", "y", "z"])
     def IdentityN3(x: int, y: int = 1, z: int = 2) -> tuple[int, int, int]:
         return x, y, z

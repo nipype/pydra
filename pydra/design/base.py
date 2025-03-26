@@ -27,7 +27,7 @@ from pydra.utils.hash import hash_function
 
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import TaskDef, TaskOutputs
+    from pydra.engine.specs import Task, TaskOutputs
 
 
 __all__ = [
@@ -35,7 +35,7 @@ __all__ = [
     "Arg",
     "Out",
     "ensure_field_objects",
-    "make_task_def",
+    "make_task",
 ]
 
 
@@ -89,7 +89,7 @@ class Requirement:
         default=None, converter=allowed_values_converter
     )
 
-    def satisfied(self, inputs: "TaskDef") -> bool:
+    def satisfied(self, inputs: "Task") -> bool:
         """Check if the requirement is satisfied by the inputs"""
         value = getattr(inputs, self.name)
         field = {f.name: f for f in list_fields(inputs)}[self.name]
@@ -157,7 +157,7 @@ class RequirementSet:
         converter=requirements_converter,
     )
 
-    def satisfied(self, inputs: "TaskDef") -> bool:
+    def satisfied(self, inputs: "Task") -> bool:
         """Check if all the requirements are satisfied by the inputs"""
         return all(req.satisfied(inputs) for req in self.requirements)
 
@@ -203,7 +203,7 @@ def requires_converter(
 
 @attrs.define(kw_only=True)
 class Field:
-    """Base class for input and output fields to task definitions
+    """Base class for input and output fields to tasks
 
     Parameters
     ----------
@@ -245,7 +245,7 @@ class Field:
     validator: ty.Callable[..., bool] | None = None
     hash_eq: bool = False
 
-    def requirements_satisfied(self, inputs: "TaskDef") -> bool:
+    def requirements_satisfied(self, inputs: "Task") -> bool:
         """Check if all the requirements are satisfied by the inputs"""
         return any(req.satisfied(inputs) for req in self.requires)
 
@@ -264,7 +264,7 @@ class Field:
 
 @attrs.define(kw_only=True)
 class Arg(Field):
-    """Base class for input fields of task definitions
+    """Base class for input fields of tasks
 
     Parameters
     ----------
@@ -303,7 +303,7 @@ class Arg(Field):
 
 @attrs.define(kw_only=True, slots=False)
 class Out(Field):
-    """Base class for output fields of task definitions
+    """Base class for output fields of tasks
 
     Parameters
     ----------
@@ -328,7 +328,7 @@ class Out(Field):
 
 
 def extract_fields_from_class(
-    spec_type: type["TaskDef"],
+    spec_type: type["Task"],
     outputs_type: type["TaskOutputs"],
     klass: type,
     arg_type: type[Arg],
@@ -436,8 +436,8 @@ def extract_fields_from_class(
     return inputs, outputs
 
 
-def make_task_def(
-    spec_type: type["TaskDef"],
+def make_task(
+    spec_type: type["Task"],
     out_type: type["TaskOutputs"],
     inputs: dict[str, Arg],
     outputs: dict[str, Out],
@@ -447,7 +447,7 @@ def make_task_def(
     outputs_bases: ty.Sequence[type] = (),
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
 ):
-    """Create a task definition class and its outputs definition class from the
+    """Create a task class and its outputs class from the
     input and output fields provided to the decorator/function.
 
     Modifies the class so that its attributes are converted from pydra fields to attrs fields
@@ -467,9 +467,9 @@ def make_task_def(
     name : str, optional
         The name of the class, by default
     bases : ty.Sequence[type], optional
-        The base classes for the task definition class, by default ()
+        The base classes for the task class, by default ()
     outputs_bases : ty.Sequence[type], optional
-        The base classes for the outputs definition class, by default ()
+        The base classes for the outputs class, by default ()
     xor: Sequence[str | None] | Sequence[Sequence[str | None]], optional
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
@@ -509,14 +509,14 @@ def make_task_def(
         if name is None:
             raise ValueError("name must be provided if klass is not")
         bases = tuple(bases)
-        # Ensure that TaskDef is a base class
+        # Ensure that Task is a base class
         if not any(issubclass(b, spec_type) for b in bases):
             bases = bases + (spec_type,)
         # If building from a decorated class (as opposed to dynamically from a function
         # or shell-template), add any base classes not already in the bases tuple
         if klass is not None:
             bases += tuple(c for c in klass.__mro__ if c not in bases + (object,))
-        # Create a new class with the TaskDef as a base class
+        # Create a new class with the Task as a base class
         klass = types.new_class(
             name=name,
             bases=bases,
@@ -580,7 +580,7 @@ def make_outputs_spec(
     bases: ty.Sequence[type],
     spec_name: str,
 ) -> type["TaskOutputs"]:
-    """Create an outputs definition class and its outputs definition class from the
+    """Create an outputs class and its outputs class from the
     output fields provided to the decorator/function.
 
     Creates a new class with attrs fields and then calls `attrs.define` to create an
@@ -591,9 +591,9 @@ def make_outputs_spec(
     outputs : dict[str, Out]
         The output fields of the task
     bases : ty.Sequence[type], optional
-        The base classes for the outputs definition class, by default ()
+        The base classes for the outputs class, by default ()
     spec_name : str
-        The name of the task definition class the outputs are for
+        The name of the task class the outputs are for
 
     Returns
     -------

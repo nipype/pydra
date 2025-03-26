@@ -11,7 +11,7 @@ def test_load_json(tmp_path: Path):
     with open(json_file, "w") as f:
         json.dump(JSON_CONTENTS, f)
 
-    # Instantiate the task definition, providing the JSON file we want to load
+    # Instantiate the task, providing the JSON file we want to load
     load_json = LoadJson(file=json_file)
 
     # Run the task to load the JSON file

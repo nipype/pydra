@@ -258,7 +258,7 @@ def test_wf_shell_cmd_1(worker, tmp_path):
     assert "_task.pklz" in res.outputs.out
 
 
-# customised input definition
+# customised input task
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1940,7 +1940,7 @@ def test_wf_shell_cmd_ndst_1(worker, tmp_path):
     assert all([file.fspath.exists() for file in res.outputs.cp_file])
 
 
-# customised output definition
+# customised output task
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -2453,7 +2453,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, worker, results_function):
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_8d(tmp_path, worker, results_function):
     """
-    customised output_spec, adding Directory to the output named by input definition
+    customised output_spec, adding Directory to the output named by input task
     """
 
     # For /tmp/some_dict/test this function returns "/test"
@@ -3563,7 +3563,7 @@ def test_shellcommand_error_msg(tmp_path):
 
     assert (
         str(excinfo.value)
-        == f"""Error running 'main' task with ['{path_str}', 'hello']:
+        == f"""Error running 'main' job with ['{path_str}', 'hello']:
 
 stderr:
 {path_str}: line 3: /command-that-doesnt-exist: No such file or directory

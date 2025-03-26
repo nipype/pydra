@@ -52,7 +52,7 @@ def test_workflow():
     constructor = MyTestWorkflow().constructor
     assert constructor.__name__ == "MyTestWorkflow"
 
-    # The constructor function is included as a part of the definition so it is
+    # The constructor function is included as a part of the task so it is
     # included in the hash by default and can be overridden if needed. Not 100% sure
     # if this is a good idea or not
     assert list_fields(MyTestWorkflow) == [
@@ -143,7 +143,7 @@ def test_shell_workflow():
 
 
 def test_workflow_canonical():
-    """Test class-based workflow definition"""
+    """Test class-based workflow task"""
 
     # NB: We use PascalCase (i.e. class names) as it is translated into a class
 
@@ -169,7 +169,7 @@ def test_workflow_canonical():
     constructor = MyTestWorkflow().constructor
     assert constructor.__name__ == "constructor"
 
-    # The constructor function is included as a part of the definition so it is
+    # The constructor function is included as a part of the task so it is
     # included in the hash by default and can be overridden if needed. Not 100% sure
     # if this is a good idea or not
     assert sorted(list_fields(MyTestWorkflow), key=attrgetter("name")) == [
@@ -236,7 +236,7 @@ def test_workflow_lazy():
         input_video=LazyOutField(node=mock_node, field="a_video", type=video.Mp4),
         watermark=LazyOutField(node=mock_node, field="a_watermark", type=image.Png),
     )
-    Workflow.clear_cache(definition=MyTestShellWorkflow)
+    Workflow.clear_cache(task=MyTestShellWorkflow)
     wf = Workflow.construct(workflow_spec)
     assert wf["add_watermark"].inputs.in_video == LazyInField(
         workflow=wf, field="input_video", type=video.Mp4, type_checked=True
@@ -458,7 +458,7 @@ def test_nested_workflow():
         node=wf["NestedWorkflow"], field="out", type=float, type_checked=True
     )
     assert list(wf.node_names) == ["Divide", "NestedWorkflow"]
-    nwf_spec = copy(wf["NestedWorkflow"]._definition)
+    nwf_spec = copy(wf["NestedWorkflow"]._task)
     nwf_spec.a = 100.0
     nwf = Workflow.construct(nwf_spec)
     nwf.inputs.a == 100.0

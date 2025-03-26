@@ -20,7 +20,7 @@ from pydra.utils.typing import StateArray
 
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import TaskDef, Result, WorkflowOutputs, WorkflowTask
+    from pydra.engine.specs import Task, Result, WorkflowOutputs, WorkflowTask
     from pydra.engine.core import Job
     from pydra.design.base import Field
     from pydra.engine.lazy import LazyField
@@ -28,7 +28,7 @@ if ty.TYPE_CHECKING:
 
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 
-TaskType = ty.TypeVar("TaskType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
 def plot_workflow(
@@ -78,11 +78,9 @@ def plot_workflow(
         return dotfile, formatted_dot
 
 
-def attrs_fields(definition, exclude_names=()) -> list[attrs.Attribute]:
-    """Get the fields of a definition, excluding some names."""
-    return [
-        field for field in definition.__attrs_attrs__ if field.name not in exclude_names
-    ]
+def attrs_fields(task, exclude_names=()) -> list[attrs.Attribute]:
+    """Get the fields of a task, excluding some names."""
+    return [field for field in task.__attrs_attrs__ if field.name not in exclude_names]
 
 
 def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
@@ -94,15 +92,15 @@ def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
     }
 
 
-def list_fields(definition: "type[TaskDef] | TaskDef") -> list["Field"]:
-    """List the fields of a task definition"""
-    if not inspect.isclass(definition):
-        definition = type(definition)
-    if not attrs.has(definition):
+def list_fields(task: "type[Task] | Task") -> list["Field"]:
+    """List the fields of a task"""
+    if not inspect.isclass(task):
+        task = type(task)
+    if not attrs.has(task):
         return []
     return [
         f.metadata[PYDRA_ATTR_METADATA]
-        for f in attrs.fields(definition)
+        for f in attrs.fields(task)
         if PYDRA_ATTR_METADATA in f.metadata
     ]
 
@@ -112,9 +110,9 @@ def fields_values(obj, **kwargs) -> dict[str, ty.Any]:
     return {f.name: getattr(obj, f.name) for f in list_fields(obj)}
 
 
-def fields_dict(definition: "type[TaskDef] | TaskDef") -> dict[str, "Field"]:
-    """Returns the fields of a definition in a dictionary"""
-    return {f.name: f for f in list_fields(definition)}
+def fields_dict(task: "type[Task] | Task") -> dict[str, "Field"]:
+    """Returns the fields of a task in a dictionary"""
+    return {f.name: f for f in list_fields(task)}
 
 
 # from pydra.engine.specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
@@ -134,7 +132,7 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
     return obj
 
 
-def print_help(defn: "TaskDef[TaskType]") -> list[str]:
+def print_help(defn: "Task[TaskType]") -> list[str]:
     """Visit a job object and print its input/output interface."""
     from pydra.design.base import NO_DEFAULT
 
@@ -229,11 +227,7 @@ def save(
     lockfile = task_path.parent / (task_path.name + "_save.lock")
     with SoftFileLock(lockfile):
         if result:
-            if (
-                result.definition
-                and is_workflow(result.definition)
-                and result.outputs is not None
-            ):
+            if result.task and is_workflow(result.task) and result.outputs is not None:
                 # copy files to the workflow directory
                 result.outputs = copyfile_workflow(
                     wf_path=task_path, outputs=result.outputs
@@ -535,7 +529,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(task_pkl.parent, error=traceback)
-            result = Result(output=None, runtime=None, errored=True, definition=None)
+            result = Result(output=None, runtime=None, errored=True, task=None)
             save(task_pkl.parent, result=result)
         raise
 
@@ -553,7 +547,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(job.output_dir, error=traceback)
         if not resultfile.exists():  # not sure if this is needed
-            result = Result(output=None, runtime=None, errored=True, definition=None)
+            result = Result(output=None, runtime=None, errored=True, task=None)
             save(job.output_dir, result=result)
         e.add_note(f" full crash report is here: {errorfile}")
         raise

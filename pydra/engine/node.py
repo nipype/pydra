@@ -13,7 +13,7 @@ from pydra.engine.state import State
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Workflow
     from pydra.engine.environments import Environment
-    from pydra.engine.specs import TaskDef, TaskOutputs, TaskHooks
+    from pydra.engine.specs import Task, TaskOutputs, TaskHooks
 
 
 OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
@@ -32,12 +32,12 @@ class Node(ty.Generic[OutputType]):
     ----------
     name : str
         The name of the node
-    inputs : TaskDef
-        The definition of the node
+    inputs : Task
+        The task of the node
     """
 
     name: str
-    _definition: "TaskDef[OutputType]"
+    _task: "Task[OutputType]"
     _environment: "Environment | None" = None
     _hooks: "TaskHooks | None" = None
     _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False, repr=False)
@@ -61,7 +61,7 @@ class Node(ty.Generic[OutputType]):
             super().__setattr__("_node", node)
 
         def __getattr__(self, name: str) -> ty.Any:
-            return getattr(self._node._definition, name)
+            return getattr(self._node._task, name)
 
         def __getstate__(self) -> ty.Dict[str, ty.Any]:
             return {"_node": self._node}
@@ -70,7 +70,7 @@ class Node(ty.Generic[OutputType]):
             super().__setattr__("_node", state["_node"])
 
         def __setattr__(self, name: str, value: ty.Any) -> None:
-            setattr(self._node._definition, name, value)
+            setattr(self._node._task, name, value)
             if is_lazy(value):
                 upstream_states = self._node._get_upstream_states()
                 if (
@@ -89,7 +89,7 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def input_names(self) -> list[str]:
-        return list(attrs_values(self._definition).keys())
+        return list(attrs_values(self._task).keys())
 
     @property
     def state(self):
@@ -100,27 +100,25 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def input_values(self) -> tuple[tuple[str, ty.Any]]:
-        return tuple(attrs_values(self._definition).items())
+        return tuple(attrs_values(self._task).items())
 
     @property
     def state_values(self) -> dict[str, ty.Any]:
-        """Get the values of the task definition, scoped by the name of the node to be
+        """Get the values of the task, scoped by the name of the node to be
         used in the state
 
         Returns
         -------
         dict[str, Any]
-            The values of the task definition
+            The values of the task
         """
-        return {
-            f"{self.name}.{n}": v for n, v in attrs_values(self._definition).items()
-        }
+        return {f"{self.name}.{n}": v for n, v in attrs_values(self._task).items()}
 
     @property
     def lzout(self) -> OutputType:
         from pydra.engine.helpers import list_fields
 
-        """The output definition of the node populated with lazy fields"""
+        """The output task of the node populated with lazy fields"""
         if self._lzout is not None:
             return self._lzout
         lazy_fields = {}
@@ -178,19 +176,15 @@ class Node(ty.Generic[OutputType]):
 
     def _set_state(self) -> None:
         # Add node name to state's splitter, combiner and cont_dim loaded from the def
-        splitter = deepcopy(
-            self._definition._splitter
-        )  # these can be modified in state
-        combiner = deepcopy(
-            self._definition._combiner
-        )  # these can be modified in state
+        splitter = deepcopy(self._task._splitter)  # these can be modified in state
+        combiner = deepcopy(self._task._combiner)  # these can be modified in state
         cont_dim = {}
         if splitter:
             splitter = hlpst.add_name_splitter(splitter, self.name)
         if combiner:
             combiner = hlpst.add_name_combiner(combiner, self.name)
-        if self._definition._cont_dim:
-            for key, val in self._definition._cont_dim.items():
+        if self._task._cont_dim:
+            for key, val in self._task._cont_dim.items():
                 cont_dim[f"{self.name}.{key}"] = val
         other_states = self._get_upstream_states()
         if splitter or combiner or other_states:

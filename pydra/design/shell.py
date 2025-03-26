@@ -20,7 +20,7 @@ from pydra.design.base import (
     check_explicit_fields_are_none,
     extract_fields_from_class,
     ensure_field_objects,
-    make_task_def,
+    make_task,
     NO_DEFAULT,
 )
 from pydra.utils.typing import (
@@ -257,8 +257,8 @@ def define(
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
 ) -> "ShellTask":
-    """Create a task definition for a shell command. Can be used either as a decorator on
-    the "canonical" dataclass-form of a task definition or as a function that takes a
+    """Create a task for a shell command. Can be used either as a decorator on
+    the "canonical" dataclass-form of a task or as a function that takes a
     "shell-command template string" of the form
 
     ```
@@ -430,7 +430,7 @@ def define(
                 outpt.callable = GlobCallable(outpt.default)
                 outpt.default = NO_DEFAULT
 
-        defn = make_task_def(
+        defn = make_task(
             ShellTask,
             ShellOutputs,
             parsed_inputs,

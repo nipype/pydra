@@ -54,7 +54,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.workers import Worker
 
 
-TaskType = ty.TypeVar("TaskType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
 def is_set(value: ty.Any) -> bool:
@@ -147,7 +147,7 @@ class TaskOutputs:
             ) from None
 
     def __eq__(self, other: ty.Any) -> bool:
-        """Check if two task definitions are equal"""
+        """Check if two tasks are equal"""
         values = attrs.asdict(self)
         fields = list_fields(self)
         try:
@@ -167,7 +167,7 @@ class TaskOutputs:
         return values == other_values
 
     def __repr__(self) -> str:
-        """A string representation of the task definition"""
+        """A string representation of the task"""
         fields_str = ", ".join(
             f"{f.name}={getattr(self, f.name)!r}"
             for f in list_fields(self)
@@ -206,8 +206,8 @@ class TaskHooks:
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class TaskDef(ty.Generic[OutputsType]):
-    """Base class for all task definitions"""
+class Task(ty.Generic[OutputsType]):
+    """Base class for all tasks"""
 
     # Class attributes
     _xor: frozenset[frozenset[str | None]] = (
@@ -236,7 +236,7 @@ class TaskDef(ty.Generic[OutputsType]):
         hooks: TaskHooks | None = None,
         **kwargs: ty.Any,
     ) -> OutputsType:
-        """Create a job from this definition and execute it to produce a result.
+        """Create a job from this task and execute it to produce a result.
 
         Parameters
         ----------
@@ -289,7 +289,7 @@ class TaskDef(ty.Generic[OutputsType]):
                     rerun=rerun,
                 )
         except TypeError as e:
-            # Catch any inadvertent passing of task definition parameters to the
+            # Catch any inadvertent passing of task parameters to the
             # execution call
             if hasattr(e, "__notes__") and WORKER_KWARG_FAIL_NOTE in e.__notes__:
                 if match := re.match(
@@ -298,7 +298,7 @@ class TaskDef(ty.Generic[OutputsType]):
                     if match.group(1) in self:
                         e.add_note(
                             f"Note that the unrecognised argument, {match.group(1)!r}, is "
-                            f"an input of the task definition {self!r} that has already been "
+                            f"an input of the task {self!r} that has already been "
                             f"parameterised (it is being called to execute it)"
                         )
             raise
@@ -433,14 +433,14 @@ class TaskDef(ty.Generic[OutputsType]):
         local_names = set(c for c in combiner if "." not in c and not c.startswith("_"))
         if unrecognised := local_names - set(self):
             raise ValueError(
-                f"Combiner fields {unrecognised} are not present in the task definition"
+                f"Combiner fields {unrecognised} are not present in the task"
             )
         combined_def = copy(self)
         combined_def._combiner = combiner
         return combined_def
 
     def __repr__(self) -> str:
-        """A string representation of the task definition"""
+        """A string representation of the task"""
         fields_str = ", ".join(
             f"{f.name}={getattr(self, f.name)!r}"
             for f in list_fields(self)
@@ -449,7 +449,7 @@ class TaskDef(ty.Generic[OutputsType]):
         return f"{self.__class__.__name__}({fields_str})"
 
     def __iter__(self) -> ty.Generator[str, None, None]:
-        """Iterate through all the names in the definition"""
+        """Iterate through all the names in the task"""
         return (
             f.name
             for f in list_fields(self)
@@ -457,7 +457,7 @@ class TaskDef(ty.Generic[OutputsType]):
         )
 
     def __eq__(self, other: ty.Any) -> bool:
-        """Check if two task definitions are equal"""
+        """Check if two tasks are equal"""
         values = attrs.asdict(self, recurse=False)
         try:
             other_values = attrs.asdict(other, recurse=False)
@@ -601,8 +601,7 @@ class TaskDef(ty.Generic[OutputsType]):
 
         if errors := self._rule_violations():
             raise ValueError(
-                f"Found the following errors in job {self} definition:\n"
-                + "\n".join(errors)
+                f"Found the following errors in job {self} task:\n" + "\n".join(errors)
             )
 
     @classmethod
@@ -644,7 +643,7 @@ class TaskDef(ty.Generic[OutputsType]):
                     )
 
     def _check_resolved(self):
-        """Checks that all the fields in the definition have been resolved"""
+        """Checks that all the fields in the task have been resolved"""
         if lazy_values := [n for n, v in attrs_values(self).items() if is_lazy(v)]:
             raise ValueError(
                 f"Cannot execute {self} because the following fields "
@@ -672,9 +671,9 @@ class Result(ty.Generic[OutputsType]):
     outputs: OutputsType | None = None
     runtime: Runtime | None = None
     errored: bool = False
-    definition: TaskDef[OutputsType] | None = None
+    task: Task[OutputsType] | None = None
 
-    CLOUD_PICKLE_ATTRS = ("outputs", "definition")
+    CLOUD_PICKLE_ATTRS = ("outputs", "task")
 
     def __getstate__(self):
         state = attrs_values(self)
@@ -784,7 +783,7 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class PythonTask(TaskDef[PythonOutputsType]):
+class PythonTask(Task[PythonOutputsType]):
 
     _task_type = "python"
 
@@ -847,7 +846,7 @@ class WorkflowOutputs(TaskOutputs):
                         error_message = "NOT RETRIEVED"
                     errors.append(
                         f"Job {node.name!r} failed @ {time_of_crash} running "
-                        f"{node._definition} with the following errors:\n{error_message}"
+                        f"{node._task} with the following errors:\n{error_message}"
                         "\nTo inspect, please load the pickled job object from here: "
                         f"{result.output_dir}/_task.pklz"
                     )
@@ -875,11 +874,11 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class WorkflowTask(TaskDef[WorkflowOutputsType]):
+class WorkflowTask(Task[WorkflowOutputsType]):
 
     _task_type = "workflow"
 
-    RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("construct",)
+    RESERVED_FIELD_NAMES = Task.RESERVED_FIELD_NAMES + ("construct",)
 
     _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
 
@@ -907,7 +906,7 @@ STDERR_HELP = """The standard error stream produced by the command."""
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class ShellOutputs(TaskOutputs):
-    """Output definition of a generic shell process."""
+    """Output task of a generic shell process."""
 
     BASE_NAMES = ["return_code", "stdout", "stderr"]
 
@@ -923,7 +922,7 @@ class ShellOutputs(TaskOutputs):
         Parameters
         ----------
         inputs : ShellTask
-            The input definition of the shell process.
+            The input task of the shell process.
         output_dir : Path
             The directory where the process was run.
         stdout : str
@@ -1029,12 +1028,12 @@ class ShellOutputs(TaskOutputs):
         """Collect output file if metadata specified."""
         from pydra.design import shell
 
-        if not cls._required_fields_satisfied(fld, job.definition):
+        if not cls._required_fields_satisfied(fld, job.task):
             return None
         if isinstance(fld, shell.outarg) and fld.path_template:
             return template_update_single(
                 fld,
-                definition=job.definition,
+                task=job.task,
                 output_dir=job.output_dir,
                 spec_type="output",
             )
@@ -1055,7 +1054,7 @@ class ShellOutputs(TaskOutputs):
             elif argnm == "output_dir":
                 call_args_val[argnm] = job.output_dir
             elif argnm == "executable":
-                call_args_val[argnm] = job.definition.executable
+                call_args_val[argnm] = job.task.executable
             elif argnm == "inputs":
                 call_args_val[argnm] = job.inputs
             elif argnm == "stdout":
@@ -1091,7 +1090,7 @@ def additional_args_converter(value: ty.Any) -> list[str]:
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class ShellTask(TaskDef[ShellOutputsType]):
+class ShellTask(Task[ShellOutputsType]):
 
     _task_type = "shell"
 
@@ -1106,7 +1105,7 @@ class ShellTask(TaskDef[ShellOutputsType]):
         help="Additional free-form arguments to append to the end of the command.",
     )
 
-    RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
+    RESERVED_FIELD_NAMES = Task.RESERVED_FIELD_NAMES + ("cmdline",)
 
     def _run(self, job: "Job[ShellTask]", rerun: bool = True) -> None:
         """Run the shell command."""
@@ -1383,8 +1382,8 @@ def argstr_formatting(argstr: str, values: dict[str, ty.Any]):
 
 
 @register_serializer
-def bytes_repr_task_def(obj: TaskDef, cache: Cache) -> ty.Iterator[bytes]:
-    yield f"task_def[{obj._task_type}]:(".encode()
+def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
+    yield f"task[{obj._task_type}]:(".encode()
     for field in list_fields(obj):
         yield f"{field.name}=".encode()
         yield hash_single(getattr(obj, field.name), cache)

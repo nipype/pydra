@@ -21,7 +21,7 @@ from .utils import (
     FunFileList,
     Op4Var,
 )
-from pydra.engine.specs import TaskDef
+from pydra.engine.specs import Task
 from pydra.engine.state import State
 from pydra.utils.typing import StateArray
 from pydra.engine.submitter import Submitter
@@ -40,7 +40,7 @@ def IdentityWorkflow(a: int) -> int:
     return a.out
 
 
-def get_state(task: TaskDef, name="NA") -> State:
+def get_state(task: Task, name="NA") -> State:
     """helper function to get the state of the task once it has been added to workflow"""
     identity_workflow = IdentityWorkflow(a=1)
     wf = Workflow.construct(identity_workflow, dont_cache=True)

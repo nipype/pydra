@@ -408,7 +408,7 @@ def test_annotated_input_func_8b():
 
 def test_annotated_func_multreturn_exception():
     """function has two elements in the return statement,
-    but three element provided in the definition - should raise an error
+    but three element provided in the task - should raise an error
     """
 
     @python.define(outputs={"fractional": float, "integer": int, "who_knows": int})
@@ -1057,7 +1057,7 @@ def test_audit_prov_messdir_1(
     message_path = tmpdir / funky._checksum / "my_messages"
     # providing messenger_dir for audit
     funky_task = Job(
-        definition=funky,
+        task=funky,
         submitter=Submitter(
             cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
         ),
@@ -1196,9 +1196,7 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     cache_dir = tmpdir / "cache"
     cache_dir.mkdir()
 
-    foo = Job(
-        definition=FunAddTwo(a=1), submitter=Submitter(cache_dir=tmpdir), name="foo"
-    )
+    foo = Job(task=FunAddTwo(a=1), submitter=Submitter(cache_dir=tmpdir), name="foo")
     assert foo.hooks
     # ensure all hooks are defined
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
@@ -1278,9 +1276,7 @@ def test_taskhooks_2(tmpdir, capsys):
 
 def test_taskhooks_3(tmpdir, capsys):
     """checking results in the post run hooks"""
-    foo = Job(
-        definition=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_dir=tmpdir)
-    )
+    foo = Job(task=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_dir=tmpdir))
 
     def myhook_postrun_task(task, result, *args):
         print(f"postrun task hook, the result is {result.outputs.out}")

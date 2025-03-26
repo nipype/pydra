@@ -408,7 +408,7 @@ class DiGraph(ty.Generic[NodeType]):
 
         dotstr = "digraph G {\n"
         for nd in self.nodes:
-            if is_workflow(getattr(nd, "_definition", None)):
+            if is_workflow(getattr(nd, "_task", None)):
                 if nd.state:
                     # adding color for wf with a state
                     dotstr += f"{nd.name} [shape=box, color=blue]\n"
@@ -508,8 +508,8 @@ class DiGraph(ty.Generic[NodeType]):
         wf_asnd = {}
         dotstr = ""
         for nd in nodes:
-            if is_workflow(getattr(nd, "_definition", None)):
-                nd_graph = nd._definition.construct().graph()
+            if is_workflow(getattr(nd, "_task", None)):
+                nd_graph = nd._task.construct().graph()
                 wf_asnd[nd.name] = nd_graph
                 # for job in nd_graph.nodes:
                 #     nd.create_connections(job)

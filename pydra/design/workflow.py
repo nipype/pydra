@@ -6,7 +6,7 @@ from pydra.design.base import (
     Arg,
     Out,
     ensure_field_objects,
-    make_task_def,
+    make_task,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
@@ -15,7 +15,7 @@ from pydra.design.base import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Workflow
-    from pydra.engine.specs import TaskDef, TaskOutputs, WorkflowTask
+    from pydra.engine.specs import Task, TaskOutputs, WorkflowTask
     from pydra.engine.environments import Environment
     from pydra.engine.specs import TaskHooks
 
@@ -25,7 +25,7 @@ __all__ = ["define", "add", "this", "arg", "out"]
 
 @attrs.define
 class arg(Arg):
-    """Argument of a workflow task definition
+    """Argument of a workflow task
 
     Parameters
     ----------
@@ -63,7 +63,7 @@ class arg(Arg):
 
 @attrs.define
 class out(Out):
-    """Output of a workflow task definition
+    """Output of a workflow task
 
     Parameters
     ----------
@@ -111,7 +111,7 @@ def define(
 ) -> "WorkflowTask":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
-    a constructor function or the "canonical" dataclass-form of a task definition.
+    a constructor function or the "canonical" dataclass-form of a task.
 
     Parameters
     ----------
@@ -130,15 +130,15 @@ def define(
 
     Returns
     -------
-    TaskDef
+    Task
         The interface for the function or class.
     """
-    from pydra.engine.specs import TaskDef, WorkflowTask, WorkflowOutputs
+    from pydra.engine.specs import Task, WorkflowTask, WorkflowOutputs
 
     if lazy is None:
         lazy = []
 
-    def make(wrapped: ty.Callable | type) -> TaskDef:
+    def make(wrapped: ty.Callable | type) -> Task:
         if inspect.isclass(wrapped):
             klass = wrapped
             constructor = klass.constructor
@@ -187,7 +187,7 @@ def define(
         for inpt_name in lazy:
             parsed_inputs[inpt_name].lazy = True
 
-        defn = make_task_def(
+        defn = make_task(
             WorkflowTask,
             WorkflowOutputs,
             parsed_inputs,
@@ -225,7 +225,7 @@ OutputsType = ty.TypeVar("OutputsType", bound="TaskOutputs")
 
 
 def add(
-    task_def: "TaskDef[OutputsType]",
+    task: "Task[OutputsType]",
     name: str | None = None,
     environment: "Environment | None" = None,
     hooks: "TaskHooks | None" = None,
@@ -234,10 +234,10 @@ def add(
 
     Parameters
     ----------
-    task_def : TaskDef
+    task : Task
         The definition of the task to add to the workflow as a node
     name : str, optional
-        The name of the node, by default it will be the name of the task definition
+        The name of the node, by default it will be the name of the task
         class
     environment : Environment, optional
         The environment to run the task in, such as the Docker or Singularity container,
@@ -248,9 +248,9 @@ def add(
     Returns
     -------
     Outputs
-        The outputs definition of the node
+        The outputs of the node
     """
-    return this().add(task_def, name=name, environment=environment, hooks=hooks)
+    return this().add(task, name=name, environment=environment, hooks=hooks)
 
 
 U = ty.TypeVar("U")

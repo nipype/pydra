@@ -6,7 +6,7 @@ from pydra.design.base import (
     Arg,
     Out,
     ensure_field_objects,
-    make_task_def,
+    make_task,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
@@ -21,7 +21,7 @@ __all__ = ["arg", "out", "define"]
 
 @attrs.define
 class arg(Arg):
-    """Argument of a Python task definition
+    """Argument of a Python task
 
     Parameters
     ----------
@@ -56,7 +56,7 @@ class arg(Arg):
 
 @attrs.define
 class out(Out):
-    """Output of a Python task definition
+    """Output of a Python task
 
     Parameters
     ----------
@@ -125,7 +125,7 @@ def define(
     Returns
     -------
     PythonTask
-        The task definition class for the Python function
+        The task class for the Python function
     """
     from pydra.engine.specs import PythonTask, PythonOutputs
 
@@ -175,7 +175,7 @@ def define(
             name="function", type=ty.Callable, default=function, hash_eq=True
         )
 
-        defn = make_task_def(
+        defn = make_task(
             PythonTask,
             PythonOutputs,
             parsed_inputs,

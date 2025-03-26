@@ -112,18 +112,18 @@ def copy_nested_files(
 
 # not sure if this might be useful for Function Job
 def template_update(
-    definition,
+    task,
     output_dir: Path | None = None,
     map_copyfiles: dict[str, Path] | None = None,
 ):
     """
-    Update all templates that are present in the input definition.
+    Update all templates that are present in the input task.
 
     Should be run when all inputs used in the templates are already set.
 
     """
 
-    values = attrs_values(definition)
+    values = attrs_values(task)
     if map_copyfiles is not None:
         values.update(map_copyfiles)
 
@@ -132,18 +132,18 @@ def template_update(
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
         field
-        for field in list_fields(definition)
+        for field in list_fields(task)
         if isinstance(field, shell.outarg)
         and field.path_template
-        and getattr(definition, field.name)
-        and all(req.satisfied(definition) for req in field.requires)
+        and getattr(task, field.name)
+        and all(req.satisfied(task) for req in field.requires)
     ]
 
     dict_mod = {}
     for fld in fields_templ:
         dict_mod[fld.name] = template_update_single(
             field=fld,
-            definition=definition,
+            task=task,
             values=values,
             output_dir=output_dir,
         )
@@ -155,7 +155,7 @@ def template_update(
 
 def template_update_single(
     field: "shell.outarg",
-    definition: "ShellTask",
+    task: "ShellTask",
     values: dict[str, ty.Any] = None,
     output_dir: Path | None = None,
     spec_type: str = "input",
@@ -169,7 +169,7 @@ def template_update_single(
     from pydra.utils.typing import TypeParser, OUTPUT_TEMPLATE_TYPES  # noqa
 
     if values is None:
-        values = attrs_values(definition)
+        values = attrs_values(task)
 
     if spec_type == "input":
         field_value = values[field.name]
@@ -195,7 +195,7 @@ def template_update_single(
             # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
             return None
     # inputs_dict[field.name] is True or spec_type is output
-    value = _template_formatting(field, definition, values)
+    value = _template_formatting(field, task, values)
     if output_dir and value is not None:
         # changing path so it is in the output_dir
         # should be converted to str, it is also used for input fields that should be str
@@ -207,7 +207,7 @@ def template_update_single(
 
 
 def _template_formatting(
-    field: "shell.arg", definition: "ShellTask", values: dict[str, ty.Any]
+    field: "shell.arg", task: "ShellTask", values: dict[str, ty.Any]
 ) -> Path | list[Path] | None:
     """Formatting the field template based on the values from inputs.
     Taking into account that the field with a template can be a MultiOutputFile
@@ -220,8 +220,8 @@ def _template_formatting(
     ----------
     field : pydra.engine.helpers.Field
         field with a template
-    definition : pydra.engine.specs.TaskDef
-        the task definition
+    task : pydra.engine.specs.Task
+        the task
     values : dict
         dictionary with values from inputs object
 
@@ -233,7 +233,7 @@ def _template_formatting(
     # if a template is a function it has to be run first with the inputs as the only arg
     template = field.path_template
     if callable(template):
-        template = template(definition)
+        template = template(task)
 
     # as default, we assume that keep_extension is True
     if isinstance(template, (tuple, list)):

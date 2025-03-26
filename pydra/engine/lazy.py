@@ -9,11 +9,11 @@ from pydra.engine import node
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import DiGraph, NodeExecution
     from pydra.engine.core import Job, Workflow
-    from pydra.engine.specs import TaskDef
+    from pydra.engine.specs import Task
 
 
 T = ty.TypeVar("T")
-TaskType = ty.TypeVar("TaskType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="Task")
 
 TypeOrAny = ty.Union[type, ty.Any]
 
@@ -193,7 +193,7 @@ class LazyOutField(LazyField[T]):
                     + "\n".join(str(p) for p in set(job.cache_locations))
                     + f"\n\nThis is likely due to hash changes in '{job.name}' node inputs. "
                     f"Current values and hashes: {job.inputs}, "
-                    f"{job.definition._hash}\n\n"
+                    f"{job.task._hash}\n\n"
                     "Set loglevel to 'debug' in order to track hash changes "
                     "throughout the execution of the workflow.\n\n "
                     "These issues may have been caused by `bytes_repr()` methods "

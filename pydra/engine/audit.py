@@ -188,10 +188,8 @@ class Audit:
 
         label = job.name
 
-        command = (
-            job.definition.cmdline if hasattr(job.definition, "executable") else None
-        )
-        attr_list = list_fields(job.definition)
+        command = job.task.cmdline if hasattr(job.task, "executable") else None
+        attr_list = list_fields(job.task)
         for attrs in attr_list:
             input_name = attrs.name
             value = job.inputs[input_name]

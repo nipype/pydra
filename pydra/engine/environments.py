@@ -53,7 +53,7 @@ class Native(Environment):
 
     def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
         keys = ["return_code", "stdout", "stderr"]
-        cmd_args = job.definition._command_args(values=job.inputs)
+        cmd_args = job.task._command_args(values=job.inputs)
         values = execute(cmd_args)
         output = dict(zip(keys, values))
         if output["return_code"]:
@@ -121,7 +121,7 @@ class Container(Environment):
         if root is None:
             return bindings
         fld: shell.arg
-        for fld in list_fields(job.definition):
+        for fld in list_fields(job.task):
             if TypeParser.contains_type(FileSet, fld.type):
                 value: FileSet | None = job.inputs[fld.name]
                 if not value:
@@ -169,7 +169,10 @@ class Container(Environment):
                     )
 
         # Add the cache directory to the list of mounts
-        bindings[job.cache_dir] = (f"{self.root}/{job.cache_dir}", "rw")
+        bindings[job.cache_dir] = (
+            f"{self.root.rstrip('/')}{job.cache_dir.absolute()}",
+            "rw",
+        )
 
         # Update values with the new paths
         values = copy(job.inputs)
@@ -199,8 +202,9 @@ class Docker(Container):
         docker_args.extend(["-w", f"{self.root}{job.output_dir}"])
         keys = ["return_code", "stdout", "stderr"]
 
+        job.output_dir.mkdir(exist_ok=True)
         values = execute(
-            docker_args + [docker_img] + job.definition._command_args(values=values),
+            docker_args + [docker_img] + job.task._command_args(values=values),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:
@@ -230,13 +234,16 @@ class Singularity(Container):
                 [f"-B {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
             ).split()
         )
-        singularity_args.extend(["--pwd", f"{self.root}{job.output_dir}"])
+        singularity_args.extend(
+            ["--pwd", f"{self.root.rstrip('/')}{job.output_dir.absolute()}"]
+        )
         keys = ["return_code", "stdout", "stderr"]
 
+        job.output_dir.mkdir(exist_ok=True)
         values = execute(
             singularity_args
             + [singularity_img]
-            + job.definition._command_args(values=values),
+            + job.task._command_args(values=values),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:
