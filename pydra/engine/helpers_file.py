@@ -12,7 +12,7 @@ from fileformats.generic import FileSet
 from pydra.engine.helpers import is_lazy, attrs_values, list_fields
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import ShellDef
+    from pydra.engine.specs import ShellTask
     from pydra.design import shell
 
 logger = logging.getLogger("pydra")
@@ -110,7 +110,7 @@ def copy_nested_files(
     return TypeParser.apply_to_instances(FileSet, copy_fileset, value)
 
 
-# not sure if this might be useful for Function Task
+# not sure if this might be useful for Function Job
 def template_update(
     definition,
     output_dir: Path | None = None,
@@ -155,7 +155,7 @@ def template_update(
 
 def template_update_single(
     field: "shell.outarg",
-    definition: "ShellDef",
+    definition: "ShellTask",
     values: dict[str, ty.Any] = None,
     output_dir: Path | None = None,
     spec_type: str = "input",
@@ -207,7 +207,7 @@ def template_update_single(
 
 
 def _template_formatting(
-    field: "shell.arg", definition: "ShellDef", values: dict[str, ty.Any]
+    field: "shell.arg", definition: "ShellTask", values: dict[str, ty.Any]
 ) -> Path | list[Path] | None:
     """Formatting the field template based on the values from inputs.
     Taking into account that the field with a template can be a MultiOutputFile

@@ -8,12 +8,12 @@ from pydra.engine import node
 
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import DiGraph, NodeExecution
-    from pydra.engine.core import Task, Workflow
+    from pydra.engine.core import Job, Workflow
     from pydra.engine.specs import TaskDef
 
 
 T = ty.TypeVar("T")
-DefType = ty.TypeVar("DefType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="TaskDef")
 
 TypeOrAny = ty.Union[type, ty.Any]
 
@@ -179,7 +179,7 @@ class LazyOutField(LazyField[T]):
             the resolved value of the lazy-field
         """
 
-        def retrieve_from_job(job: "Task[DefType]") -> ty.Any:
+        def retrieve_from_job(job: "Job[TaskType]") -> ty.Any:
             if job.errored:
                 raise ValueError(
                     f"Cannot retrieve value for {self._field!r} from {self._node.name} as "

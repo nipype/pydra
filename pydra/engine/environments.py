@@ -11,8 +11,8 @@ from pydra.utils.typing import TypeParser
 logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.core import Task
-    from pydra.engine.specs import ShellDef
+    from pydra.engine.core import Job
+    from pydra.engine.specs import ShellTask
 
 
 class Environment:
@@ -26,19 +26,19 @@ class Environment:
     def setup(self):
         pass
 
-    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
         """
-        Execute the task in the environment.
+        Execute the job in the environment.
 
         Parameters
         ----------
-        task : TaskBase
-            the task to execute
+        job : TaskBase
+            the job to execute
 
         Returns
         -------
         output: dict[str, Any]
-            Output of the task.
+            Output of the job.
         """
         raise NotImplementedError
 
@@ -51,13 +51,13 @@ class Native(Environment):
     Native environment, i.e. the tasks are executed in the current python environment.
     """
 
-    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
         keys = ["return_code", "stdout", "stderr"]
-        cmd_args = task.definition._command_args(values=task.inputs)
+        cmd_args = job.definition._command_args(values=job.inputs)
         values = execute(cmd_args)
         output = dict(zip(keys, values))
         if output["return_code"]:
-            msg = f"Error running '{task.name}' task with {cmd_args}:"
+            msg = f"Error running '{job.name}' job with {cmd_args}:"
             if output["stderr"]:
                 msg += "\n\nstderr:\n" + output["stderr"]
             if output["stdout"]:
@@ -97,11 +97,11 @@ class Container(Environment):
         return f"{loc_abs}:{self.root}{loc_abs}:{mode}"
 
     def get_bindings(
-        self, task: "Task", root: str | None = None
+        self, job: "Job", root: str | None = None
     ) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[Path, ...]]]:
-        """Return bindings necessary to run task in an alternative root.
+        """Return bindings necessary to run job in an alternative root.
 
-        This is primarily intended for contexts when a task is going
+        This is primarily intended for contexts when a job is going
         to be run in a container with mounted volumes.
 
         Arguments
@@ -121,9 +121,9 @@ class Container(Environment):
         if root is None:
             return bindings
         fld: shell.arg
-        for fld in list_fields(task.definition):
+        for fld in list_fields(job.definition):
             if TypeParser.contains_type(FileSet, fld.type):
-                value: FileSet | None = task.inputs[fld.name]
+                value: FileSet | None = job.inputs[fld.name]
                 if not value:
                     continue
 
@@ -169,10 +169,10 @@ class Container(Environment):
                     )
 
         # Add the cache directory to the list of mounts
-        bindings[task.cache_dir] = (f"{self.root}/{task.cache_dir}", "rw")
+        bindings[job.cache_dir] = (f"{self.root}/{job.cache_dir}", "rw")
 
         # Update values with the new paths
-        values = copy(task.inputs)
+        values = copy(job.inputs)
         values.update(value_updates)
 
         return bindings, values
@@ -181,10 +181,10 @@ class Container(Environment):
 class Docker(Container):
     """Docker environment."""
 
-    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, values = self.get_bindings(task=task, root=self.root)
+        mounts, values = self.get_bindings(job=job, root=self.root)
 
         docker_args = [
             "docker",
@@ -196,11 +196,11 @@ class Docker(Container):
                 [f"-v {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
             ).split()
         )
-        docker_args.extend(["-w", f"{self.root}{task.output_dir}"])
+        docker_args.extend(["-w", f"{self.root}{job.output_dir}"])
         keys = ["return_code", "stdout", "stderr"]
 
         values = execute(
-            docker_args + [docker_img] + task.definition._command_args(values=values),
+            docker_args + [docker_img] + job.definition._command_args(values=values),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:
@@ -214,10 +214,10 @@ class Docker(Container):
 class Singularity(Container):
     """Singularity environment."""
 
-    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, values = self.get_bindings(task=task, root=self.root)
+        mounts, values = self.get_bindings(job=job, root=self.root)
 
         # todo adding xargsy etc
         singularity_args = [
@@ -230,13 +230,13 @@ class Singularity(Container):
                 [f"-B {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
             ).split()
         )
-        singularity_args.extend(["--pwd", f"{self.root}{task.output_dir}"])
+        singularity_args.extend(["--pwd", f"{self.root}{job.output_dir}"])
         keys = ["return_code", "stdout", "stderr"]
 
         values = execute(
             singularity_args
             + [singularity_img]
-            + task.definition._command_args(values=values),
+            + job.definition._command_args(values=values),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:

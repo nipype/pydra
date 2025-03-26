@@ -1,6 +1,6 @@
 from pydra.engine.helpers import load_task
 from pydra.design import python, workflow
-from pydra.engine.core import Task
+from pydra.engine.core import Job
 from pydra.engine.submitter import Submitter
 
 import numpy as np

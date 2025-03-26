@@ -15,7 +15,7 @@ from pydra.design.base import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Workflow
-    from pydra.engine.specs import TaskDef, TaskOutputs, WorkflowDef
+    from pydra.engine.specs import TaskDef, TaskOutputs, WorkflowTask
     from pydra.engine.environments import Environment
     from pydra.engine.specs import TaskHooks
 
@@ -108,7 +108,7 @@ def define(
     lazy: list[str] | None = None,
     auto_attribs: bool = True,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
-) -> "WorkflowDef":
+) -> "WorkflowTask":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
     a constructor function or the "canonical" dataclass-form of a task definition.
@@ -133,7 +133,7 @@ def define(
     TaskDef
         The interface for the function or class.
     """
-    from pydra.engine.specs import TaskDef, WorkflowDef, WorkflowOutputs
+    from pydra.engine.specs import TaskDef, WorkflowTask, WorkflowOutputs
 
     if lazy is None:
         lazy = []
@@ -145,7 +145,7 @@ def define(
             name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                WorkflowDef,
+                WorkflowTask,
                 WorkflowOutputs,
                 klass,
                 arg,
@@ -188,7 +188,7 @@ def define(
             parsed_inputs[inpt_name].lazy = True
 
         defn = make_task_def(
-            WorkflowDef,
+            WorkflowTask,
             WorkflowOutputs,
             parsed_inputs,
             parsed_outputs,

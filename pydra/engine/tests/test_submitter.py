@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from pydra.design import workflow, shell
 from fileformats.generic import Directory
-from pydra.engine.core import Task
+from pydra.engine.core import Job
 from pydra.engine.submitter import Submitter
 from pydra.engine.workers import DebugWorker
 from pydra.design import python
@@ -666,7 +666,7 @@ class BYOAddVarWorker(DebugWorker):
 
     def run(
         self,
-        task: "Task",
+        task: "Job",
         rerun: bool = False,
     ) -> "Result":
         with patch.dict(os.environ, {"BYO_ADD_VAR": str(self.add_var)}):

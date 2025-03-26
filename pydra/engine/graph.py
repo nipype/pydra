@@ -511,8 +511,8 @@ class DiGraph(ty.Generic[NodeType]):
             if is_workflow(getattr(nd, "_definition", None)):
                 nd_graph = nd._definition.construct().graph()
                 wf_asnd[nd.name] = nd_graph
-                # for task in nd_graph.nodes:
-                #     nd.create_connections(task)
+                # for job in nd_graph.nodes:
+                #     nd.create_connections(job)
                 dotstr += f"subgraph cluster_{nd.name} {{\n" f"label = {nd.name} \n"
                 dotstr += self._create_dotfile_single_graph(
                     nodes=nd_graph.nodes, edges=nd_graph.edges

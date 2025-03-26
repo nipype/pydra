@@ -1,11 +1,11 @@
 import attrs
 import pytest
 from pydra.engine.submitter import Submitter
-from pydra.engine.specs import ShellDef, ShellOutputs
+from pydra.engine.specs import ShellTask, ShellOutputs
 from fileformats.generic import File
 from pydra.engine.environments import Docker
 from pydra.design import shell, workflow
-from pydra.engine.core import Task
+from pydra.engine.core import Job
 from .utils import no_win, need_docker, run_submitter, run_no_submitter
 
 
@@ -18,7 +18,7 @@ def test_docker_1_nosubm(tmp_path):
     cmd = "whoami"
     Docky = shell.define(cmd)
     docky = Docky()
-    docky_task = Task(
+    docky_task = Job(
         definition=docky,
         name="docky",
         submitter=Submitter(environment=Docker(image="busybox"), cache_dir=tmp_path),
@@ -374,7 +374,7 @@ def test_docker_cmd_inputspec_copyfile_1(worker, tmp_path):
         f.write("hello from pydra\n")
 
     @shell.define
-    class Docky(ShellDef["Docky.Outputs"]):
+    class Docky(ShellTask["Docky.Outputs"]):
         executable = ["sed", "-is", "s/hello/hi/"]
         orig_file: File = shell.arg(
             position=1,

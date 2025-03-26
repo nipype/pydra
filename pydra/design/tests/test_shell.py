@@ -7,7 +7,7 @@ import cloudpickle as cp
 from pydra.design import shell
 from pydra.engine.helpers import list_fields
 from pydra.engine.specs import (
-    ShellDef,
+    ShellTask,
     ShellOutputs,
     RETURN_CODE_HELP,
     STDOUT_HELP,
@@ -22,7 +22,7 @@ def test_interface_template():
 
     Cp = shell.define("cp <in_path> <out|out_path>")
 
-    assert issubclass(Cp, ShellDef)
+    assert issubclass(Cp, ShellTask)
     output = shell.outarg(
         name="out_path",
         path_template="out_path",
@@ -40,7 +40,7 @@ def test_interface_template():
         ),
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
-        ShellDef.additional_args,
+        ShellTask.additional_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -77,7 +77,7 @@ def test_interface_template_w_types_and_path_template_ext():
 
     TrimPng = shell.define("trim-png <in_image:image/png> <out|out_image:image/png>")
 
-    assert issubclass(TrimPng, ShellDef)
+    assert issubclass(TrimPng, ShellTask)
     output = shell.outarg(
         name="out_image",
         path_template="out_image.png",
@@ -95,7 +95,7 @@ def test_interface_template_w_types_and_path_template_ext():
         ),
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
-        ShellDef.additional_args,
+        ShellTask.additional_args,
     ]
     assert sorted_fields(TrimPng.Outputs) == [
         output,
@@ -124,7 +124,7 @@ def test_interface_template_w_modify():
 
     TrimPng = shell.define("trim-png <modify|image:image/png>")
 
-    assert issubclass(TrimPng, ShellDef)
+    assert issubclass(TrimPng, ShellTask)
     assert sorted_fields(TrimPng) == [
         shell.arg(
             name="executable",
@@ -137,7 +137,7 @@ def test_interface_template_w_modify():
         shell.arg(
             name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
         ),
-        ShellDef.additional_args,
+        ShellTask.additional_args,
     ]
     assert sorted_fields(TrimPng.Outputs) == [
         shell.out(
@@ -177,7 +177,7 @@ def test_interface_template_more_complex():
         ),
     )
 
-    assert issubclass(Cp, ShellDef)
+    assert issubclass(Cp, ShellTask)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -222,7 +222,7 @@ def test_interface_template_more_complex():
             default=None,
             position=6,
         ),
-        ShellDef.additional_args,
+        ShellTask.additional_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -268,7 +268,7 @@ def test_interface_template_with_overrides_and_optionals():
         },
     )
 
-    assert issubclass(Cp, ShellDef)
+    assert issubclass(Cp, ShellTask)
     outargs = [
         shell.outarg(
             name="out_dir",
@@ -317,7 +317,7 @@ def test_interface_template_with_overrides_and_optionals():
             sep=" ",
             position=5,
         ),
-    ] + outargs + [ShellDef.additional_args]
+    ] + outargs + [ShellTask.additional_args]
     assert sorted_fields(Cp.Outputs) == outargs + [
         shell.out(
             name="return_code",
@@ -349,7 +349,7 @@ def test_interface_template_with_defaults():
         ),
     )
 
-    assert issubclass(Cp, ShellDef)
+    assert issubclass(Cp, ShellTask)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -380,7 +380,7 @@ def test_interface_template_with_defaults():
             position=6,
             sep=" ",
         ),
-        ShellDef.additional_args,
+        ShellTask.additional_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -417,7 +417,7 @@ def test_interface_template_with_type_overrides():
         inputs={"text_arg": str, "int_arg": int | None},
     )
 
-    assert issubclass(Cp, ShellDef)
+    assert issubclass(Cp, ShellTask)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -450,7 +450,7 @@ def test_interface_template_with_type_overrides():
             position=6,
             sep=" ",
         ),
-        ShellDef.additional_args,
+        ShellTask.additional_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -477,7 +477,7 @@ def Ls(request):
     if request.param == "static":
 
         @shell.define(xor=["complete_date", "date_format_str", None])
-        class Ls(ShellDef["Ls.Outputs"]):
+        class Ls(ShellTask["Ls.Outputs"]):
             executable = "ls"
 
             directory: Directory = shell.arg(
@@ -649,7 +649,7 @@ def A(request):
     if request.param == "static":
 
         @shell.define
-        class A(ShellDef["A.Outputs"]):
+        class A(ShellTask["A.Outputs"]):
             """An example shell interface described in a class
 
             Parameters
@@ -705,7 +705,7 @@ def test_shell_output_path_template(A):
 
 def test_shell_output_field_name_static():
     @shell.define
-    class A(ShellDef["A.Outputs"]):
+    class A(ShellTask["A.Outputs"]):
         """Copy a file"""
 
         executable = "cp"
@@ -760,7 +760,7 @@ def test_shell_output_field_name_static():
             position=1,
         ),
         output,
-        ShellDef.additional_args,
+        ShellTask.additional_args,
     ]
     assert sorted_fields(A.Outputs) == [
         output,
@@ -920,7 +920,7 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
 
 def test_shell_inputs_outputs_bases_static(tmp_path):
     @shell.define
-    class A(ShellDef["A.Outputs"]):
+    class A(ShellTask["A.Outputs"]):
         executable = "ls"
 
         directory: Directory = shell.arg(help="input directory", argstr="", position=-1)

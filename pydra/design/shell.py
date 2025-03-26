@@ -31,7 +31,7 @@ from pydra.utils.typing import (
 )
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import ShellDef
+    from pydra.engine.specs import ShellTask
 
 __all__ = ["arg", "out", "outarg", "define"]
 
@@ -256,7 +256,7 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
-) -> "ShellDef":
+) -> "ShellTask":
     """Create a task definition for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task definition or as a function that takes a
     "shell-command template string" of the form
@@ -309,14 +309,14 @@ def define(
 
     Returns
     -------
-    ShellDef
+    ShellTask
         The interface for the shell command
     """
-    from pydra.engine.specs import ShellDef, ShellOutputs
+    from pydra.engine.specs import ShellTask, ShellOutputs
 
     def make(
         wrapped: ty.Callable | type | None = None,
-    ) -> ShellDef:
+    ) -> ShellTask:
 
         if inspect.isclass(wrapped):
             klass = wrapped
@@ -342,7 +342,7 @@ def define(
             class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                ShellDef,
+                ShellTask,
                 ShellOutputs,
                 klass,
                 arg,
@@ -384,7 +384,9 @@ def define(
                 class_name = f"_{class_name}"
 
             # Add in fields from base classes
-            parsed_inputs.update({n: getattr(ShellDef, n) for n in ShellDef.BASE_NAMES})
+            parsed_inputs.update(
+                {n: getattr(ShellTask, n) for n in ShellTask.BASE_NAMES}
+            )
             parsed_outputs.update(
                 {n: getattr(ShellOutputs, n) for n in ShellOutputs.BASE_NAMES}
             )
@@ -429,7 +431,7 @@ def define(
                 outpt.default = NO_DEFAULT
 
         defn = make_task_def(
-            ShellDef,
+            ShellTask,
             ShellOutputs,
             parsed_inputs,
             parsed_outputs,
@@ -769,7 +771,7 @@ class _InputPassThrough:
 
     name: str
 
-    def __call__(self, inputs: ShellDef) -> ty.Any:
+    def __call__(self, inputs: ShellTask) -> ty.Any:
         return getattr(inputs, self.name)
 
 

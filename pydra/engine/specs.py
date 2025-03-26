@@ -1,4 +1,4 @@
-"""Task I/O definitions."""
+"""Job I/O definitions."""
 
 from pathlib import Path
 import re
@@ -46,7 +46,7 @@ from pydra.design.base import Field, Arg, Out, RequirementSet, NO_DEFAULT
 from pydra.design import shell
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.core import Task
+    from pydra.engine.core import Job
     from pydra.engine.graph import DiGraph
     from pydra.engine.submitter import NodeExecution
     from pydra.engine.core import Workflow
@@ -54,7 +54,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.workers import Worker
 
 
-DefType = ty.TypeVar("DefType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="TaskDef")
 
 
 def is_set(value: ty.Any) -> bool:
@@ -76,19 +76,19 @@ class TaskOutputs:
         return self._get_node().inputs
 
     @classmethod
-    def _from_task(cls, task: "Task[DefType]") -> Self:
-        """Collect the outputs of a task. This is just an abstract base method that
+    def _from_task(cls, job: "Job[TaskType]") -> Self:
+        """Collect the outputs of a job. This is just an abstract base method that
         should be used by derived classes to set default values for the outputs.
 
         Parameters
         ----------
-        task : Task[DefType]
-            The task whose outputs are being collected.
+        job : Job[TaskType]
+            The job whose outputs are being collected.
 
         Returns
         -------
         outputs : Outputs
-            The outputs of the task
+            The outputs of the job
         """
         outputs = cls(
             **{
@@ -101,14 +101,14 @@ class TaskOutputs:
                 if not f.name.startswith("_")
             }
         )
-        outputs._output_dir = task.output_dir
+        outputs._output_dir = job.output_dir
         return outputs
 
     @property
     def _results(self) -> "Result[Self]":
         results_path = self._output_dir / "_task.pklz"
         if not results_path.exists():
-            raise FileNotFoundError(f"Task results file {results_path} not found")
+            raise FileNotFoundError(f"Job results file {results_path} not found")
         with open(results_path, "rb") as f:
             return cp.load(f)
 
@@ -185,7 +185,7 @@ def donothing(*args: ty.Any, **kwargs: ty.Any) -> None:
 
 @attrs.define(kw_only=True)
 class TaskHooks:
-    """Callable task hooks."""
+    """Callable job hooks."""
 
     pre_run_task: ty.Callable = attrs.field(
         default=donothing, converter=default_if_none(donothing)
@@ -236,19 +236,19 @@ class TaskDef(ty.Generic[OutputsType]):
         hooks: TaskHooks | None = None,
         **kwargs: ty.Any,
     ) -> OutputsType:
-        """Create a task from this definition and execute it to produce a result.
+        """Create a job from this definition and execute it to produce a result.
 
         Parameters
         ----------
         cache_dir : os.PathLike, optional
-            Cache directory where the working directory/results for the task will be
+            Cache directory where the working directory/results for the job will be
             stored, by default None
         worker : str or Worker, optional
             The worker to use, by default "cf"
         environment: Environment, optional
             The execution environment to use, by default None
         rerun : bool, optional
-            Whether to force the re-computation of the task results even if existing
+            Whether to force the re-computation of the job results even if existing
             results are found, by default False
         cache_locations : list[os.PathLike], optional
             Alternate cache locations to check for pre-computed results, by default None
@@ -264,7 +264,7 @@ class TaskDef(ty.Generic[OutputsType]):
         Returns
         -------
         OutputsType or list[OutputsType]
-            The output interface of the task, or in the case of split tasks, a list of
+            The output interface of the job, or in the case of split tasks, a list of
             output interfaces
         """
         from pydra.engine.submitter import (  # noqa: F811
@@ -310,9 +310,9 @@ class TaskDef(ty.Generic[OutputsType]):
                 time_of_crash = "UNKNOWN-TIME"
                 error_message = "NOT RETRIEVED"
             raise RuntimeError(
-                f"Task {self} failed @ {time_of_crash} with the "
+                f"Job {self} failed @ {time_of_crash} with the "
                 f"following errors:\n{error_message}\n"
-                "To inspect, please load the pickled task object from here: "
+                "To inspect, please load the pickled job object from here: "
                 f"{result.output_dir}/_task.pklz"
             )
         return result.outputs
@@ -326,7 +326,7 @@ class TaskDef(ty.Generic[OutputsType]):
         **inputs,
     ) -> Self:
         """
-        Run this task parametrically over lists of split inputs.
+        Run this job parametrically over lists of split inputs.
 
         Parameters
         ----------
@@ -347,7 +347,7 @@ class TaskDef(ty.Generic[OutputsType]):
         Returns
         -------
         self : TaskBase
-            a reference to the task
+            a reference to the job
         """
         if self._splitter and not overwrite:
             raise ValueError(
@@ -411,11 +411,11 @@ class TaskDef(ty.Generic[OutputsType]):
         ----------
         combiner : list[str] or str
             the field or list of inputs to be combined (i.e. not left split) after the
-            task has been run
+            job has been run
         overwrite : bool
             whether to overwrite an existing combiner on the node
         **kwargs : dict[str, Any]
-            values for the task that will be "combined" before they are provided to the
+            values for the job that will be "combined" before they are provided to the
             node
 
         Returns
@@ -601,7 +601,7 @@ class TaskDef(ty.Generic[OutputsType]):
 
         if errors := self._rule_violations():
             raise ValueError(
-                f"Found the following errors in task {self} definition:\n"
+                f"Found the following errors in job {self} definition:\n"
                 + "\n".join(errors)
             )
 
@@ -713,7 +713,7 @@ class Result(ty.Generic[OutputsType]):
         return None
 
     @property
-    def task(self):
+    def job(self):
         task_pkl = self.output_dir / "_task.pklz"
         if not task_pkl.exists():
             return None
@@ -728,15 +728,11 @@ class Result(ty.Generic[OutputsType]):
         with open(return_values_pkl, "rb") as f:
             return cp.load(f)
 
-    @property
-    def job(self):
-        return self.task
-
 
 @attrs.define(kw_only=True)
 class RuntimeSpec:
     """
-    Specification for a task.
+    Specification for a job.
 
     From CWL::
 
@@ -762,24 +758,24 @@ class RuntimeSpec:
 class PythonOutputs(TaskOutputs):
 
     @classmethod
-    def _from_task(cls, task: "Task[PythonDef]") -> Self:
-        """Collect the outputs of a task from a combination of the provided inputs,
+    def _from_task(cls, job: "Job[PythonTask]") -> Self:
+        """Collect the outputs of a job from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
         Parameters
         ----------
-        task : Task[PythonDef]
-            The task whose outputs are being collected.
+        job : Job[PythonTask]
+            The job whose outputs are being collected.
         outputs_dict : dict[str, ty.Any]
-            The outputs of the task, as a dictionary
+            The outputs of the job, as a dictionary
 
         Returns
         -------
         outputs : Outputs
-            The outputs of the task in dataclass
+            The outputs of the job in dataclass
         """
-        outputs = super()._from_task(task)
-        for name, val in task.return_values.items():
+        outputs = super()._from_task(job)
+        for name, val in job.return_values.items():
             setattr(outputs, name, val)
         return outputs
 
@@ -788,28 +784,28 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class PythonDef(TaskDef[PythonOutputsType]):
+class PythonTask(TaskDef[PythonOutputsType]):
 
     _task_type = "python"
 
-    def _run(self, task: "Task[PythonDef]", rerun: bool = True) -> None:
+    def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
         inputs = attrs_values(self)
         del inputs["function"]
         # Run the actual function
         returned = self.function(**inputs)
-        # Collect the outputs and save them into the task.return_values dictionary
-        task.return_values = {f.name: f.default for f in list_fields(self.Outputs)}
-        return_names = list(task.return_values)
+        # Collect the outputs and save them into the job.return_values dictionary
+        job.return_values = {f.name: f.default for f in list_fields(self.Outputs)}
+        return_names = list(job.return_values)
         if returned is None:
-            task.return_values = {nm: None for nm in return_names}
-        elif len(task.return_values) == 1:
+            job.return_values = {nm: None for nm in return_names}
+        elif len(job.return_values) == 1:
             # if only one element in the fields, everything should be returned together
-            task.return_values = {list(task.return_values)[0]: returned}
+            job.return_values = {list(job.return_values)[0]: returned}
         elif isinstance(returned, tuple) and len(return_names) == len(returned):
-            task.return_values = dict(zip(return_names, returned))
+            job.return_values = dict(zip(return_names, returned))
         elif isinstance(returned, dict):
-            task.return_values = {key: returned.get(key, None) for key in return_names}
+            job.return_values = {key: returned.get(key, None) for key in return_names}
         else:
             raise RuntimeError(
                 f"expected {len(return_names)} elements, but {returned} were returned"
@@ -820,22 +816,22 @@ class PythonDef(TaskDef[PythonOutputsType]):
 class WorkflowOutputs(TaskOutputs):
 
     @classmethod
-    def _from_task(cls, task: "Task[WorkflowDef]") -> Self:
-        """Collect the outputs of a workflow task from the outputs of the nodes in the
+    def _from_task(cls, job: "Job[WorkflowTask]") -> Self:
+        """Collect the outputs of a workflow job from the outputs of the nodes in the
 
         Parameters
         ----------
-        task : Task[WorfklowDef]
-            The task whose outputs are being collected.
+        job : Job[WorfklowDef]
+            The job whose outputs are being collected.
 
         Returns
         -------
         outputs : Outputs
-            The outputs of the task
+            The outputs of the job
         """
 
-        workflow: "Workflow" = task.return_values["workflow"]
-        exec_graph: "DiGraph[NodeExecution]" = task.return_values["exec_graph"]
+        workflow: "Workflow" = job.return_values["workflow"]
+        exec_graph: "DiGraph[NodeExecution]" = job.return_values["exec_graph"]
 
         # Check for errors in any of the workflow nodes
         if errored := [n for n in exec_graph.nodes if n.errored]:
@@ -850,13 +846,13 @@ class WorkflowOutputs(TaskOutputs):
                         time_of_crash = "UNKNOWN-TIME"
                         error_message = "NOT RETRIEVED"
                     errors.append(
-                        f"Task {node.name!r} failed @ {time_of_crash} running "
+                        f"Job {node.name!r} failed @ {time_of_crash} running "
                         f"{node._definition} with the following errors:\n{error_message}"
-                        "\nTo inspect, please load the pickled task object from here: "
+                        "\nTo inspect, please load the pickled job object from here: "
                         f"{result.output_dir}/_task.pklz"
                     )
             raise RuntimeError(
-                f"Workflow {task!r} failed with errors:\n\n" + "\n\n".join(errors)
+                f"Workflow {job!r} failed with errors:\n\n" + "\n\n".join(errors)
             )
 
         # Retrieve values from the output fields
@@ -869,9 +865,9 @@ class WorkflowOutputs(TaskOutputs):
             values[name] = val_out
 
         # Set the values in the outputs object
-        outputs = super()._from_task(task)
+        outputs = super()._from_task(job)
         outputs = attrs.evolve(outputs, **values)
-        outputs._output_dir = task.output_dir
+        outputs._output_dir = job.output_dir
         return outputs
 
 
@@ -879,7 +875,7 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class WorkflowDef(TaskDef[WorkflowOutputsType]):
+class WorkflowTask(TaskDef[WorkflowOutputsType]):
 
     _task_type = "workflow"
 
@@ -887,13 +883,13 @@ class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
 
-    def _run(self, task: "Task[WorkflowDef]", rerun: bool) -> None:
+    def _run(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow."""
-        task.submitter.expand_workflow(task, rerun)
+        job.submitter.expand_workflow(job, rerun)
 
-    async def _run_async(self, task: "Task[WorkflowDef]", rerun: bool) -> None:
+    async def _run_async(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow asynchronously."""
-        await task.submitter.expand_workflow_async(task, rerun)
+        await job.submitter.expand_workflow_async(job, rerun)
 
     def construct(self) -> "Workflow":
         from pydra.engine.core import Workflow
@@ -920,13 +916,13 @@ class ShellOutputs(TaskOutputs):
     stderr: str = shell.out(name="stderr", type=str, help=STDERR_HELP)
 
     @classmethod
-    def _from_task(cls, task: "Task[ShellDef]") -> Self:
+    def _from_task(cls, job: "Job[ShellTask]") -> Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
         Parameters
         ----------
-        inputs : ShellDef
+        inputs : ShellTask
             The input definition of the shell process.
         output_dir : Path
             The directory where the process was run.
@@ -942,21 +938,21 @@ class ShellOutputs(TaskOutputs):
         outputs : ShellOutputs
             The outputs of the shell process
         """
-        outputs = super()._from_task(task)
+        outputs = super()._from_task(job)
         fld: shell.out
         for fld in list_fields(cls):
             if fld.name in ["return_code", "stdout", "stderr"]:
-                resolved_value = task.return_values[fld.name]
+                resolved_value = job.return_values[fld.name]
             # Get the corresponding value from the inputs if it exists, which will be
             # passed through to the outputs, to permit manual overrides
             elif isinstance(fld, shell.outarg) and isinstance(
-                task.inputs[fld.name], Path
+                job.inputs[fld.name], Path
             ):
-                resolved_value = task.inputs[fld.name]
+                resolved_value = job.inputs[fld.name]
             elif is_set(fld.default):
-                resolved_value = cls._resolve_default_value(fld, task.output_dir)
+                resolved_value = cls._resolve_default_value(fld, job.output_dir)
             else:
-                resolved_value = cls._resolve_value(fld, task)
+                resolved_value = cls._resolve_value(fld, job)
             # Set the resolved value
             try:
                 setattr(outputs, fld.name, resolved_value)
@@ -967,7 +963,7 @@ class ShellOutputs(TaskOutputs):
                     raise ValueError(
                         f"file system path(s) provided to mandatory field {fld.name!r}, "
                         f"'{resolved_value}', does not exist, this is likely due to an "
-                        f"error in the {task.name!r} task"
+                        f"error in the {job.name!r} job"
                     )
         return outputs
 
@@ -995,7 +991,7 @@ class ShellOutputs(TaskOutputs):
         return default
 
     @classmethod
-    def _required_fields_satisfied(cls, fld: shell.out, inputs: "ShellDef") -> bool:
+    def _required_fields_satisfied(cls, fld: shell.out, inputs: "ShellTask") -> bool:
         """checking if all fields from the requires and template are set in the input
         if requires is a list of list, checking if at least one list has all elements set
         """
@@ -1028,18 +1024,18 @@ class ShellOutputs(TaskOutputs):
     def _resolve_value(
         cls,
         fld: "shell.out",
-        task: "Task[DefType]",
+        job: "Job[TaskType]",
     ) -> ty.Any:
         """Collect output file if metadata specified."""
         from pydra.design import shell
 
-        if not cls._required_fields_satisfied(fld, task.definition):
+        if not cls._required_fields_satisfied(fld, job.definition):
             return None
         if isinstance(fld, shell.outarg) and fld.path_template:
             return template_update_single(
                 fld,
-                definition=task.definition,
-                output_dir=task.output_dir,
+                definition=job.definition,
+                output_dir=job.output_dir,
                 spec_type="output",
             )
         assert fld.callable, (
@@ -1057,20 +1053,20 @@ class ShellOutputs(TaskOutputs):
             if argnm == "field":
                 call_args_val[argnm] = fld
             elif argnm == "output_dir":
-                call_args_val[argnm] = task.output_dir
+                call_args_val[argnm] = job.output_dir
             elif argnm == "executable":
-                call_args_val[argnm] = task.definition.executable
+                call_args_val[argnm] = job.definition.executable
             elif argnm == "inputs":
-                call_args_val[argnm] = task.inputs
+                call_args_val[argnm] = job.inputs
             elif argnm == "stdout":
-                call_args_val[argnm] = task.return_values["stdout"]
+                call_args_val[argnm] = job.return_values["stdout"]
             elif argnm == "stderr":
-                call_args_val[argnm] = task.return_values["stderr"]
+                call_args_val[argnm] = job.return_values["stderr"]
             elif argnm == "self":
                 pass  # If the callable is a class
             else:
                 try:
-                    call_args_val[argnm] = task.inputs[argnm]
+                    call_args_val[argnm] = job.inputs[argnm]
                 except KeyError as e:
                     e.add_note(
                         f"arguments of the callable function from {fld.name!r} "
@@ -1095,7 +1091,7 @@ def additional_args_converter(value: ty.Any) -> list[str]:
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class ShellDef(TaskDef[ShellOutputsType]):
+class ShellTask(TaskDef[ShellOutputsType]):
 
     _task_type = "shell"
 
@@ -1112,13 +1108,13 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
 
-    def _run(self, task: "Task[ShellDef]", rerun: bool = True) -> None:
+    def _run(self, job: "Job[ShellTask]", rerun: bool = True) -> None:
         """Run the shell command."""
-        task.return_values = task.environment.execute(task)
+        job.return_values = job.environment.execute(job)
 
     @property
     def cmdline(self) -> str:
-        """The equivalent command line that would be submitted if the task were run on
+        """The equivalent command line that would be submitted if the job were run on
         the current working directory."""
         # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
         values = attrs_values(self)

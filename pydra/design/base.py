@@ -372,7 +372,7 @@ def extract_fields_from_class(
         type_hints = ty.get_type_hints(klass)
         for atr_name in dir(klass):
             if (
-                atr_name in ["Task", "Outputs"]
+                atr_name == "Outputs"
                 or atr_name in skip_fields
                 or atr_name.startswith("__")
             ):
@@ -404,7 +404,7 @@ def extract_fields_from_class(
             for atr_name, type_ in type_hints.items():
                 if atr_name.startswith("_") or atr_name in skip_fields:
                     continue
-                if atr_name not in list(fields_dict) + ["Task", "Outputs"]:
+                if atr_name not in list(fields_dict) + ["Outputs"]:
                     fields_dict[atr_name] = field_type(
                         name=atr_name, type=type_, help=helps.get(atr_name, "")
                     )

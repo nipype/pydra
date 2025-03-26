@@ -17,7 +17,7 @@ from collections import defaultdict
 from typing import Self
 import attrs
 from filelock import SoftFileLock
-from pydra.engine.specs import TaskDef, WorkflowDef, TaskOutputs, WorkflowOutputs
+from pydra.engine.specs import TaskDef, WorkflowTask, TaskOutputs, WorkflowOutputs
 from pydra.engine.graph import DiGraph, INPUTS_NODE_NAME, OUTPUTS_NODE_NAME
 from pydra.engine import state
 from pydra.engine.lazy import LazyInField, LazyOutField
@@ -55,10 +55,10 @@ if ty.TYPE_CHECKING:
     from pydra.engine.submitter import Submitter, NodeExecution
     from pydra.design.base import Arg
 
-DefType = ty.TypeVar("DefType", bound=TaskDef)
+TaskType = ty.TypeVar("TaskType", bound=TaskDef)
 
 
-class Task(ty.Generic[DefType]):
+class Job(ty.Generic[TaskType]):
     """
     A base structure for the nodes in the processing graph.
 
@@ -71,33 +71,33 @@ class Task(ty.Generic[DefType]):
     _etelemetry_version_data = None  # class variable to store etelemetry information
     _version: str  # Version of tool being wrapped
     _task_version: ty.Optional[str] = None
-    # Task writers encouraged to define and increment when implementation changes sufficiently
+    # Job writers encouraged to define and increment when implementation changes sufficiently
     _input_sets = None  # Dictionaries of predefined input settings
 
     audit_flags: AuditFlag = AuditFlag.NONE
     """What to audit -- available flags: :class:`~pydra.utils.messenger.AuditFlag`."""
 
-    _can_resume = False  # Does the task allow resuming from previous state
+    _can_resume = False  # Does the job allow resuming from previous state
     _redirect_x = False  # Whether an X session should be created/directed
 
     _runtime_requirements = RuntimeSpec()
     _runtime_hints = None
 
     _cache_dir = None  # Working directory in which to operate
-    _references = None  # List of references for a task
+    _references = None  # List of references for a job
 
     name: str
-    definition: DefType
+    definition: TaskType
     submitter: "Submitter | None"
     environment: "Environment | None"
     state_index: int
-    bindings: dict[str, ty.Any] | None = None  # Bindings for the task environment
+    bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
     _inputs: dict[str, ty.Any] | None = None
 
     def __init__(
         self,
-        definition: DefType,
+        definition: TaskType,
         submitter: "Submitter",
         name: str,
         environment: "Environment | None" = None,
@@ -105,7 +105,7 @@ class Task(ty.Generic[DefType]):
         hooks: TaskHooks | None = None,
     ):
         """
-        Initialize a task.
+        Initialize a job.
 
         Tasks allow for caching (retrieving a previous result of the same
         task definition and inputs), and concurrent execution.
@@ -113,7 +113,7 @@ class Task(ty.Generic[DefType]):
 
             1. Check whether prior cache exists --
                if ``True``, return cached result
-            2. Check whether other process is running this task --
+            2. Check whether other process is running this job --
                wait if ``True``:
                a. Finishes (with or without exception) -> return result
                b. Gets killed -> restart
@@ -123,14 +123,14 @@ class Task(ty.Generic[DefType]):
 
         if not isinstance(definition, TaskDef):
             raise ValueError(
-                f"Task definition ({definition!r}) must be a TaskDef, not {type(definition)}"
+                f"Job definition ({definition!r}) must be a TaskDef, not {type(definition)}"
             )
         # Check that the definition is fully resolved and ready to run
         definition._check_resolved()
         definition._check_rules()
         self.definition = definition
         # We save the submitter is the definition is a workflow otherwise we don't
-        # so the task can be pickled
+        # so the job can be pickled
         self.submitter = submitter
         self.environment = (
             environment if environment is not None else submitter.environment
@@ -152,7 +152,7 @@ class Task(ty.Generic[DefType]):
         self._errored = False
         self._lzout = None
 
-        # Save the submitter attributes needed to run the task later
+        # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
         self.cache_dir = submitter.cache_dir
         self.cache_locations = submitter.cache_locations
@@ -163,7 +163,7 @@ class Task(ty.Generic[DefType]):
 
     @property
     def is_async(self) -> bool:
-        """Check to see if the task should be run asynchronously."""
+        """Check to see if the job should be run asynchronously."""
         return self.submitter.worker.is_async and is_workflow(self.definition)
 
     @cache_dir.setter
@@ -196,13 +196,13 @@ class Task(ty.Generic[DefType]):
 
     @property
     def errored(self):
-        """Check if the task has raised an error"""
+        """Check if the job has raised an error"""
         return self._errored
 
     @property
     def checksum(self):
-        """Calculates the unique checksum of the task.
-        Used to create specific directory name for task that are run;
+        """Calculates the unique checksum of the job.
+        Used to create specific directory name for job that are run;
         and to create nodes checksums needed for graph checksums
         (before the tasks have inputs etc.)
         """
@@ -217,7 +217,7 @@ class Task(ty.Generic[DefType]):
 
     @property
     def uid(self):
-        """the unique id number for the task
+        """the unique id number for the job
         It will be used to create unique names for slurm scripts etc.
         without a need to run checksum
         """
@@ -225,12 +225,12 @@ class Task(ty.Generic[DefType]):
 
     @property
     def output_names(self):
-        """Get the names of the outputs from the task's output_spec"""
+        """Get the names of the outputs from the job's output_spec"""
         return [f.name for f in attr.fields(self.definition.Outputs)]
 
     @property
     def can_resume(self):
-        """Whether the task accepts checkpoint-restart."""
+        """Whether the job accepts checkpoint-restart."""
         return self._can_resume
 
     @property
@@ -240,15 +240,15 @@ class Task(ty.Generic[DefType]):
 
     @property
     def inputs(self) -> dict[str, ty.Any]:
-        """Resolve any template inputs of the task ahead of its execution:
+        """Resolve any template inputs of the job ahead of its execution:
 
         - links/copies upstream files and directories into the destination tasks
           working directory as required select state array values corresponding to
           state index (it will try to leave them where they are unless specified or
           they are on different file systems)
         - resolve template values (e.g. output_file_template)
-        - deepcopy all inputs to guard against in-place changes during the task's
-          execution (they will be replaced after the task's execution with the
+        - deepcopy all inputs to guard against in-place changes during the job's
+          execution (they will be replaced after the job's execution with the
           original inputs to ensure the tasks checksums are consistent)
         """
         if self._inputs is not None:
@@ -290,26 +290,26 @@ class Task(ty.Generic[DefType]):
         - Clears existing outputs if `can_resume` is False
         - Generates a fresh output directory
 
-        Created as an attempt to simplify overlapping `Task`|`Workflow` behaviors.
+        Created as an attempt to simplify overlapping `Job`|`Workflow` behaviors.
         """
-        # adding info file with the checksum in case the task was cancelled
+        # adding info file with the checksum in case the job was cancelled
         # and the lockfile has to be removed
         with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
         if not self.can_resume and self.output_dir.exists():
             shutil.rmtree(self.output_dir)
         self.output_dir.mkdir(parents=False, exist_ok=self.can_resume)
-        # Save task pkl into the output directory for future reference
-        save(self.output_dir, task=self)
+        # Save job pkl into the output directory for future reference
+        save(self.output_dir, job=self)
 
     def run(self, rerun: bool = False):
-        """Prepare the task working directory, execute the task definition, and save the
+        """Prepare the job working directory, execute the task definition, and save the
         results.
 
         Parameters
         ----------
         rerun : bool
-            If True, the task will be re-run even if a result already exists. Will
+            If True, the job will be re-run even if a result already exists. Will
             propagated to all tasks within workflow tasks.
         """
         # TODO: After these changes have been merged, will refactor this function and
@@ -338,7 +338,7 @@ class Task(ty.Generic[DefType]):
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.output_dir)
             if self.audit.audit_check(AuditFlag.PROV):
-                self.audit.audit_task(task=self)
+                self.audit.audit_task(job=self)
             try:
                 self.audit.monitor()
                 self.definition._run(self, rerun)
@@ -352,24 +352,24 @@ class Task(ty.Generic[DefType]):
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(self.output_dir, result=result, task=self)
+                save(self.output_dir, result=result, job=self)
                 # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
-        # of the task
+        # of the job
         self._check_for_hash_changes()
         return result
 
     async def run_async(self, rerun: bool = False) -> Result:
-        """Prepare the task working directory, execute the task definition asynchronously,
+        """Prepare the job working directory, execute the task definition asynchronously,
         and save the results. NB: only workflows are run asynchronously at the moment.
 
         Parameters
         ----------
         rerun : bool
-            If True, the task will be re-run even if a result already exists. Will
+            If True, the job will be re-run even if a result already exists. Will
             propagated to all tasks within workflow tasks.
         """
         # checking if the definition is fully resolved and ready to run
@@ -407,13 +407,13 @@ class Task(ty.Generic[DefType]):
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(self.output_dir, result=result, task=self)
+                save(self.output_dir, result=result, job=self)
                 # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
-        # of the task
+        # of the job
         self._check_for_hash_changes()
         return result
 
@@ -422,7 +422,7 @@ class Task(ty.Generic[DefType]):
         pkl_files = self.cache_dir / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
         task_main_path = pkl_files / f"{self.name}_{self.uid}_task.pklz"
-        save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.uid}")
+        save(task_path=pkl_files, job=self, name_prefix=f"{self.name}_{self.uid}")
         return task_main_path
 
     @property
@@ -435,14 +435,14 @@ class Task(ty.Generic[DefType]):
         if _result:
             if _result.errored:
                 self._errored = True
-                raise ValueError(f"Task {self.name!r} failed")
+                raise ValueError(f"Job {self.name!r} failed")
             else:
                 return True
         return False
 
     @property
     def run_start_time(self) -> datetime | None:
-        """Check whether the task is currently running."""
+        """Check whether the job is currently running."""
         if not self.lockfile.exists():
             return None
         return datetime.fromtimestamp(self.lockfile.stat().st_ctime)
@@ -469,12 +469,12 @@ class Task(ty.Generic[DefType]):
 
     def result(self, return_inputs=False):
         """
-        Retrieve the outcomes of this particular task.
+        Retrieve the outcomes of this particular job.
 
         Parameters
         ----------
         state_index : :obj: `int`
-            index of the element for task with splitter and multiple states
+            index of the element for job with splitter and multiple states
         return_inputs : :obj: `bool`, :obj:`str`
             if True or "val" result is returned together with values of the input fields,
             if "ind" result is returned together with indices of the input fields
@@ -482,7 +482,7 @@ class Task(ty.Generic[DefType]):
         Returns
         -------
         result : Result
-            the result of the task
+            the result of the job
         """
         if self.errored:
             return Result(
@@ -523,10 +523,10 @@ class Task(ty.Generic[DefType]):
                     f"{field_type} ('{val}'). If it is intended to contain output data "
                     "then the type of the field in the interface class should be changed "
                     "to `pathlib.Path`. Otherwise, if the field is intended to be an "
-                    "input field but it gets altered by the task in some way, then the "
+                    "input field but it gets altered by the job in some way, then the "
                     "'copyfile' flag should be set to 'copy' in the field metadata of "
-                    "the task interface class so copies of the files/directories in it "
-                    "are passed to the task instead.\n"
+                    "the job interface class so copies of the files/directories in it "
+                    "are passed to the job instead.\n"
                 )
             else:
                 details += (
@@ -541,7 +541,7 @@ class Task(ty.Generic[DefType]):
         if hash_changes:
             raise RuntimeError(
                 f"Input field hashes have changed during the execution of the "
-                f"'{self.name}' task of {type(self)} type.\n\n{details}"
+                f"'{self.name}' job of {type(self)} type.\n\n{details}"
             )
         logger.debug(
             "Input values and hashes for '%s' %s node:\n%s\n%s",
@@ -580,7 +580,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     """
 
     name: str = attrs.field()
-    inputs: WorkflowDef[WorkflowOutputsType] = attrs.field()
+    inputs: WorkflowTask[WorkflowOutputsType] = attrs.field()
     outputs: WorkflowOutputsType = attrs.field()
     _nodes: dict[str, Node] = attrs.field(factory=dict)
 
@@ -589,7 +589,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
     @classmethod
     def clear_cache(
-        cls, definition: WorkflowDef[WorkflowOutputsType] | None = None
+        cls, definition: WorkflowTask[WorkflowOutputsType] | None = None
     ) -> None:
         """Clear the cache of constructed workflows"""
         if definition is None:
@@ -600,7 +600,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     @classmethod
     def construct(
         cls,
-        definition: WorkflowDef[WorkflowOutputsType],
+        definition: WorkflowTask[WorkflowOutputsType],
         dont_cache: bool = False,
         lazy: ty.Sequence[str] = (),
     ) -> Self:
@@ -608,7 +608,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
         Parameters
         ----------
-        definition : WorkflowDef
+        definition : WorkflowTask
             The definition of the workflow to construct
         dont_cache : bool, optional
             Whether to cache the constructed workflow, by default False
@@ -761,15 +761,15 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         Parameters
         ----------
         task_spec : TaskDef
-            The definition of the task to add to the workflow as a node
+            The definition of the job to add to the workflow as a node
         name : str, optional
             The name of the node, by default it will be the name of the task definition
             class
         environment : Environment, optional
-            The environment to run the task in, such as the Docker or Singularity container,
+            The environment to run the job in, such as the Docker or Singularity container,
             by default it will be the "native"
         hooks : TaskHooks, optional
-            The hooks to run before or after the task, by default no hooks will be run
+            The hooks to run before or after the job, by default no hooks will be run
 
         Returns
         -------
@@ -835,7 +835,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         self, nodes: "list[Node | NodeExecution]", detailed: bool = False
     ) -> DiGraph:
         """
-        Connects a particular task to existing nodes in the workflow.
+        Connects a particular job to existing nodes in the workflow.
 
         Parameters
         ----------
@@ -861,7 +861,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             for field in list_fields(node._definition):
                 lf = node._definition[field.name]
                 if isinstance(lf, LazyOutField):
-                    # adding an edge to the graph if task id expecting output from a different task
+                    # adding an edge to the graph if job id expecting output from a different job
 
                     # checking if the connection is already in the graph
                     if (graph.node(lf._node.name), node) not in graph.edges:
@@ -871,7 +871,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                             (node.name, field.name, lf._node.name, lf._field)
                         )
                     logger.debug("Connecting %s to %s", lf._node.name, node.name)
-                    # adding a state from the previous task to other_states
+                    # adding a state from the previous job to other_states
                     if (
                         graph.node(lf._node.name).state
                         and graph.node(lf._node.name).state.splitter_rpn_final
@@ -884,14 +884,14 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                             in node.state._current_splitter_rpn
                         ):
                             node.state._inner_cont_dim[f"{node.name}.{field.name}"] = 1
-                        # adding task_name: (task.state, [a field from the connection]
+                        # adding task_name: (job.state, [a field from the connection]
                         if lf._node.name not in other_states:
                             other_states[lf._node.name] = (
                                 graph.node(lf._node.name).state,
                                 [field.name],
                             )
                         else:
-                            # if the task already exist in other_state,
+                            # if the job already exist in other_state,
                             # additional field name should be added to the list of fields
                             other_states[lf._node.name][1].append(field.name)
                 elif (
@@ -902,7 +902,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         (node.name, field.name, INPUTS_NODE_NAME, lf._field)
                     )
 
-            # if task has connections state has to be recalculated
+            # if job has connections state has to be recalculated
             if other_states:
                 if hasattr(node, "fut_combiner"):
                     combiner = node.fut_combiner
@@ -931,10 +931,10 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""
-    from pydra.engine.specs import WorkflowDef
+    from pydra.engine.specs import WorkflowTask
     from pydra.engine.core import Workflow
 
-    return isinstance(obj, (WorkflowDef, Workflow))
+    return isinstance(obj, (WorkflowTask, Workflow))
 
 
 def has_lazy(obj):

@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
-from pydra.engine.specs import ShellDef, ShellOutputs
+from pydra.engine.specs import ShellTask, ShellOutputs
 from pydra.design import shell
 from pydra.engine.helpers import list_fields
 from pydra.engine.helpers_file import (
@@ -357,7 +357,7 @@ def test_output_template(tmp_path):
         f.write("hello from pydra")
 
     @shell.define
-    class MyCommand(ShellDef["MyCommand.Outputs"]):
+    class MyCommand(ShellTask["MyCommand.Outputs"]):
         in_file: File = shell.arg(
             position=1,
             argstr="",

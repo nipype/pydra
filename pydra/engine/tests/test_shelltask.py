@@ -10,7 +10,7 @@ from pydra.engine.submitter import Submitter
 from pydra.design import shell, workflow, python
 from pydra.engine.specs import (
     ShellOutputs,
-    ShellDef,
+    ShellTask,
 )
 from fileformats.generic import (
     File,
@@ -272,7 +272,7 @@ def test_shell_cmd_inputspec_1(worker, results_function, tmp_path):
     cmd_args = ["hello from pydra"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         opt_n: bool = shell.arg(
             position=1,
@@ -305,7 +305,7 @@ def test_shell_cmd_inputspec_2(worker, results_function, tmp_path):
     cmd_args = ["from pydra"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         opt_hello: str = shell.arg(
             position=3,
@@ -337,7 +337,7 @@ def test_shell_cmd_inputspec_3(worker, results_function, tmp_path):
     hello = "HELLO"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(
             position=1,
@@ -365,7 +365,7 @@ def test_shell_cmd_inputspec_3a(worker, results_function, tmp_path):
     hello = "HELLO"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(position=1, help="text", argstr="")
 
@@ -387,7 +387,7 @@ def test_shell_cmd_inputspec_3b(worker, results_function, tmp_path):
     hello = "HELLO"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(
             position=1,
@@ -413,7 +413,7 @@ def test_shell_cmd_inputspec_3c_exception(worker, tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(
             position=1,
@@ -436,7 +436,7 @@ def test_shell_cmd_inputspec_3c(worker, results_function, tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: ty.Optional[str] = shell.arg(
             default=None,
@@ -463,7 +463,7 @@ def test_shell_cmd_inputspec_4(worker, results_function, tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(
             default="Hello",
@@ -493,7 +493,7 @@ def test_shell_cmd_inputspec_4a(worker, results_function, tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(default="Hello", position=1, help="text", argstr="")
 
@@ -516,7 +516,7 @@ def test_shell_cmd_inputspec_4b(worker, results_function, tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(
             default="Hi",
@@ -549,7 +549,7 @@ def test_shell_cmd_inputspec_4d_exception(worker):
     ):
 
         @shell.define
-        class Shelly(ShellDef["Shelly.Outputs"]):
+        class Shelly(ShellTask["Shelly.Outputs"]):
             executable = cmd_exec
             text: File = shell.outarg(
                 default="Hello",
@@ -570,7 +570,7 @@ def test_shell_cmd_inputspec_5_nosubm(worker, results_function, tmp_path):
     cmd_t = True
 
     @shell.define(xor=["opt_S", "opt_t"])
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         opt_t: bool = shell.arg(
             position=1,
@@ -601,7 +601,7 @@ def test_shell_cmd_inputspec_5a_exception(worker, tmp_path):
     cmd_S = True
 
     @shell.define(xor=["opt_S", "opt_t"])
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         opt_t: bool = shell.arg(
             position=1,
@@ -632,7 +632,7 @@ def test_shell_cmd_inputspec_6(worker, results_function, tmp_path):
     cmd_t = True
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         opt_t: bool = shell.arg(
             position=2,
@@ -664,7 +664,7 @@ def test_shell_cmd_inputspec_6a_exception(worker, tmp_path):
     cmd_t = True
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         opt_t: bool = shell.arg(
             position=2,
@@ -698,7 +698,7 @@ def test_shell_cmd_inputspec_6b(worker, results_function, tmp_path):
     cmd_t = True
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         opt_t: bool = shell.arg(
             position=2,
@@ -737,7 +737,7 @@ def test_shell_cmd_inputspec_7(worker, results_function, tmp_path):
     cache_dir = tmp_path / "cache"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
 
         arg: str = shell.arg(argstr=None)
@@ -768,7 +768,7 @@ def test_shell_cmd_inputspec_7b(worker, results_function, tmp_path):
     cmd = "touch"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         newfile: str = shell.arg(
             position=1,
@@ -799,7 +799,7 @@ def test_shell_cmd_inputspec_7c(worker, results_function, tmp_path):
     arg = File.mock("newfile_tmp.txt")
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
 
         arg = shell.arg(argstr=None)
@@ -828,7 +828,7 @@ def test_shell_cmd_inputspec_8(worker, results_function, tmp_path):
     cmd = "touch"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         newfile: str = shell.arg(
             position=2,
@@ -867,7 +867,7 @@ def test_shell_cmd_inputspec_8a(worker, results_function, tmp_path):
     cmd = "touch"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         newfile: str = shell.arg(
             position=2,
@@ -910,7 +910,7 @@ def test_shell_cmd_inputspec_9(tmp_path, worker, results_function):
     file.write_text("content\n")
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
             position=1,
@@ -951,7 +951,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, worker, results_function):
     file.write_text("content\n")
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
             position=1,
@@ -987,7 +987,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, worker, results_function):
     file.write_text("content\n")
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
             position=1,
@@ -1026,7 +1026,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, worker, results_function):
     file.write_text("content\n")
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
             position=1,
@@ -1064,7 +1064,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, worker, results_function):
     file.write_text("content\n")
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
             position=1,
@@ -1108,7 +1108,7 @@ def test_shell_cmd_inputspec_10(worker, results_function, tmp_path):
     files_list = [file_1, file_2]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         files: ty.List[File] = shell.arg(
             position=1,
@@ -1146,7 +1146,7 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
     cmd_exec = "cat"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         files: File = shell.arg(
             position=1,
@@ -1164,7 +1164,7 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
 def test_shell_cmd_inputspec_11(tmp_path):
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         inputFiles: MultiInputObj[str] = shell.arg(
             argstr="...",
             help="The list of input image files to be segmented.",
@@ -1221,7 +1221,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, worker, results_function):
             return "{file_orig}_odd"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file_orig: File = shell.arg(
             position=2,
@@ -1259,7 +1259,7 @@ def test_shell_cmd_inputspec_with_iterable():
     """Test formatting of argstr with different iterable types."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "test"
         iterable_1: list[int] = shell.arg(
             help="iterable input 1",
@@ -1301,7 +1301,7 @@ def test_shell_cmd_inputspec_copyfile_1(worker, results_function, tmp_path):
     cmd = ["sed", "-is", "s/hello/hi/"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         orig_file: File = shell.arg(
             help="orig file",
@@ -1341,7 +1341,7 @@ def test_shell_cmd_inputspec_copyfile_1a(worker, results_function, tmp_path):
     cmd = ["sed", "-is", "s/hello/hi/"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         orig_file: File = shell.arg(
             position=1,
@@ -1390,7 +1390,7 @@ def test_shell_cmd_inputspec_state_1(worker, results_function, tmp_path):
     hello = ["HELLO", "hi"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(
             position=1,
@@ -1418,7 +1418,7 @@ def test_shell_cmd_inputspec_typeval_1(tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: int = shell.arg(
             position=1,
@@ -1440,7 +1440,7 @@ def test_shell_cmd_inputspec_typeval_2(tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
 
         text: int = shell.arg(position=1, argstr="", help="text")
@@ -1460,7 +1460,7 @@ def test_shell_cmd_inputspec_state_1a(worker, results_function, tmp_path):
     cmd_exec = "echo"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         text: str = shell.arg(
             position=1,
@@ -1489,7 +1489,7 @@ def test_shell_cmd_inputspec_state_2(worker, results_function, tmp_path):
     args = ["newfile_1.txt", "newfile_2.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
 
         arg: str = shell.arg(argstr=None)
@@ -1523,7 +1523,7 @@ def test_shell_cmd_inputspec_state_3(worker, results_function, tmp_path):
     cmd_exec = "cat"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd_exec
         file: File = shell.arg(
             position=1,
@@ -1559,7 +1559,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(worker, results_function, tmp_path
     cmd = ["sed", "-is", "s/hello/hi/"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         orig_file: File = shell.arg(
             position=1,
@@ -1602,7 +1602,7 @@ def test_wf_shell_cmd_2(worker, tmp_path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "touch"
 
         arg: str = shell.arg()
@@ -1641,7 +1641,7 @@ def test_wf_shell_cmd_2a(worker, tmp_path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "shelly"
 
         arg: str = shell.arg()
@@ -1680,7 +1680,7 @@ def test_wf_shell_cmd_3(worker, tmp_path):
     """
 
     @shell.define
-    class Shelly1(ShellDef["Shelly1.Outputs"]):
+    class Shelly1(ShellTask["Shelly1.Outputs"]):
         executable = "shelly"
 
         arg: str = shell.arg(argstr=None)
@@ -1692,7 +1692,7 @@ def test_wf_shell_cmd_3(worker, tmp_path):
             )
 
     @shell.define
-    class Shelly2(ShellDef["Shelly2.Outputs"]):
+    class Shelly2(ShellTask["Shelly2.Outputs"]):
 
         executable = "shelly2"
 
@@ -1748,7 +1748,7 @@ def test_wf_shell_cmd_3a(worker, tmp_path):
     """
 
     @shell.define
-    class Shelly1(ShellDef["Shelly1.Outputs"]):
+    class Shelly1(ShellTask["Shelly1.Outputs"]):
         executable = "shelly"
         arg: str = shell.outarg(argstr=None)
 
@@ -1760,7 +1760,7 @@ def test_wf_shell_cmd_3a(worker, tmp_path):
             )
 
     @shell.define
-    class Shelly2(ShellDef["Shelly2.Outputs"]):
+    class Shelly2(ShellTask["Shelly2.Outputs"]):
         executable = "shelly2"
         orig_file: str = shell.arg(
             position=1,
@@ -1812,7 +1812,7 @@ def test_wf_shell_cmd_state_1(worker, tmp_path):
     """
 
     @shell.define
-    class Shelly1(ShellDef["Shelly1.Outputs"]):
+    class Shelly1(ShellTask["Shelly1.Outputs"]):
         executable = "shelly1"
 
         arg: str = shell.arg(argstr=None)
@@ -1824,7 +1824,7 @@ def test_wf_shell_cmd_state_1(worker, tmp_path):
             )
 
     @shell.define
-    class Shelly2(ShellDef["Shelly2.Outputs"]):
+    class Shelly2(ShellTask["Shelly2.Outputs"]):
         executable = "shelly2"
         orig_file: str = shell.arg(
             position=1,
@@ -1879,7 +1879,7 @@ def test_wf_shell_cmd_ndst_1(worker, tmp_path):
     """
 
     @shell.define
-    class Shelly1(ShellDef["Shelly1.Outputs"]):
+    class Shelly1(ShellTask["Shelly1.Outputs"]):
         executable = "shelly"
 
         arg: str = shell.arg(argstr=None)
@@ -1891,7 +1891,7 @@ def test_wf_shell_cmd_ndst_1(worker, tmp_path):
             )
 
     @shell.define
-    class Shelly2(ShellDef["Shelly2.Outputs"]):
+    class Shelly2(ShellTask["Shelly2.Outputs"]):
         executable = "shelly2"
 
         orig_file: str = shell.arg(
@@ -1970,7 +1970,7 @@ def test_shell_cmd_outputspec_1a(worker, results_function, tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -1991,7 +1991,7 @@ def test_shell_cmd_outputspec_1b_exception(worker, tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2015,7 +2015,7 @@ def test_shell_cmd_outputspec_2(worker, results_function, tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2037,7 +2037,7 @@ def test_shell_cmd_outputspec_2a_exception(worker, tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2059,7 +2059,7 @@ def test_shell_cmd_outputspec_3(worker, results_function, tmp_path):
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2089,7 +2089,7 @@ def test_shell_cmd_outputspec_5(worker, results_function, tmp_path):
             return list(Path(output_dir).expanduser().glob("newfile*.txt"))
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2120,7 +2120,7 @@ def test_shell_cmd_outputspec_5a(worker, results_function, tmp_path):
         return [Path(output_dir) / file for file in files]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2150,7 +2150,7 @@ def test_shell_cmd_outputspec_5b_error(tmp_path):
         return [Path(output_dir) / file for file in files]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2170,7 +2170,7 @@ def test_shell_cmd_outputspec_5c(worker, results_function, tmp_path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
@@ -2202,7 +2202,7 @@ def test_shell_cmd_outputspec_6(worker, results_function, tmp_path):
     arg = "newfile_tmp.txt"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2234,7 +2234,7 @@ def test_shell_cmd_outputspec_6a(tmp_path):
     arg = "newfile_tmp.txt"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2274,7 +2274,7 @@ def test_shell_cmd_outputspec_7(tmp_path, worker, results_function):
     new_files_id = ["1", "2", "3"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         script: File = shell.arg(
             help="script file",
@@ -2320,7 +2320,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, worker, results_function):
     new_files_id = "1"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         script: File = shell.arg(
             help="script file",
@@ -2374,7 +2374,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, worker, results_function):
         return f"stderr: {stderr}"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2409,7 +2409,7 @@ def test_shell_cmd_outputspec_8b_error(tmp_path):
     ):
 
         @shell.define
-        class Shelly(ShellDef["Shelly.Outputs"]):
+        class Shelly(ShellTask["Shelly.Outputs"]):
             executable = "echo"
 
             class Outputs(ShellOutputs):
@@ -2429,7 +2429,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, worker, results_function):
     args = [f"{tmp_path}/dir1", f"{tmp_path}/dir2"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2463,7 +2463,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, worker, results_function):
     cmd = "mkdir"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         resultsDir: str = shell.arg(
             position=1,
@@ -2499,7 +2499,7 @@ def test_shell_cmd_state_outputspec_1(worker, results_function, tmp_path):
     args = ["newfile_1.txt", "newfile_2.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = cmd
 
@@ -2532,7 +2532,7 @@ def test_shell_cmd_outputspec_wf_1(worker, tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = "shelly"
 
@@ -2562,7 +2562,7 @@ def test_shell_cmd_inputspec_outputspec_1(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         file1: File = shell.arg(help="1st creadted file", argstr="", position=1)
         file2: File = shell.arg(help="2nd creadted file", argstr="", position=2)
 
@@ -2591,7 +2591,7 @@ def test_shell_cmd_inputspec_outputspec_1a(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         file2: str | None = shell.arg(
@@ -2624,7 +2624,7 @@ def test_shell_cmd_inputspec_outputspec_2(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         file2: str = shell.arg(help="2nd creadted file", argstr="", position=2)
@@ -2664,7 +2664,7 @@ def test_shell_cmd_inputspec_outputspec_2a(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         file2: str | None = shell.arg(
@@ -2711,7 +2711,7 @@ def test_shell_cmd_inputspec_outputspec_3(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         file2: str = shell.arg(help="2nd creadted file", argstr="", position=2)
@@ -2746,7 +2746,7 @@ def test_shell_cmd_inputspec_outputspec_3a(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         file2: str | None = shell.arg(help="2nd creadted file", argstr="", position=2)
@@ -2791,7 +2791,7 @@ def test_shell_cmd_inputspec_outputspec_4(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         additional_inp: int | None = shell.arg(help="additional inp", default=None)
@@ -2831,7 +2831,7 @@ def test_shell_cmd_inputspec_outputspec_4a(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         additional_inp: int | None = shell.arg(help="additional inp", default=None)
@@ -2863,7 +2863,7 @@ def test_shell_cmd_inputspec_outputspec_5(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         additional_inp_A: int | None = shell.arg(help="additional inp A", default=None)
@@ -2901,7 +2901,7 @@ def test_shell_cmd_inputspec_outputspec_5a(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         additional_inp_A: str | None = shell.arg(help="additional inp A", default=None)
@@ -2939,7 +2939,7 @@ def test_shell_cmd_inputspec_outputspec_5b(tmp_path):
     cmd = ["touch", "newfile_tmp.txt"]
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = cmd
         file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
         additional_inp_A: str | None = shell.arg(help="additional inp A", default=None)
@@ -2978,7 +2978,7 @@ def test_shell_cmd_inputspec_outputspec_6_except(tmp_path):
     with pytest.raises(Exception, match="requires field can be"):
 
         @shell.define
-        class Shelly(ShellDef["Shelly.Outputs"]):
+        class Shelly(ShellTask["Shelly.Outputs"]):
             executable = "touch"
             file1: str = shell.arg(help="1st creadted file", argstr="", position=1)
             additional_inp_A: str | None = shell.arg(
@@ -3019,7 +3019,7 @@ def test_fsl(data_tests_dir, tmp_path):
             None,
         ]
     )
-    class Bet(ShellDef["Bet.Outputs"]):
+    class Bet(ShellTask["Bet.Outputs"]):
         executable = "bet"
         in_file: File = shell.arg(
             help="input file to skull strip",
@@ -3151,7 +3151,7 @@ def test_shell_cmd_optional_output_file1(tmp_path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         input: File = shell.arg(argstr="", help="input file")
 
         executable = "cp"
@@ -3182,7 +3182,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "cp"
 
         input: File = shell.arg(argstr="", help="input file")
@@ -3212,7 +3212,7 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
     but return None instead"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "echo"
         out_name: str = shell.arg(
             help="""
@@ -3242,7 +3242,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "touch"
         out_name: str = shell.arg(
             help="""
@@ -3282,7 +3282,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "touch"
         out_name: str = shell.arg(
             help="""
@@ -3322,7 +3322,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
     mandatory output file."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "touch"
         out_name: str = shell.arg(
             help="""base name of the pretend outputs.""",
@@ -3358,7 +3358,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
     """This test looks if non existing files of an multiOuputFile are also set to NOTHING"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "echo"
         out_name: MultiInputObj = shell.arg(
             help="""
@@ -3385,7 +3385,7 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
     It checks that it also works if one file of the multiOutputFile actually exists."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "touch"
         out_name: MultiInputObj = shell.arg(
             help="""base name of the pretend outputs.""",
@@ -3415,7 +3415,7 @@ def test_shellspec_formatter_1(tmp_path):
 
     def make_shelly(formatter):
         @shell.define
-        class Shelly(ShellDef["Shelly.Outputs"]):
+        class Shelly(ShellTask["Shelly.Outputs"]):
             executable = "exec"
             in1: str = shell.arg(
                 argstr=None,
@@ -3494,7 +3494,7 @@ def test_shellspec_formatter_splitter_2(tmp_path):
         return f"-t [{in1} {in2}]"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         executable = "executable"
         in1: str = shell.arg(help="in1")
         in2: str = shell.arg(help="in2")
@@ -3545,7 +3545,7 @@ def test_shellcommand_error_msg(tmp_path):
     )
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
 
         executable = str(script_path)
 

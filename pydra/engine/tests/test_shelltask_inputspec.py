@@ -2,7 +2,7 @@ import typing as ty
 from pathlib import Path
 import attrs
 import pytest
-from pydra.engine.specs import ShellOutputs, ShellDef
+from pydra.engine.specs import ShellOutputs, ShellTask
 from fileformats.generic import File
 from pydra.design import shell
 from pydra.utils.typing import MultiInputObj
@@ -27,7 +27,7 @@ def test_shell_cmd_inputs_1():
     """additional input with provided position"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -45,7 +45,7 @@ def test_shell_cmd_inputs_1a():
     """additional input without provided position"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -64,7 +64,7 @@ def test_shell_cmd_inputs_1b():
     """additional input with negative position"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -84,7 +84,7 @@ def test_shell_cmd_inputs_2():
     """additional inputs with provided positions"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -105,7 +105,7 @@ def test_shell_cmd_inputs_2a():
     """additional inputs without provided positions"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -129,7 +129,7 @@ def test_shell_cmd_inputs_2_err():
     with pytest.raises(Exception) as e:
 
         @shell.define
-        class Shelly(ShellDef["Shelly.Outputs"]):
+        class Shelly(ShellTask["Shelly.Outputs"]):
             class Outputs(ShellOutputs):
                 pass
 
@@ -145,7 +145,7 @@ def test_shell_cmd_inputs_3():
     """additional inputs: positive pos, negative pos and  no pos"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -169,7 +169,7 @@ def test_shell_cmd_inputs_argstr_1():
     """additional string inputs with argstr"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -186,7 +186,7 @@ def test_shell_cmd_inputs_argstr_2():
     """additional bool inputs with argstr"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -204,7 +204,7 @@ def test_shell_cmd_inputs_list_1():
     """providing list as an additional input, no sep, no argstr"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -221,7 +221,7 @@ def test_shell_cmd_inputs_list_2():
     """providing list as an additional input, no sep, but argstr"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -237,7 +237,7 @@ def test_shell_cmd_inputs_list_3():
     """providing list as an additional input, no sep, argstr with ..."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -254,7 +254,7 @@ def test_shell_cmd_inputs_list_sep_1():
     """providing list as an additional input:, sep, no argstr"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -276,7 +276,7 @@ def test_shell_cmd_inputs_list_sep_2():
     """providing list as an additional input:, sep, and argstr"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -298,7 +298,7 @@ def test_shell_cmd_inputs_list_sep_2a():
     """providing list as an additional input:, sep, and argstr with f-string"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -320,7 +320,7 @@ def test_shell_cmd_inputs_list_sep_3():
     """providing list as an additional input:, sep, argstr with ..."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -342,7 +342,7 @@ def test_shell_cmd_inputs_list_sep_3a():
     """providing list as an additional input:, sep, argstr with ... and f-string"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -364,7 +364,7 @@ def test_shell_cmd_inputs_sep_4():
     """providing 1-el list as an additional input:, sep, argstr with ...,"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -384,7 +384,7 @@ def test_shell_cmd_inputs_sep_4a():
     """providing str instead of list as an additional input:, sep, argstr with ..."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -404,7 +404,7 @@ def test_shell_cmd_inputs_format_1():
     """additional inputs with argstr that has string formatting"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -424,7 +424,7 @@ def test_shell_cmd_inputs_format_2():
     """additional inputs with argstr that has string formatting and ..."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -444,7 +444,7 @@ def test_shell_cmd_inputs_format_3():
     """adding float formatting for argstr with input field"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -464,7 +464,7 @@ def test_shell_cmd_inputs_mandatory_1():
     """additional inputs with mandatory=True"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -484,7 +484,7 @@ def test_shell_cmd_inputs_mandatory_1():
 
 def test_shell_cmd_inputs_not_given_1():
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -516,7 +516,7 @@ def test_shell_cmd_inputs_template_1():
     """additional inputs, one uses path_template (and argstr)"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=2,
@@ -546,7 +546,7 @@ def test_shell_cmd_inputs_template_2():
     """additional inputs, one uses path_template (and argstr, but input not provided)"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outB: File | None = shell.outarg(
                 position=2,
@@ -576,7 +576,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
     Path.touch(inpB)
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
@@ -632,7 +632,7 @@ def test_shell_cmd_inputs_template_3a():
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
@@ -689,7 +689,7 @@ def test_shell_cmd_inputs_template_4():
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 argstr=None,
@@ -733,7 +733,7 @@ def test_shell_cmd_inputs_template_5_ex():
     """checking if the exception is raised for read-only fields when input is set"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             pass
 
@@ -760,7 +760,7 @@ def test_shell_cmd_inputs_template_6():
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=2,
@@ -806,7 +806,7 @@ def test_shell_cmd_inputs_template_6a():
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File | None = shell.outarg(
                 position=2,
@@ -846,7 +846,7 @@ def test_shell_cmd_inputs_template_7(tmp_path: Path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=2,
@@ -880,7 +880,7 @@ def test_shell_cmd_inputs_template_7a(tmp_path: Path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=2,
@@ -915,7 +915,7 @@ def test_shell_cmd_inputs_template_7b(tmp_path: Path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=2,
@@ -948,7 +948,7 @@ def test_shell_cmd_inputs_template_8(tmp_path: Path):
     """additional inputs uses path_template with a suffix and an extension"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=2,
@@ -982,7 +982,7 @@ def test_shell_cmd_inputs_template_9(tmp_path: Path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=3,
@@ -1023,7 +1023,7 @@ def test_shell_cmd_inputs_template_9a(tmp_path: Path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
             outA: File = shell.outarg(
                 position=3,
@@ -1064,7 +1064,7 @@ def test_shell_cmd_inputs_template_9b_err(tmp_path: Path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
@@ -1108,7 +1108,7 @@ def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
     """
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
@@ -1148,7 +1148,7 @@ def test_shell_cmd_inputs_template_10():
     """path_template uses a float field with formatting"""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
@@ -1179,7 +1179,7 @@ def test_shell_cmd_inputs_template_requires_1():
     ensure the field is set only when all requirements are met."""
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             out_file: File | None = shell.outarg(
@@ -1216,7 +1216,7 @@ def test_shell_cmd_inputs_template_function_1():
         return "{inpA}_out"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
@@ -1252,7 +1252,7 @@ def test_shell_cmd_inputs_template_function_2():
             return "{inpA}_odd"
 
     @shell.define
-    class Shelly(ShellDef["Shelly.Outputs"]):
+    class Shelly(ShellTask["Shelly.Outputs"]):
         class Outputs(ShellOutputs):
 
             outA: File = shell.outarg(
@@ -1289,7 +1289,7 @@ def test_shell_cmd_inputs_denoise_image(
     """example from #279"""
 
     @shell.define
-    class DenoiseImage(ShellDef["DenoiseImage.Outputs"]):
+    class DenoiseImage(ShellTask["DenoiseImage.Outputs"]):
         class Outputs(ShellOutputs):
 
             correctedImage: File = shell.outarg(
@@ -1454,7 +1454,7 @@ def test_shell_cmd_inputs_denoise_image(
 
 
 @shell.define(xor=("input_1", "input_2", "input_3"))
-class SimpleXor(ShellDef["SimpleTaskXor.Outputs"]):
+class SimpleXor(ShellTask["SimpleTaskXor.Outputs"]):
 
     input_1: str | None = shell.arg(
         default=None,

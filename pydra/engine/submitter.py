@@ -22,7 +22,7 @@ from pydra.engine.helpers import (
 from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField
 from pydra.engine.audit import Audit
-from pydra.engine.core import Task
+from pydra.engine.core import Job
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils import default_run_cache_dir
 from pydra.design import workflow
@@ -33,12 +33,12 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.node import Node
-    from pydra.engine.specs import WorkflowDef, TaskDef, TaskOutputs, TaskHooks, Result
+    from pydra.engine.specs import WorkflowTask, TaskDef, TaskOutputs, TaskHooks, Result
     from pydra.engine.core import Workflow
     from pydra.engine.environments import Environment
 
 
-DefType = ty.TypeVar("DefType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="TaskDef")
 OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
 
 # Used to flag development mode of Audit
@@ -48,12 +48,12 @@ WORKER_KWARG_FAIL_NOTE = "Attempting to instantiate worker submitter"
 
 
 class Submitter:
-    """Send a task to the execution backend.
+    """Send a job to the execution backend.
 
     Parameters
     ----------
     cache_dir : os.PathLike, optional
-        Cache directory where the working directory/results for the task will be
+        Cache directory where the working directory/results for the job will be
         stored, by default None
     worker : str or Worker, optional
         The worker to use, by default "cf"
@@ -113,8 +113,8 @@ class Submitter:
 
         from pydra.engine import check_latest_version
 
-        if Task._etelemetry_version_data is None:
-            Task._etelemetry_version_data = check_latest_version()
+        if Job._etelemetry_version_data is None:
+            Job._etelemetry_version_data = check_latest_version()
 
         self.audit = Audit(
             audit_flags=audit_flags,
@@ -197,13 +197,13 @@ class Submitter:
         task_def : :obj:`~pydra.engine.specs.TaskDef`
             The task definition to run
         hooks : :obj:`~pydra.engine.specs.TaskHooks`, optional
-            Task hooks, callable functions called as the task is setup and torn down,
+            Job hooks, callable functions called as the job is setup and torn down,
             by default no functions are called at the hooks
         raise_errors : bool, optional
             Whether to raise errors, by default True if the 'debug' worker is used,
             otherwise False
         rerun : bool, optional
-            Whether to force the re-computation of the task results even if existing
+            Whether to force the re-computation of the job results even if existing
             results are found, by default False
         propagate_rerun : bool, optional
             Whether to propagate the rerun flag to all tasks in the workflow, by default True
@@ -211,7 +211,7 @@ class Submitter:
         Returns
         -------
         result : Any
-            The result of the task
+            The result of the job
         """
         from pydra.engine.environments import Environment
 
@@ -223,7 +223,7 @@ class Submitter:
             )
 
         task_def._check_rules()
-        # If the outer task is split, create an implicit workflow to hold the split nodes
+        # If the outer job is split, create an implicit workflow to hold the split nodes
         if task_def._splitter:
             from pydra.engine.specs import TaskDef
 
@@ -257,13 +257,13 @@ class Submitter:
             environment = None
         elif task_def._combiner:
             raise ValueError(
-                f"Task {self} is marked for combining, but not splitting. "
-                "Use the `split` method to split the task before combining."
+                f"Job {self} is marked for combining, but not splitting. "
+                "Use the `split` method to split the job before combining."
             )
         else:
             environment = self.environment
 
-        task = Task(
+        job = Job(
             task_def,
             submitter=self,
             name="main",
@@ -272,48 +272,48 @@ class Submitter:
         )
         try:
             self.run_start_time = datetime.now()
-            self.submit(task, rerun=rerun)
+            self.submit(job, rerun=rerun)
         except Exception as exc:
             error_msg = (
-                f"Full crash report for {type(task_def).__name__!r} task is here: "
-                + str(task.output_dir / "_error.pklz")
+                f"Full crash report for {type(task_def).__name__!r} job is here: "
+                + str(job.output_dir / "_error.pklz")
             )
             exc.add_note(error_msg)
-            if raise_errors or not task.result():
+            if raise_errors or not job.result():
                 raise exc
             else:
                 logger.error("\nTask execution failed\n%s", error_msg)
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()
-        result = task.result()
+        result = job.result()
         if result is None:
-            if task.lockfile.exists():
+            if job.lockfile.exists():
                 raise RuntimeError(
-                    f"Task {task} has a lockfile, but no result was found. "
+                    f"Job {job} has a lockfile, but no result was found. "
                     "This may be due to another submission that is currently running, or the hard "
                     "interrupt (e.g. a debugging abortion) interrupting a previous run. "
-                    f"In the case of an interrupted run, please remove {str(task.lockfile)!r} "
+                    f"In the case of an interrupted run, please remove {str(job.lockfile)!r} "
                     "and resubmit."
                 )
-            raise RuntimeError(f"Task {task} has no result in {str(task.output_dir)!r}")
+            raise RuntimeError(f"Job {job} has no result in {str(job.output_dir)!r}")
         return result
 
-    def submit(self, task: "Task[DefType]", rerun: bool = False) -> None:
-        """Submit a task to the worker.
+    def submit(self, job: "Job[TaskType]", rerun: bool = False) -> None:
+        """Submit a job to the worker.
 
         Parameters
         ----------
-        task : :obj:`~pydra.engine.core.Task`
-            The task to submit
+        job : :obj:`~pydra.engine.core.Job`
+            The job to submit
         rerun : bool, optional
-            Whether to force the re-computation of the task results even if existing
+            Whether to force the re-computation of the job results even if existing
             results are found, by default False
         """
         if self.worker.is_async:  # Only workflow tasks can be async
-            self.loop.run_until_complete(self.worker.submit(task, rerun=rerun))
+            self.loop.run_until_complete(self.worker.submit(job, rerun=rerun))
         else:
-            self.worker.run(task, rerun=rerun)
+            self.worker.run(job, rerun=rerun)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -330,14 +330,14 @@ class Submitter:
         self._worker = WORKERS[self.worker_name](**self.worker_kwargs)
         self.worker.loop = self.loop
 
-    def expand_workflow(self, workflow_task: "Task[WorkflowDef]", rerun: bool) -> None:
-        """Expands and executes a workflow task synchronously. Typically only used during
+    def expand_workflow(self, workflow_task: "Job[WorkflowTask]", rerun: bool) -> None:
+        """Expands and executes a workflow job synchronously. Typically only used during
         debugging and testing, as the asynchronous version is more efficient.
 
         Parameters
         ----------
-        task : :obj:`~pydra.engine.core.Task[WorkflowDef]`
-            Workflow Task object
+        job : :obj:`~pydra.engine.core.Job[WorkflowTask]`
+            Workflow Job object
 
         """
         # Construct the workflow
@@ -347,20 +347,20 @@ class Submitter:
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
-            for task in tasks:
-                self.worker.run(task, rerun=rerun and self.propagate_rerun)
+            for job in tasks:
+                self.worker.run(job, rerun=rerun and self.propagate_rerun)
             tasks = self.get_runnable_tasks(exec_graph)
 
     async def expand_workflow_async(
-        self, workflow_task: "Task[WorkflowDef]", rerun: bool
+        self, workflow_task: "Job[WorkflowTask]", rerun: bool
     ) -> None:
         """
-        Expand and execute a workflow task asynchronously.
+        Expand and execute a workflow job asynchronously.
 
         Parameters
         ----------
-        task : :obj:`~pydra.engine.core.Task[WorkflowDef]`
-            Workflow Task object
+        job : :obj:`~pydra.engine.core.Job[WorkflowTask]`
+            Workflow Job object
         """
         wf = workflow_task.definition.construct()
         # Generate the execution graph
@@ -368,7 +368,7 @@ class Submitter:
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
         # keep track of pending futures
         task_futures = set()
-        futured: dict[str, Task[DefType]] = {}
+        futured: dict[str, Job[TaskType]] = {}
         tasks = self.get_runnable_tasks(exec_graph)
         errors = []
         try:
@@ -405,7 +405,7 @@ class Submitter:
                                 for t in not_done[0].queued.values()
                             )
                             # Get blocked tasks and the predecessors they are blocked on
-                            outstanding: dict[Task[DefType], list[Task[DefType]]] = {
+                            outstanding: dict[Job[TaskType], list[Job[TaskType]]] = {
                                 t: [
                                     p
                                     for p in exec_graph.predecessors[t.name]
@@ -415,10 +415,10 @@ class Submitter:
                             }
 
                             hashes_have_changed = False
-                            for task, blocked_on in outstanding.items():
+                            for job, blocked_on in outstanding.items():
                                 if not blocked_on:
                                     continue
-                                msg += f"- '{task.name}' node blocked due to\n"
+                                msg += f"- '{job.name}' node blocked due to\n"
                                 for pred in blocked_on:
                                     if (
                                         pred.checksum
@@ -452,18 +452,18 @@ class Submitter:
                                     "or more types in your interface inputs."
                                 )
                             raise RuntimeError(msg)
-                for task in tasks:
-                    if task.is_async:  # Only workflows at this stage
+                for job in tasks:
+                    if job.is_async:  # Only workflows at this stage
                         await self.worker.submit(
-                            task, rerun=rerun and self.propagate_rerun
+                            job, rerun=rerun and self.propagate_rerun
                         )
-                    elif task.checksum not in futured:
+                    elif job.checksum not in futured:
                         asyncio_task = asyncio.Task(
-                            self.worker.run(task, rerun=rerun and self.propagate_rerun),
-                            name=task.checksum,
+                            self.worker.run(job, rerun=rerun and self.propagate_rerun),
+                            name=job.checksum,
                         )
                         task_futures.add(asyncio_task)
-                        futured[task.checksum] = task
+                        futured[job.checksum] = job
                 task_futures, completed = await self.worker.fetch_finished(task_futures)
                 for task_future in completed:
                     try:
@@ -476,19 +476,19 @@ class Submitter:
                             flags=re.DOTALL | re.MULTILINE,
                         ):
                             error_msg = match.group(1)
-                        task = futured[task_future.get_name()]
-                        task_name = task.name
-                        if task.state_index is not None:
-                            task_name += f"({task.state_index})"
+                        job = futured[task_future.get_name()]
+                        task_name = job.name
+                        if job.state_index is not None:
+                            task_name += f"({job.state_index})"
                         errors.append(
-                            f"Job {task_name!r}, {task.definition!r}, errored:{error_msg}"
+                            f"Job {task_name!r}, {job.definition!r}, errored:{error_msg}"
                         )
                 tasks = self.get_runnable_tasks(exec_graph)
         finally:
             if errors:
                 all_errors = "\n\n".join(errors)
                 raise RuntimeError(
-                    f"Workflow task {workflow_task} failed with errors"
+                    f"Workflow job {workflow_task} failed with errors"
                     f":\n\n{all_errors}\n\nSee output directory for details: {workflow_task.output_dir}"
                 )
 
@@ -509,15 +509,15 @@ class Submitter:
         if self._own_loop:
             self.loop.close()
 
-    def _check_locks(self, tasks: list[Task]) -> None:
+    def _check_locks(self, tasks: list[Job]) -> None:
         """Check for stale lock files and remove them."""
         if self.clean_stale_locks:
-            for task in tasks:
-                start_time = task.run_start_time
+            for job in tasks:
+                start_time = job.run_start_time
                 if start_time and start_time < self.run_start_time:
-                    task.lockfile.unlink()
+                    job.lockfile.unlink()
 
-    def get_runnable_tasks(self, graph: DiGraph) -> list["Task[DefType]"]:
+    def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """Parse a graph and return all runnable tasks.
 
         Parameters
@@ -527,7 +527,7 @@ class Submitter:
 
         Returns
         -------
-        tasks : list of :obj:`~pydra.engine.core.Task`
+        tasks : list of :obj:`~pydra.engine.core.Job`
             List of runnable tasks
         following_err : dict[NodeToExecute, list[str]]
             Dictionary of tasks that are blocked by errored tasks
@@ -539,7 +539,7 @@ class Submitter:
             if node.done:
                 continue
             # since the list is sorted (breadth-first) we can stop
-            # when we find a task that depends on any task that is already in tasks
+            # when we find a job that depends on any job that is already in tasks
             preds = set(graph.predecessors[node.name])
             if preds.intersection(not_started):
                 break
@@ -572,7 +572,7 @@ class Submitter:
             self._cache_dir = Path(self._cache_dir).resolve()
 
 
-class NodeExecution(ty.Generic[DefType]):
+class NodeExecution(ty.Generic[TaskType]):
     """A wrapper around a workflow node containing the execution state of the tasks that
     are generated from it"""
 
@@ -581,19 +581,19 @@ class NodeExecution(ty.Generic[DefType]):
     submitter: Submitter
 
     # List of tasks that were completed successfully
-    successful: dict[int, list["Task[DefType]"]]
+    successful: dict[int, list["Job[TaskType]"]]
     # List of tasks that failed
-    errored: dict[int, "Task[DefType]"]
+    errored: dict[int, "Job[TaskType]"]
     # List of tasks that couldn't be run due to upstream errors
-    unrunnable: dict[int, list["Task[DefType]"]]
+    unrunnable: dict[int, list["Job[TaskType]"]]
     # List of tasks that are queued
-    queued: dict[int, "Task[DefType]"]
+    queued: dict[int, "Job[TaskType]"]
     # List of tasks that are queued
-    running: dict[int, tuple["Task[DefType]", datetime]]
+    running: dict[int, tuple["Job[TaskType]", datetime]]
     # List of tasks that are blocked on other tasks to complete before they can be run
-    blocked: dict[int, "Task[DefType]"] | None
+    blocked: dict[int, "Job[TaskType]"] | None
 
-    _tasks: dict[int | None, "Task[DefType]"] | None
+    _tasks: dict[int | None, "Job[TaskType]"] | None
 
     workflow: "Workflow"
 
@@ -640,7 +640,7 @@ class NodeExecution(ty.Generic[DefType]):
         return self.node._definition
 
     @property
-    def tasks(self) -> ty.Generator["Task[DefType]", None, None]:
+    def tasks(self) -> ty.Generator["Job[TaskType]", None, None]:
         if self._tasks is None:
             raise RuntimeError("Tasks have not been generated")
         return self._tasks.values()
@@ -664,7 +664,7 @@ class NodeExecution(ty.Generic[DefType]):
             self.state.prepare_inputs()
             # Generate the tasks
             for index, split_defn in enumerate(self._split_definition()):
-                self._tasks[index] = Task(
+                self._tasks[index] = Job(
                     definition=split_defn,
                     submitter=self.submitter,
                     environment=self.node._environment,
@@ -673,7 +673,7 @@ class NodeExecution(ty.Generic[DefType]):
                     state_index=index,
                 )
         else:
-            self._tasks[None] = Task(
+            self._tasks[None] = Job(
                 definition=self._resolve_lazy_inputs(task_def=self.node._definition),
                 submitter=self.submitter,
                 environment=self.node._environment,
@@ -710,29 +710,29 @@ class NodeExecution(ty.Generic[DefType]):
         if not self.started:
             return
         # Check to see if any previously queued tasks have completed
-        for index, task in list(self.queued.items()):
+        for index, job in list(self.queued.items()):
             try:
-                is_done = task.done
+                is_done = job.done
             except ValueError:
                 errored = True
                 is_done = False
             else:
                 errored = False
             if is_done:
-                self.successful[task.state_index] = self.queued.pop(index)
-            elif task.errored or errored:
-                self.errored[task.state_index] = self.queued.pop(index)
-            elif task.run_start_time:
-                self.running[task.state_index] = (
+                self.successful[job.state_index] = self.queued.pop(index)
+            elif job.errored or errored:
+                self.errored[job.state_index] = self.queued.pop(index)
+            elif job.run_start_time:
+                self.running[job.state_index] = (
                     self.queued.pop(index),
-                    task.run_start_time,
+                    job.run_start_time,
                 )
         # Check to see if any previously running tasks have completed
-        for index, (task, start_time) in list(self.running.items()):
-            if task.done:
-                self.successful[task.state_index] = self.running.pop(index)[0]
-            elif task.errored:
-                self.errored[task.state_index] = self.running.pop(index)[0]
+        for index, (job, start_time) in list(self.running.items()):
+            if job.done:
+                self.successful[job.state_index] = self.running.pop(index)[0]
+            elif job.errored:
+                self.errored[job.state_index] = self.running.pop(index)[0]
 
     @property
     def all_failed(self) -> bool:
@@ -797,7 +797,7 @@ class NodeExecution(ty.Generic[DefType]):
             split_defs.append(attrs.evolve(self.node._definition, **resolved))
         return split_defs
 
-    def get_runnable_tasks(self, graph: DiGraph) -> list["Task[DefType]"]:
+    def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """For a given node, check to see which tasks have been successfully run, are ready
         to run, can't be run due to upstream errors, or are blocked on other tasks to complete.
 
@@ -814,8 +814,8 @@ class NodeExecution(ty.Generic[DefType]):
         runnable : list[NodeExecution]
             List of tasks that are ready to run
         """
-        runnable: list["Task[DefType]"] = []
-        predecessors: list["Task[DefType]"] = graph.predecessors[self.node.name]
+        runnable: list["Job[TaskType]"] = []
+        predecessors: list["Job[TaskType]"] = graph.predecessors[self.node.name]
 
         # If there is a split, we need to wait for all predecessor nodes to finish
         # In theory, if the current splitter splits an already split state we should
@@ -847,7 +847,7 @@ class NodeExecution(ty.Generic[DefType]):
                 self.start()
 
             # Check to see if any blocked tasks are now runnable/unrunnable
-            for index, task in list(self.blocked.items()):
+            for index, job in list(self.blocked.items()):
                 pred: NodeExecution
                 is_runnable = True
                 states_ind = (

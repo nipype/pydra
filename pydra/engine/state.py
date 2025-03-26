@@ -18,9 +18,9 @@ class State:
     """
     A class that specifies a State of all tasks.
 
-      * It's only used when a task have a splitter.
+      * It's only used when a job have a splitter.
       * It contains all information about splitter, combiner, final splitter,
-        and input values for specific task states
+        and input values for specific job states
         (specified by the splitter and the input).
       * It also contains information about the final groups and the final splitter
         if combiner is available.
@@ -28,7 +28,7 @@ class State:
     Attributes
     ----------
     name : :obj:`str`
-        name of the state that is the same as a name of the task
+        name of the state that is the same as a name of the job
     splitter : :obj:`str`, :obj:`tuple`, :obj:`list`
         can be a str (name of a single input),
         tuple for scalar splitter, or list for outer splitter
@@ -62,8 +62,8 @@ class State:
         values for all state inputs (i.e. inputs that are part of the splitter)
     inputs_ind : :obj:`list` of :obj:`dict`
         dictionary for every state that contains
-        indices for all task inputs (i.e. inputs that are relevant
-        for current task, can be outputs from previous nodes)
+        indices for all job inputs (i.e. inputs that are relevant
+        for current job, can be outputs from previous nodes)
     group_for_inputs : :obj:`dict`
         specifying groups (axes) for each input field
         (depends on the splitter)
@@ -93,9 +93,9 @@ class State:
         Parameters
         ----------
         name : :obj:`str`
-            name (should be the same as the task's name)
+            name (should be the same as the job's name)
         splitter : :obj:`str`, or :obj:`tuple`, or :obj:`list`
-            splitter of a task
+            splitter of a job
         combiner : :obj:`str`, or :obj:`list`)
             field/fields used to combine results
         other_states :obj:`dict`:
@@ -289,7 +289,7 @@ class State:
     @property
     def current_splitter(self):
         """the current part of the splitter,
-        i.e. the part that is related to the current task's state only
+        i.e. the part that is related to the current job's state only
         (doesn't include fields propagated from the previous tasks)
         """
         if hasattr(self, "_current_splitter"):
@@ -299,8 +299,8 @@ class State:
 
     @property
     def inputs_ind(self):
-        """dictionary for every state that contains indices for all task inputs
-        (i.e. inputs that are relevant for current task, can be outputs from previous nodes)
+        """dictionary for every state that contains indices for all job inputs
+        (i.e. inputs that are relevant for current job, can be outputs from previous nodes)
         """
         if self._inputs_ind is None:
             raise RuntimeError(
@@ -402,7 +402,7 @@ class State:
     @property
     def current_combiner(self):
         """the current part of the combiner,
-        i.e. the part that is related to the current task's state only
+        i.e. the part that is related to the current job's state only
         (doesn't include fields propagated from the previous tasks)
         """
         return [comb for comb in self.combiner if self.name in comb]
@@ -1223,7 +1223,7 @@ class State:
         Parameters
         ----------
         value : Any
-            inputs of the task
+            inputs of the job
         field_name : str
             name of the input field
         ind : int

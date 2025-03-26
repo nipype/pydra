@@ -8,7 +8,7 @@ import pytest
 import cloudpickle as cp
 from pydra.engine.submitter import Submitter
 from pydra.engine.specs import Result
-from pydra.engine.core import Task
+from pydra.engine.core import Job
 from pydra.design import workflow
 from fileformats.generic import Directory, File
 from .utils import Multiply, RaiseXeq1
@@ -26,16 +26,16 @@ def test_save(tmpdir):
     outdir = Path(tmpdir)
     with pytest.raises(ValueError):
         save(tmpdir)
-    foo = Task(name="mult", definition=Multiply(x=1, y=2), submitter=Submitter())
-    # save task
-    save(outdir, task=foo)
+    foo = Job(name="mult", definition=Multiply(x=1, y=2), submitter=Submitter())
+    # save job
+    save(outdir, job=foo)
     del foo
-    # load saved task
+    # load saved job
     task_pkl = outdir / "_task.pklz"
-    foo: Task = cp.loads(task_pkl.read_bytes())
+    foo: Job = cp.loads(task_pkl.read_bytes())
     assert foo.name == "mult"
     assert foo.inputs["x"] == 1 and foo.inputs["y"] == 2
-    # execute task and save result
+    # execute job and save result
     res: Result = foo.run()
     assert res.outputs.out == 2
     save(outdir, result=res)
@@ -176,13 +176,13 @@ def test_get_available_cpus():
 
 
 def test_load_and_run(tmpdir):
-    """testing load_and_run for pickled task"""
+    """testing load_and_run for pickled job"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
     # Note that tasks now don't have state arrays and indices, just a single resolved
     # set of parameters that are ready to run
-    task = Task(name="mult", definition=Multiply(x=2, y=10), submitter=Submitter())
+    job = Job(name="mult", definition=Multiply(x=2, y=10), submitter=Submitter())
     with task_pkl.open("wb") as fp:
-        cp.dump(task, fp)
+        cp.dump(job, fp)
     resultfile = load_and_run(task_pkl=task_pkl)
     # checking the result files
     result = cp.loads(resultfile.read_bytes())
@@ -195,14 +195,14 @@ def test_load_and_run_exception_run(tmpdir):
     cache_root = Path(tmpdir.join("cache"))
     cache_root.mkdir()
 
-    task = Task(
+    job = Job(
         definition=RaiseXeq1(x=1),
         name="raise",
         submitter=Submitter(worker="cf", cache_dir=cache_root),
     )
 
     with task_pkl.open("wb") as fp:
-        cp.dump(task, fp)
+        cp.dump(job, fp)
 
     with pytest.raises(Exception) as excinfo:
         load_and_run(task_pkl=task_pkl)
@@ -219,19 +219,19 @@ def test_load_and_run_exception_run(tmpdir):
     result_exception = cp.loads(resultfile.read_bytes())
     assert result_exception.errored is True
 
-    task = Task(definition=RaiseXeq1(x=2), name="wont_raise", submitter=Submitter())
+    job = Job(definition=RaiseXeq1(x=2), name="wont_raise", submitter=Submitter())
 
     with task_pkl.open("wb") as fp:
-        cp.dump(task, fp)
+        cp.dump(job, fp)
 
-    # the second task should be fine
+    # the second job should be fine
     resultfile = load_and_run(task_pkl=task_pkl)
     result_1 = cp.loads(resultfile.read_bytes())
     assert result_1.outputs.out == 2
 
 
 def test_load_and_run_wf(tmpdir, worker):
-    """testing load_and_run for pickled task"""
+    """testing load_and_run for pickled job"""
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))
 
     @workflow.define
@@ -239,14 +239,14 @@ def test_load_and_run_wf(tmpdir, worker):
         multiply = workflow.add(Multiply(x=x, y=y))
         return multiply.out
 
-    task = Task(
+    job = Job(
         name="mult",
         definition=Workflow(x=2),
         submitter=Submitter(cache_dir=tmpdir, worker=worker),
     )
 
     with wf_pkl.open("wb") as fp:
-        cp.dump(task, fp)
+        cp.dump(job, fp)
 
     resultfile = load_and_run(task_pkl=wf_pkl)
     # checking the result files

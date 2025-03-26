@@ -6,7 +6,7 @@ from fileformats.generic import File
 from pydra.engine.specs import (
     Runtime,
     Result,
-    WorkflowDef,
+    WorkflowTask,
 )
 from pydra.engine.lazy import (
     LazyInField,
@@ -37,7 +37,7 @@ def ATestWorkflow(x: int, y: list[int]) -> int:
 
 
 @pytest.fixture
-def workflow_task(submitter: Submitter) -> WorkflowDef:
+def workflow_task(submitter: Submitter) -> WorkflowTask:
     wf = ATestWorkflow(x=1, y=[1, 2, 3])
     with submitter:
         submitter(wf)
@@ -45,7 +45,7 @@ def workflow_task(submitter: Submitter) -> WorkflowDef:
 
 
 @pytest.fixture
-def wf(workflow_task: WorkflowDef) -> Workflow:
+def wf(workflow_task: WorkflowTask) -> Workflow:
     wf = Workflow.construct(workflow_task)
     return wf
 

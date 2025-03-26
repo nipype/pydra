@@ -14,7 +14,7 @@ from pydra.design.base import (
 )
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import PythonDef
+    from pydra.engine.specs import PythonTask
 
 __all__ = ["arg", "out", "define"]
 
@@ -103,7 +103,7 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
-) -> "PythonDef":
+) -> "PythonTask":
     """
     Create an interface for a function or a class.
 
@@ -124,19 +124,19 @@ def define(
 
     Returns
     -------
-    PythonDef
+    PythonTask
         The task definition class for the Python function
     """
-    from pydra.engine.specs import PythonDef, PythonOutputs
+    from pydra.engine.specs import PythonTask, PythonOutputs
 
-    def make(wrapped: ty.Callable | type) -> PythonDef:
+    def make(wrapped: ty.Callable | type) -> PythonTask:
         if inspect.isclass(wrapped):
             klass = wrapped
             function = klass.function
             name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                PythonDef,
+                PythonTask,
                 PythonOutputs,
                 klass,
                 arg,
@@ -176,7 +176,7 @@ def define(
         )
 
         defn = make_task_def(
-            PythonDef,
+            PythonTask,
             PythonOutputs,
             parsed_inputs,
             parsed_outputs,

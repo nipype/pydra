@@ -12,7 +12,7 @@ from pathlib import Path
 from shutil import copyfile, which
 import cloudpickle as cp
 import concurrent.futures as cf
-from pydra.engine.core import Task
+from pydra.engine.core import Job
 from pydra.engine.specs import TaskDef
 from pydra.engine.helpers import (
     get_available_cpus,
@@ -29,7 +29,7 @@ logger = logging.getLogger("pydra.worker")
 if ty.TYPE_CHECKING:
     from pydra.engine.specs import Result
 
-DefType = ty.TypeVar("DefType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="TaskDef")
 
 
 class Worker(metaclass=abc.ABCMeta):
@@ -44,18 +44,18 @@ class Worker(metaclass=abc.ABCMeta):
         self.loop = loop
 
     @abc.abstractmethod
-    def run(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
-        """Return coroutine for task execution."""
+    def run(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
+        """Return coroutine for job execution."""
         pass
 
-    async def submit(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
-        assert self.is_async, "Worker is not asynchronous, task should just be `run()`"
-        if task.is_async:  # only for workflows at this stage and the foreseeable
+    async def submit(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
+        assert self.is_async, "Worker is not asynchronous, job should just be `run()`"
+        if job.is_async:  # only for workflows at this stage and the foreseeable
             # These jobs are run in the primary process but potentially farm out
             # workflow jobs to other processes/job-schedulers
-            return await task.run_async(rerun=rerun)
+            return await job.run_async(rerun=rerun)
         else:
-            return await self.run(task=task, rerun=rerun)
+            return await self.run(job=job, rerun=rerun)
 
     def close(self):
         """Close this worker."""
@@ -74,7 +74,7 @@ class Worker(metaclass=abc.ABCMeta):
         Parameters
         ----------
         futures : set of asyncio awaitables
-            Task execution coroutines or asyncio :class:`asyncio.Task`
+            Job execution coroutines or asyncio :class:`asyncio.Task`
 
         Returns
         -------
@@ -122,14 +122,14 @@ class DebugWorker(Worker):
 
     def run(
         self,
-        task: "Task[DefType]",
+        job: "Job[TaskType]",
         rerun: bool = False,
     ) -> "Result":
-        """Run a task."""
-        return task.run(rerun=rerun)
+        """Run a job."""
+        return job.run(rerun=rerun)
 
     def close(self):
-        """Return whether the task is finished."""
+        """Return whether the job is finished."""
 
     async def fetch_finished(self, futures):
         raise NotImplementedError("DebugWorker does not support async execution")
@@ -155,20 +155,20 @@ class ConcurrentFuturesWorker(Worker):
 
     async def run(
         self,
-        task: "Task[DefType]",
+        job: "Job[TaskType]",
         rerun: bool = False,
     ) -> "Result":
-        """Run a task."""
+        """Run a job."""
         assert self.loop, "No event loop available to submit tasks"
         return await self.loop.run_in_executor(
-            self.pool, self.uncloudpickle_and_run, cp.dumps(task), rerun
+            self.pool, self.uncloudpickle_and_run, cp.dumps(job), rerun
         )
 
     @classmethod
     def uncloudpickle_and_run(cls, task_pkl: bytes, rerun: bool) -> "Result":
-        """Unpickle and run a task."""
-        task: Task[DefType] = cp.loads(task_pkl)
-        return task.run(rerun=rerun)
+        """Unpickle and run a job."""
+        job: Job[TaskType] = cp.loads(task_pkl)
+        return job.run(rerun=rerun)
 
     def close(self):
         """Finalize the internal pool of tasks."""
@@ -205,29 +205,29 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
         self.error = {}
 
-    def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
-        if isinstance(task, Task):
-            cache_dir = task.cache_dir
+    def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
+        if isinstance(job, Job):
+            cache_dir = job.cache_dir
             ind = None
-            uid = task.uid
+            uid = job.uid
         else:
-            assert isinstance(task, tuple), f"Expecting a task or a tuple, not {task!r}"
-            assert len(task) == 2, f"Expecting a tuple of length 2, not {task!r}"
-            ind = task[0]
-            cache_dir = task[-1].cache_dir
-            uid = f"{task[-1].uid}_{ind}"
+            assert isinstance(job, tuple), f"Expecting a job or a tuple, not {job!r}"
+            assert len(job) == 2, f"Expecting a tuple of length 2, not {job!r}"
+            ind = job[0]
+            cache_dir = job[-1].cache_dir
+            uid = f"{job[-1].uid}_{ind}"
 
         script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
         if ind is None:
             if not (script_dir / "_task.pkl").exists():
-                save(script_dir, task=task)
+                save(script_dir, job=job)
         else:
-            copyfile(task[1], script_dir / "_task.pklz")
+            copyfile(job[1], script_dir / "_task.pklz")
 
         task_pkl = script_dir / "_task.pklz"
         if not task_pkl.exists() or not task_pkl.stat().st_size:
-            raise Exception("Missing or empty task!")
+            raise Exception("Missing or empty job!")
 
         batchscript = script_dir / f"batchscript_{uid}.sh"
         python_string = (
@@ -245,16 +245,16 @@ class SlurmWorker(DistributedWorker):
             fp.writelines(bcmd)
         return script_dir, batchscript
 
-    async def run(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
+    async def run(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
         """Worker submission API."""
-        script_dir, batch_script = self._prepare_runscripts(task, rerun=rerun)
+        script_dir, batch_script = self._prepare_runscripts(job, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        script_dir = task.cache_dir / f"{self.__class__.__name__}_scripts" / task.uid
+        script_dir = job.cache_dir / f"{self.__class__.__name__}_scripts" / job.uid
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
-            jobname = ".".join((task.name, task.uid))
+            jobname = ".".join((job.name, job.uid))
             sargs.append(f"--job-name={jobname}")
         output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
         if not output:
@@ -292,13 +292,13 @@ class SlurmWorker(DistributedWorker):
                     done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
                     and "--no-requeue" not in self.sbatch_args
                 ):
-                    # loading info about task with a specific uid
-                    info_file = task.cache_dir / f"{task.uid}_info.json"
+                    # loading info about job with a specific uid
+                    info_file = job.cache_dir / f"{job.uid}_info.json"
                     if info_file.exists():
                         checksum = json.loads(info_file.read_text())["checksum"]
-                        if (task.cache_dir / f"{checksum}.lock").exists():
+                        if (job.cache_dir / f"{checksum}.lock").exists():
                             # for pyt3.8 we could you missing_ok=True
-                            (task.cache_dir / f"{checksum}.lock").unlink()
+                            (job.cache_dir / f"{checksum}.lock").unlink()
                     cmd_re = ("scontrol", "requeue", jobid)
                     await read_and_display_async(*cmd_re, hide_display=True)
                 else:
@@ -387,13 +387,13 @@ class SGEWorker(DistributedWorker):
         max_threads : int
             Maximum number of threads that will be scheduled for SGE submission at once
         poll_for_result_file : bool
-            If true, a task is complete when its _result.pklz file exists
-            If false, a task is complete when its job array is indicated complete by qstat/qacct polling
+            If true, a job is complete when its _result.pklz file exists
+            If false, a job is complete when its job array is indicated complete by qstat/qacct polling
         default_threads_per_task : int
-            Sets the number of slots SGE should request for a task if sgeThreads
-            is not a field in the task input_spec
+            Sets the number of slots SGE should request for a job if sgeThreads
+            is not a field in the job input_spec
         polls_before_checking_evicted : int
-            Number of poll_delays before running qacct to check if a task has been evicted by SGE
+            Number of poll_delays before running qacct to check if a job has been evicted by SGE
         collect_jobs_delay : int
             Number of seconds to wait for the list of jobs for a job array to fill
 
@@ -424,21 +424,21 @@ class SGEWorker(DistributedWorker):
         self.default_qsub_args = default_qsub_args
         self.max_mem_free = max_mem_free
 
-    def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
-        if isinstance(task, Task):
-            cache_dir = task.cache_dir
+    def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
+        if isinstance(job, Job):
+            cache_dir = job.cache_dir
             ind = None
-            uid = task.uid
+            uid = job.uid
             try:
-                task_qsub_args = task.qsub_args
+                task_qsub_args = job.qsub_args
             except Exception:
                 task_qsub_args = self.default_qsub_args
         else:
-            ind = task[0]
-            cache_dir = task[-1].cache_dir
-            uid = f"{task[-1].uid}_{ind}"
+            ind = job[0]
+            cache_dir = job[-1].cache_dir
+            uid = f"{job[-1].uid}_{ind}"
             try:
-                task_qsub_args = task[-1].qsub_args
+                task_qsub_args = job[-1].qsub_args
             except Exception:
                 task_qsub_args = self.default_qsub_args
 
@@ -446,13 +446,13 @@ class SGEWorker(DistributedWorker):
         script_dir.mkdir(parents=True, exist_ok=True)
         if ind is None:
             if not (script_dir / "_task.pkl").exists():
-                save(script_dir, task=task)
+                save(script_dir, job=job)
         else:
-            copyfile(task[1], script_dir / "_task.pklz")
+            copyfile(job[1], script_dir / "_task.pklz")
 
         task_pkl = script_dir / "_task.pklz"
         if not task_pkl.exists() or not task_pkl.stat().st_size:
-            raise Exception("Missing or empty task!")
+            raise Exception("Missing or empty job!")
 
         batchscript = script_dir / f"batchscript_{uid}.job"
 
@@ -467,7 +467,7 @@ class SGEWorker(DistributedWorker):
             batchscript,
             task_pkl,
             ind,
-            task.output_dir,
+            job.output_dir,
             task_qsub_args,
         )
 
@@ -490,12 +490,12 @@ class SGEWorker(DistributedWorker):
         return tasks_to_run_copy
 
     async def check_for_results_files(self, jobid, threads_requested):
-        for task in list(self.result_files_by_jobid[jobid]):
-            if self.result_files_by_jobid[jobid][task].exists():
-                del self.result_files_by_jobid[jobid][task]
+        for job in list(self.result_files_by_jobid[jobid]):
+            if self.result_files_by_jobid[jobid][job].exists():
+                del self.result_files_by_jobid[jobid][job]
                 self.threads_used -= threads_requested
 
-    async def run(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
+    async def run(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
         """Worker submission API."""
         (
             script_dir,
@@ -504,7 +504,7 @@ class SGEWorker(DistributedWorker):
             ind,
             output_dir,
             task_qsub_args,
-        ) = self._prepare_runscripts(task, rerun=rerun)
+        ) = self._prepare_runscripts(job, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
         interpreter = "/bin/sh"
@@ -569,7 +569,7 @@ class SGEWorker(DistributedWorker):
                 fp.writelines(bcmd_job)
 
             script_dir = (
-                task.cache_dir / f"{self.__class__.__task.name__}_scripts" / task.uid
+                job.cache_dir / f"{self.__class__.__task.name__}_scripts" / job.uid
             )
             script_dir.mkdir(parents=True, exist_ok=True)
             sargs = ["-t"]
@@ -579,7 +579,7 @@ class SGEWorker(DistributedWorker):
             jobname = re.search(r"(?<=-N )\S+", task_qsub_args)
 
             if not jobname:
-                jobname = ".".join((task.name, task.uid))
+                jobname = ".".join((job.name, job.uid))
                 sargs.append("-N")
                 sargs.append(jobname)
             output = re.search(r"(?<=-o )\S+", self.qsub_args)
@@ -606,9 +606,9 @@ class SGEWorker(DistributedWorker):
             if self.poll_for_result_file:
                 self.result_files_by_jobid[jobid] = {}
                 for task_pkl, ind, rerun in tasks_to_run:
-                    task = load_task(task_pkl=task_pkl, ind=ind)
-                    self.result_files_by_jobid[jobid][task] = (
-                        task.output_dir / "_result.pklz"
+                    job = load_task(task_pkl=task_pkl, ind=ind)
+                    self.result_files_by_jobid[jobid][job] = (
+                        job.output_dir / "_result.pklz"
                     )
 
             poll_counter = 0
@@ -620,17 +620,17 @@ class SGEWorker(DistributedWorker):
                 # done = await self._poll_job(jobid)
                 if self.poll_for_result_file:
                     if len(self.result_files_by_jobid[jobid]) > 0:
-                        for task in list(self.result_files_by_jobid[jobid]):
-                            if self.result_files_by_jobid[jobid][task].exists():
-                                del self.result_files_by_jobid[jobid][task]
+                        for job in list(self.result_files_by_jobid[jobid]):
+                            if self.result_files_by_jobid[jobid][job].exists():
+                                del self.result_files_by_jobid[jobid][job]
                                 self.threads_used -= threads_requested
 
                     else:
                         exit_status = await self._verify_exit_code(jobid)
                         if exit_status == "ERRORED":
                             jobid = await self._rerun_job_array(
-                                task.cache_dir,
-                                task.uid,
+                                job.cache_dir,
+                                job.uid,
                                 sargs,
                                 tasks_to_run,
                                 error_file,
@@ -647,8 +647,8 @@ class SGEWorker(DistributedWorker):
                         exit_status = await self._verify_exit_code(jobid)
                         if exit_status == "ERRORED":
                             jobid = await self._rerun_job_array(
-                                task.cache_dir,
-                                task.uid,
+                                job.cache_dir,
+                                job.uid,
                                 sargs,
                                 tasks_to_run,
                                 error_file,
@@ -658,12 +658,12 @@ class SGEWorker(DistributedWorker):
                     poll_counter += 1
                     await asyncio.sleep(self.poll_delay)
                 else:
-                    done = await self._poll_job(jobid, task.cache_dir)
+                    done = await self._poll_job(jobid, job.cache_dir)
                     if done:
                         if done == "ERRORED":  # If the SGE job was evicted, rerun it
                             jobid = await self._rerun_job_array(
-                                task.cache_dir,
-                                task.uid,
+                                job.cache_dir,
+                                job.uid,
                                 sargs,
                                 tasks_to_run,
                                 error_file,
@@ -758,7 +758,7 @@ class SGEWorker(DistributedWorker):
         output_dir,
         task_qsub_args,
     ):
-        """Coroutine that submits task runscript and polls job until completion or error."""
+        """Coroutine that submits job runscript and polls job until completion or error."""
         await self._submit_jobs(
             batchscript,
             name,
@@ -840,13 +840,13 @@ class DaskWorker(Worker):
 
     async def run(
         self,
-        task: "Task[DefType]",
+        job: "Job[TaskType]",
         rerun: bool = False,
     ) -> "Result":
         from dask.distributed import Client
 
         async with Client(**self.client_args, asynchronous=True) as client:
-            return await client.submit(task.run, rerun)
+            return await client.submit(job.run, rerun)
 
     def close(self):
         """Finalize the internal pool of tasks."""
@@ -917,11 +917,11 @@ class PsijWorker(Worker):
 
     async def run(
         self,
-        task: "Task[DefType]",
+        job: "Job[TaskType]",
         rerun: bool = False,
     ) -> "Result":
         """
-        Run a task (coroutine wrapper).
+        Run a job (coroutine wrapper).
 
         Raises
         ------
@@ -935,10 +935,10 @@ class PsijWorker(Worker):
         jex = self.psij.JobExecutor.get_instance(self.subtype)
         absolute_path = Path(__file__).parent
 
-        cache_dir = task.cache_dir
+        cache_dir = job.cache_dir
         file_path = cache_dir / "runnable_function.pkl"
         with open(file_path, "wb") as file:
-            cp.dump(task.run, file)
+            cp.dump(job.run, file)
         func_path = absolute_path / "run_pickled.py"
         spec = self.make_spec("python", [func_path, file_path])
 
@@ -959,7 +959,7 @@ class PsijWorker(Worker):
                 f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
             )
 
-        return task.result()
+        return job.result()
 
     def close(self):
         """Finalize the internal pool of tasks."""

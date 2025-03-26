@@ -2,7 +2,7 @@ import pytest
 
 from pydra.engine.state import State
 from pydra.design import python
-from pydra.engine.specs import PythonDef, PythonOutputs
+from pydra.engine.specs import PythonTask, PythonOutputs
 from pydra.engine.helpers_state import PydraStateError, add_name_splitter
 
 
@@ -2252,7 +2252,7 @@ def test_state_connect_combine_prevst_6():
 
 
 @python.define
-class ExampleDef(PythonDef["ExampleDef.Outputs"]):
+class ExampleDef(PythonTask["ExampleDef.Outputs"]):
 
     a: int
     b: int

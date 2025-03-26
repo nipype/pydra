@@ -20,19 +20,19 @@ from pydra.utils.typing import StateArray
 
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import TaskDef, Result, WorkflowOutputs, WorkflowDef
-    from pydra.engine.core import Task
+    from pydra.engine.specs import TaskDef, Result, WorkflowOutputs, WorkflowTask
+    from pydra.engine.core import Job
     from pydra.design.base import Field
     from pydra.engine.lazy import LazyField
 
 
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 
-DefType = ty.TypeVar("DefType", bound="TaskDef")
+TaskType = ty.TypeVar("TaskType", bound="TaskDef")
 
 
 def plot_workflow(
-    workflow_task: "WorkflowDef",
+    workflow_task: "WorkflowTask",
     out_dir: Path,
     plot_type: str = "simple",
     export: ty.Sequence[str] | None = None,
@@ -134,8 +134,8 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
     return obj
 
 
-def print_help(defn: "TaskDef[DefType]") -> list[str]:
-    """Visit a task object and print its input/output interface."""
+def print_help(defn: "TaskDef[TaskType]") -> list[str]:
+    """Visit a job object and print its input/output interface."""
     from pydra.design.base import NO_DEFAULT
 
     lines = [f"Help for {defn.__class__.__name__}"]
@@ -174,7 +174,7 @@ def load_result(checksum, cache_locations):
     Parameters
     ----------
     checksum : :obj:`str`
-        Unique identifier of the task to be loaded.
+        Unique identifier of the job to be loaded.
     cache_locations : :obj:`list` of :obj:`os.pathlike`
         List of cache directories, in order of priority, where
         the checksum will be looked for.
@@ -197,7 +197,7 @@ def load_result(checksum, cache_locations):
 def save(
     task_path: Path,
     result: "Result | None" = None,
-    task: "Task[DefType] | None" = None,
+    job: "Job[TaskType] | None" = None,
     return_values: dict[str, ty.Any] | None = None,
     name_prefix: str = None,
 ) -> None:
@@ -210,14 +210,14 @@ def save(
         Write directory
     result : :obj:`Result`
         Result to pickle and write
-    task : :class:`~pydra.engine.core.TaskBase`
-        Task to pickle and write
+    job : :class:`~pydra.engine.core.TaskBase`
+        Job to pickle and write
     return_values : :obj:`dict`
         Return values to pickle and write
     """
     from pydra.engine.core import is_workflow
 
-    if task is None and result is None:
+    if job is None and result is None:
         raise ValueError("Nothing to be saved")
 
     if not isinstance(task_path, Path):
@@ -240,12 +240,12 @@ def save(
                 )
             with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
                 cp.dump(result, fp)
-        if task:
+        if job:
             with (task_path / f"{name_prefix}_task.pklz").open("wb") as fp:
-                cp.dump(task, fp)
+                cp.dump(job, fp)
         if return_values:
             with (task_path / f"{name_prefix}_return_values.pklz").open("wb") as fp:
-                cp.dump(task, fp)
+                cp.dump(job, fp)
 
 
 def copyfile_workflow(
@@ -409,12 +409,12 @@ def execute(cmd, strip=False):
 
 def create_checksum(name, inputs):
     """
-    Generate a checksum name for a given combination of task name and inputs.
+    Generate a checksum name for a given combination of job name and inputs.
 
     Parameters
     ----------
     name : :obj:`str`
-        Task name.
+        Job name.
     inputs : :obj:`str`
         String of inputs.
 
@@ -431,7 +431,7 @@ def record_error(error_path, error):
     if not resultfile.exists():
         error_message += """\n
     When creating this error file, the results file corresponding
-    to the task could not be found."""
+    to the job could not be found."""
 
     name_checksum = str(error_path.name)
     timeofcrash = strftime("%Y%m%d-%H%M%S")
@@ -512,13 +512,13 @@ def get_available_cpus():
 
 def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
     """
-    loading a task from a pickle file, settings proper input
-    and running the task
+    loading a job from a pickle file, settings proper input
+    and running the job
 
     Parameters
     ----------
     task_pkl : :obj:`Path`
-        The path to pickled task file
+        The path to pickled job file
 
     Returns
     -------
@@ -529,7 +529,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
     from pydra.engine.specs import Result
 
     try:
-        task: Task[DefType] = load_task(task_pkl=task_pkl)
+        job: Job[TaskType] = load_task(task_pkl=task_pkl)
     except Exception:
         if task_pkl.parent.exists():
             etype, eval, etr = sys.exc_info()
@@ -539,22 +539,22 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
             save(task_pkl.parent, result=result)
         raise
 
-    resultfile = task.output_dir / "_result.pklz"
+    resultfile = job.output_dir / "_result.pklz"
     try:
-        if task.is_async:
-            task.submitter.submit(task, rerun=rerun)
+        if job.is_async:
+            job.submitter.submit(job, rerun=rerun)
         else:
-            task.run(rerun=rerun)
+            job.run(rerun=rerun)
     except Exception as e:
         # creating result and error files if missing
-        errorfile = task.output_dir / "_error.pklz"
+        errorfile = job.output_dir / "_error.pklz"
         if not errorfile.exists():  # not sure if this is needed
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
-            errorfile = record_error(task.output_dir, error=traceback)
+            errorfile = record_error(job.output_dir, error=traceback)
         if not resultfile.exists():  # not sure if this is needed
             result = Result(output=None, runtime=None, errored=True, definition=None)
-            save(task.output_dir, result=result)
+            save(job.output_dir, result=result)
         e.add_note(f" full crash report is here: {errorfile}")
         raise
     return resultfile
@@ -562,18 +562,18 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
 
 # async def load_and_run_async(task_pkl):
 #     """
-#     loading a task from a pickle file, settings proper input
+#     loading a job from a pickle file, settings proper input
 #     and running the workflow
 #     """
-#     task = load_task(task_pkl=task_pkl)
-#     await task()
+#     job = load_task(task_pkl=task_pkl)
+#     await job()
 
 
-def load_task(task_pkl: os.PathLike) -> "Task[DefType]":
-    """loading a task from a pickle file, settings proper input for the specific ind"""
+def load_task(task_pkl: os.PathLike) -> "Job[TaskType]":
+    """loading a job from a pickle file, settings proper input for the specific ind"""
     with open(task_pkl, "rb") as fp:
-        task = cp.load(fp)
-    return task
+        job = cp.load(fp)
+    return job
 
 
 def position_sort(args):

@@ -4,14 +4,14 @@ from pydra.engine.environments import Native, Docker, Singularity
 from pydra.engine.submitter import Submitter
 from fileformats.generic import File
 from pydra.design import shell
-from pydra.engine.core import Task
-from pydra.engine.specs import ShellDef
+from pydra.engine.core import Job
+from pydra.engine.specs import ShellTask
 from pydra.engine.helpers import attrs_values
 from .utils import no_win, need_docker, need_singularity
 import pytest
 
 
-def makedir(path, name):
+def makedir(path: Path, name: str) -> Path:
     newdir = path / name
     newdir.mkdir()
     return newdir
@@ -32,7 +32,7 @@ def test_native_1(tmp_path):
     shelly = Shelly()
     assert shelly.cmdline == cmd
 
-    shelly_job = Task(
+    shelly_job = Job(
         definition=shelly,
         submitter=Submitter(cache_dir=newcache("native-task")),
         name="native",
@@ -56,7 +56,7 @@ def test_docker_1(tmp_path):
     """docker env: simple command, no arguments"""
 
     def newcache(x):
-        makedir(tmp_path, x)
+        return makedir(tmp_path, x)
 
     cmd = "whoami"
     docker = Docker(image="busybox")
@@ -64,7 +64,7 @@ def test_docker_1(tmp_path):
     shelly = Shelly()
     assert shelly.cmdline == cmd
 
-    shelly_job = Task(
+    shelly_job = Job(
         definition=shelly,
         submitter=Submitter(cache_dir=newcache("docker")),
         name="docker",
@@ -99,12 +99,12 @@ def test_docker_1_subm(tmp_path, docker):
     """docker env with submitter: simple command, no arguments"""
 
     def newcache(x):
-        makedir(tmp_path, x)
+        return makedir(tmp_path, x)
 
     cmd = "whoami"
     docker = Docker(image="busybox")
     shelly = shell.define(cmd)()
-    shelly_job = Task(
+    shelly_job = Job(
         definition=shelly,
         submitter=Submitter(cache_dir=newcache("docker")),
         name="docker",
@@ -128,13 +128,13 @@ def test_singularity_1(tmp_path):
     """singularity env: simple command, no arguments"""
 
     def newcache(x):
-        makedir(tmp_path, x)
+        return makedir(tmp_path, x)
 
     cmd = "whoami"
     sing = Singularity(image="docker://alpine", xargs=["--fakeroot"])
     Shelly = shell.define(cmd)
     shelly = Shelly()
-    shelly_job = Task(
+    shelly_job = Job(
         definition=shelly,
         submitter=Submitter(cache_dir=newcache("singu")),
         name="singu",
@@ -155,14 +155,14 @@ def test_singularity_1(tmp_path):
 def test_singularity_1_subm(tmp_path, worker):
     """docker env with submitter: simple command, no arguments"""
 
-    def newcache(x):
-        makedir(tmp_path, x)
+    def newcache(x: str) -> Path:
+        return makedir(tmp_path, x)
 
     cmd = "whoami"
     sing = Singularity(image="docker://alpine", xargs=["--fakeroot"])
     Shelly = shell.define(cmd)
     shelly = Shelly()
-    shelly_job = Task(
+    shelly_job = Job(
         definition=shelly,
         submitter=Submitter(cache_dir=newcache("singu")),
         name="singu",
@@ -181,7 +181,7 @@ def test_singularity_1_subm(tmp_path, worker):
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
-def shelly_with_input_factory(filename, executable) -> ShellDef:
+def shelly_with_input_factory(filename, executable) -> ShellTask:
     """creating a task with a simple input_spec"""
     Shelly = shell.define(
         executable,
@@ -198,8 +198,8 @@ def shelly_with_input_factory(filename, executable) -> ShellDef:
     return Shelly(**({} if filename is None else {"file": filename}))
 
 
-def make_job(task: ShellDef, tempdir: Path, name: str):
-    return Task(
+def make_job(task: ShellTask, tempdir: Path, name: str):
+    return Job(
         definition=task,
         submitter=Submitter(cache_dir=makedir(tempdir, name)),
         name=name,

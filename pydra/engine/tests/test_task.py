@@ -12,14 +12,14 @@ from pydra.design import python, shell, workflow
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from pydra.engine.specs import (
     argstr_formatting,
-    ShellDef,
+    ShellTask,
     ShellOutputs,
     TaskHooks,
     AuditFlag,
 )
 from pydra.engine.helpers import list_fields, print_help
 from pydra.engine.submitter import Submitter
-from pydra.engine.core import Task
+from pydra.engine.core import Job
 from pydra.utils import default_run_cache_dir
 from pydra.utils.typing import (
     MultiInputObj,
@@ -1056,7 +1056,7 @@ def test_audit_prov_messdir_1(
     # user defined path
     message_path = tmpdir / funky._checksum / "my_messages"
     # providing messenger_dir for audit
-    funky_task = Task(
+    funky_task = Job(
         definition=funky,
         submitter=Submitter(
             cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
@@ -1196,7 +1196,7 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     cache_dir = tmpdir / "cache"
     cache_dir.mkdir()
 
-    foo = Task(
+    foo = Job(
         definition=FunAddTwo(a=1), submitter=Submitter(cache_dir=tmpdir), name="foo"
     )
     assert foo.hooks
@@ -1278,7 +1278,7 @@ def test_taskhooks_2(tmpdir, capsys):
 
 def test_taskhooks_3(tmpdir, capsys):
     """checking results in the post run hooks"""
-    foo = Task(
+    foo = Job(
         definition=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_dir=tmpdir)
     )
 
@@ -1437,7 +1437,7 @@ def test_object_input():
 
 def test_argstr_formatting():
     @shell.define
-    class Defn(ShellDef["Defn.Outputs"]):
+    class Defn(ShellTask["Defn.Outputs"]):
         a1_field: str
         b2_field: float
         c3_field: ty.Dict[str, str]

@@ -14,7 +14,7 @@ except ImportError:
     import importlib.resources as importlib_resources  # type: ignore
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.core import Task
+    from pydra.engine.core import Job
 
 
 class Audit:
@@ -50,7 +50,7 @@ class Audit:
         Start recording provenance.
 
         Monitored information is not sent until directory is created,
-        in case message directory is inside task output directory.
+        in case message directory is inside job output directory.
 
         Parameters
         ----------
@@ -65,7 +65,7 @@ class Audit:
             user_id = f"uid:{gen_uuid()}"
             start_message = {
                 "@id": self.aid,
-                "@type": "task",
+                "@type": "job",
                 "startedAtTime": now(),
                 "executedBy": user_id,
             }
@@ -182,19 +182,19 @@ class Audit:
         """
         return self.audit_flags & flag
 
-    def audit_task(self, task: "Task"):
+    def audit_task(self, job: "Job"):
         import subprocess as sp
         from pydra.engine.helpers import list_fields
 
-        label = task.name
+        label = job.name
 
         command = (
-            task.definition.cmdline if hasattr(task.definition, "executable") else None
+            job.definition.cmdline if hasattr(job.definition, "executable") else None
         )
-        attr_list = list_fields(task.definition)
+        attr_list = list_fields(job.definition)
         for attrs in attr_list:
             input_name = attrs.name
-            value = task.inputs[input_name]
+            value = job.inputs[input_name]
             if isinstance(value, FileSet):
                 input_path = os.path.abspath(value)
                 file_hash = hash_function(value)
@@ -229,7 +229,7 @@ class Audit:
 
         start_message = {
             "@id": self.aid,
-            "@type": "task",
+            "@type": "job",
             "Label": label,
             "Command": command,
             "StartedAtTime": now(),
