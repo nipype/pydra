@@ -948,9 +948,9 @@ class PsijWorker(Worker):
         spec.stdout_path = cache_dir / "demo.stdout"
         spec.stderr_path = cache_dir / "demo.stderr"
 
-        job = self.make_job(spec, None)
-        jex.submit(job)
-        job.wait()
+        psij_job = self.make_job(spec, None)
+        jex.submit(psij_job)
+        psij_job.wait()
 
         if spec.stderr_path.stat().st_size > 0:
             with open(spec.stderr_path, "r") as stderr_file:
