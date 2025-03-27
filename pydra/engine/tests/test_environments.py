@@ -1,12 +1,14 @@
 from pathlib import Path
 import typing as ty
-from pydra.engine.environments import Native, Docker, Singularity
+from pydra.environments.native import Native
+from pydra.environments.docker import Docker
+from pydra.environments.singularity import Singularity
 from pydra.engine.submitter import Submitter
 from fileformats.generic import File
-from pydra.design import shell
+from pydra.compose import shell
 from pydra.engine.core import Job
 from pydra.engine.specs import ShellTask
-from pydra.engine.helpers import attrs_values
+from pydra.utils.general import attrs_values
 from .utils import no_win, need_docker, need_singularity
 import pytest
 

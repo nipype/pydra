@@ -8,7 +8,7 @@ import cloudpickle as cp
 from pathlib import Path
 import json
 import glob as glob
-from pydra.design import python, shell, workflow
+from pydra.compose import python, shell, workflow
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from pydra.engine.specs import (
     argstr_formatting,
@@ -17,7 +17,7 @@ from pydra.engine.specs import (
     TaskHooks,
     AuditFlag,
 )
-from pydra.engine.helpers import list_fields, print_help
+from pydra.utils.general import list_fields, print_help
 from pydra.engine.submitter import Submitter
 from pydra.engine.core import Job
 from pydra.utils import default_run_cache_dir

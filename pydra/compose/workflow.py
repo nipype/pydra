@@ -2,22 +2,29 @@ import typing as ty
 import inspect
 from typing import dataclass_transform
 import attrs
-from pydra.design.base import (
+from pydra.compose.base import (
+    Task,
+    Outputs,
     Arg,
     Out,
     ensure_field_objects,
-    make_task,
+    build_task_class,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
     extract_fields_from_class,
 )
+from pydra.utils.general import attrs_values
+from pydra.utils.typing import StateArray
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.core import Workflow
-    from pydra.engine.specs import Task, TaskOutputs, WorkflowTask
-    from pydra.engine.environments import Environment
-    from pydra.engine.specs import TaskHooks
+    from pydra.engine.workflow import Workflow
+    from pydra.engine.job import Job
+    from pydra.engine.lazy import LazyOutField
+    from pydra.engine.graph import DiGraph
+    from pydra.engine.submitter import NodeExecution
+    from pydra.environments.base import Environment
+    from pydra.engine.hooks import TaskHooks
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -187,7 +194,7 @@ def define(
         for inpt_name in lazy:
             parsed_inputs[inpt_name].lazy = True
 
-        defn = make_task(
+        defn = build_task_class(
             WorkflowTask,
             WorkflowOutputs,
             parsed_inputs,
@@ -221,7 +228,7 @@ def this() -> "Workflow":
     return Workflow.under_construction()
 
 
-OutputsType = ty.TypeVar("OutputsType", bound="TaskOutputs")
+OutputsType = ty.TypeVar("OutputsType", bound="Outputs")
 
 
 def add(
@@ -278,3 +285,91 @@ def cast(field: ty.Any, new_type: type[U]) -> U:
         type=new_type,
         cast_from=field._cast_from if field._cast_from else field._type,
     )
+
+
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
+class WorkflowOutputs(Outputs):
+
+    @classmethod
+    def _from_task(cls, job: "Job[WorkflowTask]") -> ty.Self:
+        """Collect the outputs of a workflow job from the outputs of the nodes in the
+
+        Parameters
+        ----------
+        job : Job[WorfklowDef]
+            The job whose outputs are being collected.
+
+        Returns
+        -------
+        outputs : Outputs
+            The outputs of the job
+        """
+
+        workflow: "Workflow" = job.return_values["workflow"]
+        exec_graph: "DiGraph[NodeExecution]" = job.return_values["exec_graph"]
+
+        # Check for errors in any of the workflow nodes
+        if errored := [n for n in exec_graph.nodes if n.errored]:
+            errors = []
+            for node in errored:
+                for node_task in node.errored.values():
+                    result = node_task.result()
+                    if result.errors:
+                        time_of_crash = result.errors["time of crash"]
+                        error_message = "\n".join(result.errors["error message"])
+                    else:
+                        time_of_crash = "UNKNOWN-TIME"
+                        error_message = "NOT RETRIEVED"
+                    errors.append(
+                        f"Job {node.name!r} failed @ {time_of_crash} running "
+                        f"{node._task} with the following errors:\n{error_message}"
+                        "\nTo inspect, please load the pickled job object from here: "
+                        f"{result.output_dir}/_task.pklz"
+                    )
+            raise RuntimeError(
+                f"Workflow {job!r} failed with errors:\n\n" + "\n\n".join(errors)
+            )
+
+        # Retrieve values from the output fields
+        values = {}
+        lazy_field: LazyOutField
+        for name, lazy_field in attrs_values(workflow.outputs).items():
+            val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
+            if isinstance(val_out, StateArray):
+                val_out = list(val_out)  # implicitly combine state arrays
+            values[name] = val_out
+
+        # Set the values in the outputs object
+        outputs = super()._from_task(job)
+        outputs = attrs.evolve(outputs, **values)
+        outputs._output_dir = job.output_dir
+        return outputs
+
+
+WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
+
+
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
+class WorkflowTask(Task[WorkflowOutputsType]):
+
+    _task_type = "workflow"
+
+    RESERVED_FIELD_NAMES = Task.RESERVED_FIELD_NAMES + ("construct",)
+
+    _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
+
+    def _run(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
+        """Run the workflow."""
+        job.submitter.expand_workflow(job, rerun)
+
+    async def _run_async(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
+        """Run the workflow asynchronously."""
+        await job.submitter.expand_workflow_async(job, rerun)
+
+    def construct(self) -> "Workflow":
+        from pydra.engine.core import Workflow
+
+        if self._constructed is not None:
+            return self._constructed
+        self._constructed = Workflow.construct(self)
+        return self._constructed

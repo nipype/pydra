@@ -3,7 +3,7 @@ from copy import deepcopy
 from enum import Enum
 import attrs
 from pydra.engine import lazy
-from pydra.engine.helpers import (
+from pydra.utils.general import (
     attrs_values,
     is_lazy,
 )
@@ -12,11 +12,11 @@ from pydra.engine.state import State
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Workflow
-    from pydra.engine.environments import Environment
-    from pydra.engine.specs import Task, TaskOutputs, TaskHooks
+    from pydra.environments.base import Environment
+    from pydra.engine.specs import Task, Outputs, TaskHooks
 
 
-OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
+OutputType = ty.TypeVar("OutputType", bound="Outputs")
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 _not_set = Enum("_not_set", "NOT_SET")
@@ -116,7 +116,7 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def lzout(self) -> OutputType:
-        from pydra.engine.helpers import list_fields
+        from pydra.utils.general import list_fields
 
         """The output task of the node populated with lazy fields"""
         if self._lzout is not None:

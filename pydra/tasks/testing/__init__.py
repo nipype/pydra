@@ -1,4 +1,4 @@
-from pydra.design import python, workflow
+from pydra.compose import python, workflow
 
 
 @python.define

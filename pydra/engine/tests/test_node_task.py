@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 import pytest
 from fileformats.generic import File
-from pydra.design import python, workflow
+from pydra.compose import python, workflow
 
 from .utils import (
     FunAddTwo,
@@ -26,7 +26,7 @@ from pydra.engine.state import State
 from pydra.utils.typing import StateArray
 from pydra.engine.submitter import Submitter
 from pydra.engine.core import Workflow
-from pydra.engine.helpers import attrs_values
+from pydra.utils.general import attrs_values
 
 
 @workflow.define

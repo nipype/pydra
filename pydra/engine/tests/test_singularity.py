@@ -1,8 +1,8 @@
 from pydra.engine.submitter import Submitter
 from pydra.engine.specs import ShellTask, ShellOutputs
-from pydra.design import shell, workflow
+from pydra.compose import shell, workflow
 from fileformats.generic import File
-from pydra.engine.environments import Singularity
+from pydra.environments.singularity import Singularity
 from .utils import need_singularity
 
 

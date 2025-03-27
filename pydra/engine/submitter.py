@@ -3,7 +3,6 @@
 import asyncio
 import typing as ty
 import re
-import pickle
 import os
 from pathlib import Path
 from traceback import format_exc
@@ -12,10 +11,9 @@ from copy import copy, deepcopy
 from datetime import datetime
 from collections import defaultdict
 import attrs
-from pydra.engine.workers import Worker, WORKERS
+from pydra.workers.base import Worker, WORKERS
 from pydra.engine.graph import DiGraph
-from pydra.engine.helpers import (
-    get_open_loop,
+from pydra.utils.general import (
     list_fields,
     attrs_values,
 )
@@ -25,7 +23,7 @@ from pydra.engine.audit import Audit
 from pydra.engine.core import Job
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils import default_run_cache_dir
-from pydra.design import workflow
+from pydra.compose import workflow
 from pydra.engine.state import State
 import logging
 
@@ -33,13 +31,13 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.node import Node
-    from pydra.engine.specs import WorkflowTask, Task, TaskOutputs, TaskHooks, Result
+    from pydra.engine.specs import WorkflowTask, Task, Outputs, TaskHooks, Result
     from pydra.engine.core import Workflow
-    from pydra.engine.environments import Environment
+    from pydra.environments.base import Environment
 
 
 TaskType = ty.TypeVar("TaskType", bound="Task")
-OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
+OutputType = ty.TypeVar("OutputType", bound="Outputs")
 
 # Used to flag development mode of Audit
 develop = False
@@ -106,7 +104,7 @@ class Submitter:
         **kwargs,
     ):
 
-        from pydra.engine.environments import Native
+        from pydra.environments.native import Native
 
         if worker is None:
             worker = "debug"
@@ -213,7 +211,7 @@ class Submitter:
         result : Any
             The result of the job
         """
-        from pydra.engine.environments import Environment
+        from pydra.environments.base import Environment
 
         if raise_errors is None:
             raise_errors = self.worker_name == "debug"
@@ -895,31 +893,60 @@ async def prepare_runnable(runnable):
     return runnable.pickle_task()
 
 
-def _list_blocked_tasks(graph):
-    """Generates a list of tasks that can't be run and predecessors that are blocking
-    them to help debugging of broken workflows"""
-    blocked = []
-    for tsk in graph.sorted_nodes:
-        blocking = []
-        for pred in graph.predecessors[tsk.name]:
-            if not pred.done:
-                matching_name = []
-                for cache_loc in tsk.cache_locations:
-                    for tsk_work_dir in cache_loc.iterdir():
-                        if (tsk_work_dir / "_task.pklz").exists():
-                            with open(tsk_work_dir / "_task.pklz", "rb") as f:
-                                saved_tsk = pickle.load(f)
-                            if saved_tsk.name == pred.name:
-                                matching_name.append(
-                                    f"{saved_tsk.name} ({tsk_work_dir.name})"
-                                )
-                blocking.append((pred, ", ".join(matching_name)))
-        if blocking:
-            blocked.append(
-                f"\n{tsk.name} ({tsk.checksum}) is blocked by "
-                + "; ".join(
-                    f"{pred.name} ({pred.checksum}), which matches names of [{matching}]"
-                    for pred, matching in blocking
-                )
-            )
-    return blocked
+# def _list_blocked_tasks(graph):
+#     """Generates a list of tasks that can't be run and predecessors that are blocking
+#     them to help debugging of broken workflows"""
+#     blocked = []
+#     for tsk in graph.sorted_nodes:
+#         blocking = []
+#         for pred in graph.predecessors[tsk.name]:
+#             if not pred.done:
+#                 matching_name = []
+#                 for cache_loc in tsk.cache_locations:
+#                     for tsk_work_dir in cache_loc.iterdir():
+#                         if (tsk_work_dir / "_task.pklz").exists():
+#                             with open(tsk_work_dir / "_task.pklz", "rb") as f:
+#                                 saved_tsk = pickle.load(f)
+#                             if saved_tsk.name == pred.name:
+#                                 matching_name.append(
+#                                     f"{saved_tsk.name} ({tsk_work_dir.name})"
+#                                 )
+#                 blocking.append((pred, ", ".join(matching_name)))
+#         if blocking:
+#             blocked.append(
+#                 f"\n{tsk.name} ({tsk.checksum}) is blocked by "
+#                 + "; ".join(
+#                     f"{pred.name} ({pred.checksum}), which matches names of [{matching}]"
+#                     for pred, matching in blocking
+#                 )
+#             )
+#     return blocked
+
+
+def get_open_loop():
+    """
+    Get current event loop.
+
+    If the loop is closed, a new
+    loop is created and set as the current event loop.
+
+    Returns
+    -------
+    loop : :obj:`asyncio.EventLoop`
+        The current event loop
+
+    """
+    if os.name == "nt":
+        loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
+    else:
+        try:
+            loop = asyncio.get_event_loop()
+        # in case RuntimeError: There is no current event loop in thread 'MainThread'
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        else:
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+    return loop

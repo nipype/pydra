@@ -26,7 +26,7 @@ import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
 import fileformats.core.exceptions
-from pydra.utils.misc import in_stdlib, user_cache_dir, add_exc_note
+from pydra.utils.general import in_stdlib, user_cache_dir, add_exc_note
 
 logger = logging.getLogger("pydra")
 
@@ -466,7 +466,7 @@ def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
 @register_serializer(ty._SpecialForm)
 @register_serializer(type)
 def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
-    from pydra.engine.helpers import list_fields
+    from pydra.utils.general import list_fields
 
     def type_location(tp: type) -> bytes:
         """Return the module and name of the type in a ASCII byte string"""

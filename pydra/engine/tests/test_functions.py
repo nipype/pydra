@@ -1,10 +1,10 @@
 import pytest
 import random
 import typing as ty
-from pydra.design.base import Field
-from pydra.design import python
+from pydra.compose.base import Field
+from pydra.compose import python
 from pydra.engine.specs import PythonTask, PythonOutputs
-from pydra.engine.helpers import list_fields, attrs_values
+from pydra.utils.general import list_fields, attrs_values
 
 
 def non_func_fields(defn: PythonTask) -> list[Field]:

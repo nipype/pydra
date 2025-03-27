@@ -8,16 +8,16 @@ import typing as ty
 import os
 from unittest.mock import patch
 import pytest
-from pydra.design import workflow, shell
+from pydra.compose import workflow, shell
 from fileformats.generic import Directory
 from pydra.engine.core import Job
 from pydra.engine.submitter import Submitter
 from pydra.engine.workers import DebugWorker
-from pydra.design import python
+from pydra.compose import python
 from pathlib import Path
 from datetime import datetime
 from pydra.engine.specs import Result
-from pydra.engine.environments import Singularity
+from pydra.environments.singularity import Singularity
 from .utils import (
     need_sge,
     need_slurm,

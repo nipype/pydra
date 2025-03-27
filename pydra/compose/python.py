@@ -2,11 +2,11 @@ import typing as ty
 import inspect
 from typing import dataclass_transform
 import attrs
-from pydra.design.base import (
-    Arg,
-    Out,
+from pydra.utils.general import list_fields, attrs_values
+from pydra.compose import base
+from pydra.compose.base import (
     ensure_field_objects,
-    make_task,
+    build_task_class,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
@@ -14,13 +14,13 @@ from pydra.design.base import (
 )
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import PythonTask
+    from pydra.engine.job import Job
 
-__all__ = ["arg", "out", "define"]
+__all__ = ["arg", "out", "define", "PythonTask", "PythonOutputs"]
 
 
 @attrs.define
-class arg(Arg):
+class arg(base.Arg):
     """Argument of a Python task
 
     Parameters
@@ -55,7 +55,7 @@ class arg(Arg):
 
 
 @attrs.define
-class out(Out):
+class out(base.Out):
     """Output of a Python task
 
     Parameters
@@ -97,8 +97,8 @@ def outputs(wrapped):
 def define(
     wrapped: type | ty.Callable | None = None,
     /,
-    inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
-    outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+    inputs: list[str | arg] | dict[str, arg | type] | None = None,
+    outputs: list[str | out] | dict[str, out | type] | type | None = None,
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
@@ -113,7 +113,7 @@ def define(
         The function or class to create an interface for.
     inputs : list[str | Arg] | dict[str, Arg | type] | None
         The inputs to the function or class.
-    outputs : list[str | Out] | dict[str, Out | type] | type | None
+    outputs : list[str | base.Out] | dict[str, base.Out | type] | type | None
         The outputs of the function or class.
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
@@ -175,7 +175,7 @@ def define(
             name="function", type=ty.Callable, default=function, hash_eq=True
         )
 
-        defn = make_task(
+        defn = build_task_class(
             PythonTask,
             PythonOutputs,
             parsed_inputs,
@@ -194,3 +194,61 @@ def define(
             raise ValueError(f"wrapped must be a class or a callable, not {wrapped!r}")
         return make(wrapped)
     return make
+
+
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
+class PythonOutputs(base.Outputs):
+
+    @classmethod
+    def _from_task(cls, job: "Job[PythonTask]") -> ty.Self:
+        """Collect the outputs of a job from a combination of the provided inputs,
+        the objects in the output directory, and the stdout and stderr of the process.
+
+        Parameters
+        ----------
+        job : Job[PythonTask]
+            The job whose outputs are being collected.
+        outputs_dict : dict[str, ty.Any]
+            The outputs of the job, as a dictionary
+
+        Returns
+        -------
+        outputs : Outputs
+            The outputs of the job in dataclass
+        """
+        outputs = super()._from_task(job)
+        for name, val in job.return_values.items():
+            setattr(outputs, name, val)
+        return outputs
+
+
+PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
+
+
+@attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
+class PythonTask(base.Task[PythonOutputsType]):
+
+    _task_type = "python"
+
+    def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
+        # Prepare the inputs to the function
+        inputs = attrs_values(self)
+        del inputs["function"]
+        # Run the actual function
+        returned = self.function(**inputs)
+        # Collect the outputs and save them into the job.return_values dictionary
+        job.return_values = {f.name: f.default for f in list_fields(self.Outputs)}
+        return_names = list(job.return_values)
+        if returned is None:
+            job.return_values = {nm: None for nm in return_names}
+        elif len(job.return_values) == 1:
+            # if only one element in the fields, everything should be returned together
+            job.return_values = {list(job.return_values)[0]: returned}
+        elif isinstance(returned, tuple) and len(return_names) == len(returned):
+            job.return_values = dict(zip(return_names, returned))
+        elif isinstance(returned, dict):
+            job.return_values = {key: returned.get(key, None) for key in return_names}
+        else:
+            raise RuntimeError(
+                f"expected {len(return_names)} elements, but {returned} were returned"
+            )

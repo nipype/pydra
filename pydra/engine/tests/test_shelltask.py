@@ -7,7 +7,7 @@ import re
 import stat
 import attrs
 from pydra.engine.submitter import Submitter
-from pydra.design import shell, workflow, python
+from pydra.compose import shell, workflow, python
 from pydra.engine.specs import (
     ShellOutputs,
     ShellTask,

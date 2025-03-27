@@ -1,5 +1,5 @@
-from pydra.engine.helpers import load_task
-from pydra.design import python, workflow
+from pydra.utils.general import load_task
+from pydra.compose import python, workflow
 from pydra.engine.core import Job
 from pydra.engine.submitter import Submitter
 

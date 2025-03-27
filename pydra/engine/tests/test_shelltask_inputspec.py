@@ -4,7 +4,7 @@ import attrs
 import pytest
 from pydra.engine.specs import ShellOutputs, ShellTask
 from fileformats.generic import File
-from pydra.design import shell
+from pydra.compose import shell
 from pydra.utils.typing import MultiInputObj
 from .utils import get_output_names
 

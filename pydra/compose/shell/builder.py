@@ -13,14 +13,14 @@ from typing import dataclass_transform
 from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
-from pydra.engine.helpers import attrs_values
-from pydra.design.base import (
+from pydra.utils.general import attrs_values
+from pydra.compose.base import (
     Arg,
     Out,
     check_explicit_fields_are_none,
     extract_fields_from_class,
     ensure_field_objects,
-    make_task,
+    build_task_class,
     NO_DEFAULT,
 )
 from pydra.utils.typing import (
@@ -29,11 +29,9 @@ from pydra.utils.typing import (
     TypeParser,
     is_optional,
 )
+from . import field
+from .task import ShellTask, ShellOutputs
 
-if ty.TYPE_CHECKING:
-    from pydra.engine.specs import ShellTask
-
-__all__ = ["arg", "out", "outarg", "define"]
 
 EXECUTABLE_HELP_STRING = (
     "the first part of the command, can be a string, "
@@ -41,201 +39,9 @@ EXECUTABLE_HELP_STRING = (
 )
 
 
-@attrs.define(kw_only=True)
-class arg(Arg):
-    """An input field that specifies a command line argument
-
-    Parameters
-    ----------
-    help: str
-        A short description of the input field.
-    default : Any, optional
-        the default value for the argument
-    mandatory: bool, optional
-        If True user has to provide a value for the field, by default it is False
-    allowed_values: list, optional
-        List of allowed values for the field.
-    requires: list, optional
-        List of field names that are required together with the field.
-    copy_mode: File.CopyMode, optional
-        The mode of copying the file, by default it is File.CopyMode.any
-    copy_collation: File.CopyCollation, optional
-        The collation of the file, by default it is File.CopyCollation.any
-    copy_ext_decomp: File.ExtensionDecomposition, optional
-        The extension decomposition of the file, by default it is
-        File.ExtensionDecomposition.single
-    readonly: bool, optional
-        If True the input field can’t be provided by the user but it aggregates other
-        input fields (for example the fields with argstr: -o {fldA} {fldB}), by default
-        it is False
-    type: type, optional
-        The type of the field, by default it is Any
-    name: str, optional
-        The name of the field, used when specifying a list of fields instead of a mapping
-        from name to field, by default it is None
-    argstr: str, optional
-        A flag or string that is used in the command before the value, e.g. -v or
-        -v {inp_field}, but it could be and empty string, “”, in which case the value is
-        just printed to the command line. If … are used, e.g. -v…,
-        the flag is used before every element if a list is provided as a value. If the
-        argstr is None, the field is not part of the command.
-    position: int, optional
-        Position of the field in the command, could be nonnegative or negative integer.
-        If nothing is provided the field will be inserted between all fields with
-        nonnegative positions and fields with negative positions.
-    sep: str, optional
-        A separator if a sequence type is provided as a value, by default " ".
-    container_path: bool, optional
-        If True a path will be consider as a path inside the container (and not as a
-        local path, by default it is False
-    formatter: function, optional
-        If provided the argstr of the field is created using the function. This function
-        can for example be used to combine several inputs into one command argument. The
-        function can take field (this input field will be passed to the function),
-        inputs (entire inputs will be passed) or any input field name (a specific input
-        field will be sent).
-    """
-
-    argstr: str | None = ""
-    position: int | None = None
-    sep: str = " "
-    allowed_values: list | None = None
-    container_path: bool = False  # IS THIS STILL USED??
-    formatter: ty.Callable | None = None
-
-
-@attrs.define(kw_only=True)
-class out(Out):
-    """An output field that specifies a command line argument
-
-    Parameters
-    ----------
-    callable : Callable, optional
-        If provided the output file name (or list of file names) is created using the
-        function. The function can take field (the specific output field will be passed
-        to the function), output_dir (task output_dir will be used), stdout, stderr
-        (stdout and stderr of the task will be sent) inputs (entire inputs will be
-        passed) or any input field name (a specific input field will be sent).
-    """
-
-    callable: ty.Callable | None = attrs.field(default=None)
-
-    def __attrs_post_init__(self):
-        # Set type from return annotation of callable if not set
-        if self.type is ty.Any and self.callable:
-            self.type = ty.get_type_hints(self.callable).get("return", ty.Any)
-
-    @callable.validator
-    def _callable_validator(self, _, value):
-
-        if value:
-            if not callable(value):
-                raise ValueError(f"callable must be a function, not {value!r}")
-        elif (
-            self.default is NO_DEFAULT
-            and not getattr(self, "path_template", None)
-            and self.name
-            not in [
-                "return_code",
-                "stdout",
-                "stderr",
-            ]
-        ):  # ShellOutputs.BASE_NAMES
-            raise ValueError(
-                "A shell output field must have either a callable or a path_template"
-            )
-
-
-@attrs.define(kw_only=True)
-class outarg(arg, Out):
-    """An input field that specifies where to save the output file
-
-    Parameters
-    ----------
-    help: str
-        A short description of the input field.
-    default : Any, optional
-        the default value for the argument
-    mandatory: bool, optional
-        If True user has to provide a value for the field, by default it is False
-    allowed_values: list, optional
-        List of allowed values for the field.
-    requires: list, optional
-        List of field names that are required together with the field.
-    copy_mode: File.CopyMode, optional
-        The mode of copying the file, by default it is File.CopyMode.any
-    copy_collation: File.CopyCollation, optional
-        The collation of the file, by default it is File.CopyCollation.any
-    copy_ext_decomp: File.ExtensionDecomposition, optional
-        The extension decomposition of the file, by default it is
-        File.ExtensionDecomposition.single
-    readonly: bool, optional
-        If True the input field can’t be provided by the user but it aggregates other
-        input fields (for example the fields with argstr: -o {fldA} {fldB}), by default
-        it is False
-    type: type, optional
-        The type of the field, by default it is Any
-    name: str, optional
-        The name of the field, used when specifying a list of fields instead of a mapping
-        from name to field, by default it is None
-    argstr: str, optional
-        A flag or string that is used in the command before the value, e.g. -v or
-        -v {inp_field}, but it could be and empty string, “”. If … are used, e.g. -v…,
-        the flag is used before every element if a list is provided as a value. If no
-        argstr is used the field is not part of the command.
-    position: int, optional
-        Position of the field in the command line, could be nonnegative or negative integer.
-        If nothing is provided the field will be inserted between all fields with
-        nonnegative positions and fields with negative positions.
-    sep: str, optional
-        A separator if a list is provided as a value.
-    container_path: bool, optional
-        If True a path will be consider as a path inside the container (and not as a
-        local path, by default it is False
-    formatter: function, optional
-        If provided the argstr of the field is created using the function. This function
-        can for example be used to combine several inputs into one command argument. The
-        function can take field (this input field will be passed to the function),
-        inputs (entire inputs will be passed) or any input field name (a specific input
-        field will be sent).
-    path_template: str, optional
-        The template used to specify where the output file will be written to can use
-        other fields, e.g. {file1}. Used in order to create an output definition.
-    """
-
-    path_template: str | None = attrs.field(default=None)
-    keep_extension: bool = attrs.field(default=True)
-
-    @path_template.validator
-    def _validate_path_template(self, attribute, value):
-        if value:
-            if self.default not in (NO_DEFAULT, True, None):
-                raise ValueError(
-                    f"path_template ({value!r}) can only be provided when there is no "
-                    f"default value provided ({self.default!r})"
-                )
-            # if not (is_fileset_or_union(self.type) or self.type is ty.Any):
-            #     raise ValueError(
-            #         f"path_template ({value!r}) can only be provided when type is a FileSet, "
-            #         f"or union thereof, not {self.type!r}"
-            #     )
-            # if self.argstr is None:
-            #     raise ValueError(
-            #         f"path_template ({value!r}) can only be provided when argstr is not None"
-            #     )
-
-    # @keep_extension.validator
-    # def _validate_keep_extension(self, attribute, value):
-    #     if value and self.path_template is None:
-    #         raise ValueError(
-    #             f"keep_extension ({value!r}) can only be provided when path_template "
-    #             f"is provided"
-    #         )
-
-
 @dataclass_transform(
     kw_only_default=True,
-    field_specifiers=(out, outarg),
+    field_specifiers=(field.out, field.outarg),
 )
 def outputs(wrapped):
     """Decorator to specify the output fields of a shell command is a dataclass-style type"""
@@ -244,7 +50,7 @@ def outputs(wrapped):
 
 @dataclass_transform(
     kw_only_default=True,
-    field_specifiers=(arg,),
+    field_specifiers=(field.arg,),
 )
 def define(
     wrapped: type | str | None = None,
@@ -266,7 +72,7 @@ def define(
     ```
 
     Fields are inferred from the template if not provided. In the template, inputs are
-    specified with `<fieldname>` and outputs with `<out:fieldname>`.
+    specified with `<fieldname>` and outputs with `<out|fieldname>`.
 
     ```
     my_command <myinput> <out|myoutput2>
@@ -312,7 +118,6 @@ def define(
     ShellTask
         The interface for the shell command
     """
-    from pydra.engine.specs import ShellTask, ShellOutputs
 
     def make(
         wrapped: ty.Callable | type | None = None,
@@ -345,8 +150,8 @@ def define(
                 ShellTask,
                 ShellOutputs,
                 klass,
-                arg,
-                out,
+                field.arg,
+                field.out,
                 auto_attribs,
                 skip_fields=["executable"],
             )
@@ -365,8 +170,8 @@ def define(
             )
 
             parsed_inputs, parsed_outputs = ensure_field_objects(
-                arg_type=arg,
-                out_type=out,
+                arg_type=field.arg,
+                out_type=field.out,
                 inputs=inferred_inputs,
                 outputs=inferred_outputs,
                 input_helps=input_helps,
@@ -400,9 +205,9 @@ def define(
         # Update the inputs (overriding inputs from base classes) with the executable
         # and the output argument fields
         parsed_inputs.update(
-            {o.name: o for o in parsed_outputs.values() if isinstance(o, arg)}
+            {o.name: o for o in parsed_outputs.values() if isinstance(o, field.arg)}
         )
-        parsed_inputs["executable"] = arg(
+        parsed_inputs["executable"] = field.arg(
             name="executable",
             type=str | ty.Sequence[str],
             argstr="",
@@ -423,14 +228,14 @@ def define(
         # Convert string default values to callables that glob the files in the cwd
         for outpt in parsed_outputs.values():
             if (
-                isinstance(outpt, out)
+                isinstance(outpt, field.out)
                 and isinstance(outpt.default, str)
                 and TypeParser.contains_type(generic.FileSet, outpt.type)
             ):
                 outpt.callable = GlobCallable(outpt.default)
                 outpt.default = NO_DEFAULT
 
-        defn = make_task(
+        defn = build_task_class(
             ShellTask,
             ShellOutputs,
             parsed_inputs,
@@ -481,7 +286,7 @@ def parse_command_line_template(
     """Parses a command line template into a name and input and output fields. Fields
     are inferred from the template if not explicitly provided.
 
-    In the template, inputs are specified with `<fieldname>` and outputs with `<out:fieldname>`.
+    In the template, inputs are specified with `<fieldname>` and outputs with `<out|fieldname>`.
     The types of the fields can be specified using their MIME like (see fileformats.core.from_mime), e.g.
 
     ```
@@ -530,7 +335,7 @@ def parse_command_line_template(
         assert inputs is None
         inputs = {}
     if isinstance(outputs, list):
-        outputs = {out.name: out for out in outputs}
+        outputs = {o.name: o for o in outputs}
     elif isinstance(outputs, dict):
         outputs = copy(outputs)  # We don't want to modify the original
     else:
@@ -570,26 +375,26 @@ def parse_command_line_template(
         else:
             dct = inputs
         try:
-            field = dct.pop(name)
+            fld = dct.pop(name)
         except KeyError:
-            field = field_type(name=name, **kwds)
+            fld = field_type(name=name, **kwds)
         else:
-            if isinstance(field, dict):
-                field = field_type(**field)
-            elif isinstance(field, type) or ty.get_origin(field):
-                kwds["type"] = field
-                field = field_type(name=name, **kwds)
-            elif not isinstance(field, field_type):  # If field type is outarg not out
-                field = field_type(**attrs_values(field))
-            field.name = name
-            type_ = kwds.pop("type", field.type)
-            if field.type is ty.Any:
-                field.type = type_
+            if isinstance(fld, dict):
+                fld = field_type(**fld)
+            elif isinstance(fld, type) or ty.get_origin(fld):
+                kwds["type"] = fld
+                fld = field_type(name=name, **kwds)
+            elif not isinstance(fld, field_type):  # If fld type is outarg not out
+                fld = field_type(**attrs_values(fld))
+            fld.name = name
+            type_ = kwds.pop("type", fld.type)
+            if fld.type is ty.Any:
+                fld.type = type_
             for k, v in kwds.items():
-                setattr(field, k, v)
-        dct[name] = field
+                setattr(fld, k, v)
+        dct[name] = fld
         if issubclass(field_type, Arg):
-            arguments.append(field)
+            arguments.append(fld)
 
     def from_type_str(type_str) -> type:
         types = []
@@ -623,13 +428,13 @@ def parse_command_line_template(
             modify = False
             if name.startswith("out|"):
                 name = name[4:]
-                field_type = outarg
+                field_type = field.outarg
             elif name.startswith("modify|"):
                 name = name[7:]
-                field_type = arg
+                field_type = field.arg
                 modify = True
             else:
-                field_type = arg
+                field_type = field.arg
             # Identify type after ':' symbols
             kwds = {}
             is_multi = False
@@ -654,7 +459,7 @@ def parse_command_line_template(
             elif "$" in name:
                 name, path_template = name.split("$")
                 kwds["path_template"] = path_template
-                if field_type is not outarg:
+                if field_type is not field.outarg:
                     raise ValueError(
                         f"Path templates can only be used with output fields, not {token}"
                     )
@@ -673,9 +478,13 @@ def parse_command_line_template(
             if modify:
                 kwds["copy_mode"] = generic.File.CopyMode.copy
                 # Add field to outputs with the same name as the input
-                add_arg(name, out, {"type": type_, "callable": _InputPassThrough(name)})
+                add_arg(
+                    name,
+                    field.out,
+                    {"type": type_, "callable": _InputPassThrough(name)},
+                )
             # If name contains a '.', treat it as a file template and strip it from the name
-            if field_type is outarg and "path_template" not in kwds:
+            if field_type is field.outarg and "path_template" not in kwds:
                 path_template = name
                 if is_fileset_or_union(type_):
                     if ty.get_origin(type_):
@@ -703,7 +512,9 @@ def parse_command_line_template(
                 default = eval(default)
             else:
                 default = False
-            add_arg(var, arg, {"type": bool, "argstr": argstr, "default": default})
+            add_arg(
+                var, field.arg, {"type": bool, "argstr": argstr, "default": default}
+            )
         elif match := opt_re.match(token):
             option = token
         else:

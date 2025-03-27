@@ -6,7 +6,7 @@ import typing as ty
 from collections import Counter
 import subprocess as sp
 
-from pydra.engine.helpers import ensure_list
+from pydra.utils.general import ensure_list
 
 
 NodeType = ty.TypeVar("NodeType")

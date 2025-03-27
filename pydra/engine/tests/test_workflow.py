@@ -37,10 +37,10 @@ from .utils import (
     DOT_FLAG,
 )
 from pydra.engine.submitter import Submitter
-from pydra.design import python, workflow
+from pydra.compose import python, workflow
 import pydra.engine.core
 from pydra.engine.core import Workflow
-from pydra.engine.helpers import plot_workflow
+from pydra.utils.general import plot_workflow
 
 
 def test_wf_no_output(worker: str, tmp_path: Path):

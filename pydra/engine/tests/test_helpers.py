@@ -9,10 +9,10 @@ import cloudpickle as cp
 from pydra.engine.submitter import Submitter
 from pydra.engine.specs import Result
 from pydra.engine.core import Job
-from pydra.design import workflow
+from pydra.compose import workflow
 from fileformats.generic import Directory, File
 from .utils import Multiply, RaiseXeq1
-from pydra.engine.helpers import (
+from pydra.utils.general import (
     get_available_cpus,
     save,
     load_and_run,
@@ -31,8 +31,8 @@ def test_save(tmpdir):
     save(outdir, job=foo)
     del foo
     # load saved job
-    task_pkl = outdir / "_task.pklz"
-    foo: Job = cp.loads(task_pkl.read_bytes())
+    job_pkl = outdir / "_task.pklz"
+    foo: Job = cp.loads(job_pkl.read_bytes())
     assert foo.name == "mult"
     assert foo.inputs["x"] == 1 and foo.inputs["y"] == 2
     # execute job and save result
@@ -177,13 +177,13 @@ def test_get_available_cpus():
 
 def test_load_and_run(tmpdir):
     """testing load_and_run for pickled job"""
-    task_pkl = Path(tmpdir.join("task_main.pkl"))
+    job_pkl = Path(tmpdir.join("task_main.pkl"))
     # Note that tasks now don't have state arrays and indices, just a single resolved
     # set of parameters that are ready to run
     job = Job(name="mult", task=Multiply(x=2, y=10), submitter=Submitter())
-    with task_pkl.open("wb") as fp:
+    with job_pkl.open("wb") as fp:
         cp.dump(job, fp)
-    resultfile = load_and_run(task_pkl=task_pkl)
+    resultfile = load_and_run(job_pkl=job_pkl)
     # checking the result files
     result = cp.loads(resultfile.read_bytes())
     assert result.outputs.out == 20
@@ -191,7 +191,7 @@ def test_load_and_run(tmpdir):
 
 def test_load_and_run_exception_run(tmpdir):
     """testing raising exception and saving info in crashfile when when load_and_run"""
-    task_pkl = Path(tmpdir.join("task_main.pkl"))
+    job_pkl = Path(tmpdir.join("task_main.pkl"))
     cache_root = Path(tmpdir.join("cache"))
     cache_root.mkdir()
 
@@ -201,11 +201,11 @@ def test_load_and_run_exception_run(tmpdir):
         submitter=Submitter(worker="cf", cache_dir=cache_root),
     )
 
-    with task_pkl.open("wb") as fp:
+    with job_pkl.open("wb") as fp:
         cp.dump(job, fp)
 
     with pytest.raises(Exception) as excinfo:
-        load_and_run(task_pkl=task_pkl)
+        load_and_run(job_pkl=job_pkl)
     exc_msg = excinfo.value.args[0]
     assert "i'm raising an exception!" in exc_msg
     # checking if the crashfile has been created
@@ -221,11 +221,11 @@ def test_load_and_run_exception_run(tmpdir):
 
     job = Job(task=RaiseXeq1(x=2), name="wont_raise", submitter=Submitter())
 
-    with task_pkl.open("wb") as fp:
+    with job_pkl.open("wb") as fp:
         cp.dump(job, fp)
 
     # the second job should be fine
-    resultfile = load_and_run(task_pkl=task_pkl)
+    resultfile = load_and_run(job_pkl=job_pkl)
     result_1 = cp.loads(resultfile.read_bytes())
     assert result_1.outputs.out == 2
 
@@ -248,7 +248,7 @@ def test_load_and_run_wf(tmpdir, worker):
     with wf_pkl.open("wb") as fp:
         cp.dump(job, fp)
 
-    resultfile = load_and_run(task_pkl=wf_pkl)
+    resultfile = load_and_run(job_pkl=wf_pkl)
     # checking the result files
     result = cp.loads(resultfile.read_bytes())
     assert result.outputs.out == 20

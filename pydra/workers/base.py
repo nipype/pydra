@@ -1,35 +1,31 @@
 """Execution workers."""
 
 import asyncio
+import asyncio.subprocess as asp
 import sys
 import json
 import abc
 import re
+import os
 import inspect
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
+import subprocess as sp
 from shutil import copyfile, which
 import cloudpickle as cp
 import concurrent.futures as cf
-from pydra.engine.core import Job
-from pydra.engine.specs import Task
-from pydra.engine.helpers import (
-    get_available_cpus,
-    read_and_display_async,
-    save,
-    load_task,
-)
-
+from pydra.engine.job import Job, save, load_job
 import logging
 import random
 
 logger = logging.getLogger("pydra.worker")
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import Result
+    from pydra.engine.result import Result
+    from pydra.compose import base
 
-TaskType = ty.TypeVar("TaskType", bound="Task")
+TaskType = ty.TypeVar("TaskType", bound="base.Task")
 
 
 class Worker(metaclass=abc.ABCMeta):
@@ -165,9 +161,9 @@ class ConcurrentFuturesWorker(Worker):
         )
 
     @classmethod
-    def uncloudpickle_and_run(cls, task_pkl: bytes, rerun: bool) -> "Result":
+    def uncloudpickle_and_run(cls, job_pkl: bytes, rerun: bool) -> "Result":
         """Unpickle and run a job."""
-        job: Job[TaskType] = cp.loads(task_pkl)
+        job: Job[TaskType] = cp.loads(job_pkl)
         return job.run(rerun=rerun)
 
     def close(self):
@@ -225,14 +221,14 @@ class SlurmWorker(DistributedWorker):
         else:
             copyfile(job[1], script_dir / "_task.pklz")
 
-        task_pkl = script_dir / "_task.pklz"
-        if not task_pkl.exists() or not task_pkl.stat().st_size:
+        job_pkl = script_dir / "_task.pklz"
+        if not job_pkl.exists() or not job_pkl.stat().st_size:
             raise Exception("Missing or empty job!")
 
         batchscript = script_dir / f"batchscript_{uid}.sh"
         python_string = (
-            f"""'from pydra.engine.helpers import load_and_run; """
-            f"""load_and_run("{task_pkl}", rerun={rerun}) '"""
+            f"""'from pydra.utils.general import load_and_run; """
+            f"""load_and_run("{job_pkl}", rerun={rerun}) '"""
         )
         bcmd = "\n".join(
             (
@@ -420,7 +416,7 @@ class SGEWorker(DistributedWorker):
         self.polls_before_checking_evicted = polls_before_checking_evicted
         self.result_files_by_jobid = {}
         self.collect_jobs_delay = collect_jobs_delay
-        self.task_pkls_rerun = {}
+        self.job_pkls_rerun = {}
         self.default_qsub_args = default_qsub_args
         self.max_mem_free = max_mem_free
 
@@ -450,8 +446,8 @@ class SGEWorker(DistributedWorker):
         else:
             copyfile(job[1], script_dir / "_task.pklz")
 
-        task_pkl = script_dir / "_task.pklz"
-        if not task_pkl.exists() or not task_pkl.stat().st_size:
+        job_pkl = script_dir / "_task.pklz"
+        if not job_pkl.exists() or not job_pkl.stat().st_size:
             raise Exception("Missing or empty job!")
 
         batchscript = script_dir / f"batchscript_{uid}.job"
@@ -459,13 +455,13 @@ class SGEWorker(DistributedWorker):
         if task_qsub_args not in self.tasks_to_run_by_threads_requested:
             self.tasks_to_run_by_threads_requested[task_qsub_args] = []
         self.tasks_to_run_by_threads_requested[task_qsub_args].append(
-            (str(task_pkl), ind, rerun)
+            (str(job_pkl), ind, rerun)
         )
 
         return (
             script_dir,
             batchscript,
-            task_pkl,
+            job_pkl,
             ind,
             job.output_dir,
             task_qsub_args,
@@ -500,7 +496,7 @@ class SGEWorker(DistributedWorker):
         (
             script_dir,
             batch_script,
-            task_pkl,
+            job_pkl,
             ind,
             output_dir,
             task_qsub_args,
@@ -546,10 +542,10 @@ class SGEWorker(DistributedWorker):
                     await asyncio.sleep(self.poll_delay)
             self.threads_used += threads_requested * len(tasks_to_run)
 
-            python_string = f"""import sys; from pydra.engine.helpers import load_and_run; \
-                task_pkls={[task_tuple for task_tuple in tasks_to_run]}; \
+            python_string = f"""import sys; from pydra.utils.general import load_and_run; \
+                job_pkls={[task_tuple for task_tuple in tasks_to_run]}; \
                 task_index=int(sys.argv[1])-1; \
-                load_and_run(task_pkls[task_index][0], rerun=task_pkls[task_index][1])"""
+                load_and_run(job_pkls[task_index][0], rerun=job_pkls[task_index][1])"""
             bcmd_job = "\n".join(
                 (
                     f"#!{interpreter}",
@@ -605,8 +601,8 @@ class SGEWorker(DistributedWorker):
 
             if self.poll_for_result_file:
                 self.result_files_by_jobid[jobid] = {}
-                for task_pkl, ind, rerun in tasks_to_run:
-                    job = load_task(task_pkl=task_pkl, ind=ind)
+                for job_pkl, ind, rerun in tasks_to_run:
+                    job = load_job(job_pkl=job_pkl, ind=ind)
                     self.result_files_by_jobid[jobid][job] = (
                         job.output_dir / "_result.pklz"
                     )
@@ -637,9 +633,9 @@ class SGEWorker(DistributedWorker):
                                 jobid,
                             )
                         else:
-                            for task_pkl, ind, rerun in tasks_to_run:
-                                if task_pkl in self.task_pkls_rerun:
-                                    del self.task_pkls_rerun[task_pkl]
+                            for job_pkl, ind, rerun in tasks_to_run:
+                                if job_pkl in self.job_pkls_rerun:
+                                    del self.job_pkls_rerun[job_pkl]
                             return True
 
                     if poll_counter >= self.polls_before_checking_evicted:
@@ -681,15 +677,15 @@ class SGEWorker(DistributedWorker):
     async def _rerun_job_array(
         self, cache_dir, uid, sargs, tasks_to_run, error_file, evicted_jobid
     ):
-        for task_pkl, ind, rerun in tasks_to_run:
-            sge_task = load_task(task_pkl=task_pkl, ind=ind)
-            application_task_pkl = sge_task.output_dir / "_task.pklz"
+        for job_pkl, ind, rerun in tasks_to_run:
+            sge_task = load_job(job_pkl=job_pkl, ind=ind)
+            application_job_pkl = sge_task.output_dir / "_task.pklz"
             if (
-                not application_task_pkl.exists()
-                or load_task(task_pkl=application_task_pkl).result() is None
-                or load_task(task_pkl=application_task_pkl).result().errored
+                not application_job_pkl.exists()
+                or load_job(job_pkl=application_job_pkl).result() is None
+                or load_job(job_pkl=application_job_pkl).result().errored
             ):
-                self.task_pkls_rerun[task_pkl] = None
+                self.job_pkls_rerun[job_pkl] = None
                 info_file = cache_dir / f"{sge_task.uid}_info.json"
                 if info_file.exists():
                     checksum = json.loads(info_file.read_text())["checksum"]
@@ -728,18 +724,18 @@ class SGEWorker(DistributedWorker):
         jobid = jobid.group()
         self.output_by_jobid[jobid] = (rc, stdout, stderr)
 
-        for task_pkl, ind, rerun in tasks_to_run:
-            self.jobid_by_task_uid[Path(task_pkl).parent.name] = jobid
+        for job_pkl, ind, rerun in tasks_to_run:
+            self.jobid_by_task_uid[Path(job_pkl).parent.name] = jobid
 
         if error_file:
             error_file = str(error_file).replace("%j", jobid)
         self.error[jobid] = str(error_file).replace("%j", jobid)
         return jobid
 
-    async def get_output_by_task_pkl(self, task_pkl):
-        jobid = self.jobid_by_task_uid.get(task_pkl.parent.name)
+    async def get_output_by_job_pkl(self, job_pkl):
+        jobid = self.jobid_by_task_uid.get(job_pkl.parent.name)
         while jobid is None:
-            jobid = self.jobid_by_task_uid.get(task_pkl.parent.name)
+            jobid = self.jobid_by_task_uid.get(job_pkl.parent.name)
             await asyncio.sleep(1)
         job_output = self.output_by_jobid.get(jobid)
         while job_output is None:
@@ -753,7 +749,7 @@ class SGEWorker(DistributedWorker):
         name,
         uid,
         cache_dir,
-        task_pkl,
+        job_pkl,
         ind,
         output_dir,
         task_qsub_args,
@@ -770,13 +766,13 @@ class SGEWorker(DistributedWorker):
         if self.poll_for_result_file:
             while True:
                 result_file = output_dir / "_result.pklz"
-                if result_file.exists() and str(task_pkl) not in self.task_pkls_rerun:
+                if result_file.exists() and str(job_pkl) not in self.job_pkls_rerun:
                     return True
                 await asyncio.sleep(self.poll_delay)
         else:
-            rc, stdout, stderr = await self.get_output_by_task_pkl(task_pkl)
+            rc, stdout, stderr = await self.get_output_by_job_pkl(job_pkl)
             while True:
-                jobid = self.jobid_by_task_uid.get(task_pkl.parent.name)
+                jobid = self.jobid_by_task_uid.get(job_pkl.parent.name)
                 if self.job_completed_by_jobid.get(jobid):
                     return True
                 else:
@@ -992,3 +988,135 @@ WORKERS = {
         PsijSlurmWorker,
     )
 }
+
+
+async def read_stream_and_display(stream, display):
+    """
+    Read from stream line by line until EOF, display, and capture the lines.
+
+    See Also
+    --------
+    This `discussion on StackOverflow
+    <https://stackoverflow.com/questions/17190221>`__.
+
+    """
+    output = []
+    while True:
+        line = await stream.readline()
+        if not line:
+            break
+        output.append(line)
+        if display is not None:
+            display(line)  # assume it doesn't block
+    return b"".join(output).decode()
+
+
+async def read_and_display_async(*cmd, hide_display=False, strip=False):
+    """
+    Capture standard input and output of a process, displaying them as they arrive.
+
+    Works line-by-line.
+
+    """
+    # start process
+    process = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asp.PIPE, stderr=asp.PIPE
+    )
+
+    stdout_display = sys.stdout.buffer.write if not hide_display else None
+    stderr_display = sys.stderr.buffer.write if not hide_display else None
+    # read child's stdout/stderr concurrently (capture and display)
+    try:
+        stdout, stderr = await asyncio.gather(
+            read_stream_and_display(process.stdout, stdout_display),
+            read_stream_and_display(process.stderr, stderr_display),
+        )
+    except Exception:
+        process.kill()
+        raise
+    finally:
+        # wait for the process to exit
+        rc = await process.wait()
+    if strip:
+        return rc, stdout.strip(), stderr
+    else:
+        return rc, stdout, stderr
+
+
+def read_and_display(*cmd, strip=False, hide_display=False):
+    """Capture a process' standard output."""
+    try:
+        process = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+    except Exception:
+        # TODO editing some tracing?
+        raise
+
+    if strip:
+        return (
+            process.returncode,
+            process.stdout.decode("utf-8").strip(),
+            process.stderr.decode("utf-8"),
+        )
+    else:
+        return (
+            process.returncode,
+            process.stdout.decode("utf-8"),
+            process.stderr.decode("utf-8"),
+        )
+
+
+def execute(cmd, strip=False):
+    """
+    Run the event loop with coroutine.
+
+    Uses :func:`read_and_display_async` unless a loop is
+    already running, in which case :func:`read_and_display`
+    is used.
+
+    Parameters
+    ----------
+    cmd : :obj:`list` or :obj:`tuple`
+        The command line to be executed.
+    strip : :obj:`bool`
+        TODO
+
+    """
+    rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+    """
+    loop = get_open_loop()
+    if loop.is_running():
+        rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+    else:
+        rc, stdout, stderr = loop.run_until_complete(
+            read_and_display_async(*cmd, strip=strip)
+        )
+    """
+    return rc, stdout, stderr
+
+
+def get_available_cpus():
+    """
+    Return the number of CPUs available to the current process or, if that is not
+    available, the total number of CPUs on the system.
+
+    Returns
+    -------
+    n_proc : :obj:`int`
+        The number of available CPUs.
+    """
+    # Will not work on some systems or if psutil is not installed.
+    # See https://psutil.readthedocs.io/en/latest/#psutil.Process.cpu_affinity
+    try:
+        import psutil
+
+        return len(psutil.Process().cpu_affinity())
+    except (AttributeError, ImportError, NotImplementedError):
+        pass
+
+    # Not available on all systems, including macOS.
+    # See https://docs.python.org/3/library/os.html#os.sched_getaffinity
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+
+    # Last resort
+    return os.cpu_count()

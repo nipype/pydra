@@ -1,11 +1,11 @@
 import typing as ty
 import os
 from copy import copy
-from pydra.engine.helpers import execute
+from pydra.utils.general import execute
 from pathlib import Path
 import logging
 from fileformats.generic import FileSet
-from pydra.engine.helpers import list_fields
+from pydra.utils.general import list_fields
 from pydra.utils.typing import TypeParser
 
 logger = logging.getLogger("pydra")
@@ -114,7 +114,7 @@ class Container(Environment):
         bindings: dict
           Mapping from paths in the host environment to the target environment
         """
-        from pydra.design import shell
+        from pydra.compose import shell
 
         bindings: dict[str, tuple[str, str]] = {}
         value_updates: dict[str, tuple[Path, ...]] = {}

@@ -1,6 +1,6 @@
 import json
 from fileformats.application import Json
-from pydra.design import python
+from pydra.compose import python
 
 
 @python.define

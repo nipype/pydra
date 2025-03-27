@@ -3,9 +3,9 @@ import typing as ty
 from decimal import Decimal
 import attrs
 import pytest
-from pydra.engine.helpers import list_fields
+from pydra.utils.general import list_fields
 from pydra.engine.specs import PythonTask, PythonOutputs
-from pydra.design import python
+from pydra.compose import python
 
 
 sort_key = attrgetter("name")

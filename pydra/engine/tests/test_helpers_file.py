@@ -6,9 +6,9 @@ from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
 from pydra.engine.specs import ShellTask, ShellOutputs
-from pydra.design import shell
-from pydra.engine.helpers import list_fields
-from pydra.engine.helpers_file import (
+from pydra.compose import shell
+from pydra.utils.general import list_fields
+from pydra.utils.files import (
     ensure_list,
     MountIndentifier,
     copy_nested_files,

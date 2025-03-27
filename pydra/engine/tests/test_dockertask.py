@@ -3,8 +3,8 @@ import pytest
 from pydra.engine.submitter import Submitter
 from pydra.engine.specs import ShellTask, ShellOutputs
 from fileformats.generic import File
-from pydra.engine.environments import Docker
-from pydra.design import shell, workflow
+from pydra.environments.docker import Docker
+from pydra.compose import shell, workflow
 from pydra.engine.core import Job
 from .utils import no_win, need_docker, run_submitter, run_no_submitter
 

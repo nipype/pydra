@@ -4,7 +4,7 @@ import os
 import typing as ty
 import json
 from pydra.utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
-from pydra.engine.helpers import attrs_values
+from pydra.utils.general import attrs_values
 from fileformats.core import FileSet
 from pydra.utils.hash import hash_function
 
@@ -38,7 +38,7 @@ class Audit:
             If True, the local context.jsonld file is used, otherwise the one from github is used.
 
         """
-        from pydra.engine.helpers import ensure_list
+        from pydra.utils.general import ensure_list
 
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
@@ -97,7 +97,7 @@ class Audit:
     def finalize_audit(self, result):
         """End auditing."""
         if self.audit_check(AuditFlag.RESOURCE):
-            from pydra.engine.helpers import gather_runtime_info
+            from pydra.utils.general import gather_runtime_info
 
             self.resource_monitor.stop()
             result.runtime = gather_runtime_info(self.resource_monitor.fname)
@@ -184,7 +184,7 @@ class Audit:
 
     def audit_task(self, job: "Job"):
         import subprocess as sp
-        from pydra.engine.helpers import list_fields
+        from pydra.utils.general import list_fields
 
         label = job.name
 

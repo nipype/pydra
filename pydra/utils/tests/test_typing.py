@@ -7,10 +7,10 @@ import tempfile
 import traceback
 from unittest.mock import Mock
 import pytest
-from pydra.design import python
+from pydra.compose import python
 from fileformats.generic import File
 from pydra.engine.lazy import LazyOutField
-from pydra.design import workflow
+from pydra.compose import workflow
 from pydra.utils.typing import TypeParser, MultiInputObj
 from fileformats.application import Json, Yaml, Xml
 from .utils import (

@@ -2,7 +2,7 @@ from fileformats.generic import File, BinaryFile
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
 from pydra.engine.specs import ShellTask
 from pydra.engine import specs
-from pydra.design import shell, python
+from pydra.compose import shell, python
 
 
 class MyFormat(WithMagicNumber, BinaryFile):

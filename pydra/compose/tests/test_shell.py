@@ -4,8 +4,8 @@ from pathlib import Path
 import attrs
 import pytest
 import cloudpickle as cp
-from pydra.design import shell
-from pydra.engine.helpers import list_fields
+from pydra.compose import shell
+from pydra.utils.general import list_fields
 from pydra.engine.specs import (
     ShellTask,
     ShellOutputs,

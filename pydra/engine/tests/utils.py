@@ -9,13 +9,13 @@ import operator
 import subprocess as sp
 import pytest
 from fileformats.generic import File
-from pydra.engine.helpers import list_fields
+from pydra.utils.general import list_fields
 from pydra.engine.specs import ShellTask
 from pydra.engine.submitter import Submitter
-from pydra.design import workflow, python
+from pydra.compose import workflow, python
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.environments import Environment
+    from pydra.environments.base import Environment
 
 
 need_docker = pytest.mark.skipif(

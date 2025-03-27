@@ -217,7 +217,7 @@ class TypeParser(ty.Generic[T]):
             if the coercion is not possible, or not specified by the
             `coercible`/`not_coercible` parameters, then a TypeError is raised
         """
-        from pydra.engine.helpers import is_lazy
+        from pydra.utils.general import is_lazy
 
         coerced: T
         if obj is attrs.NOTHING:

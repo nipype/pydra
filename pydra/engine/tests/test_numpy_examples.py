@@ -7,7 +7,7 @@ import pytest
 
 
 from pydra.engine.submitter import Submitter
-from pydra.design import python, workflow
+from pydra.compose import python, workflow
 from .utils import Identity
 from pydra.utils.hash import hash_function
 

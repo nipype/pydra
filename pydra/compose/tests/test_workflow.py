@@ -5,8 +5,8 @@ import pytest
 import attrs
 from pydra.engine.lazy import LazyInField, LazyOutField
 import typing as ty
-from pydra.design import shell, python, workflow
-from pydra.engine.helpers import list_fields
+from pydra.compose import shell, python, workflow
+from pydra.utils.general import list_fields
 from pydra.engine.specs import WorkflowTask, WorkflowOutputs
 from pydra.engine.core import Workflow
 from pydra.utils.hash import hash_function
