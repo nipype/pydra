@@ -7,6 +7,7 @@ import typing as ty
 import re
 import attrs
 import ast
+import importlib
 import types
 import sysconfig
 import platformdirs
@@ -445,3 +446,32 @@ def is_workflow(obj):
     from pydra.engine.workflow import Workflow
 
     return isinstance(obj, (Task, Workflow))
+
+
+def get_plugin_classes(namespace: ty.ModuleType, class_name: str) -> dict[str, type]:
+    """
+    Get all classes within sub-packages of namespace package with a given name, e.g.
+    "Worker" within "pydra.workers.*" sub-packages.
+
+    Parameters
+    ----------
+    namespace : :obj:`str`
+        The namespace to search for subclasses.
+    base_class : :obj:`type`
+        The base class to search for subclasses of.
+
+    Returns
+    -------
+    :obj:`dict[str, type]`
+        A dictionary mapping the sub-package name to classes of 'class_name' within
+        the namespace package
+    """
+    sub_packages = [
+        importlib.import_module(f"{namespace.__name__}.{m.name}")
+        for m in pkgutil.iter_modules(namespace.__path__)
+    ]
+    return {
+        class_name: getattr(pkg, class_name)
+        for pkg in sub_packages
+        if hasattr(pkg, class_name)
+    }
