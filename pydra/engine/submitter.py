@@ -111,7 +111,7 @@ class Submitter:
         if worker is None:
             worker = "debug"
 
-        from pydra.engine import check_latest_version
+        from pydra.utils.etelemetry import check_latest_version
 
         if Job._etelemetry_version_data is None:
             Job._etelemetry_version_data = check_latest_version()

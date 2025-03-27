@@ -18,7 +18,6 @@ from pydra.utils.general import (
     attrs_fields,
     attrs_values,
 )
-from pydra.engine import lazy
 from pydra.utils.hash import Cache, hash_single, register_serializer
 from .field import Field, Arg, Out
 
@@ -295,6 +294,7 @@ class Task(ty.Generic[OutputsType]):
             a reference to the job
         """
         from pydra.engine.state import unwrap_splitter
+        from pydra.engine import lazy
 
         if self._splitter and not overwrite:
             raise ValueError(

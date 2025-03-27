@@ -1,25 +1,6 @@
 """The core of the workflow engine."""
 
-import __main__
-import logging
-
-__all__ = [
-    "logger",
-    "check_latest_version",
-]
-
-logger = logging.getLogger("pydra")
+from .submitter import Submitter
 
 
-def check_latest_version():
-    import etelemetry
-
-    return etelemetry.check_available_version("nipype/pydra", __version__, lgr=logger)
-
-
-# Run telemetry on import for interactive sessions, such as IPython, Jupyter notebooks, Python REPL
-# if not hasattr(__main__, "__file__"):
-#     from pydra.compose.base import Task
-
-#     if Task._etelemetry_version_data is None:
-#         Task._etelemetry_version_data = check_latest_version()
+__all__ = ["Submitter"]
