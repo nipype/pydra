@@ -17,10 +17,8 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
 
 
-class Worker(base.DistributedWorker):
+class Worker(base.Worker):
     """A worker to execute tasks on SLURM systems."""
-
-    plugin_name = "sge"
 
     _cmd = "qsub"
     _sacct_re = re.compile(
@@ -30,7 +28,6 @@ class Worker(base.DistributedWorker):
     def __init__(
         self,
         loop=None,
-        max_jobs=None,
         poll_delay=1,
         qsub_args=None,
         write_output_files=True,
@@ -75,7 +72,7 @@ class Worker(base.DistributedWorker):
             Number of seconds to wait for the list of jobs for a job array to fill
 
         """
-        super().__init__(loop=loop, max_jobs=max_jobs)
+        super().__init__(loop=loop)
         if not poll_delay or poll_delay < 0:
             poll_delay = 0
         self.poll_delay = poll_delay

@@ -330,7 +330,9 @@ def test_singularity_st_2(tmp_path, n):
     Singu = shell.define("echo")
     singu = Singu().split("args", args=args_n)
     with Submitter(
-        worker="slurm", environment=Singularity(image=image), cache_dir=tmp_path
+        worker="slurm",
+        environment=singularity.Environment(image=image),
+        cache_dir=tmp_path,
     ) as sub:
         res = sub(singu)
 

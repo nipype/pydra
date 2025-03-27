@@ -13,8 +13,6 @@ logger = logging.getLogger("pydra.worker")
 class Worker(base.Worker):
     """A worker to execute linearly."""
 
-    plugin_name: str = "debug"
-
     def __init__(self, **kwargs):
         """Initialize worker."""
         logger.debug("Initialize SerialWorker")

@@ -16,8 +16,6 @@ if ty.TYPE_CHECKING:
 class Worker(base.Worker):
     """A worker to execute in parallel using Python's concurrent futures."""
 
-    plugin_name = "cf"
-
     n_procs: int
     loop: asyncio.AbstractEventLoop
     pool: cf.ProcessPoolExecutor
@@ -30,6 +28,18 @@ class Worker(base.Worker):
         self.pool = cf.ProcessPoolExecutor(self.n_procs)
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
+
+    def __getstate__(self):
+        """Return state for pickling."""
+        state = super().__getstate__()
+        state["n_procs"] = self.n_procs
+        return state
+
+    def __setstate__(self, state):
+        """Set state for unpickling."""
+        self.n_procs = state["n_procs"]
+        self.pool = cf.ProcessPoolExecutor(self.n_procs)
+        super().__setstate__(state)
 
     async def run(
         self,

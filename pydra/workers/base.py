@@ -31,6 +31,12 @@ class Worker(metaclass=abc.ABCMeta):
         logger.debug(f"Initializing {self.__class__.__name__}")
         self.loop = loop
 
+    def __getstate__(self):
+        """Return state for pickling."""
+        state = super().__getstate__()
+        state["loop"] = None
+        return state
+
     @abc.abstractmethod
     def run(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
         """Return coroutine for job execution."""
@@ -88,25 +94,30 @@ class Worker(metaclass=abc.ABCMeta):
         return pending, done
 
     @classmethod
-    def available(cls) -> ty.Dict[str, ty.Type["Worker"]]:
+    def available_plugins(cls) -> ty.Dict[str, ty.Type["Worker"]]:
         """Return all installed worker types"""
-        return get_plugin_classes(pydra.workers, Worker)
+        return get_plugin_classes(pydra.workers, "Worker")
 
     @classmethod
-    def resolve_subtype(cls, plugin_name: str) -> ty.Type["Worker"]:
+    def plugin(cls, plugin_name: str) -> ty.Type["Worker"]:
         """Return a worker class by name."""
-        return cls.available()[plugin_name]
+        return cls.available_plugins()[plugin_name.replace("-", "_")]
 
-
-class DistributedWorker(Worker):
-    """Base Worker for distributed execution."""
-
-    def __init__(self, loop=None, max_jobs=None):
-        """Initialize the worker."""
-        super().__init__(loop=loop)
-        self.max_jobs = max_jobs
-        """Maximum number of concurrently running jobs."""
-        self._jobs = 0
+    @classmethod
+    def plugin_name(cls) -> str:
+        """Return the name of the plugin."""
+        try:
+            plugin_name = cls._plugin_name
+        except AttributeError:
+            parts = cls.__module__.split(".")
+            if parts[:-1] != ["pydra", "workers"]:
+                raise ValueError(
+                    f"Cannot infer plugin name of Worker ({cls}) from module path, as it "
+                    f"isn't installed within `pydra.workers` ({cls.__module__}). "
+                    "Please set the `_plugin_name` attribute on the class explicitly."
+                )
+            plugin_name = parts[-1]
+        return plugin_name.replace("_", "-")
 
 
 async def read_and_display_async(*cmd, hide_display=False, strip=False):

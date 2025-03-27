@@ -14,8 +14,6 @@ class Worker(base.Worker):
     This is an experimental implementation with limited testing.
     """
 
-    plugin_name = "dask"
-
     def __init__(self, **kwargs):
         """Initialize Worker."""
         super().__init__()
@@ -24,7 +22,6 @@ class Worker(base.Worker):
         except ImportError:
             logger.critical("Please instiall Dask distributed.")
             raise
-        self.client = None
         self.client_args = kwargs
         logger.debug("Initialize Dask")
 

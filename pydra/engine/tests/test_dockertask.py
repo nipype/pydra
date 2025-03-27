@@ -2,7 +2,7 @@ import attrs
 import pytest
 from pydra.engine.submitter import Submitter
 from fileformats.generic import File
-from pydra.environments.docker import Docker
+from pydra.environments import docker
 from pydra.compose import shell, workflow
 from pydra.engine.job import Job
 from .utils import no_win, need_docker, run_submitter, run_no_submitter
@@ -20,11 +20,13 @@ def test_docker_1_nosubm(tmp_path):
     docky_task = Job(
         task=docky,
         name="docky",
-        submitter=Submitter(environment=Docker(image="busybox"), cache_dir=tmp_path),
+        submitter=Submitter(
+            environment=docker.Environment(image="busybox"), cache_dir=tmp_path
+        ),
     )
     assert docky_task.environment.image == "busybox"
     assert docky_task.environment.tag == "latest"
-    assert isinstance(docky_task.environment, Docker)
+    assert isinstance(docky_task.environment, docker.Environment)
     assert docky.cmdline == cmd
 
     res = docky_task.run()
@@ -42,7 +44,9 @@ def test_docker_1(worker, tmp_path):
     Docky = shell.define(cmd)
     docky = Docky()
 
-    with Submitter(cache_dir=tmp_path, environment=Docker(image="busybox")) as sub:
+    with Submitter(
+        cache_dir=tmp_path, environment=docker.Environment(image="busybox")
+    ) as sub:
         res = sub(docky)
 
     assert res.outputs.stdout == "root\n"
@@ -61,7 +65,9 @@ def test_docker_2(run_function, worker, tmp_path):
     docky = Docky()
     # cmdline doesn't know anything about docker
     assert docky.cmdline == cmdline
-    outputs = run_function(docky, tmp_path, worker, environment=Docker(image="busybox"))
+    outputs = run_function(
+        docky, tmp_path, worker, environment=docker.Environment(image="busybox")
+    )
     assert outputs.stdout.strip() == " ".join(cmdline.split()[1:])
     assert outputs.return_code == 0
 
@@ -80,7 +86,9 @@ def test_docker_2a(run_function, worker, tmp_path):
     assert docky.executable == cmd
     assert docky.cmdline == " ".join(cmd)
 
-    outputs = run_function(docky, tmp_path, worker, environment=Docker(image="busybox"))
+    outputs = run_function(
+        docky, tmp_path, worker, environment=docker.Environment(image="busybox")
+    )
     assert outputs.stdout.strip() == " ".join(cmd[1:])
     assert outputs.return_code == 0
 
@@ -99,7 +107,9 @@ def test_docker_st_1(run_function, worker, tmp_path):
     Docky = shell.define("docky")  # cmd is just a placeholder
     docky = Docky().split(executable=cmd)
 
-    outputs = run_function(docky, tmp_path, worker, environment=Docker(image="busybox"))
+    outputs = run_function(
+        docky, tmp_path, worker, environment=docker.Environment(image="busybox")
+    )
     assert (
         outputs.stdout[0]
         == f"/mnt/pydra{tmp_path}/{attrs.evolve(docky, executable=cmd[0])._checksum}\n"
@@ -121,7 +131,7 @@ def test_docker_outputspec_1(worker, tmp_path):
     Docky = shell.define("touch <out|newfile$newfile_tmp.txt>")
     docky = Docky()
 
-    outputs = docky(worker=worker, environment=Docker(image="ubuntu"))
+    outputs = docky(worker=worker, environment=docker.Environment(image="ubuntu"))
     assert outputs.stdout == ""
 
 
@@ -154,7 +164,9 @@ def test_docker_inputspec_1(tmp_path, worker):
     docky = Docky(file=filename)
 
     outputs = docky(
-        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
+        cache_dir=tmp_path,
+        worker=worker,
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout.strip() == "hello from pydra"
 
@@ -187,7 +199,7 @@ def test_docker_inputspec_1a(tmp_path):
 
     docky = Docky()
 
-    outputs = docky(cache_dir=tmp_path, environment=Docker(image="busybox"))
+    outputs = docky(cache_dir=tmp_path, environment=docker.Environment(image="busybox"))
     assert outputs.stdout.strip() == "hello from pydra"
 
 
@@ -231,7 +243,7 @@ def test_docker_inputspec_2(worker, tmp_path):
 
     outputs = docky(
         name="docky",
-        environment=Docker(image="busybox"),
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
@@ -278,7 +290,9 @@ def test_docker_inputspec_2a_except(worker, tmp_path):
     assert docky.file2.fspath == filename_2
 
     outputs = docky(
-        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
+        cache_dir=tmp_path,
+        worker=worker,
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
@@ -323,7 +337,9 @@ def test_docker_inputspec_2a(worker, tmp_path):
     docky = Docky(file2=filename_2)
 
     outputs = docky(
-        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
+        cache_dir=tmp_path,
+        worker=worker,
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
@@ -350,7 +366,7 @@ def test_docker_inputspec_3(worker, tmp_path):
     ]
 
     docky = shell.define(cmd, inputs=inputs)(
-        environment=Docker(image="busybox"),
+        environment=docker.Environment(image="busybox"),
         file=filename,
         strip=True,
     )
@@ -391,7 +407,9 @@ def test_docker_cmd_inputspec_copyfile_1(worker, tmp_path):
     docky = Docky(orig_file=str(file))
 
     outputs = docky(
-        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
+        cache_dir=tmp_path,
+        worker=worker,
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout == ""
     out_file = outputs.out_file.fspath
@@ -436,7 +454,9 @@ def test_docker_inputspec_state_1(worker, tmp_path):
     docky = Docky().split(file=[str(filename_1), str(filename_2)])
 
     outputs = docky(
-        worker=worker, cache_dir=tmp_path, environment=Docker(image="busybox")
+        worker=worker,
+        cache_dir=tmp_path,
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
@@ -473,7 +493,9 @@ def test_docker_inputspec_state_1b(worker, tmp_path):
     docky = Docky().split(file=[str(file_1), str(file_2)])
 
     outputs = docky(
-        cache_dir=tmp_path, worker=worker, environment=Docker(image="busybox")
+        cache_dir=tmp_path,
+        worker=worker,
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
@@ -507,7 +529,7 @@ def test_docker_wf_inputspec_1(worker, tmp_path):
 
         docky = workflow.add(
             Docky(file=file),
-            environment=Docker(image="busybox"),
+            environment=docker.Environment(image="busybox"),
         )
 
         return docky.stdout
@@ -549,7 +571,7 @@ def test_docker_wf_state_inputspec_1(worker, tmp_path):
 
         docky = workflow.add(
             Docky(file=file),
-            environment=Docker(image="busybox"),
+            environment=docker.Environment(image="busybox"),
         )
 
         return docky.stdout
@@ -593,7 +615,7 @@ def test_docker_wf_ndst_inputspec_1(worker, tmp_path):
 
         docky = workflow.add(
             Docky(file=file),
-            environment=Docker(image="busybox"),
+            environment=docker.Environment(image="busybox"),
         )
 
         return docky.stdout

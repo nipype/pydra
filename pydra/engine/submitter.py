@@ -11,7 +11,7 @@ from copy import copy, deepcopy
 from datetime import datetime
 from collections import defaultdict
 import attrs
-from pydra.workers.base import Worker, WORKERS
+import logging
 from pydra.engine.graph import DiGraph
 from pydra.utils.general import (
     task_fields,
@@ -25,7 +25,8 @@ from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_dir
 from pydra.compose import workflow
 from pydra.engine.state import State
-import logging
+from pydra.workers.base import Worker
+
 
 logger = logging.getLogger("pydra.submitter")
 
@@ -143,24 +144,16 @@ class Submitter:
         self._own_loop = not self.loop.is_running()
         if isinstance(worker, Worker):
             self._worker = worker
-            self.worker_name = worker.plugin_name
         else:
-            if isinstance(worker, str):
-                self.worker_name = worker
-                try:
-                    worker_cls = WORKERS[self.worker_name]
-                except KeyError:
-                    raise NotImplementedError(
-                        f"No worker for '{self.worker_name}' worker"
-                    )
-            else:
-                try:
-                    self.worker_name = worker.plugin_name
-                except AttributeError:
-                    raise ValueError(
-                        "Worker class must have a 'plugin_name' str attribute"
-                    )
+            if issubclass(worker, Worker):
                 worker_cls = worker
+            elif isinstance(worker, str):
+                worker_cls = Worker.plugin(worker)
+            else:
+                raise TypeError(
+                    "Worker must be a Worker object, name of a worker or a Worker "
+                    f"class, not {type(worker)}"
+                )
             try:
                 self._worker = worker_cls(**kwargs)
             except TypeError as e:
@@ -170,7 +163,7 @@ class Submitter:
         self.clean_stale_locks = (
             clean_stale_locks
             if clean_stale_locks is not None
-            else (self.worker_name == "debug")
+            else (self.worker.plugin_name() == "debug")
         )
         self.worker_kwargs = kwargs
         self._worker.loop = self.loop
@@ -216,7 +209,7 @@ class Submitter:
         from pydra.environments.base import Environment
 
         if raise_errors is None:
-            raise_errors = self.worker_name == "debug"
+            raise_errors = self.worker.plugin_name() == "debug"
         if not isinstance(raise_errors, bool):
             raise TypeError(
                 f"'raise_errors' must be a boolean or None, not {type(raise_errors)}"
@@ -317,14 +310,12 @@ class Submitter:
         # Remove the unpicklable entries or those that should not be pickled
         # When unpickled (in another process) the submitter can't be called
         state["loop"] = None
-        state["_worker"] = None
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
         # Restore the loop and worker
         self.loop = get_open_loop()
-        self._worker = WORKERS[self.worker_name](**self.worker_kwargs)
         self.worker.loop = self.loop
 
     def expand_workflow(self, workflow_task: "Job[workflow.Task]", rerun: bool) -> None:

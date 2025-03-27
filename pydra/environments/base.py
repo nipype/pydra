@@ -6,8 +6,9 @@ from pathlib import Path
 import logging
 from fileformats.generic import FileSet
 from pydra.compose import shell
-from pydra.utils.general import task_fields
+from pydra.utils.general import task_fields, get_plugin_classes
 from pydra.utils.typing import TypeParser
+import pydra.environments
 
 logger = logging.getLogger("pydra")
 
@@ -45,25 +46,31 @@ class Environment:
     def teardown(self):
         pass
 
+    @classmethod
+    def available_plugins(cls) -> ty.Dict[str, ty.Type["Environment"]]:
+        """Return all installed worker types"""
+        return get_plugin_classes(pydra.environments, "Environment")
 
-class Native(Environment):
-    """
-    Native environment, i.e. the tasks are executed in the current python environment.
-    """
+    @classmethod
+    def plugin(cls, plugin_name: str) -> ty.Type["Environment"]:
+        """Return a worker class by name."""
+        return cls.available_plugins()[plugin_name.replace("-", "_")]
 
-    def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
-        keys = ["return_code", "stdout", "stderr"]
-        cmd_args = job.task._command_args(values=job.inputs)
-        values = execute(cmd_args)
-        output = dict(zip(keys, values))
-        if output["return_code"]:
-            msg = f"Error running '{job.name}' job with {cmd_args}:"
-            if output["stderr"]:
-                msg += "\n\nstderr:\n" + output["stderr"]
-            if output["stdout"]:
-                msg += "\n\nstdout:\n" + output["stdout"]
-            raise RuntimeError(msg)
-        return output
+    @classmethod
+    def plugin_name(cls) -> str:
+        """Return the name of the plugin."""
+        try:
+            plugin_name = cls._plugin_name
+        except AttributeError:
+            parts = cls.__module__.split(".")
+            if parts[:-1] != ["pydra", "environments"]:
+                raise ValueError(
+                    f"Cannot infer plugin name of Environment (({cls}) from module path, "
+                    f"as it isn't installed within `pydra.environments` ({cls.__module__}). "
+                    "Please set the `_plugin_name` attribute on the class explicitly."
+                )
+            plugin_name = parts[-1]
+        return plugin_name.replace("_", "-")
 
 
 class Container(Environment):
@@ -179,79 +186,6 @@ class Container(Environment):
         values.update(value_updates)
 
         return bindings, values
-
-
-class Docker(Container):
-    """Docker environment."""
-
-    def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
-        docker_img = f"{self.image}:{self.tag}"
-        # mounting all input locations
-        mounts, values = self.get_bindings(job=job, root=self.root)
-
-        docker_args = [
-            "docker",
-            "run",
-            *self.xargs,
-        ]
-        docker_args.extend(
-            " ".join(
-                [f"-v {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
-            ).split()
-        )
-        docker_args.extend(["-w", f"{self.root}{job.output_dir}"])
-        keys = ["return_code", "stdout", "stderr"]
-
-        job.output_dir.mkdir(exist_ok=True)
-        values = execute(
-            docker_args + [docker_img] + job.task._command_args(values=values),
-        )
-        output = dict(zip(keys, values))
-        if output["return_code"]:
-            if output["stderr"]:
-                raise RuntimeError(output["stderr"])
-            else:
-                raise RuntimeError(output["stdout"])
-        return output
-
-
-class Singularity(Container):
-    """Singularity environment."""
-
-    def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
-        singularity_img = f"{self.image}:{self.tag}"
-        # mounting all input locations
-        mounts, values = self.get_bindings(job=job, root=self.root)
-
-        # todo adding xargsy etc
-        singularity_args = [
-            "singularity",
-            "exec",
-            *self.xargs,
-        ]
-        singularity_args.extend(
-            " ".join(
-                [f"-B {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
-            ).split()
-        )
-        singularity_args.extend(
-            ["--pwd", f"{self.root.rstrip('/')}{job.output_dir.absolute()}"]
-        )
-        keys = ["return_code", "stdout", "stderr"]
-
-        job.output_dir.mkdir(exist_ok=True)
-        values = execute(
-            singularity_args
-            + [singularity_img]
-            + job.task._command_args(values=values),
-        )
-        output = dict(zip(keys, values))
-        if output["return_code"]:
-            if output["stderr"]:
-                raise RuntimeError(output["stderr"])
-            else:
-                raise RuntimeError(output["stdout"])
-        return output
 
 
 def execute(cmd, strip=False):
