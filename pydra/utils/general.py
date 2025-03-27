@@ -258,7 +258,7 @@ def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
     }
 
 
-def list_fields(task: "type[Task] | Task") -> list["Field"]:
+def task_fields(task: "type[Task] | Task") -> list["Field"]:
     """List the fields of a task"""
     if not inspect.isclass(task):
         task = type(task)
@@ -273,12 +273,12 @@ def list_fields(task: "type[Task] | Task") -> list["Field"]:
 
 def fields_values(obj, **kwargs) -> dict[str, ty.Any]:
     """Get the values of an attrs object."""
-    return {f.name: getattr(obj, f.name) for f in list_fields(obj)}
+    return {f.name: getattr(obj, f.name) for f in task_fields(obj)}
 
 
 def fields_dict(task: "type[Task] | Task") -> dict[str, "Field"]:
     """Returns the fields of a task in a dictionary"""
-    return {f.name: f for f in list_fields(task)}
+    return {f.name: f for f in task_fields(task)}
 
 
 def from_list_if_single(obj: ty.Any) -> ty.Any:
@@ -301,9 +301,9 @@ def print_help(defn: "Task[TaskType]") -> list[str]:
     from pydra.compose.base import NO_DEFAULT
 
     lines = [f"Help for {defn.__class__.__name__}"]
-    if list_fields(defn):
+    if task_fields(defn):
         lines += ["Input Parameters:"]
-    for f in list_fields(defn):
+    for f in task_fields(defn):
         if (defn._task_type == "python" and f.name == "function") or (
             defn._task_type == "workflow" and f.name == "constructor"
         ):
@@ -317,9 +317,9 @@ def print_help(defn: "Task[TaskType]") -> list[str]:
             name = str(f.type)
         lines += [f"- {f.name}: {name}{default}"]
     output_klass = defn.Outputs
-    if list_fields(output_klass):
+    if task_fields(output_klass):
         lines += ["Output Parameters:"]
-    for f in list_fields(output_klass):
+    for f in task_fields(output_klass):
         try:
             name = f.type.__name__
         except AttributeError:

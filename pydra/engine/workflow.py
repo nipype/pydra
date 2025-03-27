@@ -20,7 +20,7 @@ from pydra.engine.submitter import Submitter, NodeExecution
 from pydra.utils.general import (
     attrs_values,
     fields_values,
-    list_fields,
+    task_fields,
 )
 from pydra.utils.typing import is_lazy
 from pydra.environments.base import Environment
@@ -119,7 +119,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
         # Initialise the outputs of the workflow
         outputs = task.Outputs(
-            **{f.name: attrs.NOTHING for f in list_fields(task.Outputs)}
+            **{f.name: attrs.NOTHING for f in task_fields(task.Outputs)}
         )
 
         # Initialise the lzin fields
@@ -131,7 +131,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         )
         # Set lazy inputs to the workflow, need to do it after the workflow is initialised
         # so a back ref to the workflow can be set in the lazy field
-        for field in list_fields(task):
+        for field in task_fields(task):
             if field.name not in non_lazy_keys:
                 setattr(
                     lazy_spec,
@@ -174,7 +174,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         if output_lazy_fields:
             if not isinstance(output_lazy_fields, (list, tuple)):
                 output_lazy_fields = [output_lazy_fields]
-            output_fields = list_fields(task.Outputs)
+            output_fields = task_fields(task.Outputs)
             if len(output_lazy_fields) != len(output_fields):
                 raise ValueError(
                     f"Expected {len(output_fields)} outputs, got "
@@ -324,7 +324,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         # TODO: create connection is run twice
         for node in nodes:
             other_states = {}
-            for field in list_fields(node._task):
+            for field in task_fields(node._task):
                 lf = node._task[field.name]
                 if isinstance(lf, LazyOutField):
                     # adding an edge to the graph if job id expecting output from a different job

@@ -5,7 +5,7 @@ import attrs
 import pytest
 import cloudpickle as cp
 from pydra.compose import shell
-from pydra.utils.general import list_fields
+from pydra.utils.general import task_fields
 from pydra.compose.shell.task import (
     RETURN_CODE_HELP,
     STDOUT_HELP,
@@ -993,7 +993,7 @@ def list_entries(stdout):
 
 
 def sorted_fields(interface):
-    fields = list_fields(interface)
+    fields = task_fields(interface)
     length = len(fields) - 1
 
     def pos_key(out: shell.out) -> int:

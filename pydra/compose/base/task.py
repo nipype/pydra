@@ -5,7 +5,7 @@ from copy import copy
 from typing import Self
 import attrs.validators
 from pydra.utils.typing import is_optional, is_fileset_or_union
-from pydra.utils.general import list_fields
+from pydra.utils.general import task_fields
 from pydra.utils.typing import StateArray, is_lazy
 from pydra.utils.hash import hash_function
 import os
@@ -120,18 +120,18 @@ class Outputs:
     def __eq__(self, other: ty.Any) -> bool:
         """Check if two tasks are equal"""
         values = attrs.asdict(self)
-        fields = list_fields(self)
+        fields = task_fields(self)
         try:
             other_values = attrs.asdict(other)
         except AttributeError:
             return False
         try:
-            other_fields = list_fields(other)
+            other_fields = task_fields(other)
         except AttributeError:
             return False
         if fields != other_fields:
             return False
-        for field in list_fields(self):
+        for field in task_fields(self):
             if field.hash_eq:
                 values[field.name] = hash_function(values[field.name])
                 other_values[field.name] = hash_function(other_values[field.name])
@@ -141,7 +141,7 @@ class Outputs:
         """A string representation of the task"""
         fields_str = ", ".join(
             f"{f.name}={getattr(self, f.name)!r}"
-            for f in list_fields(self)
+            for f in task_fields(self)
             if getattr(self, f.name) != f.default
         )
         return f"{self.__class__.__name__}({fields_str})"
@@ -390,7 +390,7 @@ class Task(ty.Generic[OutputsType]):
         """A string representation of the task"""
         fields_str = ", ".join(
             f"{f.name}={getattr(self, f.name)!r}"
-            for f in list_fields(self)
+            for f in task_fields(self)
             if getattr(self, f.name) != f.default
         )
         return f"{self.__class__.__name__}({fields_str})"
@@ -399,7 +399,7 @@ class Task(ty.Generic[OutputsType]):
         """Iterate through all the names in the task"""
         return (
             f.name
-            for f in list_fields(self)
+            for f in task_fields(self)
             if not (f.name.startswith("_") or f.name in self.RESERVED_FIELD_NAMES)
         )
 
@@ -412,7 +412,7 @@ class Task(ty.Generic[OutputsType]):
             return False
         if set(values) != set(other_values):
             return False  # Return if attribute keys don't match
-        for field in list_fields(self):
+        for field in task_fields(self):
             if field.hash_eq:
                 values[field.name] = hash_function(values[field.name])
                 other_values[field.name] = hash_function(other_values[field.name])
@@ -467,7 +467,7 @@ class Task(ty.Generic[OutputsType]):
     def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
         """Compute a basic hash for any given set of fields."""
         inp_dict = {}
-        for field in list_fields(self):
+        for field in task_fields(self):
             if isinstance(field, Out):
                 continue  # Skip output fields
             # removing values that are not set from hash calculation
@@ -489,7 +489,7 @@ class Task(ty.Generic[OutputsType]):
 
         field: Arg
         errors = []
-        for field in list_fields(self):
+        for field in task_fields(self):
             value = self[field.name]
 
             if is_lazy(value):
@@ -606,7 +606,7 @@ class Task(ty.Generic[OutputsType]):
 @register_serializer
 def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
     yield f"task[{obj._task_type}]:(".encode()
-    for field in list_fields(obj):
+    for field in task_fields(obj):
         yield f"{field.name}=".encode()
         yield hash_single(getattr(obj, field.name), cache)
         yield b","

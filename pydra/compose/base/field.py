@@ -5,7 +5,7 @@ import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File, FileSet
 from pydra.utils.typing import TypeParser, is_optional, is_type
-from pydra.utils.general import list_fields
+from pydra.utils.general import task_fields
 import attrs
 
 if ty.TYPE_CHECKING:
@@ -65,7 +65,7 @@ class Requirement:
     def satisfied(self, inputs: "Task") -> bool:
         """Check if the requirement is satisfied by the inputs"""
         value = getattr(inputs, self.name)
-        field = {f.name: f for f in list_fields(inputs)}[self.name]
+        field = {f.name: f for f in task_fields(inputs)}[self.name]
         if value is None or field.type is bool and value is False:
             return False
         if self.allowed_values is None:

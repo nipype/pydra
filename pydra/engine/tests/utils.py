@@ -9,7 +9,7 @@ import operator
 import subprocess as sp
 import pytest
 from fileformats.generic import File
-from pydra.utils.general import list_fields
+from pydra.utils.general import task_fields
 from pydra.engine.submitter import Submitter
 from pydra.compose import workflow, python, shell
 
@@ -39,7 +39,7 @@ need_sge = pytest.mark.skipif(
 
 
 def get_output_names(task):
-    return sorted(f.name for f in list_fields(task.Outputs))
+    return sorted(f.name for f in task_fields(task.Outputs))
 
 
 def run_no_submitter(

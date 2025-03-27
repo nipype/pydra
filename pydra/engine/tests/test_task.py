@@ -13,10 +13,10 @@ from pydra.compose.shell.templating import argstr_formatting
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from pydra.engine.audit import AuditFlag
 from pydra.engine.hooks import TaskHooks
-from pydra.utils.general import list_fields, print_help
+from pydra.utils.general import task_fields, print_help
 from pydra.engine.submitter import Submitter
 from pydra.engine.job import Job
-from pydra.utils import default_run_cache_dir
+from pydra.utils.general import default_run_cache_dir
 from pydra.utils.typing import (
     MultiInputObj,
     MultiOutputObj,
@@ -76,7 +76,7 @@ def test_annotated_func():
     assert getattr(funky, "a") == 1
     assert getattr(funky, "b") == 0.1
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in list_fields(funky.Outputs)) == {"out_out"}
+    assert set(f.name for f in task_fields(funky.Outputs)) == {"out_out"}
 
     outputs = funky()
     assert hasattr(outputs, "out_out")
@@ -137,7 +137,7 @@ def test_annotated_func_multreturn():
     assert hasattr(funky, "function")
     assert getattr(funky, "a") == 3.5
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in list_fields(funky.Outputs)) == {"fractional", "integer"}
+    assert set(f.name for f in task_fields(funky.Outputs)) == {"fractional", "integer"}
 
     outputs = funky()
     assert os.path.exists(
@@ -437,7 +437,7 @@ def test_halfannotated_func(tmp_path):
     assert getattr(funky, "a") == 10
     assert getattr(funky, "b") == 20
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in list_fields(funky.Outputs)) == {"out"}
+    assert set(f.name for f in task_fields(funky.Outputs)) == {"out"}
 
     outputs = funky(cache_dir=cache_dir)
     assert hasattr(outputs, "out")
@@ -478,7 +478,7 @@ def test_halfannotated_func_multreturn(tmp_path):
     assert getattr(funky, "a") == 10
     assert getattr(funky, "b") == 20
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in list_fields(funky.Outputs)) == {"out1", "out2"}
+    assert set(f.name for f in task_fields(funky.Outputs)) == {"out1", "out2"}
 
     outputs = funky(cache_dir=cache_dir)
     assert hasattr(outputs, "out1")

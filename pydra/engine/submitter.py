@@ -14,7 +14,7 @@ import attrs
 from pydra.workers.base import Worker, WORKERS
 from pydra.engine.graph import DiGraph
 from pydra.utils.general import (
-    list_fields,
+    task_fields,
     attrs_values,
 )
 from pydra.utils.hash import PersistentCache
@@ -22,7 +22,7 @@ from pydra.engine.lazy import LazyField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils import default_run_cache_dir
+from pydra.utils.general import default_run_cache_dir
 from pydra.compose import workflow
 from pydra.engine.state import State
 import logging
@@ -239,7 +239,7 @@ class Submitter:
                 return tp
 
             output_types = {
-                o.name: wrap_type(o.type) for o in list_fields(task.Outputs)
+                o.name: wrap_type(o.type) for o in task_fields(task.Outputs)
             }
 
             @workflow.define(outputs=output_types)

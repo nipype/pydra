@@ -466,7 +466,7 @@ def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
 @register_serializer(ty._SpecialForm)
 @register_serializer(type)
 def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
-    from pydra.utils.general import list_fields
+    from pydra.utils.general import task_fields
 
     def type_location(tp: type) -> bytes:
         """Return the module and name of the type in a ASCII byte string"""
@@ -502,7 +502,7 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
                 yield b"mime-like:(" + klass.mime_like.encode() + b")"
             except fileformats.core.exceptions.FormatDefinitionError:
                 yield type_location(klass)
-        elif fields := list_fields(klass):
+        elif fields := task_fields(klass):
             yield b"fields:("
             yield from bytes_repr_sequence_contents(fields, cache)
             yield b")"

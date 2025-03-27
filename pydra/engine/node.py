@@ -114,13 +114,13 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def lzout(self) -> OutputType:
-        from pydra.utils.general import list_fields
+        from pydra.utils.general import task_fields
 
         """The output task of the node populated with lazy fields"""
         if self._lzout is not None:
             return self._lzout
         lazy_fields = {}
-        for field in list_fields(self.inputs.Outputs):
+        for field in task_fields(self.inputs.Outputs):
             lazy_fields[field.name] = lazy.LazyOutField(
                 node=self,
                 field=field.name,

@@ -24,7 +24,7 @@ from .utils import (
     MyOtherFormatX,
     MyHeader,
 )
-from pydra.utils import exc_info_matches
+from pydra.utils.general import exc_info_matches
 
 
 def exc_to_str(exc_info):

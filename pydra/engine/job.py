@@ -27,7 +27,7 @@ from pydra.engine.result import (
 from pydra.utils.general import (
     attrs_values,
     attrs_fields,
-    list_fields,
+    task_fields,
     ensure_list,
     is_workflow,
 )
@@ -250,7 +250,7 @@ class Job(ty.Generic[TaskType]):
         }
         map_copyfiles = {}
         fld: "Arg"
-        for fld in list_fields(self.task):
+        for fld in task_fields(self.task):
             name = fld.name
             value = self._inputs[name]
             if value and TypeParser.contains_type(FileSet, fld.type):
