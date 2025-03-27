@@ -8,8 +8,9 @@ from pydra.engine import node
 
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import DiGraph, NodeExecution
-    from pydra.engine.core import Job, Workflow
-    from pydra.engine.specs import Task
+    from pydra.engine.job import Job
+    from pydra.engine.workflow import Workflow
+    from pydra.compose.base import Task
 
 
 T = ty.TypeVar("T")

@@ -7,18 +7,18 @@ import typing as ty
 import pytest
 import cloudpickle as cp
 from pydra.engine.submitter import Submitter
-from pydra.engine.specs import Result
-from pydra.engine.core import Job
+from pydra.engine.result import Result
+from pydra.engine.job import Job
 from pydra.compose import workflow
 from fileformats.generic import Directory, File
 from .utils import Multiply, RaiseXeq1
-from pydra.utils.general import (
-    get_available_cpus,
+from pydra.utils.general import position_sort
+from pydra.compose.shell.templating import parse_format_string
+from pydra.engine.job import (
     save,
     load_and_run,
-    position_sort,
-    parse_format_string,
 )
+from pydra.workers.base import get_available_cpus
 from pydra.utils.hash import hash_function
 
 

@@ -1,8 +1,4 @@
-from pydra.utils.general import load_task
 from pydra.compose import python, workflow
-from pydra.engine.core import Job
-from pydra.engine.submitter import Submitter
-
 import numpy as np
 from pympler import asizeof
 from pytest import approx

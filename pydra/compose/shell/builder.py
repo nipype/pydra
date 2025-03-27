@@ -30,7 +30,7 @@ from pydra.utils.typing import (
     is_optional,
 )
 from . import field
-from .task import ShellTask, ShellOutputs
+from .task import Task, Outputs
 
 
 EXECUTABLE_HELP_STRING = (
@@ -62,7 +62,7 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
-) -> "ShellTask":
+) -> "Task":
     """Create a task for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task or as a function that takes a
     "shell-command template string" of the form
@@ -115,13 +115,13 @@ def define(
 
     Returns
     -------
-    ShellTask
+    Task
         The interface for the shell command
     """
 
     def make(
         wrapped: ty.Callable | type | None = None,
-    ) -> ShellTask:
+    ) -> Task:
 
         if inspect.isclass(wrapped):
             klass = wrapped
@@ -147,8 +147,8 @@ def define(
             class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                ShellTask,
-                ShellOutputs,
+                Task,
+                Outputs,
                 klass,
                 field.arg,
                 field.out,
@@ -189,12 +189,8 @@ def define(
                 class_name = f"_{class_name}"
 
             # Add in fields from base classes
-            parsed_inputs.update(
-                {n: getattr(ShellTask, n) for n in ShellTask.BASE_NAMES}
-            )
-            parsed_outputs.update(
-                {n: getattr(ShellOutputs, n) for n in ShellOutputs.BASE_NAMES}
-            )
+            parsed_inputs.update({n: getattr(Task, n) for n in Task.BASE_NAMES})
+            parsed_outputs.update({n: getattr(Outputs, n) for n in Outputs.BASE_NAMES})
 
         if "executable" in parsed_inputs:
             raise ValueError(
@@ -236,8 +232,8 @@ def define(
                 outpt.default = NO_DEFAULT
 
         defn = build_task_class(
-            ShellTask,
-            ShellOutputs,
+            Task,
+            Outputs,
             parsed_inputs,
             parsed_outputs,
             name=class_name,
@@ -582,7 +578,7 @@ class _InputPassThrough:
 
     name: str
 
-    def __call__(self, inputs: ShellTask) -> ty.Any:
+    def __call__(self, inputs: Task) -> ty.Any:
         return getattr(inputs, self.name)
 
 

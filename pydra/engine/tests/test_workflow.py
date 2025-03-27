@@ -22,8 +22,6 @@ from .utils import (
     FunAddVar3,
     FunAddVar,
     FunAddTwo,
-    Add2Sub2Res,
-    Add2Sub2ResList,
     FunAddVarNone,
     FunAddVarDefault,
     FunAddVarDefaultNoType,
@@ -38,8 +36,7 @@ from .utils import (
 )
 from pydra.engine.submitter import Submitter
 from pydra.compose import python, workflow
-import pydra.engine.core
-from pydra.engine.core import Workflow
+from pydra.engine.workflow import Workflow
 from pydra.utils.general import plot_workflow
 
 
@@ -3484,7 +3481,7 @@ def create_tasks():
         return t2.out
 
     worky = Worky(x=1)
-    workflow_obj = pydra.engine.core.Workflow.construct(worky)
+    workflow_obj = Workflow.construct(worky)
     t1 = workflow_obj["t1"]
     t2 = workflow_obj["t2"]
     return worky, t1, t2

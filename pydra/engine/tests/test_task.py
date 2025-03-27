@@ -9,17 +9,13 @@ from pathlib import Path
 import json
 import glob as glob
 from pydra.compose import python, shell, workflow
+from pydra.compose.shell.templating import argstr_formatting
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from pydra.engine.specs import (
-    argstr_formatting,
-    ShellTask,
-    ShellOutputs,
-    TaskHooks,
-    AuditFlag,
-)
+from pydra.engine.audit import AuditFlag
+from pydra.engine.hooks import TaskHooks
 from pydra.utils.general import list_fields, print_help
 from pydra.engine.submitter import Submitter
-from pydra.engine.core import Job
+from pydra.engine.job import Job
 from pydra.utils import default_run_cache_dir
 from pydra.utils.typing import (
     MultiInputObj,
@@ -727,7 +723,7 @@ def test_input_spec_func_4a():
 
 
 def test_input_spec_func_5():
-    """the PythonTask with input_spec, a input has MultiInputObj type
+    """the python.Task with input_spec, a input has MultiInputObj type
     a single value is provided and should be converted to a list
     """
 
@@ -1433,14 +1429,14 @@ def test_object_input():
 
 def test_argstr_formatting():
     @shell.define
-    class Defn(ShellTask["Defn.Outputs"]):
+    class Defn(shell.Task["Defn.Outputs"]):
         a1_field: str
         b2_field: float
         c3_field: ty.Dict[str, str]
         d4_field: ty.List[str] = shell.arg(sep=" ")
         executable = "dummy"
 
-        class Outputs(ShellOutputs):
+        class Outputs(shell.Outputs):
             pass
 
     values = dict(a1_field="1", b2_field=2.0, c3_field={"c": "3"}, d4_field=["4"])

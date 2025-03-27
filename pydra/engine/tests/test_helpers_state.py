@@ -1,6 +1,12 @@
-from pydra.engine import helpers_state as hlpst
-
 import pytest
+from pydra.engine.state import (
+    splitter2rpn,
+    splits_groups,
+    rpn2splitter,
+    add_name_splitter,
+    remove_inp_from_splitter_rpn,
+    converter_groups_to_input,
+)
 
 
 # TODO: feature?
@@ -50,8 +56,8 @@ class other_states_to_tests:
     ],
 )
 def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
-    splitter_rpn = hlpst.splitter2rpn(splitter)
-    keys_f, groups_f, grstack_f, _ = hlpst.splits_groups(splitter_rpn)
+    splitter_rpn = splitter2rpn(splitter)
+    keys_f, groups_f, grstack_f, _ = splits_groups(splitter_rpn)
 
     assert set(keys_f) == set(keys_exp)
     assert groups_f == groups_exp
@@ -88,8 +94,8 @@ def test_splits_groups_comb(
     grstack_final_exp,
     combiner_all_exp,
 ):
-    splitter_rpn = hlpst.splitter2rpn(splitter)
-    keys_final, groups_final, grstack_final, combiner_all = hlpst.splits_groups(
+    splitter_rpn = splitter2rpn(splitter)
+    keys_final, groups_final, grstack_final, combiner_all = splits_groups(
         splitter_rpn, combiner
     )
     assert keys_final == keys_final_exp
@@ -117,7 +123,7 @@ def test_splits_groups_comb(
     ],
 )
 def test_splitter2rpn(splitter, rpn):
-    assert hlpst.splitter2rpn(splitter) == rpn
+    assert splitter2rpn(splitter) == rpn
 
 
 @pytest.mark.parametrize(
@@ -130,7 +136,7 @@ def test_splitter2rpn(splitter, rpn):
     ],
 )
 def test_splitter2rpn_2(splitter, rpn):
-    assert hlpst.splitter2rpn(splitter) == rpn
+    assert splitter2rpn(splitter) == rpn
 
 
 @pytest.mark.parametrize(
@@ -149,7 +155,7 @@ def test_splitter2rpn_2(splitter, rpn):
     ],
 )
 def test_rpn2splitter(splitter, rpn):
-    assert hlpst.rpn2splitter(rpn) == splitter
+    assert rpn2splitter(rpn) == splitter
 
 
 @pytest.mark.parametrize(
@@ -173,7 +179,7 @@ def test_rpn2splitter(splitter, rpn):
     ],
 )
 def test_splitter2rpn_wf_splitter_1(splitter, other_states, rpn):
-    assert hlpst.splitter2rpn(splitter, other_states=other_states) == rpn
+    assert splitter2rpn(splitter, other_states=other_states) == rpn
 
 
 @pytest.mark.parametrize(
@@ -197,10 +203,7 @@ def test_splitter2rpn_wf_splitter_1(splitter, other_states, rpn):
     ],
 )
 def test_splitter2rpn_wf_splitter_3(splitter, other_states, rpn):
-    assert (
-        hlpst.splitter2rpn(splitter, other_states=other_states, state_fields=False)
-        == rpn
-    )
+    assert splitter2rpn(splitter, other_states=other_states, state_fields=False) == rpn
 
 
 @pytest.mark.parametrize(
@@ -212,7 +215,7 @@ def test_splitter2rpn_wf_splitter_3(splitter, other_states, rpn):
     ],
 )
 def test_addname_splitter(splitter, splitter_changed):
-    assert hlpst.add_name_splitter(splitter, "Node") == splitter_changed
+    assert add_name_splitter(splitter, "Node") == splitter_changed
 
 
 @pytest.mark.parametrize(
@@ -235,7 +238,7 @@ def test_remove_inp_from_splitter_rpn(
     splitter_rpn, input_to_remove, final_splitter_rpn
 ):
     assert (
-        hlpst.remove_inp_from_splitter_rpn(splitter_rpn, input_to_remove)
+        remove_inp_from_splitter_rpn(splitter_rpn, input_to_remove)
         == final_splitter_rpn
     )
 
@@ -248,6 +251,6 @@ def test_remove_inp_from_splitter_rpn(
     ],
 )
 def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
-    res = hlpst.converter_groups_to_input(group_for_inputs)
+    res = converter_groups_to_input(group_for_inputs)
     assert res[0] == input_for_groups
     assert res[1] == ndim

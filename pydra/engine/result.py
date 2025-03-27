@@ -9,7 +9,7 @@ import getpass
 from time import strftime
 from filelock import SoftFileLock
 from fileformats.generic import FileSet
-from pydra.utils.general import attrs_values, attrs_fields
+from pydra.utils.general import attrs_values, attrs_fields, is_workflow
 from pydra.compose import workflow, base
 
 if ty.TYPE_CHECKING:
@@ -157,7 +157,7 @@ def save(
     name_prefix: str = None,
 ) -> None:
     """
-    Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
+    Save a :class:`~pydra.compose.base.Task` object and/or results.
 
     Parameters
     ----------
@@ -165,12 +165,11 @@ def save(
         Write directory
     result : :obj:`Result`
         Result to pickle and write
-    job : :class:`~pydra.engine.core.TaskBase`
+    job : :class:`~pydra.compose.base.Task`
         Job to pickle and write
     return_values : :obj:`dict`
         Return values to pickle and write
     """
-    from pydra.engine.core import is_workflow
 
     if job is None and result is None:
         raise ValueError("Nothing to be saved")
@@ -200,8 +199,8 @@ def save(
 
 
 def copyfile_workflow(
-    wf_path: os.PathLike, outputs: workflow.WorkflowOutputs
-) -> workflow.WorkflowOutputs:
+    wf_path: os.PathLike, outputs: workflow.Outputs
+) -> workflow.Outputs:
     """if file in the wf results, the file will be copied to the workflow directory"""
     from pydra.utils.files import copy_nested_files
 
@@ -229,7 +228,6 @@ def gather_runtime_info(fname):
         A runtime object containing the collected information.
 
     """
-    from pydra.engine.specs import Runtime
 
     runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None, cpu_peak_percent=None)
 

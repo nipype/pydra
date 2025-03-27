@@ -9,9 +9,9 @@ import types
 import typing as ty
 import logging
 import attrs
-from pydra.utils import add_exc_note
 from fileformats import field, core, generic
-
+from pydra.utils.general import add_exc_note
+from pydra.utils.mount_identifier import MountIndentifier
 
 try:
     from typing import get_origin, get_args
@@ -23,6 +23,9 @@ if sys.version_info >= (3, 10):
     UNION_TYPES = (ty.Union, types.UnionType)
 else:
     UNION_TYPES = (ty.Union,)
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.lazy import LazyField
 
 logger = logging.getLogger("pydra")
 
@@ -217,7 +220,6 @@ class TypeParser(ty.Generic[T]):
             if the coercion is not possible, or not specified by the
             `coercible`/`not_coercible` parameters, then a TypeError is raised
         """
-        from pydra.utils.general import is_lazy
 
         coerced: T
         if obj is attrs.NOTHING:
@@ -1121,3 +1123,90 @@ def is_type(*args: ty.Any) -> bool:
     else:
         val = args[0]
     return inspect.isclass(val) or ty.get_origin(val)
+
+
+T = ty.TypeVar("T")
+U = ty.TypeVar("U")
+
+
+def state_array_support(
+    function: ty.Callable[T, U],
+) -> ty.Callable[T | StateArray[T], U | StateArray[U]]:
+    """
+    Decorator to convert a allow a function to accept and return StateArray objects,
+    where the function is applied to each element of the StateArray.
+    """
+
+    def state_array_wrapper(
+        value: "T | StateArray[T] | LazyField[T]",
+    ) -> "U | StateArray[U] | LazyField[U]":
+        if is_lazy(value):
+            return value
+        if isinstance(value, StateArray):
+            return StateArray(function(v) for v in value)
+        return function(value)
+
+    return state_array_wrapper
+
+
+def is_lazy(obj):
+    """Check whether an object is a lazy field or has any attribute that is a Lazy Field"""
+    from pydra.engine.lazy import LazyField
+
+    return isinstance(obj, LazyField)
+
+
+def copy_nested_files(
+    value: ty.Any,
+    dest_dir: os.PathLike,
+    supported_modes: generic.FileSet.CopyMode = generic.FileSet.CopyMode.any,
+    **kwargs,
+) -> ty.Any:
+    """Copies all "file-sets" found within the nested value (e.g. dict, list,...) into the
+    destination directory. If no nested file-sets are found then the original value is
+    returned. Note that multiple nested file-sets (e.g. a list) will to have unique names
+    names (i.e. not differentiated by parent directories) otherwise there will be a path
+    clash in the destination directory.
+
+    Parameters
+    ----------
+    value : Any
+        the value to copy files from (if required)
+    dest_dir : os.PathLike
+        the destination directory to copy the files to
+    **kwargs
+        passed directly onto FileSet.copy()
+    """
+    from pydra.utils.typing import TypeParser  # noqa
+
+    cache: ty.Dict[generic.FileSet, generic.FileSet] = {}
+
+    # Set to keep track of file paths that have already been copied
+    # to allow FileSet.copy to avoid name clashes
+    clashes_to_avoid = set()
+
+    def copy_fileset(fileset: generic.FileSet):
+        try:
+            return cache[fileset]
+        except KeyError:
+            pass
+        supported = supported_modes
+        if any(MountIndentifier.on_cifs(p) for p in fileset.fspaths):
+            supported -= generic.FileSet.CopyMode.symlink
+        if not all(
+            MountIndentifier.on_same_mount(p, dest_dir) for p in fileset.fspaths
+        ):
+            supported -= generic.FileSet.CopyMode.hardlink
+        cp_kwargs = {}
+
+        cp_kwargs.update(kwargs)
+        copied = fileset.copy(
+            dest_dir=dest_dir,
+            supported_modes=supported,
+            avoid_clashes=clashes_to_avoid,  # this prevents fname clashes between filesets
+            **kwargs,
+        )
+        cache[fileset] = copied
+        return copied
+
+    return TypeParser.apply_to_instances(generic.FileSet, copy_fileset, value)

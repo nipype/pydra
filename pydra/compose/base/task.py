@@ -5,13 +5,8 @@ from copy import copy
 from typing import Self
 import attrs.validators
 from pydra.utils.typing import is_optional, is_fileset_or_union
-from pydra.utils.general import (
-    list_fields,
-    is_lazy,
-)
-from pydra.utils.typing import (
-    StateArray,
-)
+from pydra.utils.general import list_fields
+from pydra.utils.typing import StateArray, is_lazy
 from pydra.utils.hash import hash_function
 import os
 import itertools
@@ -183,7 +178,7 @@ class Task(ty.Generic[OutputsType]):
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
-        hooks: TaskHooks | None = None,
+        hooks: "TaskHooks | None" = None,
         **kwargs: ty.Any,
     ) -> OutputsType:
         """Create a job from this task and execute it to produce a result.

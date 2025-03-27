@@ -5,7 +5,8 @@ from copy import copy
 from collections import defaultdict
 from typing import Self
 import attrs
-from pydra.engine.specs import Task, WorkflowTask, Outputs, WorkflowOutputs
+from pydra.compose import workflow
+from pydra.compose.base import Task, Outputs
 from pydra.engine.graph import DiGraph, INPUTS_NODE_NAME, OUTPUTS_NODE_NAME
 from pydra.engine import state
 from pydra.engine.lazy import LazyInField, LazyOutField
@@ -20,14 +21,14 @@ from pydra.utils.general import (
     attrs_values,
     fields_values,
     list_fields,
-    is_lazy,
 )
+from pydra.utils.typing import is_lazy
 from pydra.environments.base import Environment
 
 logger = logging.getLogger("pydra")
 
 OutputsType = ty.TypeVar("OutputType", bound=Outputs)
-WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
+WorkflowOutputsType = ty.TypeVar("OutputType", bound=workflow.Outputs)
 
 
 @attrs.define(auto_attribs=False)
@@ -45,7 +46,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     """
 
     name: str = attrs.field()
-    inputs: WorkflowTask[WorkflowOutputsType] = attrs.field()
+    inputs: workflow.Task[WorkflowOutputsType] = attrs.field()
     outputs: WorkflowOutputsType = attrs.field()
     _nodes: dict[str, Node] = attrs.field(factory=dict)
 
@@ -53,7 +54,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         return f"Workflow(name={self.name!r}, defn={self.inputs!r})"
 
     @classmethod
-    def clear_cache(cls, task: WorkflowTask[WorkflowOutputsType] | None = None) -> None:
+    def clear_cache(
+        cls, task: workflow.Task[WorkflowOutputsType] | None = None
+    ) -> None:
         """Clear the cache of constructed workflows"""
         if task is None:
             cls._constructed_cache = defaultdict(lambda: defaultdict(dict))
@@ -63,7 +66,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     @classmethod
     def construct(
         cls,
-        task: WorkflowTask[WorkflowOutputsType],
+        task: workflow.Task[WorkflowOutputsType],
         dont_cache: bool = False,
         lazy: ty.Sequence[str] = (),
     ) -> Self:
@@ -71,7 +74,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
         Parameters
         ----------
-        task : WorkflowTask
+        task : workflow.Task
             The task of the workflow to construct
         dont_cache : bool, optional
             Whether to cache the constructed workflow, by default False
@@ -390,11 +393,3 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     (OUTPUTS_NODE_NAME, outpt_name, lf._node.name, lf._field)
                 )
         return graph
-
-
-def is_workflow(obj):
-    """Check whether an object is a :class:`Workflow` instance."""
-    from pydra.engine.specs import WorkflowTask
-    from pydra.engine.workflow import Workflow
-
-    return isinstance(obj, (WorkflowTask, Workflow))

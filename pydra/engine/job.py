@@ -27,13 +27,13 @@ from pydra.engine.result import (
 from pydra.utils.general import (
     attrs_values,
     attrs_fields,
-    is_lazy,
     list_fields,
     ensure_list,
+    is_workflow,
 )
+from pydra.utils.typing import is_lazy
 from pydra.engine.result import load_result, save
-from pydra.engine.workflow import is_workflow
-from pydra.utils.general import copy_nested_files
+from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
 from pydra.environments.base import Environment
@@ -595,8 +595,6 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
     resultfile : :obj:`Path`
         The path to the pickled result file
     """
-
-    from pydra.engine.specs import Result
 
     try:
         job: Job[TaskType] = load_job(job_pkl=job_pkl)

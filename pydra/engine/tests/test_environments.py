@@ -6,8 +6,7 @@ from pydra.environments.singularity import Singularity
 from pydra.engine.submitter import Submitter
 from fileformats.generic import File
 from pydra.compose import shell
-from pydra.engine.core import Job
-from pydra.engine.specs import ShellTask
+from pydra.engine.job import Job
 from pydra.utils.general import attrs_values
 from .utils import no_win, need_docker, need_singularity
 import pytest
@@ -183,7 +182,7 @@ def test_singularity_1_subm(tmp_path, worker):
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
-def shelly_with_input_factory(filename, executable) -> ShellTask:
+def shelly_with_input_factory(filename, executable) -> shell.Task:
     """creating a task with a simple input_spec"""
     Shelly = shell.define(
         executable,
@@ -200,7 +199,7 @@ def shelly_with_input_factory(filename, executable) -> ShellTask:
     return Shelly(**({} if filename is None else {"file": filename}))
 
 
-def make_job(task: ShellTask, tempdir: Path, name: str):
+def make_job(task: shell.Task, tempdir: Path, name: str):
     return Job(
         task=task,
         submitter=Submitter(cache_dir=makedir(tempdir, name)),

@@ -20,7 +20,7 @@ from pydra.utils.general import (
 from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField
 from pydra.engine.audit import Audit
-from pydra.engine.core import Job
+from pydra.engine.job import Job
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils import default_run_cache_dir
 from pydra.compose import workflow
@@ -31,8 +31,10 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.node import Node
-    from pydra.engine.specs import WorkflowTask, Task, Outputs, TaskHooks, Result
-    from pydra.engine.core import Workflow
+    from pydra.engine.result import Result
+    from pydra.engine.hooks import TaskHooks
+    from pydra.engine.workflow import Workflow
+    from pydra.compose.base import Task, Outputs
     from pydra.environments.base import Environment
 
 
@@ -192,9 +194,9 @@ class Submitter:
 
         Parameters
         ----------
-        task : :obj:`~pydra.engine.specs.Task`
+        task : :obj:`~pydra.compose.base.Task`
             The task to run
-        hooks : :obj:`~pydra.engine.specs.TaskHooks`, optional
+        hooks : :obj:`~pydra.engine.hooks.TaskHooks`, optional
             Job hooks, callable functions called as the job is setup and torn down,
             by default no functions are called at the hooks
         raise_errors : bool, optional
@@ -223,7 +225,6 @@ class Submitter:
         task._check_rules()
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
-            from pydra.engine.specs import Task
 
             state = State(
                 name="outer_split",
@@ -300,7 +301,7 @@ class Submitter:
 
         Parameters
         ----------
-        job : :obj:`~pydra.engine.core.Job`
+        job : :obj:`~pydra.engine.job.Job`
             The job to submit
         rerun : bool, optional
             Whether to force the re-computation of the job results even if existing
@@ -326,13 +327,13 @@ class Submitter:
         self._worker = WORKERS[self.worker_name](**self.worker_kwargs)
         self.worker.loop = self.loop
 
-    def expand_workflow(self, workflow_task: "Job[WorkflowTask]", rerun: bool) -> None:
+    def expand_workflow(self, workflow_task: "Job[workflow.Task]", rerun: bool) -> None:
         """Expands and executes a workflow job synchronously. Typically only used during
         debugging and testing, as the asynchronous version is more efficient.
 
         Parameters
         ----------
-        job : :obj:`~pydra.engine.core.Job[WorkflowTask]`
+        job : :obj:`~pydra.engine.job.Job[workflow.Task]`
             Workflow Job object
 
         """
@@ -348,14 +349,14 @@ class Submitter:
             tasks = self.get_runnable_tasks(exec_graph)
 
     async def expand_workflow_async(
-        self, workflow_task: "Job[WorkflowTask]", rerun: bool
+        self, workflow_task: "Job[workflow.Task]", rerun: bool
     ) -> None:
         """
         Expand and execute a workflow job asynchronously.
 
         Parameters
         ----------
-        job : :obj:`~pydra.engine.core.Job[WorkflowTask]`
+        job : :obj:`~pydra.engine.job.Job[workflow.Task]`
             Workflow Job object
         """
         wf = workflow_task.task.construct()
@@ -523,7 +524,7 @@ class Submitter:
 
         Returns
         -------
-        tasks : list of :obj:`~pydra.engine.core.Job`
+        tasks : list of :obj:`~pydra.engine.job.Job`
             List of runnable tasks
         following_err : dict[NodeToExecute, list[str]]
             Dictionary of tasks that are blocked by errored tasks

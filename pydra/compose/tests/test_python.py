@@ -4,7 +4,6 @@ from decimal import Decimal
 import attrs
 import pytest
 from pydra.utils.general import list_fields
-from pydra.engine.specs import PythonTask, PythonOutputs
 from pydra.compose import python
 
 
@@ -18,7 +17,7 @@ def test_interface_wrap_function(tmp_path):
 
     SampleDef = python.define(func)
 
-    assert issubclass(SampleDef, PythonTask)
+    assert issubclass(SampleDef, python.Task)
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -49,7 +48,7 @@ def test_interface_wrap_function_with_default():
 
     SampleDef = python.define(func)
 
-    assert issubclass(SampleDef, PythonTask)
+    assert issubclass(SampleDef, python.Task)
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -73,7 +72,7 @@ def test_interface_wrap_function_overrides():
         outputs={"b": python.out(help="the doubled output", type=Decimal)},
     )
 
-    assert issubclass(SampleDef, PythonTask)
+    assert issubclass(SampleDef, python.Task)
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -98,7 +97,7 @@ def test_interface_wrap_function_types():
         outputs={"b": float},
     )
 
-    assert issubclass(SampleDef, PythonTask)
+    assert issubclass(SampleDef, python.Task)
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -118,7 +117,7 @@ def test_decorated_function_interface():
         """Sample function for testing"""
         return a + b, a * b
 
-    assert issubclass(SampleDef, PythonTask)
+    assert issubclass(SampleDef, python.Task)
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -250,7 +249,7 @@ def test_interface_with_function_numpy_docstr():
 
 def test_interface_with_class():
     @python.define
-    class SampleDef(PythonTask["SampleDef.Outputs"]):
+    class SampleDef(python.Task["SampleDef.Outputs"]):
         """Sample class for testing
 
         Args:
@@ -262,7 +261,7 @@ def test_interface_with_class():
         a: int
         b: float = 2.0
 
-        class Outputs(PythonOutputs):
+        class Outputs(python.Outputs):
             """
             Args:
                 c: Sum of a and b
@@ -276,7 +275,7 @@ def test_interface_with_class():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleDef, PythonTask)
+    assert issubclass(SampleDef, python.Task)
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -301,7 +300,7 @@ def test_interface_with_class():
 
 def test_interface_with_inheritance():
     @python.define
-    class SampleDef(PythonTask["SampleDef.Outputs"]):
+    class SampleDef(python.Task["SampleDef.Outputs"]):
         """Sample class for testing
 
         Args:
@@ -313,7 +312,7 @@ def test_interface_with_inheritance():
         a: int
         b: float
 
-        class Outputs(PythonOutputs):
+        class Outputs(python.Outputs):
             """
             Args:
                 c: Sum of a and b
@@ -327,18 +326,18 @@ def test_interface_with_inheritance():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleDef, PythonTask)
+    assert issubclass(SampleDef, python.Task)
 
 
 def test_interface_with_class_no_auto_attribs():
     @python.define(auto_attribs=False)
-    class SampleDef(PythonTask["SampleDef.Outputs"]):
+    class SampleDef(python.Task["SampleDef.Outputs"]):
         a: int = python.arg(help="First input to be inputted")
         b: float = python.arg(help="Second input")
 
         x: int
 
-        class Outputs(PythonOutputs):
+        class Outputs(python.Outputs):
             c: float = python.out(help="Sum of a and b")
             d: float = python.out(help="Product of a and b")
 
@@ -377,7 +376,7 @@ def test_interface_invalid_wrapped1():
     with pytest.raises(ValueError):
 
         @python.define(inputs={"a": python.arg()})
-        class SampleDef(PythonTask["SampleDef.Outputs"]):
+        class SampleDef(python.Task["SampleDef.Outputs"]):
             a: int
 
             class Outputs:
@@ -392,7 +391,7 @@ def test_interface_invalid_wrapped2():
     with pytest.raises(ValueError):
 
         @python.define(outputs={"b": python.out()})
-        class SampleDef(PythonTask["SampleDef.Outputs"]):
+        class SampleDef(python.Task["SampleDef.Outputs"]):
             a: int
 
             class Outputs:

@@ -10,9 +10,8 @@ import subprocess as sp
 import pytest
 from fileformats.generic import File
 from pydra.utils.general import list_fields
-from pydra.engine.specs import ShellTask
 from pydra.engine.submitter import Submitter
-from pydra.compose import workflow, python
+from pydra.compose import workflow, python, shell
 
 if ty.TYPE_CHECKING:
     from pydra.environments.base import Environment
@@ -44,7 +43,7 @@ def get_output_names(task):
 
 
 def run_no_submitter(
-    shell_def: ShellTask,
+    shell_def: shell.Task,
     cache_dir: Path | None = None,
     worker: str | None = None,
     environment: "Environment | None" = None,
@@ -54,7 +53,7 @@ def run_no_submitter(
 
 
 def run_submitter(
-    shell_def: ShellTask,
+    shell_def: shell.Task,
     cache_dir: Path | None = None,
     worker: str | None = None,
     environment: "Environment | None" = None,

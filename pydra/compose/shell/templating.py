@@ -6,9 +6,11 @@ from copy import copy
 from pathlib import Path
 from fileformats.generic import FileSet
 from pydra.utils.general import attrs_values, list_fields
+from pydra.utils.typing import is_lazy
 from . import field
-from .task import ShellTask
-from pydra.utils.general import is_lazy
+
+if ty.TYPE_CHECKING:
+    from . import Task
 
 
 def template_update(
@@ -53,7 +55,7 @@ def template_update(
 
 def template_update_single(
     fld: "field.outarg",
-    task: "ShellTask",
+    task: "Task",
     values: dict[str, ty.Any] = None,
     output_dir: Path | None = None,
     spec_type: str = "input",
@@ -105,7 +107,7 @@ def template_update_single(
 
 
 def _template_formatting(
-    fld: "field.arg", task: "ShellTask", values: dict[str, ty.Any]
+    fld: "field.arg", task: "Task", values: dict[str, ty.Any]
 ) -> Path | list[Path] | None:
     """Formatting the fld template based on the values from inputs.
     Taking into account that the fld with a template can be a MultiOutputFile
@@ -118,7 +120,7 @@ def _template_formatting(
     ----------
     fld : pydra.utils.general.Field
         field with a template
-    task : pydra.engine.specs.Task
+    task : pydra.compose.shell.Task
         the task
     values : dict
         dictionary with values from inputs object

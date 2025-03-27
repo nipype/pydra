@@ -2,11 +2,8 @@ import typing as ty
 import inspect
 from typing import dataclass_transform
 import attrs
+from pydra.compose import base
 from pydra.compose.base import (
-    Task,
-    Outputs,
-    Arg,
-    Out,
     ensure_field_objects,
     build_task_class,
     parse_doc_string,
@@ -31,7 +28,7 @@ __all__ = ["define", "add", "this", "arg", "out"]
 
 
 @attrs.define
-class arg(Arg):
+class arg(base.Arg):
     """Argument of a workflow task
 
     Parameters
@@ -69,7 +66,7 @@ class arg(Arg):
 
 
 @attrs.define
-class out(Out):
+class out(base.Out):
     """Output of a workflow task
 
     Parameters
@@ -108,14 +105,14 @@ def outputs(wrapped):
 def define(
     wrapped: type | ty.Callable | None = None,
     /,
-    inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
-    outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+    inputs: list[str | arg] | dict[str, arg | type] | None = None,
+    outputs: list[str | out] | dict[str, out | type] | type | None = None,
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     lazy: list[str] | None = None,
     auto_attribs: bool = True,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
-) -> "WorkflowTask":
+) -> "Task":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
     a constructor function or the "canonical" dataclass-form of a task.
@@ -140,7 +137,6 @@ def define(
     Task
         The interface for the function or class.
     """
-    from pydra.engine.specs import Task, WorkflowTask, WorkflowOutputs
 
     if lazy is None:
         lazy = []
@@ -152,8 +148,8 @@ def define(
             name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                WorkflowTask,
-                WorkflowOutputs,
+                Task,
+                Outputs,
                 klass,
                 arg,
                 out,
@@ -195,8 +191,8 @@ def define(
             parsed_inputs[inpt_name].lazy = True
 
         defn = build_task_class(
-            WorkflowTask,
-            WorkflowOutputs,
+            Task,
+            Outputs,
             parsed_inputs,
             parsed_outputs,
             name=name,
@@ -223,7 +219,7 @@ def this() -> "Workflow":
     Workflow
         The workflow currently being constructed.
     """
-    from pydra.engine.core import Workflow
+    from pydra.engine.workflow import Workflow
 
     return Workflow.under_construction()
 
@@ -288,10 +284,10 @@ def cast(field: ty.Any, new_type: type[U]) -> U:
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class WorkflowOutputs(Outputs):
+class Outputs(base.Outputs):
 
     @classmethod
-    def _from_task(cls, job: "Job[WorkflowTask]") -> ty.Self:
+    def _from_task(cls, job: "Job[Task]") -> ty.Self:
         """Collect the outputs of a workflow job from the outputs of the nodes in the
 
         Parameters
@@ -346,28 +342,28 @@ class WorkflowOutputs(Outputs):
         return outputs
 
 
-WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
+WorkflowOutputsType = ty.TypeVar("OutputType", bound=Outputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class WorkflowTask(Task[WorkflowOutputsType]):
+class Task(base.Task[WorkflowOutputsType]):
 
     _task_type = "workflow"
 
-    RESERVED_FIELD_NAMES = Task.RESERVED_FIELD_NAMES + ("construct",)
+    RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("construct",)
 
     _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
 
-    def _run(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
+    def _run(self, job: "Job[Task]", rerun: bool) -> None:
         """Run the workflow."""
         job.submitter.expand_workflow(job, rerun)
 
-    async def _run_async(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
+    async def _run_async(self, job: "Job[Task]", rerun: bool) -> None:
         """Run the workflow asynchronously."""
         await job.submitter.expand_workflow_async(job, rerun)
 
     def construct(self) -> "Workflow":
-        from pydra.engine.core import Workflow
+        from pydra.engine.workflow import Workflow
 
         if self._constructed is not None:
             return self._constructed

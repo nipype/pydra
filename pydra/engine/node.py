@@ -3,20 +3,18 @@ from copy import deepcopy
 from enum import Enum
 import attrs
 from pydra.engine import lazy
-from pydra.utils.general import (
-    attrs_values,
-    is_lazy,
-)
-from pydra.engine import helpers_state as hlpst
-from pydra.engine.state import State
+from pydra.utils.general import attrs_values
+from pydra.utils.typing import is_lazy
+from pydra.engine.state import State, add_name_splitter, add_name_combiner
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.core import Workflow
+    from pydra.engine.workflow import Workflow
     from pydra.environments.base import Environment
-    from pydra.engine.specs import Task, Outputs, TaskHooks
+    from pydra.compose import base
+    from pydra.engine.hooks import TaskHooks
 
 
-OutputType = ty.TypeVar("OutputType", bound="Outputs")
+OutputType = ty.TypeVar("OutputType", bound="base.Outputs")
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 _not_set = Enum("_not_set", "NOT_SET")
@@ -37,7 +35,7 @@ class Node(ty.Generic[OutputType]):
     """
 
     name: str
-    _task: "Task[OutputType]"
+    _task: "base.Task[OutputType]"
     _environment: "Environment | None" = None
     _hooks: "TaskHooks | None" = None
     _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False, repr=False)
@@ -180,9 +178,9 @@ class Node(ty.Generic[OutputType]):
         combiner = deepcopy(self._task._combiner)  # these can be modified in state
         cont_dim = {}
         if splitter:
-            splitter = hlpst.add_name_splitter(splitter, self.name)
+            splitter = add_name_splitter(splitter, self.name)
         if combiner:
-            combiner = hlpst.add_name_combiner(combiner, self.name)
+            combiner = add_name_combiner(combiner, self.name)
         if self._task._cont_dim:
             for key, val in self._task._cont_dim.items():
                 cont_dim[f"{self.name}.{key}"] = val

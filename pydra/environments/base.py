@@ -1,18 +1,18 @@
 import typing as ty
 import os
 from copy import copy
-from pydra.utils.general import execute
+import subprocess as sp
 from pathlib import Path
 import logging
 from fileformats.generic import FileSet
+from pydra.compose import shell
 from pydra.utils.general import list_fields
 from pydra.utils.typing import TypeParser
 
 logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.core import Job
-    from pydra.engine.specs import ShellTask
+    from pydra.engine.job import Job
 
 
 class Environment:
@@ -26,7 +26,7 @@ class Environment:
     def setup(self):
         pass
 
-    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         """
         Execute the job in the environment.
 
@@ -51,7 +51,7 @@ class Native(Environment):
     Native environment, i.e. the tasks are executed in the current python environment.
     """
 
-    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         keys = ["return_code", "stdout", "stderr"]
         cmd_args = job.task._command_args(values=job.inputs)
         values = execute(cmd_args)
@@ -184,7 +184,7 @@ class Container(Environment):
 class Docker(Container):
     """Docker environment."""
 
-    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
         mounts, values = self.get_bindings(job=job, root=self.root)
@@ -218,7 +218,7 @@ class Docker(Container):
 class Singularity(Container):
     """Singularity environment."""
 
-    def execute(self, job: "Job[ShellTask]") -> dict[str, ty.Any]:
+    def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
         mounts, values = self.get_bindings(job=job, root=self.root)
@@ -252,3 +252,54 @@ class Singularity(Container):
             else:
                 raise RuntimeError(output["stdout"])
         return output
+
+
+def execute(cmd, strip=False):
+    """
+    Run the event loop with coroutine.
+
+    Uses :func:`read_and_display_async` unless a loop is
+    already running, in which case :func:`read_and_display`
+    is used.
+
+    Parameters
+    ----------
+    cmd : :obj:`list` or :obj:`tuple`
+        The command line to be executed.
+    strip : :obj:`bool`
+        TODO
+
+    """
+    rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+    """
+    loop = get_open_loop()
+    if loop.is_running():
+        rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+    else:
+        rc, stdout, stderr = loop.run_until_complete(
+            read_and_display_async(*cmd, strip=strip)
+        )
+    """
+    return rc, stdout, stderr
+
+
+def read_and_display(*cmd, strip=False, hide_display=False):
+    """Capture a process' standard output."""
+    try:
+        process = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+    except Exception:
+        # TODO editing some tracing?
+        raise
+
+    if strip:
+        return (
+            process.returncode,
+            process.stdout.decode("utf-8").strip(),
+            process.stderr.decode("utf-8"),
+        )
+    else:
+        return (
+            process.returncode,
+            process.stdout.decode("utf-8"),
+            process.stderr.decode("utf-8"),
+        )

@@ -3,16 +3,15 @@ import typing as ty
 import time
 import pytest
 from fileformats.generic import File
-from pydra.engine.specs import (
+from pydra.engine.result import (
     Runtime,
     Result,
-    WorkflowTask,
 )
 from pydra.engine.lazy import (
     LazyInField,
     LazyOutField,
 )
-from pydra.engine.core import Workflow
+from pydra.engine.workflow import Workflow
 from pydra.engine.node import Node
 from pydra.engine.submitter import Submitter, NodeExecution, DiGraph
 from pydra.compose import python, workflow
@@ -37,7 +36,7 @@ def ATestWorkflow(x: int, y: list[int]) -> int:
 
 
 @pytest.fixture
-def workflow_task(submitter: Submitter) -> WorkflowTask:
+def workflow_task(submitter: Submitter) -> workflow.Task:
     wf = ATestWorkflow(x=1, y=[1, 2, 3])
     with submitter:
         submitter(wf)
@@ -45,7 +44,7 @@ def workflow_task(submitter: Submitter) -> WorkflowTask:
 
 
 @pytest.fixture
-def wf(workflow_task: WorkflowTask) -> Workflow:
+def wf(workflow_task: workflow.Task) -> Workflow:
     wf = Workflow.construct(workflow_task)
     return wf
 

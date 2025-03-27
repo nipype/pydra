@@ -12,13 +12,13 @@ from pydra.utils.general import (
     from_list_if_single,
     ensure_list,
     PYDRA_ATTR_METADATA,
-    is_lazy,
 )
 from pydra.utils.typing import (
     MultiInputObj,
     MultiInputFile,
     MultiOutputObj,
     MultiOutputFile,
+    is_lazy,
 )
 from .field import Field, Arg, Out
 

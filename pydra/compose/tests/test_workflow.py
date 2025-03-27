@@ -7,8 +7,7 @@ from pydra.engine.lazy import LazyInField, LazyOutField
 import typing as ty
 from pydra.compose import shell, python, workflow
 from pydra.utils.general import list_fields
-from pydra.engine.specs import WorkflowTask, WorkflowOutputs
-from pydra.engine.core import Workflow
+from pydra.engine.workflow import Workflow
 from pydra.utils.hash import hash_function
 from fileformats import video, image
 
@@ -148,7 +147,7 @@ def test_workflow_canonical():
     # NB: We use PascalCase (i.e. class names) as it is translated into a class
 
     @workflow.define
-    class MyTestWorkflow(WorkflowTask["MyTestWorkflow.Outputs"]):
+    class MyTestWorkflow(workflow.Task["MyTestWorkflow.Outputs"]):
 
         a: int
         b: float = workflow.arg(
@@ -163,7 +162,7 @@ def test_workflow_canonical():
             return mul.out
 
         @workflow.outputs
-        class Outputs(WorkflowOutputs):
+        class Outputs(workflow.Outputs):
             out: float
 
     constructor = MyTestWorkflow().constructor

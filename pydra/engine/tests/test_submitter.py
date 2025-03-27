@@ -10,13 +10,13 @@ from unittest.mock import patch
 import pytest
 from pydra.compose import workflow, shell
 from fileformats.generic import Directory
-from pydra.engine.core import Job
+from pydra.engine.job import Job
 from pydra.engine.submitter import Submitter
-from pydra.engine.workers import DebugWorker
+from pydra.workers.base import DebugWorker
 from pydra.compose import python
 from pathlib import Path
 from datetime import datetime
-from pydra.engine.specs import Result
+from pydra.engine.result import Result
 from pydra.environments.singularity import Singularity
 from .utils import (
     need_sge,

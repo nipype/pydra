@@ -1,5 +1,4 @@
 from pydra.engine.submitter import Submitter
-from pydra.engine.specs import ShellTask, ShellOutputs
 from pydra.compose import shell, workflow
 from fileformats.generic import File
 from pydra.environments.singularity import Singularity
@@ -338,7 +337,7 @@ def test_singularity_cmd_inputspec_copyfile_1(worker, tmp_path):
     image = "docker://alpine"
 
     @shell.define
-    class Singu(ShellTask["Singu.Outputs"]):
+    class Singu(shell.Task["Singu.Outputs"]):
 
         executable = ["sed", "-is", "s/hello/hi/"]
 
@@ -349,7 +348,7 @@ def test_singularity_cmd_inputspec_copyfile_1(worker, tmp_path):
             copy_mode=File.CopyMode.copy,
         )
 
-        class Outputs(ShellOutputs):
+        class Outputs(shell.Outputs):
             out_file: File = shell.outarg(
                 path_template="{orig_file}.txt",  # FIXME: Shouldn't have to specify the extension
                 help="output file",

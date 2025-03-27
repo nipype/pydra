@@ -126,14 +126,14 @@ include = ["./pydra"]
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "pydra/engine/_version.py"
+version-file = "pydra/utils/_version.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.black]
 target-version = ['py38']
-exclude = "pydra/engine/_version.py"
+exclude = "pydra/utils/_version.py"
 
 [tool.codespell]
 ignore-words-list = "nd,afile,inpt,fpr"

@@ -21,12 +21,11 @@ from .utils import (
     FunFileList,
     Op4Var,
 )
-from pydra.engine.specs import Task
+from pydra.compose.base import Task
 from pydra.engine.state import State
 from pydra.utils.typing import StateArray
 from pydra.engine.submitter import Submitter
-from pydra.engine.core import Workflow
-from pydra.utils.general import attrs_values
+from pydra.engine.workflow import Workflow
 
 
 @workflow.define

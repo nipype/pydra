@@ -1,14 +1,11 @@
 """Administrative support for the engine framework."""
 
 from pathlib import Path
-import os
 import inspect
 import sys
 import typing as ty
 import re
 import attrs
-from fileformats.core import FileSet
-from pydra.utils.typing import StateArray
 import ast
 import types
 import sysconfig
@@ -16,16 +13,14 @@ import platformdirs
 import builtins
 import pkgutil
 import logging
-from pydra.engine._version import __version__
-from .mount_identifier import MountIndentifier
+from ._version import __version__
 
 
 logger = logging.getLogger("pydra")
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
-    from pydra.compose import workflow
     from pydra.compose.base import Field
-    from pydra.engine.lazy import LazyField
+    from pydra.compose import workflow
 
 
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
@@ -203,7 +198,7 @@ STDLIB_MODULES: frozenset[str] = _stdlib_modules()
 
 
 def plot_workflow(
-    workflow_task: "workflow.WorkflowTask",
+    workflow_task: "workflow.Task",
     out_dir: Path,
     plot_type: str = "simple",
     export: ty.Sequence[str] | None = None,
@@ -212,7 +207,7 @@ def plot_workflow(
     lazy: ty.Sequence[str] | ty.Set[str] = (),
 ):
     """creating a graph - dotfile and optionally exporting to other formats"""
-    from pydra.engine.core import Workflow
+    from pydra.engine.workflow import Workflow
 
     # Create output directory
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -288,6 +283,7 @@ def fields_dict(task: "type[Task] | Task") -> dict[str, "Field"]:
 
 def from_list_if_single(obj: ty.Any) -> ty.Any:
     """Converts a list to a single item if it is of length == 1"""
+    from pydra.utils.typing import is_lazy
 
     if obj is attrs.NOTHING:
         return obj
@@ -389,6 +385,7 @@ def ensure_list(obj, tuple2list=False):
     [5.0]
 
     """
+    from pydra.utils.typing import is_lazy
 
     if obj is attrs.NOTHING:
         return attrs.NOTHING
@@ -418,37 +415,6 @@ def ensure_list(obj, tuple2list=False):
 #     return None
 
 
-def is_lazy(obj):
-    """Check whether an object is a lazy field or has any attribute that is a Lazy Field"""
-    from pydra.engine.lazy import LazyField
-
-    return isinstance(obj, LazyField)
-
-
-T = ty.TypeVar("T")
-U = ty.TypeVar("U")
-
-
-def state_array_support(
-    function: ty.Callable[T, U],
-) -> ty.Callable[T | StateArray[T], U | StateArray[U]]:
-    """
-    Decorator to convert a allow a function to accept and return StateArray objects,
-    where the function is applied to each element of the StateArray.
-    """
-
-    def state_array_wrapper(
-        value: "T | StateArray[T] | LazyField[T]",
-    ) -> "U | StateArray[U] | LazyField[U]":
-        if is_lazy(value):
-            return value
-        if isinstance(value, StateArray):
-            return StateArray(function(v) for v in value)
-        return function(value)
-
-    return state_array_wrapper
-
-
 # dj: copied from misc
 def is_container(item):
     """
@@ -473,57 +439,9 @@ def is_container(item):
     return False
 
 
-def copy_nested_files(
-    value: ty.Any,
-    dest_dir: os.PathLike,
-    supported_modes: FileSet.CopyMode = FileSet.CopyMode.any,
-    **kwargs,
-) -> ty.Any:
-    """Copies all "file-sets" found within the nested value (e.g. dict, list,...) into the
-    destination directory. If no nested file-sets are found then the original value is
-    returned. Note that multiple nested file-sets (e.g. a list) will to have unique names
-    names (i.e. not differentiated by parent directories) otherwise there will be a path
-    clash in the destination directory.
+def is_workflow(obj):
+    """Check whether an object is a :class:`Workflow` instance."""
+    from pydra.compose.workflow import Task
+    from pydra.engine.workflow import Workflow
 
-    Parameters
-    ----------
-    value : Any
-        the value to copy files from (if required)
-    dest_dir : os.PathLike
-        the destination directory to copy the files to
-    **kwargs
-        passed directly onto FileSet.copy()
-    """
-    from pydra.utils.typing import TypeParser  # noqa
-
-    cache: ty.Dict[FileSet, FileSet] = {}
-
-    # Set to keep track of file paths that have already been copied
-    # to allow FileSet.copy to avoid name clashes
-    clashes_to_avoid = set()
-
-    def copy_fileset(fileset: FileSet):
-        try:
-            return cache[fileset]
-        except KeyError:
-            pass
-        supported = supported_modes
-        if any(MountIndentifier.on_cifs(p) for p in fileset.fspaths):
-            supported -= FileSet.CopyMode.symlink
-        if not all(
-            MountIndentifier.on_same_mount(p, dest_dir) for p in fileset.fspaths
-        ):
-            supported -= FileSet.CopyMode.hardlink
-        cp_kwargs = {}
-
-        cp_kwargs.update(kwargs)
-        copied = fileset.copy(
-            dest_dir=dest_dir,
-            supported_modes=supported,
-            avoid_clashes=clashes_to_avoid,  # this prevents fname clashes between filesets
-            **kwargs,
-        )
-        cache[fileset] = copied
-        return copied
-
-    return TypeParser.apply_to_instances(FileSet, copy_fileset, value)
+    return isinstance(obj, (Task, Workflow))

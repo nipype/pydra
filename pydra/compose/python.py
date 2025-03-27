@@ -16,7 +16,7 @@ from pydra.compose.base import (
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
-__all__ = ["arg", "out", "define", "PythonTask", "PythonOutputs"]
+__all__ = ["arg", "out", "define", "Task", "Outputs"]
 
 
 @attrs.define
@@ -103,7 +103,7 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
-) -> "PythonTask":
+) -> "Task":
     """
     Create an interface for a function or a class.
 
@@ -124,20 +124,19 @@ def define(
 
     Returns
     -------
-    PythonTask
+    Task
         The task class for the Python function
     """
-    from pydra.engine.specs import PythonTask, PythonOutputs
 
-    def make(wrapped: ty.Callable | type) -> PythonTask:
+    def make(wrapped: ty.Callable | type) -> Task:
         if inspect.isclass(wrapped):
             klass = wrapped
             function = klass.function
             name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                PythonTask,
-                PythonOutputs,
+                Task,
+                Outputs,
                 klass,
                 arg,
                 out,
@@ -176,8 +175,8 @@ def define(
         )
 
         defn = build_task_class(
-            PythonTask,
-            PythonOutputs,
+            Task,
+            Outputs,
             parsed_inputs,
             parsed_outputs,
             name=name,
@@ -197,16 +196,16 @@ def define(
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class PythonOutputs(base.Outputs):
+class Outputs(base.Outputs):
 
     @classmethod
-    def _from_task(cls, job: "Job[PythonTask]") -> ty.Self:
+    def _from_task(cls, job: "Job[Task]") -> ty.Self:
         """Collect the outputs of a job from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
         Parameters
         ----------
-        job : Job[PythonTask]
+        job : Job[Task]
             The job whose outputs are being collected.
         outputs_dict : dict[str, ty.Any]
             The outputs of the job, as a dictionary
@@ -222,15 +221,15 @@ class PythonOutputs(base.Outputs):
         return outputs
 
 
-PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
+PythonOutputsType = ty.TypeVar("OutputType", bound=Outputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class PythonTask(base.Task[PythonOutputsType]):
+class Task(base.Task[PythonOutputsType]):
 
     _task_type = "python"
 
-    def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
+    def _run(self, job: "Job[Task]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
         inputs = attrs_values(self)
         del inputs["function"]

@@ -1,23 +1,22 @@
 """Execution workers."""
 
 import asyncio
-import asyncio.subprocess as asp
 import sys
 import json
 import abc
 import re
 import os
 import inspect
+import asyncio.subprocess as asp
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
-import subprocess as sp
 from shutil import copyfile, which
 import cloudpickle as cp
 import concurrent.futures as cf
-from pydra.engine.job import Job, save, load_job
 import logging
 import random
+from pydra.engine.job import Job, save, load_job
 
 logger = logging.getLogger("pydra.worker")
 
@@ -990,25 +989,32 @@ WORKERS = {
 }
 
 
-async def read_stream_and_display(stream, display):
+def get_available_cpus():
     """
-    Read from stream line by line until EOF, display, and capture the lines.
+    Return the number of CPUs available to the current process or, if that is not
+    available, the total number of CPUs on the system.
 
-    See Also
-    --------
-    This `discussion on StackOverflow
-    <https://stackoverflow.com/questions/17190221>`__.
-
+    Returns
+    -------
+    n_proc : :obj:`int`
+        The number of available CPUs.
     """
-    output = []
-    while True:
-        line = await stream.readline()
-        if not line:
-            break
-        output.append(line)
-        if display is not None:
-            display(line)  # assume it doesn't block
-    return b"".join(output).decode()
+    # Will not work on some systems or if psutil is not installed.
+    # See https://psutil.readthedocs.io/en/latest/#psutil.Process.cpu_affinity
+    try:
+        import psutil
+
+        return len(psutil.Process().cpu_affinity())
+    except (AttributeError, ImportError, NotImplementedError):
+        pass
+
+    # Not available on all systems, including macOS.
+    # See https://docs.python.org/3/library/os.html#os.sched_getaffinity
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+
+    # Last resort
+    return os.cpu_count()
 
 
 async def read_and_display_async(*cmd, hide_display=False, strip=False):
@@ -1043,80 +1049,22 @@ async def read_and_display_async(*cmd, hide_display=False, strip=False):
         return rc, stdout, stderr
 
 
-def read_and_display(*cmd, strip=False, hide_display=False):
-    """Capture a process' standard output."""
-    try:
-        process = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-    except Exception:
-        # TODO editing some tracing?
-        raise
-
-    if strip:
-        return (
-            process.returncode,
-            process.stdout.decode("utf-8").strip(),
-            process.stderr.decode("utf-8"),
-        )
-    else:
-        return (
-            process.returncode,
-            process.stdout.decode("utf-8"),
-            process.stderr.decode("utf-8"),
-        )
-
-
-def execute(cmd, strip=False):
+async def read_stream_and_display(stream, display):
     """
-    Run the event loop with coroutine.
+    Read from stream line by line until EOF, display, and capture the lines.
 
-    Uses :func:`read_and_display_async` unless a loop is
-    already running, in which case :func:`read_and_display`
-    is used.
-
-    Parameters
-    ----------
-    cmd : :obj:`list` or :obj:`tuple`
-        The command line to be executed.
-    strip : :obj:`bool`
-        TODO
+    See Also
+    --------
+    This `discussion on StackOverflow
+    <https://stackoverflow.com/questions/17190221>`__.
 
     """
-    rc, stdout, stderr = read_and_display(*cmd, strip=strip)
-    """
-    loop = get_open_loop()
-    if loop.is_running():
-        rc, stdout, stderr = read_and_display(*cmd, strip=strip)
-    else:
-        rc, stdout, stderr = loop.run_until_complete(
-            read_and_display_async(*cmd, strip=strip)
-        )
-    """
-    return rc, stdout, stderr
-
-
-def get_available_cpus():
-    """
-    Return the number of CPUs available to the current process or, if that is not
-    available, the total number of CPUs on the system.
-
-    Returns
-    -------
-    n_proc : :obj:`int`
-        The number of available CPUs.
-    """
-    # Will not work on some systems or if psutil is not installed.
-    # See https://psutil.readthedocs.io/en/latest/#psutil.Process.cpu_affinity
-    try:
-        import psutil
-
-        return len(psutil.Process().cpu_affinity())
-    except (AttributeError, ImportError, NotImplementedError):
-        pass
-
-    # Not available on all systems, including macOS.
-    # See https://docs.python.org/3/library/os.html#os.sched_getaffinity
-    if hasattr(os, "sched_getaffinity"):
-        return len(os.sched_getaffinity(0))
-
-    # Last resort
-    return os.cpu_count()
+    output = []
+    while True:
+        line = await stream.readline()
+        if not line:
+            break
+        output.append(line)
+        if display is not None:
+            display(line)  # assume it doesn't block
+    return b"".join(output).decode()

@@ -22,5 +22,4 @@ cov.xml
 .ipynb_checkpoints
 
 # This can be generated in-tree. We never want to commit it.
-pydra/_version.py
-pydra/engine/_version.py
+pydra/utils/_version.py

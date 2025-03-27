@@ -1,12 +1,11 @@
-"""Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
+"""Data structure to support :class:`~pydra.engine.workflow.Workflow` tasks."""
 
 from copy import copy
 from pathlib import Path
 import typing as ty
 from collections import Counter
 import subprocess as sp
-
-from pydra.utils.general import ensure_list
+from pydra.utils.general import ensure_list, is_workflow
 
 
 NodeType = ty.TypeVar("NodeType")
@@ -404,7 +403,6 @@ class DiGraph(ty.Generic[NodeType]):
 
     def create_dotfile_simple(self, outdir, name="graph"):
         """creates a simple dotfile (no nested structure)"""
-        from pydra.engine.core import is_workflow
 
         dotstr = "digraph G {\n"
         for nd in self.nodes:
@@ -503,7 +501,6 @@ class DiGraph(ty.Generic[NodeType]):
         return dotfile
 
     def _create_dotfile_single_graph(self, nodes, edges):
-        from pydra.engine.core import is_workflow
 
         wf_asnd = {}
         dotstr = ""

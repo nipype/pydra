@@ -3,19 +3,18 @@ import random
 import typing as ty
 from pydra.compose.base import Field
 from pydra.compose import python
-from pydra.engine.specs import PythonTask, PythonOutputs
 from pydra.utils.general import list_fields, attrs_values
 
 
-def non_func_fields(defn: PythonTask) -> list[Field]:
+def non_func_fields(defn: python.Task) -> list[Field]:
     return [f for f in list_fields(defn) if f.name != "function"]
 
 
-def non_func_values(defn: PythonTask) -> dict:
+def non_func_values(defn: python.Task) -> dict:
     return {n: v for n, v in attrs_values(defn).items() if n != "function"}
 
 
-def hashes(defn: PythonTask) -> dict[str, str]:
+def hashes(defn: python.Task) -> dict[str, str]:
     return defn._compute_hashes()[1]
 
 
@@ -26,11 +25,11 @@ def test_task_equivalence():
         return a + 2
 
     @python.define
-    class Canonical(PythonTask["Canonical.Outputs"]):
+    class Canonical(python.Task["Canonical.Outputs"]):
 
         a: ty.Any
 
-        class Outputs(PythonOutputs):
+        class Outputs(python.Outputs):
             out: int
 
         @staticmethod

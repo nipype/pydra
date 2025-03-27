@@ -2,7 +2,6 @@
 
 import __main__
 import logging
-from ._version import __version__
 
 __all__ = [
     "logger",
@@ -20,7 +19,7 @@ def check_latest_version():
 
 # Run telemetry on import for interactive sessions, such as IPython, Jupyter notebooks, Python REPL
 # if not hasattr(__main__, "__file__"):
-#     from pydra.engine.core import TaskBase
+#     from pydra.compose.base import Task
 
-#     if TaskBase._etelemetry_version_data is None:
-#         TaskBase._etelemetry_version_data = check_latest_version()
+#     if Task._etelemetry_version_data is None:
+#         Task._etelemetry_version_data = check_latest_version()

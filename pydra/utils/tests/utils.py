@@ -1,7 +1,5 @@
 from fileformats.generic import File, BinaryFile
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
-from pydra.engine.specs import ShellTask
-from pydra.engine import specs
 from pydra.compose import shell, python
 
 
@@ -30,7 +28,7 @@ def GenericFuncTask(in_file: File) -> File:
 
 
 @shell.define
-class GenericShellTask(specs.ShellTask["GenericShellTask.Outputs"]):
+class GenericShellTask(shell.Task["GenericShellTask.Outputs"]):
     """class with customized input and executables"""
 
     in_file: File = shell.arg(
@@ -39,7 +37,7 @@ class GenericShellTask(specs.ShellTask["GenericShellTask.Outputs"]):
         copy_mode="copy",
     )
 
-    class Outputs(specs.ShellOutputs):
+    class Outputs(shell.Outputs):
         out: File = shell.outarg(
             help="output file name",
             argstr="",
@@ -56,7 +54,7 @@ def SpecificFuncTask(in_file: MyFormatX) -> MyFormatX:
 
 
 @shell.define
-class SpecificShellTask(specs.ShellTask["SpecificShellTask.Outputs"]):
+class SpecificShellTask(shell.Task["SpecificShellTask.Outputs"]):
     executable = "echo"
 
     in_file: MyFormatX = shell.arg(
@@ -65,7 +63,7 @@ class SpecificShellTask(specs.ShellTask["SpecificShellTask.Outputs"]):
         copy_mode="copy",
     )
 
-    class Outputs(specs.ShellOutputs):
+    class Outputs(shell.Outputs):
         out: MyFormatX = shell.outarg(
             help="output file name",
             argstr="",
@@ -79,7 +77,7 @@ def OtherSpecificFuncTask(in_file: MyOtherFormatX) -> MyOtherFormatX:
     return in_file
 
 
-class OtherSpecificShellTask(ShellTask):
+class OtherSpecificShellTask(shell.Task):
 
     in_file: MyOtherFormatX = shell.arg(
         help="the input file",
@@ -87,7 +85,7 @@ class OtherSpecificShellTask(ShellTask):
         copy_mode="copy",
     )
 
-    class Outputs(specs.ShellOutputs):
+    class Outputs(shell.Outputs):
         out: MyOtherFormatX = shell.outarg(
             help="output file name",
             argstr="",

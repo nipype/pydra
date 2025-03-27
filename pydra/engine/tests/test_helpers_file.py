@@ -5,15 +5,11 @@ from pathlib import Path
 from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
-from pydra.engine.specs import ShellTask, ShellOutputs
 from pydra.compose import shell
-from pydra.utils.general import list_fields
-from pydra.utils.files import (
-    ensure_list,
-    MountIndentifier,
-    copy_nested_files,
-    template_update_single,
-)
+from pydra.utils.general import ensure_list
+from pydra.utils.mount_identifier import MountIndentifier
+from pydra.utils.typing import copy_nested_files
+from pydra.compose.shell.templating import template_update_single
 
 
 def _ignore_atime(stat):
@@ -357,7 +353,7 @@ def test_output_template(tmp_path):
         f.write("hello from pydra")
 
     @shell.define
-    class MyCommand(ShellTask["MyCommand.Outputs"]):
+    class MyCommand(shell.Task["MyCommand.Outputs"]):
         in_file: File = shell.arg(
             position=1,
             argstr="",
@@ -370,7 +366,7 @@ def test_output_template(tmp_path):
             help="optional file output",
         )
 
-        class Outputs(ShellOutputs):
+        class Outputs(shell.Outputs):
             pass
 
         executable = "my"

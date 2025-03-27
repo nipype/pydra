@@ -12,12 +12,12 @@ from fileformats.generic import FileSet, File
 from pydra.utils.general import (
     attrs_values,
     list_fields,
-    state_array_support,
     ensure_list,
     position_sort,
 )
 from pydra.utils.typing import (
     is_fileset_or_union,
+    state_array_support,
     is_optional,
     optional_type,
     is_multi_input,
@@ -39,7 +39,7 @@ from .templating import (
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
-TaskType = ty.TypeVar("TaskType", bound="ShellTask")
+TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
 RETURN_CODE_HELP = """The process' exit code."""
@@ -48,7 +48,7 @@ STDERR_HELP = """The standard error stream produced by the command."""
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class ShellOutputs(base.Outputs):
+class Outputs(base.Outputs):
     """Output task of a generic shell process."""
 
     BASE_NAMES = ["return_code", "stdout", "stderr"]
@@ -58,13 +58,13 @@ class ShellOutputs(base.Outputs):
     stderr: str = field.out(name="stderr", type=str, help=STDERR_HELP)
 
     @classmethod
-    def _from_task(cls, job: "Job[ShellTask]") -> ty.Self:
+    def _from_task(cls, job: "Job[Task]") -> ty.Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
         Parameters
         ----------
-        inputs : ShellTask
+        inputs : Task
             The input task of the shell process.
         output_dir : Path
             The directory where the process was run.
@@ -77,7 +77,7 @@ class ShellOutputs(base.Outputs):
 
         Returns
         -------
-        outputs : ShellOutputs
+        outputs : Outputs
             The outputs of the shell process
         """
         outputs = super()._from_task(job)
@@ -133,7 +133,7 @@ class ShellOutputs(base.Outputs):
         return default
 
     @classmethod
-    def _required_fields_satisfied(cls, fld: field.out, inputs: "ShellTask") -> bool:
+    def _required_fields_satisfied(cls, fld: field.out, inputs: "Task") -> bool:
         """checking if all fields from the requires and template are set in the input
         if requires is a list of list, checking if at least one list has all elements set
         """
@@ -218,7 +218,7 @@ class ShellOutputs(base.Outputs):
         return callable_(**call_args_val)
 
 
-ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
+ShellOutputsType = ty.TypeVar("OutputType", bound=Outputs)
 
 
 @state_array_support
@@ -232,7 +232,7 @@ def additional_args_converter(value: ty.Any) -> list[str]:
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class ShellTask(base.Task[ShellOutputsType]):
+class Task(base.Task[ShellOutputsType]):
 
     _task_type = "shell"
 
@@ -249,7 +249,7 @@ class ShellTask(base.Task[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("cmdline",)
 
-    def _run(self, job: "Job[ShellTask]", rerun: bool = True) -> None:
+    def _run(self, job: "Job[Task]", rerun: bool = True) -> None:
         """Run the shell command."""
         job.return_values = job.environment.execute(job)
 
@@ -312,7 +312,7 @@ class ShellTask(base.Task[ShellOutputsType]):
     def _command_shelltask_executable(
         self, fld: field.arg, value: ty.Any
     ) -> tuple[int, ty.Any]:
-        """Returning position and value for executable ShellTask input"""
+        """Returning position and value for executable Task input"""
         pos = 0  # executable should be the first el. of the command
         assert value
         return pos, ensure_list(value, tuple2list=True)
@@ -320,7 +320,7 @@ class ShellTask(base.Task[ShellOutputsType]):
     def _command_shelltask_args(
         self, fld: field.arg, value: ty.Any
     ) -> tuple[int, ty.Any]:
-        """Returning position and value for args ShellTask input"""
+        """Returning position and value for args Task input"""
         pos = -1  # assuming that args is the last el. of the command
         if value is None:
             return None
