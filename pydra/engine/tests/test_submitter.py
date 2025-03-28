@@ -708,7 +708,7 @@ def test_bad_builtin_worker():
 
 def test_bad_byo_worker1():
 
-    pydra.workers.base_worker
+    import pydra.workers.base_worker as base
 
     class BadWorker(base.Worker):
 
