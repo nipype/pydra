@@ -15,7 +15,7 @@ from __future__ import print_function
 import typing as ty
 import datetime
 
-from pydra.engine import __version__  # noqa
+from pydra.utils import __version__  # noqa
 
 
 authors = [("Nipype developers", "neuroimaging@python.org")]
