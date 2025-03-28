@@ -78,6 +78,30 @@ class Worker(base.Worker):
     result_files_by_jobid: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
     job_pkls_rerun: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
 
+    _INTERNAL_DICT_ATTRS = [
+        "error",
+        "tasks_to_run_by_threads_requested",
+        "output_by_jobid",
+        "jobid_by_task_uid",
+        "threads_used",
+        "job_completed_by_jobid",
+        "result_files_by_jobid",
+        "job_pkls_rerun",
+    ]
+
+    def __getstate__(self) -> dict[str, ty.Any]:
+        """Return state for pickling."""
+        state = super().__getstate__()
+        for atr in self._INTERNAL_DICT_ATTRS:
+            del state[atr]
+        return state
+
+    def __setstate__(self, state: dict[str, ty.Any]):
+        """Set state for unpickling."""
+        super().__setstate__(state)
+        for atr in self._INTERNAL_DICT_ATTRS:
+            setattr(self, atr, {})
+
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
         if isinstance(job, Job):
             cache_dir = job.cache_dir

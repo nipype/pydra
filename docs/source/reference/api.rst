@@ -4,7 +4,7 @@ API
 Python tasks
 ------------
 
-.. automodule:: pydra.design.python
+.. automodule:: pydra.compose.python
    :members:
    :undoc-members:
    :show-inheritance:
@@ -12,7 +12,7 @@ Python tasks
 Shell tasks
 -----------
 
-.. automodule:: pydra.design.shell
+.. automodule:: pydra.compose.shell
    :members:
    :undoc-members:
    :show-inheritance:
@@ -20,7 +20,7 @@ Shell tasks
 Workflows
 ---------
 
-.. automodule:: pydra.design.workflow
+.. automodule:: pydra.compose.workflow
    :members:
    :undoc-members:
    :show-inheritance:

@@ -31,6 +31,17 @@ class Worker(base.Worker):
     sbatch_args: str = ""
     error: dict[str, ty.Any] = attrs.field(factory=dict)
 
+    def __getstate__(self) -> dict[str, ty.Any]:
+        """Return state for pickling."""
+        state = super().__getstate__()
+        del state["error"]
+        return state
+
+    def __setstate__(self, state: dict[str, ty.Any]):
+        """Set state for unpickling."""
+        state["error"] = {}
+        super().__setstate__(state)
+
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
         if isinstance(job, Job):
             cache_dir = job.cache_dir
