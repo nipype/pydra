@@ -320,7 +320,7 @@ class Outputs(base.Outputs):
                         f"Job {node.name!r} failed @ {time_of_crash} running "
                         f"{node._task} with the following errors:\n{error_message}"
                         "\nTo inspect, please load the pickled job object from here: "
-                        f"{result.output_dir}/_task.pklz"
+                        f"{result.output_dir}/_job.pklz"
                     )
             raise RuntimeError(
                 f"Workflow {job!r} failed with errors:\n\n" + "\n\n".join(errors)

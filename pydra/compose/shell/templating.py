@@ -170,8 +170,8 @@ def _single_template_formatting(
     val_dict = {}
     file_template = None
 
-    for fld in inp_fields:
-        fld_name = fld[1:-1]  # extracting the name form {field_name}
+    for inp_fld in inp_fields:
+        fld_name = inp_fld[1:-1]  # extracting the name form {field_name}
         if fld_name not in values:
             raise AttributeError(f"{fld_name} is not provided in the input")
         fld_value = values[fld_name]

@@ -97,7 +97,7 @@ class Audit:
     def finalize_audit(self, result):
         """End auditing."""
         if self.audit_check(AuditFlag.RESOURCE):
-            from pydra.utils.general import gather_runtime_info
+            from pydra.engine.result import gather_runtime_info
 
             self.resource_monitor.stop()
             result.runtime = gather_runtime_info(self.resource_monitor.fname)

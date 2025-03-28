@@ -1,6 +1,7 @@
 import typing as ty
 import os
 from copy import copy
+import attrs
 import subprocess as sp
 from pathlib import Path
 import logging
@@ -16,6 +17,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
+@attrs.define
 class Environment:
     """
     Base class for environments that are used to execute tasks.
@@ -54,7 +56,14 @@ class Environment:
     @classmethod
     def plugin(cls, plugin_name: str) -> ty.Type["Environment"]:
         """Return a worker class by name."""
-        return cls.available_plugins()[plugin_name.replace("-", "_")]
+        try:
+            return cls.available_plugins()[plugin_name.replace("-", "_")]
+        except KeyError:
+            raise ValueError(
+                f"No environment matches {plugin_name!r}, check if there is a "
+                f"plugin package called 'pydra-environments-{plugin_name}' that needs to be "
+                "installed."
+            )
 
     @classmethod
     def plugin_name(cls) -> str:
@@ -73,6 +82,15 @@ class Environment:
         return plugin_name.replace("_", "-")
 
 
+def split_if_str(s) -> list[str]:
+    if isinstance(s, str):
+        return s.split()
+    elif not isinstance(s, list):
+        return list(s)
+    return s
+
+
+@attrs.define
 class Container(Environment):
     """
     Base class for container environments used by Docker and Singularity.
@@ -89,15 +107,10 @@ class Container(Environment):
         Extra arguments to be passed to the container
     """
 
-    def __init__(self, image, tag="latest", root="/mnt/pydra", xargs=None):
-        self.image = image
-        self.tag = tag
-        if xargs is None:
-            xargs = []
-        elif isinstance(xargs, str):
-            xargs = xargs.split()
-        self.xargs = xargs
-        self.root = root
+    image: str
+    tag: str = "latest"
+    root: str = "/mnt/pydra"
+    xargs: list[str] = attrs.field(factory=list, converter=split_if_str)
 
     def bind(self, loc, mode="ro"):
         loc_abs = Path(loc).absolute()
@@ -121,7 +134,6 @@ class Container(Environment):
         bindings: dict
           Mapping from paths in the host environment to the target environment
         """
-        from pydra.compose import shell
 
         bindings: dict[str, tuple[str, str]] = {}
         value_updates: dict[str, tuple[Path, ...]] = {}

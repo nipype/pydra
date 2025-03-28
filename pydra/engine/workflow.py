@@ -242,7 +242,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         OutputType
             The outputs of the node
         """
-        from pydra.environments.native import Native
+        from pydra.environments import native
 
         if name is None:
             name = type(task).__name__
@@ -250,7 +250,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             raise ValueError(f"Node with name {name!r} already exists in the workflow")
         if (
             environment
-            and not isinstance(environment, Native)
+            and not isinstance(environment, native.Environment)
             and task._task_type != "shell"
         ):
             raise ValueError(

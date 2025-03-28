@@ -408,7 +408,7 @@ class Job(ty.Generic[TaskType]):
         """Pickling the tasks with full inputs"""
         pkl_files = self.cache_dir / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
-        task_main_path = pkl_files / f"{self.name}_{self.uid}_task.pklz"
+        task_main_path = pkl_files / f"{self.name}_{self.uid}_job.pklz"
         save(task_path=pkl_files, job=self, name_prefix=f"{self.name}_{self.uid}")
         return task_main_path
 

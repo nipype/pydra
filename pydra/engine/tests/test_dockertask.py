@@ -241,10 +241,7 @@ def test_docker_inputspec_2(worker, tmp_path):
         file1=filename_1,
     )
 
-    outputs = docky(
-        name="docky",
-        environment=docker.Environment(image="busybox"),
-    )
+    outputs = docky(environment=docker.Environment(image="busybox"))
     assert outputs.stdout.strip() == "hello from pydra\nhave a nice one"
 
 

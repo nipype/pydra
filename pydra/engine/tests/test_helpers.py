@@ -18,7 +18,7 @@ from pydra.engine.job import (
     save,
     load_and_run,
 )
-from pydra.workers.base import get_available_cpus
+from pydra.workers.cf import get_available_cpus
 from pydra.utils.hash import hash_function
 
 
@@ -31,7 +31,7 @@ def test_save(tmpdir):
     save(outdir, job=foo)
     del foo
     # load saved job
-    job_pkl = outdir / "_task.pklz"
+    job_pkl = outdir / "_job.pklz"
     foo: Job = cp.loads(job_pkl.read_bytes())
     assert foo.name == "mult"
     assert foo.inputs["x"] == 1 and foo.inputs["y"] == 2

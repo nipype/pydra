@@ -399,21 +399,21 @@ def ensure_list(obj, tuple2list=False):
         return list(obj)
     elif is_lazy(obj):
         return obj
-    elif is_container(obj):
-        raise NotImplementedError("just checking for now")
+    # elif is_container(obj):
+    #     raise NotImplementedError("just checking for now")
     return [obj]
 
 
-# def ensure_list(filename):
-#     """Return a list given either a string or a list."""
-#     if isinstance(filename, (str, bytes)):
-#         return [filename]
-#     elif isinstance(filename, list):
-#         return filename
-#     elif is_container(filename):
-#         return [x for x in filename]
+def ensure_file_list(filename):
+    """Return a list given either a string or a list."""
+    if isinstance(filename, (str, bytes)):
+        return [filename]
+    elif isinstance(filename, list):
+        return filename
+    elif is_container(filename):
+        return [x for x in filename]
 
-#     return None
+    return None
 
 
 # dj: copied from misc
@@ -448,7 +448,7 @@ def is_workflow(obj):
     return isinstance(obj, (Task, Workflow))
 
 
-def get_plugin_classes(namespace: ty.ModuleType, class_name: str) -> dict[str, type]:
+def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str, type]:
     """
     Get all classes within sub-packages of namespace package with a given name, e.g.
     "Worker" within "pydra.workers.*" sub-packages.
@@ -469,9 +469,10 @@ def get_plugin_classes(namespace: ty.ModuleType, class_name: str) -> dict[str, t
     sub_packages = [
         importlib.import_module(f"{namespace.__name__}.{m.name}")
         for m in pkgutil.iter_modules(namespace.__path__)
+        if m.name != "base"
     ]
     return {
-        class_name: getattr(pkg, class_name)
+        pkg.__name__.split(".")[-1]: getattr(pkg, class_name)
         for pkg in sub_packages
         if hasattr(pkg, class_name)
     }

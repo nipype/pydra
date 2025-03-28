@@ -1,6 +1,7 @@
 """Execution workers."""
 
 import asyncio
+import attrs
 import sys
 import abc
 import inspect
@@ -20,22 +21,23 @@ if ty.TYPE_CHECKING:
 TaskType = ty.TypeVar("TaskType", bound="base.Task")
 
 
+@attrs.define
 class Worker(metaclass=abc.ABCMeta):
     """A base class for execution of tasks."""
 
-    plugin_name: str
-    loop: asyncio.AbstractEventLoop
+    loop: asyncio.AbstractEventLoop = None
 
-    def __init__(self, loop=None):
-        """Initialize the worker."""
-        logger.debug(f"Initializing {self.__class__.__name__}")
-        self.loop = loop
-
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, ty.Any]:
         """Return state for pickling."""
-        state = super().__getstate__()
+        state = attrs.asdict(self, recurse=False)
         state["loop"] = None
         return state
+
+    def __setstate__(self, state: dict[str, ty.Any]) -> None:
+        for key, value in state.items():
+            setattr(self, key, value)
+        self.loop = None
+        # Loop will be restored by submitter __setstate__
 
     @abc.abstractmethod
     def run(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
@@ -101,7 +103,14 @@ class Worker(metaclass=abc.ABCMeta):
     @classmethod
     def plugin(cls, plugin_name: str) -> ty.Type["Worker"]:
         """Return a worker class by name."""
-        return cls.available_plugins()[plugin_name.replace("-", "_")]
+        try:
+            return cls.available_plugins()[plugin_name.replace("-", "_")]
+        except KeyError:
+            raise ValueError(
+                f"No worker matches {plugin_name!r}, check if there is a "
+                f"plugin package called 'pydra-workers-{plugin_name}' that needs to be "
+                "installed."
+            )
 
     @classmethod
     def plugin_name(cls) -> str:
@@ -116,8 +125,8 @@ class Worker(metaclass=abc.ABCMeta):
                     f"isn't installed within `pydra.workers` ({cls.__module__}). "
                     "Please set the `_plugin_name` attribute on the class explicitly."
                 )
-            plugin_name = parts[-1]
-        return plugin_name.replace("_", "-")
+            plugin_name = parts[-1].replace("_", "-")
+        return plugin_name
 
 
 async def read_and_display_async(*cmd, hide_display=False, strip=False):
@@ -171,3 +180,9 @@ async def read_stream_and_display(stream, display):
         if display is not None:
             display(line)  # assume it doesn't block
     return b"".join(output).decode()
+
+
+def ensure_non_negative(value: int) -> int:
+    if not value or value < 0:
+        return 0
+    return value

@@ -2,6 +2,7 @@ import asyncio
 import sys
 import json
 import re
+import attrs
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
@@ -17,86 +18,65 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
 
 
+@attrs.define
 class Worker(base.Worker):
-    """A worker to execute tasks on SLURM systems."""
+    """A worker to execute tasks on SLURM systems. Initialize SGE Worker.
+
+    Parameters
+    ----------
+    poll_delay : seconds
+        Delay between polls to slurmd
+    qsub_args : str
+        Additional qsub arguments
+    max_jobs : int
+        Maximum number of submitted jobs
+    write_output_files : bool
+        Turns on/off writing to output files for individual tasks
+    max_job_array_length : int
+        Number of jobs an SGE job array can hold
+    indirect_submit_host : str
+        Name of a submit node in the SGE cluster through which to run SGE qsub commands
+    max_threads : int
+        Maximum number of threads that will be scheduled for SGE submission at once
+    poll_for_result_file : bool
+        If true, a job is complete when its _result.pklz file exists
+        If false, a job is complete when its job array is indicated complete by qstat/qacct polling
+    default_threads_per_task : int
+        Sets the number of slots SGE should request for a job if sgeThreads
+        is not a field in the job input_spec
+    polls_before_checking_evicted : int
+        Number of poll_delays before running qacct to check if a job has been evicted by SGE
+    collect_jobs_delay : int
+        Number of seconds to wait for the list of jobs for a job array to fill
+    """
 
     _cmd = "qsub"
     _sacct_re = re.compile(
         "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
     )
 
-    def __init__(
-        self,
-        loop=None,
-        poll_delay=1,
-        qsub_args=None,
-        write_output_files=True,
-        max_job_array_length=50,
-        indirect_submit_host=None,
-        max_threads=None,
-        poll_for_result_file=True,
-        default_threads_per_task=1,
-        polls_before_checking_evicted=60,
-        collect_jobs_delay=30,
-        default_qsub_args="",
-        max_mem_free=None,
-    ):
-        """
-        Initialize SGE Worker.
-
-        Parameters
-        ----------
-        poll_delay : seconds
-            Delay between polls to slurmd
-        qsub_args : str
-            Additional qsub arguments
-        max_jobs : int
-            Maximum number of submitted jobs
-        write_output_files : bool
-            Turns on/off writing to output files for individual tasks
-        max_job_array_length : int
-            Number of jobs an SGE job array can hold
-        indirect_submit_host : str
-            Name of a submit node in the SGE cluster through which to run SGE qsub commands
-        max_threads : int
-            Maximum number of threads that will be scheduled for SGE submission at once
-        poll_for_result_file : bool
-            If true, a job is complete when its _result.pklz file exists
-            If false, a job is complete when its job array is indicated complete by qstat/qacct polling
-        default_threads_per_task : int
-            Sets the number of slots SGE should request for a job if sgeThreads
-            is not a field in the job input_spec
-        polls_before_checking_evicted : int
-            Number of poll_delays before running qacct to check if a job has been evicted by SGE
-        collect_jobs_delay : int
-            Number of seconds to wait for the list of jobs for a job array to fill
-
-        """
-        super().__init__(loop=loop)
-        if not poll_delay or poll_delay < 0:
-            poll_delay = 0
-        self.poll_delay = poll_delay
-        self.qsub_args = qsub_args or ""
-        self.error = {}
-        self.write_output_files = (
-            write_output_files  # set to False to avoid OSError: Too many open files
-        )
-        self.tasks_to_run_by_threads_requested = {}
-        self.output_by_jobid = {}
-        self.jobid_by_task_uid = {}
-        self.max_job_array_length = max_job_array_length
-        self.threads_used = 0
-        self.job_completed_by_jobid = {}
-        self.indirect_submit_host = indirect_submit_host
-        self.max_threads = max_threads
-        self.default_threads_per_task = default_threads_per_task
-        self.poll_for_result_file = poll_for_result_file
-        self.polls_before_checking_evicted = polls_before_checking_evicted
-        self.result_files_by_jobid = {}
-        self.collect_jobs_delay = collect_jobs_delay
-        self.job_pkls_rerun = {}
-        self.default_qsub_args = default_qsub_args
-        self.max_mem_free = max_mem_free
+    poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)
+    qsub_args: str = ""
+    write_output_files: bool = True
+    max_job_array_length: int = 50
+    indirect_submit_host: str | None = None
+    max_threads: int | None = None
+    poll_for_result_file: bool = True
+    default_threads_per_task: int = 1
+    polls_before_checking_evicted: int = 60
+    collect_jobs_delay: int = 30
+    default_qsub_args: str = ""
+    max_mem_free: int | None = None
+    error: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
+    tasks_to_run_by_threads_requested: dict[str, ty.Any] = attrs.field(
+        factory=dict, init=False
+    )
+    output_by_jobid: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
+    jobid_by_task_uid: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
+    threads_used: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
+    job_completed_by_jobid: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
+    result_files_by_jobid: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
+    job_pkls_rerun: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
 
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
         if isinstance(job, Job):
@@ -122,9 +102,9 @@ class Worker(base.Worker):
             if not (script_dir / "_task.pkl").exists():
                 save(script_dir, job=job)
         else:
-            copyfile(job[1], script_dir / "_task.pklz")
+            copyfile(job[1], script_dir / "_job.pklz")
 
-        job_pkl = script_dir / "_task.pklz"
+        job_pkl = script_dir / "_job.pklz"
         if not job_pkl.exists() or not job_pkl.stat().st_size:
             raise Exception("Missing or empty job!")
 
@@ -357,7 +337,7 @@ class Worker(base.Worker):
     ):
         for job_pkl, ind, rerun in tasks_to_run:
             sge_task = load_job(job_pkl=job_pkl, ind=ind)
-            application_job_pkl = sge_task.output_dir / "_task.pklz"
+            application_job_pkl = sge_task.output_dir / "_job.pklz"
             if (
                 not application_job_pkl.exists()
                 or load_job(job_pkl=application_job_pkl).result() is None

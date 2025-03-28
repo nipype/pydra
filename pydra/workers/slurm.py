@@ -7,6 +7,7 @@ from tempfile import gettempdir
 from pathlib import Path
 from shutil import copyfile
 import logging
+import attrs
 from pydra.engine.job import Job, save
 from . import base
 
@@ -17,6 +18,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
 
 
+@attrs.define
 class Worker(base.Worker):
     """A worker to execute tasks on SLURM systems."""
 
@@ -25,26 +27,9 @@ class Worker(base.Worker):
         "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
     )
 
-    def __init__(self, loop=None, poll_delay=1, sbatch_args=None):
-        """
-        Initialize SLURM Worker.
-
-        Parameters
-        ----------
-        poll_delay : seconds
-            Delay between polls to slurmd
-        sbatch_args : str
-            Additional sbatch arguments
-        max_jobs : int
-            Maximum number of submitted jobs
-
-        """
-        super().__init__(loop=loop)
-        if not poll_delay or poll_delay < 0:
-            poll_delay = 0
-        self.poll_delay = poll_delay
-        self.sbatch_args = sbatch_args or ""
-        self.error = {}
+    poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)
+    sbatch_args: str = ""
+    error: dict[str, ty.Any] = attrs.field(factory=dict)
 
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
         if isinstance(job, Job):
@@ -64,9 +49,9 @@ class Worker(base.Worker):
             if not (script_dir / "_task.pkl").exists():
                 save(script_dir, job=job)
         else:
-            copyfile(job[1], script_dir / "_task.pklz")
+            copyfile(job[1], script_dir / "_job.pklz")
 
-        job_pkl = script_dir / "_task.pklz"
+        job_pkl = script_dir / "_job.pklz"
         if not job_pkl.exists() or not job_pkl.stat().st_size:
             raise Exception("Missing or empty job!")
 

@@ -1,5 +1,5 @@
-import asyncio
 import os
+import attrs
 import typing as ty
 import cloudpickle as cp
 import concurrent.futures as cf
@@ -11,56 +11,6 @@ logger = logging.getLogger("pydra.worker")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
-
-
-class Worker(base.Worker):
-    """A worker to execute in parallel using Python's concurrent futures."""
-
-    n_procs: int
-    loop: asyncio.AbstractEventLoop
-    pool: cf.ProcessPoolExecutor
-
-    def __init__(self, n_procs: int | None = None):
-        """Initialize Worker."""
-        super().__init__()
-        self.n_procs = get_available_cpus() if n_procs is None else n_procs
-        # added cpu_count to verify, remove once confident and let PPE handle
-        self.pool = cf.ProcessPoolExecutor(self.n_procs)
-        # self.loop = asyncio.get_event_loop()
-        logger.debug("Initialize ConcurrentFuture")
-
-    def __getstate__(self):
-        """Return state for pickling."""
-        state = super().__getstate__()
-        state["n_procs"] = self.n_procs
-        return state
-
-    def __setstate__(self, state):
-        """Set state for unpickling."""
-        self.n_procs = state["n_procs"]
-        self.pool = cf.ProcessPoolExecutor(self.n_procs)
-        super().__setstate__(state)
-
-    async def run(
-        self,
-        job: Job[base.TaskType],
-        rerun: bool = False,
-    ) -> "Result":
-        """Run a job."""
-        assert self.loop, "No event loop available to submit tasks"
-        return await self.loop.run_in_executor(
-            self.pool, self.uncloudpickle_and_run, cp.dumps(job), rerun
-        )
-
-    @classmethod
-    def uncloudpickle_and_run(cls, job_pkl: bytes, rerun: bool) -> "Result":
-        """Unpickle and run a job."""
-        job: Job[base.TaskType] = cp.loads(job_pkl)
-        return job.run(rerun=rerun)
-
-    def close(self):
-        """Finalize the internal pool of tasks."""
-        self.pool.shutdown()
 
 
 def get_available_cpus():
@@ -89,3 +39,48 @@ def get_available_cpus():
 
     # Last resort
     return os.cpu_count()
+
+
+@attrs.define
+class Worker(base.Worker):
+    """A worker to execute in parallel using Python's concurrent futures."""
+
+    n_procs: int = attrs.field(factory=get_available_cpus)
+    pool: cf.ProcessPoolExecutor = attrs.field()
+
+    @pool.default
+    def _pool_default(self) -> cf.ProcessPoolExecutor:
+        return cf.ProcessPoolExecutor(self.n_procs)
+
+    def __getstate__(self) -> dict[str, ty.Any]:
+        """Return state for pickling."""
+        state = super().__getstate__()
+        del state["pool"]
+        return state
+
+    def __setstate__(self, state: dict[str, ty.Any]) -> None:
+        """Set state from pickling."""
+        super().__setstate__(state)
+        self.pool = cf.ProcessPoolExecutor(self.n_procs)
+
+    async def run(
+        self,
+        job: Job[base.TaskType],
+        rerun: bool = False,
+    ) -> "Result":
+        """Run a job."""
+        assert self.loop, "No event loop available to submit tasks"
+        job_pkl = cp.dumps(job)
+        return await self.loop.run_in_executor(
+            self.pool, self.uncloudpickle_and_run, job_pkl, rerun
+        )
+
+    @classmethod
+    def uncloudpickle_and_run(cls, job_pkl: bytes, rerun: bool) -> "Result":
+        """Unpickle and run a job."""
+        job: Job[base.TaskType] = cp.loads(job_pkl)
+        return job.run(rerun=rerun)
+
+    def close(self):
+        """Finalize the internal pool of tasks."""
+        self.pool.shutdown()

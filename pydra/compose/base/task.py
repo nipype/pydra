@@ -76,7 +76,7 @@ class Outputs:
 
     @property
     def _results(self) -> "Result[Self]":
-        results_path = self._output_dir / "_task.pklz"
+        results_path = self._output_dir / "_job.pklz"
         if not results_path.exists():
             raise FileNotFoundError(f"Job results file {results_path} not found")
         with open(results_path, "rb") as f:
@@ -257,7 +257,7 @@ class Task(ty.Generic[OutputsType]):
                 f"Job {self} failed @ {time_of_crash} with the "
                 f"following errors:\n{error_message}\n"
                 "To inspect, please load the pickled job object from here: "
-                f"{result.output_dir}/_task.pklz"
+                f"{result.output_dir}/_job.pklz"
             )
         return result.outputs
 

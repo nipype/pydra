@@ -13,10 +13,6 @@ logger = logging.getLogger("pydra.worker")
 class Worker(base.Worker):
     """A worker to execute linearly."""
 
-    def __init__(self, **kwargs):
-        """Initialize worker."""
-        logger.debug("Initialize SerialWorker")
-
     def run(
         self,
         job: "Job[base.TaskType]",

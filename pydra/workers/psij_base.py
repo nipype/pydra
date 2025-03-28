@@ -2,6 +2,8 @@ import typing as ty
 from pathlib import Path
 import cloudpickle as cp
 import logging
+import attrs
+import psij
 from pydra.engine.job import Job
 from . import base
 
@@ -11,25 +13,9 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
 
 
+@attrs.define
 class PsijWorker(base.Worker):
     """A worker to execute tasks using PSI/J."""
-
-    def __init__(self, **kwargs):
-        """
-        Initialize PsijWorker.
-
-        Parameters
-        ----------
-        subtype : str
-            Scheduler for PSI/J.
-        """
-        try:
-            import psij
-        except ImportError:
-            logger.critical("Please install psij.")
-            raise
-        logger.debug("Initialize PsijWorker")
-        self.psij = psij
 
     def make_spec(self, cmd=None, arg=None):
         """
@@ -47,7 +33,7 @@ class PsijWorker(base.Worker):
         psij.JobDef
             PSI/J job specification.
         """
-        spec = self.psij.JobSpec()
+        spec = psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
 
@@ -69,7 +55,7 @@ class PsijWorker(base.Worker):
         psij.Job
             PSI/J job.
         """
-        job = self.psij.Job()
+        job = psij.Job()
         job.spec = spec
         return job
 
@@ -90,7 +76,7 @@ class PsijWorker(base.Worker):
         -------
         None
         """
-        jex = self.psij.JobExecutor.get_instance(self.subtype)
+        jex = psij.JobExecutor.get_instance(self.subtype)
         absolute_path = Path(__file__).parent
 
         cache_dir = job.cache_dir

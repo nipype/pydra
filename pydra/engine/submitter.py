@@ -26,7 +26,7 @@ from pydra.utils.general import default_run_cache_dir
 from pydra.compose import workflow
 from pydra.engine.state import State
 from pydra.workers.base import Worker
-
+from pydra.compose.base import Task, Outputs
 
 logger = logging.getLogger("pydra.submitter")
 
@@ -35,7 +35,6 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
     from pydra.engine.workflow import Workflow
-    from pydra.compose.base import Task, Outputs
     from pydra.environments.base import Environment
 
 
@@ -107,7 +106,7 @@ class Submitter:
         **kwargs,
     ):
 
-        from pydra.environments.native import Native
+        from pydra.environments import native
 
         if worker is None:
             worker = "debug"
@@ -139,26 +138,27 @@ class Submitter:
                 f"not {max_concurrent}"
             )
         self.max_concurrent = max_concurrent
-        self.environment = environment if environment is not None else Native()
+        self.environment = (
+            environment if environment is not None else native.Environment()
+        )
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
-        if isinstance(worker, Worker):
-            self._worker = worker
-        else:
-            if issubclass(worker, Worker):
-                worker_cls = worker
-            elif isinstance(worker, str):
+        if not isinstance(worker, Worker):
+            if isinstance(worker, str):
                 worker_cls = Worker.plugin(worker)
+            elif issubclass(worker, Worker):
+                worker_cls = worker
             else:
                 raise TypeError(
                     "Worker must be a Worker object, name of a worker or a Worker "
-                    f"class, not {type(worker)}"
+                    f"class, not {worker}"
                 )
             try:
-                self._worker = worker_cls(**kwargs)
+                worker = worker_cls(**kwargs)
             except TypeError as e:
                 e.add_note(WORKER_KWARG_FAIL_NOTE)
                 raise
+        self.worker = worker
         self.run_start_time = None
         self.clean_stale_locks = (
             clean_stale_locks
@@ -166,15 +166,7 @@ class Submitter:
             else (self.worker.plugin_name() == "debug")
         )
         self.worker_kwargs = kwargs
-        self._worker.loop = self.loop
-
-    @property
-    def worker(self):
-        if self._worker is None:
-            raise RuntimeError(
-                "Cannot access worker of unpickeld submitter (typically in subprocess)"
-            )
-        return self._worker
+        self.worker.loop = self.loop
 
     def __call__(
         self,
@@ -896,8 +888,8 @@ async def prepare_runnable(runnable):
 #                 matching_name = []
 #                 for cache_loc in tsk.cache_locations:
 #                     for tsk_work_dir in cache_loc.iterdir():
-#                         if (tsk_work_dir / "_task.pklz").exists():
-#                             with open(tsk_work_dir / "_task.pklz", "rb") as f:
+#                         if (tsk_work_dir / "_job.pklz").exists():
+#                             with open(tsk_work_dir / "_job.pklz", "rb") as f:
 #                                 saved_tsk = pickle.load(f)
 #                             if saved_tsk.name == pred.name:
 #                                 matching_name.append(

@@ -9,7 +9,12 @@ import getpass
 from time import strftime
 from filelock import SoftFileLock
 from fileformats.generic import FileSet
-from pydra.utils.general import attrs_values, attrs_fields, is_workflow
+from pydra.utils.general import (
+    attrs_values,
+    attrs_fields,
+    is_workflow,
+)
+from pydra.utils.typing import copy_nested_files
 from pydra.compose import workflow, base
 
 if ty.TYPE_CHECKING:
@@ -82,7 +87,7 @@ class Result(ty.Generic[OutputsType]):
 
     @property
     def job(self):
-        job_pkl = self.output_dir / "_task.pklz"
+        job_pkl = self.output_dir / "_job.pklz"
         if not job_pkl.exists():
             return None
         with open(job_pkl, "rb") as f:
@@ -191,7 +196,7 @@ def save(
             with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
                 cp.dump(result, fp)
         if job:
-            with (task_path / f"{name_prefix}_task.pklz").open("wb") as fp:
+            with (task_path / f"{name_prefix}_job.pklz").open("wb") as fp:
                 cp.dump(job, fp)
         if return_values:
             with (task_path / f"{name_prefix}_return_values.pklz").open("wb") as fp:
@@ -202,7 +207,6 @@ def copyfile_workflow(
     wf_path: os.PathLike, outputs: workflow.Outputs
 ) -> workflow.Outputs:
     """if file in the wf results, the file will be copied to the workflow directory"""
-    from pydra.utils.files import copy_nested_files
 
     for field in attrs_fields(outputs):
         value = getattr(outputs, field.name)

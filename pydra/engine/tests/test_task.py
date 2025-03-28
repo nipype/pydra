@@ -888,7 +888,6 @@ def test_audit_task(tmpdir):
         cache_dir=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
-        name="TestFunc",
     )
     message_path = tmpdir / funky._checksum / "messages"
 
@@ -919,7 +918,6 @@ def test_audit_shellcommandtask(tmpdir):
         cache_dir=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
-        name="shelly",
     )
     message_path = tmpdir / shelly._checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
@@ -1017,7 +1015,6 @@ def test_audit_shellcommandtask_version(tmpdir):
 
     shelly(
         cache_dir=tmpdir,
-        name="shelly",
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
@@ -1114,7 +1111,6 @@ def test_audit_prov_wf(
     wf = Workflow(x=2)
 
     wf(
-        name="wf",
         cache_dir=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),

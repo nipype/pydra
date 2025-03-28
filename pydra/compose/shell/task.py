@@ -341,7 +341,7 @@ class Task(base.Task[ShellOutputsType]):
         Parameters
         ----------
         """
-        if field.argstr is None and fld.formatter is None:
+        if fld.argstr is None and fld.formatter is None:
             # assuming that input that has no argstr is not used in the command,
             # or a formatter is not provided too.
             return None
@@ -389,11 +389,11 @@ class Task(base.Task[ShellOutputsType]):
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str != "":
                 cmd_add += split_cmd(cmd_el_str)
-        elif tp is bool and "{" not in field.argstr:
+        elif tp is bool and "{" not in fld.argstr:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command.
             if value is True:
-                cmd_add.append(field.argstr)
+                cmd_add.append(fld.argstr)
         elif is_multi_input(tp) or tp is MultiOutputObj or tp is MultiOutputFile:
             # if the field is MultiInputObj, it is used to create a list of arguments
             for val in value or []:
@@ -408,11 +408,11 @@ class Task(base.Task[ShellOutputsType]):
         """Returning arguments used to specify the command args for a single inputs"""
         value = values[fld.name]
         if (
-            field.argstr.endswith("...")
+            fld.argstr.endswith("...")
             and isinstance(value, ty.Iterable)
             and not isinstance(value, (str, bytes))
         ):
-            argstr = field.argstr.replace("...", "")
+            argstr = fld.argstr.replace("...", "")
             # if argstr has a more complex form, with "{input_field}"
             if "{" in argstr and "}" in argstr:
                 argstr_formatted_l = []
@@ -426,7 +426,7 @@ class Task(base.Task[ShellOutputsType]):
                 cmd_el_str = fld.sep.join([f" {argstr} {val}" for val in value])
         else:
             # in case there are ... when input is not a list
-            argstr = field.argstr.replace("...", "")
+            argstr = fld.argstr.replace("...", "")
             if isinstance(value, ty.Iterable) and not isinstance(value, (str, bytes)):
                 cmd_el_str = fld.sep.join([str(val) for val in value])
                 value = cmd_el_str
@@ -449,15 +449,15 @@ class Task(base.Task[ShellOutputsType]):
         fields = task_fields(self)
         available_template_names = [f.name for f in fields] + ["field", "inputs"]
         for fld in fields:
-            if field.argstr:
+            if fld.argstr:
                 if unrecognised := [
                     f
-                    for f in parse_format_string(field.argstr)
+                    for f in parse_format_string(fld.argstr)
                     if f not in available_template_names
                 ]:
                     errors.append(
                         f"Unrecognised field names in the argstr of {fld.name} "
-                        f"({field.argstr}): {unrecognised}"
+                        f"({fld.argstr}): {unrecognised}"
                     )
             if getattr(fld, "path_template", None):
                 if unrecognised := [

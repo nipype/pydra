@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
 from pydra.compose import shell
-from pydra.utils.general import ensure_list
+from pydra.utils.general import ensure_file_list
 from pydra.utils.mount_identifier import MountIndentifier
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update_single
@@ -45,8 +45,8 @@ def _temp_analyze_files_prime(tmpdir):
         (12.34, None),
     ],
 )
-def test_ensure_list(filename, expected):
-    x = ensure_list(filename)
+def test_ensure_file_list(filename, expected):
+    x = ensure_file_list(filename)
     assert x == expected
 
 

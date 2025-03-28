@@ -12,12 +12,12 @@ from pydra.compose import workflow, shell
 from fileformats.generic import Directory
 from pydra.engine.job import Job
 from pydra.engine.submitter import Submitter
-from pydra.workers.base import DebugWorker
+from pydra.workers import debug
+from pydra.environments import singularity
 from pydra.compose import python
 from pathlib import Path
 from datetime import datetime
 from pydra.engine.result import Result
-from pydra.environments.singularity import Singularity
 from .utils import (
     need_sge,
     need_slurm,
@@ -63,7 +63,7 @@ def test_callable_wf(any_worker, tmpdir):
     # providing submitter
     wf = BasicWorkflow(x=5)
 
-    with Submitter(workflow=any_worker, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
         res = sub(wf)
     assert res.outputs.out == 9
 
@@ -657,10 +657,10 @@ def to_tuple(x, y):
     return (x, y)
 
 
-class BYOAddVarWorker(DebugWorker):
+class BYOAddVarWorker(debug.Worker):
     """A dummy worker that adds 1 to the output of the task"""
 
-    plugin_name = "byo_add_env_var"
+    _plugin_name = "byo_add_env_var"
 
     def __init__(self, add_var, **kwargs):
         super().__init__(**kwargs)
@@ -685,7 +685,7 @@ def test_byo_worker(tmp_path):
     task1 = AddEnvVarTask(x=1)
 
     with Submitter(worker=BYOAddVarWorker, add_var=10, cache_dir=tmp_path) as sub:
-        assert sub.worker_name == "byo_add_env_var"
+        assert sub.worker.plugin_name() == "byo_add_env_var"
         result = sub(task1)
 
     assert result.outputs.out == 11
@@ -702,16 +702,30 @@ def test_byo_worker(tmp_path):
 
 def test_bad_builtin_worker():
 
-    with pytest.raises(NotImplementedError, match="No worker for 'bad-worker' worker"):
+    with pytest.raises(ValueError, match="No worker matches 'bad-worker'"):
         Submitter(worker="bad-worker")
 
 
-def test_bad_byo_worker():
+def test_bad_byo_worker1():
+
+    from pydra.workers import base
+
+    class BadWorker(base.Worker):
+
+        def run(self, task: Job, rerun: bool = False) -> Result:
+            pass
+
+    with pytest.raises(ValueError, match="Cannot infer plugin name of Worker "):
+        Submitter(worker=BadWorker)
+
+
+def test_bad_byo_worker2():
 
     class BadWorker:
         pass
 
     with pytest.raises(
-        ValueError, match="Worker class must have a 'plugin_name' str attribute"
+        TypeError,
+        match="Worker must be a Worker object, name of a worker or a Worker class",
     ):
         Submitter(worker=BadWorker)

@@ -251,7 +251,7 @@ def test_wf_shell_cmd_1(worker, tmp_path):
         res = sub(wf)
 
     assert "_result.pklz" in res.outputs.out
-    assert "_task.pklz" in res.outputs.out
+    assert "_job.pklz" in res.outputs.out
 
 
 # customised input task
@@ -1997,8 +1997,7 @@ def test_shell_cmd_outputspec_1b_exception(worker, tmp_path):
     shelly = Shelly()
 
     with pytest.raises(Exception) as exinfo:
-        with Submitter(worker=worker) as sub:
-            shelly(submitter=sub)
+        shelly(worker=worker)
     assert "does not exist" in str(exinfo.value)
 
 

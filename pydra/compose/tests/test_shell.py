@@ -11,6 +11,7 @@ from pydra.compose.shell.task import (
     STDOUT_HELP,
     STDERR_HELP,
 )
+from pydra.compose.shell.builder import EXECUTABLE_HELP_STRING, _InputPassThrough
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
 from pydra.utils.typing import MultiInputObj
@@ -34,7 +35,7 @@ def test_interface_template():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
@@ -89,7 +90,7 @@ def test_interface_template_w_types_and_path_template_ext():
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
@@ -130,7 +131,7 @@ def test_interface_template_w_modify():
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
@@ -141,7 +142,7 @@ def test_interface_template_w_modify():
         shell.out(
             name="image",
             type=image.Png,
-            callable=shell._InputPassThrough("image"),
+            callable=_InputPassThrough("image"),
         ),
         shell.out(
             name="return_code",
@@ -189,7 +190,7 @@ def test_interface_template_more_complex():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="in_fs_objects",
@@ -289,7 +290,7 @@ def test_interface_template_with_overrides_and_optionals():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         shell.arg(
@@ -361,7 +362,7 @@ def test_interface_template_with_defaults():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         output,
@@ -429,7 +430,7 @@ def test_interface_template_with_type_overrides():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         output,
@@ -747,7 +748,7 @@ def test_shell_output_field_name_static():
             type=str | ty.Sequence[str],
             argstr="",
             position=0,
-            help=shell.EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="x",
