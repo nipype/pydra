@@ -68,7 +68,7 @@ jobs:
       - name: Install Pydra
         run: pip install .[test]
       - name: Print version
-        run: python -c "import pydra.engine; print(pydra.engine.__version__)"
+        run: python -c "import pydra.engine; print(pydra.utils.__version__)"
       - name: Disable etelemetry
         run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Pytest
@@ -211,7 +211,7 @@ jobs:
             docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v 3.11.5"
         fi
         docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
-        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.engine.__version__)'"
+        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
         docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --rootdir /pydra/pydra --only-worker=${{ matrix.worker }} --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
@@ -291,7 +291,7 @@ jobs:
   #       fi
   #   - name: Install Pydra
   #     run: |
-  #       pip install --upgrade pip && pip install -e .[test] && python -c 'import pydra.engine; print(pydra.engine.__version__)'
+  #       pip install --upgrade pip && pip install -e .[test] && python -c 'import pydra.engine; print(pydra.utils.__version__)'
   #   - name: Run pytest
   #     run: |
   #       pytest pydra/engine/tests/test_submitter.py --rootdir . --only-worker=sge --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
