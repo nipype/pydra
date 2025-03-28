@@ -23,6 +23,3 @@ class Worker(base.Worker):
 
     def close(self):
         """Return whether the job is finished."""
-
-    async def fetch_finished(self, futures):
-        raise NotImplementedError("DebugWorker does not support async execution")

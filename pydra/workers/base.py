@@ -61,40 +61,6 @@ class Worker(metaclass=abc.ABCMeta):
         """Return whether the worker is asynchronous."""
         return inspect.iscoroutinefunction(self.run)
 
-    async def fetch_finished(
-        self, futures
-    ) -> tuple[set[asyncio.Task], set[asyncio.Task]]:
-        """
-        Awaits asyncio's :class:`asyncio.Task` until one is finished.
-
-        Parameters
-        ----------
-        futures : set of asyncio awaitables
-            Job execution coroutines or asyncio :class:`asyncio.Task`
-
-        Returns
-        -------
-        pending : set
-            Pending asyncio :class:`asyncio.Task`.
-        done: set
-            Completed asyncio :class:`asyncio.Task`
-
-        """
-        done = set()
-        try:
-            done, pending = await asyncio.wait(
-                [
-                    asyncio.create_task(f) if not isinstance(f, asyncio.Task) else f
-                    for f in futures
-                ],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-        except ValueError:
-            # nothing pending!
-            pending = set()
-        logger.debug(f"Tasks finished: {len(done)}")
-        return pending, done
-
     @classmethod
     def available_plugins(cls) -> ty.Dict[str, ty.Type["Worker"]]:
         """Return all installed worker types"""

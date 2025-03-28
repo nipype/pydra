@@ -444,7 +444,7 @@ class Submitter:
                         )
                         task_futures.add(asyncio_task)
                         futured[job.checksum] = job
-                task_futures, completed = await self.worker.fetch_finished(task_futures)
+                task_futures, completed = await self.fetch_finished(task_futures)
                 for task_future in completed:
                     try:
                         task_future.result()
@@ -471,6 +471,36 @@ class Submitter:
                     f"Workflow job {workflow_task} failed with errors"
                     f":\n\n{all_errors}\n\nSee output directory for details: {workflow_task.output_dir}"
                 )
+
+    async def fetch_finished(
+        self, futures
+    ) -> tuple[set[asyncio.Task], set[asyncio.Task]]:
+        """
+        Awaits asyncio's :class:`asyncio.Task` until one is finished.
+
+        Parameters
+        ----------
+        futures : set of asyncio awaitables
+            Job execution coroutines or asyncio :class:`asyncio.Task`
+
+        Returns
+        -------
+        pending : set
+            Pending asyncio :class:`asyncio.Task`.
+        done: set
+            Completed asyncio :class:`asyncio.Task`
+
+        """
+        done = set()
+        try:
+            done, pending = await asyncio.wait(
+                futures, return_when=asyncio.FIRST_COMPLETED
+            )
+        except ValueError:
+            # nothing pending!
+            pending = set()
+        logger.debug(f"Tasks finished: {len(done)}")
+        return pending, done
 
     def __enter__(self):
         return self
