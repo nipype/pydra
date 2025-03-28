@@ -73,7 +73,7 @@ jobs:
         run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Pytest
         run: |
-          pytest -vs -n auto pydra --doctest-modules --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -vs -n auto pydra --doctest-modules --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --rootdir pydra
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
