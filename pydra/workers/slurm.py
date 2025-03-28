@@ -68,7 +68,7 @@ class Worker(base.Worker):
 
         batchscript = script_dir / f"batchscript_{uid}.sh"
         python_string = (
-            f"""'from pydra.utils.general import load_and_run; """
+            f"""'from pydra.engine.job import load_and_run; """
             f"""load_and_run("{job_pkl}", rerun={rerun}) '"""
         )
         bcmd = "\n".join(

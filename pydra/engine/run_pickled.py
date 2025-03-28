@@ -1,7 +1,7 @@
 import cloudpickle as cp
 import sys
 from pathlib import Path
-from pydra.utils.general import load_and_run
+from pydra.engine.job import load_and_run
 
 # To avoid issues when running pytest, where the namespace package "pydra" is dropped in
 # the pickling process due to it being run from inside the source tree

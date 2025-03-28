@@ -224,7 +224,7 @@ class Worker(base.Worker):
                     await asyncio.sleep(self.poll_delay)
             self.threads_used += threads_requested * len(tasks_to_run)
 
-            python_string = f"""import sys; from pydra.utils.general import load_and_run; \
+            python_string = f"""import sys; from pydra.engine.job import load_and_run; \
                 job_pkls={[task_tuple for task_tuple in tasks_to_run]}; \
                 task_index=int(sys.argv[1])-1; \
                 load_and_run(job_pkls[task_index][0], rerun=job_pkls[task_index][1])"""
