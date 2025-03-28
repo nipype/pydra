@@ -14,7 +14,7 @@ from pydra.engine.submitter import Submitter
 from pydra.compose import workflow, python, shell
 
 if ty.TYPE_CHECKING:
-    from pydra.environments.base import Environment
+    from pydra.environments.base_environment import Environment
 
 
 need_docker = pytest.mark.skipif(

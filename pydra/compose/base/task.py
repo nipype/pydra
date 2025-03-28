@@ -24,8 +24,8 @@ from .field import Field, Arg, Out
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
-    from pydra.environments.base import Environment
-    from pydra.workers.base import Worker
+    from pydra.environments.base_environment import Environment
+    from pydra.workers.base_worker import Worker
     from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
 

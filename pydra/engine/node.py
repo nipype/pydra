@@ -9,7 +9,7 @@ from pydra.engine.state import State, add_name_splitter, add_name_combiner
 
 if ty.TYPE_CHECKING:
     from pydra.engine.workflow import Workflow
-    from pydra.environments.base import Environment
+    from pydra.environments.base_environment import Environment
     from pydra.compose import base
     from pydra.engine.hooks import TaskHooks
 

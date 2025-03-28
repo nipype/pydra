@@ -23,7 +23,7 @@ from pydra.utils.general import (
     task_fields,
 )
 from pydra.utils.typing import is_lazy
-from pydra.environments.base import Environment
+from pydra.environments.base_environment import Environment
 
 logger = logging.getLogger("pydra")
 

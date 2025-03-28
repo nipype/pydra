@@ -25,7 +25,7 @@ from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_dir
 from pydra.compose import workflow
 from pydra.engine.state import State
-from pydra.workers.base import Worker
+from pydra.workers.base_worker import Worker
 from pydra.compose.base import Task, Outputs
 
 logger = logging.getLogger("pydra.submitter")
@@ -35,7 +35,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
     from pydra.engine.workflow import Workflow
-    from pydra.environments.base import Environment
+    from pydra.environments.base_environment import Environment
 
 
 TaskType = ty.TypeVar("TaskType", bound="Task")
@@ -198,7 +198,7 @@ class Submitter:
         result : Any
             The result of the job
         """
-        from pydra.environments.base import Environment
+        from pydra.environments.base_environment import Environment
 
         if raise_errors is None:
             raise_errors = self.worker.plugin_name() == "debug"
