@@ -8,11 +8,6 @@ os.environ["NO_ET"] = "true"
 def pytest_addoption(parser):
     parser.addoption("--with-dask", action="store_true", help="run all combinations")
     parser.addoption(
-        "--with-psij",
-        action="store_true",
-        help="run with psij workers in test matrix",
-    )
-    parser.addoption(
         "--only-worker",
         help="only run tests with provided worker",
     )
@@ -30,10 +25,6 @@ def pytest_generate_tests(metafunc):
         except ValueError:
             with_dask = False
         try:
-            with_psij = metafunc.config.getoption("with_psij")
-        except ValueError:
-            with_psij = False
-        try:
             only_worker = metafunc.config.getoption("only_worker")
         except ValueError:
             only_worker = None
@@ -43,10 +34,6 @@ def pytest_generate_tests(metafunc):
                 available_workers.append("dask")
             if bool(shutil.which("sbatch")):
                 available_workers.append("slurm")
-                if with_psij:
-                    available_workers.append("psij-slurm")
-            if with_psij:
-                available_workers.append("psij-local")
         else:
             available_workers = [only_worker]
         # Set the available workers as a parameter to the

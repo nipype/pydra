@@ -37,8 +37,6 @@ classifiers = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-psij = ["psij-python"]
-dask = ["dask", "distributed"]
 dev = ["black", "pre-commit", "pydra[test]"]
 doc = [
     "fileformats-extras >= v0.15.0a6",

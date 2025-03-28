@@ -80,38 +80,6 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  test-workers:
-    needs: ['build']
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ['3.11', '3.12', '3.13']
-        worker: ["psij-local", "dask"]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-      - name: Fetch tags
-        run: git fetch --prune --unshallow
-      - name: Setup Python version ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install package
-        run: |
-          pip install -e ".[test,dask,psij]"
-      - name: Run tests for Dask
-        run: |
-          pytest -v pydra/engine/tests/test_submitter.py --only-worker=${{ matrix.worker }} --rootdir pydra --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v2
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-
   test-singularity:
     needs: ['build']
     runs-on: ubuntu-22.04
@@ -177,7 +145,6 @@ jobs:
     strategy:
       matrix:
         python-version: [3.11.5]
-        worker: ["slurm", "psij-slurm"]
       fail-fast: false
     runs-on: ubuntu-latest
     env:
@@ -214,7 +181,7 @@ jobs:
         docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --rootdir /pydra/pydra --only-worker=${{ matrix.worker }} --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
+        docker exec slurm bash -c "pytest /pydra/pydra/engine/tests/test_submitter.py --rootdir /pydra/pydra --only-worker=slurm --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v2
       with:
@@ -373,7 +340,7 @@ jobs:
         path: docs/build/html
 
   deploy:
-    needs: [build-docs, test, test-workers, test-singularity, test-slurm]
+    needs: [build-docs, test, test-singularity, test-slurm]
     runs-on: ubuntu-latest
     steps:
     - name: Download dist

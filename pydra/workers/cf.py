@@ -5,7 +5,7 @@ import cloudpickle as cp
 import concurrent.futures as cf
 import logging
 from pydra.engine.job import Job
-from . import base
+from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
 
