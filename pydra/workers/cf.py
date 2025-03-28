@@ -46,7 +46,9 @@ class Worker(base.Worker):
     """A worker to execute in parallel using Python's concurrent futures."""
 
     n_procs: int = attrs.field(factory=get_available_cpus)
-    pool: cf.ProcessPoolExecutor = attrs.field()
+    pool: cf.ProcessPoolExecutor = attrs.field(
+        eq=False, init=False, hash=False, repr=False
+    )
 
     @pool.default
     def _pool_default(self) -> cf.ProcessPoolExecutor:
