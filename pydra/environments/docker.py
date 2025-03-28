@@ -1,7 +1,7 @@
 import typing as ty
 import logging
 from pydra.compose import shell
-from pydra.environments import base
+from pydra.environments import base_environment
 
 logger = logging.getLogger("pydra")
 
@@ -9,7 +9,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
-class Environment(base.Container):
+class Environment(base_environment.Container):
     """Docker environment."""
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
@@ -31,7 +31,7 @@ class Environment(base.Container):
         keys = ["return_code", "stdout", "stderr"]
 
         job.output_dir.mkdir(exist_ok=True)
-        values = base.execute(
+        values = base_environment.execute(
             docker_args + [docker_img] + job.task._command_args(values=values),
         )
         output = dict(zip(keys, values))

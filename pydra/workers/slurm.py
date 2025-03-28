@@ -9,7 +9,7 @@ from shutil import copyfile
 import logging
 import attrs
 from pydra.engine.job import Job, save
-from pydra.workers import base
+from pydra.workers import base_worker as base
 
 
 logger = logging.getLogger("pydra.worker")

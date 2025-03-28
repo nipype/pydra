@@ -1,7 +1,7 @@
 import typing as ty
 import logging
 from pydra.engine.job import Job
-from pydra.workers import base
+from pydra.workers import base_worker as base
 
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result

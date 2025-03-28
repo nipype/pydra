@@ -1,7 +1,7 @@
 import typing as ty
 import logging
 from pydra.compose import shell
-from pydra.environments import base
+from pydra.environments import base_environment as base
 
 logger = logging.getLogger("pydra")
 

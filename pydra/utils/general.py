@@ -469,7 +469,7 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
     sub_packages = [
         importlib.import_module(f"{namespace.__name__}.{m.name}")
         for m in pkgutil.iter_modules(namespace.__path__)
-        if m.name != "base"
+        if not m.name.startswith("base")
     ]
     return {
         pkg.__name__.split(".")[-1]: getattr(pkg, class_name)

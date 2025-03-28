@@ -10,7 +10,7 @@ from shutil import copyfile, which
 import random
 import logging
 from pydra.engine.job import Job, save, load_job
-from pydra.workers import base
+from pydra.workers import base_worker as base
 
 logger = logging.getLogger("pydra.worker")
 
