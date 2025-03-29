@@ -120,10 +120,10 @@ class Worker(base.Worker):
             except Exception:
                 task_qsub_args = self.default_qsub_args
 
-        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
+        script_dir = cache_dir / f"{self.plugin_name()}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
         if ind is None:
-            if not (script_dir / "_task.pkl").exists():
+            if not (script_dir / "_job.pklz").exists():
                 save(script_dir, job=job)
         else:
             copyfile(job[1], script_dir / "_job.pklz")
@@ -246,9 +246,7 @@ class Worker(base.Worker):
             with batch_script.open("wt") as fp:
                 fp.writelines(bcmd_job)
 
-            script_dir = (
-                job.cache_dir / f"{self.__class__.__task.name__}_scripts" / job.uid
-            )
+            script_dir = job.cache_dir / f"{self.plugin_name()}_scripts" / job.uid
             script_dir.mkdir(parents=True, exist_ok=True)
             sargs = ["-t"]
             sargs.append(f"1-{len(tasks_to_run)}")

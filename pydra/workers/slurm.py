@@ -54,10 +54,10 @@ class Worker(base.Worker):
             cache_dir = job[-1].cache_dir
             uid = f"{job[-1].uid}_{ind}"
 
-        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
+        script_dir = cache_dir / f"{self.plugin_name()}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
         if ind is None:
-            if not (script_dir / "_task.pkl").exists():
+            if not (script_dir / "_job.pklz").exists():
                 save(script_dir, job=job)
         else:
             copyfile(job[1], script_dir / "_job.pklz")
@@ -87,7 +87,7 @@ class Worker(base.Worker):
         script_dir, batch_script = self._prepare_runscripts(job, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        script_dir = job.cache_dir / f"{self.__class__.__name__}_scripts" / job.uid
+        script_dir = job.cache_dir / f"{self.plugin_name()}_scripts" / job.uid
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:

@@ -199,7 +199,7 @@ def test_slurm_wf(tmpdir):
 
     outputs = res.outputs
     assert outputs.out == 5
-    script_dir = tmpdir / "SlurmWorker_scripts"
+    script_dir = tmpdir / "slurm_scripts"
     assert script_dir.exists()
     # ensure each task was executed with slurm
     assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
@@ -219,7 +219,7 @@ def test_slurm_wf_cf(tmpdir):
         res = sub(wf)
     outputs = res.outputs
     assert outputs.out == 5
-    script_dir = tmpdir / "SlurmWorker_scripts"
+    script_dir = tmpdir / "slurm_scripts"
     assert script_dir.exists()
     # ensure only workflow was executed with slurm
     sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
@@ -235,7 +235,7 @@ def test_slurm_wf_state(tmpdir):
         res = sub(wf)
 
     assert res.outputs.out == [9, 10]
-    script_dir = tmpdir / "SlurmWorker_scripts"
+    script_dir = tmpdir / "slurm_scripts"
     assert script_dir.exists()
     sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
     assert len(sdirs) == 2 * len(wf.x)
@@ -261,7 +261,7 @@ def test_slurm_max_jobs(tmp_path):
 
     jobids = []
     time.sleep(0.5)  # allow time for sacct to collect itself
-    for fl in (tmp_path / "SlurmWorker_scripts").glob("**/slurm-*.out"):
+    for fl in (tmp_path / "slurm_scripts").glob("**/slurm-*.out"):
         jid = re.search(r"(?<=slurm-)\d+", str(fl))
         assert jid.group()
         jobids.append(jid.group())
@@ -298,7 +298,7 @@ def test_slurm_args_1(tmpdir):
         res = sub(task)
 
     assert res.outputs.out == 2
-    script_dir = tmpdir / "SlurmWorker_scripts"
+    script_dir = tmpdir / "slurm_scripts"
     assert script_dir.exists()
 
 
@@ -404,7 +404,7 @@ def test_slurm_cancel_rerun_1(tmpdir):
     # checking if indeed the sleep-task job was cancelled by cancel-task
     assert "Terminating" in outputs.canc_out
     assert "Invalid" not in outputs.canc_out
-    script_dir = tmpdir / "SlurmWorker_scripts"
+    script_dir = tmpdir / "slurm_scripts"
     assert script_dir.exists()
 
 
@@ -442,7 +442,7 @@ def test_sge_wf(tmpdir):
 
     outputs = res.outputs
     assert outputs.out == 9
-    script_dir = tmpdir / "SGEWorker_scripts"
+    script_dir = tmpdir / "sge_scripts"
     assert script_dir.exists()
     # ensure each task was executed with sge
     assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
@@ -458,7 +458,7 @@ def test_sge_wf_cf(tmp_path):
         res = sub(wf)
     outputs = res.outputs
     assert outputs.out == 9
-    script_dir = tmp_path / "SGEWorker_scripts"
+    script_dir = tmp_path / "sge_scripts"
     assert script_dir.exists()
     # ensure only workflow was executed with slurm
     sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
@@ -475,7 +475,7 @@ def test_sge_wf_state(tmpdir):
         res = sub(wf)
     assert res.output.out[0] == 9
     assert res.output.out[1] == 10
-    script_dir = tmpdir / "SGEWorker_scripts"
+    script_dir = tmpdir / "sge_scripts"
     assert script_dir.exists()
     sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
     assert len(sdirs) == 2 * len(wf.x)
