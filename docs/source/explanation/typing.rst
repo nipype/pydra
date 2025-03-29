@@ -71,7 +71,7 @@ regardless of how specific typing is defined in the task definition. This includ
 file format types, so a task that expects a ``fileformats.medimage.NiftiGz`` file can
 be connected to a task that outputs a ``fileformats.generic.File`` file.
 Therefore, the only cases where a typing error will be raised are when the upstream
-field can't be cast or coered to the downstream field, e.g. a ``fileformats.medimage.DicomSeries``
+field can't be cast or coerced to the downstream field, e.g. a ``fileformats.medimage.DicomSeries``
 cannot be cast to a ``fileformats.medimage.Nifti`` file.
 
 
