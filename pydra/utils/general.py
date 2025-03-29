@@ -297,7 +297,7 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
     return obj
 
 
-def print_help(defn: "Task[TaskType]") -> list[str]:
+def task_help(defn: "Task[TaskType]", to_list: bool = False) -> list[str] | None:
     """Visit a job object and print its input/output interface."""
     from pydra.compose.base import NO_DEFAULT
 
@@ -326,8 +326,9 @@ def print_help(defn: "Task[TaskType]") -> list[str]:
         except AttributeError:
             name = str(f.type)
         lines += [f"- {f.name}: {name}"]
+    if to_list:
+        return lines
     print("\n".join(lines))
-    return lines
 
 
 def position_sort(args):

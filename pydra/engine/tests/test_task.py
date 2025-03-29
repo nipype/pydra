@@ -13,7 +13,7 @@ from pydra.compose.shell.templating import argstr_formatting
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from pydra.engine.audit import AuditFlag
 from pydra.engine.hooks import TaskHooks
-from pydra.utils.general import task_fields, print_help
+from pydra.utils.general import task_fields, task_help
 from pydra.engine.submitter import Submitter
 from pydra.engine.job import Job
 from pydra.utils.general import default_run_cache_dir
@@ -90,7 +90,7 @@ def test_annotated_func():
     outputs = funky()
     assert outputs.out_out == 2.1
 
-    help = print_help(funky)
+    help = task_help(funky)
     assert help == [
         "Help for TestFunc",
         "Input Parameters:",
@@ -148,7 +148,7 @@ def test_annotated_func_multreturn():
     assert hasattr(outputs, "integer")
     assert outputs.integer == 3
 
-    help = print_help(funky)
+    help = task_help(funky)
     assert help == [
         "Help for TestFunc",
         "Input Parameters:",
@@ -450,7 +450,7 @@ def test_halfannotated_func(tmp_path):
     assert not Path(cache_dir / f"python-{funky._hash}").exists()
     outputs = funky(cache_dir=cache_dir)
     assert outputs.out == 31
-    help = print_help(funky)
+    help = task_help(funky)
 
     assert help == [
         "Help for TestFunc",
@@ -491,7 +491,7 @@ def test_halfannotated_func_multreturn(tmp_path):
     assert not Path(cache_dir / f"python-{funky._hash}" / "_result.pklz").exists()
     outputs = funky(cache_dir=cache_dir)
     assert outputs.out1 == 12
-    help = print_help(funky)
+    help = task_help(funky)
 
     assert help == [
         "Help for TestFunc",
