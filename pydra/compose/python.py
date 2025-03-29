@@ -241,11 +241,11 @@ class Task(base.Task[PythonOutputsType]):
             job.return_values = {nm: None for nm in return_names}
         elif len(return_names) == 1:
             # if only one element in the fields, everything should be returned together
-            job.return_values = {list(job.return_values)[0]: returned}
+            job.return_values[return_names[0]] = returned
         elif isinstance(returned, tuple) and len(return_names) == len(returned):
-            job.return_values = dict(zip(return_names, returned))
+            job.return_values.update(zip(return_names, returned))
         elif isinstance(returned, dict):
-            job.return_values = {key: returned.get(key, None) for key in return_names}
+            job.return_values.update({key: returned[key] for key in return_names if key in returned})
         else:
             raise RuntimeError(
                 f"expected {len(return_names)} elements, but {returned} were returned"
