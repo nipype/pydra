@@ -245,7 +245,9 @@ class Task(base.Task[PythonOutputsType]):
         elif isinstance(returned, tuple) and len(return_names) == len(returned):
             job.return_values.update(zip(return_names, returned))
         elif isinstance(returned, dict):
-            job.return_values.update({key: returned[key] for key in return_names if key in returned})
+            job.return_values.update(
+                {key: returned[key] for key in return_names if key in returned}
+            )
         else:
             raise RuntimeError(
                 f"expected {len(return_names)} elements, but {returned} were returned"
