@@ -3,7 +3,7 @@ import inspect
 import attrs
 import re
 from copy import copy
-from pydra.utils.typing import is_type
+from pydra.utils.typing import is_type, is_optional
 from pydra.utils.general import task_fields
 from .field import Field, Arg, Out, NO_DEFAULT
 
@@ -74,6 +74,8 @@ def ensure_field_objects(
                 name=input_name,
                 help=input_helps.get(input_name, ""),
             )
+            if is_optional(arg):
+                inputs[input_name].default = None
         elif isinstance(arg, dict):
             arg_kwds = copy(arg)
             if "help" not in arg_kwds:
@@ -102,12 +104,14 @@ def ensure_field_objects(
                 out.name = output_name
             if not out.help:
                 out.help = output_helps.get(output_name, "")
-        elif inspect.isclass(out) or ty.get_origin(out):
+        elif is_type(out):
             outputs[output_name] = out_type(
                 type=out,
                 name=output_name,
                 help=output_helps.get(output_name, ""),
             )
+            if is_optional(out):
+                outputs[output_name].default = None
         elif isinstance(out, dict):
             out_kwds = copy(out)
             if "help" not in out_kwds:

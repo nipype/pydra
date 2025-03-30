@@ -19,7 +19,7 @@ from pydra.utils.general import (
     attrs_values,
 )
 from pydra.utils.hash import Cache, hash_single, register_serializer
-from .field import Field, Arg, Out
+from .field import Field, Arg, Out, NO_DEFAULT
 
 
 if ty.TYPE_CHECKING:
@@ -60,17 +60,16 @@ class Outputs:
         outputs : Outputs
             The outputs of the job
         """
-        outputs = cls(
-            **{
-                f.name: (
-                    f.default.factory()
-                    if isinstance(f.default, attrs.Factory)
-                    else f.default
-                )
-                for f in attrs_fields(cls)
-                if not f.name.startswith("_")
-            }
-        )
+        defaults = {}
+        for output in task_fields(cls):
+            if output.default is NO_DEFAULT:
+                default = attrs.NOTHING
+            elif isinstance(output.default, attrs.Factory):
+                default = output.default.factory()
+            else:
+                default = output.default
+            defaults[output.name] = default
+        outputs = cls(**defaults)
         outputs._output_dir = job.output_dir
         return outputs
 

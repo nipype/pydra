@@ -236,8 +236,7 @@ class Task(base.Task[PythonOutputsType]):
         # Run the actual function
         returned = self.function(**inputs)
         # Collect the outputs and save them into the job.return_values dictionary
-        job.return_values = {f.name: f.default for f in task_fields(self.Outputs)}
-        return_names = list(job.return_values)
+        return_names = [f.name for f in task_fields(self.Outputs)]
         if returned is None:
             job.return_values = {nm: None for nm in return_names}
         elif len(return_names) == 1:

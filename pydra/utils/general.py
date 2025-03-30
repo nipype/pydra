@@ -297,37 +297,69 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
     return obj
 
 
-def task_help(defn: "Task[TaskType]", to_list: bool = False) -> list[str] | None:
-    """Visit a job object and print its input/output interface."""
-    from pydra.compose.base import NO_DEFAULT
+def fold_text(text: str, width: int = 70) -> str:
+    """Fold text to a given width, respecting word boundaries."""
+    if not isinstance(text, str):
+        return text
+    if len(text) <= width:
+        return text
+    lines = []
+    for line in text.splitlines():
+        while len(line) > width:
+            words = line.split()
+            split_line = ""
+            for word in words:
+                if len(split_line) + len(word) + 1 > width:
+                    lines.append(split_line.strip())
+                    split_line = ""
+                split_line += word + " "
+            lines.append(split_line.strip())
+        lines.append(line)
+    return "\n".join(lines)
 
-    lines = [f"Help for {defn.__class__.__name__}"]
-    if task_fields(defn):
-        lines += ["Input Parameters:"]
-    for f in task_fields(defn):
-        if (defn._task_type == "python" and f.name == "function") or (
-            defn._task_type == "workflow" and f.name == "constructor"
-        ):
-            continue
-        default = ""
-        if f.default is not NO_DEFAULT and not f.name.startswith("_"):
-            default = f" (default: {f.default})"
+
+def task_help(task_type: "type[Task] | Task", line_width: int = 79) -> list[str] | None:
+    """Visit a job object and print its input/output interface."""
+    from pydra.compose.base import Task, NO_DEFAULT
+
+    if isinstance(task_type, Task):
+        task_type = type(task_type)
+
+    def field_listing(field: "Field") -> str:
+        """Get the field listing for a task."""
         try:
-            name = f.type.__name__
+            type_str = field.type.__name__
         except AttributeError:
-            name = str(f.type)
-        lines += [f"- {f.name}: {name}{default}"]
-    output_klass = defn.Outputs
-    if task_fields(output_klass):
-        lines += ["Output Parameters:"]
-    for f in task_fields(output_klass):
-        try:
-            name = f.type.__name__
-        except AttributeError:
-            name = str(f.type)
-        lines += [f"- {f.name}: {name}"]
-    if to_list:
-        return lines
+            type_str = str(field.type)
+        field_str = f"- {field.name}: {type_str}"
+        if isinstance(field.default, attrs.Factory):
+            field_str += f" (factory: {field.default.factory.__name__})"
+        elif callable(field.default):
+            field_str += f" (default: {field.default.__name__}())"
+        elif field.default is not NO_DEFAULT:
+            field_str += f" (default: {field.default})"
+        if field.help:
+            field_str += f"\n    {fold_text(field.help, width=line_width - 4)}"
+        return field_str
+
+    lines = [f"Help for '{task_type.__name__}' tasks"]
+    lines.append("-" * len(lines[0]))
+    inputs = task_fields(task_type)
+    if inputs:
+        lines.append("Inputs:")
+    for inpt in inputs:
+        lines.append(field_listing(inpt))
+    outputs = task_fields(task_type.Outputs)
+    if outputs:
+        lines.append("Outputs:")
+    for output in outputs:
+        lines.append(field_listing(output))
+    return lines
+
+
+def print_help(task: "Task[TaskType]") -> None:
+    """Print help for a task."""
+    lines = task_help(task)
     print("\n".join(lines))
 
 

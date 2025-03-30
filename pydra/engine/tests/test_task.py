@@ -92,24 +92,26 @@ def test_annotated_func():
 
     help = task_help(funky)
     assert help == [
-        "Help for TestFunc",
-        "Input Parameters:",
+        "Help for 'TestFunc' tasks",
+        "-------------------------",
+        "Inputs:",
         "- a: int",
         "- b: float (default: 0.1)",
-        "Output Parameters:",
+        "- function: Callable (default: TestFunc())",
+        "Outputs:",
         "- out_out: float",
     ]
 
 
-def test_annotated_func_dictreturn():
+def test_annotated_func_dictreturn(tmp_path: Path):
     """Test mapping from returned dictionary to output definition."""
 
-    @python.define(outputs={"sum": int, "mul": ty.Optional[int]})
+    @python.define(outputs={"sum": int, "mul": int | None})
     def TestFunc(a: int, b: int):
         return dict(sum=a + b, diff=a - b)
 
     task = TestFunc(a=2, b=3)
-    outputs = task()
+    outputs = task(cache_dir=tmp_path)
 
     # Part of the annotation and returned, should be exposed to output.
     assert outputs.sum == 5
@@ -150,10 +152,12 @@ def test_annotated_func_multreturn():
 
     help = task_help(funky)
     assert help == [
-        "Help for TestFunc",
-        "Input Parameters:",
+        "Help for 'TestFunc' tasks",
+        "-------------------------",
+        "Inputs:",
         "- a: float",
-        "Output Parameters:",
+        "- function: Callable (default: TestFunc())",
+        "Outputs:",
         "- fractional: float",
         "- integer: int",
     ]
@@ -453,11 +457,13 @@ def test_halfannotated_func(tmp_path):
     help = task_help(funky)
 
     assert help == [
-        "Help for TestFunc",
-        "Input Parameters:",
+        "Help for 'TestFunc' tasks",
+        "-------------------------",
+        "Inputs:",
         "- a: Any",
         "- b: Any",
-        "Output Parameters:",
+        "- function: Callable (default: TestFunc())",
+        "Outputs:",
         "- out: int",
     ]
 
@@ -494,11 +500,13 @@ def test_halfannotated_func_multreturn(tmp_path):
     help = task_help(funky)
 
     assert help == [
-        "Help for TestFunc",
-        "Input Parameters:",
+        "Help for 'TestFunc' tasks",
+        "-------------------------",
+        "Inputs:",
         "- a: Any",
         "- b: Any",
-        "Output Parameters:",
+        "- function: Callable (default: TestFunc())",
+        "Outputs:",
         "- out1: int",
         "- out2: int",
     ]
