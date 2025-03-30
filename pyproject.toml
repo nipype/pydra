@@ -37,7 +37,7 @@ classifiers = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = ["black", "pre-commit", "pydra[test]"]
+dev = ["black", "pre-commit", "pydra[test]", "matplotlib"]
 doc = [
     "fileformats-extras >= v0.15.0a6",
     "fileformats-medimage >= v0.10.0a2",

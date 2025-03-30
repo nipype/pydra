@@ -7,6 +7,7 @@ import typing as ty
 import re
 import attrs
 import ast
+import tempfile
 import importlib
 import types
 import sysconfig
@@ -204,14 +205,19 @@ def plot_workflow(
     plot_type: str = "simple",
     export: ty.Sequence[str] | None = None,
     name: str | None = None,
-    output_dir: Path | None = None,
-    lazy: ty.Sequence[str] | ty.Set[str] = (),
-):
+    lazy: ty.Sequence[str] | ty.Set[str] | None = None,
+) -> Path | tuple[Path, list[Path]]:
     """creating a graph - dotfile and optionally exporting to other formats"""
     from pydra.engine.workflow import Workflow
 
+    if inspect.isclass(workflow_task):
+        workflow_task = workflow_task()
+
     # Create output directory
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if lazy is None:
+        lazy = [n for n, v in attrs_values(workflow_task).items() if v is attrs.NOTHING]
 
     # Construct the workflow object with all of the fields lazy
     wf = Workflow.construct(workflow_task, lazy=lazy)
@@ -243,6 +249,61 @@ def plot_workflow(
         for ext in export:
             formatted_dot.append(graph.export_graph(dotfile=dotfile, ext=ext))
         return dotfile, formatted_dot
+
+
+def show_workflow(
+    workflow_task: "workflow.Task",
+    plot_type: str = "simple",
+    lazy: ty.Sequence[str] | ty.Set[str] | None = None,
+    use_lib: str | None = None,
+    figsize: tuple[int, int] | None = None,
+    **kwargs,
+) -> None:
+    """creating a graph and showing it"""
+    out_dir = Path(tempfile.mkdtemp())
+    png_graph = plot_workflow(
+        workflow_task,
+        out_dir=out_dir,
+        plot_type=plot_type,
+        export="png",
+        lazy=lazy,
+    )[1][0]
+
+    if use_lib in ("matplotlib", None):
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.image import imread
+        except ImportError:
+            if use_lib == "matplotlib":
+                raise ImportError(
+                    "Please install either matplotlib to display the workflow image."
+                )
+        else:
+            use_lib = "matplotlib"
+
+            # Read the image
+            img = imread(png_graph)
+
+            if figsize is not None:
+                plt.figure(figsize=figsize)
+            # Display the image
+            plt.imshow(img, **kwargs)
+            plt.axis("off")
+            plt.show()
+
+    if use_lib in ("PIL", None):
+        try:
+            from PIL import Image
+        except ImportError:
+            msg = " or matplotlib" if use_lib is None else ""
+            raise ImportError(
+                f"Please install either Pillow{msg} to display the workflow image."
+            )
+        # Open the PNG image
+        img = Image.open(png_graph)
+
+        # Display the image
+        img.show(**kwargs)
 
 
 def attrs_fields(task, exclude_names=()) -> list[attrs.Attribute]:
