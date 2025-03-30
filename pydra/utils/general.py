@@ -369,24 +369,24 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
     return obj
 
 
-def fold_text(text: str, width: int = 70) -> str:
-    """Fold text to a given width, respecting word boundaries."""
-    if not isinstance(text, str):
-        return text
+def wrap_text(text: str, width: int = 70, indent_size=4) -> str:
+    """Wraps text to a given width, respecting word boundaries."""
+    indent = " " * indent_size
     if len(text) <= width:
-        return text
+        return indent + text
     lines = []
     for line in text.splitlines():
-        while len(line) > width:
+        if len(line) > width:
             words = line.split()
-            split_line = ""
+            split_line = indent
             for word in words:
                 if len(split_line) + len(word) + 1 > width:
-                    lines.append(split_line.strip())
-                    split_line = ""
+                    lines.append(split_line.rstrip())
+                    split_line = indent
                 split_line += word + " "
-            lines.append(split_line.strip())
-        lines.append(line)
+            lines.append(split_line.rstrip())
+        else:
+            lines.append(indent + line)
     return "\n".join(lines)
 
 
@@ -405,27 +405,29 @@ def task_help(task_type: "type[Task] | Task", line_width: int = 79) -> list[str]
             type_str = str(field.type)
         field_str = f"- {field.name}: {type_str}"
         if isinstance(field.default, attrs.Factory):
-            field_str += f" (factory: {field.default.factory.__name__})"
+            field_str += f" (factory: {field.default.factory.__name__}())"
         elif callable(field.default):
             field_str += f" (default: {field.default.__name__}())"
         elif field.default is not NO_DEFAULT:
-            field_str += f" (default: {field.default})"
+            field_str += f" (default: {field.default!r})"
         if field.help:
-            field_str += f"\n    {fold_text(field.help, width=line_width - 4)}"
+            field_str += f"\n{wrap_text(field.help, width=line_width, indent_size=4)}"
         return field_str
 
-    lines = [f"Help for '{task_type.__name__}' tasks"]
-    lines.append("-" * len(lines[0]))
+    header = f"Help for '{task_type.__name__}' tasks"
+    hyphen_line = "-" * len(header)
+    lines = [hyphen_line, header, hyphen_line]
     inputs = task_fields(task_type)
     if inputs:
-        lines.append("Inputs:")
+        lines.extend(["", "Inputs:"])
     for inpt in inputs:
         lines.append(field_listing(inpt))
     outputs = task_fields(task_type.Outputs)
     if outputs:
-        lines.append("Outputs:")
+        lines.extend(["", "Outputs:"])
     for output in outputs:
         lines.append(field_listing(output))
+    lines.append("")
     return lines
 
 

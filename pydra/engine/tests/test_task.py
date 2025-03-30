@@ -92,14 +92,18 @@ def test_annotated_func():
 
     help = task_help(funky)
     assert help == [
+        "-------------------------",
         "Help for 'TestFunc' tasks",
         "-------------------------",
+        "",
         "Inputs:",
         "- a: int",
         "- b: float (default: 0.1)",
         "- function: Callable (default: TestFunc())",
+        "",
         "Outputs:",
         "- out_out: float",
+        "",
     ]
 
 
@@ -152,14 +156,18 @@ def test_annotated_func_multreturn():
 
     help = task_help(funky)
     assert help == [
+        "-------------------------",
         "Help for 'TestFunc' tasks",
         "-------------------------",
+        "",
         "Inputs:",
         "- a: float",
         "- function: Callable (default: TestFunc())",
+        "",
         "Outputs:",
         "- fractional: float",
         "- integer: int",
+        "",
     ]
 
 
@@ -457,14 +465,18 @@ def test_halfannotated_func(tmp_path):
     help = task_help(funky)
 
     assert help == [
+        "-------------------------",
         "Help for 'TestFunc' tasks",
         "-------------------------",
+        "",
         "Inputs:",
         "- a: Any",
         "- b: Any",
         "- function: Callable (default: TestFunc())",
+        "",
         "Outputs:",
         "- out: int",
+        "",
     ]
 
 
@@ -500,15 +512,19 @@ def test_halfannotated_func_multreturn(tmp_path):
     help = task_help(funky)
 
     assert help == [
+        "-------------------------",
         "Help for 'TestFunc' tasks",
         "-------------------------",
+        "",
         "Inputs:",
         "- a: Any",
         "- b: Any",
         "- function: Callable (default: TestFunc())",
+        "",
         "Outputs:",
         "- out1: int",
         "- out2: int",
+        "",
     ]
 
 
