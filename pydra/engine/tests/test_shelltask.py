@@ -845,7 +845,7 @@ def test_shell_cmd_inputspec_8(worker, results_function, tmp_path):
 
     shelly = Shelly(
         executable=cmd,
-        newfile=File.mock("newfile_tmp.txt"),
+        newfile=tmp_path / "newfile_tmp.txt",
         time="02121010",
     )
 
@@ -884,7 +884,7 @@ def test_shell_cmd_inputspec_8a(worker, results_function, tmp_path):
 
     shelly = Shelly(
         executable=cmd,
-        newfile=File.mock("newfile_tmp.txt"),
+        newfile=tmp_path / "newfile_tmp.txt",
         time="02121010",
     )
 
@@ -2682,7 +2682,7 @@ def test_shell_cmd_inputspec_outputspec_2a(tmp_path):
     shelly = Shelly(
         executable=cmd,
     )
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = tmp_path / "new_file_1.txt"
     assert get_output_names(shelly) == [
         "newfile1",
         "newfile2",

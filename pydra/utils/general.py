@@ -320,17 +320,33 @@ def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
     }
 
 
-def task_fields(task: "type[Task] | Task") -> list["Field"]:
+class _TaskFieldsList(dict[str, "Field"]):
+    """A list of task fields. Acts like list in that you can iterate over the values
+    but also access them like a dict or by attribute."""
+
+    def __iter__(self):
+        return iter(self.values())
+
+    def __getattr__(self, name):
+        return self[name]
+
+    def __dir__(self):
+        return sorted(self.keys())
+
+
+def task_fields(task: "type[Task] | Task") -> _TaskFieldsList:
     """List the fields of a task"""
     if not inspect.isclass(task):
         task = type(task)
     if not attrs.has(task):
-        return []
-    return [
-        f.metadata[PYDRA_ATTR_METADATA]
-        for f in attrs.fields(task)
-        if PYDRA_ATTR_METADATA in f.metadata
-    ]
+        return _TaskFieldsList()
+    return _TaskFieldsList(
+        **{
+            f.name: f.metadata[PYDRA_ATTR_METADATA]
+            for f in attrs.fields(task)
+            if PYDRA_ATTR_METADATA in f.metadata
+        }
+    )
 
 
 def fields_values(obj, **kwargs) -> dict[str, ty.Any]:

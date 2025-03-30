@@ -74,8 +74,6 @@ def ensure_field_objects(
                 name=input_name,
                 help=input_helps.get(input_name, ""),
             )
-            if is_optional(arg):
-                inputs[input_name].default = None
         elif isinstance(arg, dict):
             arg_kwds = copy(arg)
             if "help" not in arg_kwds:
