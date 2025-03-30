@@ -349,14 +349,9 @@ def task_fields(task: "type[Task] | Task") -> _TaskFieldsList:
     )
 
 
-def fields_values(obj, **kwargs) -> dict[str, ty.Any]:
+def task_dict(obj, **kwargs) -> dict[str, ty.Any]:
     """Get the values of an attrs object."""
     return {f.name: getattr(obj, f.name) for f in task_fields(obj)}
-
-
-def fields_dict(task: "type[Task] | Task") -> dict[str, "Field"]:
-    """Returns the fields of a task in a dictionary"""
-    return {f.name: f for f in task_fields(task)}
 
 
 def from_list_if_single(obj: ty.Any) -> ty.Any:

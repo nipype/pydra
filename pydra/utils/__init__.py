@@ -1,6 +1,5 @@
 from .general import (
     task_fields,
-    fields_dict,
     plot_workflow,
     show_workflow,
     task_help,
@@ -15,5 +14,4 @@ __all__ = [
     "show_workflow",
     "task_help",
     "print_help",
-    "fields_dict",
 ]
