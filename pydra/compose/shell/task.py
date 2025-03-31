@@ -64,7 +64,7 @@ class ShellOutputs(base.Outputs):
         ----------
         inputs : Task
             The input task of the shell process.
-        output_dir : Path
+        cache_dir : Path
             The directory where the process was run.
         stdout : str
             The standard output of the process.
@@ -108,13 +108,13 @@ class ShellOutputs(base.Outputs):
         return outputs
 
     @classmethod
-    def _resolve_default_value(cls, fld: field.out, output_dir: Path) -> ty.Any:
+    def _resolve_default_value(cls, fld: field.out, cache_dir: Path) -> ty.Any:
         """Resolve path and glob expr default values relative to the output dir"""
         default = fld.default
         if fld.type is Path:
             assert isinstance(default, Path)
             if not default.is_absolute():
-                default = output_dir.joinpath(default)
+                default = cache_dir.joinpath(default)
             if "*" not in str(default):
                 if default.exists():
                     return default
@@ -174,7 +174,7 @@ class ShellOutputs(base.Outputs):
             return template_update_single(
                 fld,
                 task=job.task,
-                output_dir=job.cache_dir,
+                cache_dir=job.cache_dir,
                 spec_type="output",
             )
         assert fld.callable, (
@@ -191,7 +191,7 @@ class ShellOutputs(base.Outputs):
         for argnm in call_args.args:
             if argnm == "field":
                 call_args_val[argnm] = fld
-            elif argnm == "output_dir":
+            elif argnm == "cache_dir":
                 call_args_val[argnm] = job.cache_dir
             elif argnm == "executable":
                 call_args_val[argnm] = job.task.executable
@@ -209,7 +209,7 @@ class ShellOutputs(base.Outputs):
                 except KeyError as e:
                     e.add_note(
                         f"arguments of the callable function from {fld.name!r} "
-                        f"has to be in inputs or be field or output_dir, "
+                        f"has to be in inputs or be field or cache_dir, "
                         f"but {argnm!r} is used"
                     )
                     raise
@@ -262,7 +262,7 @@ class ShellTask(base.Task[ShellOutputsType]):
         the current working directory."""
         # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
         values = attrs_values(self)
-        values.update(template_update(self, output_dir=Path.cwd()))
+        values.update(template_update(self, cache_dir=Path.cwd()))
         cmd_args = self._command_args(values=values)
         cmdline = cmd_args[0]
         for arg in cmd_args[1:]:

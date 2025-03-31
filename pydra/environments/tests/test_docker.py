@@ -386,7 +386,7 @@ def test_docker_inputspec_3(worker, tmp_path):
 def test_docker_cmd_inputspec_copyfile_1(worker, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=True to the file-input from input_spec
-    hardlink or copy in the output_dir should be created
+    hardlink or copy in the cache_dir should be created
     """
     file = tmp_path / "file_pydra.txt"
     with open(file, "w") as f:

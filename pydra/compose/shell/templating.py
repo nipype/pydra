@@ -15,7 +15,7 @@ if ty.TYPE_CHECKING:
 
 def template_update(
     task,
-    output_dir: Path | None = None,
+    cache_dir: Path | None = None,
     map_copyfiles: dict[str, Path] | None = None,
 ):
     """
@@ -45,7 +45,7 @@ def template_update(
             fld=fld,
             task=task,
             values=values,
-            output_dir=output_dir,
+            cache_dir=cache_dir,
         )
     # adding elements from map_copyfiles to fields with templates
     if map_copyfiles:
@@ -57,7 +57,7 @@ def template_update_single(
     fld: "field.outarg",
     task: "Task",
     values: dict[str, ty.Any] = None,
-    output_dir: Path | None = None,
+    cache_dir: Path | None = None,
     spec_type: str = "input",
 ) -> Path | list[Path | None] | None:
     """Update a single template from the input_spec or output_spec
@@ -96,13 +96,13 @@ def template_update_single(
             return None
     # inputs_dict[fld.name] is True or spec_type is output
     value = _template_formatting(fld, task, values)
-    if output_dir and value is not None:
-        # changing path so it is in the output_dir
+    if cache_dir and value is not None:
+        # changing path so it is in the cache_dir
         # should be converted to str, it is also used for input fields that should be str
         if type(value) is list:
-            value = [output_dir / val.name for val in value]
+            value = [cache_dir / val.name for val in value]
         else:
-            value = output_dir / value.name
+            value = cache_dir / value.name
     return value
 
 

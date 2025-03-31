@@ -1289,7 +1289,7 @@ def test_shell_cmd_inputspec_with_iterable():
 def test_shell_cmd_inputspec_copyfile_1(worker, results_function, tmp_path):
     """shelltask changes a file in place,
     adding copy_mode="copy" to the file-input from input_spec
-    hardlink or copy in the output_dir should be created
+    hardlink or copy in the cache_dir should be created
     """
     file = tmp_path / "file_pydra.txt"
     with open(file, "w") as f:
@@ -1329,7 +1329,7 @@ def test_shell_cmd_inputspec_copyfile_1(worker, results_function, tmp_path):
 def test_shell_cmd_inputspec_copyfile_1a(worker, results_function, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=False to the File-input from input_spec
-    hardlink or softlink in the output_dir is created
+    hardlink or softlink in the cache_dir is created
     """
     file = tmp_path / "file_pydra.txt"
     with open(file, "w") as f:
@@ -2076,13 +2076,13 @@ def test_shell_cmd_outputspec_5(worker, results_function, tmp_path):
     """
     customised output_spec, adding files to the output,
     using a function to collect output, the function is saved in the field metadata
-    and uses output_dir and the glob function
+    and uses cache_dir and the glob function
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
-    def gather_output(field, output_dir):
+    def gather_output(field, cache_dir):
         if field.name == "newfile":
-            return list(Path(output_dir).expanduser().glob("newfile*.txt"))
+            return list(Path(cache_dir).expanduser().glob("newfile*.txt"))
 
     @shell.define
     class Shelly(shell.Task["Shelly.Outputs"]):
@@ -2107,13 +2107,13 @@ def test_shell_cmd_outputspec_5a(worker, results_function, tmp_path):
     """
     customised output_spec, adding files to the output,
     using a function to collect output, the function is saved in the field metadata
-    and uses output_dir and inputs element
+    and uses cache_dir and inputs element
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
-    def gather_output(executable, output_dir):
+    def gather_output(executable, cache_dir):
         files = executable[1:]
-        return [Path(output_dir) / file for file in files]
+        return [Path(cache_dir) / file for file in files]
 
     @shell.define
     class Shelly(shell.Task["Shelly.Outputs"]):
@@ -2141,9 +2141,9 @@ def test_shell_cmd_outputspec_5b_error(tmp_path):
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
-    def gather_output(executable, output_dir, ble):
+    def gather_output(executable, cache_dir, ble):
         files = executable[1:]
-        return [Path(output_dir) / file for file in files]
+        return [Path(cache_dir) / file for file in files]
 
     @shell.define
     class Shelly(shell.Task["Shelly.Outputs"]):
@@ -2173,9 +2173,9 @@ def test_shell_cmd_outputspec_5c(worker, results_function, tmp_path):
         class Outputs(shell.Outputs):
 
             @staticmethod
-            def gather_output(executable, output_dir):
+            def gather_output(executable, cache_dir):
                 files = executable[1:]
-                return [Path(output_dir) / file for file in files]
+                return [Path(cache_dir) / file for file in files]
 
             newfile: MultiOutputFile = shell.out(callable=gather_output)
 
@@ -2478,10 +2478,10 @@ def test_shell_cmd_outputspec_8d(tmp_path, worker, results_function):
     assert get_output_names(shelly) == ["resultsDir", "return_code", "stderr", "stdout"]
     cache_root = tmp_path / "cache"
     outputs = results_function(shelly, worker=worker, cache_root=cache_root)
-    output_dir = next(p for p in cache_root.iterdir() if p.name.startswith("shell-"))
-    assert (output_dir / Path("test")).exists()
+    cache_dir = next(p for p in cache_root.iterdir() if p.name.startswith("shell-"))
+    assert (cache_dir / Path("test")).exists()
     assert get_lowest_directory(outputs.resultsDir) == get_lowest_directory(
-        output_dir / Path("test")
+        cache_dir / Path("test")
     )
 
 

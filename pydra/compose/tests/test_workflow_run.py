@@ -1115,7 +1115,7 @@ def test_wf_3nd_ndst_4(worker: str, tmp_path: Path):
 
     outputs = worky(worker=worker, cache_root=tmp_path)
 
-    # assert outputs._output_dir.exists()
+    # assert outputs._cache_dir.exists()
 
     assert len(outputs.out) == 6
     assert outputs.out == [39, 42, 52, 56, 65, 70]
@@ -1907,7 +1907,7 @@ def test_wfasnd_wfst_1(worker: str, tmp_path: Path):
 
     outputs = worky(worker=worker, cache_root=tmp_path)
 
-    # assert outputs._output_dir.exists()
+    # assert outputs._cache_dir.exists()
 
     assert outputs.out[0] == 4
     assert outputs.out[1] == 6
@@ -1937,7 +1937,7 @@ def test_wfasnd_st_2(worker: str, tmp_path: Path):
 
     outputs = worky(worker=worker, cache_root=tmp_path)
 
-    # assert outputs._output_dir.exists()
+    # assert outputs._cache_dir.exists()
 
     assert outputs.out == [4, 42]
 
@@ -1963,7 +1963,7 @@ def test_wfasnd_wfst_2(worker: str, tmp_path: Path):
 
     outputs = worky(worker=worker, cache_root=tmp_path)
 
-    # assert outputs._output_dir.exists()
+    # assert outputs._cache_dir.exists()
 
     assert outputs.out[0] == 4
     assert outputs.out[1] == 42
@@ -1993,7 +1993,7 @@ def test_wfasnd_ndst_3(worker: str, tmp_path: Path):
 
     outputs = worky(cache_root=tmp_path, worker=worker)
 
-    # assert outputs._output_dir.exists()
+    # assert outputs._cache_dir.exists()
 
     assert outputs.out == [4, 42]
 
@@ -2021,7 +2021,7 @@ def test_wfasnd_wfst_3(worker: str, tmp_path: Path):
 
     outputs = worky(worker=worker, cache_root=tmp_path)
 
-    # assert outputs._output_dir.exists()
+    # assert outputs._cache_dir.exists()
 
     assert outputs.out[0] == 4
     assert outputs.out[1] == 42
@@ -2098,7 +2098,7 @@ def test_wfasnd_wfst_4(worker: str, tmp_path: Path):
 
     outputs = worky(worker=worker, cache_root=tmp_path)
 
-    # assert outputs._output_dir.exists()
+    # assert outputs._cache_dir.exists()
 
     assert outputs.out == [6, 8]
 
@@ -2250,7 +2250,7 @@ def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
 
     assert 2 == results2.outputs.out
 
-    # checking if both output_dirs are created
+    # checking if both cache_dirs are created
     assert results1.cache_dir != results2.cache_dir
 
 
@@ -2370,7 +2370,7 @@ def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
         # testing relative values (windows or slurm takes much longer to create worky itself)
         assert t2 < max(1, t1 - 1)
 
-    # both worky output_dirs should be created
+    # both worky cache_dirs should be created
     assert results1.cache_dir != results2.cache_dir
 
 
@@ -2426,7 +2426,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path
         # testing relative values (windows or slurm takes much longer to create worky itself)
         assert t2 < max(1, t1 - 1)
 
-    # both worky output_dirs should be created
+    # both worky cache_dirs should be created
     assert results1.cache_dir != results2.cache_dir
 
 
@@ -3398,7 +3398,7 @@ def test_wf_nostate_runtwice_usecache(worker: str, tmp_path: Path):
     t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
-    # checkoing output_dir after the first run
+    # checkoing cache_dir after the first run
 
     # saving the content of the cache dit after the first run
     cache_root_content = os.listdir(cache_root1)
@@ -3448,7 +3448,7 @@ def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
     assert 8 == results1.outputs.out[0]
     assert 602 == results1.outputs.out[1]
 
-    # checkoing output_dir after the first run
+    # checkoing cache_dir after the first run
     assert results1.cache_dir.exists()
 
     # saving the content of the cache dit after the first run
@@ -3539,7 +3539,7 @@ def test_wf_resultfile_1(worker: str, tmp_path: Path):
     # checking if the file exists and if it is in the Worky directory
     wf_out = outputs.wf_out.fspath
     assert wf_out.exists()
-    assert wf_out == outputs._output_dir / "file_1.txt"
+    assert wf_out == outputs._cache_dir / "file_1.txt"
 
 
 def test_wf_resultfile_2(worker: str, tmp_path: Path):
@@ -3560,7 +3560,7 @@ def test_wf_resultfile_2(worker: str, tmp_path: Path):
     # checking if the file exists and if it is in the Worky directory
     for ii, file in enumerate(outputs.wf_out):
         assert file.fspath.exists()
-        assert file.fspath == outputs._output_dir / file_list[ii]
+        assert file.fspath == outputs._cache_dir / file_list[ii]
 
 
 def test_wf_resultfile_3(worker: str, tmp_path: Path):
@@ -3585,7 +3585,7 @@ def test_wf_resultfile_3(worker: str, tmp_path: Path):
         else:
             assert val.fspath.exists()
             ii = int(key.split("_")[1])
-            assert val.fspath == outputs._output_dir / file_list[ii]
+            assert val.fspath == outputs._cache_dir / file_list[ii]
 
 
 def test_wf_upstream_error1(tmp_path: Path):

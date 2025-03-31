@@ -267,7 +267,7 @@ class Job(ty.Generic[TaskType]):
                     map_copyfiles[name] = copied_value
         self._inputs.update(
             template_update(
-                self.task, output_dir=self.cache_dir, map_copyfiles=map_copyfiles
+                self.task, cache_dir=self.cache_dir, map_copyfiles=map_copyfiles
             )
         )
         return self._inputs
@@ -321,7 +321,7 @@ class Job(ty.Generic[TaskType]):
                 outputs=None,
                 runtime=None,
                 errored=False,
-                output_dir=self.cache_dir,
+                cache_dir=self.cache_dir,
                 task=self.task,
             )
             self.hooks.pre_run_task(self)
@@ -377,7 +377,7 @@ class Job(ty.Generic[TaskType]):
                 outputs=None,
                 runtime=None,
                 errored=False,
-                output_dir=self.cache_dir,
+                cache_dir=self.cache_dir,
                 task=self.task,
             )
             self.hooks.pre_run_task(self)
@@ -483,7 +483,7 @@ class Job(ty.Generic[TaskType]):
                 outputs=None,
                 runtime=None,
                 errored=True,
-                output_dir=self.cache_dir,
+                cache_dir=self.cache_dir,
                 task=self.task,
             )
 

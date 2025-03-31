@@ -389,7 +389,7 @@ def test_task_nostate_1(worker, tmp_path):
     # checking the results
     assert results.outputs.out == 5
 
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 
@@ -402,7 +402,7 @@ def test_task_nostate_1_call(tmp_path):
     # checking the results
 
     assert results.outputs.out == 5
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 
@@ -422,7 +422,7 @@ def test_task_nostate_1_call_subm(worker, tmp_path):
     # checking the results
 
     assert results.outputs.out == 5
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 
@@ -442,7 +442,7 @@ def test_task_nostate_1_call_plug(worker, tmp_path):
     # checking the results
 
     assert results.outputs.out == 5
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 
@@ -462,7 +462,7 @@ def test_task_nostate_2(worker, tmp_path):
     # checking the results
 
     assert results.outputs.out == 33
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 
@@ -479,7 +479,7 @@ def test_task_nostate_3(worker, tmp_path):
     # checking the results
 
     assert results.outputs.out == "a:ala_b:bala"
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 
@@ -498,7 +498,7 @@ def test_task_nostate_4(worker, tmp_path):
     # checking the results
 
     assert results.outputs.out == "hello from pydra\n"
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 
@@ -821,7 +821,7 @@ def test_task_state_singl_1(worker, tmp_path):
 
     for i, res in enumerate(expected):
         assert results.outputs.out[i] == res[1]
-    # checking the output_dir
+    # checking the cache_dir
     assert results.cache_dir.exists()
 
 

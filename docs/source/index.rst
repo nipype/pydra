@@ -170,6 +170,7 @@ See the full reference documentation for Pydra
    reference/api
    genindex
    modindex
+   reference/glossary
 
 .. _FSL: https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL
 .. _ANTs: http://stnava.github.io/ANTs/

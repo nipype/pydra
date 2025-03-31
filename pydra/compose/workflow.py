@@ -338,7 +338,7 @@ class WorkflowOutputs(base.Outputs):
         # Set the values in the outputs object
         outputs = super()._from_task(job)
         outputs = attrs.evolve(outputs, **values)
-        outputs._output_dir = job.cache_dir
+        outputs._cache_dir = job.cache_dir
         return outputs
 
 

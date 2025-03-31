@@ -604,11 +604,11 @@ def test_sge_no_limit_maxthreads(tmpdir):
 
 def test_hash_changes_in_task_inputs_file(tmp_path):
     @python.define
-    def output_dir_as_input(out_dir: Directory) -> Directory:
+    def cache_dir_as_input(out_dir: Directory) -> Directory:
         (out_dir.fspath / "new-file.txt").touch()
         return out_dir
 
-    task = output_dir_as_input(out_dir=tmp_path)
+    task = cache_dir_as_input(out_dir=tmp_path)
     with pytest.raises(RuntimeError, match="Input field hashes have changed"):
         task(cache_root=tmp_path)
 

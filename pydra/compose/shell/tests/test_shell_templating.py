@@ -104,6 +104,6 @@ def test_template_formatting(tmp_path: Path):
         field,
         task,
         values=values,
-        output_dir=tmp_path,
+        cache_dir=tmp_path,
         spec_type="input",
     ) == [tmp_path / "file.bvec", tmp_path / "file.bval"]

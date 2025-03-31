@@ -180,7 +180,7 @@ class SgeWorker(base.Worker):
             batch_script,
             job_pkl,
             ind,
-            output_dir,
+            cache_dir,
             task_qsub_args,
         ) = self._prepare_runscripts(job, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
@@ -431,7 +431,7 @@ class SgeWorker(base.Worker):
         cache_root,
         job_pkl,
         ind,
-        output_dir,
+        cache_dir,
         task_qsub_args,
     ):
         """Coroutine that submits job runscript and polls job until completion or error."""
@@ -440,12 +440,12 @@ class SgeWorker(base.Worker):
             name,
             uid,
             cache_root,
-            output_dir,
+            cache_dir,
             task_qsub_args,
         )
         if self.poll_for_result_file:
             while True:
-                result_file = output_dir / "_result.pklz"
+                result_file = cache_dir / "_result.pklz"
                 if result_file.exists() and str(job_pkl) not in self.job_pkls_rerun:
                     return True
                 await asyncio.sleep(self.poll_delay)

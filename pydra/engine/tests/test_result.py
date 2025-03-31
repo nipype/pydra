@@ -9,7 +9,7 @@ def test_runtime():
 
 
 def test_result(tmp_path):
-    result = Result(output_dir=tmp_path)
+    result = Result(cache_dir=tmp_path)
     assert hasattr(result, "runtime")
     assert hasattr(result, "outputs")
     assert hasattr(result, "errored")

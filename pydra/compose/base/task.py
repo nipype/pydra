@@ -38,7 +38,7 @@ class Outputs:
 
     RESERVED_FIELD_NAMES = ("inputs",)
 
-    _output_dir: Path = attrs.field(default=None, init=False, repr=False)
+    _cache_dir: Path = attrs.field(default=None, init=False, repr=False)
 
     @property
     def inputs(self):
@@ -70,12 +70,12 @@ class Outputs:
                 default = output.default
             defaults[output.name] = default
         outputs = cls(**defaults)
-        outputs._output_dir = job.cache_dir
+        outputs._cache_dir = job.cache_dir
         return outputs
 
     @property
     def _results(self) -> "Result[Self]":
-        results_path = self._output_dir / "_job.pklz"
+        results_path = self._cache_dir / "_job.pklz"
         if not results_path.exists():
             raise FileNotFoundError(f"Job results file {results_path} not found")
         with open(results_path, "rb") as f:

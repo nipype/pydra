@@ -97,11 +97,11 @@ def test_traceback_wf(tmp_path: Path):
             sub(wf, raise_errors=True)
 
     # getting error file from the error message
-    output_dir_match = Path(
+    cache_dir_match = Path(
         str(exinfo.value).split("See output directory for details: ")[-1].strip()
     )
-    assert output_dir_match.exists()
-    error_file = output_dir_match / "_error.pklz"
+    assert cache_dir_match.exists()
+    error_file = cache_dir_match / "_error.pklz"
     # checking if the file exists
     assert error_file.exists()
     assert "in FunError" in str(exinfo.value)
