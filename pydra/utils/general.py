@@ -15,6 +15,7 @@ import platformdirs
 import builtins
 import pkgutil
 import logging
+import pydra.scripts
 from ._version import __version__
 
 
@@ -23,6 +24,8 @@ if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
     from pydra.compose import workflow
 
+
+SCRIPTS_DIR = Path(pydra.scripts.__file__).parent
 
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 
