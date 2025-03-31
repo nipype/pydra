@@ -34,7 +34,7 @@ def test_shell_cmd_inputs_1():
         inpA: str = shell.arg(position=1, help="inp1", argstr="")
 
     shelly = Shelly(
-        additional_args=["arg"],
+        append_args=["arg"],
         inpA="inp1",
     )
     assert shelly.cmdline == "executable inp1 arg"
@@ -52,7 +52,7 @@ def test_shell_cmd_inputs_1a():
         inpA: str = shell.arg(help="inpA", argstr="")
 
     shelly = Shelly(
-        additional_args=["arg"],
+        append_args=["arg"],
         inpA="inpNone1",
     )
     # inp1 should be the first one after executable
@@ -72,7 +72,7 @@ def test_shell_cmd_inputs_1b():
 
     # separate command into exec + args
     shelly = Shelly(
-        additional_args=["arg"],
+        append_args=["arg"],
         inpA="inp-1",
     )
     # inp1 should be last before arg
@@ -194,7 +194,7 @@ def test_shell_cmd_inputs_argstr_2():
         inpA: bool = shell.arg(position=1, help="inpA", argstr="-v")
 
     # separate command into exec + args
-    shelly = Shelly(additional_args=["arg"], inpA=True)
+    shelly = Shelly(append_args=["arg"], inpA=True)
     # a flag is used without any additional argument
     assert shelly.cmdline == "executable -v arg"
 

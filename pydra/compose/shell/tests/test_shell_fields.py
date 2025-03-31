@@ -34,7 +34,7 @@ def test_interface_template():
         ),
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
-        shell.Task.additional_args,
+        shell.Task.append_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -89,7 +89,7 @@ def test_interface_template_w_types_and_path_template_ext():
         ),
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
-        shell.Task.additional_args,
+        shell.Task.append_args,
     ]
     assert sorted_fields(TrimPng.Outputs) == [
         output,
@@ -131,7 +131,7 @@ def test_interface_template_w_modify():
         shell.arg(
             name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
         ),
-        shell.Task.additional_args,
+        shell.Task.append_args,
     ]
     assert sorted_fields(TrimPng.Outputs) == [
         shell.out(
@@ -216,7 +216,7 @@ def test_interface_template_more_complex():
             default=None,
             position=6,
         ),
-        shell.Task.additional_args,
+        shell.Task.append_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -311,7 +311,7 @@ def test_interface_template_with_overrides_and_optionals():
             sep=" ",
             position=5,
         ),
-    ] + outargs + [shell.Task.additional_args]
+    ] + outargs + [shell.Task.append_args]
     assert sorted_fields(Cp.Outputs) == outargs + [
         shell.out(
             name="return_code",
@@ -374,7 +374,7 @@ def test_interface_template_with_defaults():
             position=6,
             sep=" ",
         ),
-        shell.Task.additional_args,
+        shell.Task.append_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -444,7 +444,7 @@ def test_interface_template_with_type_overrides():
             position=6,
             sep=" ",
         ),
-        shell.Task.additional_args,
+        shell.Task.append_args,
     ]
     assert sorted_fields(Cp.Outputs) == [
         output,
@@ -584,7 +584,7 @@ def Ls(request):
 def test_shell_fields(Ls):
     assert sorted([a.name for a in sorted_fields(Ls)]) == sorted(
         [
-            "additional_args",
+            "append_args",
             "executable",
             "directory",
             "hidden",
@@ -714,7 +714,7 @@ def test_shell_output_field_name_static():
             )
 
     assert sorted([a.name for a in attrs.fields(A) if not a.name.startswith("_")]) == [
-        "additional_args",
+        "append_args",
         "executable",
         "x",
         "y",
@@ -753,7 +753,7 @@ def test_shell_output_field_name_static():
             position=1,
         ),
         output,
-        shell.Task.additional_args,
+        shell.Task.append_args,
     ]
     assert sorted_fields(A.Outputs) == [
         output,
@@ -1011,7 +1011,7 @@ def test_shell_help1():
     ).split(
         "\n"
     ) + [
-        "- additional_args: list[str | generic/file]; default-factory = list()",
+        "- append_args: list[str | generic/file]; default-factory = list()",
         "    Additional free-form arguments to append to the end of the command.",
         "",
         "Outputs:",
@@ -1036,7 +1036,7 @@ def sorted_fields(interface):
     length = len(fields) - 1
 
     def pos_key(out: shell.out) -> int:
-        if out.name == "additional_args":
+        if out.name == "append_args":
             return (length + 1, out.name)
         try:
             pos = out.position

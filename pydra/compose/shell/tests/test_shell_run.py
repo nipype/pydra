@@ -78,7 +78,7 @@ def test_shell_cmd_2a(worker, results_function, tmp_path):
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
-    shelly = shell.define(cmd_exec)(additional_args=cmd_args)
+    shelly = shell.define(cmd_exec)(append_args=cmd_args)
 
     assert shelly.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
@@ -95,7 +95,7 @@ def test_shell_cmd_2b(worker, results_function, tmp_path):
     cmd_exec = "echo"
     cmd_args = ["pydra"]
     # separate command into exec + args
-    shelly = shell.define(cmd_exec)(additional_args=cmd_args)
+    shelly = shell.define(cmd_exec)(append_args=cmd_args)
 
     assert shelly.executable == "echo"
     assert shelly.cmdline == "echo pydra"
@@ -138,10 +138,10 @@ def test_shell_cmd_4(worker, tmp_path):
     cmd_exec = "echo"
     cmd_args = [["nipype"], ["pydra"]]
     # separate command into exec + args
-    shelly = shell.define(cmd_exec)().split(additional_args=cmd_args)
+    shelly = shell.define(cmd_exec)().split(append_args=cmd_args)
 
     assert shelly.executable == "echo"
-    assert shelly.additional_args == StateArray([["nipype"], ["pydra"]])
+    assert shelly.append_args == StateArray([["nipype"], ["pydra"]])
     # assert shelly.cmdline == ["echo nipype", "echo pydra"]
     outputs = shelly(worker=worker)
 
@@ -159,14 +159,10 @@ def test_shell_cmd_5(worker, tmp_path):
     cmd_exec = "echo"
     cmd_args = [["nipype"], ["pydra"]]
     # separate command into exec + args
-    shelly = (
-        shell.define(cmd_exec)()
-        .split(additional_args=cmd_args)
-        .combine("additional_args")
-    )
+    shelly = shell.define(cmd_exec)().split(append_args=cmd_args).combine("append_args")
 
     assert shelly.executable == "echo"
-    assert shelly.additional_args == StateArray([["nipype"], ["pydra"]])
+    assert shelly.append_args == StateArray([["nipype"], ["pydra"]])
     # assert shelly.cmdline == ["echo nipype", "echo pydra"]
     outputs = shelly(worker=worker)
 
@@ -182,11 +178,11 @@ def test_shell_cmd_6(worker, tmp_path):
     cmd_args = [["nipype"], ["pydra"]]
     # separate command into exec + args
     shelly = shell.define("shelly")().split(
-        ["executable", "additional_args"], executable=cmd_exec, additional_args=cmd_args
+        ["executable", "append_args"], executable=cmd_exec, append_args=cmd_args
     )
 
     assert shelly.executable == ["echo", ["echo", "-n"]]
-    assert shelly.additional_args == StateArray([["nipype"], ["pydra"]])
+    assert shelly.append_args == StateArray([["nipype"], ["pydra"]])
     outputs = shelly(cache_root=tmp_path, worker=worker)
 
     assert outputs.stdout == ["nipype\n", "pydra\n", "nipype", "pydra"]
@@ -217,15 +213,15 @@ def test_shell_cmd_7(worker, tmp_path):
     shelly = (
         shell.define("shelly")()
         .split(
-            ["executable", "additional_args"],
+            ["executable", "append_args"],
             executable=cmd_exec,
-            additional_args=cmd_args,
+            append_args=cmd_args,
         )
-        .combine("additional_args")
+        .combine("append_args")
     )
 
     assert shelly.executable == ["echo", ["echo", "-n"]]
-    assert shelly.additional_args == StateArray([["nipype"], ["pydra"]])
+    assert shelly.append_args == StateArray([["nipype"], ["pydra"]])
 
     outputs = shelly(worker=worker)
 
@@ -247,7 +243,7 @@ def test_wf_shell_cmd_1(worker, tmp_path):
             return [x.strip()]
 
         listify = workflow.add(StripAndListify(x=shelly_pwd.stdout))
-        shelly_ls = workflow.add(shell.define(cmd2)(additional_args=listify.out))
+        shelly_ls = workflow.add(shell.define(cmd2)(append_args=listify.out))
         return shelly_ls.stdout
 
     wf = Workflow(cmd1="pwd", cmd2="ls")
@@ -285,9 +281,9 @@ def test_shell_cmd_inputspec_1(worker, results_function, tmp_path):
             pass
 
     # separate command into exec + args
-    shelly = Shelly(additional_args=cmd_args, opt_n=cmd_opt)
+    shelly = Shelly(append_args=cmd_args, opt_n=cmd_opt)
     assert shelly.executable == cmd_exec
-    assert shelly.additional_args == cmd_args
+    assert shelly.append_args == cmd_args
     assert shelly.cmdline == "echo -n 'hello from pydra'"
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
@@ -323,9 +319,9 @@ def test_shell_cmd_inputspec_2(worker, results_function, tmp_path):
             pass
 
     # separate command into exec + args
-    shelly = Shelly(additional_args=cmd_args, opt_n=cmd_opt, opt_hello=cmd_opt_hello)
+    shelly = Shelly(append_args=cmd_args, opt_n=cmd_opt, opt_hello=cmd_opt_hello)
     assert shelly.executable == cmd_exec
-    assert shelly.additional_args == cmd_args
+    assert shelly.append_args == cmd_args
     assert shelly.cmdline == "echo -n HELLO 'from pydra'"
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == "HELLO from pydra"
@@ -2389,7 +2385,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, worker, results_function):
                 callable=get_stderr,
             )
 
-    shelly = Shelly().split(additional_args=args)
+    shelly = Shelly().split(append_args=args)
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     for index in range(2):

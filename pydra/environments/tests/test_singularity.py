@@ -73,7 +73,7 @@ def test_singularity_2a(worker, tmp_path):
     # separate command into exec + args
     image = "docker://alpine"
     Singu = shell.define(cmd_exec)
-    singu = Singu(additional_args=cmd_args)
+    singu = Singu(append_args=cmd_args)
     assert singu.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
     with Submitter(

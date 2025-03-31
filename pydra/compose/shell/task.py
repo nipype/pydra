@@ -220,7 +220,7 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
 @state_array_support
-def additional_args_converter(value: ty.Any) -> list[str]:
+def append_args_converter(value: ty.Any) -> list[str]:
     """Convert additional arguments to a list of strings."""
     if isinstance(value, str):
         return shlex.split(value)
@@ -234,17 +234,17 @@ class ShellTask(base.Task[ShellOutputsType]):
 
     _task_type = "shell"
 
-    BASE_NAMES = ["additional_args"]
+    BASE_NAMES = ["append_args"]
 
     EXECUTABLE_HELP = (
         "the first part of the command, can be a string, "
         "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
     )
 
-    additional_args: list[str | File] = field.arg(
-        name="additional_args",
+    append_args: list[str | File] = field.arg(
+        name="append_args",
         default=attrs.Factory(list),
-        converter=additional_args_converter,
+        converter=append_args_converter,
         type=list[str | File],
         sep=" ",
         help="Additional free-form arguments to append to the end of the command.",
@@ -289,7 +289,7 @@ class ShellTask(base.Task[ShellOutputsType]):
                 del values[fld.name]
         # Drop special fields that are added separately
         del values["executable"]
-        del values["additional_args"]
+        del values["append_args"]
         # Add executable
         pos_args = [
             self._command_shelltask_executable(fld, self.executable),
@@ -309,7 +309,7 @@ class ShellTask(base.Task[ShellOutputsType]):
         # pos_args values are each a list of arguments, so concatenate lists after sorting
         command_args = sum(cmd_args, [])
         # Append additional arguments to the end of the command
-        command_args += self.additional_args
+        command_args += self.append_args
         return command_args
 
     def _command_shelltask_executable(

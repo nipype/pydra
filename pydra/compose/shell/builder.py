@@ -210,7 +210,7 @@ def define(
         # Set positions for the remaining inputs that don't have an explicit position
         position_stack = remaining_positions(list(parsed_inputs.values()))
         for inpt in parsed_inputs.values():
-            if inpt.name == "additional_args":
+            if inpt.name == "append_args":
                 continue
             if inpt.position is None:
                 inpt.position = position_stack.pop(0)
@@ -544,11 +544,11 @@ def remaining_positions(
         If multiple fields have the same position
     """
     if num_args is None:
-        num_args = len(args) - 1  # Subtract 1 for the 'additional_args' field
+        num_args = len(args) - 1  # Subtract 1 for the 'append_args' field
     # Check for multiple positions
     positions = defaultdict(list)
     for arg in args:
-        if arg.name == "additional_args":
+        if arg.name == "append_args":
             continue
         if arg.position is not None:
             if arg.position >= 0:
