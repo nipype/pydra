@@ -437,7 +437,6 @@ class Job(ty.Generic[TaskType]):
         try:
             stat = self.lockfile.stat()
         except FileNotFoundError:
-            # the lockfile was deleted
             return None
         self._run_start_time = datetime.fromtimestamp(stat.st_ctime)
         return self._run_start_time
