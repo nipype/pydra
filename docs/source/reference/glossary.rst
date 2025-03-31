@@ -3,6 +3,19 @@ Glossary
 
 .. glossary::
 
+    Cache-root
+        The directory where cache directories for tasks to be executed are created.
+        Task cache directories are named within the cache root directory using a hash
+        of the task's parameters, so that the same task with the same parameters can be
+        reused.
+
+    Container-ndim
+        The number of dimensions of the container object to be iterated over when splitting
+        a iterable value. For example, a list-of-lists or a 2D array with `container_ndim=2`
+        would be split over the elements of the inner lists into a single 1-D state array.
+        However, if `container_ndim=1`, the outer list/2D would be split into a 1-D state array
+        of lists/1D arrays.
+
     Environment
         An environment refers to a specific software encapsulation, such as a Docker
         or Singularity image, that is used to run a task.
@@ -18,7 +31,7 @@ Glossary
         or send notifications
 
     Job
-        A task that has been instantiated with resolved with concrete inputs.
+        A :ref:`Task` that has been instantiated with resolved with concrete inputs.
         (i.e. not lazy-values or state-arrays) and assigned to a worker. Whereas a
         a task describes "what" is to be done and a submitter object describes
         "how" it is to be done, a job combines them both to describe a concrete unit
@@ -33,6 +46,11 @@ Glossary
         A single task within the context of a workflow, which is assigned a name and
         references a state. Note this task can be nested workflow task.
 
+    Read-only-caches
+        A read-only cache is a cache root directory that was created by a previous
+        pydra runs, which is checked for matching task caches to be reused if present
+        but not written not modified during the execution of a task.
+
     State
         The combination of all upstream splits and combines with any splitters and
         combiners for a given node, it is used to track how many jobs, and their
@@ -40,7 +58,8 @@ Glossary
 
     State-array
         A state array is a collection of parameterised tasks or values that were generated
-        by a split operation either at the current or upstream node of a workflow.
+        by a split operation either at the current or upstream node of a workflow. The
+        size of the array is determined by the :ref:`State` of the workflow node.
 
     Submitter
         A submitter object parameterises how a task is to be executed, by specifying
