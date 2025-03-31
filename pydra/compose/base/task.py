@@ -172,7 +172,7 @@ class Task(ty.Generic[OutputsType]):
         worker: "str | ty.Type[Worker] | Worker" = "debug",
         environment: "Environment | None" = None,
         rerun: bool = False,
-        cache_locations: ty.Iterable[os.PathLike] | None = None,
+        readonly_caches: ty.Iterable[os.PathLike] | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
@@ -193,7 +193,7 @@ class Task(ty.Generic[OutputsType]):
         rerun : bool, optional
             Whether to force the re-computation of the job results even if existing
             results are found, by default False
-        cache_locations : list[os.PathLike], optional
+        readonly_caches : list[os.PathLike], optional
             Alternate cache locations to check for pre-computed results, by default None
         audit_flags : AuditFlag, optional
             Auditing configuration, by default AuditFlag.NONE
@@ -219,7 +219,7 @@ class Task(ty.Generic[OutputsType]):
             with Submitter(
                 audit_flags=audit_flags,
                 cache_root=cache_root,
-                cache_locations=cache_locations,
+                readonly_caches=readonly_caches,
                 messenger_args=messenger_args,
                 messengers=messengers,
                 environment=environment,

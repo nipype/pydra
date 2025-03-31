@@ -145,7 +145,7 @@ class Job(ty.Generic[TaskType]):
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
         self.cache_root = submitter.cache_root
-        self.cache_locations = submitter.cache_locations
+        self.all_caches = submitter.readonly_caches
         self._run_start_time = None
 
     @property
@@ -162,16 +162,16 @@ class Job(ty.Generic[TaskType]):
         self._cache_root = Path(path)
 
     @property
-    def cache_locations(self):
+    def all_caches(self):
         """Get the list of cache sources."""
-        return ensure_list(self.cache_root) + self._cache_locations
+        return ensure_list(self.cache_root) + self._readonly_caches
 
-    @cache_locations.setter
-    def cache_locations(self, locations):
+    @all_caches.setter
+    def all_caches(self, locations):
         if locations is not None:
-            self._cache_locations = [Path(loc) for loc in ensure_list(locations)]
+            self._readonly_caches = [Path(loc) for loc in ensure_list(locations)]
         else:
-            self._cache_locations = []
+            self._readonly_caches = []
 
     def __str__(self):
         return self.name
@@ -446,7 +446,7 @@ class Job(ty.Generic[TaskType]):
         for gr, ind_l in self.state.final_combined_ind_mapping.items():
             combined_results_gr = []
             for ind in ind_l:
-                result = load_result(self.checksum_states(ind), self.cache_locations)
+                result = load_result(self.checksum_states(ind), self.all_caches)
                 if result is None:
                     return None
                 if return_inputs is True or return_inputs == "val":
@@ -488,7 +488,7 @@ class Job(ty.Generic[TaskType]):
             )
 
         checksum = self.checksum
-        result = load_result(checksum, self.cache_locations)
+        result = load_result(checksum, self.all_caches)
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":

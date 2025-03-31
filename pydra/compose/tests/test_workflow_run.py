@@ -2152,7 +2152,7 @@ def test_wf_nostate_cachedir_relativepath(tmp_path, worker):
 def test_wf_nostate_cachelocations(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_root;
-    the second worky has cache_locations and should not recompute the results
+    the second worky has readonly_caches and should not recompute the results
     """
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
@@ -2187,7 +2187,7 @@ def test_wf_nostate_cachelocations(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2242,7 +2242,7 @@ def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2295,7 +2295,7 @@ def test_wf_nostate_cachelocations_b(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2354,7 +2354,7 @@ def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2411,7 +2411,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2434,7 +2434,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path
 def test_wf_nostate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_root;
-    the second worky has cache_locations,
+    the second worky has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
     cache_root1 = tmp_path / "test_wf_cache3"
@@ -2492,7 +2492,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     worker: str, tmp_path: Path
 ):
     """
-    Two identical wfs with provided cache_root and cache_locations for the second one;
+    Two identical wfs with provided cache_root and readonly_caches for the second one;
     submitter doesn't have rerun, but the second worky has rerun=True,
     propagate_rerun is True as default, so everything should be rerun
     """
@@ -2528,7 +2528,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2, rerun=True)
 
@@ -2555,7 +2555,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     worker: str, tmp_path: Path
 ):
     """
-    Two identical wfs with provided cache_root and cache_locations for the second one;
+    Two identical wfs with provided cache_root and readonly_caches for the second one;
     submitter doesn't have rerun, but the second worky has rerun=True,
     propagate_rerun is set to False, so worky will be triggered,
     but tasks will not have rerun, so will use the previous results
@@ -2594,7 +2594,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     with Submitter(
         worker=worker,
         cache_root=cache_root2,
-        cache_locations=cache_root1,
+        readonly_caches=cache_root1,
         propagate_rerun=False,
     ) as sub:
         results2 = sub(worky2, rerun=True)
@@ -2629,7 +2629,7 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     worker: str, tmp_path: Path
 ):
     """
-    Two identical wfs with provided cache_root, and cache_locations for the second worky;
+    Two identical wfs with provided cache_root, and readonly_caches for the second worky;
     submitter doesn't have rerun, but worky has rerun=True,
     since propagate_rerun=False, only tasks that have rerun=True will be rerun
     """
@@ -2668,7 +2668,7 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     with Submitter(
         worker=worker,
         cache_root=cache_root2,
-        cache_locations=cache_root1,
+        readonly_caches=cache_root1,
         propagate_rerun=False,
     ) as sub:
         results2 = sub(worky2, rerun=True)  # rerun will not be propagated to each task)
@@ -2692,7 +2692,7 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
 def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with different input, but the second node has the same input;
-    the second worky has cache_locations and should recompute the worky,
+    the second worky has readonly_caches and should recompute the worky,
     but without recomputing the second node
     """
     cache_root1 = tmp_path / "test_wf_cache3"
@@ -2725,7 +2725,7 @@ def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
     worky2 = Worky2(x=2)
 
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2744,7 +2744,7 @@ def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
 def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     """
     Two wfs with different input, but the second node has the same input;
-    the second worky has cache_locations (set after adding tasks) and should recompute,
+    the second worky has readonly_caches (set after adding tasks) and should recompute,
     but without recomputing the second node
     """
     cache_root1 = tmp_path / "test_wf_cache3"
@@ -2776,7 +2776,7 @@ def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     worky2 = Worky2(x=2)
 
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2795,7 +2795,7 @@ def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
 def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_root;
-    the second worky has cache_locations and should not recompute the results
+    the second worky has readonly_caches and should not recompute the results
     """
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
@@ -2831,7 +2831,7 @@ def test_wf_state_cachelocations(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2858,7 +2858,7 @@ def test_wf_state_cachelocations(worker: str, tmp_path: Path):
 def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_root;
-    the second worky has cache_locations,
+    the second worky has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
     cache_root1 = tmp_path / "test_wf_cache3"
@@ -2919,7 +2919,7 @@ def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
 def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_root;
-    the second worky has cache_locations and should not recompute the results
+    the second worky has readonly_caches and should not recompute the results
     (the lazy input of the node is updated to the correct one,
     i.e. the same as in worky1, after adding the node to the worky)
     """
@@ -2956,7 +2956,7 @@ def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -2982,7 +2982,7 @@ def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
 def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with provided cache_root, the first one has no state, the second has;
-    the second worky has cache_locations and should not recompute only one element
+    the second worky has readonly_caches and should not recompute only one element
     """
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
@@ -3014,7 +3014,7 @@ def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     worky2 = Worky2().split(("x", "y"), x=[2, 20], y=[3, 4])
 
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3027,9 +3027,9 @@ def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
 def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_root;
-    the second worky has cache_locations in init,
+    the second worky has readonly_caches in init,
      that is later overwritten in Submitter.__call__;
-    the cache_locations from call doesn't exist so the second task should run again
+    the readonly_caches from call doesn't exist so the second task should run again
     """
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
@@ -3065,9 +3065,9 @@ def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
     worky2 = Worky2(x=2, y=3)
 
     t0 = time.time()
-    # changing cache_locations to non-existing dir
+    # changing readonly_caches to non-existing dir
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1_empty
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1_empty
     ) as sub:
         results2 = sub(worky2)
 
@@ -3124,7 +3124,7 @@ def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
     worky2 = Worky2(x=2, y=3)
 
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3144,7 +3144,7 @@ def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
 def test_wf_ndstate_cachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node states;
-    the second worky has cache_locations and should not recompute the results
+    the second worky has readonly_caches and should not recompute the results
     """
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
@@ -3179,7 +3179,7 @@ def test_wf_ndstate_cachelocations(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3199,7 +3199,7 @@ def test_wf_ndstate_cachelocations(worker: str, tmp_path: Path):
 def test_wf_ndstate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node states;
-    the second worky has cache_locations,
+    the second worky has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
     cache_root1 = tmp_path / "test_wf_cache3"
@@ -3257,7 +3257,7 @@ def test_wf_ndstate_cachelocations_forcererun(worker: str, tmp_path: Path):
 def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node state (that is set after adding the node!);
-    the second worky has cache_locations and should not recompute the results
+    the second worky has readonly_caches and should not recompute the results
     """
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
@@ -3292,7 +3292,7 @@ def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
@@ -3317,7 +3317,7 @@ def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
 def test_wf_ndstate_cachelocations_recompute(worker: str, tmp_path: Path):
     """
     Two wfs (with nodes with states) with provided cache_root;
-    the second worky has cache_locations and should not recompute the results
+    the second worky has readonly_caches and should not recompute the results
     """
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
@@ -3352,7 +3352,7 @@ def test_wf_ndstate_cachelocations_recompute(worker: str, tmp_path: Path):
 
     t0 = time.time()
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 

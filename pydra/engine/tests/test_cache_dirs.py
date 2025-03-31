@@ -11,7 +11,7 @@ from pydra.engine.tests.utils import num_python_cache_roots
 def test_task_state_cachelocations(worker, tmp_path):
     """
     Two identical tasks with a state and cache_root;
-    the second task has cache_locations and should not recompute the results
+    the second task has readonly_caches and should not recompute the results
     """
     cache_root = tmp_path / "test_task_nostate"
     cache_root.mkdir()
@@ -24,7 +24,7 @@ def test_task_state_cachelocations(worker, tmp_path):
 
     nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -42,7 +42,7 @@ def test_task_state_cachelocations(worker, tmp_path):
 def test_task_state_cachelocations_forcererun(worker, tmp_path):
     """
     Two identical tasks with a state and cache_root;
-    the second task has cache_locations,
+    the second task has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
     cache_root = tmp_path / "test_task_nostate"
@@ -56,7 +56,7 @@ def test_task_state_cachelocations_forcererun(worker, tmp_path):
 
     nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
     ) as sub:
         results2 = sub(nn2, rerun=True)
 
@@ -74,9 +74,9 @@ def test_task_state_cachelocations_forcererun(worker, tmp_path):
 def test_task_state_cachelocations_updated(worker, tmp_path):
     """
     Two identical tasks with states and cache_root;
-    the second task has cache_locations in init,
+    the second task has readonly_caches in init,
      that is later overwritten in Submitter.__call__;
-    the cache_locations from call doesn't exist so the second task should run again
+    the readonly_caches from call doesn't exist so the second task should run again
     """
     cache_root = tmp_path / "test_task_nostate"
     cache_root.mkdir()
@@ -91,7 +91,7 @@ def test_task_state_cachelocations_updated(worker, tmp_path):
 
     nn2 = FunAddTwo().split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -110,7 +110,7 @@ def test_task_state_cachelocations_updated(worker, tmp_path):
 def test_task_files_cachelocations(worker, tmp_path):
     """
     Two identical tasks with provided cache_root that use file as an input;
-    the second task has cache_locations and should not recompute the results
+    the second task has readonly_caches and should not recompute the results
     """
     cache_root = tmp_path / "test_task_nostate"
     cache_root.mkdir()
@@ -131,7 +131,7 @@ def test_task_files_cachelocations(worker, tmp_path):
 
     nn2 = FunFile(filename=input2)
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results.errors["error message"])
@@ -173,7 +173,7 @@ class OverriddenContentsFile(File):
 def test_task_files_persistentcache(tmp_path):
     """
     Two identical tasks with provided cache_root that use file as an input;
-    the second task has cache_locations and should not recompute the results
+    the second task has readonly_caches and should not recompute the results
     """
     test_file_path = tmp_path / "test_file.txt"
     test_file_path.write_bytes(b"foo")

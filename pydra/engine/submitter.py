@@ -59,7 +59,7 @@ class Submitter:
         The worker to use, by default "cf"
     environment: Environment, optional
         The execution environment to use, by default None
-    cache_locations : list[os.PathLike], optional
+    readonly_caches : list[os.PathLike], optional
         Alternate cache locations to check for pre-computed results, by default None
     max_concurrent: int | float, optional
         Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
@@ -81,7 +81,7 @@ class Submitter:
     cache_root: os.PathLike
     worker: Worker
     environment: "Environment | None"
-    cache_locations: list[os.PathLike]
+    readonly_caches: list[os.PathLike]
     audit_flags: AuditFlag
     messengers: ty.Iterable[Messenger]
     messenger_args: dict[str, ty.Any]
@@ -96,7 +96,7 @@ class Submitter:
         cache_root: os.PathLike | None = None,
         worker: str | ty.Type[Worker] | Worker | None = "debug",
         environment: "Environment | None" = None,
-        cache_locations: list[os.PathLike] | None = None,
+        readonly_caches: list[os.PathLike] | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
@@ -128,7 +128,7 @@ class Submitter:
         cache_root.mkdir(parents=True, exist_ok=True)
 
         self.cache_root = cache_root
-        self.cache_locations = cache_locations
+        self.readonly_caches = readonly_caches
         self.propagate_rerun = propagate_rerun
         if max_concurrent < 1 or (
             isinstance(max_concurrent, float) and max_concurrent != float("inf")
@@ -916,7 +916,7 @@ async def prepare_runnable(runnable):
 #         for pred in graph.predecessors[tsk.name]:
 #             if not pred.done:
 #                 matching_name = []
-#                 for cache_loc in tsk.cache_locations:
+#                 for cache_loc in tsk.readonly_caches:
 #                     for tsk_work_dir in cache_loc.iterdir():
 #                         if (tsk_work_dir / "_job.pklz").exists():
 #                             with open(tsk_work_dir / "_job.pklz", "rb") as f:

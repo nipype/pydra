@@ -131,7 +131,7 @@ class RuntimeSpec:
 
 def load_result(
     checksum: str,
-    cache_locations: list[Path],
+    readonly_caches: list[Path],
     retries: int = 10,
     polling_interval: float = 0.1,
 ) -> Result | None:
@@ -142,7 +142,7 @@ def load_result(
     ----------
     checksum : :obj:`str`
         Unique identifier of the job to be loaded.
-    cache_locations : :obj:`list` of :obj:`os.pathlike`
+    readonly_caches : :obj:`list` of :obj:`os.pathlike`
         List of cache directories, in order of priority, where
         the checksum will be looked for.
     retries : :obj:`int`
@@ -157,11 +157,11 @@ def load_result(
         The result object if found, otherwise None.
 
     """
-    if not cache_locations:
+    if not readonly_caches:
         return None
     # TODO: if there are issues with loading, we might need to
     # TODO: sleep and repeat loads (after checking that there are no lock files!)
-    for location in cache_locations:
+    for location in readonly_caches:
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
             if result_file.exists() and result_file.stat().st_size > 0:

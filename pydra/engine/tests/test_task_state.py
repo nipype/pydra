@@ -595,7 +595,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, worker):
 def test_task_nostate_cachelocations(worker, tmp_path):
     """
     Two identical tasks with provided cache_root;
-    the second task has cache_locations and should not recompute the results
+    the second task has readonly_caches and should not recompute the results
     """
     cache_root = tmp_path / "test_task_nostate"
     cache_root.mkdir()
@@ -609,7 +609,7 @@ def test_task_nostate_cachelocations(worker, tmp_path):
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results.errors["error message"])
@@ -625,7 +625,7 @@ def test_task_nostate_cachelocations(worker, tmp_path):
 def test_task_nostate_cachelocations_forcererun(worker, tmp_path):
     """
     Two identical tasks with provided cache_root;
-    the second task has cache_locations,
+    the second task has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
     cache_root = tmp_path / "test_task_nostate"
@@ -640,7 +640,7 @@ def test_task_nostate_cachelocations_forcererun(worker, tmp_path):
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
     ) as sub:
         results2 = sub(nn2, rerun=True)
 
@@ -656,7 +656,7 @@ def test_task_nostate_cachelocations_forcererun(worker, tmp_path):
 def test_task_nostate_cachelocations_nosubmitter(tmp_path):
     """
     Two identical tasks (that are run without submitter!) with provided cache_root;
-    the second task has cache_locations and should not recompute the results
+    the second task has readonly_caches and should not recompute the results
     """
     cache_root = tmp_path / "test_task_nostate"
     cache_root.mkdir()
@@ -667,7 +667,7 @@ def test_task_nostate_cachelocations_nosubmitter(tmp_path):
     nn(cache_root=cache_root)
 
     nn2 = FunAddTwo(a=3)
-    outputs2 = nn2(cache_root=cache_root2, cache_locations=cache_root)
+    outputs2 = nn2(cache_root=cache_root2, readonly_caches=cache_root)
 
     # checking the results
 
@@ -681,7 +681,7 @@ def test_task_nostate_cachelocations_nosubmitter(tmp_path):
 def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
     """
     Two identical tasks (that are run without submitter!) with provided cache_root;
-    the second task has cache_locations,
+    the second task has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
     cache_root = tmp_path / "test_task_nostate"
@@ -693,7 +693,7 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
     nn(cache_root=cache_root)
 
     nn2 = FunAddTwo(a=3)
-    outputs2 = nn2(rerun=True, cache_root=cache_root2, cache_locations=cache_root)
+    outputs2 = nn2(rerun=True, cache_root=cache_root2, readonly_caches=cache_root)
 
     # checking the results
 
@@ -707,9 +707,9 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
 def test_task_nostate_cachelocations_updated(worker, tmp_path):
     """
     Two identical tasks with provided cache_root;
-    the second task has cache_locations in init,
+    the second task has readonly_caches in init,
      that is later overwritten in Submitter.__call__;
-    the cache_locations passed to call doesn't exist so the second task should run again
+    the readonly_caches passed to call doesn't exist so the second task should run again
     """
     cache_root = tmp_path / "test_task_nostate"
     cache_root.mkdir()
@@ -725,14 +725,14 @@ def test_task_nostate_cachelocations_updated(worker, tmp_path):
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
-        worker=worker, cache_root=cache_root2, cache_locations=cache_root
+        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
     ) as sub:
         results1 = sub(nn2)
     assert not results1.errored, "\n".join(results.errors["error message"])
 
     # updating cache location to non-existing dir
     with Submitter(
-        worker=worker, cache_locations=cache_root1, cache_root=tmp_path
+        worker=worker, readonly_caches=cache_root1, cache_root=tmp_path
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results.errors["error message"])
