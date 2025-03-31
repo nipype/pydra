@@ -400,3 +400,27 @@ def test_interface_invalid_wrapped2():
             @staticmethod
             def function(a):
                 return a + 1
+
+
+def test_task_repr():
+    @python.define(outputs=["x", "y", "z"])
+    def IdentityN3(x: int, y: int = 1, z: int = 2) -> tuple[int, int, int]:
+        return x, y, z
+
+    assert repr(IdentityN3(x=1, y=2)) == "IdentityN3(x=1, y=2)"
+
+
+@attrs.define(auto_attribs=True)
+class A:
+    x: int
+
+
+def test_object_input():
+    """Test function tasks with object inputs"""
+
+    @python.define
+    def TestFunc(a: A):
+        return a.x
+
+    outputs = TestFunc(a=A(x=7))()
+    assert outputs.out == 7

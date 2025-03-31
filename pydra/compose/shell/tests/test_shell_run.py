@@ -12,7 +12,6 @@ from fileformats.generic import (
     File,
     Directory,
 )
-from pydra.utils.general import task_help, wrap_text
 from pydra.utils.typing import (
     MultiOutputFile,
     MultiInputObj,
@@ -3576,44 +3575,24 @@ first line is ok, it prints 'hello'
     )
 
 
-def test_shell_help1():
+@no_win
+def test_shell_cmd(tmpdir):
+    cmd = ["echo", "hail", "pydra"]
 
+    # all args given as executable
+    Shelly = shell.define(" ".join(cmd))
+    shelly = Shelly()
+    assert shelly.cmdline == " ".join(cmd)
+    outputs = shelly()
+    assert outputs.stdout == " ".join(cmd[1:]) + "\n"
+
+    # separate command into exec + args
     Shelly = shell.define(
-        "shelly <in_file:generic/file> <out|out_file:generic/file> --arg1 <arg1:int> "
-        "--arg2 <arg2:float?> --opt-out <out|opt_out:File?>"
+        cmd[0], inputs=[shell.arg(name=a, default=a) for a in cmd[1:]]
     )
-
-    assert task_help(Shelly) == [
-        "----------------------------",
-        "Help for Shell task 'shelly'",
-        "----------------------------",
-        "",
-        "Inputs:",
-        "- executable: str | Sequence[str]; default = 'shelly'",
-        "    the first part of the command, can be a string, e.g. 'ls', or a list, e.g.",
-        "    ['ls', '-l', 'dirname']",
-        "- in_file: generic/file",
-        "- out_file: Path | bool; default = True",
-    ] + wrap_text(shell.outarg.PATH_TEMPLATE_HELP).split("\n") + [
-        "- arg1: int ('--arg1')",
-        "- arg2: float | None; default = None ('--arg2')",
-        "- opt_out: Path | bool | None; default = None ('--opt-out')",
-    ] + wrap_text(
-        shell.outarg.OPTIONAL_PATH_TEMPLATE_HELP
-    ).split(
-        "\n"
-    ) + [
-        "- additional_args: list[str | generic/file]; default-factory = list()",
-        "    Additional free-form arguments to append to the end of the command.",
-        "",
-        "Outputs:",
-        "- out_file: generic/file",
-        "- opt_out: generic/file | None; default = None",
-        "- return_code: int",
-        "    " + shell.Outputs.RETURN_CODE_HELP,
-        "- stdout: str",
-        "    " + shell.Outputs.STDOUT_HELP,
-        "- stderr: str",
-        "    " + shell.Outputs.STDERR_HELP,
-        "",
-    ]
+    shelly = Shelly()
+    assert shelly.executable == "echo"
+    assert shelly.cmdline == " ".join(cmd)
+    outputs = shelly()
+    assert outputs.return_code == 0
+    assert outputs.stdout == " ".join(cmd[1:]) + "\n"

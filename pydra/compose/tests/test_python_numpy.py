@@ -93,3 +93,16 @@ def test_task_numpyinput_2(tmp_path: Path):
     outputs = nn(cache_dir=tmp_path)
     assert outputs.out[0] == np.array(["VAL1"], dtype=object)
     assert outputs.out[1] == np.array(["VAL2"], dtype=object)
+
+
+def test_numpy_fft():
+    """checking if mark.task works for numpy functions"""
+    np = pytest.importorskip("numpy")
+    FFT = python.define(inputs={"a": np.ndarray}, outputs={"out": np.ndarray})(
+        np.fft.fft
+    )
+
+    arr = np.array([[1, 10], [2, 20]])
+    fft = FFT(a=arr)
+    outputs = fft()
+    assert np.allclose(np.fft.fft(arr), outputs.out)

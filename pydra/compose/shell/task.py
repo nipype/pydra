@@ -43,7 +43,7 @@ TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class Outputs(base.Outputs):
+class ShellOutputs(base.Outputs):
     """Output task of a generic shell process."""
 
     BASE_NAMES = ["return_code", "stdout", "stderr"]
@@ -216,7 +216,7 @@ class Outputs(base.Outputs):
         return callable_(**call_args_val)
 
 
-ShellOutputsType = ty.TypeVar("OutputType", bound=Outputs)
+ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
 @state_array_support
@@ -508,3 +508,4 @@ def split_cmd(cmd: str | None):
 
 # Alias ShellTask to Task so we can refer to it by shell.Task
 Task = ShellTask
+Outputs = ShellOutputs

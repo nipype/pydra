@@ -38,6 +38,10 @@ need_sge = pytest.mark.skipif(
 )
 
 
+def num_python_cache_dirs(cache_path: Path) -> int:
+    return len(list(cache_path.glob("python-*")))
+
+
 def get_output_names(task):
     return sorted(f.name for f in task_fields(task.Outputs))
 

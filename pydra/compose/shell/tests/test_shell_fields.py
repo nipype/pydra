@@ -5,7 +5,7 @@ import attrs
 import pytest
 import cloudpickle as cp
 from pydra.compose import shell
-from pydra.utils.general import task_fields
+from pydra.utils.general import task_fields, task_help, wrap_text
 from pydra.compose.shell.builder import _InputPassThrough
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
@@ -982,6 +982,49 @@ def test_shell_missing_executable_dynamic():
                 )
             },
         )
+
+
+def test_shell_help1():
+
+    Shelly = shell.define(
+        "shelly <in_file:generic/file> <out|out_file:generic/file> --arg1 <arg1:int> "
+        "--arg2 <arg2:float?> --opt-out <out|opt_out:File?>"
+    )
+
+    assert task_help(Shelly) == [
+        "----------------------------",
+        "Help for Shell task 'shelly'",
+        "----------------------------",
+        "",
+        "Inputs:",
+        "- executable: str | Sequence[str]; default = 'shelly'",
+        "    the first part of the command, can be a string, e.g. 'ls', or a list, e.g.",
+        "    ['ls', '-l', 'dirname']",
+        "- in_file: generic/file",
+        "- out_file: Path | bool; default = True",
+    ] + wrap_text(shell.outarg.PATH_TEMPLATE_HELP).split("\n") + [
+        "- arg1: int ('--arg1')",
+        "- arg2: float | None; default = None ('--arg2')",
+        "- opt_out: Path | bool | None; default = None ('--opt-out')",
+    ] + wrap_text(
+        shell.outarg.OPTIONAL_PATH_TEMPLATE_HELP
+    ).split(
+        "\n"
+    ) + [
+        "- additional_args: list[str | generic/file]; default-factory = list()",
+        "    Additional free-form arguments to append to the end of the command.",
+        "",
+        "Outputs:",
+        "- out_file: generic/file",
+        "- opt_out: generic/file | None; default = None",
+        "- return_code: int",
+        "    " + shell.Outputs.RETURN_CODE_HELP,
+        "- stdout: str",
+        "    " + shell.Outputs.STDOUT_HELP,
+        "- stderr: str",
+        "    " + shell.Outputs.STDERR_HELP,
+        "",
+    ]
 
 
 def list_entries(stdout):

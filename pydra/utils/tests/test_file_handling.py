@@ -382,21 +382,3 @@ def test_output_template(tmp_path):
     assert defn.cmdline == f"my {filename}"
     defn.optional = "custom-file-out.txt"
     assert defn.cmdline == f"my {filename} --opt custom-file-out.txt"
-
-
-def test_template_formatting(tmp_path: Path):
-    field = Mock()
-    field.name = "grad"
-    field.argstr = "--grad"
-    field.path_template = ("{in_file}.bvec", "{in_file}.bval")
-    field.keep_extension = False
-    task = Mock()
-    values = {"in_file": Path("/a/b/c/file.txt"), "grad": True}
-
-    assert template_update_single(
-        field,
-        task,
-        values=values,
-        output_dir=tmp_path,
-        spec_type="input",
-    ) == [tmp_path / "file.bvec", tmp_path / "file.bval"]

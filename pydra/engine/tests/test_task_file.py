@@ -1,101 +1,17 @@
+import os
 from pathlib import Path
-import typing as ty
-import time
+import numpy as np
 import pytest
-from fileformats.generic import File
-from pydra.engine.result import (
-    Runtime,
-    Result,
-)
-from pydra.engine.lazy import (
-    LazyInField,
-    LazyOutField,
-)
-from pydra.engine.workflow import Workflow
-from pydra.engine.node import Node
-from pydra.engine.submitter import Submitter, NodeExecution, DiGraph
+from pydra.engine.submitter import Submitter
 from pydra.compose import python, workflow
+from fileformats.generic import File, Directory
+import time
 from pydra.engine.tests.utils import (
-    Foo,
-    FunAddTwo,
-    FunAddVar,
-    ListSum,
     FileOrIntIdentity,
     FileAndIntIdentity,
     ListOfListOfFileOrIntIdentity,
     ListOfDictOfFileOrIntIdentity,
 )
-
-
-@workflow.define
-def ATestWorkflow(x: int, y: list[int]) -> int:
-    node_a = workflow.add(FunAddTwo(a=x), name="A")
-    node_b = workflow.add(FunAddVar(a=node_a.out).split(b=y).combine("b"), name="B")
-    node_c = workflow.add(ListSum(x=node_b.out), name="C")
-    return node_c.out
-
-
-@pytest.fixture
-def workflow_task(submitter: Submitter) -> workflow.Task:
-    wf = ATestWorkflow(x=1, y=[1, 2, 3])
-    with submitter:
-        submitter(wf)
-    return wf
-
-
-@pytest.fixture
-def wf(workflow_task: workflow.Task) -> Workflow:
-    wf = Workflow.construct(workflow_task)
-    return wf
-
-
-@pytest.fixture
-def submitter(tmp_path) -> Submitter:
-    return Submitter(tmp_path)
-
-
-@pytest.fixture
-def graph(wf: Workflow, submitter: Submitter) -> DiGraph[NodeExecution]:
-    graph = wf.execution_graph(submitter=submitter)
-    for node in graph.nodes:
-        if node.state:
-            node.state.prepare_states(inputs=node.node.state_values)
-            node.state.prepare_inputs()
-        node.start()
-    return graph
-
-
-@pytest.fixture
-def node_a(wf) -> Node:
-    return wf["A"]  # we can pick any node to retrieve the values to
-
-
-def test_runtime():
-    runtime = Runtime()
-    assert hasattr(runtime, "rss_peak_gb")
-    assert hasattr(runtime, "vms_peak_gb")
-    assert hasattr(runtime, "cpu_peak_percent")
-
-
-def test_result(tmp_path):
-    result = Result(output_dir=tmp_path)
-    assert hasattr(result, "runtime")
-    assert hasattr(result, "outputs")
-    assert hasattr(result, "errored")
-    assert getattr(result, "errored") is False
-
-
-def test_lazy_inp(wf: Workflow, graph: DiGraph[NodeExecution]):
-    lf = LazyInField(field="x", type=int, workflow=wf)
-    assert lf._get_value(workflow=wf, graph=graph) == 1
-
-    lf = LazyInField(field="y", type=str, workflow=wf)
-    assert lf._get_value(workflow=wf, graph=graph) == [1, 2, 3]
-
-
-def test_lazy_out(node_a, wf, graph):
-    lf = LazyOutField(field="out", type=int, node=node_a)
-    assert lf._get_value(wf, graph) == 3
 
 
 @pytest.mark.flaky(reruns=5)
@@ -272,37 +188,185 @@ def test_input_file_hash_5(tmp_path):
     assert hash1 != hash3
 
 
-def test_lazy_field_cast(wf: Workflow):
-    lzout = wf.add(Foo(a="a", b=1, c=2.0), name="foo")
-
-    assert lzout.y._type is int
-    assert workflow.cast(lzout.y, float)._type is float
+@python.define
+def DirCountFile(dirpath: Directory) -> int:
+    return len(os.listdir(dirpath))
 
 
-def test_wf_lzin_split(tmp_path):
-    @python.define
-    def identity(x: int) -> int:
-        return x
+@python.define
+def DirCountFileAnnot(dirpath: Directory) -> int:
+    return len(os.listdir(dirpath))
+
+
+@python.define
+def FileAdd2(file: File) -> File:
+    array_inp = np.load(file)
+    array_out = array_inp + 2
+    cwd = os.getcwd()
+    # providing a full path
+    file_out = os.path.join(cwd, "arr_out.npy")
+    np.save(file_out, array_out)
+    return file_out
+
+
+@python.define
+def FileMult(file: File) -> File:
+    array_inp = np.load(file)
+    array_out = 10 * array_inp
+    cwd = os.getcwd()
+    file_out = os.path.join(cwd, "arr_out.npy")
+    np.save(file_out, array_out)
+    return file_out
+
+
+@python.define
+def FileAdd2Annot(file: File) -> File:
+    array_inp = np.load(file)
+    array_out = array_inp + 2
+    cwd = os.getcwd()
+    # providing a full path
+    file_out = os.path.join(cwd, "arr_out.npy")
+    np.save(file_out, array_out)
+    return file_out
+
+
+@python.define
+def FileMultAnnot(file: File) -> File:
+    array_inp = np.load(file)
+    array_out = 10 * array_inp
+    cwd = os.getcwd()
+    file_out = os.path.join(cwd, "arr_out.npy")
+    np.save(file_out, array_out)
+    return file_out
+
+
+def test_task_1(tmpdir):
+    """task that takes file as an input"""
+    os.chdir(tmpdir)
+    arr = np.array([2])
+    # creating abs path
+    file = os.path.join(os.getcwd(), "arr1.npy")
+    np.save(file, arr)
+    nn = FileAdd2(file=file)
+
+    with Submitter(worker="cf") as sub:
+        res = sub(nn)
+
+    # checking the results
+
+    result = np.load(res.outputs.out)
+    assert result == np.array([4])
+
+
+def test_wf_1(tmpdir):
+    """workflow with 2 tasks that take file as an input and give file as an aoutput"""
 
     @workflow.define
-    def Inner(x):
-        ident = workflow.add(identity(x=x))
-        return ident.out
+    def Workflow(file_orig: File):
+        add2 = workflow.add(FileAdd2(file=file_orig))
+        mult = workflow.add(FileMult(file=add2.out))
+        return mult.out
 
-    @workflow.define
-    def Outer(xs):
-        inner = workflow.add(Inner().split(x=xs))
-        return inner.out
+    os.chdir(tmpdir)
+    arr = np.array([2, 3])
+    # creating abs path
+    file_orig = os.path.join(os.getcwd(), "arr_orig.npy")
+    np.save(file_orig, arr)
+    wf = Workflow(file_orig=file_orig)
 
-    outer = Outer(xs=[1, 2, 3])
+    with Submitter(worker="cf") as sub:
+        res = sub(wf)
 
-    outputs = outer(cache_dir=tmp_path)
-    assert outputs.out == [1, 2, 3]
+    assert res.output_dir.exists()
+    file_output = res.outputs.out
+    assert Path(file_output).exists()
+    # loading results
+    array_out = np.load(file_output)
+    assert np.array_equal(array_out, [40, 50])
 
 
-def test_task_repr():
-    @python.define(outputs=["x", "y", "z"])
-    def IdentityN3(x: int, y: int = 1, z: int = 2) -> tuple[int, int, int]:
-        return x, y, z
+def test_file_annotation_1(tmpdir):
+    """task that takes file as an input"""
+    os.chdir(tmpdir)
+    arr = np.array([2])
+    # creating abs path
+    file = os.path.join(os.getcwd(), "arr1.npy")
+    np.save(file, arr)
+    nn = FileAdd2Annot(file=file)
 
-    assert repr(IdentityN3(x=1, y=2)) == "IdentityN3(x=1, y=2)"
+    with Submitter(worker="cf") as sub:
+        res = sub(nn)
+
+    # checking the results
+    assert res.errored is False, " ".join(res.errors["error message"])
+    arr = np.load(res.outputs.out)
+    assert arr == np.array([4])
+
+
+def test_broken_file(tmpdir):
+    """task that takes file as an input"""
+    os.chdir(tmpdir)
+    file = os.path.join(os.getcwd(), "non_existent.npy")
+
+    with pytest.raises(FileNotFoundError):
+        with Submitter(worker="cf") as sub:
+            sub(FileAdd2(file=file))
+
+    with pytest.raises(FileNotFoundError, match="do not exist"):
+        FileAdd2Annot(file=file)
+
+
+def test_broken_file_link(tmpdir):
+    """
+    Test how broken symlinks are handled during hashing
+    """
+    os.chdir(tmpdir)
+    file = os.path.join(os.getcwd(), "arr.npy")
+    arr = np.array([2])
+    np.save(file, arr)
+
+    file_link = os.path.join(os.getcwd(), "link_to_arr.npy")
+    os.symlink(file, file_link)
+    os.remove(file)
+
+    # raises error inside task
+    # unless variable is defined as a File pydra will treat it as a string
+    with pytest.raises(FileNotFoundError):
+        with Submitter(worker="cf") as sub:
+            sub(FileAdd2(file=file_link))
+
+    with pytest.raises(FileNotFoundError, match="do not exist"):
+        FileAdd2Annot(file=file_link)
+
+
+def test_broken_dir():
+    """Test how broken directories are handled during hashing"""
+
+    # unless variable is defined as a File pydra will treat it as a string
+    with pytest.raises(FileNotFoundError):
+        with Submitter(worker="cf") as sub:
+            sub(DirCountFile(dirpath="/broken_dir_path/"))
+
+    # raises error before task is run
+    with pytest.raises(FileNotFoundError):
+        DirCountFileAnnot(dirpath="/broken_dir_path/")
+
+
+def test_broken_dir_link1(tmpdir):
+    """
+    Test how broken symlinks are hashed in hash_dir
+    """
+    # broken symlink to dir path
+    dir1 = tmpdir.join("dir1")
+    os.mkdir(dir1)
+    dir1_link = tmpdir.join("dir1_link")
+    os.symlink(dir1, dir1_link)
+    os.rmdir(dir1)
+
+    # raises error while running task
+    with pytest.raises(FileNotFoundError):
+        with Submitter(worker="cf") as sub:
+            sub(DirCountFile(dirpath=Path(dir1)))
+
+    with pytest.raises(FileNotFoundError):
+        DirCountFileAnnot(dirpath=Path(dir1))

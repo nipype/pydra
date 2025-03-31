@@ -17,6 +17,120 @@ from pydra.utils.hash import (
     register_serializer,
     PersistentCache,
 )
+import shutil
+import random
+from fileformats.generic import Directory, File
+from pydra.utils.hash import hash_function
+
+
+def test_hash_file(tmpdir):
+    outdir = Path(tmpdir)
+    with open(outdir / "test.file", "w") as fp:
+        fp.write("test")
+    assert (
+        hash_function(File(outdir / "test.file")) == "f32ab20c4a86616e32bf2504e1ac5a22"
+    )
+
+
+def test_hashfun_float():
+    import math
+
+    pi_50 = 3.14159265358979323846264338327950288419716939937510
+    pi_15 = 3.141592653589793
+    pi_10 = 3.1415926536
+    # comparing for x that have the same x.as_integer_ratio()
+    assert (
+        math.pi.as_integer_ratio()
+        == pi_50.as_integer_ratio()
+        == pi_15.as_integer_ratio()
+    )
+    assert hash_function(math.pi) == hash_function(pi_15) == hash_function(pi_50)
+    # comparing for x that have different x.as_integer_ratio()
+    assert math.pi.as_integer_ratio() != pi_10.as_integer_ratio()
+    assert hash_function(math.pi) != hash_function(pi_10)
+
+
+def test_hash_function_dict():
+    dict1 = {"a": 10, "b": 5}
+    dict2 = {"b": 5, "a": 10}
+    assert hash_function(dict1) == hash_function(dict2)
+
+
+def test_hash_function_list_tpl():
+    lst = [2, 5.6, "ala"]
+    tpl = (2, 5.6, "ala")
+    assert hash_function(lst) != hash_function(tpl)
+
+
+def test_hash_function_list_dict():
+    lst = [2, {"a": "ala", "b": 1}]
+    hash_function(lst)
+
+
+def test_hash_function_files(tmp_path: Path):
+    file_1 = tmp_path / "file_1.txt"
+    file_2 = tmp_path / "file_2.txt"
+    file_1.write_text("hello")
+    file_2.write_text("hello")
+
+    assert hash_function(File(file_1)) == hash_function(File(file_2))
+
+
+def test_hash_function_dir_and_files_list(tmp_path: Path):
+    dir1 = tmp_path / "foo"
+    dir2 = tmp_path / "bar"
+    for d in (dir1, dir2):
+        d.mkdir()
+        for i in range(3):
+            f = d / f"{i}.txt"
+            f.write_text(str(i))
+
+    assert hash_function(Directory(dir1)) == hash_function(Directory(dir2))
+    file_list1: ty.List[File] = [File(f) for f in dir1.iterdir()]
+    file_list2: ty.List[File] = [File(f) for f in dir2.iterdir()]
+    assert hash_function(file_list1) == hash_function(file_list2)
+
+
+def test_hash_function_files_mismatch(tmp_path: Path):
+    file_1 = tmp_path / "file_1.txt"
+    file_2 = tmp_path / "file_2.txt"
+    file_1.write_text("hello")
+    file_2.write_text("hi")
+
+    assert hash_function(File(file_1)) != hash_function(File(file_2))
+
+
+def test_hash_function_nested(tmp_path: Path):
+    dpath = tmp_path / "dir"
+    dpath.mkdir()
+    hidden = dpath / ".hidden"
+    nested = dpath / "nested"
+    hidden.mkdir()
+    nested.mkdir()
+    file_1 = dpath / "file_1.txt"
+    file_2 = hidden / "file_2.txt"
+    file_3 = nested / ".file_3.txt"
+    file_4 = nested / "file_4.txt"
+
+    for fx in [file_1, file_2, file_3, file_4]:
+        fx.write_text(str(random.randint(0, 1000)))
+
+    nested_dir = Directory(dpath)
+
+    orig_hash = nested_dir.hash()
+
+    nohidden_hash = nested_dir.hash(ignore_hidden_dirs=True, ignore_hidden_files=True)
+    nohiddendirs_hash = nested_dir.hash(ignore_hidden_dirs=True)
+    nohiddenfiles_hash = nested_dir.hash(ignore_hidden_files=True)
+
+    assert orig_hash != nohidden_hash
+    assert orig_hash != nohiddendirs_hash
+    assert orig_hash != nohiddenfiles_hash
+
+    os.remove(file_3)
+    assert nested_dir.hash() == nohiddenfiles_hash
+    shutil.rmtree(hidden)
+    assert nested_dir.hash() == nohidden_hash
 
 
 @pytest.fixture
