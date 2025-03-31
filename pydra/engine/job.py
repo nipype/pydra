@@ -74,7 +74,7 @@ class Job(ty.Generic[TaskType]):
     _runtime_requirements = RuntimeSpec()
     _runtime_hints = None
 
-    _cache_dir = None  # Working directory in which to operate
+    _cache_root = None  # Working directory in which to operate
     _references = None  # List of references for a job
 
     name: str
@@ -144,27 +144,27 @@ class Job(ty.Generic[TaskType]):
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
-        self.cache_dir = submitter.cache_dir
+        self.cache_root = submitter.cache_root
         self.cache_locations = submitter.cache_locations
         self._run_start_time = None
 
     @property
-    def cache_dir(self):
-        return self._cache_dir
+    def cache_root(self):
+        return self._cache_root
 
     @property
     def is_async(self) -> bool:
         """Check to see if the job should be run asynchronously."""
         return self.submitter.worker.is_async and is_workflow(self.task)
 
-    @cache_dir.setter
-    def cache_dir(self, path: os.PathLike):
-        self._cache_dir = Path(path)
+    @cache_root.setter
+    def cache_root(self, path: os.PathLike):
+        self._cache_root = Path(path)
 
     @property
     def cache_locations(self):
         """Get the list of cache sources."""
-        return ensure_list(self.cache_dir) + self._cache_locations
+        return ensure_list(self.cache_root) + self._cache_locations
 
     @cache_locations.setter
     def cache_locations(self, locations):
@@ -227,7 +227,7 @@ class Job(ty.Generic[TaskType]):
     @property
     def output_dir(self):
         """Get the filesystem path where outputs will be written."""
-        return self.cache_dir / self.checksum
+        return self.cache_root / self.checksum
 
     @property
     def inputs(self) -> dict[str, ty.Any]:
@@ -283,7 +283,7 @@ class Job(ty.Generic[TaskType]):
         """
         # adding info file with the checksum in case the job was cancelled
         # and the lockfile has to be removed
-        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+        with open(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
         if not self.can_resume and self.output_dir.exists():
             shutil.rmtree(self.output_dir)
@@ -343,7 +343,7 @@ class Job(ty.Generic[TaskType]):
                 self.audit.finalize_audit(result=result)
                 save(self.output_dir, result=result, job=self)
                 # removing the additional file with the checksum
-                (self.cache_dir / f"{self.uid}_info.json").unlink()
+                (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
@@ -398,7 +398,7 @@ class Job(ty.Generic[TaskType]):
                 self.audit.finalize_audit(result=result)
                 save(self.output_dir, result=result, job=self)
                 # removing the additional file with the checksum
-                (self.cache_dir / f"{self.uid}_info.json").unlink()
+                (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
@@ -408,7 +408,7 @@ class Job(ty.Generic[TaskType]):
 
     def pickle_task(self):
         """Pickling the tasks with full inputs"""
-        pkl_files = self.cache_dir / "pkl_files"
+        pkl_files = self.cache_root / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
         task_main_path = pkl_files / f"{self.name}_{self.uid}_job.pklz"
         save(task_path=pkl_files, job=self, name_prefix=f"{self.name}_{self.uid}")

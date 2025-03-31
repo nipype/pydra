@@ -188,8 +188,8 @@ class Container(Environment):
                     )
 
         # Add the cache directory to the list of mounts
-        bindings[job.cache_dir] = (
-            f"{self.root.rstrip('/')}{job.cache_dir.absolute()}",
+        bindings[job.cache_root] = (
+            f"{self.root.rstrip('/')}{job.cache_root.absolute()}",
             "rw",
         )
 

@@ -22,7 +22,7 @@ from pydra.engine.lazy import LazyField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.general import default_run_cache_dir
+from pydra.utils.general import default_run_cache_root
 from pydra.compose import workflow
 from pydra.engine.state import State
 from pydra.workers.base import Worker
@@ -52,7 +52,7 @@ class Submitter:
 
     Parameters
     ----------
-    cache_dir : os.PathLike, optional
+    cache_root : os.PathLike, optional
         Cache directory where the working directory/results for the job will be
         stored, by default None
     worker : str or Worker, optional
@@ -78,7 +78,7 @@ class Submitter:
         Keyword arguments to pass on to the worker initialisation
     """
 
-    cache_dir: os.PathLike
+    cache_root: os.PathLike
     worker: Worker
     environment: "Environment | None"
     cache_locations: list[os.PathLike]
@@ -93,7 +93,7 @@ class Submitter:
     def __init__(
         self,
         /,
-        cache_dir: os.PathLike | None = None,
+        cache_root: os.PathLike | None = None,
         worker: str | ty.Type[Worker] | Worker | None = "debug",
         environment: "Environment | None" = None,
         cache_locations: list[os.PathLike] | None = None,
@@ -122,12 +122,12 @@ class Submitter:
             messenger_args=messenger_args,
             develop=develop,
         )
-        if cache_dir is None:
-            cache_dir = default_run_cache_dir
-        cache_dir = Path(cache_dir).resolve()
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        if cache_root is None:
+            cache_root = default_run_cache_root
+        cache_root = Path(cache_root).resolve()
+        cache_root.mkdir(parents=True, exist_ok=True)
 
-        self.cache_dir = cache_dir
+        self.cache_root = cache_root
         self.cache_locations = cache_locations
         self.propagate_rerun = propagate_rerun
         if max_concurrent < 1 or (
@@ -568,18 +568,18 @@ class Submitter:
         return tasks
 
     @property
-    def cache_dir(self):
+    def cache_root(self):
         """Get the location of the cache directory."""
-        return self._cache_dir
+        return self._cache_root
 
-    @cache_dir.setter
-    def cache_dir(self, location):
+    @cache_root.setter
+    def cache_root(self, location):
         if location is not None:
-            self._cache_dir = Path(location).resolve()
-            self._cache_dir.mkdir(parents=False, exist_ok=True)
+            self._cache_root = Path(location).resolve()
+            self._cache_root.mkdir(parents=False, exist_ok=True)
         else:
-            self._cache_dir = mkdtemp()
-            self._cache_dir = Path(self._cache_dir).resolve()
+            self._cache_root = mkdtemp()
+            self._cache_root = Path(self._cache_root).resolve()
 
 
 class NodeExecution(ty.Generic[TaskType]):

@@ -21,10 +21,10 @@ def FunAddTwo(a):
 
 
 def test_taskhooks_1(tmpdir: Path, capsys):
-    cache_dir = tmpdir / "cache"
-    cache_dir.mkdir()
+    cache_root = tmpdir / "cache"
+    cache_root.mkdir()
 
-    foo = Job(task=FunAddTwo(a=1), submitter=Submitter(cache_dir=tmpdir), name="foo")
+    foo = Job(task=FunAddTwo(a=1), submitter=Submitter(cache_root=tmpdir), name="foo")
     assert foo.hooks
     # ensure all hooks are defined
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
@@ -34,7 +34,7 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     def myhook(task, *args):
         print("I was called")
 
-    FunAddTwo(a=1)(cache_dir=cache_dir, hooks=TaskHooks(pre_run=myhook))
+    FunAddTwo(a=1)(cache_root=cache_root, hooks=TaskHooks(pre_run=myhook))
     captured = capsys.readouterr()
     assert "I was called\n" in captured.out
     del captured
@@ -50,12 +50,12 @@ def test_taskhooks_1(tmpdir: Path, capsys):
         assert hook() is None
 
     # clear cache
-    shutil.rmtree(cache_dir)
-    cache_dir.mkdir()
+    shutil.rmtree(cache_root)
+    cache_root.mkdir()
 
     # set all hooks
     FunAddTwo(a=1)(
-        cache_dir=cache_dir,
+        cache_root=cache_root,
         hooks=TaskHooks(
             pre_run=myhook,
             post_run=myhook,
@@ -84,7 +84,7 @@ def test_taskhooks_2(tmpdir, capsys):
         print(f"iv. postrun hook was called {task.name}")
 
     FunAddTwo(a=1)(
-        cache_dir=tmpdir,
+        cache_root=tmpdir,
         hooks=TaskHooks(
             pre_run=myhook_prerun,
             post_run=myhook_postrun,
@@ -104,7 +104,7 @@ def test_taskhooks_2(tmpdir, capsys):
 
 def test_taskhooks_3(tmpdir, capsys):
     """checking results in the post run hooks"""
-    foo = Job(task=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_dir=tmpdir))
+    foo = Job(task=FunAddTwo(a=1), name="foo", submitter=Submitter(cache_root=tmpdir))
 
     def myhook_postrun_task(task, result, *args):
         print(f"postrun task hook, the result is {result.outputs.out}")
@@ -134,7 +134,7 @@ def test_taskhooks_4(tmpdir, capsys):
 
     with pytest.raises(Exception):
         FunAddTwo(a="one")(
-            cache_dir=tmpdir,
+            cache_root=tmpdir,
             hooks=TaskHooks(post_run=myhook_postrun, post_run_task=myhook_postrun_task),
         )
 

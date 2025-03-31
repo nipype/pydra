@@ -26,7 +26,7 @@ import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
 import fileformats.core.exceptions
-from pydra.utils.general import in_stdlib, user_cache_dir, add_exc_note
+from pydra.utils.general import in_stdlib, user_cache_root, add_exc_note
 
 logger = logging.getLogger("pydra")
 
@@ -88,7 +88,7 @@ class PersistentCache:
     The locally unique key is hashed (cheaply) using hashlib cryptography and this
     "local hash" is use to name the entry of the (potentially expensive) hash of the
     object itself (e.g. the contents of a file). This entry is saved as a text file
-    within a user-specific cache directory (see `platformdirs.user_cache_dir`), with
+    within a user-specific cache directory (see `platformdirs.user_cache_root`), with
     the name of the file being the "local hash" of the key and the contents of the
     file being the "globally unique hash" of the object itself.
 
@@ -111,7 +111,7 @@ class PersistentCache:
         try:
             location = os.environ[cls.LOCATION_ENV_VAR]
         except KeyError:
-            location = user_cache_dir / "hashes"
+            location = user_cache_root / "hashes"
         return location
 
     # the default needs to be an instance method

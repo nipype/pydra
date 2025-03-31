@@ -38,7 +38,7 @@ need_sge = pytest.mark.skipif(
 )
 
 
-def num_python_cache_dirs(cache_path: Path) -> int:
+def num_python_cache_roots(cache_path: Path) -> int:
     return len(list(cache_path.glob("python-*")))
 
 
@@ -48,24 +48,26 @@ def get_output_names(task):
 
 def run_no_submitter(
     shell_def: shell.Task,
-    cache_dir: Path | None = None,
+    cache_root: Path | None = None,
     worker: str | None = None,
     environment: "Environment | None" = None,
 ):
     """helper function to return result when running without submitter"""
-    return shell_def(worker=worker, cache_dir=cache_dir, environment=environment)
+    return shell_def(worker=worker, cache_root=cache_root, environment=environment)
 
 
 def run_submitter(
     shell_def: shell.Task,
-    cache_dir: Path | None = None,
+    cache_root: Path | None = None,
     worker: str | None = None,
     environment: "Environment | None" = None,
 ):
     """helper function to return result when running with submitter
     with specific worker
     """
-    with Submitter(worker=worker, cache_dir=cache_dir, environment=environment) as sub:
+    with Submitter(
+        worker=worker, cache_root=cache_root, environment=environment
+    ) as sub:
         results = sub(shell_def)
     if results.errored:
         raise RuntimeError(f"task {shell_def} failed:\n" + "\n".join(results.errors))

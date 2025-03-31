@@ -5,7 +5,7 @@ from pathlib import Path
 import glob as glob
 from pydra.compose import python
 from pydra.utils.general import task_fields, task_help
-from pydra.utils.general import default_run_cache_dir
+from pydra.utils.general import default_run_cache_root
 from pydra.utils.typing import (
     MultiInputObj,
     MultiOutputObj,
@@ -55,7 +55,7 @@ def test_python_output():
     assert outputs.output == 1.1
 
     assert os.path.exists(
-        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
+        default_run_cache_root / f"python-{funky._hash}" / "_result.pklz"
     )
     funky()  # should not recompute
     funky.a = 2
@@ -90,7 +90,7 @@ def test_python_output_dictreturn(tmp_path: Path):
         return dict(sum=a + b, diff=a - b)
 
     task = TestFunc(a=2, b=3)
-    outputs = task(cache_dir=tmp_path)
+    outputs = task(cache_root=tmp_path)
 
     # Part of the annotation and returned, should be exposed to output.
     assert outputs.sum == 5
@@ -122,7 +122,7 @@ def test_python_output_multreturn():
 
     outputs = funky()
     assert os.path.exists(
-        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
+        default_run_cache_root / f"python-{funky._hash}" / "_result.pklz"
     )
     assert hasattr(outputs, "fractional")
     assert outputs.fractional == 0.5
@@ -410,8 +410,8 @@ def test_python_output_multreturn_exception():
 
 def test_halfpython_output(tmp_path):
 
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
 
     @python.define
     def TestFunc(a, b) -> int:
@@ -426,16 +426,16 @@ def test_halfpython_output(tmp_path):
     assert getattr(funky, "function") is not None
     assert set(f.name for f in task_fields(funky.Outputs)) == {"out"}
 
-    outputs = funky(cache_dir=cache_dir)
+    outputs = funky(cache_root=cache_root)
     assert hasattr(outputs, "out")
     assert outputs.out == 30
 
-    assert Path(cache_dir / f"python-{funky._hash}" / "_result.pklz").exists()
+    assert Path(cache_root / f"python-{funky._hash}" / "_result.pklz").exists()
 
-    funky(cache_dir=cache_dir)  # should not recompute
+    funky(cache_root=cache_root)  # should not recompute
     funky.a = 11
-    assert not Path(cache_dir / f"python-{funky._hash}").exists()
-    outputs = funky(cache_dir=cache_dir)
+    assert not Path(cache_root / f"python-{funky._hash}").exists()
+    outputs = funky(cache_root=cache_root)
     assert outputs.out == 31
     help = task_help(funky)
 
@@ -457,8 +457,8 @@ def test_halfpython_output(tmp_path):
 
 def test_halfpython_output_multreturn(tmp_path):
 
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
 
     @python.define(outputs=["out1", "out2"])
     def TestFunc(a, b) -> tuple[int, int]:
@@ -473,16 +473,16 @@ def test_halfpython_output_multreturn(tmp_path):
     assert getattr(funky, "function") is not None
     assert set(f.name for f in task_fields(funky.Outputs)) == {"out1", "out2"}
 
-    outputs = funky(cache_dir=cache_dir)
+    outputs = funky(cache_root=cache_root)
     assert hasattr(outputs, "out1")
     assert outputs.out1 == 11
 
-    assert Path(cache_dir / f"python-{funky._hash}" / "_result.pklz").exists()
+    assert Path(cache_root / f"python-{funky._hash}" / "_result.pklz").exists()
 
-    funky(cache_dir=cache_dir)  # should not recompute
+    funky(cache_root=cache_root)  # should not recompute
     funky.a = 11
-    assert not Path(cache_dir / f"python-{funky._hash}" / "_result.pklz").exists()
-    outputs = funky(cache_dir=cache_dir)
+    assert not Path(cache_root / f"python-{funky._hash}" / "_result.pklz").exists()
+    outputs = funky(cache_root=cache_root)
     assert outputs.out1 == 12
     help = task_help(funky)
 
@@ -827,5 +827,5 @@ def test_functask_callable(tmpdir):
 
     # worker
     bar = FunAddTwo(a=2)
-    outputs = bar(worker="cf", cache_dir=tmpdir)
+    outputs = bar(worker="cf", cache_root=tmpdir)
     assert outputs.out == 4

@@ -39,7 +39,7 @@ def SleepAddOne(x):
 
 def test_callable_wf(any_worker, tmpdir):
     wf = BasicWorkflow(x=5)
-    outputs = wf(cache_dir=tmpdir)
+    outputs = wf(cache_root=tmpdir)
     assert outputs.out == 9
     del wf, outputs
 
@@ -63,7 +63,7 @@ def test_callable_wf(any_worker, tmpdir):
     # providing submitter
     wf = BasicWorkflow(x=5)
 
-    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_root=tmpdir) as sub:
         res = sub(wf)
     assert res.outputs.out == 9
 
@@ -82,7 +82,7 @@ def test_concurrent_wf(any_worker, tmpdir):
 
     wf = Workflow(x=5, y=10)
 
-    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_root=tmpdir) as sub:
         results = sub(wf)
 
     assert not results.errored, " ".join(results.errors["error message"])
@@ -105,7 +105,7 @@ def test_concurrent_wf_nprocs(tmpdir):
         return taskc.out, taskd.out
 
     wf = Workflow(x=5, y=10)
-    with Submitter(worker="cf", n_procs=2, cache_dir=tmpdir) as sub:
+    with Submitter(worker="cf", n_procs=2, cache_root=tmpdir) as sub:
         res = sub(wf)
 
     assert not res.errored, " ".join(res.errors["error message"])
@@ -133,7 +133,7 @@ def test_wf_in_wf(any_worker, tmpdir):
 
     wf = WfInWf(x=3)
 
-    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_root=tmpdir) as sub:
         results = sub(wf)
 
     assert not results.errored, " ".join(results.errors["error message"])
@@ -159,7 +159,7 @@ def test_wf2(any_worker, tmpdir):
 
     wf = Workflow(x=2)
 
-    with Submitter(worker=any_worker, cache_dir=tmpdir) as sub:
+    with Submitter(worker=any_worker, cache_root=tmpdir) as sub:
         res = sub(wf)
 
     assert res.outputs.out == 3
@@ -175,7 +175,7 @@ def test_wf_with_state(any_worker, tmpdir):
 
     wf = Workflow().split(x=[1, 2, 3])
 
-    with Submitter(cache_dir=tmpdir, worker=any_worker) as sub:
+    with Submitter(cache_root=tmpdir, worker=any_worker) as sub:
         res = sub(wf)
 
     assert res.outputs.out[0] == 3
@@ -194,7 +194,7 @@ def test_debug_wf():
 def test_slurm_wf(tmpdir):
     wf = BasicWorkflow(x=1)
     # submit workflow and every task as slurm job
-    with Submitter(worker="slurm", cache_dir=tmpdir) as sub:
+    with Submitter(worker="slurm", cache_root=tmpdir) as sub:
         res = sub(wf)
 
     outputs = res.outputs
@@ -215,7 +215,7 @@ def test_slurm_wf(tmpdir):
 def test_slurm_wf_cf(tmpdir):
     # submit entire workflow as single job executing with cf worker
     wf = BasicWorkflow(x=1)
-    with Submitter(worker="slurm", cache_dir=tmpdir) as sub:
+    with Submitter(worker="slurm", cache_root=tmpdir) as sub:
         res = sub(wf)
     outputs = res.outputs
     assert outputs.out == 5
@@ -231,7 +231,7 @@ def test_slurm_wf_cf(tmpdir):
 @need_slurm
 def test_slurm_wf_state(tmpdir):
     wf = BasicWorkflow().split(x=[5, 6])
-    with Submitter(worker="slurm", cache_dir=tmpdir) as sub:
+    with Submitter(worker="slurm", cache_root=tmpdir) as sub:
         res = sub(wf)
 
     assert res.outputs.out == [9, 10]
@@ -254,7 +254,7 @@ def test_slurm_max_jobs(tmp_path):
 
     wf = Workflow(x=5, y=10)
 
-    with Submitter(worker="slurm", cache_dir=tmp_path, max_concurrent=1) as sub:
+    with Submitter(worker="slurm", cache_root=tmp_path, max_concurrent=1) as sub:
         res = sub(wf)
 
     assert not res.errored, " ".join(res.errors["error message"])
@@ -294,7 +294,7 @@ def test_slurm_args_1(tmpdir):
     """testing sbatch_args provided to the submitter"""
     task = SleepAddOne(x=1)
     # submit workflow and every task as slurm job
-    with Submitter(worker="slurm", cache_dir=tmpdir, sbatch_args="-N1") as sub:
+    with Submitter(worker="slurm", cache_root=tmpdir, sbatch_args="-N1") as sub:
         res = sub(task)
 
     assert res.outputs.out == 2
@@ -311,7 +311,7 @@ def test_slurm_args_2(tmpdir):
     # submit workflow and every task as slurm job
     with pytest.raises(RuntimeError, match="Error returned from sbatch:"):
         with Submitter(
-            worker="slurm", cache_dir=tmpdir, sbatch_args="-N1 --invalid"
+            worker="slurm", cache_root=tmpdir, sbatch_args="-N1 --invalid"
         ) as sub:
             sub(task)
 
@@ -332,7 +332,7 @@ def test_singularity_st_2(tmp_path, n):
     with Submitter(
         worker="slurm",
         environment=singularity.Environment(image=image),
-        cache_dir=tmp_path,
+        cache_root=tmp_path,
     ) as sub:
         res = sub(singu)
 
@@ -396,7 +396,7 @@ def test_slurm_cancel_rerun_1(tmpdir):
 
     wf = Workflow(x=10, job_name_resqueue="sleep1", job_name_cancel="cancel1")
 
-    with Submitter(worker="slurm", cache_dir=tmpdir) as sub:
+    with Submitter(worker="slurm", cache_root=tmpdir) as sub:
         res = sub(wf)
 
     outputs = res.outputs
@@ -427,7 +427,7 @@ def test_slurm_cancel_rerun_2(tmpdir):
 
     with pytest.raises(Exception):
         with Submitter(
-            worker="slurm", cache_dir=tmpdir, sbatch_args="--no-requeue"
+            worker="slurm", cache_root=tmpdir, sbatch_args="--no-requeue"
         ) as sub:
             sub(wf, raise_errors=True)
 
@@ -437,7 +437,7 @@ def test_sge_wf(tmpdir):
     """testing that a basic workflow can be run with the SGEWorker"""
     wf = BasicWorkflow(x=1)
     # submit workflow and every task as sge job
-    with Submitter(worker="sge", cache_dir=tmpdir) as sub:
+    with Submitter(worker="sge", cache_root=tmpdir) as sub:
         res = sub(wf)
 
     outputs = res.outputs
@@ -454,7 +454,7 @@ def test_sge_wf_cf(tmp_path):
     uses the concurrent futures any_worker"""
     # submit entire workflow as single job executing with cf worker
     wf = BasicWorkflow(x=1)
-    with Submitter(worker="sge", cache_dir=tmp_path) as sub:
+    with Submitter(worker="sge", cache_root=tmp_path) as sub:
         res = sub(wf)
     outputs = res.outputs
     assert outputs.out == 9
@@ -471,7 +471,7 @@ def test_sge_wf_cf(tmp_path):
 def test_sge_wf_state(tmpdir):
     """testing the SGEWorker can be used with a workflow with state"""
     wf = BasicWorkflow().split(x=[5, 6])
-    with Submitter(worker="sge", cache_dir=tmpdir) as sub:
+    with Submitter(worker="sge", cache_root=tmpdir) as sub:
         res = sub(wf)
     assert res.output.out[0] == 9
     assert res.output.out[1] == 10
@@ -503,7 +503,7 @@ def test_sge_set_threadcount(tmpdir):
     wf = BasicWorkflowWithThreadCount(x=5)
 
     jobids = []
-    with Submitter(worker="sge", cache_dir=tmpdir) as sub:
+    with Submitter(worker="sge", cache_root=tmpdir) as sub:
         sub(wf)
         jobids = list(sub.worker.jobid_by_task_uid.values())
         jobids.sort()
@@ -531,7 +531,7 @@ def test_sge_limit_maxthreads(tmpdir):
     wf = BasicWorkflowWithThreadCountConcurrent().split(x=[5, 6])
 
     jobids = []
-    with Submitter(worker="sge", max_threads=8, cache_dir=tmpdir) as sub:
+    with Submitter(worker="sge", max_threads=8, cache_root=tmpdir) as sub:
         sub(wf)
         jobids = list(sub.worker.jobid_by_task_uid.values())
         jobids.sort()
@@ -572,7 +572,7 @@ def test_sge_no_limit_maxthreads(tmpdir):
     wf = BasicWorkflowWithThreadCountConcurrent().split(x=[5, 6])
 
     jobids = []
-    with Submitter(worker="sge", max_threads=None, cache_dir=tmpdir) as sub:
+    with Submitter(worker="sge", max_threads=None, cache_root=tmpdir) as sub:
         sub(wf)
         jobids = list(sub.worker.jobid_by_task_uid.values())
         jobids.sort()
@@ -610,7 +610,7 @@ def test_hash_changes_in_task_inputs_file(tmp_path):
 
     task = output_dir_as_input(out_dir=tmp_path)
     with pytest.raises(RuntimeError, match="Input field hashes have changed"):
-        task(cache_dir=tmp_path)
+        task(cache_root=tmp_path)
 
 
 def test_hash_changes_in_task_inputs_unstable(tmp_path):
@@ -628,7 +628,7 @@ def test_hash_changes_in_task_inputs_unstable(tmp_path):
 
     task = unstable_input(unstable=Unstable(1))
     with pytest.raises(RuntimeError, match="Input field hashes have changed"):
-        task(cache_dir=tmp_path)
+        task(cache_root=tmp_path)
 
 
 def test_hash_changes_in_workflow_inputs(tmp_path):
@@ -644,12 +644,12 @@ def test_hash_changes_in_workflow_inputs(tmp_path):
 
     in_dir = tmp_path / "in_dir"
     in_dir.mkdir()
-    cache_dir = tmp_path / "cache_dir"
-    cache_dir.mkdir()
+    cache_root = tmp_path / "cache_root"
+    cache_root.mkdir()
 
     wf = Workflow(in_dir=in_dir)
     with pytest.raises(RuntimeError, match="Input field hashes have changed.*"):
-        wf(cache_dir=cache_dir)
+        wf(cache_root=cache_root)
 
 
 @python.define
@@ -684,7 +684,7 @@ def test_byo_worker(tmp_path):
 
     task1 = AddEnvVarTask(x=1)
 
-    with Submitter(worker=BYOAddVarWorker, add_var=10, cache_dir=tmp_path) as sub:
+    with Submitter(worker=BYOAddVarWorker, add_var=10, cache_root=tmp_path) as sub:
         assert sub.worker.plugin_name() == "byo_add_env_var"
         result = sub(task1)
 
@@ -692,9 +692,9 @@ def test_byo_worker(tmp_path):
 
     task2 = AddEnvVarTask(x=2)
 
-    new_cache_dir = tmp_path / "new"
+    new_cache_root = tmp_path / "new"
 
-    with Submitter(worker="debug", cache_dir=new_cache_dir) as sub:
+    with Submitter(worker="debug", cache_root=new_cache_root) as sub:
         result = sub(task2)
 
     assert result.outputs.out == 2

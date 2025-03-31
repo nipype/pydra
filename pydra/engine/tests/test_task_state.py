@@ -22,7 +22,7 @@ from pydra.engine.state import State
 from pydra.utils.typing import StateArray
 from pydra.engine.submitter import Submitter
 from pydra.engine.workflow import Workflow
-from pydra.engine.tests.utils import num_python_cache_dirs
+from pydra.engine.tests.utils import num_python_cache_roots
 
 
 @workflow.define
@@ -63,16 +63,16 @@ def change_dir(request):
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_cachedir(worker, tmp_path):
-    """task with a state and provided cache_dir using pytest tmp_path"""
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
+    """task with a state and provided cache_root using pytest tmp_path"""
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
     nn = FunAddTwo().split("a", a=[3, 5])
     state = get_state(nn)
 
     assert state.splitter == "NA.a"
     assert (nn.a == np.array([3, 5])).all()
 
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -366,7 +366,7 @@ def test_task_init_9():
 def test_task_error(tmp_path):
     func = FunDiv(a=1, b=0)
     with pytest.raises(ZeroDivisionError):
-        func(cache_dir=tmp_path)
+        func(cache_root=tmp_path)
     assert (next(tmp_path.iterdir()) / "_error.pklz").exists()
 
 
@@ -382,7 +382,7 @@ def test_task_nostate_1(worker, tmp_path):
     state = get_state(nn)
     assert state is None
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -396,7 +396,7 @@ def test_task_nostate_1(worker, tmp_path):
 def test_task_nostate_1_call(tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
-    with Submitter(cache_dir=tmp_path) as sub:
+    with Submitter(cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
     # checking the results
@@ -415,7 +415,7 @@ def test_task_nostate_1_call_subm(worker, tmp_path):
     state = get_state(nn)
     assert state is None
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -435,7 +435,7 @@ def test_task_nostate_1_call_plug(worker, tmp_path):
     state = get_state(nn)
     assert state is None
 
-    with Submitter(cache_dir=tmp_path, worker=worker) as sub:
+    with Submitter(cache_root=tmp_path, worker=worker) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -455,7 +455,7 @@ def test_task_nostate_2(worker, tmp_path):
     state = get_state(nn)
     assert state is None
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -472,7 +472,7 @@ def test_task_nostate_3(worker, tmp_path):
 
     assert nn.d == {"a": "ala", "b": "bala"}
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -491,7 +491,7 @@ def test_task_nostate_4(worker, tmp_path):
 
     nn = FunFile(filename=file1)
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -551,15 +551,15 @@ def test_task_nostate_7():
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachedir(worker, tmp_path):
-    """task with provided cache_dir using pytest tmp_path"""
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
+    """task with provided cache_root using pytest tmp_path"""
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
     nn = FunAddTwo(a=3)
     state = get_state(nn)
     assert np.allclose(nn.a, [3])
     assert state is None
 
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -570,17 +570,17 @@ def test_task_nostate_cachedir(worker, tmp_path):
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachedir_relativepath(tmp_path, worker):
-    """task with provided cache_dir as relative path"""
+    """task with provided cache_root as relative path"""
     os.chdir(tmp_path)
-    cache_dir = "test_task_nostate"
-    (tmp_path / cache_dir).mkdir()
+    cache_root = "test_task_nostate"
+    (tmp_path / cache_root).mkdir()
 
     nn = FunAddTwo(a=3)
     assert np.allclose(nn.a, [3])
     state = get_state(nn)
     assert state is None
 
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -588,28 +588,28 @@ def test_task_nostate_cachedir_relativepath(tmp_path, worker):
 
     assert results.outputs.out == 5
 
-    shutil.rmtree(cache_dir)
+    shutil.rmtree(cache_root)
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachelocations(worker, tmp_path):
     """
-    Two identical tasks with provided cache_dir;
+    Two identical tasks with provided cache_root;
     the second task has cache_locations and should not recompute the results
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo(a=3)
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
-        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir
+        worker=worker, cache_root=cache_root2, cache_locations=cache_root
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results.errors["error message"])
@@ -624,23 +624,23 @@ def test_task_nostate_cachelocations(worker, tmp_path):
 
 def test_task_nostate_cachelocations_forcererun(worker, tmp_path):
     """
-    Two identical tasks with provided cache_dir;
+    Two identical tasks with provided cache_root;
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo(a=3)
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
-        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir
+        worker=worker, cache_root=cache_root2, cache_locations=cache_root
     ) as sub:
         results2 = sub(nn2, rerun=True)
 
@@ -655,84 +655,84 @@ def test_task_nostate_cachelocations_forcererun(worker, tmp_path):
 
 def test_task_nostate_cachelocations_nosubmitter(tmp_path):
     """
-    Two identical tasks (that are run without submitter!) with provided cache_dir;
+    Two identical tasks (that are run without submitter!) with provided cache_root;
     the second task has cache_locations and should not recompute the results
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo(a=3)
-    nn(cache_dir=cache_dir)
+    nn(cache_root=cache_root)
 
     nn2 = FunAddTwo(a=3)
-    outputs2 = nn2(cache_dir=cache_dir2, cache_locations=cache_dir)
+    outputs2 = nn2(cache_root=cache_root2, cache_locations=cache_root)
 
     # checking the results
 
     assert outputs2.out == 5
 
     # checking if the second task didn't run the interface again
-    assert num_python_cache_dirs(cache_dir) == 1
-    assert not num_python_cache_dirs(cache_dir2)
+    assert num_python_cache_roots(cache_root) == 1
+    assert not num_python_cache_roots(cache_root2)
 
 
 def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
     """
-    Two identical tasks (that are run without submitter!) with provided cache_dir;
+    Two identical tasks (that are run without submitter!) with provided cache_root;
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo(a=3)
-    nn(cache_dir=cache_dir)
+    nn(cache_root=cache_root)
 
     nn2 = FunAddTwo(a=3)
-    outputs2 = nn2(rerun=True, cache_dir=cache_dir2, cache_locations=cache_dir)
+    outputs2 = nn2(rerun=True, cache_root=cache_root2, cache_locations=cache_root)
 
     # checking the results
 
     assert outputs2.out == 5
 
     # checking if the second task run the interface again
-    assert num_python_cache_dirs(cache_dir) == 1
-    assert num_python_cache_dirs(cache_dir2)
+    assert num_python_cache_roots(cache_root) == 1
+    assert num_python_cache_roots(cache_root2)
 
 
 def test_task_nostate_cachelocations_updated(worker, tmp_path):
     """
-    Two identical tasks with provided cache_dir;
+    Two identical tasks with provided cache_root;
     the second task has cache_locations in init,
      that is later overwritten in Submitter.__call__;
     the cache_locations passed to call doesn't exist so the second task should run again
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir1 = tmp_path / "test_task_nostate1"
-    cache_dir1.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root1 = tmp_path / "test_task_nostate1"
+    cache_root1.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo(a=3)
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunAddTwo(a=3)
     with Submitter(
-        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir
+        worker=worker, cache_root=cache_root2, cache_locations=cache_root
     ) as sub:
         results1 = sub(nn2)
     assert not results1.errored, "\n".join(results.errors["error message"])
 
     # updating cache location to non-existing dir
     with Submitter(
-        worker=worker, cache_locations=cache_dir1, cache_dir=tmp_path
+        worker=worker, cache_locations=cache_root1, cache_root=tmp_path
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results.errors["error message"])
@@ -764,7 +764,7 @@ def test_task_state_1(worker, input_type, tmp_path):
     assert state.splitter_rpn == ["NA.a"]
     assert (nn.a == np.array([3, 5])).all()
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -787,7 +787,7 @@ def test_task_state_1a(worker, tmp_path):
     assert state.splitter_rpn == ["NA.a"]
     assert (nn.a == np.array([3, 5])).all()
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -812,7 +812,7 @@ def test_task_state_singl_1(worker, tmp_path):
     assert state.splitter_final == "NA.a"
     assert state.splitter_rpn_final == ["NA.a"]
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -881,7 +881,7 @@ def test_task_state_2(
     assert state.splitter_final == state_splitter
     assert state.splitter_rpn_final == state_rpn
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -900,7 +900,7 @@ def test_task_state_3(worker, tmp_path):
     assert state.splitter_rpn == ["NA.a"]
     assert nn.a == []
 
-    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -924,7 +924,7 @@ def test_task_state_4(worker, input_type, tmp_path):
     assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
     assert state.splitter == "NA.lst"
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -950,7 +950,7 @@ def test_task_state_4a(worker, tmp_path):
     assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
     assert state.splitter == "NA.lst"
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -969,7 +969,7 @@ def test_task_state_5(worker, tmp_path):
     assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
     assert state.splitter == ("NA.n", "NA.lst")
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1003,7 +1003,7 @@ def test_task_state_6(worker, tmp_path):
     assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
     assert state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1020,7 +1020,7 @@ def test_task_state_6a(worker, tmp_path):
     assert np.allclose(nn.lst, [[2, 3, 4], [1, 2, 3]])
     assert state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1042,7 +1042,7 @@ def test_task_state_comb_1(worker, tmp_path):
     assert state.splitter_final is None
     assert state.splitter_rpn_final == []
 
-    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1156,7 +1156,7 @@ def test_task_state_comb_2(
     assert state.splitter_rpn == state_rpn
     assert state.combiner == state_combiner
 
-    with Submitter(worker="debug", cache_dir=tmp_path) as sub:
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1188,7 +1188,7 @@ def test_task_state_comb_singl_1(worker, tmp_path):
     assert state.splitter_final is None
     assert state.splitter_rpn_final == []
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1204,7 +1204,7 @@ def test_task_state_comb_3(worker, tmp_path):
     assert state.splitter_rpn == ["NA.a"]
     assert nn.a == []
 
-    with Submitter(worker=worker, cache_dir=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -1225,7 +1225,7 @@ def test_task_state_comb_order(tmp_path):
     state_a = get_state(nn_a)
     assert state_a.combiner == ["NA.a"]
 
-    outputs = nn_a(cache_dir=tmp_path / "cache")
+    outputs = nn_a(cache_root=tmp_path / "cache")
     # combined_results_a = [[res.output.out for res in res_l] for res_l in results_a]
     assert outputs.out == [[13, 23], [15, 25]]
 
@@ -1234,7 +1234,7 @@ def test_task_state_comb_order(tmp_path):
     state_b = get_state(nn_b)
     assert state_b.combiner == ["NA.b"]
 
-    outputs_b = nn_b(cache_dir=tmp_path / "cache_b")
+    outputs_b = nn_b(cache_root=tmp_path / "cache_b")
     # combined_results_b = [[res.output.out for res in res_l] for res_l in results_b]
     assert outputs_b.out == [[13, 15], [23, 25]]
 
@@ -1245,7 +1245,7 @@ def test_task_state_comb_order(tmp_path):
     state_ab = get_state(nn_ab)
     assert state_ab.combiner == ["NA.a", "NA.b"]
 
-    outputs_ab = nn_ab(cache_dir=tmp_path / "cache_ab")
+    outputs_ab = nn_ab(cache_root=tmp_path / "cache_ab")
     assert outputs_ab.out == [13, 15, 23, 25]
 
     # combiner with both fields ["b", "a"] - will create the same list as nn_ab
@@ -1256,7 +1256,7 @@ def test_task_state_comb_order(tmp_path):
     state_ba = get_state(nn_ba)
     assert state_ba.combiner == ["NA.b", "NA.a"]
 
-    outputs_ba = nn_ba(cache_dir=tmp_path / "cache_ba")
+    outputs_ba = nn_ba(cache_root=tmp_path / "cache_ba")
     assert outputs_ba.out == [13, 15, 23, 25]
 
 
@@ -1274,7 +1274,7 @@ def test_task_state_contdim_1(tmp_path):
         d=["d1", "d2"],
         cont_dim={"b": 2},
     )
-    outputs = task_4var(cache_dir=tmp_path)
+    outputs = task_4var(cache_root=tmp_path)
     assert len(outputs.out) == 4
     assert outputs.out[3] == "a1 b4 c2 d2"
 
@@ -1289,7 +1289,7 @@ def test_task_state_contdim_2(tmp_path):
         c=["c1", "c2"],
         d=["d1", "d2"],
     )
-    outputs = task_4var(cache_dir=tmp_path)
+    outputs = task_4var(cache_root=tmp_path)
     assert len(outputs.out) == 8
     assert outputs.out[7] == "a2 b4 c2 d2"
 
@@ -1307,7 +1307,7 @@ def test_task_state_comb_contdim_1(tmp_path):
         )
         .combine("b")
     )
-    outputs = task_4var(cache_dir=tmp_path)
+    outputs = task_4var(cache_root=tmp_path)
     assert len(outputs.out) == 4
     assert outputs.out[3] == "a1 b4 c2 d2"
 
@@ -1326,6 +1326,6 @@ def test_task_state_comb_contdim_2(tmp_path):
         )
         .combine("a")
     )
-    outputs = task_4var(cache_dir=tmp_path)
+    outputs = task_4var(cache_root=tmp_path)
     assert len(outputs.out) == 4
     assert outputs.out[3][1] == "a2 b4 c2 d2"

@@ -18,11 +18,11 @@ def test_audit_prov(
 
     # printing the audit message
     funky = TestFunc(a=1)
-    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
 
     # saving the audit message into the file
     funky = TestFunc(a=2)
-    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     # this should be the default loctaion
     message_path = tmpdir / funky._checksum / "messages"
     assert (tmpdir / funky._checksum / "messages").exists()
@@ -40,7 +40,7 @@ def test_audit_task(tmpdir):
 
     funky = TestFunc(a=2)
     funky(
-        cache_dir=tmpdir,
+        cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
@@ -70,7 +70,7 @@ def test_audit_shellcommandtask(tmpdir):
     shelly = Shelly()
 
     shelly(
-        cache_dir=tmpdir,
+        cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
@@ -137,7 +137,7 @@ def test_audit_shellcommandtask_file(tmp_path):
         in_file_2=file_in_2,
     )
     shelly(
-        cache_dir=tmp_path,
+        cache_root=tmp_path,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
@@ -169,7 +169,7 @@ def test_audit_shellcommandtask_version(tmpdir):
     import glob
 
     shelly(
-        cache_dir=tmpdir,
+        cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
@@ -197,7 +197,7 @@ def test_audit_prov_messdir_1(
 
     # printing the audit message
     funky = TestFunc(a=1)
-    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
 
     # saving the audit message into the file
     funky = TestFunc(a=2)
@@ -207,7 +207,7 @@ def test_audit_prov_messdir_1(
     funky_task = Job(
         task=funky,
         submitter=Submitter(
-            cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
+            cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
         ),
         name="funky",
     )
@@ -230,7 +230,7 @@ def test_audit_prov_messdir_2(
 
     # printing the audit message
     funky = TestFunc(a=1)
-    funky(cache_dir=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
 
     # user defined path (doesn't depend on checksum, can be defined before init)
     message_path = tmpdir / "my_messages"
@@ -238,7 +238,7 @@ def test_audit_prov_messdir_2(
     funky = TestFunc(a=2)
     # providing messenger_dir for audit
     funky(
-        cache_dir=tmpdir,
+        cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
         messenger_args=dict(message_dir=message_path),
@@ -266,7 +266,7 @@ def test_audit_prov_wf(
     wf = Workflow(x=2)
 
     wf(
-        cache_dir=tmpdir,
+        cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
@@ -289,7 +289,7 @@ def test_audit_all(
     message_path = tmpdir / funky._checksum / "messages"
 
     funky(
-        cache_dir=tmpdir,
+        cache_root=tmpdir,
         audit_flags=AuditFlag.ALL,
         messengers=FileMessenger(),
         messenger_args=dict(message_dir=message_path),

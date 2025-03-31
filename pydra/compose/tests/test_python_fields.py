@@ -26,7 +26,7 @@ def test_interface_wrap_function(tmp_path):
     ]
     assert outputs == [python.out(name="out", type=float)]
     task = SampleDef(a=1)
-    outputs = task(cache_dir=tmp_path)
+    outputs = task(cache_root=tmp_path)
     assert outputs.out == 2.0
     with pytest.raises(TypeError):
         SampleDef(a=1.5)

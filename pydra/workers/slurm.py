@@ -44,17 +44,17 @@ class SlurmWorker(base.Worker):
 
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
         if isinstance(job, Job):
-            cache_dir = job.cache_dir
+            cache_root = job.cache_root
             ind = None
             uid = job.uid
         else:
             assert isinstance(job, tuple), f"Expecting a job or a tuple, not {job!r}"
             assert len(job) == 2, f"Expecting a tuple of length 2, not {job!r}"
             ind = job[0]
-            cache_dir = job[-1].cache_dir
+            cache_root = job[-1].cache_root
             uid = f"{job[-1].uid}_{ind}"
 
-        script_dir = cache_dir / f"{self.plugin_name()}_scripts" / uid
+        script_dir = cache_root / f"{self.plugin_name()}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
         if ind is None:
             if not (script_dir / "_job.pklz").exists():
@@ -87,7 +87,7 @@ class SlurmWorker(base.Worker):
         script_dir, batch_script = self._prepare_runscripts(job, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        script_dir = job.cache_dir / f"{self.plugin_name()}_scripts" / job.uid
+        script_dir = job.cache_root / f"{self.plugin_name()}_scripts" / job.uid
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
@@ -130,12 +130,12 @@ class SlurmWorker(base.Worker):
                     and "--no-requeue" not in self.sbatch_args
                 ):
                     # loading info about job with a specific uid
-                    info_file = job.cache_dir / f"{job.uid}_info.json"
+                    info_file = job.cache_root / f"{job.uid}_info.json"
                     if info_file.exists():
                         checksum = json.loads(info_file.read_text())["checksum"]
-                        if (job.cache_dir / f"{checksum}.lock").exists():
+                        if (job.cache_root / f"{checksum}.lock").exists():
                             # for pyt3.8 we could you missing_ok=True
-                            (job.cache_dir / f"{checksum}.lock").unlink()
+                            (job.cache_root / f"{checksum}.lock").unlink()
                     cmd_re = ("scontrol", "requeue", jobid)
                     await base.read_and_display_async(*cmd_re, hide_display=True)
                 else:

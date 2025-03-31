@@ -168,7 +168,7 @@ class Task(ty.Generic[OutputsType]):
     def __call__(
         self,
         /,
-        cache_dir: os.PathLike | None = None,
+        cache_root: os.PathLike | None = None,
         worker: "str | ty.Type[Worker] | Worker" = "debug",
         environment: "Environment | None" = None,
         rerun: bool = False,
@@ -183,7 +183,7 @@ class Task(ty.Generic[OutputsType]):
 
         Parameters
         ----------
-        cache_dir : os.PathLike, optional
+        cache_root : os.PathLike, optional
             Cache directory where the working directory/results for the job will be
             stored, by default None
         worker : str or Worker, optional
@@ -218,7 +218,7 @@ class Task(ty.Generic[OutputsType]):
         try:
             with Submitter(
                 audit_flags=audit_flags,
-                cache_dir=cache_dir,
+                cache_root=cache_root,
                 cache_locations=cache_locations,
                 messenger_args=messenger_args,
                 messengers=messengers,

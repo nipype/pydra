@@ -56,7 +56,7 @@ def test_load_and_run_exception_run(tmpdir):
     job = Job(
         task=RaiseXeq1(x=1),
         name="raise",
-        submitter=Submitter(worker="cf", cache_dir=cache_root),
+        submitter=Submitter(worker="cf", cache_root=cache_root),
     )
 
     with job_pkl.open("wb") as fp:
@@ -100,7 +100,7 @@ def test_load_and_run_wf(tmpdir, worker):
     job = Job(
         name="mult",
         task=Workflow(x=2),
-        submitter=Submitter(cache_dir=tmpdir, worker=worker),
+        submitter=Submitter(cache_root=tmpdir, worker=worker),
     )
 
     with wf_pkl.open("wb") as fp:

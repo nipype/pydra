@@ -59,7 +59,7 @@ def test_traceback(tmpdir):
         raise Exception("Error from the function")
 
     with pytest.raises(Exception, match="Error from the function") as exinfo:
-        with Submitter(worker="cf", cache_dir=tmpdir) as sub:
+        with Submitter(worker="cf", cache_root=tmpdir) as sub:
             sub(FunError(x=3), raise_errors=True)
 
     # getting error file from the error message
@@ -93,7 +93,7 @@ def test_traceback_wf(tmp_path: Path):
 
     wf = Workflow(x_list=[3, 4])
     with pytest.raises(RuntimeError, match="Job 'fun_error.*, errored") as exinfo:
-        with Submitter(worker="cf", cache_dir=tmp_path) as sub:
+        with Submitter(worker="cf", cache_root=tmp_path) as sub:
             sub(wf, raise_errors=True)
 
     # getting error file from the error message
@@ -124,9 +124,9 @@ def test_rerun_errored(tmp_path, capfd):
     pass_odds = PassOdds().split("x", x=[1, 2, 3, 4, 5])
 
     with pytest.raises(Exception):
-        pass_odds(cache_dir=tmp_path, worker="cf", n_procs=3)
+        pass_odds(cache_root=tmp_path, worker="cf", n_procs=3)
     with pytest.raises(Exception):
-        pass_odds(cache_dir=tmp_path, worker="cf", n_procs=3)
+        pass_odds(cache_root=tmp_path, worker="cf", n_procs=3)
 
     out, err = capfd.readouterr()
     stdout_lines = out.splitlines()

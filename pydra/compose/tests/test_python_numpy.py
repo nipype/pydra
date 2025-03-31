@@ -30,7 +30,7 @@ def test_multiout(tmpdir):
 
     wf = Workflow(val=2)
 
-    with Submitter(worker="cf", cache_dir=tmpdir, n_procs=2) as sub:
+    with Submitter(worker="cf", cache_root=tmpdir, n_procs=2) as sub:
         results = sub(wf)
 
     assert np.array_equal(results.outputs.array, np.array([2, 2]))
@@ -46,7 +46,7 @@ def test_multiout_st(tmpdir):
 
     wf = Workflow(values=[0, 1, 2])
 
-    with Submitter(worker="cf", cache_dir=tmpdir, n_procs=2) as sub:
+    with Submitter(worker="cf", cache_root=tmpdir, n_procs=2) as sub:
         results = sub(wf)
 
     for el in range(3):
@@ -80,7 +80,7 @@ def test_task_numpyinput_1(tmp_path: Path):
     """task with numeric numpy array as an input"""
     nn = Identity().split(x=[np.array([1, 2]), np.array([3, 4])])
     # checking the results
-    outputs = nn(cache_dir=tmp_path)
+    outputs = nn(cache_root=tmp_path)
     assert (np.array(outputs.out) == np.array([[1, 2], [3, 4]])).all()
 
 
@@ -90,7 +90,7 @@ def test_task_numpyinput_2(tmp_path: Path):
         x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)]
     )
     # checking the results
-    outputs = nn(cache_dir=tmp_path)
+    outputs = nn(cache_root=tmp_path)
     assert outputs.out[0] == np.array(["VAL1"], dtype=object)
     assert outputs.out[1] == np.array(["VAL2"], dtype=object)
 

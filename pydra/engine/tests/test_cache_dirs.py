@@ -5,26 +5,26 @@ from fileformats.generic import File
 from pydra.compose import python
 from pydra.engine.tests.utils import FunAddTwo, FunFile
 from pydra.engine.submitter import Submitter
-from pydra.engine.tests.utils import num_python_cache_dirs
+from pydra.engine.tests.utils import num_python_cache_roots
 
 
 def test_task_state_cachelocations(worker, tmp_path):
     """
-    Two identical tasks with a state and cache_dir;
+    Two identical tasks with a state and cache_root;
     the second task has cache_locations and should not recompute the results
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo(a=3).split("a", a=[3, 5])
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         sub(nn)
 
     nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir
+        worker=worker, cache_root=cache_root2, cache_locations=cache_root
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -35,28 +35,28 @@ def test_task_state_cachelocations(worker, tmp_path):
         assert results2.outputs.out[i] == res[1]
 
     # Would ideally check for all nodes of the workflows
-    assert num_python_cache_dirs(cache_dir) == 2
-    assert not num_python_cache_dirs(cache_dir2)
+    assert num_python_cache_roots(cache_root) == 2
+    assert not num_python_cache_roots(cache_root2)
 
 
 def test_task_state_cachelocations_forcererun(worker, tmp_path):
     """
-    Two identical tasks with a state and cache_dir;
+    Two identical tasks with a state and cache_root;
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo(a=3).split("a", a=[3, 5])
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         sub(nn)
 
     nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir
+        worker=worker, cache_root=cache_root2, cache_locations=cache_root
     ) as sub:
         results2 = sub(nn2, rerun=True)
 
@@ -67,31 +67,31 @@ def test_task_state_cachelocations_forcererun(worker, tmp_path):
         assert results2.outputs.out[i] == res[1]
 
     # both workflows should be run
-    assert num_python_cache_dirs(cache_dir) == 2
-    assert num_python_cache_dirs(cache_dir2) == 2
+    assert num_python_cache_roots(cache_root) == 2
+    assert num_python_cache_roots(cache_root2) == 2
 
 
 def test_task_state_cachelocations_updated(worker, tmp_path):
     """
-    Two identical tasks with states and cache_dir;
+    Two identical tasks with states and cache_root;
     the second task has cache_locations in init,
      that is later overwritten in Submitter.__call__;
     the cache_locations from call doesn't exist so the second task should run again
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir1 = tmp_path / "test_task_nostate1"
-    cache_dir1.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root1 = tmp_path / "test_task_nostate1"
+    cache_root1.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
 
     nn = FunAddTwo().split("a", a=[3, 5])
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         sub(nn)
 
     nn2 = FunAddTwo().split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir1
+        worker=worker, cache_root=cache_root2, cache_locations=cache_root1
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -103,19 +103,19 @@ def test_task_state_cachelocations_updated(worker, tmp_path):
         assert results2.outputs.out[i] == res[1]
 
     # both workflows should be run
-    assert num_python_cache_dirs(cache_dir) == 2
-    assert num_python_cache_dirs(cache_dir2) == 2
+    assert num_python_cache_roots(cache_root) == 2
+    assert num_python_cache_roots(cache_root2) == 2
 
 
 def test_task_files_cachelocations(worker, tmp_path):
     """
-    Two identical tasks with provided cache_dir that use file as an input;
+    Two identical tasks with provided cache_root that use file as an input;
     the second task has cache_locations and should not recompute the results
     """
-    cache_dir = tmp_path / "test_task_nostate"
-    cache_dir.mkdir()
-    cache_dir2 = tmp_path / "test_task_nostate2"
-    cache_dir2.mkdir()
+    cache_root = tmp_path / "test_task_nostate"
+    cache_root.mkdir()
+    cache_root2 = tmp_path / "test_task_nostate2"
+    cache_root2.mkdir()
     input_dir = tmp_path / "input"
     input_dir.mkdir()
 
@@ -125,13 +125,13 @@ def test_task_files_cachelocations(worker, tmp_path):
     input2.write_text("test")
 
     nn = FunFile(filename=input1)
-    with Submitter(worker=worker, cache_dir=cache_dir) as sub:
+    with Submitter(worker=worker, cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
     nn2 = FunFile(filename=input2)
     with Submitter(
-        worker=worker, cache_dir=cache_dir2, cache_locations=cache_dir
+        worker=worker, cache_root=cache_root2, cache_locations=cache_root
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results.errors["error message"])
@@ -172,25 +172,25 @@ class OverriddenContentsFile(File):
 
 def test_task_files_persistentcache(tmp_path):
     """
-    Two identical tasks with provided cache_dir that use file as an input;
+    Two identical tasks with provided cache_root that use file as an input;
     the second task has cache_locations and should not recompute the results
     """
     test_file_path = tmp_path / "test_file.txt"
     test_file_path.write_bytes(b"foo")
-    cache_dir = tmp_path / "cache-dir"
-    cache_dir.mkdir()
+    cache_root = tmp_path / "cache-dir"
+    cache_root.mkdir()
     test_file = OverriddenContentsFile(test_file_path)
 
     @python.define
     def read_contents(x: OverriddenContentsFile) -> bytes:
         return x.raw_contents
 
-    assert read_contents(x=test_file)(cache_dir=cache_dir).out == b"foo"
+    assert read_contents(x=test_file)(cache_root=cache_root).out == b"foo"
     test_file._contents = b"bar"
     # should return result from the first run using the persistent cache
-    assert read_contents(x=test_file)(cache_dir=cache_dir).out == b"foo"
+    assert read_contents(x=test_file)(cache_root=cache_root).out == b"foo"
     time.sleep(2)  # Windows has a 2-second resolution for mtime
     test_file_path.touch()  # update the mtime to invalidate the persistent cache value
     assert (
-        read_contents(x=test_file)(cache_dir=cache_dir).out == b"bar"
+        read_contents(x=test_file)(cache_root=cache_root).out == b"bar"
     )  # returns the overridden value

@@ -145,6 +145,11 @@ def load_result(
     cache_locations : :obj:`list` of :obj:`os.pathlike`
         List of cache directories, in order of priority, where
         the checksum will be looked for.
+    retries : :obj:`int`
+        Number of times to retry loading the result if the file is not
+        completely written.
+    polling_interval : :obj:`float`
+        Time to wait between retries.
 
     Returns
     -------

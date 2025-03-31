@@ -104,7 +104,7 @@ class SgeWorker(base.Worker):
 
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
         if isinstance(job, Job):
-            cache_dir = job.cache_dir
+            cache_root = job.cache_root
             ind = None
             uid = job.uid
             try:
@@ -113,14 +113,14 @@ class SgeWorker(base.Worker):
                 task_qsub_args = self.default_qsub_args
         else:
             ind = job[0]
-            cache_dir = job[-1].cache_dir
+            cache_root = job[-1].cache_root
             uid = f"{job[-1].uid}_{ind}"
             try:
                 task_qsub_args = job[-1].qsub_args
             except Exception:
                 task_qsub_args = self.default_qsub_args
 
-        script_dir = cache_dir / f"{self.plugin_name()}_scripts" / uid
+        script_dir = cache_root / f"{self.plugin_name()}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
         if ind is None:
             if not (script_dir / "_job.pklz").exists():
@@ -246,7 +246,7 @@ class SgeWorker(base.Worker):
             with batch_script.open("wt") as fp:
                 fp.writelines(bcmd_job)
 
-            script_dir = job.cache_dir / f"{self.plugin_name()}_scripts" / job.uid
+            script_dir = job.cache_root / f"{self.plugin_name()}_scripts" / job.uid
             script_dir.mkdir(parents=True, exist_ok=True)
             sargs = ["-t"]
             sargs.append(f"1-{len(tasks_to_run)}")
@@ -305,7 +305,7 @@ class SgeWorker(base.Worker):
                         exit_status = await self._verify_exit_code(jobid)
                         if exit_status == "ERRORED":
                             jobid = await self._rerun_job_array(
-                                job.cache_dir,
+                                job.cache_root,
                                 job.uid,
                                 sargs,
                                 tasks_to_run,
@@ -323,7 +323,7 @@ class SgeWorker(base.Worker):
                         exit_status = await self._verify_exit_code(jobid)
                         if exit_status == "ERRORED":
                             jobid = await self._rerun_job_array(
-                                job.cache_dir,
+                                job.cache_root,
                                 job.uid,
                                 sargs,
                                 tasks_to_run,
@@ -334,11 +334,11 @@ class SgeWorker(base.Worker):
                     poll_counter += 1
                     await asyncio.sleep(self.poll_delay)
                 else:
-                    done = await self._poll_job(jobid, job.cache_dir)
+                    done = await self._poll_job(jobid, job.cache_root)
                     if done:
                         if done == "ERRORED":  # If the SGE job was evicted, rerun it
                             jobid = await self._rerun_job_array(
-                                job.cache_dir,
+                                job.cache_root,
                                 job.uid,
                                 sargs,
                                 tasks_to_run,
@@ -355,7 +355,7 @@ class SgeWorker(base.Worker):
                     )
 
     async def _rerun_job_array(
-        self, cache_dir, uid, sargs, tasks_to_run, error_file, evicted_jobid
+        self, cache_root, uid, sargs, tasks_to_run, error_file, evicted_jobid
     ):
         for job_pkl, ind, rerun in tasks_to_run:
             sge_task = load_job(job_pkl=job_pkl, ind=ind)
@@ -366,12 +366,12 @@ class SgeWorker(base.Worker):
                 or load_job(job_pkl=application_job_pkl).result().errored
             ):
                 self.job_pkls_rerun[job_pkl] = None
-                info_file = cache_dir / f"{sge_task.uid}_info.json"
+                info_file = cache_root / f"{sge_task.uid}_info.json"
                 if info_file.exists():
                     checksum = json.loads(info_file.read_text())["checksum"]
-                    if (cache_dir / f"{checksum}.lock").exists():
+                    if (cache_root / f"{checksum}.lock").exists():
                         # for pyt3.8 we could use missing_ok=True
-                        (cache_dir / f"{checksum}.lock").unlink()
+                        (cache_root / f"{checksum}.lock").unlink()
                     # Maybe wait a little to check if _error.pklz exists - not getting found immediately
 
         # If the previous job array failed, run the array's script again and get the new jobid
@@ -428,7 +428,7 @@ class SgeWorker(base.Worker):
         batchscript,
         name,
         uid,
-        cache_dir,
+        cache_root,
         job_pkl,
         ind,
         output_dir,
@@ -439,7 +439,7 @@ class SgeWorker(base.Worker):
             batchscript,
             name,
             uid,
-            cache_dir,
+            cache_root,
             output_dir,
             task_qsub_args,
         )
@@ -458,7 +458,7 @@ class SgeWorker(base.Worker):
                 else:
                     await asyncio.sleep(self.poll_delay)
 
-    async def _poll_job(self, jobid, cache_dir):
+    async def _poll_job(self, jobid, cache_root):
         cmd = ("qstat", "-j", jobid)
         logger.debug(f"Polling job {jobid}")
         rc, stdout, stderr = await base.read_and_display_async(*cmd, hide_display=True)

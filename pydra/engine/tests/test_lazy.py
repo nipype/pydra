@@ -95,5 +95,5 @@ def test_wf_lzin_split(tmp_path):
 
     outer = Outer(xs=[1, 2, 3])
 
-    outputs = outer(cache_dir=tmp_path)
+    outputs = outer(cache_root=tmp_path)
     assert outputs.out == [1, 2, 3]

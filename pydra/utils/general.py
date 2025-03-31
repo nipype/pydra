@@ -32,15 +32,15 @@ PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
-user_cache_dir = Path(
-    platformdirs.user_cache_dir(
+user_cache_root = Path(
+    platformdirs.user_cache_root(
         appname="pydra",
         appauthor="nipype",
         version=__version__,
     )
 )
 
-default_run_cache_dir = user_cache_dir / "run-cache"
+default_run_cache_root = user_cache_root / "run-cache"
 
 
 def add_exc_note(e: Exception, note: str) -> Exception:
