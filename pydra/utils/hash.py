@@ -88,7 +88,7 @@ class PersistentCache:
     The locally unique key is hashed (cheaply) using hashlib cryptography and this
     "local hash" is use to name the entry of the (potentially expensive) hash of the
     object itself (e.g. the contents of a file). This entry is saved as a text file
-    within a user-specific cache directory (see `platformdirs.user_cache_root`), with
+    within a user-specific cache directory (see `platformdirs.user_cache_dir`), with
     the name of the file being the "local hash" of the key and the contents of the
     file being the "globally unique hash" of the object itself.
 

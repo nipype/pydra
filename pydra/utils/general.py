@@ -33,7 +33,7 @@ TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
 user_cache_root = Path(
-    platformdirs.user_cache_root(
+    platformdirs.user_cache_dir(
         appname="pydra",
         appauthor="nipype",
         version=__version__,
