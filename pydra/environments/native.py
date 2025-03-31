@@ -11,7 +11,7 @@ if ty.TYPE_CHECKING:
 
 class Native(base.Environment):
     """
-    Native environment, i.e. the tasks are executed in the current python environment.
+    Native environment, i.e. the tasks are executed in the current shell environment.
     """
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
