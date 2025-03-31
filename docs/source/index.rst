@@ -111,6 +111,7 @@ See the full reference documentation for Pydra
 * :ref:`API`
 * :ref:`genindex`
 * :ref:`modindex`
+* :ref:`Glossary`
 
 
 .. toctree::
