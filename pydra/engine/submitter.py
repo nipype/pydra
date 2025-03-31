@@ -215,7 +215,7 @@ class Submitter:
                 name="outer_split",
                 splitter=deepcopy(task._splitter),
                 combiner=deepcopy(task._combiner),
-                cont_dim=deepcopy(task._cont_dim),
+                container_ndim=deepcopy(task._container_ndim),
             )
 
             def wrap_type(tp):

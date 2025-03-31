@@ -349,7 +349,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                             and f"{node.name}.{field.name}"
                             in node.state._current_splitter_rpn
                         ):
-                            node.state._inner_cont_dim[f"{node.name}.{field.name}"] = 1
+                            node.state._inner_container_ndim[
+                                f"{node.name}.{field.name}"
+                            ] = 1
                         # adding task_name: (job.state, [a field from the connection]
                         if lf._node.name not in other_states:
                             other_states[lf._node.name] = (

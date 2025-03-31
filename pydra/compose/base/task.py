@@ -160,7 +160,7 @@ class Task(ty.Generic[OutputsType]):
     # The following fields are used to store split/combine state information
     _splitter = attrs.field(default=None, init=False, repr=False)
     _combiner = attrs.field(default=None, init=False, repr=False)
-    _cont_dim = attrs.field(default=None, init=False, repr=False)
+    _container_ndim = attrs.field(default=None, init=False, repr=False)
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
@@ -265,7 +265,7 @@ class Task(ty.Generic[OutputsType]):
         splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
         /,
         overwrite: bool = False,
-        cont_dim: ty.Optional[dict] = None,
+        container_ndim: ty.Optional[dict] = None,
         **inputs,
     ) -> Self:
         """
@@ -279,9 +279,9 @@ class Task(ty.Generic[OutputsType]):
             then the fields to split are taken from the keyword-arg names.
         overwrite : bool, optional
             whether to overwrite an existing split on the node, by default False
-        cont_dim : dict, optional
+        container_ndim : dict, optional
             Container dimensions for specific inputs, used in the splitter.
-            If input name is not in cont_dim, it is assumed that the input values has
+            If input name is not in container_ndim, it is assumed that the input values has
             a container dimension of 1, so only the most outer dim will be used for splitting.
         **inputs
             fields to split over, will be automatically wrapped in a StateArray object
@@ -321,7 +321,7 @@ class Task(ty.Generic[OutputsType]):
         else:
             # If no splitter is provided, use the names of the inputs as combinatorial splitter
             split_names = splitter = list(inputs)
-        for field_name in cont_dim or []:
+        for field_name in container_ndim or []:
             if field_name not in split_names:
                 raise ValueError(
                     f"Container dimension for {field_name} is provided but the field "
@@ -342,7 +342,7 @@ class Task(ty.Generic[OutputsType]):
             split_inputs[name] = split_val
         split_def = attrs.evolve(self, **split_inputs)
         split_def._splitter = splitter
-        split_def._cont_dim = cont_dim
+        split_def._container_ndim = container_ndim
         return split_def
 
     def combine(
@@ -613,8 +613,8 @@ def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
     yield hash_single(obj._splitter, cache)
     yield b",_combiner="
     yield hash_single(obj._combiner, cache)
-    yield b",_cont_dim="
-    yield hash_single(obj._cont_dim, cache)
+    yield b",_container_ndim="
+    yield hash_single(obj._container_ndim, cache)
     yield b",_xor="
     yield hash_single(obj._xor, cache)
     yield b")"

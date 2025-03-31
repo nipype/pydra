@@ -85,7 +85,7 @@ class State:
         name,
         splitter=None,
         combiner=None,
-        cont_dim=None,
+        container_ndim=None,
         other_states=None,
     ):
         """
@@ -109,8 +109,8 @@ class State:
         self.splitter = splitter
         # temporary combiner
         self.combiner = combiner
-        self.cont_dim = cont_dim or {}
-        self._inner_cont_dim = {}
+        self.container_ndim = container_ndim or {}
+        self._inner_container_ndim = {}
         self._inputs_ind = None
         # if other_states, the connections have to be updated
         if self.other_states:
@@ -377,12 +377,12 @@ class State:
         return self._prev_state_splitter_rpn_compact
 
     @property
-    def cont_dim_all(self):
-        # adding inner_cont_dim to the general container_dimension provided by the users
-        cont_dim_all = deepcopy(self.cont_dim)
-        for k, v in self._inner_cont_dim.items():
-            cont_dim_all[k] = cont_dim_all.get(k, 1) + v
-        return cont_dim_all
+    def container_ndim_all(self):
+        # adding inner_container_ndim to the general container_dimension provided by the users
+        container_ndim_all = deepcopy(self.container_ndim)
+        for k, v in self._inner_container_ndim.items():
+            container_ndim_all[k] = container_ndim_all.get(k, 1) + v
+        return container_ndim_all
 
     @property
     def combiner(self):
@@ -869,7 +869,7 @@ class State:
     def prepare_states(
         self,
         inputs: dict[str, ty.Any],
-        cont_dim: dict[str, int] | None = None,
+        container_ndim: dict[str, int] | None = None,
     ):
         """
         Prepare a full list of state indices and state values.
@@ -885,13 +885,13 @@ class State:
         self.combiner_validation()
         self.set_input_groups()
         self.inputs = inputs
-        if cont_dim is not None:
-            self.cont_dim = cont_dim
+        if container_ndim is not None:
+            self.container_ndim = container_ndim
         if self.other_states:
             st: State
             for nm, (st, _) in self.other_states.items():
                 self.inputs.update(st.inputs)
-                self.cont_dim.update(st.cont_dim_all)
+                self.container_ndim.update(st.container_ndim_all)
 
         self.prepare_states_ind()
         self.prepare_states_val()
@@ -995,7 +995,9 @@ class State:
     def prepare_states_val(self):
         """Evaluate states values having states indices."""
         self.states_val = list(
-            map_splits(self.states_ind, self.inputs, cont_dim=self.cont_dim_all)
+            map_splits(
+                self.states_ind, self.inputs, container_ndim=self.container_ndim_all
+            )
         )
         return self.states_val
 
@@ -1165,8 +1167,8 @@ class State:
             var_ind, new_keys = previous_states_ind[term]
             shape = (len(var_ind),)
         else:
-            cont_dim = self.cont_dim_all.get(term, 1)
-            shape = input_shape(self.inputs[term], cont_dim=cont_dim)
+            container_ndim = self.container_ndim_all.get(term, 1)
+            shape = input_shape(self.inputs[term], container_ndim=container_ndim)
             var_ind = range(reduce(lambda x, y: x * y, shape))
             new_keys = [term]
             # checking if the term is in inner_inputs
@@ -1186,7 +1188,8 @@ class State:
     def _single_op_splits(self, op_single):
         """splits function if splitter is a singleton"""
         shape = input_shape(
-            self.inputs[op_single], cont_dim=self.cont_dim_all.get(op_single, 1)
+            self.inputs[op_single],
+            container_ndim=self.container_ndim_all.get(op_single, 1),
         )
         val_ind = range(reduce(lambda x, y: x * y, shape))
         if op_single in self.inner_inputs:
@@ -1211,8 +1214,8 @@ class State:
     def _get_element(self, value: ty.Any, field_name: str, ind: int) -> ty.Any:
         """
         Extracting element of the inputs taking into account
-        container dimension of the specific element that can be set in self.state.cont_dim.
-        If input name is not in cont_dim, it is assumed that the input values has
+        container dimension of the specific element that can be set in self.state.container_ndim.
+        If input name is not in container_ndim, it is assumed that the input values has
         a container dimension of 1, so only the most outer dim will be used for splitting.
 
         Parameters
@@ -1229,11 +1232,11 @@ class State:
         Any
             specific element of the input field
         """
-        if f"{self.name}.{field_name}" in self.cont_dim_all:
+        if f"{self.name}.{field_name}" in self.container_ndim_all:
             return list(
                 flatten(
                     ensure_list(value),
-                    max_depth=self.cont_dim_all[f"{self.name}.{field_name}"],
+                    max_depth=self.container_ndim_all[f"{self.name}.{field_name}"],
                 )
             )[ind]
         else:
@@ -1600,15 +1603,15 @@ def iter_splits(iterable, keys):
         yield dict(zip(keys, list(flatten(iter, max_depth=1000))))
 
 
-def input_shape(inp, cont_dim=1):
+def input_shape(inp, container_ndim=1):
     """Get input shape, depends on the container dimension, if not specify it is assumed to be 1"""
     # TODO: have to be changed for inner splitter (sometimes different length)
-    cont_dim -= 1
+    container_ndim -= 1
     shape = [len(inp)]
     last_shape = None
     for value in inp:
-        if isinstance(value, list) and cont_dim > 0:
-            cur_shape = input_shape(value, cont_dim)
+        if isinstance(value, list) and container_ndim > 0:
+            cur_shape = input_shape(value, container_ndim)
             if last_shape is None:
                 last_shape = cur_shape
             elif last_shape != cur_shape:
@@ -1828,13 +1831,15 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     return keys_final, groups_final_map, groups_stack_final, combiner_all
 
 
-def map_splits(split_iter, inputs, cont_dim=None):
+def map_splits(split_iter, inputs, container_ndim=None):
     """generate a dictionary of inputs prescribed by the splitter."""
-    if cont_dim is None:
-        cont_dim = {}
+    if container_ndim is None:
+        container_ndim = {}
     for split in split_iter:
         yield {
-            k: list(flatten(ensure_list(inputs[k]), max_depth=cont_dim.get(k, None)))[v]
+            k: list(
+                flatten(ensure_list(inputs[k]), max_depth=container_ndim.get(k, None))
+            )[v]
             for k, v in split.items()
         }
 

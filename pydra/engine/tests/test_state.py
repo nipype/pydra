@@ -379,7 +379,7 @@ def test_state_5_err():
 
 
 @pytest.mark.parametrize(
-    "splitter, cont_dim, values, keys, splits",
+    "splitter, container_ndim, values, keys, splits",
     [
         ("a", None, [(0,), (1,)], ["a"], [{"a": 1}, {"a": 2}]),
         (["a"], None, [(0,), (1,)], ["a"], [{"a": 1}, {"a": 2}]),
@@ -569,7 +569,7 @@ def test_state_5_err():
         ),
     ],
 )
-def test_state_6(splitter, cont_dim, values, keys, splits):
+def test_state_6(splitter, container_ndim, values, keys, splits):
     """checking split method and prepare_state"""
     inputs = {
         "S.a": [1, 2],
@@ -581,13 +581,13 @@ def test_state_6(splitter, cont_dim, values, keys, splits):
 
     # adding st.name to the inputs variables
     splitter = add_name_splitter(splitter, name="S")
-    if cont_dim:
-        cont_dim = {f"S.{k}": v for k, v in cont_dim.items()}
+    if container_ndim:
+        container_ndim = {f"S.{k}": v for k, v in container_ndim.items()}
     keys = [f"S.{k}" for k in keys]
     splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
 
     st = State(splitter=splitter, name="S")
-    st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+    st.prepare_states(inputs=inputs, container_ndim=container_ndim)
 
     # checking keys and splits
     assert st.keys_final == keys
@@ -596,7 +596,7 @@ def test_state_6(splitter, cont_dim, values, keys, splits):
 
 
 @pytest.mark.parametrize(
-    "splitter, cont_dim, inputs, mismatch",
+    "splitter, container_ndim, inputs, mismatch",
     [
         ((["a", "v"], "c"), None, {"a": [1, 2], "v": ["a", "b"], "c": [3, 4]}, True),
         (
@@ -613,26 +613,26 @@ def test_state_6(splitter, cont_dim, values, keys, splits):
         ),
     ],
 )
-def test_state_7(splitter, cont_dim, inputs, mismatch):
+def test_state_7(splitter, container_ndim, inputs, mismatch):
     """checking if the split methods returns errors if shapes doesn't match"""
 
     # adding st.name to the inputs variables
     splitter = add_name_splitter(splitter, name="S")
-    if cont_dim:
-        cont_dim = {f"S.{k}": v for k, v in cont_dim.items()}
+    if container_ndim:
+        container_ndim = {f"S.{k}": v for k, v in container_ndim.items()}
     inputs = {f"S.{k}": v for k, v in inputs.items()}
 
     st = State(splitter=splitter, name="S")
 
     if mismatch:
         with pytest.raises(ValueError):
-            st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+            st.prepare_states(inputs=inputs, container_ndim=container_ndim)
     else:
-        st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+        st.prepare_states(inputs=inputs, container_ndim=container_ndim)
 
 
 @pytest.mark.parametrize(
-    "splitter, cont_dim, values, keys, shapes, splits",
+    "splitter, container_ndim, values, keys, shapes, splits",
     [
         (
             (["a", "v"], "c"),
@@ -662,18 +662,18 @@ def test_state_7(splitter, cont_dim, inputs, mismatch):
         ),
     ],
 )
-def test_state_8(splitter, cont_dim, values, keys, shapes, splits):
+def test_state_8(splitter, container_ndim, values, keys, shapes, splits):
     inputs = {"S.a": [1, 2], "S.v": ["a", "b"], "S.c": [[3, 4], [5, 6]]}
 
     # adding st.name to the inputs variables
     splitter = add_name_splitter(splitter, name="S")
-    if cont_dim:
-        cont_dim = {f"S.{k}": v for k, v in cont_dim.items()}
+    if container_ndim:
+        container_ndim = {f"S.{k}": v for k, v in container_ndim.items()}
     keys = [f"S.{k}" for k in keys]
     splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
 
     st = State(splitter=splitter, name="S")
-    st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+    st.prepare_states(inputs=inputs, container_ndim=container_ndim)
 
     # checking keys and splits
     assert st.keys_final == keys
@@ -1360,7 +1360,7 @@ def test_state_connect_innerspl_1():
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     assert st2.other_states["NA"][1] == ["b"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
@@ -1417,7 +1417,7 @@ def test_state_connect_innerspl_1a():
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1]]
@@ -1469,7 +1469,7 @@ def test_state_connect_innerspl_2():
     st1 = State(name="NA", splitter="a")
     st1.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     st2 = State(
         name="NB",
@@ -1487,7 +1487,7 @@ def test_state_connect_innerspl_2():
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     assert st2.other_states["NA"][1] == ["b"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1, "NB.b": 2}
@@ -1548,7 +1548,7 @@ def test_state_connect_innerspl_2a():
     st1 = State(name="NA", splitter="a")
     st1.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     st2 = State(
         name="NB",
@@ -1562,7 +1562,7 @@ def test_state_connect_innerspl_2a():
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 2, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1, 2]]
@@ -1632,7 +1632,7 @@ def test_state_connect_innerspl_3():
             "NB.b": [[1, 10, 100], [2, 20, 200]],
             "NB.c": [13, 17],
         },
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     st3 = State(name="NC", splitter="d", other_states={"NB": (st2, "a")})
 
@@ -1651,7 +1651,7 @@ def test_state_connect_innerspl_3():
             "NB.c": [13, 17],
             "NC.d": [33, 77],
         },
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     assert st3.group_for_inputs_final == {"NA.a": 0, "NB.c": 1, "NB.b": 2, "NC.d": 3}
     assert st3.groups_stack_final == [[0], [1, 2, 3]]
@@ -1805,7 +1805,7 @@ def test_state_connect_innerspl_4():
             "NC.f": [[23, 27], [33, 37]],
             "NC.d": [1, 2],
         },
-        cont_dim={"NC.f": 2},  # will be treated as 2d container
+        container_ndim={"NC.f": 2},  # will be treated as 2d container
     )
     assert st3.group_for_inputs_final == {"NA.a": 0, "NB.c": 2, "NB.b": 1, "NC.d": 3}
     assert st3.groups_stack_final == [[0, 1, 2, 3]]
@@ -2093,7 +2093,7 @@ def test_state_connect_innerspl_combine_1():
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1}
     assert st2.groups_stack_final == [[0], [1]]
@@ -2173,7 +2173,7 @@ def test_state_connect_innerspl_combine_2():
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
-        cont_dim={"NB.b": 2},  # will be treated as 2d container
+        container_ndim={"NB.b": 2},  # will be treated as 2d container
     )
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1]]

@@ -1524,7 +1524,7 @@ def test_wf_ndstinner_5(worker: str, tmp_path: Path):
     """workflow with 3 tasks,
     the second task has two inputs and inner splitter from one of the input,
     (inner input come from the first task that has its own splitter,
-    there is a inner_cont_dim)
+    there is a inner_container_ndim)
     the third task has no new splitter
     """
 

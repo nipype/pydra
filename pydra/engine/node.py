@@ -173,17 +173,17 @@ class Node(ty.Generic[OutputType]):
             )
 
     def _set_state(self) -> None:
-        # Add node name to state's splitter, combiner and cont_dim loaded from the def
+        # Add node name to state's splitter, combiner and container_ndim loaded from the def
         splitter = deepcopy(self._task._splitter)  # these can be modified in state
         combiner = deepcopy(self._task._combiner)  # these can be modified in state
-        cont_dim = {}
+        container_ndim = {}
         if splitter:
             splitter = add_name_splitter(splitter, self.name)
         if combiner:
             combiner = add_name_combiner(combiner, self.name)
-        if self._task._cont_dim:
-            for key, val in self._task._cont_dim.items():
-                cont_dim[f"{self.name}.{key}"] = val
+        if self._task._container_ndim:
+            for key, val in self._task._container_ndim.items():
+                container_ndim[f"{self.name}.{key}"] = val
         other_states = self._get_upstream_states()
         if splitter or combiner or other_states:
             self._state = State(
@@ -191,7 +191,7 @@ class Node(ty.Generic[OutputType]):
                 splitter=splitter,
                 other_states=other_states,
                 combiner=combiner,
-                cont_dim=cont_dim,
+                container_ndim=container_ndim,
             )
             if combiner:
                 if not_split := [
@@ -218,7 +218,7 @@ class Node(ty.Generic[OutputType]):
                 node: Node = val._node
                 # variables that are part of inner splitters should be treated as a containers
                 if node.state and f"{node.name}.{val._field}" in node.state.splitter:
-                    node.state._inner_cont_dim[f"{node.name}.{val._field}"] = 1
+                    node.state._inner_container_ndim[f"{node.name}.{val._field}"] = 1
                 # adding task_name: (task.state, [a field from the connection]
                 if node.name not in upstream_states:
                     upstream_states[node.name] = (node.state, [val._field])

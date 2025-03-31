@@ -1272,7 +1272,7 @@ def test_task_state_contdim_1(tmp_path):
         b=[["b1", "b2"], ["b3", "b4"]],
         c=["c1", "c2"],
         d=["d1", "d2"],
-        cont_dim={"b": 2},
+        container_ndim={"b": 2},
     )
     outputs = task_4var(cache_root=tmp_path)
     assert len(outputs.out) == 4
@@ -1283,7 +1283,7 @@ def test_task_state_contdim_2(tmp_path):
     """task with a splitter and container dimension for one of the value"""
     task_4var = Op4Var().split(
         ["a", ("b", ["c", "d"])],
-        cont_dim={"b": 2},
+        container_ndim={"b": 2},
         a=["a1", "a2"],
         b=[["b1", "b2"], ["b3", "b4"]],
         c=["c1", "c2"],
@@ -1300,7 +1300,7 @@ def test_task_state_comb_contdim_1(tmp_path):
         Op4Var(a="a1")
         .split(
             ("b", ["c", "d"]),
-            cont_dim={"b": 2},
+            container_ndim={"b": 2},
             b=[["b1", "b2"], ["b3", "b4"]],
             c=["c1", "c2"],
             d=["d1", "d2"],
@@ -1322,7 +1322,7 @@ def test_task_state_comb_contdim_2(tmp_path):
             b=[["b1", "b2"], ["b3", "b4"]],
             c=["c1", "c2"],
             d=["d1", "d2"],
-            cont_dim={"b": 2},
+            container_ndim={"b": 2},
         )
         .combine("a")
     )
