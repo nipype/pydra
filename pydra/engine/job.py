@@ -36,7 +36,7 @@ from pydra.engine.result import load_result, save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
-from pydra.environments.base_environment import Environment
+from pydra.environments.base import Environment
 
 logger = logging.getLogger("pydra")
 

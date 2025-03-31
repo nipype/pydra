@@ -230,7 +230,7 @@ def additional_args_converter(value: ty.Any) -> list[str]:
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class Task(base.Task[ShellOutputsType]):
+class ShellTask(base.Task[ShellOutputsType]):
 
     _task_type = "shell"
 
@@ -252,7 +252,7 @@ class Task(base.Task[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("cmdline",)
 
-    def _run(self, job: "Job[Task]", rerun: bool = True) -> None:
+    def _run(self, job: "Job[ShellTask]", rerun: bool = True) -> None:
         """Run the shell command."""
         job.return_values = job.environment.execute(job)
 
@@ -504,3 +504,7 @@ def split_cmd(cmd: str | None):
         else:
             cmd_args.append(arg)
     return cmd_args
+
+
+# Alias ShellTask to Task so we can refer to it by shell.Task
+Task = ShellTask

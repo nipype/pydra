@@ -18,7 +18,7 @@ from pydra.compose import python
 from pathlib import Path
 from datetime import datetime
 from pydra.engine.result import Result
-from .utils import (
+from pydra.engine.tests.utils import (
     need_sge,
     need_slurm,
     need_singularity,
@@ -708,7 +708,7 @@ def test_bad_builtin_worker():
 
 def test_bad_byo_worker1():
 
-    import pydra.workers.base_worker as base
+    import pydra.workers.base as base
 
     class BadWorker(base.Worker):
 

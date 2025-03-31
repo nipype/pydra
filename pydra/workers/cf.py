@@ -5,7 +5,7 @@ import cloudpickle as cp
 import concurrent.futures as cf
 import logging
 from pydra.engine.job import Job
-from pydra.workers import base_worker as base
+from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
 
@@ -42,7 +42,7 @@ def get_available_cpus():
 
 
 @attrs.define
-class Worker(base.Worker):
+class ConcurrentFuturesWorker(base.Worker):
     """A worker to execute in parallel using Python's concurrent futures."""
 
     n_procs: int = attrs.field(factory=get_available_cpus)
@@ -86,3 +86,7 @@ class Worker(base.Worker):
     def close(self):
         """Finalize the internal pool of tasks."""
         self.pool.shutdown()
+
+
+# Alias so it can be referred to as cf.Worker
+Worker = ConcurrentFuturesWorker

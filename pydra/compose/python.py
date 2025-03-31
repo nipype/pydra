@@ -196,10 +196,10 @@ def define(
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class Outputs(base.Outputs):
+class PythonOutputs(base.Outputs):
 
     @classmethod
-    def _from_task(cls, job: "Job[Task]") -> ty.Self:
+    def _from_task(cls, job: "Job[PythonTask]") -> ty.Self:
         """Collect the outputs of a job from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
@@ -221,15 +221,15 @@ class Outputs(base.Outputs):
         return outputs
 
 
-PythonOutputsType = ty.TypeVar("OutputType", bound=Outputs)
+PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class Task(base.Task[PythonOutputsType]):
+class PythonTask(base.Task[PythonOutputsType]):
 
     _task_type = "python"
 
-    def _run(self, job: "Job[Task]", rerun: bool = True) -> None:
+    def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
         inputs = attrs_values(self)
         del inputs["function"]
@@ -252,3 +252,8 @@ class Task(base.Task[PythonOutputsType]):
             raise RuntimeError(
                 f"expected {len(return_names)} elements, but {returned} were returned"
             )
+
+
+# Alias ShellTask to Task so we can refer to it by shell.Task
+Task = PythonTask
+Outputs = PythonOutputs

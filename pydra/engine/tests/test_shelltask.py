@@ -18,7 +18,12 @@ from pydra.utils.typing import (
     MultiInputObj,
     StateArray,
 )
-from .utils import run_no_submitter, run_submitter, no_win, get_output_names
+from pydra.engine.tests.utils import (
+    run_no_submitter,
+    run_submitter,
+    no_win,
+    get_output_names,
+)
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)

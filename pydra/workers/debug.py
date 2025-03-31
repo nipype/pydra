@@ -1,7 +1,7 @@
 import typing as ty
 import logging
 from pydra.engine.job import Job
-from pydra.workers import base_worker as base
+from pydra.workers import base
 
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
@@ -10,7 +10,7 @@ if ty.TYPE_CHECKING:
 logger = logging.getLogger("pydra.worker")
 
 
-class Worker(base.Worker):
+class DebugWorker(base.Worker):
     """A worker to execute linearly."""
 
     def run(
@@ -23,3 +23,7 @@ class Worker(base.Worker):
 
     def close(self):
         """Return whether the job is finished."""
+
+
+# Alias so it can be referred to as debug.Worker
+Worker = DebugWorker

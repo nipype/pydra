@@ -1,30 +1,43 @@
-import os
-from pathlib import Path
-from fileformats.generic import File
-from pydra.compose import shell
-from pydra.utils import print_help
+from pydra.compose import python, workflow
+from pydra.utils import print_help, show_workflow
 
 
-# Arguments to the callable function can be one of
-def get_file_size(out_file: Path) -> int:
-    """Calculate the file size"""
-    result = os.stat(out_file)
-    return result.st_size
+# Example python tasks
+@python.define
+def Add(a, b):
+    return a + b
 
 
-ACommand = shell.define(
-    "a-command",
-    inputs={
-        "in_file": shell.arg(type=File, help="output file", argstr="", position=-2)
-    },
-    outputs={
-        "out_file": shell.outarg(type=File, help="output file", argstr="", position=-1),
-        "out_file_size": {
-            "type": int,
-            "help": "size of the output directory",
-            "callable": get_file_size,
-        },
-    },
-)
+@python.define
+def Mul(a, b):
+    return a * b
 
-print_help(ACommand)
+
+@workflow.define
+class CanonicalWorkflowTask(workflow.Task["CanonicalWorkflowTask.Outputs"]):
+
+    @staticmethod
+    def a_converter(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+
+    a: int
+    b: float = workflow.arg(
+        help="A float input",
+        converter=a_converter,
+    )
+
+    @staticmethod
+    def constructor(a, b):
+        add = workflow.add(Add(a=a, b=b))
+        mul = workflow.add(Mul(a=add.out, b=b))
+        return mul.out
+
+    class Outputs(workflow.Outputs):
+        out: float
+
+
+print_help(CanonicalWorkflowTask)
+show_workflow(CanonicalWorkflowTask)

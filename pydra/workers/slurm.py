@@ -9,7 +9,7 @@ from shutil import copyfile
 import logging
 import attrs
 from pydra.engine.job import Job, save
-from pydra.workers import base_worker as base
+from pydra.workers import base
 
 
 logger = logging.getLogger("pydra.worker")
@@ -19,7 +19,7 @@ if ty.TYPE_CHECKING:
 
 
 @attrs.define
-class Worker(base.Worker):
+class SlurmWorker(base.Worker):
     """A worker to execute tasks on SLURM systems."""
 
     _cmd = "sbatch"
@@ -175,3 +175,7 @@ class Worker(base.Worker):
                 error_message = "Job failed (unknown reason - TODO)"
             raise Exception(error_message)
         return True
+
+
+# Alias so it can be referred to as slurm.Worker
+Worker = SlurmWorker

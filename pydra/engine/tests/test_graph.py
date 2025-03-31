@@ -1,5 +1,5 @@
 from pydra.engine.graph import DiGraph
-from .utils import DOT_FLAG
+from pydra.engine.tests.utils import DOT_FLAG
 import pytest
 
 

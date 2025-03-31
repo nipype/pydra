@@ -2,7 +2,7 @@ from pydra.engine.submitter import Submitter
 from pydra.compose import shell, workflow
 from fileformats.generic import File
 from pydra.environments import singularity
-from .utils import need_singularity
+from pydra.engine.tests.utils import need_singularity
 
 
 @need_singularity

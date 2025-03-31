@@ -5,7 +5,7 @@ import pytest
 from fileformats.generic import File
 from pydra.compose import shell
 from pydra.utils.typing import MultiInputObj
-from .utils import get_output_names
+from pydra.engine.tests.utils import get_output_names
 
 
 def test_shell_cmd_execargs_1():

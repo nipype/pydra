@@ -20,11 +20,11 @@ if ty.TYPE_CHECKING:
     from pydra.engine.lazy import LazyOutField
     from pydra.engine.graph import DiGraph
     from pydra.engine.submitter import NodeExecution
-    from pydra.environments.base_environment import Environment
+    from pydra.environments.base import Environment
     from pydra.engine.hooks import TaskHooks
 
 
-__all__ = ["define", "add", "this", "arg", "out"]
+__all__ = ["define", "add", "this", "arg", "out", "Task", "Outputs", "cast"]
 
 
 @attrs.define
@@ -284,10 +284,10 @@ def cast(field: ty.Any, new_type: type[U]) -> U:
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class Outputs(base.Outputs):
+class WorkflowOutputs(base.Outputs):
 
     @classmethod
-    def _from_task(cls, job: "Job[Task]") -> ty.Self:
+    def _from_task(cls, job: "Job[WorkflowTask]") -> ty.Self:
         """Collect the outputs of a workflow job from the outputs of the nodes in the
 
         Parameters
@@ -342,11 +342,11 @@ class Outputs(base.Outputs):
         return outputs
 
 
-WorkflowOutputsType = ty.TypeVar("OutputType", bound=Outputs)
+WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
-class Task(base.Task[WorkflowOutputsType]):
+class WorkflowTask(base.Task[WorkflowOutputsType]):
 
     _task_type = "workflow"
 
@@ -354,11 +354,11 @@ class Task(base.Task[WorkflowOutputsType]):
 
     _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
 
-    def _run(self, job: "Job[Task]", rerun: bool) -> None:
+    def _run(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow."""
         job.submitter.expand_workflow(job, rerun)
 
-    async def _run_async(self, job: "Job[Task]", rerun: bool) -> None:
+    async def _run_async(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow asynchronously."""
         await job.submitter.expand_workflow_async(job, rerun)
 
@@ -369,3 +369,8 @@ class Task(base.Task[WorkflowOutputsType]):
             return self._constructed
         self._constructed = Workflow.construct(self)
         return self._constructed
+
+
+# Alias WorkflowTask to Task so we can refer to it as workflow.Task
+Task = WorkflowTask
+Outputs = WorkflowOutputs

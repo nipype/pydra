@@ -1,7 +1,7 @@
 import typing as ty
 import logging
 from pydra.compose import shell
-from pydra.environments import base_environment as base
+from pydra.environments import base
 
 logger = logging.getLogger("pydra")
 
@@ -9,7 +9,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
-class Environment(base.Container):
+class Singularity(base.Container):
     """Singularity environment."""
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
@@ -46,3 +46,7 @@ class Environment(base.Container):
             else:
                 raise RuntimeError(output["stdout"])
         return output
+
+
+# Alias so it can be referred to as singularity.Environment
+Environment = Singularity

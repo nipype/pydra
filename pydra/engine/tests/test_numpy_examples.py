@@ -8,7 +8,7 @@ import pytest
 
 from pydra.engine.submitter import Submitter
 from pydra.compose import python, workflow
-from .utils import Identity
+from pydra.engine.tests.utils import Identity
 from pydra.utils.hash import hash_function
 
 if importlib.util.find_spec("numpy") is None:

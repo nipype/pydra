@@ -10,7 +10,7 @@ from shutil import copyfile, which
 import random
 import logging
 from pydra.engine.job import Job, save, load_job
-from pydra.workers import base_worker as base
+from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
 
@@ -19,7 +19,7 @@ if ty.TYPE_CHECKING:
 
 
 @attrs.define
-class Worker(base.Worker):
+class SgeWorker(base.Worker):
     """A worker to execute tasks on SLURM systems. Initialize SGE Worker.
 
     Parameters
@@ -495,3 +495,7 @@ class Worker(base.Worker):
                     elif not int(line_split[1]) == 0:
                         return "ERRORED"
         return True
+
+
+# Alias so it can be referred to as sge.Worker
+Worker = SgeWorker

@@ -9,7 +9,7 @@ import pytest
 from fileformats.generic import File
 from pydra.compose import python, workflow
 
-from .utils import (
+from pydra.engine.tests.utils import (
     FunAddTwo,
     FunAddVar,
     FunAddVarNone,

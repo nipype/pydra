@@ -6,7 +6,7 @@ from fileformats.generic import File
 from pydra.compose import shell
 from pydra.engine.job import Job
 from pydra.utils.general import attrs_values
-from .utils import no_win, need_docker, need_singularity
+from pydra.engine.tests.utils import no_win, need_docker, need_singularity
 import pytest
 
 

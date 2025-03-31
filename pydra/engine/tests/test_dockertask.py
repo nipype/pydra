@@ -5,7 +5,12 @@ from fileformats.generic import File
 from pydra.environments import docker
 from pydra.compose import shell, workflow
 from pydra.engine.job import Job
-from .utils import no_win, need_docker, run_submitter, run_no_submitter
+from pydra.engine.tests.utils import (
+    no_win,
+    need_docker,
+    run_submitter,
+    run_no_submitter,
+)
 
 
 @no_win

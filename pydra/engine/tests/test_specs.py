@@ -15,7 +15,7 @@ from pydra.engine.workflow import Workflow
 from pydra.engine.node import Node
 from pydra.engine.submitter import Submitter, NodeExecution, DiGraph
 from pydra.compose import python, workflow
-from .utils import (
+from pydra.engine.tests.utils import (
     Foo,
     FunAddTwo,
     FunAddVar,

@@ -11,7 +11,7 @@ from pydra.engine.result import Result
 from pydra.engine.job import Job
 from pydra.compose import workflow
 from fileformats.generic import Directory, File
-from .utils import Multiply, RaiseXeq1
+from pydra.engine.tests.utils import Multiply, RaiseXeq1
 from pydra.utils.general import position_sort
 from pydra.compose.shell.templating import parse_format_string
 from pydra.engine.job import save, load_and_run

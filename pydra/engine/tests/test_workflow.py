@@ -6,7 +6,7 @@ import time
 import typing as ty
 import attr
 from pathlib import Path
-from .utils import (
+from pydra.engine.tests.utils import (
     Add2,
     Add2Wait,
     Multiply,

@@ -1,7 +1,7 @@
 import typing as ty
 import logging
 from pydra.compose import shell
-from pydra.environments import base_environment as base
+from pydra.environments import base
 
 logger = logging.getLogger("pydra")
 
@@ -9,7 +9,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
-class Environment(base.Environment):
+class Native(base.Environment):
     """
     Native environment, i.e. the tasks are executed in the current python environment.
     """
@@ -27,3 +27,7 @@ class Environment(base.Environment):
                 msg += "\n\nstdout:\n" + output["stdout"]
             raise RuntimeError(msg)
         return output
+
+
+# Alias so it can be referred to as native.Environment
+Environment = Native
