@@ -434,9 +434,12 @@ class Job(ty.Generic[TaskType]):
         """Check whether the job is currently running."""
         if self._run_start_time is not None:
             return self._run_start_time
-        if not self.lockfile.exists():
+        try:
+            stat = self.lockfile.stat()
+        except FileNotFoundError:
+            # the lockfile was deleted
             return None
-        self._run_start_time = datetime.fromtimestamp(self.lockfile.stat().st_ctime)
+        self._run_start_time = datetime.fromtimestamp(stat.st_ctime)
         return self._run_start_time
 
     def _combined_output(self, return_inputs=False):
