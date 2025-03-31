@@ -133,7 +133,7 @@ jobs:
       - name: Install pydra (test)
         run: pip install -e ".[test]"
       - name: Pytest
-        run: pytest -vs --import-mode=importlib --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/engine/tests/test_singularity.py pydra/engine/tests/test_environments.py --rootdir pydra
+        run: pytest -vs --import-mode=importlib --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/environments/tests/test_singularity.py pydra/environments/tests/test_environments.py --rootdir pydra
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
