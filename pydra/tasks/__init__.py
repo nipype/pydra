@@ -1,4 +1,4 @@
-""" Pydra tasks
+"""Pydra tasks
 
 The ``pydra.tasks`` namespace is reserved for collections of Tasks, to be managed and
 packaged separately.
