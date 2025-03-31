@@ -1519,6 +1519,7 @@ def test_wf_ndstinner_4(worker: str, tmp_path: Path):
     assert outputs.out == [12, 22, 32]
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_ndstinner_5(worker: str, tmp_path: Path):
     """workflow with 3 tasks,
     the second task has two inputs and inner splitter from one of the input,

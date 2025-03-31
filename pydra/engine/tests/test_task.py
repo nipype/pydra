@@ -65,8 +65,21 @@ def test_checksum():
 
 
 def test_annotated_func():
-    @python.define(outputs=["out_out"])
+    @python.define(outputs=["output"])
     def TestFunc(a: int, b: float = 0.1) -> float:
+        """
+        Parameters
+        ----------
+        a : int
+            first input
+        b : float
+            second input
+
+        Returns
+        -------
+        output : float
+            sum of a and b
+        """
         return a + b
 
     funky = TestFunc(a=1)
@@ -76,11 +89,11 @@ def test_annotated_func():
     assert getattr(funky, "a") == 1
     assert getattr(funky, "b") == 0.1
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in task_fields(funky.Outputs)) == {"out_out"}
+    assert set(f.name for f in task_fields(funky.Outputs)) == {"output"}
 
     outputs = funky()
-    assert hasattr(outputs, "out_out")
-    assert outputs.out_out == 1.1
+    assert hasattr(outputs, "output")
+    assert outputs.output == 1.1
 
     assert os.path.exists(
         default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
@@ -88,21 +101,24 @@ def test_annotated_func():
     funky()  # should not recompute
     funky.a = 2
     outputs = funky()
-    assert outputs.out_out == 2.1
+    assert outputs.output == 2.1
 
     help = task_help(funky)
     assert help == [
-        "-------------------------",
-        "Help for 'TestFunc' tasks",
-        "-------------------------",
+        "-------------------------------",
+        "Help for Python task 'TestFunc'",
+        "-------------------------------",
         "",
         "Inputs:",
         "- a: int",
-        "- b: float (default: 0.1)",
-        "- function: Callable (default: TestFunc())",
+        "    first input",
+        "- b: float; default = 0.1",
+        "    second input",
+        "- function: Callable[]; default = TestFunc()",
         "",
         "Outputs:",
-        "- out_out: float",
+        "- output: float",
+        "    sum of a and b",
         "",
     ]
 
@@ -156,13 +172,13 @@ def test_annotated_func_multreturn():
 
     help = task_help(funky)
     assert help == [
-        "-------------------------",
-        "Help for 'TestFunc' tasks",
-        "-------------------------",
+        "-------------------------------",
+        "Help for Python task 'TestFunc'",
+        "-------------------------------",
         "",
         "Inputs:",
         "- a: float",
-        "- function: Callable (default: TestFunc())",
+        "- function: Callable[]; default = TestFunc()",
         "",
         "Outputs:",
         "- fractional: float",
@@ -465,14 +481,14 @@ def test_halfannotated_func(tmp_path):
     help = task_help(funky)
 
     assert help == [
-        "-------------------------",
-        "Help for 'TestFunc' tasks",
-        "-------------------------",
+        "-------------------------------",
+        "Help for Python task 'TestFunc'",
+        "-------------------------------",
         "",
         "Inputs:",
         "- a: Any",
         "- b: Any",
-        "- function: Callable (default: TestFunc())",
+        "- function: Callable[]; default = TestFunc()",
         "",
         "Outputs:",
         "- out: int",
@@ -512,14 +528,14 @@ def test_halfannotated_func_multreturn(tmp_path):
     help = task_help(funky)
 
     assert help == [
-        "-------------------------",
-        "Help for 'TestFunc' tasks",
-        "-------------------------",
+        "-------------------------------",
+        "Help for Python task 'TestFunc'",
+        "-------------------------------",
         "",
         "Inputs:",
         "- a: Any",
         "- b: Any",
-        "- function: Callable (default: TestFunc())",
+        "- function: Callable[]; default = TestFunc()",
         "",
         "Outputs:",
         "- out1: int",

@@ -21,7 +21,6 @@ from ._version import __version__
 logger = logging.getLogger("pydra")
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
-    from pydra.compose.base import Field
     from pydra.compose import workflow
 
 
@@ -369,7 +368,7 @@ def from_list_if_single(obj: ty.Any) -> ty.Any:
     return obj
 
 
-def wrap_text(text: str, width: int = 70, indent_size=4) -> str:
+def wrap_text(text: str, width: int = 79, indent_size=4) -> str:
     """Wraps text to a given width, respecting word boundaries."""
     indent = " " * indent_size
     if len(text) <= width:
@@ -387,46 +386,45 @@ def wrap_text(text: str, width: int = 70, indent_size=4) -> str:
             lines.append(split_line.rstrip())
         else:
             lines.append(indent + line)
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip()
 
 
-def task_help(task_type: "type[Task] | Task", line_width: int = 79) -> list[str] | None:
+def task_help(
+    task_type: "type[Task] | Task", line_width: int = 79, help_indent: int = 4
+) -> list[str] | None:
     """Visit a job object and print its input/output interface."""
-    from pydra.compose.base import Task, NO_DEFAULT
+    import pydra.compose.base
 
-    if isinstance(task_type, Task):
+    if isinstance(task_type, pydra.compose.base.Task):
         task_type = type(task_type)
 
-    def field_listing(field: "Field") -> str:
-        """Get the field listing for a task."""
-        try:
-            type_str = field.type.__name__
-        except AttributeError:
-            type_str = str(field.type)
-        field_str = f"- {field.name}: {type_str}"
-        if isinstance(field.default, attrs.Factory):
-            field_str += f" (factory: {field.default.factory.__name__}())"
-        elif callable(field.default):
-            field_str += f" (default: {field.default.__name__}())"
-        elif field.default is not NO_DEFAULT:
-            field_str += f" (default: {field.default!r})"
-        if field.help:
-            field_str += f"\n{wrap_text(field.help, width=line_width, indent_size=4)}"
-        return field_str
+    plugin_name = next(
+        n
+        for n, t in get_plugin_classes(pydra.compose, "Task").items()
+        if issubclass(task_type, t)
+    ).capitalize()
 
-    header = f"Help for '{task_type.__name__}' tasks"
+    header = f"Help for {plugin_name} task '{task_type.__name__}'"
     hyphen_line = "-" * len(header)
     lines = [hyphen_line, header, hyphen_line]
     inputs = task_fields(task_type)
     if inputs:
         lines.extend(["", "Inputs:"])
+    if any(hasattr(i, "position") for i in inputs):
+        inputs = sorted(inputs)
     for inpt in inputs:
-        lines.append(field_listing(inpt))
+        lines.extend(
+            inpt.markdown_listing(
+                line_width, help_indent=help_indent, as_input=True
+            ).split("\n")
+        )
     outputs = task_fields(task_type.Outputs)
     if outputs:
         lines.extend(["", "Outputs:"])
     for output in outputs:
-        lines.append(field_listing(output))
+        lines.extend(
+            output.markdown_listing(line_width, help_indent=help_indent).split("\n")
+        )
     lines.append("")
     return lines
 

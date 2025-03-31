@@ -6,12 +6,7 @@ import pytest
 import cloudpickle as cp
 from pydra.compose import shell
 from pydra.utils.general import task_fields
-from pydra.compose.shell.task import (
-    RETURN_CODE_HELP,
-    STDOUT_HELP,
-    STDERR_HELP,
-)
-from pydra.compose.shell.builder import EXECUTABLE_HELP_STRING, _InputPassThrough
+from pydra.compose.shell.builder import _InputPassThrough
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
 from pydra.utils.typing import MultiInputObj
@@ -35,7 +30,7 @@ def test_interface_template():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
@@ -46,17 +41,17 @@ def test_interface_template():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
     intf = Cp(in_path=File.mock("in-path.txt"))
@@ -90,7 +85,7 @@ def test_interface_template_w_types_and_path_template_ext():
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
@@ -101,17 +96,17 @@ def test_interface_template_w_types_and_path_template_ext():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
     TrimPng(in_image=image.Png.mock())
@@ -131,7 +126,7 @@ def test_interface_template_w_modify():
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(
             name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
@@ -147,17 +142,17 @@ def test_interface_template_w_modify():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
     TrimPng(image=image.Png.mock())
@@ -190,7 +185,7 @@ def test_interface_template_more_complex():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(
             name="in_fs_objects",
@@ -228,17 +223,17 @@ def test_interface_template_more_complex():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
     Cp(in_fs_objects=[File.sample(), File.sample(seed=1)])
@@ -290,7 +285,7 @@ def test_interface_template_with_overrides_and_optionals():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         shell.arg(
@@ -321,17 +316,17 @@ def test_interface_template_with_overrides_and_optionals():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
 
@@ -362,7 +357,7 @@ def test_interface_template_with_defaults():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         output,
@@ -386,17 +381,17 @@ def test_interface_template_with_defaults():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
     Cp(in_fs_objects=[File.sample(), File.sample(seed=1)])
@@ -430,7 +425,7 @@ def test_interface_template_with_type_overrides():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(name="in_fs_objects", type=MultiInputObj[FsObject], position=1),
         output,
@@ -456,17 +451,17 @@ def test_interface_template_with_type_overrides():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
 
@@ -748,7 +743,7 @@ def test_shell_output_field_name_static():
             type=str | ty.Sequence[str],
             argstr="",
             position=0,
-            help=EXECUTABLE_HELP_STRING,
+            help=shell.Task.EXECUTABLE_HELP,
         ),
         shell.arg(
             name="x",
@@ -765,17 +760,17 @@ def test_shell_output_field_name_static():
         shell.out(
             name="return_code",
             type=int,
-            help=RETURN_CODE_HELP,
+            help=shell.Outputs.RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help=STDERR_HELP,
+            help=shell.Outputs.STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help=STDOUT_HELP,
+            help=shell.Outputs.STDOUT_HELP,
         ),
     ]
 

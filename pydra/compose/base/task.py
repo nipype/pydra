@@ -19,7 +19,7 @@ from pydra.utils.general import (
     attrs_values,
 )
 from pydra.utils.hash import Cache, hash_single, register_serializer
-from .field import Field, Arg, Out, NO_DEFAULT
+from .field import Field, Arg, Out
 
 
 if ty.TYPE_CHECKING:
@@ -62,7 +62,7 @@ class Outputs:
         """
         defaults = {}
         for output in task_fields(cls):
-            if output.default is NO_DEFAULT:
+            if output.mandatory:
                 default = attrs.NOTHING
             elif isinstance(output.default, attrs.Factory):
                 default = output.default.factory()
@@ -598,7 +598,7 @@ class Task(ty.Generic[OutputsType]):
 
 
 # def set_none_default_if_optional(field: Field) -> None:
-#     if is_optional(field.type) and field.default is NO_DEFAULT:
+#     if is_optional(field.type) and field.mandatory:
 #         field.default = None
 
 

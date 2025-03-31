@@ -208,7 +208,7 @@ def extract_function_inputs_and_outputs(
     for inpt_name, default in input_defaults.items():
         inpt = inputs[inpt_name]
         if isinstance(inpt, arg_type):
-            if inpt.default is NO_DEFAULT:
+            if inpt.mandatory:
                 inpt.default = default
         elif inspect.isclass(inpt) or ty.get_origin(inpt):
             inputs[inpt_name] = arg_type(type=inpt, default=default)
@@ -283,10 +283,10 @@ def parse_doc_string(doc_str: str) -> tuple[dict[str, str], dict[str, str] | lis
     for return_val, return_help in re.findall(r":return (\w+): (.*)", doc_str):
         output_helps[return_val] = return_help
     google_args_match = re.match(
-        r".*\n\s*Args:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+        r"(?:.*\n)?\s*Args:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
     )
     google_returns_match = re.match(
-        r".*\n\s*Returns:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+        r"(?:.*\n)?\s*Returns:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
     )
     if google_args_match:
         args_str = google_args_match.group(1)
@@ -303,12 +303,14 @@ def parse_doc_string(doc_str: str) -> tuple[dict[str, str], dict[str, str] | lis
             return_help = white_space_re.sub(" ", return_help).strip()
             output_helps[return_name] = return_help
     numpy_args_match = re.match(
-        r".*\n\s+Parameters\n\s*----------\s*\n(.*)",
+        r"(?:.*\n)?\s+Parameters\n\s*----------\s*\n(.*)",
         doc_str,
         flags=re.DOTALL | re.MULTILINE,
     )
     numpy_returns_match = re.match(
-        r".*\n\s+Returns\n\s*-------\s*\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+        r"(?:.*\n)?\s+Returns\n\s*-------\s*\n(.*)",
+        doc_str,
+        flags=re.DOTALL | re.MULTILINE,
     )
     if numpy_args_match:
         args_str = numpy_args_match.group(1)

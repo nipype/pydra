@@ -42,16 +42,14 @@ if ty.TYPE_CHECKING:
 TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
-RETURN_CODE_HELP = """The process' exit code."""
-STDOUT_HELP = """The standard output stream produced by the command."""
-STDERR_HELP = """The standard error stream produced by the command."""
-
-
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class Outputs(base.Outputs):
     """Output task of a generic shell process."""
 
     BASE_NAMES = ["return_code", "stdout", "stderr"]
+    RETURN_CODE_HELP = """The process' exit code."""
+    STDOUT_HELP = """The standard output stream produced by the command."""
+    STDERR_HELP = """The standard error stream produced by the command."""
 
     return_code: int = field.out(name="return_code", type=int, help=RETURN_CODE_HELP)
     stdout: str = field.out(name="stdout", type=str, help=STDOUT_HELP)
@@ -237,6 +235,11 @@ class Task(base.Task[ShellOutputsType]):
     _task_type = "shell"
 
     BASE_NAMES = ["additional_args"]
+
+    EXECUTABLE_HELP = (
+        "the first part of the command, can be a string, "
+        "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
+    )
 
     additional_args: list[str | File] = field.arg(
         name="additional_args",

@@ -6,6 +6,8 @@ from pydra.compose.base import (
     Out,
     NO_DEFAULT,
 )
+from pydra.utils.typing import is_optional
+from pydra.utils.general import wrap_text
 
 
 @attrs.define(kw_only=True)
@@ -70,6 +72,31 @@ class arg(Arg):
     container_path: bool = False  # IS THIS STILL USED??
     formatter: ty.Callable | None = None
 
+    def _additional_descriptors(self, as_input: bool = False, **kwargs) -> str:
+        if not self.argstr or not as_input:
+            return super()._additional_descriptors(as_input=as_input, **kwargs)
+        descriptors = [f"{self.argstr!r}"]
+        descriptors.extend(super()._additional_descriptors(as_input=as_input, **kwargs))
+        return descriptors
+
+    def __lt__(self, other: "arg") -> bool:
+        """Compare two fields based on their position"""
+        if self.position is None and other.position is None:
+            return super().__lt__(other)
+        elif self.position is None:
+            return False
+        elif other.position is None:
+            return True
+        else:
+            assert self.position != other.position, "positions should be unique"
+            if self.position < 0 and other.position < 0:
+                return self.position > other.position
+            elif self.position < 0:
+                return False
+            elif other.position < 0:
+                return True
+            return self.position < other.position
+
 
 @attrs.define(kw_only=True)
 class out(Out):
@@ -99,7 +126,7 @@ class out(Out):
             if not callable(value):
                 raise ValueError(f"callable must be a function, not {value!r}")
         elif (
-            self.default is NO_DEFAULT
+            self.mandatory
             and not getattr(self, "path_template", None)
             and self.name
             not in [
@@ -181,20 +208,62 @@ class outarg(arg, Out):
                     f"path_template ({value!r}) can only be provided when there is no "
                     f"default value provided ({self.default!r})"
                 )
-            # if not (is_fileset_or_union(self.type) or self.type is ty.Any):
-            #     raise ValueError(
-            #         f"path_template ({value!r}) can only be provided when type is a FileSet, "
-            #         f"or union thereof, not {self.type!r}"
-            #     )
-            # if self.argstr is None:
-            #     raise ValueError(
-            #         f"path_template ({value!r}) can only be provided when argstr is not None"
-            #     )
 
-    # @keep_extension.validator
-    # def _validate_keep_extension(self, attribute, value):
-    #     if value and self.path_template is None:
-    #         raise ValueError(
-    #             f"keep_extension ({value!r}) can only be provided when path_template "
-    #             f"is provided"
-    #         )
+    def markdown_listing(
+        self,
+        line_width: int = 79,
+        help_indent: int = 4,
+        as_input: bool = False,
+        **kwargs,
+    ):
+        """Get the listing for the field in markdown-like format
+
+        Parameters
+        ----------
+        line_width: int
+            The maximum line width for the output, by default it is 79
+        help_indent: int
+            The indentation for the help text, by default it is 4
+        as_input: bool
+            Whether to format the field as an input or output if it can be both, by default
+            it is False
+        **kwargs: Any
+            Additional arguments to allow it to be duck-typed with extension classes
+
+        Returns
+        -------
+        str
+            The listing for the field in markdown-like format
+        """
+        if not as_input:
+            return super().markdown_listing(
+                width=line_width, help_indent=help_indent, **kwargs
+            )
+
+        type_str = "Path | bool"
+        if is_optional(self.type):
+            type_str += " | None"
+            default = "None"
+            help_text = wrap_text(
+                self.OPTIONAL_PATH_TEMPLATE_HELP,
+                width=line_width,
+                indent_size=help_indent,
+            )
+        else:
+            default = True
+            help_text = wrap_text(
+                self.PATH_TEMPLATE_HELP, width=line_width, indent_size=help_indent
+            )
+        s = f"- {self.name}: {type_str}; default = {default}"
+        if self._additional_descriptors(as_input=as_input):
+            s += f" ({', '.join(self._additional_descriptors(as_input=as_input))})"
+        s += "\n" + help_text
+        return s
+
+    PATH_TEMPLATE_HELP = (
+        "The path specified for the output file, if True, the default "
+        "'path template' will be used."
+    )
+    OPTIONAL_PATH_TEMPLATE_HELP = PATH_TEMPLATE_HELP + (
+        "If False or None, the output file will not be saved."
+    )

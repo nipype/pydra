@@ -277,10 +277,10 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-    - name: Install Pandoc for NBSphinx
+    - name: Install Pandoc for NBSphinx and graphviz for workflow plotting (dot)
       run: |
         sudo apt-get update
-        sudo apt-get install -y pandoc
+        sudo apt-get install -y pandoc graphviz
     - name: Install Dependencies for virtual notifications in Adv.-Exec Tutorial
       run: |
           sudo apt update

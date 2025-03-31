@@ -5,7 +5,6 @@ from copy import copy
 import attrs.validators
 from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union
 import attrs
-from .field import NO_DEFAULT
 from .task import Task, Outputs
 from pydra.utils.hash import hash_function
 from pydra.utils.general import (
@@ -123,12 +122,12 @@ def build_task_class(
             if getattr(arg, "path_template", False):
                 if is_optional(arg.type):
                     field_type = Path | bool | None
-                    if arg.default is NO_DEFAULT:
+                    if arg.mandatory:  # provide default if one is not provided
                         attrs_kwargs["default"] = True if arg.requires else None
                         del attrs_kwargs["factory"]
                 else:
                     field_type = Path | bool
-                    if arg.default is NO_DEFAULT:
+                    if arg.mandatory:  # provide default if one is not provided
                         attrs_kwargs["default"] = True  # use the template by default
                         del attrs_kwargs["factory"]
             elif is_optional(arg.type):
@@ -316,7 +315,7 @@ def allowed_values_validator(_, attribute, value):
 
 def _get_attrs_kwargs(field: Field) -> dict[str, ty.Any]:
     kwargs = {}
-    if field.default is not NO_DEFAULT:
+    if not field.mandatory:
         kwargs["default"] = field.default
     # elif is_optional(field.type):
     #     kwargs["default"] = None

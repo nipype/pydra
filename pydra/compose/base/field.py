@@ -3,9 +3,10 @@ import enum
 from typing import Self
 import attrs.validators
 from attrs.converters import default_if_none
+from fileformats.core import to_mime
 from fileformats.generic import File, FileSet
-from pydra.utils.typing import TypeParser, is_optional, is_type
-from pydra.utils.general import task_fields
+from pydra.utils.typing import TypeParser, is_optional, is_type, is_union
+from pydra.utils.general import task_fields, wrap_text
 import attrs
 
 if ty.TYPE_CHECKING:
@@ -234,6 +235,64 @@ class Field:
                 f"with None) or boolean, not type {self.type} ({self!r})"
             )
 
+    def markdown_listing(
+        self, line_width: int = 79, help_indent: int = 4, **kwargs
+    ) -> str:
+        """Get the listing for the field in markdown-like format
+
+        Parameters
+        ----------
+        line_width: int
+            The maximum line width for the output, by default it is 79
+        help_indent: int
+            The indentation for the help text, by default it is 4
+
+        Returns
+        -------
+        str
+            The listing for the field in markdown-like format
+        """
+
+        def type_to_str(type_: ty.Type[ty.Any]) -> str:
+            if type_ is type(None):
+                return "None"
+            if is_union(type_):
+                return " | ".join(
+                    type_to_str(t) for t in ty.get_args(type_) if t is not None
+                )
+            try:
+                type_str = to_mime(type_, official=False)
+            except Exception:
+                if origin := ty.get_origin(type_):
+                    type_str = f"{origin.__name__}[{', '.join(map(type_to_str, ty.get_args(type_)))}]"
+                else:
+                    try:
+                        type_str = type_.__name__
+                    except AttributeError:
+                        type_str = str(type_)
+            return type_str
+
+        s = f"- {self.name}: {type_to_str(self.type)}"
+        if isinstance(self.default, attrs.Factory):
+            s += f"; default-factory = {self.default.factory.__name__}()"
+        elif callable(self.default):
+            s += f"; default = {self.default.__name__}()"
+        elif not self.mandatory:
+            s += f"; default = {self.default!r}"
+        if self._additional_descriptors(**kwargs):
+            s += f" ({', '.join(self._additional_descriptors(**kwargs))})"
+        if self.help:
+            s += f"\n{wrap_text(self.help, width=line_width, indent_size=help_indent)}"
+        return s
+
+    def _additional_descriptors(self, **kwargs) -> list[str]:
+        """Get additional descriptors for the field"""
+        return []
+
+    def __lt__(self, other: "Field") -> bool:
+        """Compare two fields based on their position"""
+        return self.name < other.name
+
 
 @attrs.define(kw_only=True)
 class Arg(Field):
@@ -272,6 +331,13 @@ class Arg(Field):
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
     readonly: bool = False
+
+    def _additional_descriptors(self, **kwargs) -> list[str]:
+        """Get additional descriptors for the field"""
+        descriptors = super()._additional_descriptors(**kwargs)
+        if self.allowed_values:
+            descriptors.append(f"allowed_values={self.allowed_values}")
+        return descriptors
 
 
 @attrs.define(kw_only=True, slots=False)

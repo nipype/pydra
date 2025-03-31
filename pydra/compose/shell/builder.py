@@ -33,12 +33,6 @@ from . import field
 from .task import Task, Outputs
 
 
-EXECUTABLE_HELP_STRING = (
-    "the first part of the command, can be a string, "
-    "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
-)
-
-
 @dataclass_transform(
     kw_only_default=True,
     field_specifiers=(field.out, field.outarg),
@@ -210,7 +204,7 @@ def define(
             position=0,
             default=executable,
             validator=attrs.validators.min_len(1),
-            help=EXECUTABLE_HELP_STRING,
+            help=Task.EXECUTABLE_HELP,
         )
 
         # Set positions for the remaining inputs that don't have an explicit position
