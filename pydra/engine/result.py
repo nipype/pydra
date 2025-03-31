@@ -3,6 +3,8 @@
 from pathlib import Path
 import typing as ty
 import attrs
+import pickle
+import time
 import os
 import cloudpickle as cp
 import getpass
@@ -127,7 +129,12 @@ class RuntimeSpec:
     network: bool = False
 
 
-def load_result(checksum, cache_locations):
+def load_result(
+    checksum: str,
+    cache_locations: list[Path],
+    retries: int = 10,
+    polling_interval: float = 0.1,
+) -> Result | None:
     """
     Restore a result from the cache.
 
@@ -139,6 +146,11 @@ def load_result(checksum, cache_locations):
         List of cache directories, in order of priority, where
         the checksum will be looked for.
 
+    Returns
+    -------
+    result : :obj:`Result` | None
+        The result object if found, otherwise None.
+
     """
     if not cache_locations:
         return None
@@ -148,8 +160,16 @@ def load_result(checksum, cache_locations):
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
             if result_file.exists() and result_file.stat().st_size > 0:
-                with open(result_file, "rb") as fp:
-                    return cp.load(fp)
+                # Load the result file, retrying if necessary while waiting for the file
+                # to be written completely.
+                for _ in range(retries):
+                    try:
+                        with open(result_file, "rb") as fp:
+                            return cp.load(fp)
+                    except (pickle.UnpicklingError, EOFError):
+                        # if the file is not finished writing
+                        # wait and retry
+                        time.sleep(polling_interval)
             return None
     return None
 

@@ -85,6 +85,7 @@ class Job(ty.Generic[TaskType]):
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
     _inputs: dict[str, ty.Any] | None = None
+    _run_start_time: datetime | None
 
     def __init__(
         self,
@@ -145,6 +146,7 @@ class Job(ty.Generic[TaskType]):
         self.audit = submitter.audit
         self.cache_dir = submitter.cache_dir
         self.cache_locations = submitter.cache_locations
+        self._run_start_time = None
 
     @property
     def cache_dir(self):
@@ -430,9 +432,12 @@ class Job(ty.Generic[TaskType]):
     @property
     def run_start_time(self) -> datetime | None:
         """Check whether the job is currently running."""
+        if self._run_start_time is not None:
+            return self._run_start_time
         if not self.lockfile.exists():
             return None
-        return datetime.fromtimestamp(self.lockfile.stat().st_ctime)
+        self._run_start_time = datetime.fromtimestamp(self.lockfile.stat().st_ctime)
+        return self._run_start_time
 
     def _combined_output(self, return_inputs=False):
         combined_results = []

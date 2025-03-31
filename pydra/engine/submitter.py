@@ -738,7 +738,7 @@ class NodeExecution(ty.Generic[TaskType]):
                     job.run_start_time,
                 )
         # Check to see if any previously running tasks have completed
-        for index, (job, start_time) in list(self.running.items()):
+        for index, (job, _) in list(self.running.items()):
             if job.done:
                 self.successful[job.state_index] = self.running.pop(index)[0]
             elif job.errored:
