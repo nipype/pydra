@@ -141,7 +141,7 @@ def test_task_files_cachelocations(worker, tmp_path):
     assert results2.outputs.out == "test"
 
     # checking if the second task didn't run the interface again
-    assert results.output_dir == results2.output_dir
+    assert results.cache_dir == results2.cache_dir
 
 
 class OverriddenContentsFile(File):

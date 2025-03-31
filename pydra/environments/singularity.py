@@ -29,11 +29,11 @@ class Singularity(base.Container):
             ).split()
         )
         singularity_args.extend(
-            ["--pwd", f"{self.root.rstrip('/')}{job.output_dir.absolute()}"]
+            ["--pwd", f"{self.root.rstrip('/')}{job.cache_dir.absolute()}"]
         )
         keys = ["return_code", "stdout", "stderr"]
 
-        job.output_dir.mkdir(exist_ok=True)
+        job.cache_dir.mkdir(exist_ok=True)
         values = base.execute(
             singularity_args
             + [singularity_img]

@@ -204,7 +204,7 @@ class Job(ty.Generic[TaskType]):
 
     @property
     def lockfile(self):
-        return self.output_dir.with_suffix(".lock")
+        return self.cache_dir.with_suffix(".lock")
 
     @property
     def uid(self):
@@ -225,7 +225,7 @@ class Job(ty.Generic[TaskType]):
         return self._can_resume
 
     @property
-    def output_dir(self):
+    def cache_dir(self):
         """Get the filesystem path where outputs will be written."""
         return self.cache_root / self.checksum
 
@@ -258,7 +258,7 @@ class Job(ty.Generic[TaskType]):
             if value and TypeParser.contains_type(FileSet, fld.type):
                 copied_value = copy_nested_files(
                     value=value,
-                    dest_dir=self.output_dir,
+                    dest_dir=self.cache_dir,
                     mode=fld.copy_mode,
                     collation=fld.copy_collation,
                     supported_modes=self.SUPPORTED_COPY_MODES,
@@ -267,7 +267,7 @@ class Job(ty.Generic[TaskType]):
                     map_copyfiles[name] = copied_value
         self._inputs.update(
             template_update(
-                self.task, output_dir=self.output_dir, map_copyfiles=map_copyfiles
+                self.task, output_dir=self.cache_dir, map_copyfiles=map_copyfiles
             )
         )
         return self._inputs
@@ -285,11 +285,11 @@ class Job(ty.Generic[TaskType]):
         # and the lockfile has to be removed
         with open(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
-        if not self.can_resume and self.output_dir.exists():
-            shutil.rmtree(self.output_dir)
-        self.output_dir.mkdir(parents=False, exist_ok=self.can_resume)
+        if not self.can_resume and self.cache_dir.exists():
+            shutil.rmtree(self.cache_dir)
+        self.cache_dir.mkdir(parents=False, exist_ok=self.can_resume)
         # Save job pkl into the output directory for future reference
-        save(self.output_dir, job=self)
+        save(self.cache_dir, job=self)
 
     def run(self, rerun: bool = False):
         """Prepare the job working directory, execute the task, and save the
@@ -316,16 +316,16 @@ class Job(ty.Generic[TaskType]):
                     return result
             cwd = os.getcwd()
             self._populate_filesystem()
-            os.chdir(self.output_dir)
+            os.chdir(self.cache_dir)
             result = Result(
                 outputs=None,
                 runtime=None,
                 errored=False,
-                output_dir=self.output_dir,
+                output_dir=self.cache_dir,
                 task=self.task,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.output_dir)
+            self.audit.start_audit(odir=self.cache_dir)
             if self.audit.audit_check(AuditFlag.PROV):
                 self.audit.audit_task(job=self)
             try:
@@ -335,13 +335,13 @@ class Job(ty.Generic[TaskType]):
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.output_dir, error=traceback)
+                record_error(self.cache_dir, error=traceback)
                 result.errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(self.output_dir, result=result, job=self)
+                save(self.cache_dir, result=result, job=self)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -377,11 +377,11 @@ class Job(ty.Generic[TaskType]):
                 outputs=None,
                 runtime=None,
                 errored=False,
-                output_dir=self.output_dir,
+                output_dir=self.cache_dir,
                 task=self.task,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.output_dir)
+            self.audit.start_audit(odir=self.cache_dir)
             try:
                 self.audit.monitor()
                 await self.task._run_async(self, rerun)
@@ -389,14 +389,14 @@ class Job(ty.Generic[TaskType]):
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.output_dir, error=traceback)
+                record_error(self.cache_dir, error=traceback)
                 result.errored = True
                 self._errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(self.output_dir, result=result, job=self)
+                save(self.cache_dir, result=result, job=self)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -483,7 +483,7 @@ class Job(ty.Generic[TaskType]):
                 outputs=None,
                 runtime=None,
                 errored=True,
-                output_dir=self.output_dir,
+                output_dir=self.cache_dir,
                 task=self.task,
             )
 
@@ -614,7 +614,7 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
             save(job_pkl.parent, result=result)
         raise
 
-    resultfile = job.output_dir / "_result.pklz"
+    resultfile = job.cache_dir / "_result.pklz"
     try:
         if job.is_async:
             job.submitter.submit(job, rerun=rerun)
@@ -622,14 +622,14 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
             job.run(rerun=rerun)
     except Exception as e:
         # creating result and error files if missing
-        errorfile = job.output_dir / "_error.pklz"
+        errorfile = job.cache_dir / "_error.pklz"
         if not errorfile.exists():  # not sure if this is needed
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
-            errorfile = record_error(job.output_dir, error=traceback)
+            errorfile = record_error(job.cache_dir, error=traceback)
         if not resultfile.exists():  # not sure if this is needed
             result = Result(output=None, runtime=None, errored=True, task=None)
-            save(job.output_dir, result=result)
+            save(job.cache_dir, result=result)
         e.add_note(f" full crash report is here: {errorfile}")
         raise
     return resultfile

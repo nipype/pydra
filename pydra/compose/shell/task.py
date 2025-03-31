@@ -90,7 +90,7 @@ class ShellOutputs(base.Outputs):
             ):
                 resolved_value = job.inputs[fld.name]
             elif is_set(fld.default):
-                resolved_value = cls._resolve_default_value(fld, job.output_dir)
+                resolved_value = cls._resolve_default_value(fld, job.cache_dir)
             else:
                 resolved_value = cls._resolve_value(fld, job)
             # Set the resolved value
@@ -174,7 +174,7 @@ class ShellOutputs(base.Outputs):
             return template_update_single(
                 fld,
                 task=job.task,
-                output_dir=job.output_dir,
+                output_dir=job.cache_dir,
                 spec_type="output",
             )
         assert fld.callable, (
@@ -192,7 +192,7 @@ class ShellOutputs(base.Outputs):
             if argnm == "field":
                 call_args_val[argnm] = fld
             elif argnm == "output_dir":
-                call_args_val[argnm] = job.output_dir
+                call_args_val[argnm] = job.cache_dir
             elif argnm == "executable":
                 call_args_val[argnm] = job.task.executable
             elif argnm == "inputs":

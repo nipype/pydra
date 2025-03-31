@@ -2251,7 +2251,7 @@ def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
     assert 2 == results2.outputs.out
 
     # checking if both output_dirs are created
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2311,7 +2311,7 @@ def test_wf_nostate_cachelocations_b(worker: str, tmp_path: Path):
         assert t2 < max(1, t1 - 1)
 
     # checking if the second worky didn't run again
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2371,7 +2371,7 @@ def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
         assert t2 < max(1, t1 - 1)
 
     # both worky output_dirs should be created
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2427,7 +2427,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path
         assert t2 < max(1, t1 - 1)
 
     # both worky output_dirs should be created
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2484,7 +2484,7 @@ def test_wf_nostate_cachelocations_forcererun(worker: str, tmp_path: Path):
         assert t2 > 2
 
     # checking if the second worky didn't run again
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2538,7 +2538,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     assert 8 == results2.outputs.out
 
     # checking if the second worky runs again
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
     # everything has to be recomputed
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
@@ -2605,7 +2605,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     assert 8 == results2.outputs.out
 
     # checking if the second worky runs again
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and worker == "cf":
@@ -2676,7 +2676,7 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
 
     assert 8 == results2.outputs.out
 
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
     # the second task should be recomputed
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
@@ -2734,7 +2734,7 @@ def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
     assert 12 == results2.outputs.out
 
     # checking if the second worky runs again, but runs only one task
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
     # the second worky should rerun one task
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
@@ -2785,7 +2785,7 @@ def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     assert 12 == results2.outputs.out
 
     # checking if the second worky runs again, but runs only one task
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
     # the second worky should have only one task run
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
@@ -2851,7 +2851,7 @@ def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     # checking if the second worky didn't run again
     # checking all directories
 
-    assert results1.output_dir == results2.output_dir
+    assert results1.cache_dir == results2.cache_dir
 
 
 @pytest.mark.flaky(reruns=3)
@@ -3083,7 +3083,7 @@ def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
         assert t2 > 2
 
     # checking if both worky run
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
 
 @pytest.mark.flaky(reruns=3)
@@ -3133,7 +3133,7 @@ def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
     assert 8 == results2.outputs.out
 
     # checking if both dir exists
-    assert results1.output_dir != results2.output_dir
+    assert results1.cache_dir != results2.cache_dir
 
     # the second worky should have only one task run
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
@@ -3449,7 +3449,7 @@ def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
     assert 602 == results1.outputs.out[1]
 
     # checkoing output_dir after the first run
-    assert results1.output_dir.exists()
+    assert results1.cache_dir.exists()
 
     # saving the content of the cache dit after the first run
     cache_root_content = os.listdir(results1.job.cache_root)

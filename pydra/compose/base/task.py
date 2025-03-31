@@ -70,7 +70,7 @@ class Outputs:
                 default = output.default
             defaults[output.name] = default
         outputs = cls(**defaults)
-        outputs._output_dir = job.output_dir
+        outputs._output_dir = job.cache_dir
         return outputs
 
     @property
@@ -256,7 +256,7 @@ class Task(ty.Generic[OutputsType]):
                 f"Job {self} failed @ {time_of_crash} with the "
                 f"following errors:\n{error_message}\n"
                 "To inspect, please load the pickled job object from here: "
-                f"{result.output_dir}/_job.pklz"
+                f"{result.cache_dir}/_job.pklz"
             )
         return result.outputs
 

@@ -145,7 +145,7 @@ class SgeWorker(base.Worker):
             batchscript,
             job_pkl,
             ind,
-            job.output_dir,
+            job.cache_dir,
             task_qsub_args,
         )
 
@@ -284,7 +284,7 @@ class SgeWorker(base.Worker):
                 for job_pkl, ind, rerun in tasks_to_run:
                     job = load_job(job_pkl=job_pkl, ind=ind)
                     self.result_files_by_jobid[jobid][job] = (
-                        job.output_dir / "_result.pklz"
+                        job.cache_dir / "_result.pklz"
                     )
 
             poll_counter = 0
@@ -359,7 +359,7 @@ class SgeWorker(base.Worker):
     ):
         for job_pkl, ind, rerun in tasks_to_run:
             sge_task = load_job(job_pkl=job_pkl, ind=ind)
-            application_job_pkl = sge_task.output_dir / "_job.pklz"
+            application_job_pkl = sge_task.cache_dir / "_job.pklz"
             if (
                 not application_job_pkl.exists()
                 or load_job(job_pkl=application_job_pkl).result() is None

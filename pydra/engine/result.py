@@ -43,7 +43,7 @@ class Runtime:
 class Result(ty.Generic[OutputsType]):
     """Metadata regarding the outputs of processing."""
 
-    output_dir: Path
+    cache_dir: Path
     outputs: OutputsType | None = None
     runtime: Runtime | None = None
     errored: bool = False
@@ -81,7 +81,7 @@ class Result(ty.Generic[OutputsType]):
     @property
     def errors(self):
         if self.errored:
-            error_file = self.output_dir / "_error.pklz"
+            error_file = self.cache_dir / "_error.pklz"
             if error_file.exists():
                 with open(error_file, "rb") as f:
                     return cp.load(f)
@@ -89,7 +89,7 @@ class Result(ty.Generic[OutputsType]):
 
     @property
     def job(self):
-        job_pkl = self.output_dir / "_job.pklz"
+        job_pkl = self.cache_dir / "_job.pklz"
         if not job_pkl.exists():
             return None
         with open(job_pkl, "rb") as f:
@@ -97,7 +97,7 @@ class Result(ty.Generic[OutputsType]):
 
     @property
     def return_values(self):
-        return_values_pkl = self.output_dir / "_return_values.pklz"
+        return_values_pkl = self.cache_dir / "_return_values.pklz"
         if not return_values_pkl.exists():
             return None
         with open(return_values_pkl, "rb") as f:

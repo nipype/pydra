@@ -390,7 +390,7 @@ def test_task_nostate_1(worker, tmp_path):
     assert results.outputs.out == 5
 
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 def test_task_nostate_1_call(tmp_path):
@@ -403,7 +403,7 @@ def test_task_nostate_1_call(tmp_path):
 
     assert results.outputs.out == 5
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
@@ -423,7 +423,7 @@ def test_task_nostate_1_call_subm(worker, tmp_path):
 
     assert results.outputs.out == 5
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
@@ -443,7 +443,7 @@ def test_task_nostate_1_call_plug(worker, tmp_path):
 
     assert results.outputs.out == 5
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 def test_task_nostate_2(worker, tmp_path):
@@ -463,7 +463,7 @@ def test_task_nostate_2(worker, tmp_path):
 
     assert results.outputs.out == 33
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 def test_task_nostate_3(worker, tmp_path):
@@ -480,7 +480,7 @@ def test_task_nostate_3(worker, tmp_path):
 
     assert results.outputs.out == "a:ala_b:bala"
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 def test_task_nostate_4(worker, tmp_path):
@@ -499,7 +499,7 @@ def test_task_nostate_4(worker, tmp_path):
 
     assert results.outputs.out == "hello from pydra\n"
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 def test_task_nostate_5(tmp_path):
@@ -619,7 +619,7 @@ def test_task_nostate_cachelocations(worker, tmp_path):
     assert results2.outputs.out == 5
 
     # checking if the second task didn't run the interface again
-    assert results.output_dir == results2.output_dir
+    assert results.cache_dir == results2.cache_dir
 
 
 def test_task_nostate_cachelocations_forcererun(worker, tmp_path):
@@ -649,8 +649,8 @@ def test_task_nostate_cachelocations_forcererun(worker, tmp_path):
     assert results2.outputs.out == 5
 
     # checking if the second task rerun the interface
-    assert results.output_dir.exists()
-    assert results2.output_dir.exists()
+    assert results.cache_dir.exists()
+    assert results2.cache_dir.exists()
 
 
 def test_task_nostate_cachelocations_nosubmitter(tmp_path):
@@ -742,8 +742,8 @@ def test_task_nostate_cachelocations_updated(worker, tmp_path):
     assert results2.outputs.out == 5
 
     # checking if both tasks run interface
-    assert results.output_dir == results1.output_dir
-    assert results.output_dir != results2.output_dir
+    assert results.cache_dir == results1.cache_dir
+    assert results.cache_dir != results2.cache_dir
 
 
 # Tests for tasks with states (i.e. with splitter)
@@ -822,7 +822,7 @@ def test_task_state_singl_1(worker, tmp_path):
     for i, res in enumerate(expected):
         assert results.outputs.out[i] == res[1]
     # checking the output_dir
-    assert results.output_dir.exists()
+    assert results.cache_dir.exists()
 
 
 @pytest.mark.parametrize(

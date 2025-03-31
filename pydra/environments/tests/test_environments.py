@@ -408,7 +408,7 @@ def test_shell_fileout(tmp_path):
         environment=native.Environment(), cache_root=newcache("native_sub")
     ) as sub:
         result = sub(shelly)
-    assert Path(result.outputs.file_copy) == result.output_dir / "file_copy.txt"
+    assert Path(result.outputs.file_copy) == result.cache_dir / "file_copy.txt"
 
     call_cache = newcache("native_call")
 
@@ -471,7 +471,7 @@ def test_docker_fileout(tmp_path):
 
     with Submitter(environment=dock, cache_root=newcache("docker")) as sub:
         results = sub(shelly)
-    assert results.outputs.file_copy == File(results.output_dir / "file_copy.txt")
+    assert results.outputs.file_copy == File(results.cache_dir / "file_copy.txt")
 
 
 @no_win

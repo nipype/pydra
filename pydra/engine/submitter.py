@@ -258,7 +258,7 @@ class Submitter:
         except Exception as exc:
             error_msg = (
                 f"Full crash report for {type(task).__name__!r} job is here: "
-                + str(job.output_dir / "_error.pklz")
+                + str(job.cache_dir / "_error.pklz")
             )
             exc.add_note(error_msg)
             if raise_errors or not job.result():
@@ -278,7 +278,7 @@ class Submitter:
                     f"In the case of an interrupted run, please remove {str(job.lockfile)!r} "
                     "and resubmit."
                 )
-            raise RuntimeError(f"Job {job} has no result in {str(job.output_dir)!r}")
+            raise RuntimeError(f"Job {job} has no result in {str(job.cache_dir)!r}")
         return result
 
     def submit(self, job: "Job[TaskType]", rerun: bool = False) -> None:
@@ -469,7 +469,7 @@ class Submitter:
                 all_errors = "\n\n".join(errors)
                 raise RuntimeError(
                     f"Workflow job {workflow_task} failed with errors"
-                    f":\n\n{all_errors}\n\nSee output directory for details: {workflow_task.output_dir}"
+                    f":\n\n{all_errors}\n\nSee output directory for details: {workflow_task.cache_dir}"
                 )
 
     async def fetch_finished(

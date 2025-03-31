@@ -277,7 +277,7 @@ def test_wf_1(tmpdir):
     with Submitter(worker="cf") as sub:
         res = sub(wf)
 
-    assert res.output_dir.exists()
+    assert res.cache_dir.exists()
     file_output = res.outputs.out
     assert Path(file_output).exists()
     # loading results

@@ -320,7 +320,7 @@ class WorkflowOutputs(base.Outputs):
                         f"Job {node.name!r} failed @ {time_of_crash} running "
                         f"{node._task} with the following errors:\n{error_message}"
                         "\nTo inspect, please load the pickled job object from here: "
-                        f"{result.output_dir}/_job.pklz"
+                        f"{result.cache_dir}/_job.pklz"
                     )
             raise RuntimeError(
                 f"Workflow {job!r} failed with errors:\n\n" + "\n\n".join(errors)
@@ -338,7 +338,7 @@ class WorkflowOutputs(base.Outputs):
         # Set the values in the outputs object
         outputs = super()._from_task(job)
         outputs = attrs.evolve(outputs, **values)
-        outputs._output_dir = job.output_dir
+        outputs._output_dir = job.cache_dir
         return outputs
 
 

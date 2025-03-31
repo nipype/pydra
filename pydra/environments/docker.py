@@ -27,10 +27,10 @@ class Docker(base.Container):
                 [f"-v {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
             ).split()
         )
-        docker_args.extend(["-w", f"{self.root}{job.output_dir}"])
+        docker_args.extend(["-w", f"{self.root}{job.cache_dir}"])
         keys = ["return_code", "stdout", "stderr"]
 
-        job.output_dir.mkdir(exist_ok=True)
+        job.cache_dir.mkdir(exist_ok=True)
         values = base.execute(
             docker_args + [docker_img] + job.task._command_args(values=values),
         )
