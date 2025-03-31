@@ -9,12 +9,17 @@ Glossary
         of the task's parameters, so that the same task with the same parameters can be
         reused.
 
+    Combiner
+        A combiner is used to combine :ref:`State-array` values created by a split operation
+        defined by a :ref:`Splitter` on the current node, upstream workflow nodes or
+        stand-alone tasks.
+
     Container-ndim
-        The number of dimensions of the container object to be iterated over when splitting
-        a iterable value. For example, a list-of-lists or a 2D array with `container_ndim=2`
-        would be split over the elements of the inner lists into a single 1-D state array.
-        However, if `container_ndim=1`, the outer list/2D would be split into a 1-D state array
-        of lists/1D arrays.
+        The number of dimensions of the container object to be iterated over when using
+        a :ref:`Splitter` to split over an iterable value. For example, a list-of-lists
+        or a 2D array with `container_ndim=2` would be split over the elements of the
+        inner lists into a single 1-D state array. However, if `container_ndim=1`,
+        the outer list/2D would be split into a 1-D state array of lists/1D arrays.
 
     Environment
         An environment refers to a specific software encapsulation, such as a Docker
@@ -31,10 +36,10 @@ Glossary
         or send notifications
 
     Job
-        A :ref:`Task` that has been instantiated with resolved with concrete inputs.
-        (i.e. not lazy-values or state-arrays) and assigned to a worker. Whereas a
-        a task describes "what" is to be done and a submitter object describes
-        "how" it is to be done, a job combines them both to describe a concrete unit
+        A job is a discrete unit of work, a :ref:`Task`, with all inputs resolved
+        (i.e. not lazy-values or state-arrays) that has been assigned to a worker.
+        A task describes "what" is to be done and a submitter object describes
+        "how" it is to be done, a job combines both objects to describe a concrete unit
         of processing.
 
     Lazy-fields
@@ -61,13 +66,18 @@ Glossary
         by a split operation either at the current or upstream node of a workflow. The
         size of the array is determined by the :ref:`State` of the workflow node.
 
+    Splitter
+        Defines how a task's inputs are to be split into multiple jobs. For example if
+        a task's input takes an integer, a list of integers can be passed to it split
+        over to create a ref:`State-array` of jobs. Different combinations of
+
     Submitter
-        A submitter object parameterises how a task is to be executed, by specifying
-        an worker, environment, cache-root directory and other key execution parameters.
-        The submitter
+        A submitter object parameterises how a task is to be executed, by defining the
+        worker, environment, cache-root directory and other key execution parameters to
+        be used when executing a task.
 
     Task
-      A task describeas a unit of work within the system. It represents a unit of processing, either
+      A task describes a unit of work to be done (but not how it will be), either
       standalone or as one step in a larger workflow. Tasks can be of various types,
       including Python functions, shell commands, and nested workflows. Tasks are
       parameterised, meaning they can accept inputs and produce
@@ -79,5 +89,5 @@ Glossary
 
     Workflow
       A Directed-Acyclic-Graph (DAG) of parameterised tasks, to be executed in order.
-      Note that a Workflow object is created by a WorkflowTask, by the WorkflowTask's
-      `construct()` method at runtime.
+      Note that a Workflow object is created by a :class:`WorkflowTask`'s
+      `construct()` method at runtime and is not directly created by the end user.
