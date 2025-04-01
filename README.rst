@@ -1,4 +1,4 @@
-|CI/CD| |codecov| |Python Versions| |PyPI| |Docs|
+|CI/CD| |codecov| |PyPI| |Docs|
 
 |Pydralogo|
 
@@ -116,9 +116,9 @@ It is also useful to install pre-commit:
    :alt: Supported Python versions
    :target: https://pypi.python.org/pypi/pydra
 
-.. |PyPI| image:: https://img.shields.io/pypi/v/pydra.svg
+.. |PyPI| image:: https://img.shields.io/badge/pypi-1.0a-blue
    :alt: PyPI
-   :target: https://pypi.python.org/pypi/pydra
+   :target: https://pypi.org/project/pydra/1.0a0/
 
 .. |Docs| image:: https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat
    :alt: Documentation Status
