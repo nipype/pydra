@@ -20,8 +20,7 @@ Feature list:
 2. Composable dataflows with simple node semantics. A dataflow can be a node of another dataflow.
 3. `splitter` and `combiner` provides many ways of compressing complex loop semantics
 4. Cached execution with support for a global cache across dataflows and users
-5. Distributed execution, presently via ConcurrentFutures, SLURM and SGE, with support
-for PS/IJ and Dask available via plugins
+5. Distributed execution, presently via ConcurrentFutures, SLURM and SGE, with support for PS/IJ and Dask available via plugins
 
 `API Documentation <https://nipype.github.io/pydra/>`_
 
