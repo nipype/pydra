@@ -116,7 +116,7 @@ It is also useful to install pre-commit:
    :alt: Supported Python versions
    :target: https://pypi.python.org/pypi/pydra
 
-.. |PyPI| image:: https://img.shields.io/badge/pypi-1.0a-blue
+.. |PyPI| image:: https://img.shields.io/badge/pypi-1.0alpha-orange
    :alt: PyPI
    :target: https://pypi.org/project/pydra/1.0a0/
 
