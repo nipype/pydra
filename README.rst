@@ -42,17 +42,14 @@ Please note that mybinder times out after an hour.
 Installation
 ============
 
-::
-
-    pip install pydra
-
-
-Note that installation fails with older versions of pip on Windows. Upgrade pip before installing:
+Pydra can be installed from PyPI using pip, noting that you currently need to specify
+the 1.0-alpha version due to a quirk of PyPI version sorting, otherwise you will end up
+with the old 0.25 version.
 
 ::
 
    pip install -–upgrade pip
-   pip install pydra
+   pip install pydra>=1.0a
 
 
 If you want to install plugins for psij or dask you can by installing the relevant
