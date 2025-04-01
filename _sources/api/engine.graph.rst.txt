@@ -1,7 +1,0 @@
-engine.graph module
-===================
-
-.. automodule:: engine.graph
-   :members:
-   :undoc-members:
-   :show-inheritance:

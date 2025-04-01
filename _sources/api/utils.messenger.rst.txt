@@ -1,7 +1,0 @@
-utils.messenger module
-======================
-
-.. automodule:: utils.messenger
-   :members:
-   :undoc-members:
-   :show-inheritance:

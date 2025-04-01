@@ -1,7 +1,0 @@
-engine.audit module
-===================
-
-.. automodule:: engine.audit
-   :members:
-   :undoc-members:
-   :show-inheritance:

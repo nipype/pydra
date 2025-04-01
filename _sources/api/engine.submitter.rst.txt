@@ -1,7 +1,0 @@
-engine.submitter module
-=======================
-
-.. automodule:: engine.submitter
-   :members:
-   :undoc-members:
-   :show-inheritance:

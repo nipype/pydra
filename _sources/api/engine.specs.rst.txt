@@ -1,7 +1,0 @@
-engine.specs module
-===================
-
-.. automodule:: engine.specs
-   :members:
-   :undoc-members:
-   :show-inheritance:

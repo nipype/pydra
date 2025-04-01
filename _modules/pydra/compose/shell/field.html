@@ -1,0 +1,602 @@
+<!doctype html>
+<html class="no-js" lang="English" data-content_root="../../../../">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../../genindex.html" /><link rel="search" title="Search" href="../../../../search.html" />
+
+    <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
+        <title>pydra.compose.shell.field - Pydra v1.0a0</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=beddf052" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=354aac6f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=302659d7" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=1e8e7625" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #ffffff;
+  --color-code-foreground: black;
+  --color-brand-primary: #69306d;
+  --color-brand-content: #69306d;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #111111;
+  --color-code-foreground: #ffffff;
+  --color-brand-primary: #ce8dcf;
+  --color-brand-content: #ce8dcf;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #111111;
+  --color-code-foreground: #ffffff;
+  --color-brand-primary: #ce8dcf;
+  --color-brand-content: #ce8dcf;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../../index.html"><div class="brand">Pydra v1.0a0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../../index.html">
+  
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../../../../_static/pydra_logo.png" alt="Logo"/>
+  </div>
+  
+  <span class="sidebar-brand-text">Pydra v1.0a0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Tutorials: Execution</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/1-getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/2-advanced-execution.html">Advanced execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/3-troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials: Design</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/4-python.html">Python-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/5-shell.html">Shell-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/6-workflow.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/7-canonical-form.html">Canonical task form</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../examples/glm.html">General Linear Model (GLM)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-to</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../howto/create-task-package.html">Create a task package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/design-approach.html">Design philosophy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/splitting-combining.html">Splitting and combining</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/conditional-lazy.html">Dynamic construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/environments.html">Software environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/hashing-caching.html">Caches and hashes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/typing.html">Typing and file-formats</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../genindex.html">Index</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../py-modindex.html">Module Index</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/glossary.html">Glossary</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for pydra.compose.shell.field</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Arg</span><span class="p">,</span>
+    <span class="n">Out</span><span class="p">,</span>
+    <span class="n">NO_DEFAULT</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_optional</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.general</span><span class="w"> </span><span class="kn">import</span> <span class="n">wrap_text</span>
+
+
+<div class="viewcode-block" id="arg">
+<a class="viewcode-back" href="../../../../reference/api.html#pydra.compose.shell.arg">[docs]</a>
+<span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">arg</span><span class="p">(</span><span class="n">Arg</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;An input field that specifies a command line argument</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    help: str</span>
+<span class="sd">        A short description of the input field.</span>
+<span class="sd">    default : Any, optional</span>
+<span class="sd">        the default value for the argument</span>
+<span class="sd">    mandatory: bool, optional</span>
+<span class="sd">        If True user has to provide a value for the field, by default it is False</span>
+<span class="sd">    allowed_values: list, optional</span>
+<span class="sd">        List of allowed values for the field.</span>
+<span class="sd">    requires: list, optional</span>
+<span class="sd">        List of field names that are required together with the field.</span>
+<span class="sd">    copy_mode: File.CopyMode, optional</span>
+<span class="sd">        The mode of copying the file, by default it is File.CopyMode.any</span>
+<span class="sd">    copy_collation: File.CopyCollation, optional</span>
+<span class="sd">        The collation of the file, by default it is File.CopyCollation.any</span>
+<span class="sd">    copy_ext_decomp: File.ExtensionDecomposition, optional</span>
+<span class="sd">        The extension decomposition of the file, by default it is</span>
+<span class="sd">        File.ExtensionDecomposition.single</span>
+<span class="sd">    readonly: bool, optional</span>
+<span class="sd">        If True the input field can’t be provided by the user but it aggregates other</span>
+<span class="sd">        input fields (for example the fields with argstr: -o {fldA} {fldB}), by default</span>
+<span class="sd">        it is False</span>
+<span class="sd">    type: type, optional</span>
+<span class="sd">        The type of the field, by default it is Any</span>
+<span class="sd">    name: str, optional</span>
+<span class="sd">        The name of the field, used when specifying a list of fields instead of a mapping</span>
+<span class="sd">        from name to field, by default it is None</span>
+<span class="sd">    argstr: str, optional</span>
+<span class="sd">        A flag or string that is used in the command before the value, e.g. -v or</span>
+<span class="sd">        -v {inp_field}, but it could be and empty string, “”, in which case the value is</span>
+<span class="sd">        just printed to the command line. If … are used, e.g. -v…,</span>
+<span class="sd">        the flag is used before every element if a list is provided as a value. If the</span>
+<span class="sd">        argstr is None, the field is not part of the command.</span>
+<span class="sd">    position: int, optional</span>
+<span class="sd">        Position of the field in the command, could be nonnegative or negative integer.</span>
+<span class="sd">        If nothing is provided the field will be inserted between all fields with</span>
+<span class="sd">        nonnegative positions and fields with negative positions.</span>
+<span class="sd">    sep: str, optional</span>
+<span class="sd">        A separator if a sequence type is provided as a value, by default &quot; &quot;.</span>
+<span class="sd">    container_path: bool, optional</span>
+<span class="sd">        If True a path will be consider as a path inside the container (and not as a</span>
+<span class="sd">        local path, by default it is False</span>
+<span class="sd">    formatter: function, optional</span>
+<span class="sd">        If provided the argstr of the field is created using the function. This function</span>
+<span class="sd">        can for example be used to combine several inputs into one command argument. The</span>
+<span class="sd">        function can take field (this input field will be passed to the function),</span>
+<span class="sd">        inputs (entire inputs will be passed) or any input field name (a specific input</span>
+<span class="sd">        field will be sent).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span>
+    <span class="n">allowed_values</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">container_path</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># IS THIS STILL USED??</span>
+    <span class="n">formatter</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_additional_descriptors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">as_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">as_input</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">descriptors</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">argstr</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">]</span>
+        <span class="n">descriptors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">descriptors</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;arg&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compare two fields based on their position&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__lt__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">elif</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="s2">&quot;positions should be unique&quot;</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">&gt;</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
+            <span class="k">elif</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span></div>
+
+
+
+<div class="viewcode-block" id="out">
+<a class="viewcode-back" href="../../../../reference/api.html#pydra.compose.shell.out">[docs]</a>
+<span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">out</span><span class="p">(</span><span class="n">Out</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;An output field that specifies a command line argument</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    callable : Callable, optional</span>
+<span class="sd">        If provided the output file name (or list of file names) is created using the</span>
+<span class="sd">        function. The function can take field (the specific output field will be passed</span>
+<span class="sd">        to the function), cache_dir (task cache_dir will be used), stdout, stderr</span>
+<span class="sd">        (stdout and stderr of the task will be sent) inputs (entire inputs will be</span>
+<span class="sd">        passed) or any input field name (a specific input field will be sent).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nb">callable</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Set type from return annotation of callable if not set</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_type_hints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;return&quot;</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span>
+
+    <span class="nd">@callable</span><span class="o">.</span><span class="n">validator</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_callable_validator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;callable must be a function, not </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mandatory</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;path_template&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+            <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span>
+                <span class="s2">&quot;return_code&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;stdout&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;stderr&quot;</span><span class="p">,</span>
+            <span class="p">]</span>
+        <span class="p">):</span>  <span class="c1"># shell.Outputs.BASE_NAMES</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;A shell output field must have either a callable or a path_template&quot;</span>
+            <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="outarg">
+<a class="viewcode-back" href="../../../../reference/api.html#pydra.compose.shell.outarg">[docs]</a>
+<span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">outarg</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;An input field that specifies where to save the output file</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    help: str</span>
+<span class="sd">        A short description of the input field.</span>
+<span class="sd">    default : Any, optional</span>
+<span class="sd">        the default value for the argument</span>
+<span class="sd">    mandatory: bool, optional</span>
+<span class="sd">        If True user has to provide a value for the field, by default it is False</span>
+<span class="sd">    allowed_values: list, optional</span>
+<span class="sd">        List of allowed values for the field.</span>
+<span class="sd">    requires: list, optional</span>
+<span class="sd">        List of field names that are required together with the field.</span>
+<span class="sd">    copy_mode: File.CopyMode, optional</span>
+<span class="sd">        The mode of copying the file, by default it is File.CopyMode.any</span>
+<span class="sd">    copy_collation: File.CopyCollation, optional</span>
+<span class="sd">        The collation of the file, by default it is File.CopyCollation.any</span>
+<span class="sd">    copy_ext_decomp: File.ExtensionDecomposition, optional</span>
+<span class="sd">        The extension decomposition of the file, by default it is</span>
+<span class="sd">        File.ExtensionDecomposition.single</span>
+<span class="sd">    readonly: bool, optional</span>
+<span class="sd">        If True the input field can’t be provided by the user but it aggregates other</span>
+<span class="sd">        input fields (for example the fields with argstr: -o {fldA} {fldB}), by default</span>
+<span class="sd">        it is False</span>
+<span class="sd">    type: type, optional</span>
+<span class="sd">        The type of the field, by default it is Any</span>
+<span class="sd">    name: str, optional</span>
+<span class="sd">        The name of the field, used when specifying a list of fields instead of a mapping</span>
+<span class="sd">        from name to field, by default it is None</span>
+<span class="sd">    argstr: str, optional</span>
+<span class="sd">        A flag or string that is used in the command before the value, e.g. -v or</span>
+<span class="sd">        -v {inp_field}, but it could be and empty string, “”. If … are used, e.g. -v…,</span>
+<span class="sd">        the flag is used before every element if a list is provided as a value. If no</span>
+<span class="sd">        argstr is used the field is not part of the command.</span>
+<span class="sd">    position: int, optional</span>
+<span class="sd">        Position of the field in the command line, could be nonnegative or negative integer.</span>
+<span class="sd">        If nothing is provided the field will be inserted between all fields with</span>
+<span class="sd">        nonnegative positions and fields with negative positions.</span>
+<span class="sd">    sep: str, optional</span>
+<span class="sd">        A separator if a list is provided as a value.</span>
+<span class="sd">    container_path: bool, optional</span>
+<span class="sd">        If True a path will be consider as a path inside the container (and not as a</span>
+<span class="sd">        local path, by default it is False</span>
+<span class="sd">    formatter: function, optional</span>
+<span class="sd">        If provided the argstr of the field is created using the function. This function</span>
+<span class="sd">        can for example be used to combine several inputs into one command argument. The</span>
+<span class="sd">        function can take field (this input field will be passed to the function),</span>
+<span class="sd">        inputs (entire inputs will be passed) or any input field name (a specific input</span>
+<span class="sd">        field will be sent).</span>
+<span class="sd">    path_template: str, optional</span>
+<span class="sd">        The template used to specify where the output file will be written to can use</span>
+<span class="sd">        other fields, e.g. {file1}. Used in order to create an output definition.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">path_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">keep_extension</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="nd">@path_template</span><span class="o">.</span><span class="n">validator</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_path_template</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">default</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">NO_DEFAULT</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;path_template (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when there is no &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;default value provided (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">default</span><span class="si">!r}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span>
+
+<div class="viewcode-block" id="outarg.markdown_listing">
+<a class="viewcode-back" href="../../../../reference/api.html#pydra.compose.shell.outarg.markdown_listing">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">markdown_listing</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">line_width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">79</span><span class="p">,</span>
+        <span class="n">help_indent</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">as_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the listing for the field in markdown-like format</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        line_width: int</span>
+<span class="sd">            The maximum line width for the output, by default it is 79</span>
+<span class="sd">        help_indent: int</span>
+<span class="sd">            The indentation for the help text, by default it is 4</span>
+<span class="sd">        as_input: bool</span>
+<span class="sd">            Whether to format the field as an input or output if it can be both, by default</span>
+<span class="sd">            it is False</span>
+<span class="sd">        **kwargs: Any</span>
+<span class="sd">            Additional arguments to allow it to be duck-typed with extension classes</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            The listing for the field in markdown-like format</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">as_input</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">markdown_listing</span><span class="p">(</span>
+                <span class="n">width</span><span class="o">=</span><span class="n">line_width</span><span class="p">,</span> <span class="n">help_indent</span><span class="o">=</span><span class="n">help_indent</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+
+        <span class="n">type_str</span> <span class="o">=</span> <span class="s2">&quot;Path | bool&quot;</span>
+        <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">):</span>
+            <span class="n">type_str</span> <span class="o">+=</span> <span class="s2">&quot; | None&quot;</span>
+            <span class="n">default</span> <span class="o">=</span> <span class="s2">&quot;None&quot;</span>
+            <span class="n">help_text</span> <span class="o">=</span> <span class="n">wrap_text</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">OPTIONAL_PATH_TEMPLATE_HELP</span><span class="p">,</span>
+                <span class="n">width</span><span class="o">=</span><span class="n">line_width</span><span class="p">,</span>
+                <span class="n">indent_size</span><span class="o">=</span><span class="n">help_indent</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">default</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">help_text</span> <span class="o">=</span> <span class="n">wrap_text</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">PATH_TEMPLATE_HELP</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">line_width</span><span class="p">,</span> <span class="n">indent_size</span><span class="o">=</span><span class="n">help_indent</span>
+            <span class="p">)</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;- </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">type_str</span><span class="si">}</span><span class="s2">; default = </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">):</span>
+            <span class="n">s</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; (</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">))</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">help_text</span>
+        <span class="k">return</span> <span class="n">s</span></div>
+
+
+    <span class="n">PATH_TEMPLATE_HELP</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;The path specified for the output file, if True, the default &quot;</span>
+        <span class="s2">&quot;&#39;path template&#39; will be used.&quot;</span>
+    <span class="p">)</span>
+    <span class="n">OPTIONAL_PATH_TEMPLATE_HELP</span> <span class="o">=</span> <span class="n">PATH_TEMPLATE_HELP</span> <span class="o">+</span> <span class="p">(</span>
+        <span class="s2">&quot;If False or None, the output file will not be saved.&quot;</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Nipype developers
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../../_static/documentation_options.js?v=b9561ecd"></script>
+    <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/scripts/furo.js?v=5fa4622c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    </body>
+</html>

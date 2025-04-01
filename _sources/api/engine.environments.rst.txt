@@ -1,7 +1,0 @@
-engine.environments module
-==========================
-
-.. automodule:: engine.environments
-   :members:
-   :undoc-members:
-   :show-inheritance:

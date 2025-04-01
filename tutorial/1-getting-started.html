@@ -1,0 +1,636 @@
+<!doctype html>
+<html class="no-js" lang="English" data-content_root="../">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Advanced execution" href="2-advanced-execution.html" /><link rel="prev" title="Pydra" href="../index.html" />
+
+    <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
+        <title>Getting started - Pydra v1.0a0</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=302659d7" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=1e8e7625" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #ffffff;
+  --color-code-foreground: black;
+  --color-brand-primary: #69306d;
+  --color-brand-content: #69306d;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #111111;
+  --color-code-foreground: #ffffff;
+  --color-brand-primary: #ce8dcf;
+  --color-brand-content: #ce8dcf;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #111111;
+  --color-code-foreground: #ffffff;
+  --color-brand-primary: #ce8dcf;
+  --color-brand-content: #ce8dcf;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">Pydra v1.0a0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
+  </div>
+  
+  <span class="sidebar-brand-text">Pydra v1.0a0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Tutorials: Execution</span></p>
+<ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="2-advanced-execution.html">Advanced execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="3-troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials: Design</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="4-python.html">Python-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="5-shell.html">Shell-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="6-workflow.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical task form</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/glm.html">General Linear Model (GLM)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-to</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Create a task package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/design-approach.html">Design philosophy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/splitting-combining.html">Splitting and combining</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Dynamic construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/environments.html">Software environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caches and hashes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/typing.html">Typing and file-formats</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../reference/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../genindex.html">Index</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../py-modindex.html">Module Index</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/glossary.html">Glossary</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/tutorial/1-getting-started.ipynb.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="Getting-started">
+<h1>Getting started<a class="headerlink" href="#Getting-started" title="Link to this heading">¶</a></h1>
+<p>The basic runnable component of Pydra is a <em>task</em>. Tasks are conceptually similar to functions, in that they take inputs, operate on them and then return results. However, unlike functions, tasks are parameterised before they are executed in a separate step. This enables parameterised tasks to be linked together into workflows that are checked for errors before they are executed, and modular execution workers and environments to specified independently of the task being performed.</p>
+<p>Tasks can encapsulate Python functions or shell-commands, or be multi-component workflows, themselves constructed from task components including nested workflows.</p>
+<section id="Preparation">
+<h2>Preparation<a class="headerlink" href="#Preparation" title="Link to this heading">¶</a></h2>
+<p>Before we get started, lets set up some test data to play with. Here we create a sample JSON file in a temporary directory</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tempfile</span><span class="w"> </span><span class="kn">import</span> <span class="n">mkdtemp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pprint</span><span class="w"> </span><span class="kn">import</span> <span class="n">pprint</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
+<span class="n">JSON_CONTENTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="s2">&quot;two&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mf">0.55</span><span class="p">,</span> <span class="mi">6</span><span class="p">]}</span>
+
+<span class="n">test_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">mkdtemp</span><span class="p">())</span>
+<span class="n">json_file</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;test.json&quot;</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">json_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">JSON_CONTENTS</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Next we create a directory containing 10 randomly generated <a class="reference external" href="https://nifti.nimh.nih.gov/">NIfTI</a> files</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.medimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">Nifti1</span>
+
+<span class="n">nifti_dir</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;nifti&quot;</span>
+<span class="n">nifti_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">()</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">Nifti1</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">nifti_dir</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">i</span><span class="p">)</span>  <span class="c1"># Create a dummy NIfTI file in the dest. directory</span>
+</pre></div>
+</div>
+</div>
+<p>Note that when you run concurrent processes within a Jupyter notebook the following snippet is also required</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">nest_asyncio</span>
+
+<span class="n">nest_asyncio</span><span class="o">.</span><span class="n">apply</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Running-your-first-task">
+<h2>Running your first task<a class="headerlink" href="#Running-your-first-task" title="Link to this heading">¶</a></h2>
+<p>Pydra allows you to install independent packages with pre-defined tasks (e.g., <code class="docutils literal notranslate"><span class="pre">pydra-fsl</span></code>, <code class="docutils literal notranslate"><span class="pre">pydra-ants</span></code>). The task from the packages are installed under the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.*</span></code>. You always have access to <code class="docutils literal notranslate"><span class="pre">pydra.tasks.common</span></code>, in addition <code class="docutils literal notranslate"><span class="pre">pydra-mrtrix3.v3_0</span></code> was also installed for this tutorial. To use a pre-defined task</p>
+<ul class="simple">
+<li><p>import the class from the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.*</span></code> package it is in</p></li>
+<li><p>instantiate it with appropriate parameters</p></li>
+<li><p>&quot;call&quot; resulting object (i.e. <code class="docutils literal notranslate"><span class="pre">my_task(...)</span></code>) to execute it as you would a function</p></li>
+</ul>
+<p>To demonstrate with an example of loading a JSON file with the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.common.LoadJson</span></code> task, we first create an example JSON file to test with</p>
+<p>Now we can load the JSON contents back from the file using the <code class="docutils literal notranslate"><span class="pre">LoadJson</span></code> task class</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Import the task</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydra.tasks.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoadJson</span>
+
+<span class="c1"># Instantiate the task, providing the JSON file we want to load</span>
+<span class="n">load_json</span> <span class="o">=</span> <span class="n">LoadJson</span><span class="p">(</span><span class="n">file</span><span class="o">=</span><span class="n">json_file</span><span class="p">)</span>
+
+<span class="c1"># Run the task to load the JSON file</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">load_json</span><span class="p">()</span>
+
+<span class="c1"># Access the loaded JSON output contents and check they match original</span>
+<span class="k">assert</span> <span class="n">outputs</span><span class="o">.</span><span class="n">out</span> <span class="o">==</span> <span class="n">JSON_CONTENTS</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Iterating-over-inputs">
+<h2>Iterating over inputs<a class="headerlink" href="#Iterating-over-inputs" title="Link to this heading">¶</a></h2>
+<p>It is straightforward to apply the same operation over a set of inputs using the <code class="docutils literal notranslate"><span class="pre">split()</span></code> method. For example, if we wanted to re-grid all the NIfTI images stored in a directory, such as the sample ones generated by the code below</p>
+<p>Then we can by importing the <code class="docutils literal notranslate"><span class="pre">MrGrid</span></code> shell-command task from the <code class="docutils literal notranslate"><span class="pre">pydra-mrtrix3</span></code> package and run it over every NIfTI file in the directory using the <code class="docutils literal notranslate"><span class="pre">Task.split()</span></code> method</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.tasks.mrtrix3.v3_0</span><span class="w"> </span><span class="kn">import</span> <span class="n">MrGrid</span>
+
+<span class="c1"># Instantiate the task, &quot;splitting&quot; over all NIfTI files in the test directory</span>
+<span class="c1"># by splitting the &quot;input&quot; input field over all files in the directory</span>
+<span class="n">mrgrid</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">,</span> <span class="n">voxel</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">))</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="n">in_file</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="c1"># Run the task to resample all NIfTI files</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">()</span>
+
+<span class="c1"># Print the locations of the output files</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">out_file</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file.mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (1).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (2).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (3).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (4).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (5).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (6).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (7).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (8).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (9).mif&#39;)]
+</pre></div></div>
+</div>
+<p>It is also possible to iterate over inputs in pairs/n-tuples. For example, if you wanted to use different voxel sizes for different images, both the list of images and the voxel sizes are passed to the <code class="docutils literal notranslate"><span class="pre">split()</span></code> method and their combination is specified by a tuple &quot;splitter&quot;</p>
+<p>Note that it is important to use a tuple not a list for the splitter definition in this case, because a list splitter is interpreted as the split over each combination of inputs (see <a class="reference external" href="../explanation/splitting-combining.html">Splitting and combining</a> for more details on splitters).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">mrgrid_varying_vox_sizes</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+    <span class="n">in_file</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">(),</span>
+    <span class="c1"># Define a list of voxel sizes to resample the NIfTI files to,</span>
+    <span class="c1"># the list must be the same length as the list of NIfTI files</span>
+    <span class="n">voxel</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.25</span><span class="p">,</span> <span class="mf">1.25</span><span class="p">,</span> <span class="mf">1.25</span><span class="p">),</span>
+        <span class="p">(</span><span class="mf">1.25</span><span class="p">,</span> <span class="mf">1.25</span><span class="p">,</span> <span class="mf">1.25</span><span class="p">),</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid_varying_vox_sizes</span><span class="p">()</span>
+
+<span class="n">pprint</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">out_file</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file.mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (1).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (2).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (3).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (4).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (5).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (6).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (7).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (8).mif&#39;),
+ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-413bb9a59b1125840142030b8682ec5b/out_file (9).mif&#39;)]
+</pre></div></div>
+</div>
+</section>
+<section id="Executing-tasks-in-parallel">
+<h2>Executing tasks in parallel<a class="headerlink" href="#Executing-tasks-in-parallel" title="Link to this heading">¶</a></h2>
+<p>By default, Pydra will use the <em>debug</em> worker, which executes each task sequentially. This makes it easier to debug tasks and workflows, however, in most cases, once a workflow is tested, a concurrent worker is preferable so tasks can be executed in parallel (see <a class="reference external" href="./3-advanced-execution.html#Workers">Workers</a>). To use multiple processes on a workstation, select the <code class="docutils literal notranslate"><span class="pre">cf</span></code> worker option when executing the task/workflow. Additional keyword arguments, will be passed to the worker initialisation
+(e.g. <code class="docutils literal notranslate"><span class="pre">n_procs=4</span></code>).</p>
+<p>Note that when multiprocessing in Python on Windows and macOS (and good practice on Linux/POSIX OSs for compatibility), you need to place a <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">__name__</span> <span class="pre">==</span> <span class="pre">&quot;__main__&quot;</span></code> block when executing in top-level scripts to allow the script to be imported, but not executed, by subprocesses.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.tasks.mrtrix3.v3_0</span><span class="w"> </span><span class="kn">import</span> <span class="n">MrGrid</span>
+
+<span class="k">if</span> <span class="p">(</span>
+    <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span>
+<span class="p">):</span>  <span class="c1"># &lt;-- Add this block to allow the script to imported by subprocesses</span>
+    <span class="n">mrgrid</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">,</span> <span class="n">voxel</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">))</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+        <span class="n">in_file</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">&quot;cf&quot;</span><span class="p">,</span> <span class="n">n_procs</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>  <span class="c1"># &lt;-- Select the &quot;cf&quot; worker here</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">outputs</span><span class="o">.</span><span class="n">out_file</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file.mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (1).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (2).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (3).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (4).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (5).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (6).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (7).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (8).mif
+/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (9).mif
+</pre></div></div>
+</div>
+</section>
+<section id="File-system-locations">
+<h2>File-system locations<a class="headerlink" href="#File-system-locations" title="Link to this heading">¶</a></h2>
+<p>Output and intermediate files are typically generated during the course of a workflow/task run. In addition to this, Pydra generates a cache directory for each task, in which the task, results and any errors are stored in <a class="reference external" href="https://github.com/cloudpipe/cloudpickle">cloudpickle</a> files for future reference (see <a class="reference external" href="./troubleshooting.html">Troubleshooting</a>). By default, these cache directories are stored in a platform-specific application-cache directory</p>
+<ul class="simple">
+<li><p>Windows: <code class="docutils literal notranslate"><span class="pre">C:\Users\&lt;username&gt;\AppData\Local\pydra\&lt;pydra-version&gt;\run-cache</span></code></p></li>
+<li><p>Linux: <code class="docutils literal notranslate"><span class="pre">/home/&lt;username&gt;/.cache/pydra/&lt;pydra-version&gt;/run-cache</span></code></p></li>
+<li><p>macOS: <code class="docutils literal notranslate"><span class="pre">/Users/&lt;username&gt;/Library/Caches/pydra/&lt;pydra-version&gt;/run-cache</span></code></p></li>
+</ul>
+<p>When a task runs, a unique hash is generated by the combination of all the inputs to the task and the operation to be performed. This hash is used to name the task cache directory within the specified cache root. Therefore, if you use the same cache root and in a subsequent run the same task is executed with the same inputs, then the path of its cache directory will be the same, and if Pydra finds existing results at that path, then the outputs generated by the previous run will be reused.</p>
+<p>This cache will grow as more runs are called, therefore care needs to be taken to ensure there is enough space on the target disk. a different location for this cache, simply provide the <code class="docutils literal notranslate"><span class="pre">cache_root</span></code> keyword argument to the execution call</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;~/pydra-cache&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">())</span>
+
+<span class="n">pprint</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+SplitOutputs(out_file=[ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file.mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (1).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (2).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (3).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (4).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (5).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (6).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (7).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (8).mif&#39;), ImageFormat(&#39;/home/runner/pydra-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (9).mif&#39;)], return_code=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0], stderr=[&#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 13%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  2%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  5%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 20%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 22%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 23%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 25%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 27%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 28%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 32%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 33%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 35%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 37%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 38%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 40%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 42%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 43%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 45%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 47%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 48%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 50%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 52%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 53%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 55%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 57%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 58%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 60%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 62%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 63%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 65%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  5%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  7%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 23%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 25%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 27%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 28%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 33%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 35%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 37%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 38%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 42%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 43%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 47%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 48%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 50%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 52%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  5%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 12%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 13%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 18%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 25%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 25%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 27%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 28%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 32%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 33%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 35%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 37%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 38%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 40%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 42%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 43%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 45%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 65%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  2%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 53%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 55%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 57%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 58%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 60%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 62%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 63%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 65%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [ 53%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 55%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 57%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 58%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 60%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 62%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 63%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 65%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;\x1b[0K\n&#39;], stdout=[&#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;])
+</pre></div></div>
+</div>
+<p>To check alternative cache roots, while storing any generated task cache dirs in the specified cache root, the <code class="docutils literal notranslate"><span class="pre">readonly_caches</span></code> keyword argument can be used</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.general</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_run_cache_root</span>
+
+<span class="n">my_cache_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;~/new-pydra-cache&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
+<span class="n">my_cache_root</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">my_cache_root</span><span class="p">,</span> <span class="n">readonly_caches</span><span class="o">=</span><span class="p">[</span><span class="n">default_run_cache_root</span><span class="p">])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+SplitOutputs(out_file=[ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file.mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (1).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (2).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (3).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (4).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (5).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (6).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (7).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (8).mif&#39;), ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/workflow-1b53b63673f14fe98fbf1e9d913865c2/out_file (9).mif&#39;)], return_code=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0], stderr=[&#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 27%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 28%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 32%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 33%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 37%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 38%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 40%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 42%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 43%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 45%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 47%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 48%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 50%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 52%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 53%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 55%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 57%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 58%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 60%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 62%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 65%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ujOeHwdFcAefAZhnM6Jy8c1r.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  7%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  8%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 10%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 12%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 15%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 43%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 45%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 47%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 48%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 50%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 52%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 53%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 55%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 57%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 58%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 60%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 62%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 63%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 65%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/MTX6T5bC6O3hDpHJanr4VjXi.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  7%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 20%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 22%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 25%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 27%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/76dfZTPtLLKjAyS96HBqcbCt.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  2%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  5%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  7%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  8%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 60%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/0UAqFzWsDK4FrUMp48Y3tT3Q.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  7%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  8%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 10%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 12%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 13%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/oHwLMeaZqo9DZDNjN1GTPdVK.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  5%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  8%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 10%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 12%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 13%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 15%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 17%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 18%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 20%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 22%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 23%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 25%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 27%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 28%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 32%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 33%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 35%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 38%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/ogyjey4XVnHrkgn5ZYXltMT0.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  5%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  7%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [  8%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 10%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 47%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/XYEqaPDVxVqXTzHQlIXqXQ0u.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 27%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 28%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 30%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 32%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 33%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 35%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 37%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 38%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 40%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 42%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 45%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 47%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 48%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 50%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 52%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 55%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 57%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 58%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 60%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 62%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 63%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 65%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 67%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 68%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 70%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 72%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 75%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/o7hRfp9mNCCElZfobqz3xhq9.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  5%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 73%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 77%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 78%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 80%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 82%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 83%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 85%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 87%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 88%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 90%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 92%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 93%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/Cxi1aF3fIMcxRCSjogF5KWxU.nii&#34;\x1b[0K\n&#39;, &#39;\x1b[?7l\rmrgrid: [  3%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 33%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 95%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 97%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [ 98%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\x1b[?7l\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;...\x1b[0K\x1b[?7h\rmrgrid: [100%] reslicing &#34;/tmp/tmpco5tzhp5/nifti/i0VpEBOWfbZAVaBSo63bbH6x.nii&#34;\x1b[0K\n&#39;], stdout=[&#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;, &#39;&#39;])
+</pre></div></div>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="2-advanced-execution.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Advanced execution</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../index.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Home</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Nipype developers
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Getting started</a><ul>
+<li><a class="reference internal" href="#Preparation">Preparation</a></li>
+<li><a class="reference internal" href="#Running-your-first-task">Running your first task</a></li>
+<li><a class="reference internal" href="#Iterating-over-inputs">Iterating over inputs</a></li>
+<li><a class="reference internal" href="#Executing-tasks-in-parallel">Executing tasks in parallel</a></li>
+<li><a class="reference internal" href="#File-system-locations">File-system locations</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=b9561ecd"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=5fa4622c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
+</html>
