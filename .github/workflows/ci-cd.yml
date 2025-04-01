@@ -378,7 +378,7 @@ jobs:
       run: if [ -n "$GHPAGES_DEPLOY_KEY" ]; then echo "DEPLOY=true" >> $GITHUB_OUTPUT; fi
     - name: Deploy Docs to GitHub Pages
       if: steps.deployable.outputs.DEPLOY
-      uses: peaceiris/actions-gh-pages@v3
+      uses: peaceiris/actions-gh-pages@v4
       with:
         github_token: ${{ secrets.GHPAGES_DEPLOY_KEY }}
         publish_dir: docs-build
