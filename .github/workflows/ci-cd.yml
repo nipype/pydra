@@ -75,7 +75,7 @@ jobs:
         run: |
           pytest -vs -n auto pydra --doctest-modules --import-mode=importlib --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --rootdir pydra
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -135,7 +135,7 @@ jobs:
       - name: Pytest
         run: pytest -vs --import-mode=importlib --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/environments/tests/test_singularity.py pydra/environments/tests/test_environments.py --rootdir pydra
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -183,7 +183,7 @@ jobs:
       run: |
         docker exec slurm bash -c "pytest /pydra/pydra/workers/tests/test_worker.py --import-mode=importlib --rootdir /pydra/pydra --only-worker=slurm --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v5
       with:
         fail_ci_if_error: true
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -263,7 +263,7 @@ jobs:
   #     run: |
   #       pytest pydra/workers/tests/test_worker.py --import-mode=importlib --rootdir . --only-worker=sge --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
   #   - name: Upload coverage to Codecov
-  #     uses: codecov/codecov-action@v2
+  #     uses: codecov/codecov-action@v5
   #     with:
   #       fail_ci_if_error: true
   #       token: ${{ secrets.CODECOV_TOKEN }}
