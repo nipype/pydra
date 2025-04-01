@@ -1,20 +1,6 @@
-|GHAction| |CircleCI| |codecov|
+|CI/CD| |codecov| |Python Versions| |PyPI| |Docs|
 
 |Pydralogo|
-
-.. |Pydralogo| image:: https://raw.githubusercontent.com/nipype/pydra/master/docs/logo/pydra_logo.jpg
-   :width: 200px
-   :alt: pydra logo
-
-.. |GHAction| image:: https://github.com/nipype/pydra/workflows/Pydra/badge.svg
-   :alt: GitHub Actions CI
-   :target: https://github.com/nipype/Pydra/actions
-
-.. |CircleCI| image:: https://circleci.com/gh/nipype/pydra.svg?style=svg
-   :alt: CircleCI
-
-.. |codecov| image:: https://codecov.io/gh/nipype/pydra/branch/master/graph/badge.svg
-   :alt: codecov
 
 ======================
 Pydra: Dataflow Engine
@@ -30,11 +16,12 @@ construction, manipulation, and distributed execution.
 
 Feature list:
 =============
-1. Python 3.7+ using type annotation and `attrs <https://www.attrs.org/en/stable/>`_
+1. Python 3.11+ using type annotation and `attrs <https://www.attrs.org/en/stable/>`_
 2. Composable dataflows with simple node semantics. A dataflow can be a node of another dataflow.
 3. `splitter` and `combiner` provides many ways of compressing complex loop semantics
 4. Cached execution with support for a global cache across dataflows and users
-5. Distributed execution, presently via ConcurrentFutures, SLURM, and Dask (this is an experimental implementation with limited testing)
+5. Distributed execution, presently via ConcurrentFutures, SLURM and SGE, with support
+for PS/IJ and Dask available via plugins
 
 `API Documentation <https://nipype.github.io/pydra/>`_
 
@@ -65,14 +52,32 @@ Note that installation fails with older versions of pip on Windows. Upgrade pip 
 
 ::
 
-   pip install –upgrade pip
+   pip install -–upgrade pip
    pip install pydra
+
+
+If you want to install plugins for psij or dask you can by installing the relevant
+plugin packages
+
+::
+
+    pip install pydra-workers-psij
+    pip install pydra-workers-dask
+
+
+Task implementations for various toolkits and workflows are available in task plugins,
+which can be installed similarly
+
+::
+
+   pip install pydra-tasks-mrtrix3
+   pip install pydra-tasks-fsl
 
 
 Developer installation
 ======================
 
-Pydra requires Python 3.7+. To install in developer mode:
+Pydra requires Python 3.11+. To install in developer mode:
 
 ::
 
@@ -88,19 +93,33 @@ In order to run pydra's test locally:
     pytest -vs pydra
 
 
-If you want to test execution with Dask:
-
-::
-
-    git clone git@github.com:nipype/pydra.git
-    cd pydra
-    pip install -e ".[dask]"
-
-
-
 It is also useful to install pre-commit:
 
 ::
 
     pip install pre-commit
     pre-commit
+
+
+.. |Pydralogo| image:: https://raw.githubusercontent.com/nipype/pydra/main/docs/source/_static/logo/pydra_logo.jpg
+   :width: 200px
+   :alt: pydra logo
+
+.. |CI/CD| image:: https://github.com/nipype/pydra/actions/workflows/ci-cd.yml/badge.svg
+   :alt: CI/CD
+   :target: https://github.com/nipype/pydra/actions/workflows/ci-cd.yml
+
+.. |codecov| image:: https://codecov.io/gh/nipype/pydra/branch/main/graph/badge.svg
+   :alt: codecov
+
+.. |Python Versions| image:: https://img.shields.io/pypi/pyversions/pydra.svg
+   :alt: Supported Python versions
+   :target: https://pypi.python.org/pypi/pydra
+
+.. |PyPI| image:: https://img.shields.io/pypi/v/pydra.svg
+   :alt: PyPI
+   :target: https://pypi.python.org/pypi/pydra
+
+.. |Docs| image:: https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat
+   :alt: Documentation Status
+   :target: https://nipype.github.io/pydra
