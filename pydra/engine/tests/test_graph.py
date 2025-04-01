@@ -1,5 +1,5 @@
-from ..graph import DiGraph
-from .utils import DOT_FLAG
+from pydra.engine.graph import DiGraph
+from pydra.engine.tests.utils import DOT_FLAG
 import pytest
 
 
@@ -64,15 +64,13 @@ def test_edges_3():
 
 
 def test_edges_ecxeption_1():
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(Exception, match="Duplicate node names"):
         DiGraph(nodes=[A, B, A], edges=[(A, B)])
-    assert "repeated elements" in str(excinfo.value)
 
 
 def test_edges_ecxeption_2():
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(Exception, match="can't be added"):
         DiGraph(nodes=[A, B], edges=[(A, C)])
-    assert "can't be added" in str(excinfo.value)
 
 
 def test_sort_1():

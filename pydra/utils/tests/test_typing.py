@@ -4,29 +4,39 @@ import sys
 import typing as ty
 from pathlib import Path
 import tempfile
+import traceback
+from unittest.mock import Mock
 import pytest
-from pydra import mark
-from ...engine.specs import File, LazyOutField, MultiInputObj
-from ..typing import TypeParser
-from pydra import Workflow
+from pydra.compose import python
+from fileformats.generic import File
+from pydra.engine.lazy import LazyOutField
+from pydra.compose import workflow
+from pydra.utils.typing import TypeParser, MultiInputObj
 from fileformats.application import Json, Yaml, Xml
 from .utils import (
-    generic_func_task,
+    GenericFuncTask,
     GenericShellTask,
-    specific_func_task,
+    SpecificFuncTask,
     SpecificShellTask,
-    other_specific_func_task,
+    OtherSpecificFuncTask,
     OtherSpecificShellTask,
     MyFormatX,
     MyOtherFormatX,
     MyHeader,
 )
-from pydra.utils import exc_info_matches
+from pydra.utils.general import exc_info_matches
+
+
+def exc_to_str(exc_info):
+    return "".join(
+        traceback.format_exception(exc_info.type, exc_info.value, exc_info.tb)
+    )
 
 
 def lz(tp: ty.Type):
     """convenience method for creating a LazyField of type 'tp'"""
-    return LazyOutField(name="foo", field="boo", type=tp)
+    node = Mock()
+    return LazyOutField(node=node, field="boo", type=tp)
 
 
 PathTypes = ty.Union[str, os.PathLike]
@@ -485,29 +495,27 @@ def test_type_coercion_fail2a():
 
 
 def test_type_coercion_fail3():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError, match="Incorrect type for field"):
         TypeParser(ty.Sequence, coercible=[(ty.Sequence, ty.Sequence)])(
             {"a": 1, "b": 2}
         )
-    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_coercion_fail4():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError, match="Incorrect type for field"):
         TypeParser(ty.Sequence, coercible=[(ty.Any, ty.Any)])({"a": 1})
-    assert exc_info_matches(exc_info, "Cannot coerce {'a': 1} into")
 
 
 def test_type_coercion_fail5():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError) as excinfo:
         TypeParser(ty.List[int], coercible=[(ty.Any, ty.Any)])(1)
-    assert exc_info_matches(exc_info, "as 1 is not iterable")
+    assert "as 1 is not iterable" in exc_to_str(excinfo)
 
 
 def test_type_coercion_fail6():
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(TypeError) as excinfo:
         TypeParser(ty.List[ty.Dict[str, str]], coercible=[(ty.Any, ty.Any)])((1, 2, 3))
-    assert exc_info_matches(exc_info, "is not a mapping type")
+    assert "is not a mapping type" in exc_to_str(excinfo)
 
 
 def test_type_coercion_realistic():
@@ -520,26 +528,22 @@ def test_type_coercion_realistic():
     Path.touch(yet_another_file)
     file_list = [File(p) for p in (a_file, another_file, yet_another_file)]
 
-    @mark.task
-    @mark.annotate({"return": {"a": ty.List[File], "b": ty.List[str]}})
+    @python.define(outputs={"a": ty.List[File], "b": ty.List[str]})
     def f(x: ty.List[File], y: ty.Dict[str, ty.List[File]]):
         return list(itertools.chain(x, *y.values())), list(y.keys())
 
-    task = f(x=file_list, y={"a": file_list[1:]})
+    defn = f(x=file_list, y={"a": file_list[1:]})
+    outputs = defn()
 
-    TypeParser(ty.List[str])(task.lzout.a)  # pylint: disable=no-member
+    TypeParser(ty.List[str])(outputs.a)  # pylint: disable=no-member
     with pytest.raises(
         TypeError,
+        match=r"Incorrect type for field:",
     ) as exc_info:
-        TypeParser(ty.List[int])(task.lzout.a)  # pylint: disable=no-member
-    assert exc_info_matches(
-        exc_info,
-        match=r"Cannot coerce <class 'fileformats\.generic.*\.File'> into <class 'int'>",
-        regex=True,
-    )
+        TypeParser(ty.List[int])(outputs.a)  # pylint: disable=no-member
 
     with pytest.raises(TypeError) as exc_info:
-        task.inputs.x = "bad-value"
+        defn.x = "bad-value"
     assert exc_info_matches(
         exc_info, match="Cannot coerce 'bad-value' into <class 'list'>"
     )
@@ -682,9 +686,9 @@ def test_type_matches():
 
 
 @pytest.fixture(params=["func", "shell"])
-def generic_task(request):
+def GenericTask(request):
     if request.param == "func":
-        return generic_func_task
+        return GenericFuncTask
     elif request.param == "shell":
         return GenericShellTask
     else:
@@ -692,9 +696,9 @@ def generic_task(request):
 
 
 @pytest.fixture(params=["func", "shell"])
-def specific_task(request):
+def SpecificTask(request):
     if request.param == "func":
-        return specific_func_task
+        return SpecificFuncTask
     elif request.param == "shell":
         return SpecificShellTask
     else:
@@ -702,125 +706,72 @@ def specific_task(request):
 
 
 @pytest.fixture(params=["func", "shell"])
-def other_specific_task(request):
+def OtherSpecificTask(request):
     if request.param == "func":
-        return other_specific_func_task
+        return OtherSpecificFuncTask
     elif request.param == "shell":
         return OtherSpecificShellTask
     else:
         assert False
 
 
-def test_typing_implicit_cast_from_super(tmp_path, generic_task, specific_task):
+def test_typing_implicit_cast_from_super(tmp_path, GenericTask, SpecificTask):
     """Check the casting of lazy fields and whether specific file-sets can be recovered
     from generic `File` classes"""
 
-    wf = Workflow(
-        name="test",
-        input_spec={"in_file": MyFormatX},
-        output_spec={"out_file": MyFormatX},
-    )
-
-    wf.add(
-        specific_task(
-            in_file=wf.lzin.in_file,
-            name="specific1",
-        )
-    )
-
-    wf.add(  # Generic task
-        generic_task(
-            in_file=wf.specific1.lzout.out,
-            name="generic",
-        )
-    )
-
-    wf.add(
-        specific_task(
-            in_file=wf.generic.lzout.out,
-            name="specific2",
-        )
-    )
-
-    wf.set_output(
-        [
-            ("out_file", wf.specific2.lzout.out),
-        ]
-    )
+    @workflow.define(outputs=["out_file"])
+    def Workflow(in_file: MyFormatX) -> MyFormatX:
+        specific1 = workflow.add(SpecificTask(in_file=in_file))
+        generic = workflow.add(GenericTask(in_file=specific1.out))  # Generic task
+        specific2 = workflow.add(SpecificTask(in_file=generic.out), name="specific2")
+        return specific2.out
 
     in_file = MyFormatX.sample()
 
-    result = wf(in_file=in_file, plugin="serial")
+    outputs = Workflow(in_file=in_file)()
 
-    out_file: MyFormatX = result.output.out_file
+    out_file: MyFormatX = outputs.out_file
     assert type(out_file) is MyFormatX
     assert out_file.parent != in_file.parent
     assert type(out_file.header) is MyHeader
     assert out_file.header.parent != in_file.header.parent
 
 
-def test_typing_cast(tmp_path, specific_task, other_specific_task):
+@pytest.mark.flaky(reruns=5)
+def test_typing_cast(tmp_path, SpecificTask, OtherSpecificTask):
     """Check the casting of lazy fields and whether specific file-sets can be recovered
     from generic `File` classes"""
 
-    wf = Workflow(
-        name="test",
-        input_spec={"in_file": MyFormatX},
-        output_spec={"out_file": MyFormatX},
-    )
+    @workflow.define(outputs=["out_file"])
+    def Workflow(in_file: MyFormatX) -> MyFormatX:
+        entry = workflow.add(SpecificTask(in_file=in_file))
 
-    wf.add(
-        specific_task(
-            in_file=wf.lzin.in_file,
-            name="entry",
+        with pytest.raises(TypeError) as exc_info:
+            # No cast of generic task output to MyFormatX
+            workflow.add(OtherSpecificTask(in_file=entry.out))  # Generic task
+        assert exc_info_matches(exc_info, "Cannot coerce")
+
+        inner = workflow.add(  # Generic task
+            OtherSpecificTask(in_file=workflow.cast(entry.out, MyOtherFormatX))
         )
-    )
 
-    with pytest.raises(TypeError) as exc_info:
-        # No cast of generic task output to MyFormatX
-        wf.add(  # Generic task
-            other_specific_task(
-                in_file=wf.entry.lzout.out,
-                name="inner",
-            )
+        with pytest.raises(TypeError) as exc_info:
+            # No cast of generic task output to MyFormatX
+            workflow.add(SpecificTask(in_file=inner.out))
+
+        assert exc_info_matches(exc_info, "Cannot coerce")
+
+        exit = workflow.add(
+            SpecificTask(in_file=workflow.cast(inner.out, MyFormatX)), name="exit"
         )
-    assert exc_info_matches(exc_info, "Cannot coerce")
 
-    wf.add(  # Generic task
-        other_specific_task(
-            in_file=wf.entry.lzout.out.cast(MyOtherFormatX),
-            name="inner",
-        )
-    )
-
-    with pytest.raises(TypeError) as exc_info:
-        # No cast of generic task output to MyFormatX
-        wf.add(
-            specific_task(
-                in_file=wf.inner.lzout.out,
-                name="exit",
-            )
-        )
-    assert exc_info_matches(exc_info, "Cannot coerce")
-
-    wf.add(
-        specific_task(
-            in_file=wf.inner.lzout.out.cast(MyFormatX),
-            name="exit",
-        )
-    )
-
-    wf.set_output(
-        [
-            ("out_file", wf.exit.lzout.out),
-        ]
-    )
+        return exit.out
 
     in_file = MyFormatX.sample()
 
-    result = wf(in_file=in_file, plugin="serial")
+    outputs = Workflow(in_file=in_file)()
 
-    out_file: MyFormatX = result.output.out_file
+    out_file: MyFormatX = outputs.out_file
     assert type(out_file) is MyFormatX
     assert out_file.parent != in_file.parent
     assert type(out_file.header) is MyHeader

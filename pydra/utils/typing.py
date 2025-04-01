@@ -1,32 +1,31 @@
 import itertools
 import inspect
 from pathlib import Path
+import collections.abc
 import os
 from copy import copy
 import sys
 import types
 import typing as ty
 import logging
-import attr
-from ..engine.specs import (
-    LazyField,
-    StateArray,
-    MultiInputObj,
-    MultiOutputObj,
-)
-from ..utils import add_exc_note
-from fileformats import field
+import attrs
+from fileformats import field, core, generic
+from pydra.utils.general import add_exc_note
+from pydra.utils.mount_identifier import MountIndentifier
 
 try:
     from typing import get_origin, get_args
 except ImportError:
     # Python < 3.8
-    from typing_extensions import get_origin, get_args  # type: ignore
+    from typing import get_origin, get_args  # type: ignore
 
 if sys.version_info >= (3, 10):
     UNION_TYPES = (ty.Union, types.UnionType)
 else:
     UNION_TYPES = (ty.Union,)
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.lazy import LazyField
 
 logger = logging.getLogger("pydra")
 
@@ -44,6 +43,45 @@ else:
 
 T = ty.TypeVar("T")
 TypeOrAny = ty.Union[type, ty.Any]
+
+
+# These are special types that are checked for in the construction of input/output specs
+# and special converters inserted into the attrs fields.
+
+
+class MultiInputObj(list, ty.Generic[T]):
+    pass
+
+
+MultiInputFile = MultiInputObj[generic.File]
+
+
+# Since we can't create a NewType from a type union, we add a dummy type to the union
+# so we can detect the MultiOutput in the input/output task creation
+class MultiOutputType:
+    pass
+
+
+MultiOutputObj = ty.Union[list, object, MultiOutputType]
+MultiOutputFile = ty.Union[generic.File, ty.List[generic.File], MultiOutputType]
+
+OUTPUT_TEMPLATE_TYPES = (
+    Path,
+    ty.List[Path],
+    ty.Union[Path, bool],
+    ty.Union[ty.List[Path], bool],
+    ty.List[ty.List[Path]],
+)
+
+
+class StateArray(ty.List[T]):
+    """an array of values from, or to be split over in an array of nodes (see TaskBase.split()),
+    multiple nodes of the same task. Used in type-checking to differentiate between list
+    types and values for multiple nodes
+    """
+
+    def __repr__(self):
+        return f"{type(self).__name__}(" + ", ".join(repr(i) for i in self) + ")"
 
 
 class TypeParser(ty.Generic[T]):
@@ -86,6 +124,8 @@ class TypeParser(ty.Generic[T]):
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
         (
             (ty.Sequence, ty.Sequence),
+            (ty.Sequence, collections.abc.Set),
+            (collections.abc.Set, ty.Sequence),
             (ty.Mapping, ty.Mapping),
             (Path, os.PathLike),
             (str, os.PathLike),
@@ -159,7 +199,7 @@ class TypeParser(ty.Generic[T]):
         self.superclass_auto_cast = superclass_auto_cast
         self.match_any_of_union = match_any_of_union
 
-    def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
+    def __call__(self, obj: ty.Any) -> T:
         """Attempts to coerce the object to the specified type, unless the value is
         a LazyField where the type of the field is just checked instead or an
         attrs.NOTHING where it is simply returned.
@@ -180,24 +220,25 @@ class TypeParser(ty.Generic[T]):
             if the coercion is not possible, or not specified by the
             `coercible`/`not_coercible` parameters, then a TypeError is raised
         """
+
         coerced: T
-        if obj is attr.NOTHING:
-            coerced = attr.NOTHING  # type: ignore[assignment]
-        elif isinstance(obj, LazyField):
+        if obj is attrs.NOTHING:
+            coerced = attrs.NOTHING  # type: ignore[assignment]
+        elif is_lazy(obj):
             try:
-                self.check_type(obj.type)
+                self.check_type(obj._type)
             except TypeError as e:
                 if self.superclass_auto_cast:
                     try:
                         # Check whether the type of the lazy field isn't a superclass of
                         # the type to check against, and if so, allow it due to permissive
                         # typing rules.
-                        TypeParser(obj.type, match_any_of_union=True).check_type(
+                        TypeParser(obj._type, match_any_of_union=True).check_type(
                             self.tp
                         )
                     except TypeError:
                         raise TypeError(
-                            f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                            f"Incorrect type for lazy field{self.label_str}: {obj._type!r} "
                             f"is not a subclass or superclass of {self.tp} (and will not "
                             "be able to be coerced to one that is)"
                         ) from e
@@ -211,17 +252,25 @@ class TypeParser(ty.Generic[T]):
                         )
                 else:
                     raise TypeError(
-                        f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                        f"Incorrect type for lazy field{self.label_str}: {obj._type!r} "
                         f"is not a subclass of {self.tp} (and will not be able to be "
                         "coerced to one that is)"
                     ) from e
             coerced = obj  # type: ignore
+            if obj._type is not ty.Any:
+                # Used to check whether the type of the field can be changed
+                obj._type_checked = True
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
             try:
                 coerced = self.coerce(obj)
             except TypeError as e:
+                if obj is None:
+                    raise TypeError(
+                        f"Mandatory field{self.label_str} of type {self.tp} was not "
+                        "provided a value (i.e. a value that wasn't None) "
+                    ) from None
                 raise TypeError(
                     f"Incorrect type for field{self.label_str}: {obj!r} is not of type "
                     f"{self.tp} (and cannot be coerced to it)"
@@ -235,11 +284,13 @@ class TypeParser(ty.Generic[T]):
 
         def expand_and_coerce(obj, pattern: ty.Union[type, tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
-            if obj is attr.NOTHING:
-                return attr.NOTHING
+            if obj is attrs.NOTHING:
+                return attrs.NOTHING
             if not isinstance(pattern, tuple):
                 return coerce_basic(obj, pattern)
             origin, pattern_args = pattern
+            if origin == MultiInputObj:
+                return coerce_multi_input(obj, pattern_args)
             if origin in UNION_TYPES:
                 return coerce_union(obj, pattern_args)
             if origin is type:
@@ -291,6 +342,21 @@ class TypeParser(ty.Generic[T]):
                 f"{pattern_args}{self.label_str}:\n\n"
                 + "\n\n".join(f"{a} -> {e}" for a, e in zip(pattern_args, reasons))
             )
+
+        def coerce_multi_input(obj, pattern_args):
+            # Attempt to coerce the object into arg type of the MultiInputObj first,
+            # and if that fails, try to coerce it into a list of the arg type
+            try:
+                return coerce_sequence(list, obj, pattern_args)
+            except TypeError as e1:
+                try:
+                    return [expand_and_coerce(obj, pattern_args[0])]
+                except TypeError as e2:
+                    raise TypeError(
+                        f"Could not coerce object ({obj!r}) to MultiInputObj[{pattern_args[0]}] "
+                        f"either as sequence of {pattern_args[0]} ({e1}) or a single {pattern_args[0]} "
+                        f"object to be wrapped in a list {e2}"
+                    ) from e2
 
         def coerce_mapping(
             obj: ty.Mapping, type_: ty.Type[ty.Mapping], pattern_args: list
@@ -368,26 +434,7 @@ class TypeParser(ty.Generic[T]):
                     f"Cannot coerce {obj!r} into {type_}{msg}{self.label_str}"
                 ) from e
 
-        try:
-            return expand_and_coerce(object_, self.pattern)
-        except TypeError as e:
-            # Special handling for MultiInputObjects (which are annoying)
-            if isinstance(self.pattern, tuple) and self.pattern[0] == MultiInputObj:
-                # Attempt to coerce the object into arg type of the MultiInputObj first,
-                # and if that fails, try to coerce it into a list of the arg type
-                inner_type_parser = copy(self)
-                inner_type_parser.pattern = self.pattern[1][0]
-                try:
-                    return [inner_type_parser.coerce(object_)]
-                except TypeError:
-                    add_exc_note(
-                        e,
-                        "Also failed to coerce to the arg-type of the MultiInputObj "
-                        f"({self.pattern[1][0]})",
-                    )
-                    raise e
-            else:
-                raise e
+        return expand_and_coerce(object_, self.pattern)
 
     def check_type(self, type_: ty.Type[ty.Any]):
         """Checks the given type to see whether it matches or is a subtype of the
@@ -584,6 +631,12 @@ class TypeParser(ty.Generic[T]):
             If the object cannot be coerced into the target type depending on the explicit
             inclusions and exclusions set in the `coercible` and `not_coercible` member attrs
         """
+        if (
+            isinstance(source, ty.Sequence)
+            and issubclass(target, core.FileSet)
+            and all(isinstance(p, os.PathLike) for p in source)
+        ):
+            return True
         self.check_type_coercible(type(source), target, source_repr=repr(source))
 
     def check_type_coercible(
@@ -959,8 +1012,6 @@ class TypeParser(ty.Generic[T]):
         ----------
         type_ : ty.Type[ty.Any]
             the type to list the nested sequences of
-        only_splits : bool, optional
-            whether to only return nested splits, not all sequence types
 
         Returns
         -------
@@ -988,3 +1039,174 @@ class TypeParser(ty.Generic[T]):
 
     get_origin = staticmethod(get_origin)
     get_args = staticmethod(get_args)
+
+
+def is_union(type_: type, args: list[type] = None) -> bool:
+    """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form
+
+    Parameters
+    ----------
+    type_ : type
+        the type to check
+    args : list[type], optional
+        required arguments of the union to check, by default (None) any args will match
+
+    Returns
+    -------
+    is_union : bool
+        whether the type is a Union type
+    """
+    if ty.get_origin(type_) in UNION_TYPES:
+        if args is not None:
+            return ty.get_args(type_) == args
+        return True
+    return False
+
+
+def is_optional(type_: type) -> bool:
+    """Check if the type is Optional, i.e. a union containing None"""
+    if is_union(type_):
+        return any(a is type(None) or is_optional(a) for a in ty.get_args(type_))
+    return False
+
+
+def optional_type(type_: type) -> type:
+    """Gets the non-None args of an optional type (i.e. a union with a None arg)"""
+    if is_optional(type_):
+        non_none = [a for a in ty.get_args(type_) if a is not type(None)]
+        if len(non_none) == 1:
+            return non_none[0]
+        return ty.Union[tuple(non_none)]
+    return type_
+
+
+def is_multi_input(type_: type) -> bool:
+    """Check if the type is a MultiInputObj"""
+    type_ = optional_type(type_)
+    return MultiInputObj in (type_, ty.get_origin(type_))
+
+
+def is_fileset_or_union(type_: type, allow_none: bool | None = None) -> bool:
+    """Check if the type is a FileSet or a Union containing a FileSet
+
+    Parameters
+    ----------
+    type_ : type
+        the type to check
+    allow_none : bool, optional
+        whether to allow None as a valid type, by default None. If None, then None
+        is not allowed at the outer layer, but is allowed within a Union
+
+    Returns
+    -------
+    is_fileset : bool
+        whether the type is a FileSet or a Union containing a FileSet
+    """
+    if type_ is None and allow_none:
+        return True
+    if is_union(type_):
+        return any(
+            is_fileset_or_union(t, allow_none=allow_none or allow_none is None)
+            for t in ty.get_args(type_)
+        )
+    elif not inspect.isclass(type_):
+        return False
+    return issubclass(type_, core.FileSet)
+
+
+def is_type(*args: ty.Any) -> bool:
+    """check that the value is a type or generic"""
+    if len(args) == 3:  # attrs validator
+        val = args[2]
+    elif len(args) != 1:
+        raise TypeError(f"is_type() takes 1 or 3 arguments, not {args}")
+    else:
+        val = args[0]
+    return inspect.isclass(val) or ty.get_origin(val)
+
+
+T = ty.TypeVar("T")
+U = ty.TypeVar("U")
+
+
+def state_array_support(
+    function: ty.Callable[T, U],
+) -> ty.Callable[T | StateArray[T], U | StateArray[U]]:
+    """
+    Decorator to convert a allow a function to accept and return StateArray objects,
+    where the function is applied to each element of the StateArray.
+    """
+
+    def state_array_wrapper(
+        value: "T | StateArray[T] | LazyField[T]",
+    ) -> "U | StateArray[U] | LazyField[U]":
+        if is_lazy(value):
+            return value
+        if isinstance(value, StateArray):
+            return StateArray(function(v) for v in value)
+        return function(value)
+
+    return state_array_wrapper
+
+
+def is_lazy(obj):
+    """Check whether an object is a lazy field or has any attribute that is a Lazy Field"""
+    from pydra.engine.lazy import LazyField
+
+    return isinstance(obj, LazyField)
+
+
+def copy_nested_files(
+    value: ty.Any,
+    dest_dir: os.PathLike,
+    supported_modes: generic.FileSet.CopyMode = generic.FileSet.CopyMode.any,
+    **kwargs,
+) -> ty.Any:
+    """Copies all "file-sets" found within the nested value (e.g. dict, list,...) into the
+    destination directory. If no nested file-sets are found then the original value is
+    returned. Note that multiple nested file-sets (e.g. a list) will to have unique names
+    names (i.e. not differentiated by parent directories) otherwise there will be a path
+    clash in the destination directory.
+
+    Parameters
+    ----------
+    value : Any
+        the value to copy files from (if required)
+    dest_dir : os.PathLike
+        the destination directory to copy the files to
+    **kwargs
+        passed directly onto FileSet.copy()
+    """
+    from pydra.utils.typing import TypeParser  # noqa
+
+    cache: ty.Dict[generic.FileSet, generic.FileSet] = {}
+
+    # Set to keep track of file paths that have already been copied
+    # to allow FileSet.copy to avoid name clashes
+    clashes_to_avoid = set()
+
+    def copy_fileset(fileset: generic.FileSet):
+        try:
+            return cache[fileset]
+        except KeyError:
+            pass
+        supported = supported_modes
+        if any(MountIndentifier.on_cifs(p) for p in fileset.fspaths):
+            supported -= generic.FileSet.CopyMode.symlink
+        if not all(
+            MountIndentifier.on_same_mount(p, dest_dir) for p in fileset.fspaths
+        ):
+            supported -= generic.FileSet.CopyMode.hardlink
+        cp_kwargs = {}
+
+        cp_kwargs.update(kwargs)
+        copied = fileset.copy(
+            dest_dir=dest_dir,
+            supported_modes=supported,
+            avoid_clashes=clashes_to_avoid,  # this prevents fname clashes between filesets
+            **kwargs,
+        )
+        cache[fileset] = copied
+        return copied
+
+    return TypeParser.apply_to_instances(generic.FileSet, copy_fileset, value)

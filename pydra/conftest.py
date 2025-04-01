@@ -6,62 +6,39 @@ os.environ["NO_ET"] = "true"
 
 
 def pytest_addoption(parser):
-    parser.addoption("--dask", action="store_true", help="run all combinations")
+    parser.addoption("--with-dask", action="store_true", help="run all combinations")
     parser.addoption(
-        "--psij",
-        action="store",
-        help="run with psij subtype plugin",
-        choices=["local", "slurm"],
+        "--only-worker",
+        help="only run tests with provided worker",
     )
 
 
-def pytest_generate_tests(metafunc):
-    if "plugin_dask_opt" in metafunc.fixturenames:
-        if bool(shutil.which("sbatch")):
-            Plugins = ["slurm"]
-        else:
-            Plugins = ["cf"]
-        try:
-            if metafunc.config.getoption("dask"):
-                Plugins.append("dask")
-        except ValueError:
-            # Called as --pyargs, so --dask isn't available
-            pass
-        try:
-            if metafunc.config.getoption("psij"):
-                Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if (
-                    bool(shutil.which("sbatch"))
-                    and metafunc.config.getoption("psij") == "slurm"
-                ):
-                    Plugins.remove("slurm")
-        except ValueError:
-            pass
-        metafunc.parametrize("plugin_dask_opt", Plugins)
+@pytest.fixture(scope="session", params=["debug", "cf"])
+def worker(request):
+    return request.param
 
-    if "plugin" in metafunc.fixturenames:
-        use_dask = False
+
+def pytest_generate_tests(metafunc):
+    if "any_worker" in metafunc.fixturenames:
         try:
-            use_dask = metafunc.config.getoption("dask")
+            with_dask = metafunc.config.getoption("with_dask")
         except ValueError:
-            pass
-        if use_dask:
-            Plugins = []
-        elif bool(shutil.which("sbatch")):
-            Plugins = ["slurm"]
+            with_dask = False
+        try:
+            only_worker = metafunc.config.getoption("only_worker")
+        except ValueError:
+            only_worker = None
+        if only_worker is None:
+            available_workers = ["debug", "cf"]
+            if with_dask:
+                available_workers.append("dask")
+            if bool(shutil.which("sbatch")):
+                available_workers.append("slurm")
         else:
-            Plugins = ["cf"]
-        try:
-            if metafunc.config.getoption("psij"):
-                Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if (
-                    bool(shutil.which("sbatch"))
-                    and metafunc.config.getoption("psij") == "slurm"
-                ):
-                    Plugins.remove("slurm")
-        except ValueError:
-            pass
-        metafunc.parametrize("plugin", Plugins)
+            available_workers = [only_worker]
+        # Set the available workers as a parameter to the
+        # test function
+        metafunc.parametrize("any_worker", available_workers)
 
 
 # For debugging in IDE's don't catch raised exceptions and let the IDE

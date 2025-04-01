@@ -2,7 +2,10 @@
 
 import sys
 import os
+import re
+import ast
 import struct
+import inspect
 from datetime import datetime
 import typing as ty
 import types
@@ -21,19 +24,23 @@ from typing import (
 from filelock import SoftFileLock
 import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
-from . import user_cache_dir, add_exc_note
+from fileformats.generic import FsObject
+import fileformats.core.exceptions
+from pydra.utils.general import in_stdlib, user_cache_root, add_exc_note
 
 logger = logging.getLogger("pydra")
+
+FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 
 try:
     from typing import Protocol
 except ImportError:
-    from typing_extensions import Protocol  # type: ignore
+    from typing import Protocol  # type: ignore
 
 try:
     from typing import runtime_checkable
 except ImportError:
-    from typing_extensions import runtime_checkable  # type: ignore
+    from typing import runtime_checkable  # type: ignore
 
 
 try:
@@ -104,7 +111,7 @@ class PersistentCache:
         try:
             location = os.environ[cls.LOCATION_ENV_VAR]
         except KeyError:
-            location = user_cache_dir / "hashes"
+            location = user_cache_root / "hashes"
         return location
 
     # the default needs to be an instance method
@@ -322,10 +329,19 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     if attrs.has(type(obj)):
         # Drop any attributes that aren't used in comparisons by default
         dct = attrs.asdict(obj, recurse=False, filter=lambda a, _: bool(a.eq))
-    elif hasattr(obj, "__slots__"):
+    elif hasattr(obj, "__slots__") and obj.__slots__ is not None:
         dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
     else:
-        dct = obj.__dict__
+
+        def is_special_or_method(n: str):
+            return (n.startswith("__") and n.endswith("__")) or inspect.ismethod(
+                getattr(obj, n)
+            )
+
+        try:
+            dct = {n: v for n, v in obj.__dict__.items() if not is_special_or_method(n)}
+        except AttributeError:
+            dct = {n: getattr(obj, n) for n in dir(obj) if not is_special_or_method(n)}
     yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
 
@@ -439,33 +455,88 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
     yield b"}"
 
 
+@register_serializer
+def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
+    yield b"module:("
+    yield hash_single(FsObject(obj.__file__), cache=cache)
+    yield b")"
+
+
 @register_serializer(ty._GenericAlias)
 @register_serializer(ty._SpecialForm)
 @register_serializer(type)
 def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
-    def type_name(tp):
+    from pydra.utils.general import task_fields
+
+    def type_location(tp: type) -> bytes:
+        """Return the module and name of the type in a ASCII byte string"""
         try:
-            name = tp.__name__
+            type_name = tp.__name__
         except AttributeError:
-            name = tp._name
-        return name
+            type_name = tp._name
+        mod_path = ".".join(
+            p for p in klass.__module__.split(".") if not p.startswith("_")
+        )
+        return f"{mod_path}.{type_name}".encode()
 
     yield b"type:("
     origin = ty.get_origin(klass)
-    if origin:
-        yield f"{origin.__module__}.{type_name(origin)}[".encode()
-        for arg in ty.get_args(klass):
+    args = ty.get_args(klass)
+    if origin and args:
+        yield b"origin:("
+        yield from bytes_repr_type(origin, cache)
+        yield b"),args:("
+        for arg in args:
             if isinstance(
                 arg, list
             ):  # sometimes (e.g. Callable) the args of a type is a list
-                yield b"["
+                yield b"list:("
                 yield from (b for t in arg for b in bytes_repr_type(t, cache))
-                yield b"]"
+                yield b")"
             else:
                 yield from bytes_repr_type(arg, cache)
-        yield b"]"
+        yield b")"
     else:
-        yield f"{klass.__module__}.{type_name(klass)}".encode()
+        if inspect.isclass(klass) and issubclass(klass, FileSet):
+            try:
+                yield b"mime-like:(" + klass.mime_like.encode() + b")"
+            except fileformats.core.exceptions.FormatDefinitionError:
+                yield type_location(klass)
+        elif fields := task_fields(klass):
+            yield b"fields:("
+            yield from bytes_repr_sequence_contents(fields, cache)
+            yield b")"
+            if hasattr(klass, "Outputs"):
+                yield b",outputs:("
+                yield from bytes_repr_type(klass.Outputs, cache)
+                yield b")"
+        elif in_stdlib(klass):
+            yield type_location(klass)
+        else:
+            try:
+                dct = {
+                    n: v for n, v in klass.__dict__.items() if not n.startswith("__")
+                }
+            except AttributeError:
+                yield type_location(klass)
+            else:
+                yield b"__dict__:("
+                yield from bytes_repr_mapping_contents(dct, cache)
+                yield b")"
+                # Include annotations
+                try:
+                    annotations = klass.__annotations__
+                except AttributeError:
+                    pass
+                else:
+                    yield b",annotations:("
+                    yield from bytes_repr_mapping_contents(annotations, cache)
+                    yield b")"
+                yield b",mro:("
+                yield from (
+                    b for t in klass.mro()[1:-1] for b in bytes_repr_type(t, cache)
+                )
+                yield b")"
     yield b")"
 
 
@@ -519,6 +590,77 @@ def bytes_repr_set(obj: Set, cache: Cache) -> Iterator[bytes]:
     yield b"}"
 
 
+@register_serializer
+def bytes_repr_code(obj: types.CodeType, cache: Cache) -> Iterator[bytes]:
+    yield b"code:("
+    yield from bytes_repr_sequence_contents(
+        (
+            obj.co_argcount,
+            obj.co_posonlyargcount,
+            obj.co_kwonlyargcount,
+            obj.co_nlocals,
+            obj.co_flags,
+            obj.co_code,
+            obj.co_consts,
+            obj.co_names,
+            obj.co_varnames,
+            obj.co_freevars,
+            obj.co_name,
+            obj.co_cellvars,
+        ),
+        cache,
+    )
+    yield b")"
+
+
+@register_serializer
+def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
+    """Serialize a function, attempting to use the AST of the source code if available
+    otherwise falling back to the byte-code of the function."""
+    yield b"function:("
+    if in_stdlib(obj):
+        yield f"{obj.__module__}.{obj.__name__}".encode()
+    else:
+        try:
+            src = inspect.getsource(obj)
+        except OSError:
+            # Fallback to using the bytes representation of the code object
+            yield from bytes_repr(obj.__code__, cache)
+        else:
+
+            def dump_ast(node: ast.AST) -> bytes:
+                return ast.dump(
+                    node, annotate_fields=False, include_attributes=False
+                ).encode()
+
+            def strip_annotations(node: ast.AST):
+                """Remove annotations from function arguments."""
+                if hasattr(node, "args"):
+                    for arg in node.args.args:
+                        arg.annotation = None
+                    for arg in node.args.kwonlyargs:
+                        arg.annotation = None
+                    if node.args.vararg:
+                        node.args.vararg.annotation = None
+                    if node.args.kwarg:
+                        node.args.kwarg.annotation = None
+
+            indent = re.match(r"(\s*)", src).group(1)
+            if indent:
+                src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
+            try:
+                func_ast = ast.parse(src).body[0]
+                strip_annotations(func_ast)
+                if hasattr(func_ast, "args"):
+                    yield dump_ast(func_ast.args)
+                if hasattr(func_ast, "body"):
+                    for stmt in func_ast.body:
+                        yield dump_ast(stmt)
+            except SyntaxError:
+                yield src.encode()
+    yield b")"
+
+
 def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[bytes]:
     """Serialize the contents of a mapping
 
@@ -535,6 +677,7 @@ def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[byte
         yield from bytes_repr(key, cache)
         yield b"="
         yield bytes(hash_single(mapping[key], cache))
+        yield b","
 
 
 def bytes_repr_sequence_contents(seq: Sequence, cache: Cache) -> Iterator[bytes]:

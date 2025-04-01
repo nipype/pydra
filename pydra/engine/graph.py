@@ -1,16 +1,32 @@
-"""Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
+"""Data structure to support :class:`~pydra.engine.workflow.Workflow` tasks."""
 
 from copy import copy
 from pathlib import Path
+import typing as ty
+from collections import Counter
 import subprocess as sp
+from pydra.utils.general import ensure_list, is_workflow
 
-from .helpers import ensure_list
+
+NodeType = ty.TypeVar("NodeType")
+
+INPUTS_NODE_NAME = "__INPUTS__"
+OUTPUTS_NODE_NAME = "__OUTPUTS__"
 
 
-class DiGraph:
+class DiGraph(ty.Generic[NodeType]):
     """A simple Directed Graph object."""
 
-    def __init__(self, name=None, nodes=None, edges=None):
+    name: str
+    nodes: list[NodeType]
+    edges: list[tuple[NodeType, NodeType]]
+
+    def __init__(
+        self,
+        name: str | None = None,
+        nodes: ty.Iterable[NodeType] | None = None,
+        edges: ty.Iterable[tuple[NodeType, NodeType]] | None = None,
+    ):
         """
         Initialize a directed graph.
 
@@ -32,6 +48,7 @@ class DiGraph:
         self._sorted_nodes = None
         self._node_wip = []
         self._nodes_details = {}
+        self._node_lookup = {}
 
     def copy(self):
         """
@@ -59,20 +76,40 @@ class DiGraph:
         return new_graph
 
     @property
-    def nodes(self):
+    def nodes(self) -> list[NodeType]:
         """Get a list of the nodes currently contained in the graph."""
         return self._nodes
 
     @nodes.setter
-    def nodes(self, nodes):
+    def nodes(self, nodes: ty.Iterable[NodeType]) -> None:
         if nodes:
-            nodes = ensure_list(nodes)
-            if len(set(nodes)) != len(nodes):
-                raise Exception("nodes have repeated elements")
+            if duplicate_names := [
+                n
+                for n, c in Counter(nd.name for nd in ensure_list(nodes)).items()
+                if c > 1
+            ]:
+                raise ValueError(
+                    f"Duplicate node names found in graph: {duplicate_names}"
+                )
             self._nodes = nodes
 
+    def node(self, name: str) -> NodeType:
+        """Get a node by its name, caching the lookup directory"""
+        try:
+            return self._node_lookup[name]
+        except KeyError:
+            self._node_lookup = self.nodes_names_map
+            try:
+                return self._node_lookup[name]
+            except KeyError:
+                raise KeyError(f"Node {name!r} not found in graph") from None
+
+    def __getitem__(self, key):
+        """Get a node by its name."""
+        return self.node(key)
+
     @property
-    def nodes_names_map(self):
+    def nodes_names_map(self) -> dict[str, NodeType]:
         """Get a map of node names to nodes."""
         return {nd.name: nd for nd in self.nodes}
 
@@ -257,6 +294,8 @@ class DiGraph:
                     self._sorted_nodes.remove(nd)
                 # starting from the previous sorted list, so is faster
                 self.sorting(presorted=self.sorted_nodes)
+        # Reset the node lookup
+        self._node_lookup = {}
 
     def remove_nodes_connections(self, nodes):
         """
@@ -278,6 +317,8 @@ class DiGraph:
             self.successors.pop(nd.name)
             self.predecessors.pop(nd.name)
             self._node_wip.remove(nd)
+        # Reset the node lookup
+        self._node_lookup = {}
 
     def remove_previous_connections(self, nodes):
         """
@@ -300,6 +341,8 @@ class DiGraph:
             self.successors.pop(nd.name)
             self.predecessors.pop(nd.name)
             self._node_wip.remove(nd)
+        # Reset the node lookup
+        self._node_lookup = {}
 
     def _checking_successors_nodes(self, node, remove=True):
         if self.successors[node.name]:
@@ -308,6 +351,12 @@ class DiGraph:
                 self._checking_successors_nodes(node=nd_in)
         else:
             return True
+
+    def successors_nodes(self, node):
+        """Get all the nodes that follow the node"""
+        self._successors_all = []
+        self._checking_successors_nodes(node=node, remove=False)
+        return set(self._successors_all)
 
     def remove_successors_nodes(self, node):
         """Removing all the nodes that follow the node"""
@@ -354,11 +403,10 @@ class DiGraph:
 
     def create_dotfile_simple(self, outdir, name="graph"):
         """creates a simple dotfile (no nested structure)"""
-        from .core import is_workflow
 
         dotstr = "digraph G {\n"
         for nd in self.nodes:
-            if is_workflow(nd):
+            if is_workflow(getattr(nd, "_task", None)):
                 if nd.state:
                     # adding color for wf with a state
                     dotstr += f"{nd.name} [shape=box, color=blue]\n"
@@ -393,27 +441,29 @@ class DiGraph:
         if not self._nodes_details:
             raise Exception("node_details is empty, detailed dotfile can't be created")
         for nd_nm, nd_det in self.nodes_details.items():
-            if nd_nm == self.name:  # the main workflow itself
+            if nd_nm == INPUTS_NODE_NAME:  # the main workflow itself
                 # wf inputs
                 wf_inputs_str = f'{{<{nd_det["outputs"][0]}> {nd_det["outputs"][0]}'
                 for el in nd_det["outputs"][1:]:
                     wf_inputs_str += f" | <{el}> {el}"
                 wf_inputs_str += "}"
-                dotstr += f'struct_{nd_nm} [color=red, label="{{WORKFLOW INPUT: | {wf_inputs_str}}}"];\n'
+                dotstr += (
+                    f"struct_{self.name} [color=red, "
+                    f'label="{{WORKFLOW INPUT: | {wf_inputs_str}}}"];\n'
+                )
+            elif nd_nm == OUTPUTS_NODE_NAME:
                 # wf outputs
                 wf_outputs_str = f'{{<{nd_det["inputs"][0]}> {nd_det["inputs"][0]}'
                 for el in nd_det["inputs"][1:]:
                     wf_outputs_str += f" | <{el}> {el}"
                 wf_outputs_str += "}"
                 dotstr += (
-                    f"struct_{nd_nm}_out "
+                    f"struct_{self.name}_out "
                     f'[color=red, label="{{WORKFLOW OUTPUT: | {wf_outputs_str}}}"];\n'
                 )
                 # connections to the wf outputs
                 for con in nd_det["connections"]:
-                    dotstr += (
-                        f"struct_{con[1]}:{con[2]} -> struct_{nd_nm}_out:{con[0]};\n"
-                    )
+                    dotstr += f"struct_{con[1]}:{con[2]} -> struct_{self.name}_out:{con[0]};\n"
             else:  # elements of the main workflow
                 inputs_str = "{INPUT:"
                 for inp in nd_det["inputs"]:
@@ -429,7 +479,11 @@ class DiGraph:
                 )
                 # connections between elements
                 for con in nd_det["connections"]:
-                    dotstr += f"struct_{con[1]}:{con[2]} -> struct_{nd_nm}:{con[0]};\n"
+                    in_conn = self.name if con[1] == INPUTS_NODE_NAME else con[1]
+                    out_conn = self.name if con[0] == OUTPUTS_NODE_NAME else con[0]
+                    dotstr += (
+                        f"struct_{in_conn}:{con[2]} -> struct_{nd_nm}:{out_conn};\n"
+                    )
         dotstr += "}"
         Path(outdir).mkdir(parents=True, exist_ok=True)
         dotfile = Path(outdir) / f"{name}.dot"
@@ -447,18 +501,18 @@ class DiGraph:
         return dotfile
 
     def _create_dotfile_single_graph(self, nodes, edges):
-        from .core import is_workflow
 
-        wf_asnd = []
+        wf_asnd = {}
         dotstr = ""
         for nd in nodes:
-            if is_workflow(nd):
-                wf_asnd.append(nd.name)
-                for task in nd.graph.nodes:
-                    nd.create_connections(task)
+            if is_workflow(getattr(nd, "_task", None)):
+                nd_graph = nd._task.construct().graph()
+                wf_asnd[nd.name] = nd_graph
+                # for job in nd_graph.nodes:
+                #     nd.create_connections(job)
                 dotstr += f"subgraph cluster_{nd.name} {{\n" f"label = {nd.name} \n"
                 dotstr += self._create_dotfile_single_graph(
-                    nodes=nd.graph.nodes, edges=nd.graph.edges
+                    nodes=nd_graph.nodes, edges=nd_graph.edges
                 )
                 if nd.state:
                     dotstr += "color=blue\n"
@@ -480,12 +534,14 @@ class DiGraph:
                     f"lhead=cluster_{ed[1].name}]\n"
                 )
             elif ed[0].name in wf_asnd:
-                tail_nd = list(ed[0].nodes)[-1].name
+                nd_nodes = wf_asnd[ed[0].name].nodes
+                tail_nd = list(nd_nodes)[-1].name
                 dotstr_edg += (
                     f"{tail_nd} -> {ed[1].name} [ltail=cluster_{ed[0].name}]\n"
                 )
             elif ed[1].name in wf_asnd:
-                head_nd = list(ed[1].nodes)[0].name
+                nd_nodes = wf_asnd[ed[1].name].nodes
+                head_nd = list(nd_nodes)[0].name
                 dotstr_edg += (
                     f"{ed[0].name} -> {head_nd} [lhead=cluster_{ed[1].name}]\n"
                 )
