@@ -196,11 +196,13 @@ class Task(ty.Generic[OutputsType]):
         readonly_caches : list[os.PathLike], optional
             Alternate cache locations to check for pre-computed results, by default None
         audit_flags : AuditFlag, optional
-            Auditing configuration, by default AuditFlag.NONE
-        messengers : list, optional
-            Messengers, by default None
-        messenger_args : dict, optional
-            Messenger arguments, by default None
+            Configure provenance tracking. available flags: :class:`~pydra.utils.messenger.AuditFlag`
+            Default is no provenance tracking.
+        messenger : :class:`Messenger` or :obj:`list` of :class:`Messenger` or None
+            Messenger(s) used by Audit. Saved in the `audit` attribute.
+            See available flags at :class:`~pydra.utils.messenger.Messenger`.
+        messengers_args : messengers_args : dict[str, Any], optional
+            Argument(s) used by `messegner`. Saved in the `audit` attribu
         **kwargs : dict
             Keyword arguments to pass on to the worker initialisation
 

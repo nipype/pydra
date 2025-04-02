@@ -27,11 +27,12 @@ Installation
 
 Pydra is implemented purely in Python and has a small number of dependencies
 It is easy to install via pip for Python >= 3.11 (preferably within a
-`virtual environment`_):
+`virtual environment`_). To get the latest version you will need to explicitly specify
+greater than or equal to 1.0a, otherwise PyPI will install the last 0.* version:
 
 .. code-block:: bash
 
-   $ pip install pydra
+   $ pip install pydra>=1.0a
 
 Pre-designed tasks are available under the `pydra.tasks.*` namespace. These tasks
 are typically implemented within separate packages that are specific to a given
@@ -41,7 +42,7 @@ ANTs_ (*pydra-ants*), or a collection of related tasks/workflows, such as Niwork
 
 .. code-block:: bash
 
-   $ pip install pydra-fsl pydra-ants
+   $ pip install pydra-tasks-fsl pydra-tasks-ants
 
 Of course, if you use Pydra to execute commands within non-Python toolkits, you will
 need to either have those commands installed on the execution machine, or use containers
