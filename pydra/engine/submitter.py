@@ -64,11 +64,13 @@ class Submitter:
     max_concurrent: int | float, optional
         Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
     audit_flags : AuditFlag, optional
-        Auditing configuration, by default AuditFlag.NONE
-    messengers : list, optional
-        Messengers, by default None
-    messenger_args : dict, optional
-        Messenger arguments, by default None
+        Configure provenance tracking. available flags: :class:`~pydra.utils.messenger.AuditFlag`
+        Default is no provenance tracking.
+    messenger : :class:`Messenger` or :obj:`list` of :class:`Messenger` or None
+        Messenger(s) used by Audit. Saved in the `audit` attribute.
+        See available flags at :class:`~pydra.utils.messenger.Messenger`.
+    messengers_args : dict[str, Any], optional
+        Argument(s) used by `messegner`. Saved in the `audit` attribu
     clean_stale_locks : bool, optional
         Whether to clean stale lock files, i.e. lock files that were created before the
         start of the current run. Don't set if using a global cache where there are
