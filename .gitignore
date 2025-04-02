@@ -10,8 +10,7 @@ __pycache__
 .vscode/
 
 .coverage*
-!.coveragerc
-cov.xml
+coverage.xml
 
 .*.swp
 *~
@@ -20,6 +19,8 @@ cov.xml
 
 .DS_Store
 .ipynb_checkpoints
+
+.tox
 
 # This can be generated in-tree. We never want to commit it.
 pydra/utils/_version.py
