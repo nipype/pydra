@@ -1193,10 +1193,9 @@ class State:
         )
         val_ind = range(reduce(lambda x, y: x * y, shape))
         if op_single in self.inner_inputs:
-            if len(shape) == 1:
-                breakpoint()
             # TODO: have to be changed if differ length
-            inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+            inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1], 1)
+
             # this come from the previous node
             outer_ind = self.inner_inputs[op_single].ind_l
             op_out = itertools.chain.from_iterable(
