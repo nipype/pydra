@@ -75,11 +75,7 @@ def run_submitter(
     return results.outputs
 
 
-dot_check = sp.run(["which", "dot"], stdout=sp.PIPE, stderr=sp.PIPE)
-if dot_check.stdout:
-    DOT_FLAG = True
-else:
-    DOT_FLAG = False
+DOT_FLAG = bool(shutil.which("dot"))
 
 
 @python.define
