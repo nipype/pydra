@@ -85,7 +85,12 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.11', '3.12', '3.13']
+        dependencies: [latest]
       fail-fast: False
+
+    env:
+      DEPENDS: ${{ matrix.dependencies }}
+
     steps:
       - name: Set env
         run: |
