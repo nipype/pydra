@@ -129,7 +129,6 @@ version-file = "pydra/utils/_version.py"
 allow-direct-references = true
 
 [tool.black]
-target-version = ['py38']
 exclude = "pydra/utils/_version.py"
 
 [tool.codespell]
