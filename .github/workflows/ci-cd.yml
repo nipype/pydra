@@ -23,30 +23,18 @@ permissions:
 jobs:
 
   build:
+    name: Build & verify package
     runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: hynek/build-and-inspect-python-package@v2
         with:
-          python-version: 3
-      - run: pip install --upgrade build twine
-      - run: python -m build
-      - run: twine check dist/*
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      - name: Build archive
-        run: |
-          git clean -fxd
-          mkdir archive
-          git archive -o archive/pydra.zip HEAD
-      - uses: actions/upload-artifact@v4
-        with:
-          name: archive
-          path: archive/
+          attest-build-provenance-github: ${{ github.event_name != 'pull_request' }}
 
   test:
     needs: ['build']
@@ -342,13 +330,13 @@ jobs:
         path: docs/build/html
 
   deploy:
-    needs: [build-docs, test, test-singularity, test-slurm]
+    needs: [build, build-docs, test, test-singularity, test-slurm]
     runs-on: ubuntu-latest
     steps:
     - name: Download dist
       uses: actions/download-artifact@v4
       with:
-        name: dist
+        name: Packages
         path: dist
     - name: Check for PyPI token on tag
       id: deployable
