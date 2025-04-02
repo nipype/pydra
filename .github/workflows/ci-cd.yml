@@ -45,7 +45,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ['3.11', '3.12', '3.13']
-        dependencies: [latest] # , pre]
+        dependencies: [latest, pre]
         include:
           # Test minimum dependencies on oldest supported Python
           - os: ubuntu-latest
