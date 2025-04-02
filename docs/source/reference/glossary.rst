@@ -4,10 +4,11 @@ Glossary
 .. glossary::
 
     Cache-root
-        The directory where cache directories for tasks to be executed are created.
-        Task cache directories are named within the cache root directory using a hash
-        of the task's parameters, so that the same task with the same parameters can be
-        reused.
+        The root directory in which separate cache directories for each job are created.
+        Job cache directories are named within the cache-root directory using a unique
+        checksum for the job based on the task's parameters and software environment,
+        so that if the same job is run again the outputs from the previous run can be
+        reuused.
 
     Combiner
         A combiner is used to combine :ref:`State-array` values created by a split operation
@@ -15,51 +16,57 @@ Glossary
         stand-alone tasks.
 
     Container-ndim
-        The number of dimensions of the container object to be iterated over when using
-        a :ref:`Splitter` to split over an iterable value. For example, a list-of-lists
-        or a 2D array with `container_ndim=2` would be split over the elements of the
-        inner lists into a single 1-D state array. However, if `container_ndim=1`,
-        the outer list/2D would be split into a 1-D state array of lists/1D arrays.
+        The number of dimensions of the container object to be flattened into a single
+        state array when splitting over nested containers/multi-dimension arrays.
+        For example, a list-of-list-of-floats or a 2D numpy array with `container_ndim=1`,
+        the outer list/2D would be split into a 1-D state array consisting of
+        list-of-floats or 1D numpy arrays, respectively. Whereas with
+        `container_ndim=2` they would be split into a state-array of floats consisiting
+        of all the elements of the inner-lists/array.
 
     Environment
         An environment refers to a specific software encapsulation, such as a Docker
-        or Singularity image, that is used to run a task.
+        or Singularity image, in which a shell tasks are run. They are specified in the
+        Submitter object to be used when executing a task.
 
     Field
-        A field is a parameter of a task, or a task outputs object, that can be set to
-        a specific value. Fields are specified to be of any types, including objects
-        and file-system objects.
+        A field is a parameter of a task, or an output in a task outputs class.
+        Fields define the expected datatype of the parameter and other metadata
+        parameters that control how the field is validated and passed through to the
+        execution of the task.
 
     Hook
-        A hook is a user-defined function that is executed at a specific point in the task
-        execution process. Hooks can be used to prepare/finalise the task cache directory
+        A hook is a user-defined function that is executed at a specific point either before
+        or after a task is run. Hooks can be used to prepare/finalise the task cache directory
         or send notifications
 
     Job
-        A job is a discrete unit of work, a :ref:`Task`, with all inputs resolved
-        (i.e. not lazy-values or state-arrays) that has been assigned to a worker.
-        A task describes "what" is to be done and a submitter object describes
-        "how" it is to be done, a job combines both objects to describe a concrete unit
-        of processing.
+        A job consists of a :ref:`Task` with all inputs resolved
+        (i.e. not lazy-values or state-arrays) and a Submitter object. It therefore
+        represents a concrete unit of work to be executed, be combining "what" is to be
+        done (Task) with "how" it is to be done (Submitter).
 
     Lazy-fields
         A lazy-field is a field that is not immediately resolved to a value. Instead,
-        it is a placeholder that will be resolved at runtime, allowing for dynamic
-        parameterisation of tasks.
+        it is a placeholder that will be resolved at runtime when a workflow is executed,
+        allowing for dynamic parameterisation of tasks.
 
     Node
-        A single task within the context of a workflow, which is assigned a name and
-        references a state. Note this task can be nested workflow task.
+        A single task within the context of a workflow. It is assigned a unique name
+        within the workflow and references a state object that determines the
+        state-array of jobs to be run if present (if the state is None then a single
+        job will be run for each node).
 
     Read-only-caches
         A read-only cache is a cache root directory that was created by a previous
-        pydra runs, which is checked for matching task caches to be reused if present
-        but not written not modified during the execution of a task.
+        pydra run. The read-only caches are checked for matching job checksums, which
+        are reused if present. However, new job cache dirs are written to the cache root
+        so the read-only caches are not modified during the execution.
 
     State
         The combination of all upstream splits and combines with any splitters and
-        combiners for a given node, it is used to track how many jobs, and their
-        parameterisations, need to be run for a given workflow node.
+        combiners for a given node. It is used to track how many jobs, and their
+        parameterisations, that need to be run for a given workflow node.
 
     State-array
         A state array is a collection of parameterised tasks or values that were generated
@@ -84,8 +91,9 @@ Glossary
 
     Worker
         Encapsulation of a task execution environment. It is responsible for executing
-        tasks and managing their lifecycle. Workers can be local (e.g., a thread or
-        process) or remote (e.g., high-performance cluster).
+        tasks and managing their lifecycle. Workers can be local (e.g., debug and
+        concurrent-futures multiprocess) or orchestrated through a remote scheduler
+        (e.g., SLURM, SGE).
 
     Workflow
       A Directed-Acyclic-Graph (DAG) of parameterised tasks, to be executed in order.
