@@ -3,22 +3,25 @@
 from copy import deepcopy
 import itertools
 from functools import reduce
+import logging
+import typing as ty
+from pydra.utils.typing import StateArray, TypeParser
+from pydra.utils.general import ensure_list, attrs_values
 
-from . import helpers_state as hlpst
-from .helpers import ensure_list
-from .specs import BaseSpec
 
-# TODO: move to State
-op = {".": zip, "*": itertools.product}
+logger = logging.getLogger("pydra")
+
+
+OutputsType = ty.TypeVar("OutputsType")
 
 
 class State:
     """
     A class that specifies a State of all tasks.
 
-      * It's only used when a task have a splitter.
+      * It's only used when a job have a splitter.
       * It contains all information about splitter, combiner, final splitter,
-        and input values for specific task states
+        and input values for specific job states
         (specified by the splitter and the input).
       * It also contains information about the final groups and the final splitter
         if combiner is available.
@@ -26,7 +29,7 @@ class State:
     Attributes
     ----------
     name : :obj:`str`
-        name of the state that is the same as a name of the task
+        name of the state that is the same as a name of the job
     splitter : :obj:`str`, :obj:`tuple`, :obj:`list`
         can be a str (name of a single input),
         tuple for scalar splitter, or list for outer splitter
@@ -60,8 +63,8 @@ class State:
         values for all state inputs (i.e. inputs that are part of the splitter)
     inputs_ind : :obj:`list` of :obj:`dict`
         dictionary for every state that contains
-        indices for all task inputs (i.e. inputs that are relevant
-        for current task, can be outputs from previous nodes)
+        indices for all job inputs (i.e. inputs that are relevant
+        for current job, can be outputs from previous nodes)
     group_for_inputs : :obj:`dict`
         specifying groups (axes) for each input field
         (depends on the splitter)
@@ -77,16 +80,23 @@ class State:
 
     """
 
-    def __init__(self, name, splitter=None, combiner=None, other_states=None):
+    def __init__(
+        self,
+        name,
+        splitter=None,
+        combiner=None,
+        container_ndim=None,
+        other_states=None,
+    ):
         """
         Initialize a state.
 
         Parameters
         ----------
         name : :obj:`str`
-            name (should be the same as the task's name)
+            name (should be the same as the job's name)
         splitter : :obj:`str`, or :obj:`tuple`, or :obj:`list`
-            splitter of a task
+            splitter of a job
         combiner : :obj:`str`, or :obj:`list`)
             field/fields used to combine results
         other_states :obj:`dict`:
@@ -99,6 +109,9 @@ class State:
         self.splitter = splitter
         # temporary combiner
         self.combiner = combiner
+        self.container_ndim = container_ndim or {}
+        self._inner_container_ndim = {}
+        self._inputs_ind = None
         # if other_states, the connections have to be updated
         if self.other_states:
             self.update_connections()
@@ -111,6 +124,101 @@ class State:
         )
 
     @property
+    def names(self):
+        """Return the names of the states."""
+        previous_states_keys = {
+            f"_{v.name}": v.keys_final for v in self.inner_inputs.values()
+        }
+        names = []
+        # iterating splitter_rpn
+        for token in self.splitter_rpn:
+            if token in [".", "*"]:  # token is one of the input var
+                continue
+                # adding variable to the stack
+            if token.startswith("_"):
+                new_keys = previous_states_keys[token]
+                names += new_keys
+            else:
+                names.append(token)
+        return names
+
+    def depth(self, before_combine: bool = False) -> int:
+        """Return the number of splits of the state, i.e. the number nested
+        state arrays to wrap around the type of lazy out fields
+
+        Parameters
+        ----------
+        before_combine : :obj:`bool`
+            if True, the depth is after combining the fields, otherwise it is before
+            any combinations
+
+        Returns
+        -------
+        int
+            number of splits in the state (i.e. linked splits only add 1)
+        """
+
+        # replace field names with 1 or 0 (1 if the field is included in the state)
+        include_rpn = [
+            (
+                s
+                if s in [".", "*"]
+                else (1 if before_combine else int(s not in self.combiner))
+            )
+            for s in self.splitter_rpn
+        ]
+
+        stack = []
+        for opr in include_rpn:
+            if opr == ".":
+                assert len(stack) >= 2
+                opr1 = stack.pop()
+                opr2 = stack.pop()
+                stack.append(opr1 and opr2)
+            elif opr == "*":
+                assert len(stack) >= 2
+                stack.append(stack.pop() + stack.pop())
+            else:
+                stack.append(opr)
+        assert len(stack) == 1
+        return stack[0]
+
+    def nest_output_type(self, type_: type) -> type:
+        """Nests a type of an output field in a combination of lists and state-arrays
+        based on the state's splitter and combiner
+
+        Parameters
+        ----------
+        type_ : type
+            the type of the output field
+
+        Returns
+        -------
+        type
+            the nested type of the output field
+        """
+
+        state_array_depth = self.depth()
+
+        # If there is a combination, it will get flattened into a single list
+        if self.depth(before_combine=True) > state_array_depth:
+            type_ = list[type_]
+
+        # Nest the uncombined state arrays around the type
+        for _ in range(state_array_depth):
+            type_ = StateArray[type_]
+        return type_
+
+    @classmethod
+    def combine_state_arrays(cls, type_: type) -> type:
+        """Collapses (potentially nested) state array(s) into a single list"""
+        if TypeParser.get_origin(type_) is StateArray:
+            # Implicitly combine any remaining uncombined states into a single
+            # list
+            type_ = list[TypeParser.strip_splits(type_)[0]]
+        return type_
+
+    @property
     def splitter(self):
         """Get the splitter of the state."""
         return self._splitter
@@ -118,11 +226,9 @@ class State:
     @splitter.setter
     def splitter(self, splitter):
         if splitter and not isinstance(splitter, (str, tuple, list)):
-            raise hlpst.PydraStateError(
-                "splitter has to be a string, a tuple or a list"
-            )
+            raise PydraStateError("splitter has to be a string, a tuple or a list")
         if splitter:
-            self._splitter = hlpst.add_name_splitter(splitter, self.name)
+            self._splitter = add_name_splitter(splitter, self.name)
         else:
             self._splitter = None
         # updating splitter_rpn
@@ -131,15 +237,15 @@ class State:
     def _splitter_rpn_updates(self):
         """updating splitter_rpn and splitter_rpn_compact"""
         try:
-            self._splitter_rpn = hlpst.splitter2rpn(
+            self._splitter_rpn = splitter2rpn(
                 self.splitter, other_states=self.other_states
             )
         # other_state might not be ready yet
-        except hlpst.PydraStateError:
+        except PydraStateError:
             self._splitter_rpn = None
 
         if self.other_states or self._splitter_rpn is None:
-            self._splitter_rpn_compact = hlpst.splitter2rpn(
+            self._splitter_rpn_compact = splitter2rpn(
                 self.splitter, other_states=self.other_states, state_fields=False
             )
         else:
@@ -150,7 +256,7 @@ class State:
         """splitter in :abbr:`RPN (Reverse Polish Notation)`"""
         # if splitter_rpn was not calculated within splitter.setter
         if self._splitter_rpn is None:
-            self._splitter_rpn = hlpst.splitter2rpn(
+            self._splitter_rpn = splitter2rpn(
                 self.splitter, other_states=self.other_states
             )
         return self._splitter_rpn
@@ -166,12 +272,12 @@ class State:
     @property
     def splitter_final(self):
         """the final splitter, after removing the combined fields"""
-        return hlpst.rpn2splitter(self.splitter_rpn_final)
+        return rpn2splitter(self.splitter_rpn_final)
 
     @property
     def splitter_rpn_final(self):
         if self.combiner:
-            _splitter_rpn_final = hlpst.remove_inp_from_splitter_rpn(
+            _splitter_rpn_final = remove_inp_from_splitter_rpn(
                 deepcopy(self.splitter_rpn),
                 self.current_combiner_all + self.prev_state_combiner_all,
             )
@@ -182,13 +288,24 @@ class State:
     @property
     def current_splitter(self):
         """the current part of the splitter,
-        i.e. the part that is related to the current task's state only
+        i.e. the part that is related to the current job's state only
         (doesn't include fields propagated from the previous tasks)
         """
         if hasattr(self, "_current_splitter"):
             return self._current_splitter
         else:
             return self.splitter
+
+    @property
+    def inputs_ind(self):
+        """dictionary for every state that contains indices for all job inputs
+        (i.e. inputs that are relevant for current job, can be outputs from previous nodes)
+        """
+        if self._inputs_ind is None:
+            raise RuntimeError(
+                "inputs_ind is not set, please run prepare_states() on the state first"
+            )
+        return self._inputs_ind
 
     @current_splitter.setter
     def current_splitter(self, current_splitter):
@@ -199,7 +316,7 @@ class State:
     def _current_splitter_rpn_updates(self):
         """updating current_splitter_rpn"""
         if self._current_splitter:
-            self._current_splitter_rpn = hlpst.splitter2rpn(
+            self._current_splitter_rpn = splitter2rpn(
                 self.current_splitter, other_states=self.other_states
             )
         else:
@@ -232,14 +349,14 @@ class State:
     def _prev_state_splitter_rpn_updates(self):
         """updating prev_state_splitter_rpn/_rpn_compact"""
         if self._prev_state_splitter:
-            self._prev_state_splitter_rpn = hlpst.splitter2rpn(
+            self._prev_state_splitter_rpn = splitter2rpn(
                 self.prev_state_splitter, other_states=self.other_states
             )
         else:
             self._prev_state_splitter_rpn = []
 
         if self.other_states:
-            self._prev_state_splitter_rpn_compact = hlpst.splitter2rpn(
+            self._prev_state_splitter_rpn_compact = splitter2rpn(
                 self.prev_state_splitter,
                 other_states=self.other_states,
                 state_fields=False,
@@ -260,6 +377,14 @@ class State:
         return self._prev_state_splitter_rpn_compact
 
     @property
+    def container_ndim_all(self):
+        # adding inner_container_ndim to the general container_dimension provided by the users
+        container_ndim_all = deepcopy(self.container_ndim)
+        for k, v in self._inner_container_ndim.items():
+            container_ndim_all[k] = container_ndim_all.get(k, 1) + v
+        return container_ndim_all
+
+    @property
     def combiner(self):
         """the combiner associated to the state."""
         return self._combiner
@@ -268,15 +393,15 @@ class State:
     def combiner(self, combiner):
         if combiner:
             if not isinstance(combiner, (str, list)):
-                raise hlpst.PydraStateError("combiner has to be a string or a list")
-            self._combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
+                raise PydraStateError("combiner has to be a string or a list")
+            self._combiner = add_name_combiner(ensure_list(combiner), self.name)
         else:
             self._combiner = []
 
     @property
     def current_combiner(self):
         """the current part of the combiner,
-        i.e. the part that is related to the current task's state only
+        i.e. the part that is related to the current job's state only
         (doesn't include fields propagated from the previous tasks)
         """
         return [comb for comb in self.combiner if self.name in comb]
@@ -326,13 +451,11 @@ class State:
     def other_states(self, other_states):
         if other_states:
             if not isinstance(other_states, dict):
-                raise hlpst.PydraStateError("other states has to be a dictionary")
+                raise PydraStateError("other states has to be a dictionary")
             else:
                 for key, val in other_states.items():
                     if not val:
-                        raise hlpst.PydraStateError(
-                            f"connection from node {key} is empty"
-                        )
+                        raise PydraStateError(f"connection from node {key} is empty")
             # ensuring that the connected fields are set as a list
             self._other_states = {
                 nm: (st, ensure_list(flds)) for nm, (st, flds) in other_states.items()
@@ -430,7 +553,7 @@ class State:
             the prev-state part of the splitter, that has to be completed
         """
         if prev_state:
-            rpn_prev_state = hlpst.splitter2rpn(
+            rpn_prev_state = splitter2rpn(
                 prev_state, other_states=self.other_states, state_fields=False
             )
             for name, (st, inp) in list(self.other_states.items())[::-1]:
@@ -450,7 +573,7 @@ class State:
         """removing states from previous tasks that are repeated"""
         for el in previous_splitters:
             if el[1:] not in self.other_states:
-                raise hlpst.PydraStateError(
+                raise PydraStateError(
                     f"can't ask for splitter from {el[1:]}, other nodes that are connected: "
                     f"{self.other_states}"
                 )
@@ -557,7 +680,7 @@ class State:
         If the splitter_part is mixed exception is raised.
 
         """
-        rpn_part = hlpst.splitter2rpn(
+        rpn_part = splitter2rpn(
             splitter_part, other_states=self.other_states, state_fields=False
         )
         inputs_in_splitter = [i for i in rpn_part if i not in ["*", "."]]
@@ -579,7 +702,7 @@ class State:
             # the prev-state and the current parts separated in outer scalar
             return "[prev-state, current]"
         else:
-            raise hlpst.PydraStateError(
+            raise PydraStateError(
                 "prev-state and current splitters are mixed - splitter invalid"
             )
 
@@ -591,7 +714,7 @@ class State:
         state_fields : :obj:`bool`
             if False the splitter from the previous states are unwrapped
         """
-        current_splitter_rpn = hlpst.splitter2rpn(
+        current_splitter_rpn = splitter2rpn(
             self.current_splitter,
             other_states=self.other_states,
             state_fields=state_fields,
@@ -599,7 +722,7 @@ class State:
         # merging groups from previous nodes if any input come from previous states
         if self.other_states:
             self._merge_previous_groups()
-        keys_f, group_for_inputs_f, groups_stack_f, combiner_all = hlpst.splits_groups(
+        keys_f, group_for_inputs_f, groups_stack_f, combiner_all = splits_groups(
             current_splitter_rpn,
             combiner=self.current_combiner,
             inner_inputs=self.inner_inputs,
@@ -628,7 +751,7 @@ class State:
         self.group_for_inputs_final = {}
         self.keys_final = []
         if self.prev_state_combiner:
-            _, _, _, self._prev_state_combiner_all = hlpst.splits_groups(
+            _, _, _, self._prev_state_combiner_all = splits_groups(
                 self.prev_state_splitter_rpn, combiner=self.prev_state_combiner
             )
         for i, prev_nm in enumerate(self.prev_state_splitter_rpn_compact):
@@ -640,7 +763,7 @@ class State:
             ):
                 last_gr = last_gr - 1
             if prev_nm[1:] not in self.other_states:
-                raise hlpst.PydraStateError(
+                raise PydraStateError(
                     f"can't ask for splitter from {prev_nm[1:]}, "
                     f"other nodes that are connected: {self.other_states}"
                 )
@@ -661,14 +784,14 @@ class State:
                     group_for_inputs_f_st,
                     groups_stack_f_st,
                     combiner_all_st,
-                ) = hlpst.splits_groups(
+                ) = splits_groups(
                     st.splitter_rpn_final,
                     combiner=st_combiner,
                     inner_inputs=st.inner_inputs,
                 )
                 self.keys_final += keys_f_st  # st.keys_final
                 if not hasattr(st, "group_for_inputs_final"):
-                    raise hlpst.PydraStateError("previous state has to run first")
+                    raise PydraStateError("previous state has to run first")
                 group_for_inputs = group_for_inputs_f_st
                 groups_stack = groups_stack_f_st
                 self._prev_state_combiner_all += combiner_all_st
@@ -721,7 +844,7 @@ class State:
                 or (spl.startswith("_") and spl[1:] in self.other_states)
                 or spl.split(".")[0] == self.name
             ):
-                raise hlpst.PydraStateError(
+                raise PydraStateError(
                     "can't include {} in the splitter, consider using _{}".format(
                         spl, spl.split(".")[0]
                     )
@@ -729,15 +852,25 @@ class State:
 
     def combiner_validation(self):
         """validating if the combiner is correct (after all states are connected)"""
-        if self.combiner:
+        if local_names := set(
+            c for c in self.combiner if c.startswith(self.name + ".")
+        ):
             if not self.splitter:
-                raise hlpst.PydraStateError(
-                    "splitter has to be set before setting combiner"
+                raise PydraStateError(
+                    "splitter has to be set before setting combiner with field names "
+                    f"in the current node {list(local_names)}"
                 )
-            if set(self._combiner) - set(self.splitter_rpn):
-                raise hlpst.PydraStateError("all combiners have to be in the splitter")
+            if missing := local_names - set(self.splitter_rpn):
+                raise PydraStateError(
+                    "The following field names from the current node referenced in the "
+                    f"combiner, {list(missing)} are not in the splitter"
+                )
 
-    def prepare_states(self, inputs, cont_dim=None):
+    def prepare_states(
+        self,
+        inputs: dict[str, ty.Any],
+        container_ndim: dict[str, int] | None = None,
+    ):
         """
         Prepare a full list of state indices and state values.
 
@@ -746,34 +879,19 @@ class State:
 
         State Values
             specific elements from inputs that can be used running interfaces
-
-        Parameters
-        ----------
-        inputs : :obj:`dict`
-            inputs of the task
-        cont_dim : :obj:`dict` or `None`
-            container's dimensions for a specific input's fields
         """
         # checking if splitter and combiner have valid forms
         self.splitter_validation()
         self.combiner_validation()
         self.set_input_groups()
-        # container dimension for each input, specifies how nested the input is
-        if cont_dim:
-            self.cont_dim = cont_dim
-        else:
-            self.cont_dim = {}
-        if isinstance(inputs, BaseSpec):
-            self.inputs = hlpst.inputs_types_to_dict(self.name, inputs)
-        else:
-            self.inputs = inputs
+        self.inputs = inputs
+        if container_ndim is not None:
+            self.container_ndim = container_ndim
         if self.other_states:
+            st: State
             for nm, (st, _) in self.other_states.items():
-                # I think now this if is never used
-                if not hasattr(st, "states_ind"):
-                    st.prepare_states(self.inputs, cont_dim=cont_dim)
                 self.inputs.update(st.inputs)
-                self.cont_dim.update(st.cont_dim)
+                self.container_ndim.update(st.container_ndim_all)
 
         self.prepare_states_ind()
         self.prepare_states_val()
@@ -782,11 +900,11 @@ class State:
         """
         Calculate a list of dictionaries with state indices.
 
-        Uses hlpst.splits.
+        Uses splits.
 
         """
         # removing elements that are connected to inner splitter
-        # (they will be taken into account in hlpst.splits anyway)
+        # (they will be taken into account in splits anyway)
         # _comb part will be used in prepare_states_combined_ind
         # TODO: need tests in test_Workflow.py
         elements_to_remove = []
@@ -801,7 +919,7 @@ class State:
                     if f"{self.name}.{inp}" not in self.combiner:
                         elements_to_remove_comb.append(f"_{name}")
 
-        partial_rpn = hlpst.remove_inp_from_splitter_rpn(
+        partial_rpn = remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove
         )
         values_out_pr, keys_out_pr = self.splits(
@@ -811,7 +929,7 @@ class State:
 
         self.ind_l = values_pr
         self.keys = keys_out_pr
-        self.states_ind = list(hlpst.iter_splits(values_pr, self.keys))
+        self.states_ind = list(iter_splits(values_pr, self.keys))
         self.keys_final = self.keys
         if self.combiner:
             self.prepare_states_combined_ind(elements_to_remove_comb)
@@ -832,14 +950,14 @@ class State:
         elements_to_remove_comb : :obj:`list`
             elements of the splitter that should be removed due to the combining
         """
-        partial_rpn_compact = hlpst.remove_inp_from_splitter_rpn(
+        partial_rpn_compact = remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove_comb
         )
         # combiner can have parts from the prev-state splitter, so have to have rpn with states
-        partial_rpn = hlpst.splitter2rpn(
-            hlpst.rpn2splitter(partial_rpn_compact), other_states=self.other_states
+        partial_rpn = splitter2rpn(
+            rpn2splitter(partial_rpn_compact), other_states=self.other_states
         )
-        combined_rpn = hlpst.remove_inp_from_splitter_rpn(
+        combined_rpn = remove_inp_from_splitter_rpn(
             deepcopy(partial_rpn),
             self.current_combiner_all + self.prev_state_combiner_all,
         )
@@ -858,7 +976,7 @@ class State:
             self.keys_final = keys_out
             # groups after combiner
             ind_map = {
-                tuple(hlpst.flatten(tup, max_depth=10)): ind
+                tuple(flatten(tup, max_depth=10)): ind
                 for ind, tup in enumerate(self.ind_l_final)
             }
             self.final_combined_ind_mapping = {
@@ -872,14 +990,14 @@ class State:
             self.keys_final = keys_out
             # should be 0 or None?
             self.final_combined_ind_mapping = {0: list(range(len(self.states_ind)))}
-        self.states_ind_final = list(
-            hlpst.iter_splits(self.ind_l_final, self.keys_final)
-        )
+        self.states_ind_final = list(iter_splits(self.ind_l_final, self.keys_final))
 
     def prepare_states_val(self):
         """Evaluate states values having states indices."""
         self.states_val = list(
-            hlpst.map_splits(self.states_ind, self.inputs, cont_dim=self.cont_dim)
+            map_splits(
+                self.states_ind, self.inputs, container_ndim=self.container_ndim_all
+            )
         )
         return self.states_val
 
@@ -892,7 +1010,7 @@ class State:
 
         """
         if not self.other_states:
-            self.inputs_ind = self.states_ind
+            self._inputs_ind = self.states_ind
         else:
             # elements from the current node (the current part of the splitter)
             if self.current_splitter_rpn:
@@ -943,11 +1061,11 @@ class State:
                 inputs_ind = []
 
             # iter_splits using inputs from current state/node
-            self.inputs_ind = list(hlpst.iter_splits(inputs_ind, keys_inp))
+            self._inputs_ind = list(iter_splits(inputs_ind, keys_inp))
             # removing elements that are connected to inner splitter
             # TODO - add tests to test_workflow.py (not sure if we want to remove it)
             for el in connected_to_inner:
-                [dict.pop(el) for dict in self.inputs_ind]
+                [dict.pop(el) for dict in self._inputs_ind]
 
     def splits(self, splitter_rpn):
         """
@@ -1049,8 +1167,8 @@ class State:
             var_ind, new_keys = previous_states_ind[term]
             shape = (len(var_ind),)
         else:
-            cont_dim = self.cont_dim.get(term, 1)
-            shape = hlpst.input_shape(self.inputs[term], cont_dim=cont_dim)
+            container_ndim = self.container_ndim_all.get(term, 1)
+            shape = input_shape(self.inputs[term], container_ndim=container_ndim)
             var_ind = range(reduce(lambda x, y: x * y, shape))
             new_keys = [term]
             # checking if the term is in inner_inputs
@@ -1069,8 +1187,9 @@ class State:
 
     def _single_op_splits(self, op_single):
         """splits function if splitter is a singleton"""
-        shape = hlpst.input_shape(
-            self.inputs[op_single], cont_dim=self.cont_dim.get(op_single, 1)
+        shape = input_shape(
+            self.inputs[op_single],
+            container_ndim=self.container_ndim_all.get(op_single, 1),
         )
         val_ind = range(reduce(lambda x, y: x * y, shape))
         if op_single in self.inner_inputs:
@@ -1091,3 +1210,680 @@ class State:
             val = op["*"](val_ind)
             keys = [op_single]
             return val, keys
+
+    def _get_element(self, value: ty.Any, field_name: str, ind: int) -> ty.Any:
+        """
+        Extracting element of the inputs taking into account
+        container dimension of the specific element that can be set in self.state.container_ndim.
+        If input name is not in container_ndim, it is assumed that the input values has
+        a container dimension of 1, so only the most outer dim will be used for splitting.
+
+        Parameters
+        ----------
+        value : Any
+            inputs of the job
+        field_name : str
+            name of the input field
+        ind : int
+            index of the element
+
+        Returns
+        -------
+        Any
+            specific element of the input field
+        """
+        if f"{self.name}.{field_name}" in self.container_ndim_all:
+            return list(
+                flatten(
+                    ensure_list(value),
+                    max_depth=self.container_ndim_all[f"{self.name}.{field_name}"],
+                )
+            )[ind]
+        else:
+            return value[ind]
+
+
+def splitter2rpn(splitter, other_states=None, state_fields=True):
+    """
+    Translate user-provided splitter into *reverse polish notation*.
+
+    The reverse polish notation is imposed by :class:`~pydra.engine.state.State`.
+
+    Parameters
+    ----------
+    splitter :
+        splitter (standard form)
+    other_states :
+        other states that are connected to the state
+    state_fields : :obj:`bool`
+        if False the splitter from the previous states are unwrapped
+
+    """
+    if not splitter:
+        return []
+    output_splitter = []
+    _ordering(
+        deepcopy(splitter),
+        i=0,
+        output_splitter=output_splitter,
+        other_states=deepcopy(other_states),
+        state_fields=state_fields,
+    )
+    return output_splitter
+
+
+def _ordering(
+    el, i, output_splitter, current_sign=None, other_states=None, state_fields=True
+):
+    """Get a proper order of fields and signs (used by splitter2rpn)."""
+    if type(el) is tuple:
+        # checking if the splitter dont contain splitter from previous nodes
+        # i.e. has str "_NA", etc.
+        if len(el) == 1:
+            # treats .split(("x",)) like .split("x")
+            el = el[0]
+            _ordering(el, i, output_splitter, current_sign, other_states, state_fields)
+        else:
+            if type(el[0]) is str and el[0].startswith("_"):
+                node_nm = el[0][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
+                    )
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                    )
+                    el = (splitter_mod, el[1])
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            if type(el[1]) is str and el[1].startswith("_"):
+                node_nm = el[1][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
+                    )
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                    )
+                    el = (el[0], splitter_mod)
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            _iterate_list(
+                el,
+                ".",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
+    elif type(el) is list:
+        if len(el) == 1:
+            # treats .split(["x"]) like .split("x")
+            el = el[0]
+            _ordering(el, i, output_splitter, current_sign, other_states, state_fields)
+        else:
+            if type(el[0]) is str and el[0].startswith("_"):
+                node_nm = el[0][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
+                    )
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                    )
+                    el[0] = splitter_mod
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            if type(el[1]) is str and el[1].startswith("_"):
+                node_nm = el[1][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
+                    )
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                    )
+                    el[1] = splitter_mod
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            _iterate_list(
+                el,
+                "*",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
+    elif type(el) is str:
+        if el.startswith("_"):
+            node_nm = el[1:]
+            if node_nm not in other_states and state_fields:
+                raise PydraStateError(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                        node_nm, other_states.keys()
+                    )
+                )
+            elif state_fields:
+                splitter_mod = add_name_splitter(
+                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                )
+                el = splitter_mod
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
+        if type(el) is str:
+            output_splitter.append(el)
+        elif type(el) is tuple:
+            _iterate_list(
+                el,
+                ".",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
+        elif type(el) is list:
+            _iterate_list(
+                el,
+                "*",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
+    else:
+        raise PydraStateError("splitter has to be a string, a tuple or a list")
+    if i > 0:
+        output_splitter.append(current_sign)
+
+
+def _iterate_list(element, sign, other_states, output_splitter, state_fields=True):
+    """Iterate over list (used in the splitter2rpn to get recursion)."""
+    for i, el in enumerate(element):
+        _ordering(
+            deepcopy(el),
+            i,
+            current_sign=sign,
+            other_states=other_states,
+            output_splitter=output_splitter,
+            state_fields=state_fields,
+        )
+
+
+def converter_groups_to_input(group_for_inputs):
+    """
+    Return fields for each axis and number of all groups.
+
+    Requires having axes for all the input fields.
+
+    Parameters
+    ----------
+    group_for_inputs :
+        specified axes (groups) for each input
+
+    """
+    input_for_axis = {}
+    ngr = 0
+    for inp, grs in group_for_inputs.items():
+        for gr in ensure_list(grs):
+            if gr in input_for_axis.keys():
+                input_for_axis[gr].append(inp)
+            else:
+                ngr += 1
+                input_for_axis[gr] = [inp]
+    return input_for_axis, ngr
+
+
+def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
+    """
+    Remove inputs due to combining.
+
+    Mutates a splitter.
+
+    Parameters
+    ----------
+    splitter_rpn :
+        The splitter in reverse polish notation
+    inputs_to_remove :
+        input names that should be removed from the splitter
+
+    """
+    splitter_rpn_copy = splitter_rpn.copy()
+    # reverting order
+    splitter_rpn_copy.reverse()
+    stack_inp = []
+    stack_sgn = []
+    from_last_sign = []
+    for ii, el in enumerate(splitter_rpn_copy):
+        # element is a sign
+        if el == "." or el == "*":
+            stack_sgn.append((ii, el))
+            from_last_sign.append(0)
+        # it's an input but not to remove
+        elif el not in inputs_to_remove:
+            if from_last_sign:
+                from_last_sign[-1] += 1
+            stack_inp.append((ii, el))
+        # it'a an input that should be removed
+        else:
+            if not from_last_sign:
+                pass
+            elif from_last_sign[-1] <= 1:
+                stack_sgn.pop()
+                from_last_sign.pop()
+            else:
+                stack_sgn.pop(-1 * from_last_sign.pop())
+
+    # creating the final splitter_rpn after combining
+    remaining_elements = stack_sgn + stack_inp
+    remaining_elements.sort(reverse=True)
+    splitter_rpn_combined = [el for (i, el) in remaining_elements]
+    return splitter_rpn_combined
+
+
+def rpn2splitter(splitter_rpn):
+    """
+    Convert from splitter_rpn to splitter.
+
+    Recurrent algorithm to perform the conversion.
+    Every time combines pairs of input in one input,
+    ends when the length is one.
+
+    Parameters
+    ----------
+    splitter_rpn :
+        splitter in reverse polish notation
+
+    Returns
+    -------
+    splitter :
+        splitter in the standard/original form
+
+    """
+    if splitter_rpn == []:
+        return None
+    if len(splitter_rpn) == 1:
+        return splitter_rpn[0]
+
+    splitter_rpn_copy = splitter_rpn.copy()
+    signs = [".", "*"]
+    splitter_modified = []
+
+    while splitter_rpn_copy:
+        el = splitter_rpn_copy.pop()
+        # element is a sign
+        if el in signs:
+            if (
+                splitter_rpn_copy[-1] not in signs
+                and splitter_rpn_copy[-2] not in signs
+            ):
+                right, left = splitter_rpn_copy.pop(), splitter_rpn_copy.pop()
+                if el == ".":
+                    splitter_modified.append((left, right))
+                elif el == "*":
+                    splitter_modified.append([left, right])
+            else:
+                splitter_modified.append(el)
+        else:
+            splitter_modified.append(el)
+
+    # reversing the list and combining more
+    splitter_modified.reverse()
+    return rpn2splitter(splitter_modified)
+
+
+def add_name_combiner(combiner, name):
+    """adding a node's name to each field from the combiner"""
+    combiner_changed = []
+    for comb in combiner:
+        if "." not in comb:
+            combiner_changed.append(f"{name}.{comb}")
+        else:
+            combiner_changed.append(comb)
+    return combiner_changed
+
+
+def add_name_splitter(
+    splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None], name: str
+) -> ty.Optional[ty.List[str]]:
+    """adding a node's name to each field from the splitter"""
+    if isinstance(splitter, str):
+        return _add_name([splitter], name)[0]
+    elif isinstance(splitter, list):
+        return _add_name(list(splitter), name)
+    elif isinstance(splitter, tuple):
+        return tuple(_add_name(list(splitter), name))
+    else:
+        return None
+
+
+def _add_name(mlist, name):
+    """adding anem to each element from the list"""
+    for i, elem in enumerate(mlist):
+        if isinstance(elem, str):
+            if "." in elem or elem.startswith("_"):
+                pass
+            else:
+                mlist[i] = f"{name}.{mlist[i]}"
+        elif isinstance(elem, list):
+            mlist[i] = _add_name(elem, name)
+        elif isinstance(elem, tuple):
+            mlist[i] = list(elem)
+            mlist[i] = _add_name(mlist[i], name)
+            mlist[i] = tuple(mlist[i])
+    return mlist
+
+
+def flatten(vals, cur_depth=0, max_depth=None):
+    """Flatten a list of values."""
+    if max_depth is None:
+        max_depth = len(list(input_shape(vals)))
+    values = []
+    if cur_depth >= max_depth:
+        values.append([vals])
+    else:
+        for val in vals:
+            if isinstance(val, (list, tuple)):
+                values.append(flatten(val, cur_depth + 1, max_depth))
+            else:
+                values.append([val])
+    return itertools.chain.from_iterable(values)
+
+
+def iter_splits(iterable, keys):
+    """Generate splits."""
+    for iter in list(iterable):
+        yield dict(zip(keys, list(flatten(iter, max_depth=1000))))
+
+
+def input_shape(inp, container_ndim=1):
+    """Get input shape, depends on the container dimension, if not specify it is assumed to be 1"""
+    # TODO: have to be changed for inner splitter (sometimes different length)
+    container_ndim -= 1
+    shape = [len(inp)]
+    last_shape = None
+    for value in inp:
+        if isinstance(value, list) and container_ndim > 0:
+            cur_shape = input_shape(value, container_ndim)
+            if last_shape is None:
+                last_shape = cur_shape
+            elif last_shape != cur_shape:
+                last_shape = None
+                break
+        else:
+            last_shape = None
+            break
+    if last_shape is not None:
+        shape.extend(last_shape)
+    return tuple(shape)
+
+
+def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
+    """splits inputs to groups (axes) and creates stacks for these groups
+    This is used to specify which input can be combined.
+    """
+    if not splitter_rpn:
+        return [], {}, [], []
+    stack = []
+    keys = []
+    groups = {}
+    group_count = None
+    if not combiner:
+        combiner = []
+    if inner_inputs:
+        previous_states_ind = {
+            f"_{v.name}": v.keys_final for v in inner_inputs.values()
+        }
+        inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
+    else:
+        previous_states_ind = {}
+        inner_inputs = {}
+
+    # when splitter is a single element (no operators)
+    if len(splitter_rpn) == 1:
+        op_single = splitter_rpn[0]
+        return _single_op_splits_groups(op_single, combiner, inner_inputs, groups)
+
+    # len(splitter_rpn) > 1
+    # iterating splitter_rpn
+    for token in splitter_rpn:
+        if token in [".", "*"]:
+            terms = {}
+            terms["R"] = stack.pop()
+            terms["L"] = stack.pop()
+
+            # checking if opL/R are strings
+            trm_str = {"L": False, "R": False}
+            oldgroups = {}
+
+            for lr in ["L", "R"]:
+                if isinstance(terms[lr], str):
+                    trm_str[lr] = True
+                else:
+                    oldgroups[lr] = terms[lr]
+
+            if token == ".":
+                if all(trm_str.values()):
+                    if group_count is None:
+                        group_count = 0
+                    else:
+                        group_count += 1
+                    oldgroup = groups[terms["L"]] = groups[terms["R"]] = group_count
+                elif trm_str["R"]:
+                    groups[terms["R"]] = oldgroups["L"]
+                    oldgroup = oldgroups["L"]
+                elif trm_str["L"]:
+                    groups[terms["L"]] = oldgroups["R"]
+                    oldgroup = oldgroups["R"]
+                else:
+                    if len(ensure_list(oldgroups["L"])) != len(
+                        ensure_list(oldgroups["R"])
+                    ):
+                        raise ValueError(
+                            "Operands do not have same shape "
+                            "(left one is {}d and right one is {}d.".format(
+                                len(ensure_list(oldgroups["L"])),
+                                len(ensure_list(oldgroups["R"])),
+                            )
+                        )
+                    oldgroup = oldgroups["L"]
+                    # dj: changing axes for Right part of the scalar op.
+                    for k, v in groups.items():
+                        if v in ensure_list(oldgroups["R"]):
+                            groups[k] = ensure_list(oldgroups["L"])[
+                                ensure_list(oldgroups["R"]).index(v)
+                            ]
+            else:  # if token == "*":
+                if all(trm_str.values()):
+                    if group_count is None:
+                        group_count = 0
+                    else:
+                        group_count += 1
+                    groups[terms["L"]] = group_count
+                    group_count += 1
+                    groups[terms["R"]] = group_count
+                    oldgroup = [groups[terms["L"]], groups[terms["R"]]]
+                elif trm_str["R"]:
+                    group_count += 1
+                    groups[terms["R"]] = group_count
+                    oldgroup = ensure_list(oldgroups["L"]) + [groups[terms["R"]]]
+                elif trm_str["L"]:
+                    group_count += 1
+                    groups[terms["L"]] = group_count
+                    oldgroup = [groups[terms["L"]]] + ensure_list(oldgroups["R"])
+                else:
+                    oldgroup = ensure_list(oldgroups["L"]) + ensure_list(oldgroups["R"])
+
+            # creating list of keys
+            if trm_str["L"]:
+                if terms["L"].startswith("_"):
+                    keys = previous_states_ind[terms["L"]] + keys
+                else:
+                    keys.insert(0, terms["L"])
+            if trm_str["R"]:
+                if terms["R"].startswith("_"):
+                    keys += previous_states_ind[terms["R"]]
+                else:
+                    keys.append(terms["R"])
+
+            pushgroup = oldgroup
+            stack.append(pushgroup)
+
+        else:  # name of one of the inputs
+            stack.append(token)
+
+    groups_stack = stack.pop()
+    if isinstance(groups_stack, int):
+        groups_stack = [groups_stack]
+    if inner_inputs:
+        groups_stack = [[], groups_stack]
+    else:
+        groups_stack = [groups_stack]
+
+    if combiner:
+        (
+            keys_final,
+            groups_final,
+            groups_stack_final,
+            combiner_all,
+        ) = combine_final_groups(combiner, groups, groups_stack, keys)
+        return keys_final, groups_final, groups_stack_final, combiner_all
+    else:
+        return keys, groups, groups_stack, []
+
+
+def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
+    """splits_groups function if splitter is a singleton"""
+    if op_single in inner_inputs:
+        # TODO: have to be changed if differ length
+        # TODO: i think I don't want to add here from left part
+        # keys = inner_inputs[op_single].keys_final + [op_single]
+        keys = [op_single]
+        groups[op_single], groups_stack = 0, [[], [0]]
+    else:
+        keys = [op_single]
+        groups[op_single], groups_stack = 0, [[0]]
+    if combiner:
+        if combiner == [op_single]:
+            return [], {}, [], combiner
+        else:
+            # TODO: probably not needed, should be already check by st.combiner_validation
+            raise PydraStateError(
+                f"all fields from the combiner have to be in splitter_rpn: {[op_single]}, "
+                f"but combiner: {combiner} is set"
+            )
+    else:
+        return keys, groups, groups_stack, []
+
+
+def combine_final_groups(combiner, groups, groups_stack, keys):
+    """Combine the final groups."""
+    input_for_groups, _ = converter_groups_to_input(groups)
+    combiner_all = []
+    for comb in combiner:
+        for gr in ensure_list(groups[comb]):
+            combiner_all += input_for_groups[gr]
+    combiner_all = list(set(combiner_all))
+    combiner_all.sort()
+
+    # groups that were removed (so not trying to remove twice)
+    grs_removed = []
+    groups_stack_final = deepcopy(groups_stack)
+    for comb in combiner:
+        grs = groups[comb]
+        for gr in ensure_list(grs):
+            if gr in groups_stack_final[-1]:
+                grs_removed.append(gr)
+                groups_stack_final[-1].remove(gr)
+            elif gr in grs_removed:
+                pass
+            else:
+                raise PydraStateError(
+                    "input {} not ready to combine, you have to combine {} "
+                    "first".format(comb, groups_stack[-1])
+                )
+    groups_final = {inp: gr for (inp, gr) in groups.items() if inp not in combiner_all}
+    gr_final = set()
+    for el in groups_final.values():
+        gr_final.update(ensure_list(el))
+    gr_final = list(gr_final)
+    map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
+    groups_final_map = {}
+    for inp, gr in groups_final.items():
+        if isinstance(gr, int):
+            groups_final_map[inp] = map_gr_nr[gr]
+        elif isinstance(gr, list):
+            groups_final_map[inp] = [map_gr_nr[el] for el in gr]
+        else:
+            raise Exception("gr should be an int or a list, something wrong")
+    for i, groups_l in enumerate(groups_stack_final):
+        groups_stack_final[i] = [map_gr_nr[gr] for gr in groups_l]
+
+    keys_final = [key for key in keys if key not in combiner_all]
+    # TODO: not sure if I have to calculate and return keys, groups, groups_stack
+    return keys_final, groups_final_map, groups_stack_final, combiner_all
+
+
+def map_splits(split_iter, inputs, container_ndim=None):
+    """generate a dictionary of inputs prescribed by the splitter."""
+    if container_ndim is None:
+        container_ndim = {}
+    for split in split_iter:
+        yield {
+            k: list(
+                flatten(ensure_list(inputs[k]), max_depth=container_ndim.get(k, None))
+            )[v]
+            for k, v in split.items()
+        }
+
+
+def inputs_types_to_dict(name, inputs):
+    """Convert type.Inputs to dictionary."""
+    # dj: any better option?
+    input_names = [field for field in attrs_values(inputs) if field != "_func"]
+    inputs_dict = {}
+    for field in input_names:
+        inputs_dict[f"{name}.{field}"] = getattr(inputs, field)
+    return inputs_dict
+
+
+def unwrap_splitter(
+    splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...]],
+) -> ty.Iterable[str]:
+    """Unwraps a splitter into a flat list of fields that are split over, i.e.
+    [("a", "b"), "c"] -> ["a", "b", "c"]
+
+    Parameters
+    ----------
+    splitter: str or list[str] or tuple[str, ...]
+        the splitter task to unwrap
+
+    Returns
+    -------
+    unwrapped : ty.Iterable[str]
+        the field names listed in the splitter
+    """
+    if isinstance(splitter, str):
+        return [splitter]
+    else:
+        return itertools.chain(*(unwrap_splitter(s) for s in splitter))
+
+
+class PydraStateError(Exception):
+    """Custom error for Pydra State"""
+
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return str(self.value)
+
+
+op = {".": zip, "*": itertools.product}

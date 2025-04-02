@@ -1,18 +1,20 @@
 """Module to keep track of provenance information."""
 
 import os
+import typing as ty
 import json
-import attr
-from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
-from ..utils.hash import hash_function
-from .helpers import ensure_list, gather_runtime_info
-from .specs import attr_fields
+from pydra.utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
+from pydra.utils.general import attrs_values
 from fileformats.core import FileSet
+from pydra.utils.hash import hash_function
 
 try:
     import importlib_resources
 except ImportError:
     import importlib.resources as importlib_resources  # type: ignore
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.job import Job
 
 
 class Audit:
@@ -28,7 +30,7 @@ class Audit:
             Base configuration of auditing.
         messengers : :obj:`pydra.util.messenger.Messenger`
             or list of :class:`pydra.util.messenger.Messenger`, optional
-            Specify types of messenger used by Audit to send a message.
+            Taskify types of messenger used by Audit to send a message.
             Could be `PrintMessenger`, `FileMessenger`, or `RemoteRESTMessenger`.
         messenger_args : :obj:`dict`, optional
             Optional arguments for the `Messenger.send` method.
@@ -36,6 +38,8 @@ class Audit:
             If True, the local context.jsonld file is used, otherwise the one from github is used.
 
         """
+        from pydra.utils.general import ensure_list
+
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
@@ -46,7 +50,7 @@ class Audit:
         Start recording provenance.
 
         Monitored information is not sent until directory is created,
-        in case message directory is inside task output directory.
+        in case message directory is inside job output directory.
 
         Parameters
         ----------
@@ -61,7 +65,7 @@ class Audit:
             user_id = f"uid:{gen_uuid()}"
             start_message = {
                 "@id": self.aid,
-                "@type": "task",
+                "@type": "job",
                 "StartedAtTime": now(),
             }
 
@@ -69,7 +73,7 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             self.audit_message(start_message, AuditFlag.PROV)
         if self.audit_check(AuditFlag.RESOURCE):
-            from ..utils.profiler import ResourceMonitor
+            from pydra.utils.profiler import ResourceMonitor
 
             self.resource_monitor = ResourceMonitor(os.getpid(), logdir=self.odir)
 
@@ -92,6 +96,8 @@ class Audit:
     def finalize_audit(self, result):
         """End auditing."""
         if self.audit_check(AuditFlag.RESOURCE):
+            from pydra.engine.result import gather_runtime_info
+
             self.resource_monitor.stop()
             result.runtime = gather_runtime_info(self.resource_monitor.fname)
             if self.audit_check(AuditFlag.PROV):
@@ -101,7 +107,7 @@ class Audit:
                 )
                 # audit resources/runtime information
                 self.eid = f"uid:{gen_uuid()}"
-                entity = attr.asdict(result.runtime, recurse=False)
+                entity = attrs_values(result.runtime)
                 entity.update(
                     **{
                         "@id": self.eid,
@@ -175,18 +181,19 @@ class Audit:
         """
         return self.audit_flags & flag
 
-    def audit_task(self, task):
+    def audit_task(self, job: "Job"):
         import subprocess as sp
+        from pydra.utils.general import task_fields
 
-        label = task.name
+        label = job.name
 
         # YC: currently command only support shellcommand task
         # we can make function itself a command too
-        command = task.cmdline if hasattr(task.inputs, "executable") else None
+        command = job.task.cmdline if hasattr(job.task, "executable") else None
         attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
             input_name = attrs.name
-            value = getattr(task.inputs, input_name)
+            value = job.inputs[input_name]
             if isinstance(value, FileSet):
                 input_path = os.path.abspath(value)
                 file_hash = hash_function(value)
@@ -221,7 +228,7 @@ class Audit:
 
         start_message = {
             "@id": self.aid,
-            "@type": "task",
+            "@type": "job",
             "Label": label,
             "Command": command,
             "StartedAtTime": now(),

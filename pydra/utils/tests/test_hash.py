@@ -1,5 +1,6 @@
 import re
 import os
+import sys
 from hashlib import blake2b
 from pathlib import Path
 import time
@@ -9,13 +10,127 @@ import pytest
 import typing as ty
 from fileformats.application import Zip, Json
 from fileformats.text import TextFile
-from ..hash import (
+from pydra.utils.hash import (
     Cache,
     bytes_repr,
     hash_object,
     register_serializer,
     PersistentCache,
 )
+import shutil
+import random
+from fileformats.generic import Directory, File
+from pydra.utils.hash import hash_function
+
+
+def test_hash_file(tmpdir):
+    outdir = Path(tmpdir)
+    with open(outdir / "test.file", "w") as fp:
+        fp.write("test")
+    assert (
+        hash_function(File(outdir / "test.file")) == "f32ab20c4a86616e32bf2504e1ac5a22"
+    )
+
+
+def test_hashfun_float():
+    import math
+
+    pi_50 = 3.14159265358979323846264338327950288419716939937510
+    pi_15 = 3.141592653589793
+    pi_10 = 3.1415926536
+    # comparing for x that have the same x.as_integer_ratio()
+    assert (
+        math.pi.as_integer_ratio()
+        == pi_50.as_integer_ratio()
+        == pi_15.as_integer_ratio()
+    )
+    assert hash_function(math.pi) == hash_function(pi_15) == hash_function(pi_50)
+    # comparing for x that have different x.as_integer_ratio()
+    assert math.pi.as_integer_ratio() != pi_10.as_integer_ratio()
+    assert hash_function(math.pi) != hash_function(pi_10)
+
+
+def test_hash_function_dict():
+    dict1 = {"a": 10, "b": 5}
+    dict2 = {"b": 5, "a": 10}
+    assert hash_function(dict1) == hash_function(dict2)
+
+
+def test_hash_function_list_tpl():
+    lst = [2, 5.6, "ala"]
+    tpl = (2, 5.6, "ala")
+    assert hash_function(lst) != hash_function(tpl)
+
+
+def test_hash_function_list_dict():
+    lst = [2, {"a": "ala", "b": 1}]
+    hash_function(lst)
+
+
+def test_hash_function_files(tmp_path: Path):
+    file_1 = tmp_path / "file_1.txt"
+    file_2 = tmp_path / "file_2.txt"
+    file_1.write_text("hello")
+    file_2.write_text("hello")
+
+    assert hash_function(File(file_1)) == hash_function(File(file_2))
+
+
+def test_hash_function_dir_and_files_list(tmp_path: Path):
+    dir1 = tmp_path / "foo"
+    dir2 = tmp_path / "bar"
+    for d in (dir1, dir2):
+        d.mkdir()
+        for i in range(3):
+            f = d / f"{i}.txt"
+            f.write_text(str(i))
+
+    assert hash_function(Directory(dir1)) == hash_function(Directory(dir2))
+    file_list1: ty.List[File] = [File(f) for f in dir1.iterdir()]
+    file_list2: ty.List[File] = [File(f) for f in dir2.iterdir()]
+    assert hash_function(file_list1) == hash_function(file_list2)
+
+
+def test_hash_function_files_mismatch(tmp_path: Path):
+    file_1 = tmp_path / "file_1.txt"
+    file_2 = tmp_path / "file_2.txt"
+    file_1.write_text("hello")
+    file_2.write_text("hi")
+
+    assert hash_function(File(file_1)) != hash_function(File(file_2))
+
+
+def test_hash_function_nested(tmp_path: Path):
+    dpath = tmp_path / "dir"
+    dpath.mkdir()
+    hidden = dpath / ".hidden"
+    nested = dpath / "nested"
+    hidden.mkdir()
+    nested.mkdir()
+    file_1 = dpath / "file_1.txt"
+    file_2 = hidden / "file_2.txt"
+    file_3 = nested / ".file_3.txt"
+    file_4 = nested / "file_4.txt"
+
+    for fx in [file_1, file_2, file_3, file_4]:
+        fx.write_text(str(random.randint(0, 1000)))
+
+    nested_dir = Directory(dpath)
+
+    orig_hash = nested_dir.hash()
+
+    nohidden_hash = nested_dir.hash(ignore_hidden_dirs=True, ignore_hidden_files=True)
+    nohiddendirs_hash = nested_dir.hash(ignore_hidden_dirs=True)
+    nohiddenfiles_hash = nested_dir.hash(ignore_hidden_files=True)
+
+    assert orig_hash != nohidden_hash
+    assert orig_hash != nohiddendirs_hash
+    assert orig_hash != nohiddenfiles_hash
+
+    os.remove(file_3)
+    assert nested_dir.hash() == nohiddenfiles_hash
+    shutil.rmtree(hidden)
+    assert nested_dir.hash() == nohidden_hash
 
 
 @pytest.fixture
@@ -49,7 +164,7 @@ def test_bytes_repr_builtins():
     assert complex_repr == b"complex:" + bytes(16)
     # Dicts are sorted by key, and values are hashed
     dict_repr = join_bytes_repr({"b": "c", "a": 0})
-    assert re.match(rb"dict:{str:1:a=.{16}str:1:b=.{16}}$", dict_repr)
+    assert re.match(rb"dict:{str:1:a=.{16},str:1:b=.{16},}$", dict_repr)
     # Lists and tuples concatenate hashes of their contents
     list_repr = join_bytes_repr([1, 2, 3])
     assert re.match(rb"list:\(.{48}\)$", list_repr)
@@ -74,7 +189,7 @@ def test_bytes_repr_builtins():
         (1, "6dc1db8d4dcdd8def573476cbb90cce0"),
         (12345678901234567890, "2b5ba668c1e8ea4902361b8d81e53074"),
         (1.0, "29492927b2e505840235e15a5be9f79a"),
-        ({"b": "c", "a": 0}, "2405cd36f4e4b6318c033f32db289f7d"),
+        ({"b": "c", "a": 0}, "04e5c65ec2269775d3b9ccecaf10da38"),
         ([1, 2, 3], "2f8902ff90f63d517bd6f6e6111e15b8"),
         ((1, 2, 3), "054a7b31c29e7875a6f83ff1dcb4841b"),
     ],
@@ -141,7 +256,7 @@ def test_bytes_repr_custom_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_slots_obj():
@@ -152,7 +267,7 @@ def test_bytes_repr_slots_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_slots():
@@ -161,7 +276,7 @@ def test_bytes_repr_attrs_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_no_slots():
@@ -170,7 +285,7 @@ def test_bytes_repr_attrs_no_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_type1():
@@ -180,24 +295,45 @@ def test_bytes_repr_type1():
 
 def test_bytes_repr_type1a():
     obj_repr = join_bytes_repr(Zip[Json])
-    assert obj_repr == rb"type:(fileformats.application.archive.Json__Zip)"
+    assert obj_repr == rb"type:(mime-like:(application/json+zip))"
 
 
 def test_bytes_repr_type2():
     T = ty.TypeVar("T")
 
     class MyClass(ty.Generic[T]):
-        pass
+
+        a: int
+        b: str
+
+        def method(self, f: float) -> float:
+            return f + 1
 
     obj_repr = join_bytes_repr(MyClass[int])
-    assert (
-        obj_repr == b"type:(pydra.utils.tests.test_hash.MyClass[type:(builtins.int)])"
+    assert re.match(
+        (
+            rb"type:\(origin:\(type:\(__dict__:\(str:6:method=.{16},\),annotations:\(str:1:a=.{16},"
+            rb"str:1:b=.{16},\),mro:\(type:\(typing.Generic\)\)\)\),args:\(type:\(builtins.int\)\)\)"
+        ),
+        obj_repr,
     )
 
 
 def test_bytes_special_form1():
     obj_repr = join_bytes_repr(ty.Union[int, float])
-    assert obj_repr == b"type:(typing.Union[type:(builtins.int)type:(builtins.float)])"
+    assert obj_repr == (
+        b"type:(origin:(type:(typing.Union)),args:(type:(builtins.int)"
+        b"type:(builtins.float)))"
+    )
+
+
+@pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
+def test_bytes_special_form1a():
+    obj_repr = join_bytes_repr(int | float)
+    assert obj_repr == (
+        b"type:(origin:(type:(types.UnionType)),args:(type:(builtins.int)"
+        b"type:(builtins.float)))"
+    )
 
 
 def test_bytes_special_form2():
@@ -207,21 +343,34 @@ def test_bytes_special_form2():
 
 def test_bytes_special_form3():
     obj_repr = join_bytes_repr(ty.Optional[Path])
-    assert (
-        obj_repr == b"type:(typing.Union[type:(pathlib.Path)type:(builtins.NoneType)])"
+    assert obj_repr == (
+        b"type:(origin:(type:(typing.Union)),args:(type:(pathlib.Path)"
+        b"type:(builtins.NoneType)))"
+    )
+
+
+@pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
+def test_bytes_special_form3a():
+    obj_repr = join_bytes_repr(Path | None)
+    assert obj_repr == (
+        b"type:(origin:(type:(types.UnionType)),args:(type:(pathlib.Path)"
+        b"type:(builtins.NoneType)))"
     )
 
 
 def test_bytes_special_form4():
     obj_repr = join_bytes_repr(ty.Type[Path])
-    assert obj_repr == b"type:(builtins.type[type:(pathlib.Path)])"
+    assert (
+        obj_repr == b"type:(origin:(type:(builtins.type)),args:(type:(pathlib.Path)))"
+    )
 
 
 def test_bytes_special_form5():
     obj_repr = join_bytes_repr(ty.Callable[[Path, int], ty.Tuple[float, str]])
     assert obj_repr == (
-        b"type:(collections.abc.Callable[[type:(pathlib.Path)type:(builtins.int)]"
-        b"type:(builtins.tuple[type:(builtins.float)type:(builtins.str)])])"
+        b"type:(origin:(type:(collections.abc.Callable)),args:(list:(type:(pathlib.Path)"
+        b"type:(builtins.int))type:(origin:(type:(builtins.tuple)),"
+        b"args:(type:(builtins.float)type:(builtins.str)))))"
     )
 
 
@@ -405,8 +554,7 @@ def test_unhashable():
     with pytest.raises(
         TypeError,
         match=(
-            "unhashable\nand therefore cannot hash `A\(\)` of type "
-            "`pydra.utils.tests.test_hash.A`"
+            r"unhashable\nand therefore cannot hash `A\(\)` of type `.*\.test_hash\.A`"
         ),
     ):
         hash_object(A())

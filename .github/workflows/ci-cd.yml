@@ -1,0 +1,384 @@
+# This workflows will upload a Python Package using Twine when a release is created
+# For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
+
+name: CI/CD
+
+on:
+  release:
+    types: [published]
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3
+      - run: pip install --upgrade build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Build archive
+        run: |
+          git clean -fxd
+          mkdir archive
+          git archive -o archive/pydra.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive
+          path: archive/
+
+  test:
+    needs: ['build']
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11', '3.12', '3.13']
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v4
+      - name: Fetch tags
+        run: git fetch --prune --unshallow
+      - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Update pip
+        run: python -m pip install --upgrade pip
+      - name: Install Pydra
+        run: pip install .[test]
+      - name: Print version
+        run: python -c "import pydra.engine; print(pydra.utils.__version__)"
+      - name: Disable etelemetry
+        run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
+      - name: Pytest
+        run: |
+          pytest -vs -n auto pydra --doctest-modules --import-mode=importlib --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --rootdir pydra
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  test-singularity:
+    needs: ['build']
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+      fail-fast: False
+    steps:
+      - name: Set env
+        run: |
+          echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
+          echo "NO_ET=TRUE" >> $GITHUB_ENV
+      - name: Setup Singularity
+        uses: actions/checkout@v4
+        with:
+          repository: hpcng/singularity
+          ref: 'v3.7.1'
+          path: 'singularity'
+      - name: Setup GO
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.13'
+      - name: Install OS deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install flawfinder squashfs-tools uuid-dev libuuid1 libffi-dev libssl-dev libssl1.1 \
+          libarchive-dev libgpgme11-dev libseccomp-dev wget gcc make pkg-config -y
+      - name: Build
+        run: |
+          cd singularity
+          ./mconfig --without-suid -p /usr/local/
+          make -C ./builddir
+          sudo make -C ./builddir install
+          cd ..
+      - name: Echo singularity version
+        run: |
+          echo ${{ github.ref }}
+          singularity --version
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Update build tools
+        run: python -m pip install --upgrade pip
+      - name: Checkout Pydra repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+      - name: Fetch tags
+        run: git fetch --prune --unshallow
+      - name: Install pydra (test)
+        run: pip install -e ".[test]"
+      - name: Pytest
+        run: pytest -vs --import-mode=importlib --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/environments/tests/test_singularity.py pydra/environments/tests/test_environments.py --rootdir pydra
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  test-slurm:
+    needs: ['build']
+    strategy:
+      matrix:
+        python-version: [3.11.5]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE: adi611/docker-centos7-slurm:23.02.1
+    steps:
+    - name: Disable etelemetry
+      run: echo "NO_ET=TRUE" >> $GITHUB_ENV
+    - uses: actions/checkout@v4
+    - name: Fetch tags
+      run: git fetch --prune --unshallow
+    - name: Pull docker image
+      run: |
+        docker pull $DOCKER_IMAGE
+        # Have image running in the background
+        docker run `bash <(curl -s https://codecov.io/env)` -itd -h slurmctl --cap-add sys_admin -d --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
+    - name: Display previous jobs with sacct
+      run: |
+        echo "Allowing ports/daemons time to start" && sleep 10
+        docker exec slurm bash -c "sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
+        docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
+        if [ $? -ne 0 ]; then
+            echo "Slurm docker image error"
+            exit 1
+        fi
+    - name: Setup Python
+      run: |
+        docker exec slurm bash -c "echo $NO_ET"
+        docker exec slurm bash -c "ls -la && echo list top level dir"
+        docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
+        if [[ "${{ matrix.python-version }}" == "3.11.5" ]]; then
+            docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v 3.11.5"
+        fi
+        docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
+        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
+    - name: Run pytest
+      run: |
+        docker exec slurm bash -c "pytest /pydra/pydra/workers/tests/test_worker.py --import-mode=importlib --rootdir /pydra/pydra --only-worker=slurm --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml"
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        fail_ci_if_error: true
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./cov.xml
+
+  # test-sge:
+  #   needs: ['build']
+  #   strategy:
+  #     matrix:
+  #       python-version: [3.11.5]
+  #     fail-fast: false
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     VERSION: 1.8.1
+  #   steps:
+  #   - name: Disable etelemetry
+  #     run: echo "NO_ET=TRUE" >> $GITHUB_ENV
+  #   - uses: actions/checkout@v4
+  #   - name: Fetch tags
+  #     run: git fetch --prune --unshallow
+  #   - name: Set up Python ${{ matrix.python-version }}
+  #     uses: actions/setup-python@v5
+  #     with:
+  #       python-version: ${{ matrix.python-version }}
+  #   - name: Install SGE
+  #     run: |
+  #       mkdir -p /sge-build
+  #       cd /sge-build
+  #       wget -c https://github.com/sge-network/sge/archive/refs/tags/v${{ env.VERSION }}.tar.gz
+  #       tar zxvf v${{ env.VERSION }}.tar.gz
+  #       cd v${{ env.VERSION }}
+  #       mkdir -p /opt/sge
+  #       useradd -r -m -U -d /home/sgeadmin -s /bin/bash -c "Docker SGE Admin" sgeadmin
+  #       usermod -a -G sudo sgeadmin
+  #       sh scripts/bootstrap.sh && ./aimk -no-qmon -no-qtcsh && ./aimk -man
+  #       echo Y | ./scripts/distinst -local -allall -libs -noexit
+  #       cd /opt/sge
+  #       touch bin/lx-amd64/{qmon,qtcsh}
+  #       ln -s /opt/sge/default/common/settings.sh /etc/profile.d/sge_settings.sh
+  #       echo . /etc/profile.d/sge_settings.sh >> /etc/bash.bashrc
+  #       chmod a+x /root/boot-sge.sh
+  #       apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+  #   - name: Boot SGE
+  #     run: |
+  #       cd /opt/sge
+  #       ./inst_sge -m -x -s -auto util/install_modules/inst_template.conf
+  #       . /etc/profile.d/sge_settings.sh
+  #       cd $HOME
+  #       qconf -as `hostname`
+  #       qconf -mattr queue shell_start_mode unix_behavior all.q
+  #       update_conf() {
+  #           TMPF=`mktemp`
+  #           cat > $TMPF <<EOF
+  #       #!/bin/sh
+  #       sed -ri "$1" \$1
+  #       EOF
+  #           chmod a+x $TMPF
+  #           EDITOR="$TMPF" qconf -m$2
+  #           rm -f $TMPF
+  #       }
+  #       # allow root to qsub (yes, it's a security hole but it simplifies the container)
+  #       update_conf "/min_/s/100/0/; s/posix_compliant/unix_behavior/" conf
+
+  #       # shrink scheduling interval for faster response
+  #       update_conf "/schedule_interval/s/[0-9]+:[0-9]+:[0-9]+/0:0:2/" sconf
+
+  #       # finalize
+  #       if [ -z "$1" ]; then
+  #           exec /bin/bash
+  #       else
+  #           exec "$@"
+  #       fi
+  #   - name: Install Pydra
+  #     run: |
+  #       pip install --upgrade pip && pip install -e .[test] && python -c 'import pydra.engine; print(pydra.utils.__version__)'
+  #   - name: Run pytest
+  #     run: |
+  #       pytest pydra/workers/tests/test_worker.py --import-mode=importlib --rootdir . --only-worker=sge --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+  #   - name: Upload coverage to Codecov
+  #     uses: codecov/codecov-action@v5
+  #     with:
+  #       fail_ci_if_error: true
+  #       token: ${{ secrets.CODECOV_TOKEN }}
+  #       files: ./cov.xml
+
+  build-docs:
+    needs: ['build']
+    runs-on: ubuntu-latest
+    # Set up the environment so that it finds conda
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+    - name: Install Pandoc for NBSphinx and graphviz for workflow plotting (dot)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pandoc graphviz
+    - name: Install Dependencies for virtual notifications in Adv.-Exec Tutorial
+      run: |
+          sudo apt update
+          sudo apt install -y xvfb libnotify-bin dbus-x11 xfce4-notifyd
+    - name: Start Virtual Display (for notifications)
+      run: |
+        Xvfb :99 &
+        export DISPLAY=:99
+        eval "$(dbus-launch --sh-syntax)"
+        echo "DISPLAY=:99" >> $GITHUB_ENV
+        echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
+    - name: Start Notification Daemon (for notifications)
+      run: |
+        xfce4-notifyd &
+        sleep 2  # Give it some time to start
+    - name: Send Notification (test notifications)
+      run: |
+        notify-send "GitHub Runner Notification" "This is a test notification from GitHub Actions"
+    - name: Debug Running Processes (for notifications)
+      run: |
+        ps aux | grep notify
+        ps aux | grep xfce4-notifyd
+        dbus-monitor --session &
+        sleep 3
+    - uses: actions/checkout@v4
+    - name: Fetch tags
+      run: git fetch --prune --unshallow
+    - name: Install Minconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-activate-base: true
+        activate-environment: ""
+    - name: Install MRtrix via Conda
+      run: |
+        conda install -c mrtrix3 mrtrix3
+        mrconvert --version
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+    - name: Install package
+      run: pip install .[doc]
+    - name: Install Python3 kernel
+      run: python -m ipykernel install --user
+    - name: Build docs
+      run: |
+        cd docs
+        make html
+        cd ..
+    - uses: actions/upload-artifact@v4
+      with:
+        name: docs
+        path: docs/build/html
+
+  deploy:
+    needs: [build-docs, test, test-singularity, test-slurm]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download dist
+      uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist
+    - name: Check for PyPI token on tag
+      id: deployable
+      if: github.event_name == 'release'
+      env:
+        PYPI_API_TOKEN: "${{ secrets.PYPI_API_TOKEN }}"
+      run: if [ -n "$PYPI_API_TOKEN" ]; then echo "DEPLOY=true" >> $GITHUB_OUTPUT; fi
+    - name: Upload to PyPI
+      if: steps.deployable.outputs.DEPLOY
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        user: __token__
+        password: ${{ secrets.PYPI_API_TOKEN }}
+
+  deploy-docs:
+    needs: [build-docs, deploy]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download docs
+      uses: actions/download-artifact@v4
+      with:
+        name: docs
+        path: docs-build
+    - name: Check for GHPAGES_DEPLOY_KEY token
+      id: deployable
+      if: github.event_name == 'release'
+      env:
+        GHPAGES_DEPLOY_KEY: "${{ secrets.GHPAGES_DEPLOY_KEY }}"
+      run: if [ -n "$GHPAGES_DEPLOY_KEY" ]; then echo "DEPLOY=true" >> $GITHUB_OUTPUT; fi
+    - name: Deploy Docs to GitHub Pages
+      if: steps.deployable.outputs.DEPLOY
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GHPAGES_DEPLOY_KEY }}
+        publish_dir: docs-build

@@ -1,36 +1,26 @@
 [build-system]
-requires = ["flit_scm"]
-build-backend = "flit_scm:buildapi"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "pydra"
 description = "Pydra dataflow engine"
 readme = "README.rst"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = [
-    "attrs >=19.1.0",
+    "attrs >=24.2.0",
     "cloudpickle >=2.0.0",
     "etelemetry >=0.2.2",
     "filelock >=3.0.0",
-    "fileformats >=0.8",
-    "importlib_resources >=5.7; python_version < '3.11'",
+    "fileformats >=0.15a4",
     "platformdirs >=2",
-    "typing_extensions >=4.6.3; python_version < '3.10'",
-    "typing_utils >=0.1.0; python_version < '3.10'",
 ]
-license = {file = "LICENSE"}
-authors = [
-    {name = "Nipype developers", email = "neuroimaging@python.org"},
-]
+license = { file = "LICENSE" }
+authors = [{ name = "Nipype developers", email = "neuroimaging@python.org" }]
 maintainers = [
-    {name = "Nipype developers", email = "neuroimaging@python.org"},
+    { name = "Nipype developers", email = "neuroimaging@python.org" },
 ]
-keywords = [
-    "brainweb",
-    "dataflow",
-    "neuroimaging",
-    "pydra",
-]
+keywords = ["brainweb", "dataflow", "neuroimaging", "pydra"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -39,31 +29,39 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
-psij = [
-    "psij-python",
-]
-dask = [
-    "dask",
-    "distributed",
-]
-dev = [
-    "black",
-    "pre-commit",
-    "pydra[test]",
-]
+dev = ["black", "pre-commit", "pydra[test]", "matplotlib"]
 doc = [
+    "fileformats-extras >= v0.15.0a6",
+    "fileformats-medimage >= v0.10.0a2",
+    "fileformats-medimage-extras >= v0.10.0a2",
+    "furo>=2022.2.14.1",
+    "ipython",
+    "ipykernel",
+    "ipywidgets",
+    "matplotlib",
+    "nbsphinx",
+    "nest_asyncio",
+    "nibabel",
+    "nilearn",
+    "numpy",
+    "numpydoc>=0.6.0",
+    "openneuro-py",
     "packaging",
-    "sphinx ==6.2.1",
+    "pandas",
+    "pandoc",
+    "pydra-mrtrix3 >=3.0.4a17",
+    "scipy",
+    "sphinx",
+    "sphinx-argparse",
+    "sphinx-click",
     "sphinx_rtd_theme",
     "sphinxcontrib-apidoc ~=0.3.0",
     "sphinxcontrib-versioning",
@@ -75,14 +73,37 @@ test = [
     "pytest-xdist <2.0",
     "pytest-rerunfailures",
     "pytest-timeout",
+    "pympler",
     "codecov",
+    "fileformats-extras >=0.15.0a6",
     "numpy",
     "pyld",
     "psutil",
     "python-dateutil",
     "tornado",
-    "boutiques",
     "pympler",
+]
+tutorial = [
+    "fileformats-extras >= v0.15.0a6",
+    "fileformats-medimage >= v0.10.0a2",
+    "fileformats-medimage-extras >= v0.10.0a2",
+    "jupyter",
+    "jupyter_contrib_nbextensions",
+    "jupytext",
+    "jupyterlab",
+    "matplotlib",
+    "nbformat",
+    "nbval",
+    "nest_asyncio",
+    "nibabel",
+    "nilearn",
+    "numpy",
+    "openneuro-py",
+    "pandas",
+    "psutil",
+    "pydra-mrtrix3 >=3.0.4a17",
+    "scipy",
+    "sh",
 ]
 # Aliases
 tests = ["pydra[test]"]
@@ -94,18 +115,23 @@ documentation = "https://nipype.github.io/pydra/"
 homepage = "https://nipype.github.io/pydra/"
 repository = "https://github.com/nipype/pydra.git"
 
-[tool.flit.module]
-name = "pydra"
+[tool.hatch.build]
+packages = ["pydra"]
+exclude = ["tests"]
+include = ["./pydra"]
 
-[tool.flit.sdist]
-exclude = [".gitignore"]
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools_scm]
-write_to = "pydra/_version.py"
+[tool.hatch.build.hooks.vcs]
+version-file = "pydra/utils/_version.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.black]
-target-version = ['py37', 'py38']
-exclude = "pydra/_version.py"
+target-version = ['py38']
+exclude = "pydra/utils/_version.py"
 
 [tool.codespell]
-ignore-words-list = "nd,afile"
+ignore-words-list = "nd,afile,inpt,fpr"
