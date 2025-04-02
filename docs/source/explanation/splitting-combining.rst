@@ -31,22 +31,20 @@ nodes represent stateless copies of the original Task after splitting the input,
 
 Types of Splitter
 -----------------
-Whenever a *Task* has more complicated inputs,
-i.e. multiple fields, there are two ways of creating the mapping,
-each one is used for different application.
-These *splitters* are called *scalar splitter* and *outer splitter*.
+Whenever a *Task* has more complicated inputs, for example, multiple fields,
+there are two ways of creating the mapping, each one is used for different application.
+These *splitters* are called *inner splitter* and *outer splitter*.
 They use a special, but Python-based syntax as described next.
 
-Scalar Splitter
+Inner Splitter
 ---------------
-A *scalar splitter* performs element-wise mapping and requires that the lists of
-values for two or more fields to have the same length. The *scalar splitter* uses
+A *inner splitter* performs element-wise mapping and requires that the lists of
+values for two or more fields to have the same length. The *inner splitter* uses
 Python tuples and its operation is therefore represented by a parenthesis, ``()``:
 
 .. math::
 
   S = (x, y) : x=[x_1, x_2, .., x_n],~y=[y_1, y_2, .., y_n] \mapsto (x, y)=(x_1, y_1),..., (x, y)=(x_n, y_n),
-
 
 where `S` represents the *splitter*, `x` and `y` are the input fields.
 This is also represented as a diagram:
@@ -54,6 +52,8 @@ This is also represented as a diagram:
 .. figure:: ../_static/images/nd_spl_4.png
    :figclass: h!
    :scale: 80%
+
+Inner splitters can be analogized to the Python builtin function :func:`zip`.
 
 
 Outer Splitter
@@ -85,5 +85,6 @@ and `inp3`. This can be extended to arbitrary complexity.
 In additional, the output can be merge at the end if needed.
 This will be explained in the next section.
 
+Outer splitters can be analogized to the Python function :func:`itertools.product`.
 
 .. _Map-Reduce: https://en.wikipedia.org/wiki/MapReduce
