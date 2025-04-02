@@ -135,3 +135,28 @@ exclude = "pydra/utils/_version.py"
 
 [tool.codespell]
 ignore-words-list = "nd,afile,inpt,fpr"
+
+[tool.pytest.ini_options]
+minversion = "6"
+testpaths = ["pydra"]
+log_cli_level = "INFO"
+xfail_strict = true
+addopts = [
+  "-svx",
+  "-ra",
+  "--strict-config",
+  "--strict-markers",
+  "--doctest-modules",
+  "--import-mode=importlib",
+  # Config pytest-cov
+  "--cov=pydra",
+  "--cov-report=xml",
+  "--cov-config=pyproject.toml",
+]
+doctest_optionflags = "ALLOW_UNICODE NORMALIZE_WHITESPACE ELLIPSIS"
+env = "PYTHONHASHSEED=0"
+filterwarnings = ["ignore::DeprecationWarning"]
+junit_family = "xunit2"
+
+[tool.coverage.run]
+branch = true
