@@ -18,7 +18,8 @@ if ty.TYPE_CHECKING:
 
 
 need_docker = pytest.mark.skipif(
-    shutil.which("docker") is None or sp.call(["docker", "info"]),
+    shutil.which("docker") is None
+    or sp.run(["docker", "info"], capture_output=True).returncode,
     reason="no docker within the container",
 )
 need_singularity = pytest.mark.skipif(
