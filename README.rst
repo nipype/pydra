@@ -73,21 +73,20 @@ which can be installed similarly
 Developer installation
 ======================
 
-Pydra requires Python 3.11+. To install in developer mode:
-
-::
+Pydra requires Python 3.11+. To install in developer mode::
 
     git clone git@github.com:nipype/pydra.git
     cd pydra
     pip install -e ".[dev]"
 
+In order to run pydra's test locally::
 
-In order to run pydra's test locally:
+    pytest pydra
 
-::
+We use `tox <https://tox.wiki/>`_ to test versions and dependency sets.
+For example, to test on the minimum and latest dependencies, run::
 
-    pytest -vs pydra
-
+    tox -e py311-min -e py313-latest
 
 It is also useful to install pre-commit:
 

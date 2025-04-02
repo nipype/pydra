@@ -2250,13 +2250,6 @@ def test_shell_cmd_outputspec_6a(tmp_path):
     assert outputs.out1.fspath.exists()
 
 
-@pytest.mark.xfail(
-    sys.version_info >= (3, 11),
-    reason=(
-        "Fails on Python 3.11 in some cases (presumably a typing thing with that specific "
-        "version of Python)"
-    ),
-)
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_7(tmp_path, worker, results_function):
     """
@@ -2854,7 +2847,7 @@ def test_shell_cmd_inputspec_outputspec_5(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires
     requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
-    the firs element of the requires list has all the fields set
+    the first element of the requires list has all the fields set
     """
     cmd = ["touch", "newfile_tmp.txt"]
 
