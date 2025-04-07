@@ -1,3 +1,5 @@
+import typing as ty
+from pathlib import Path
 from fileformats.generic import File, BinaryFile
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
 from pydra.compose import shell, python
@@ -94,3 +96,33 @@ class OtherSpecificShellTask(shell.Task):
         )
 
     executable = "echo"
+
+
+@python.define(outputs=["out_file"])
+def Concatenate(
+    in_file1: File,
+    in_file2: File,
+    out_file: ty.Optional[Path] = None,
+    duplicates: int = 1,
+) -> File:
+    """Concatenates the contents of two files and writes them to a third
+
+    Parameters
+    ----------
+    in_file1 : Path
+        A text file
+    in_file2 : Path
+        Another text file
+    out_file : Path
+       The path to write the output file to
+
+    Returns
+    -------
+    out_file: Path
+        A text file made by concatenating the two inputs
+    """
+    if out_file is None:
+        out_file = Path("out_file.txt").absolute()
+    contents = [Path(fname).read_text() for fname in (in_file1, in_file2)]
+    out_file.write_text("\n".join(contents * duplicates))
+    return out_file

@@ -95,20 +95,20 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         non_lazy_keys = frozenset(non_lazy_vals)
         hash_cache = Cache()  # share the hash cache to avoid recalculations
         non_lazy_hash = hash_function(non_lazy_vals, cache=hash_cache)
-        defn_hash = hash_function(type(task), cache=hash_cache)
+        task_hash = hash_function(type(task), cache=hash_cache)
         # Check for same non-lazy inputs
         try:
-            defn_cache = cls._constructed_cache[defn_hash]
+            cached_tasks = cls._constructed_cache[task_hash]
         except KeyError:
             pass
         else:
             if (
-                non_lazy_keys in defn_cache
-                and non_lazy_hash in defn_cache[non_lazy_keys]
+                non_lazy_keys in cached_tasks
+                and non_lazy_hash in cached_tasks[non_lazy_keys]
             ):
-                return defn_cache[non_lazy_keys][non_lazy_hash]
+                return cached_tasks[non_lazy_keys][non_lazy_hash]
             # Check for supersets of lazy inputs
-            for key_set, key_set_cache in defn_cache.items():
+            for key_set, key_set_cache in cached_tasks.items():
                 if key_set.issubset(non_lazy_keys):
                     subset_vals = {
                         k: v for k, v in non_lazy_vals.items() if k in key_set
@@ -193,7 +193,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     f"constructor of {workflow!r}"
                 )
         if not dont_cache:
-            cls._constructed_cache[defn_hash][non_lazy_keys][non_lazy_hash] = workflow
+            cls._constructed_cache[task_hash][non_lazy_keys][non_lazy_hash] = workflow
 
         return workflow
 

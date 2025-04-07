@@ -3,7 +3,7 @@ from copy import deepcopy
 from enum import Enum
 import attrs
 from pydra.engine import lazy
-from pydra.utils.general import attrs_values
+from pydra.utils.general import attrs_values, task_dict
 from pydra.utils.typing import is_lazy
 from pydra.engine.state import State, add_name_splitter, add_name_combiner
 
@@ -79,7 +79,7 @@ class Node(ty.Generic[OutputType]):
                         f"cannot set {name!r} input to {value} because it changes the "
                         f"state"
                     )
-                    self._set_state()
+                    self._node._set_state()
 
     @property
     def inputs(self) -> Inputs:
@@ -144,6 +144,7 @@ class Node(ty.Generic[OutputType]):
             # output of an upstream node with additional state variables.
             outpt._type_checked = False
         self._lzout = outputs
+        outputs._node = self
         return outputs
 
     @property
@@ -161,10 +162,8 @@ class Node(ty.Generic[OutputType]):
     def _check_if_outputs_have_been_used(self, msg):
         used = []
         if self._lzout:
-            for outpt_name, outpt_val in attrs.asdict(
-                self._lzout, recurse=False
-            ).items():
-                if outpt_val.type_checked:
+            for outpt_name, outpt_val in task_dict(self._lzout).items():
+                if outpt_val._type_checked:
                     used.append(outpt_name)
         if used:
             raise RuntimeError(

@@ -2,7 +2,7 @@ import typing as ty
 import inspect
 from typing import dataclass_transform
 import attrs
-from pydra.utils.general import task_fields, attrs_values
+from pydra.utils.general import task_fields, task_dict
 from pydra.compose import base
 from pydra.compose.base import (
     ensure_field_objects,
@@ -231,7 +231,7 @@ class PythonTask(base.Task[PythonOutputsType]):
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
-        inputs = attrs_values(self)
+        inputs = task_dict(self)
         del inputs["function"]
         # Run the actual function
         returned = self.function(**inputs)

@@ -30,7 +30,7 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
 
     def __bytes_repr__(self, cache):
         yield type(self).__name__.encode() + b"("
-        yield from bytes(hash_single(self.source, cache))
+        yield b"source=" + bytes(hash_single(self._source, cache))
         yield b"field=" + self._field.encode()
         yield b"type=" + bytes(hash_single(self._type, cache))
         yield b"cast_from=" + bytes(hash_single(self._cast_from, cache))

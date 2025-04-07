@@ -43,15 +43,15 @@ def pytest_generate_tests(metafunc):
 
 # For debugging in IDE's don't catch raised exceptions and let the IDE
 # break at it
-if os.getenv("_PYTEST_RAISE", "0") != "0":
+if os.getenv("_PYTEST_RAISE", "0") != "0":  # pragma: no cover
 
-    @pytest.hookimpl(tryfirst=True)
-    def pytest_exception_interact(call):
-        raise call.excinfo.value
+    @pytest.hookimpl(tryfirst=True)  # pragma: no cover
+    def pytest_exception_interact(call):  # pragma: no cover
+        raise call.excinfo.value  # pragma: no cover
 
-    @pytest.hookimpl(tryfirst=True)
-    def pytest_internalerror(excinfo):
-        raise excinfo.value
+    @pytest.hookimpl(tryfirst=True)  # pragma: no cover
+    def pytest_internalerror(excinfo):  # pragma: no cover
+        raise excinfo.value  # pragma: no cover
 
 
 # Example VSCode launch configuration for debugging unittests

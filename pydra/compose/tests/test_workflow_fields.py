@@ -1,4 +1,5 @@
 from operator import attrgetter
+from pathlib import Path
 from copy import copy
 from unittest.mock import Mock
 import pytest
@@ -15,17 +16,17 @@ from fileformats import video, image
 
 
 @python.define
-def Add(a, b):
+def Add(a: int | float, b: int | float) -> int | float:
     return a + b
 
 
 @python.define
-def Mul(a, b):
+def Mul(a: int | float, b: int | float) -> int | float:
     return a * b
 
 
 @python.define(outputs=["divided"])
-def Divide(x, y):
+def Divide(x: int | float, y: int | float) -> float:
     return x / y
 
 
@@ -68,7 +69,9 @@ def test_workflow():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
+    assert wf.outputs.out == LazyOutField(
+        node=wf["Mul"], field="out", type=int | float, type_checked=True
+    )
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -185,7 +188,9 @@ def test_workflow_canonical():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
+    assert wf.outputs.out == LazyOutField(
+        node=wf["Mul"], field="out", type=int | float, type_checked=True
+    )
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -323,7 +328,7 @@ def test_direct_access_of_workflow_object():
         node=wf["Mul"], field="out", type=float, type_checked=True
     )
     assert wf.outputs.out2 == LazyOutField(
-        node=wf["division"], field="divided", type=ty.Any
+        node=wf["division"], field="divided", type=float, type_checked=True
     )
     assert list(wf.node_names) == ["addition", "Mul", "division"]
 
@@ -362,8 +367,12 @@ def test_workflow_set_outputs_directly():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
-    assert wf.outputs.out2 == LazyOutField(node=wf["Add"], field="out", type=ty.Any)
+    assert wf.outputs.out1 == LazyOutField(
+        node=wf["Mul"], field="out", type=int | float, type_checked=True
+    )
+    assert wf.outputs.out2 == LazyOutField(
+        node=wf["Add"], field="out", type=int | float, type_checked=True
+    )
     assert list(wf.node_names) == ["Add", "Mul"]
 
 
@@ -500,3 +509,51 @@ def test_recursively_nested_conditional_workflow():
         type=float,
         type_checked=True,
     )
+
+
+def test_workflow_lzout_inputs1(tmp_path: Path):
+
+    @workflow.define
+    def InputAccessWorkflow(a, b, c):
+        add = workflow.add(Add(a=a, b=b))
+        add.inputs.a = c
+        mul = workflow.add(Mul(a=add.out, b=b))
+        return mul.out
+
+    input_access_workflow = InputAccessWorkflow(a=1, b=2.0, c=3.0)
+    outputs = input_access_workflow(cache_root=tmp_path)
+    assert outputs.out == 10.0
+
+
+def test_workflow_lzout_inputs2(tmp_path: Path):
+
+    @workflow.define
+    def InputAccessWorkflow2(a, b, c):
+        add = workflow.add(Add(a=a, b=b))
+        add.inputs.a = c
+        mul = workflow.add(Mul(a=add.out, b=b))
+        return mul.out
+
+    input_access_workflow = InputAccessWorkflow2(a=1, b=2.0, c=3.0)
+    outputs = input_access_workflow(cache_root=tmp_path)
+    assert outputs.out == 10.0
+
+
+def test_workflow_lzout_inputs_state_change_fail(tmp_path: Path):
+    """Set the inputs of the 'mul' node after its outputs have been accessed
+    with an upstream lazy field that has a different state than the original.
+    This changes the type of the input and is therefore not permitted"""
+
+    @workflow.define
+    def InputAccessWorkflow3(a, b, c):
+        add1 = workflow.add(Add(a=a, b=b), name="add1")
+        add2 = workflow.add(Add(a=a).split(b=c), name="add2")
+        mul1 = workflow.add(Mul(a=add1.out, b=b), name="mul1")
+        workflow.add(Mul(a=mul1.out, b=b), name="mul2")
+        mul1.inputs.a = add2.out
+
+    input_access_workflow = InputAccessWorkflow3(a=1, b=2.0, c=[3.0, 4.0])
+    with pytest.raises(
+        RuntimeError, match="have already been accessed and therefore cannot set"
+    ):
+        input_access_workflow.construct()
