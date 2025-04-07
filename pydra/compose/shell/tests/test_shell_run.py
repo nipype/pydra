@@ -2854,7 +2854,7 @@ def test_shell_cmd_inputspec_outputspec_5(tmp_path):
     """
     customised input_spec and output_spec, output_spec uses input_spec fields in the requires
     requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
-    the firs element of the requires list has all the fields set
+    the first element of the requires list has all the fields set
     """
     cmd = ["touch", "newfile_tmp.txt"]
 
