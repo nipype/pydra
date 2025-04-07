@@ -123,11 +123,6 @@ def Concatenate(
     """
     if out_file is None:
         out_file = Path("out_file.txt").absolute()
-    contents = []
-    for _ in range(duplicates):
-        for fname in (in_file1, in_file2):
-            with open(fname) as f:
-                contents.append(f.read())
-    with open(out_file, "w") as f:
-        f.write("\n".join(contents))
+    contents = [Path(fname).read_text() for fname in (in_file1, in_file2)]
+    out_file.write_text("\n".join(contents * duplicates))
     return out_file
