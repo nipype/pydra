@@ -39,11 +39,16 @@ class Outputs:
     RESERVED_FIELD_NAMES = ("inputs",)
 
     _cache_dir: Path = attrs.field(default=None, init=False, repr=False)
+    _node = attrs.field(default=None, init=False, repr=False)
 
     @property
     def inputs(self):
         """The inputs object associated with a lazy-outputs object"""
-        return self._get_node().inputs
+        if self._node is None:
+            raise AttributeError(
+                f"{self} outputs object is not a lazy output of a workflow node"
+            )
+        return self._node.inputs
 
     @classmethod
     def _from_task(cls, job: "Job[TaskType]") -> Self:
@@ -80,14 +85,6 @@ class Outputs:
             raise FileNotFoundError(f"Job results file {results_path} not found")
         with open(results_path, "rb") as f:
             return cp.load(f)
-
-    def _get_node(self):
-        try:
-            return self._node
-        except AttributeError:
-            raise AttributeError(
-                f"{self} outputs object is not a lazy output of a workflow node"
-            ) from None
 
     def __iter__(self) -> ty.Generator[str, None, None]:
         """The names of the fields in the output object"""
