@@ -528,29 +528,13 @@ def test_workflow_lzout_inputs1(tmp_path: Path):
 def test_workflow_lzout_inputs2(tmp_path: Path):
 
     @workflow.define
-    def InputAccessWorkflow(a, b, c):
+    def InputAccessWorkflow2(a, b, c):
         add = workflow.add(Add(a=a, b=b))
         add.inputs.a = c
         mul = workflow.add(Mul(a=add.out, b=b))
         return mul.out
 
-    input_access_workflow = InputAccessWorkflow(a=1, b=2.0, c=3.0)
-    outputs = input_access_workflow(cache_root=tmp_path)
-    assert outputs.out == 10.0
-
-
-def test_workflow_lzout_inputs2(tmp_path: Path):
-    """Set the inputs of the 'add' node after its outputs have been accessed
-    but the state has not been altered"""
-
-    @workflow.define
-    def InputAccessWorkflow(a, b, c):
-        add = workflow.add(Add(a=a, b=b))
-        mul = workflow.add(Mul(a=add.out, b=b))
-        add.inputs.a = c
-        return mul.out
-
-    input_access_workflow = InputAccessWorkflow(a=1, b=2.0, c=3.0)
+    input_access_workflow = InputAccessWorkflow2(a=1, b=2.0, c=3.0)
     outputs = input_access_workflow(cache_root=tmp_path)
     assert outputs.out == 10.0
 
@@ -561,15 +545,14 @@ def test_workflow_lzout_inputs_state_change_fail(tmp_path: Path):
     This changes the type of the input and is therefore not permitted"""
 
     @workflow.define
-    def InputAccessWorkflow(a, b, c):
+    def InputAccessWorkflow3(a, b, c):
         add1 = workflow.add(Add(a=a, b=b), name="add1")
         add2 = workflow.add(Add(a=a).split(b=c), name="add2")
         mul1 = workflow.add(Mul(a=add1.out, b=b), name="mul1")
-        mul2 = workflow.add(Mul(a=mul1.out, b=b), name="mul2")
+        workflow.add(Mul(a=mul1.out, b=b), name="mul2")
         mul1.inputs.a = add2.out
-        return mul2.out
 
-    input_access_workflow = InputAccessWorkflow(a=1, b=2.0, c=[3.0, 4.0])
+    input_access_workflow = InputAccessWorkflow3(a=1, b=2.0, c=[3.0, 4.0])
     with pytest.raises(
         RuntimeError, match="have already been accessed and therefore cannot set"
     ):
