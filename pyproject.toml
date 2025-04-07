@@ -9,10 +9,10 @@ readme = "README.rst"
 requires-python = ">=3.11"
 dependencies = [
     "attrs >=24.2.0",
-    "cloudpickle >=2.0.0",
-    "etelemetry >=0.2.2",
+    "cloudpickle >=3.0.0",
+    "etelemetry >=0.3.1",
     "filelock >=3.0.0",
-    "fileformats >=0.15a4",
+    "fileformats >=0.15.0a7",
     "platformdirs >=2",
 ]
 license = { file = "LICENSE" }
@@ -67,21 +67,20 @@ doc = [
     "sphinxcontrib-versioning",
 ]
 test = [
-    "pytest >=6.2.5",
-    "pytest-cov",
-    "pytest-env",
-    "pytest-xdist <2.0",
-    "pytest-rerunfailures",
-    "pytest-timeout",
-    "pympler",
-    "codecov",
-    "fileformats-extras >=0.15.0a6",
-    "numpy",
-    "pyld",
-    "psutil",
-    "python-dateutil",
-    "tornado",
-    "pympler",
+    "coverage[toml] >=5.2.1",
+    "pytest >=8.3.5",
+    "pytest-cov >=6.1",
+    "pytest-env >=1.1",
+    "pytest-xdist >=3.6",
+    "pytest-rerunfailures >=15.0",
+    "pytest-timeout >=2.3",
+    "pympler >=1.1",
+    "fileformats-extras >=0.15.0a7",
+    "numpy >=1.26",
+    "pyld >=2.0",
+    "psutil >=5.9.0",
+    "python-dateutil >=2.8.2",
+    "tornado >=6.1",
 ]
 tutorial = [
     "fileformats-extras >= v0.15.0a6",
@@ -130,8 +129,32 @@ version-file = "pydra/utils/_version.py"
 allow-direct-references = true
 
 [tool.black]
-target-version = ['py38']
 exclude = "pydra/utils/_version.py"
 
 [tool.codespell]
 ignore-words-list = "nd,afile,inpt,fpr"
+
+[tool.pytest.ini_options]
+minversion = "6"
+testpaths = ["pydra"]
+log_cli_level = "INFO"
+xfail_strict = true
+addopts = [
+  "-svx",
+  "-ra",
+  "--strict-config",
+  "--strict-markers",
+  "--doctest-modules",
+  "--import-mode=importlib",
+  # Config pytest-cov
+  "--cov=pydra",
+  "--cov-report=xml",
+  "--cov-config=pyproject.toml",
+]
+doctest_optionflags = "ALLOW_UNICODE NORMALIZE_WHITESPACE ELLIPSIS"
+env = "PYTHONHASHSEED=0"
+filterwarnings = ["ignore::DeprecationWarning"]
+junit_family = "xunit2"
+
+[tool.coverage.run]
+branch = true
