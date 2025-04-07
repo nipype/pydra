@@ -2,28 +2,28 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
     - repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v4.6.0
+      rev: v5.0.0
       hooks:
           - id: trailing-whitespace
           - id: end-of-file-fixer
           - id: check-yaml
           - id: check-added-large-files
     - repo: https://github.com/psf/black
-      rev: 24.4.2
+      rev: 25.1.0
       hooks:
           - id: black
     - repo: https://github.com/codespell-project/codespell
-      rev: v2.3.0
+      rev: v2.4.1
       hooks:
           - id: codespell
             additional_dependencies:
                 - tomli
     - repo: https://github.com/PyCQA/flake8
-      rev: 7.0.0
+      rev: 7.2.0
       hooks:
           - id: flake8
     - repo: https://github.com/kynan/nbstripout
-      rev: 0.5.0
+      rev: 0.8.1
       hooks:
           - id: nbstripout
             files: \.(ipynb)$
