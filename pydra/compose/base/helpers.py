@@ -253,11 +253,10 @@ def extract_function_inputs_and_outputs(
             elif output is ty.Any:
                 output = return_type
             outputs = {output_name: output}
+    elif outputs == [] or return_type in (None, type(None)):
+        outputs = {}
     else:
-        if return_type not in (None, type(None)):
-            outputs = {"out": return_type}
-        else:
-            outputs = {}
+        outputs = {"out": return_type}
     return inputs, outputs
 
 
