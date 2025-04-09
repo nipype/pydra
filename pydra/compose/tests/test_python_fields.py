@@ -424,3 +424,38 @@ def test_object_input():
 
     outputs = TestFunc(a=A(x=7))()
     assert outputs.out == 7
+
+
+def test_no_outputs1():
+    """Test function tasks with object inputs"""
+
+    @python.define
+    def TestFunc(a: A) -> None:
+        pass
+
+    outputs = TestFunc(a=A(x=7))()
+    assert len(outputs) == 0
+
+
+def test_no_outputs2():
+    """Test function tasks with object inputs"""
+
+    @python.define(outputs=[])
+    def TestFunc(a: A):
+        pass
+
+    outputs = TestFunc(a=A(x=7))()
+    assert len(outputs) == 0
+
+
+def test_no_outputs_fail():
+    """Test function tasks with object inputs"""
+
+    @python.define(outputs=[])
+    def TestFunc(a: A):
+        return a
+
+    with pytest.raises(
+        ValueError, match="Returns an output but no outputs are defined"
+    ):
+        TestFunc(a=A(x=7))()
