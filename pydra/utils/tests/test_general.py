@@ -1,5 +1,7 @@
-from pydra.compose import python  # , workflow, shell
+from pydra.compose import python, workflow, shell
+from fileformats.generic import File
 from pydra.utils.general import task_def_as_dict, task_def_from_dict, task_fields
+from pydra.utils.tests.utils import SpecificFuncTask, Concatenate
 
 
 def test_python_task_def_as_dict():
@@ -26,3 +28,31 @@ def test_python_task_def_as_dict():
     dct = task_def_as_dict(Add)
     Reloaded = task_def_from_dict(dct)
     assert task_fields(Add) == task_fields(Reloaded)
+
+
+def test_shell_task_def_as_dict():
+
+    MyCmd = shell.define(
+        "my-cmd <in_file> <out|out_file> --an-arg <an_arg:int=2> --a-flag<a_flag>"
+    )
+
+    dct = task_def_as_dict(MyCmd)
+    Reloaded = task_def_from_dict(dct)
+    assert task_fields(MyCmd) == task_fields(Reloaded)
+
+
+def test_workflow_task_def_as_dict():
+
+    @workflow.define
+    def AWorkflow(in_file: File, a_param: int) -> tuple[File, File]:
+        spec_func = workflow.add(SpecificFuncTask(in_file))
+        concatenate = workflow.add(
+            Concatenate(
+                in_file1=in_file, in_file2=spec_func.out_file, duplicates=a_param
+            )
+        )
+        return concatenate.out_file
+
+    dct = task_def_as_dict(AWorkflow)
+    Reloaded = task_def_from_dict(dct)
+    assert task_fields(AWorkflow) == task_fields(Reloaded)
