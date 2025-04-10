@@ -134,7 +134,7 @@ class out(Out):
                 "stdout",
                 "stderr",
             ]
-        ):  # shell.Outputs.BASE_NAMES
+        ):  # shell.Outputs.BASE_ATTRS
             raise ValueError(
                 "A shell output field must have either a callable or a path_template"
             )
