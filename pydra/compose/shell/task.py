@@ -78,7 +78,7 @@ class ShellOutputs(base.Outputs):
         outputs : Outputs
             The outputs of the shell process
         """
-        outputs = super()._from_task(job)
+        outputs = super()._from_job(job)
         fld: field.out
         for fld in task_fields(cls):
             if fld.name in ["return_code", "stdout", "stderr"]:

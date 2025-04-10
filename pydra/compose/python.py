@@ -219,7 +219,7 @@ class PythonOutputs(base.Outputs):
         outputs : Outputs
             The outputs of the job in dataclass
         """
-        outputs = super()._from_task(job)
+        outputs = super()._from_job(job)
         for name, val in job.return_values.items():
             setattr(outputs, name, val)
         return outputs
