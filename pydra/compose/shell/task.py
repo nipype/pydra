@@ -46,7 +46,7 @@ TaskType = ty.TypeVar("TaskType", bound="Task")
 class ShellOutputs(base.Outputs):
     """Output task of a generic shell process."""
 
-    BASE_NAMES = ["return_code", "stdout", "stderr"]
+    BASE_ATTRS = ["return_code", "stdout", "stderr"]
     RETURN_CODE_HELP = """The process' exit code."""
     STDOUT_HELP = """The standard output stream produced by the command."""
     STDERR_HELP = """The standard error stream produced by the command."""
@@ -234,7 +234,7 @@ class ShellTask(base.Task[ShellOutputsType]):
 
     _executor_name = "executable"
 
-    BASE_NAMES = ["append_args"]
+    BASE_ATTRS = ("append_args",)
 
     EXECUTABLE_HELP = (
         "the first part of the command, can be a string, "

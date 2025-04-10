@@ -37,6 +37,7 @@ class Outputs:
     """Base class for all output definitions"""
 
     RESERVED_FIELD_NAMES = ("inputs",)
+    BASE_ATTRS = ()
 
     _cache_dir: Path = attrs.field(default=None, init=False, repr=False)
     _node = attrs.field(default=None, init=False, repr=False)
@@ -178,6 +179,7 @@ class Task(ty.Generic[OutputsType]):
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
+    BASE_ATTRS = ()
 
     def __call__(
         self,

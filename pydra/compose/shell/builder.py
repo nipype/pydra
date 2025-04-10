@@ -183,8 +183,8 @@ def define(
                 class_name = f"_{class_name}"
 
             # Add in fields from base classes
-            parsed_inputs.update({n: getattr(Task, n) for n in Task.BASE_NAMES})
-            parsed_outputs.update({n: getattr(Outputs, n) for n in Outputs.BASE_NAMES})
+            parsed_inputs.update({n: getattr(Task, n) for n in Task.BASE_ATTRS})
+            parsed_outputs.update({n: getattr(Outputs, n) for n in Outputs.BASE_ATTRS})
 
         if "executable" in parsed_inputs:
             raise ValueError(

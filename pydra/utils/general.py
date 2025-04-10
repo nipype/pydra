@@ -602,11 +602,22 @@ def task_def_as_dict(task_def: "type[Task]") -> ty.Dict[str, ty.Any]:
     dict[str, ty.Any]
         A dictionary representation of the Pydra task.
     """
+    from pydra.compose.base import Out
+
     input_fields = task_fields(task_def)
     executor = input_fields.pop(task_def._executor_name).default
-    input_dicts = [attrs.asdict(i, filter=_filter_defaults) for i in input_fields]
+    input_dicts = [
+        attrs.asdict(i, filter=_filter_defaults)
+        for i in input_fields
+        if (
+            not isinstance(i, Out)  # filter out outarg fields
+            and i.name not in task_def.BASE_ATTRS
+        )
+    ]
     output_dicts = [
-        attrs.asdict(o, filter=_filter_defaults) for o in task_fields(task_def.Outputs)
+        attrs.asdict(o, filter=_filter_defaults)
+        for o in task_fields(task_def.Outputs)
+        if o.name not in task_def.Outputs.BASE_ATTRS
     ]
     dct = {
         "type": task_def._task_type(),
