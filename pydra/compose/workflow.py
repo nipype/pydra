@@ -111,6 +111,7 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     lazy: list[str] | None = None,
     auto_attribs: bool = True,
+    name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
 ) -> "Task":
     """
@@ -127,6 +128,8 @@ def define(
         The outputs of the function or class.
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
+    name: str | None
+        The name of the returned class
     xor: Sequence[str | None] | Sequence[Sequence[str | None]], optional
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
@@ -145,7 +148,7 @@ def define(
         if inspect.isclass(wrapped):
             klass = wrapped
             constructor = klass.constructor
-            name = klass.__name__
+            class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
                 Task,
@@ -167,7 +170,8 @@ def define(
             inferred_inputs, inferred_outputs = extract_function_inputs_and_outputs(
                 constructor, arg, inputs, outputs
             )
-            name = constructor.__name__
+
+            class_name = constructor.__name__ if name is None else name
 
             parsed_inputs, parsed_outputs = ensure_field_objects(
                 arg_type=arg,
@@ -195,7 +199,7 @@ def define(
             Outputs,
             parsed_inputs,
             parsed_outputs,
-            name=name,
+            name=class_name,
             klass=klass,
             bases=bases,
             outputs_bases=outputs_bases,
@@ -349,6 +353,7 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 class WorkflowTask(base.Task[WorkflowOutputsType]):
 
     _task_type = "workflow"
+    _executor_name = "constructor"
 
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("construct",)
 
