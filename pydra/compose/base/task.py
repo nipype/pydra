@@ -51,7 +51,7 @@ class Outputs:
         return self._node.inputs
 
     @classmethod
-    def _from_task(cls, job: "Job[TaskType]") -> Self:
+    def _from_job(cls, job: "Job[TaskType]") -> Self:
         """Collect the outputs of a job. This is just an abstract base method that
         should be used by derived classes to set default values for the outputs.
 
