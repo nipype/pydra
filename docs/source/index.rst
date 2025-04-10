@@ -85,7 +85,7 @@ workflows,
 * :ref:`Python-tasks`
 * :ref:`Shell-tasks`
 * :ref:`Workflows`
-* :ref:`Canonical task form`
+* :ref:`Canonical form and serialisation`
 
 Examples
 ~~~~~~~~
