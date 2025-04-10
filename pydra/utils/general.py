@@ -636,7 +636,7 @@ def task_def_from_dict(task_def_dict: dict[str, ty.Any]) -> type["Task"]:
     dct = copy(task_def_dict)
     task_type = dct.pop("type")
     compose_module = importlib.import_module(f"pydra.compose.{task_type}")
-    return compose_module.define(dct.pop("function"), **dct)
+    return compose_module.define(dct.pop(compose_module.Task._executor_name), **dct)
 
 
 def _filter_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
