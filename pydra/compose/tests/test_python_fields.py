@@ -462,7 +462,7 @@ def test_no_outputs_fail():
 def test_only_one_output_fail():
 
     @python.define(outputs=["out1", "out2"])
-    def TestFunc4(a: A):
+    def TestFunc4(a: A) -> A:
         return a
 
     with pytest.raises(ValueError, match="Multiple outputs specified"):
@@ -472,7 +472,7 @@ def test_only_one_output_fail():
 def test_incorrect_num_outputs_fail():
 
     @python.define(outputs=["out1", "out2"])
-    def TestFunc5(a: A):
+    def TestFunc5(a: A) -> tuple[A, A, A]:
         return a, a, a
 
     with pytest.raises(ValueError, match="Length of the outputs"):
