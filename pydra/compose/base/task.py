@@ -152,9 +152,15 @@ class Task(ty.Generic[OutputsType]):
     # Task type to be overridden in derived classes
     @classmethod
     def _task_type(cls) -> str:
-        mod_parts = cls.__module__.split(".")
-        assert mod_parts[:2] == ["pydra", "compose"]
-        return mod_parts[2]
+        for base in cls.__mro__:
+            parts = base.__module__.split(".")
+            if parts[:2] == ["pydra", "compose"]:
+                return parts[2]
+        raise RuntimeError(
+            f"Cannot determine task type for {cls.__name__} in module {cls.__module__} "
+            "because none of its base classes are in the pydra.compose namespace:\n"
+            + "\n".join(f"{b.__name__!r} in {b.__module__!r}" for b in cls.__mro__)
+        )
 
     # The attribute containing the function/executable used to run the task
     _executor_name = None
