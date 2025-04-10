@@ -114,7 +114,13 @@ def ensure_field_objects(
             out_kwds = copy(out)
             if "help" not in out_kwds:
                 out_kwds["help"] = output_helps.get(output_name, "")
-            outputs[output_name] = out_type(
+            if "path_template" in out_kwds:
+                from pydra.compose.shell import outarg
+
+                out_type_ = outarg
+            else:
+                out_type_ = out_type
+            outputs[output_name] = out_type_(
                 name=output_name,
                 **out_kwds,
             )
