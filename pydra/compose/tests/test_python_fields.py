@@ -430,10 +430,10 @@ def test_no_outputs1():
     """Test function tasks with no outputs specified by None return type"""
 
     @python.define
-    def TestFunc(a: A) -> None:
-        pass
+    def TestFunc1(a: A) -> None:
+        print(a)
 
-    outputs = TestFunc(a=A(x=7))()
+    outputs = TestFunc1(a=A(x=7))()
     assert not task_fields(outputs)
 
 
@@ -441,10 +441,10 @@ def test_no_outputs2():
     """Test function tasks with no outputs set explicitly"""
 
     @python.define(outputs=[])
-    def TestFunc(a: A):
-        pass
+    def TestFunc2(a: A):
+        print(a)
 
-    outputs = TestFunc(a=A(x=7))()
+    outputs = TestFunc2(a=A(x=7))()
     assert not task_fields(outputs)
 
 
@@ -452,8 +452,28 @@ def test_no_outputs_fail():
     """Test function tasks with object inputs"""
 
     @python.define(outputs=[])
-    def TestFunc(a: A):
+    def TestFunc3(a: A):
         return a
 
     with pytest.raises(ValueError, match="No output fields were specified"):
-        TestFunc(a=A(x=7))()
+        TestFunc3(a=A(x=7))()
+
+
+def test_only_one_output_fail():
+
+    @python.define(outputs=["out1", "out2"])
+    def TestFunc4(a: A):
+        return a
+
+    with pytest.raises(ValueError, match="Multiple outputs specified"):
+        TestFunc4(a=A(x=7))()
+
+
+def test_incorrect_num_outputs_fail():
+
+    @python.define(outputs=["out1", "out2"])
+    def TestFunc5(a: A):
+        return a, a, a
+
+    with pytest.raises(ValueError, match="Length of the outputs"):
+        TestFunc5(a=A(x=7))()
