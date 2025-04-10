@@ -153,7 +153,6 @@ class Task(ty.Generic[OutputsType]):
     @classmethod
     def _task_type(cls) -> str:
         mod_parts = cls.__module__.split(".")
-        assert len(mod_parts) == 3
         assert mod_parts[:2] == ["pydra", "compose"]
         return mod_parts[2]
 
