@@ -251,11 +251,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         if (
             environment
             and not isinstance(environment, native.Environment)
-            and task._task_type != "shell"
+            and task._task_type() != "shell"
         ):
             raise ValueError(
                 "Environments can only be used with 'shell' tasks not "
-                f"{task._task_type!r} tasks ({task!r})"
+                f"{task._task_type()!r} tasks ({task!r})"
             )
         node = Node[OutputsType](
             name=name,

@@ -150,11 +150,18 @@ class Task(ty.Generic[OutputsType]):
     """Base class for all tasks"""
 
     # Task type to be overridden in derived classes
-    _task_type = ""
+    @classmethod
+    def _task_type(cls) -> str:
+        mod_parts = cls.__module__.split(".")
+        assert len(mod_parts) == 3
+        assert mod_parts[:2] == ["pydra", "compose"]
+        return mod_parts[2]
+
     # The attribute containing the function/executable used to run the task
     _executor_name = None
 
     # Class attributes
+    TASK_CLASS_ATTRS = ("xor",)
     _xor: frozenset[frozenset[str | None]] = (
         frozenset()
     )  # overwritten in derived classes
@@ -461,7 +468,7 @@ class Task(ty.Generic[OutputsType]):
 
     @property
     def _checksum(self):
-        return f"{self._task_type}-{self._hash}"
+        return f"{self._task_type()}-{self._hash}"
 
     def _hash_changes(self):
         """Detects any changes in the hashed values between the current inputs and the
@@ -610,7 +617,7 @@ class Task(ty.Generic[OutputsType]):
 
 @register_serializer
 def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
-    yield f"task[{obj._task_type}]:(".encode()
+    yield f"task[{obj._task_type()}]:(".encode()
     for field in task_fields(obj):
         yield f"{field.name}=".encode()
         yield hash_single(getattr(obj, field.name), cache)

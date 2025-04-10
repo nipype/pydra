@@ -231,7 +231,6 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonTask(base.Task[PythonOutputsType]):
 
-    _task_type = "python"
     _executor_name = "function"
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
