@@ -149,6 +149,11 @@ OutputsType = ty.TypeVar("OutputType", bound=Outputs)
 class Task(ty.Generic[OutputsType]):
     """Base class for all tasks"""
 
+    # Task type to be overridden in derived classes
+    _task_type = ""
+    # The attribute containing the function/executable used to run the task
+    _executor_name = None
+
     # Class attributes
     _xor: frozenset[frozenset[str | None]] = (
         frozenset()

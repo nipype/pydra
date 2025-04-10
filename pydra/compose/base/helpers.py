@@ -217,6 +217,8 @@ def extract_function_inputs_and_outputs(
                 inpt.default = default
         elif inspect.isclass(inpt) or ty.get_origin(inpt):
             inputs[inpt_name] = arg_type(type=inpt, default=default)
+        elif isinstance(inpt, dict):
+            inputs[inpt_name] = arg_type(**inpt)
         else:
             raise ValueError(
                 f"Unrecognised input type ({inpt}) for input {inpt_name} with default "

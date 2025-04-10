@@ -233,6 +233,7 @@ def append_args_converter(value: ty.Any) -> list[str]:
 class ShellTask(base.Task[ShellOutputsType]):
 
     _task_type = "shell"
+    _executor_name = "executable"
 
     BASE_NAMES = ["append_args"]
 

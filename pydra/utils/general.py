@@ -4,6 +4,7 @@ from pathlib import Path
 import inspect
 import sys
 import typing as ty
+from copy import copy
 import re
 import attrs
 import ast
@@ -584,3 +585,61 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
         for pkg in sub_packages
         if hasattr(pkg, class_name)
     }
+
+
+def task_def_as_dict(task_def: "type[Task]") -> ty.Dict[str, ty.Any]:
+    """Converts a Pydra task class into a dictionary representation that can be serialized
+    and saved to a file, then read and passed to an appropriate `pydra.compose.*.define`
+    method to recreate the task.
+
+    Parameters
+    ----------
+    task_def : type[pydra.compose.base.Task]
+        The Pydra task class to convert.
+
+    Returns
+    -------
+    dict[str, ty.Any]
+        A dictionary representation of the Pydra task.
+    """
+    input_fields = task_fields(task_def)
+    executor = input_fields.pop(task_def._executor_name).default
+    input_dicts = [attrs.asdict(i, filter=_filter_defaults) for i in input_fields]
+    output_dicts = [
+        attrs.asdict(o, filter=_filter_defaults) for o in task_fields(task_def.Outputs)
+    ]
+    dct = {
+        "type": task_def._task_type,
+        task_def._executor_name: executor,
+        "name": task_def.__name__,
+        "inputs": {d.pop("name"): d for d in input_dicts},
+        "outputs": {d.pop("name"): d for d in output_dicts},
+        "xor": task_def._xor,
+    }
+
+    return dct
+
+
+def task_def_from_dict(task_def_dict: dict[str, ty.Any]) -> type["Task"]:
+    """Unserializes a task definition from a dictionary created by `task_def_as_dict`
+
+    Parameters
+    ----------
+    task_def_dict: dict[str, Any]
+        the dictionary representation to unserialize
+
+    Returns
+    -------
+    type[pydra.compose.base.Task]
+        the unserialized task class
+    """
+    dct = copy(task_def_dict)
+    task_type = dct.pop("type")
+    compose_module = importlib.import_module(f"pydra.compose.{task_type}")
+    return compose_module.define(dct.pop("function"), **dct)
+
+
+def _filter_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
+    if value == atr.default:
+        return False
+    return True
