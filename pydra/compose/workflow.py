@@ -352,7 +352,6 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class WorkflowTask(base.Task[WorkflowOutputsType]):
 
-    _task_type = "workflow"
     _executor_name = "constructor"
 
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("construct",)

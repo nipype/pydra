@@ -609,13 +609,13 @@ def task_def_as_dict(task_def: "type[Task]") -> ty.Dict[str, ty.Any]:
         attrs.asdict(o, filter=_filter_defaults) for o in task_fields(task_def.Outputs)
     ]
     dct = {
-        "type": task_def._task_type,
+        "type": task_def._task_type(),
         task_def._executor_name: executor,
         "name": task_def.__name__,
         "inputs": {d.pop("name"): d for d in input_dicts},
         "outputs": {d.pop("name"): d for d in output_dicts},
-        "xor": task_def._xor,
     }
+    dct.update({a: getattr(task_def, "_" + a) for a in task_def.TASK_CLASS_ATTRS})
 
     return dct
 
@@ -635,8 +635,8 @@ def task_def_from_dict(task_def_dict: dict[str, ty.Any]) -> type["Task"]:
     """
     dct = copy(task_def_dict)
     task_type = dct.pop("type")
-    compose_module = importlib.import_module(f"pydra.compose.{task_type}")
-    return compose_module.define(dct.pop(compose_module.Task._executor_name), **dct)
+    mod = importlib.import_module(f"pydra.compose.{task_type}")
+    return mod.define(dct.pop(mod.Task._executor_name), **dct)
 
 
 def _filter_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
