@@ -291,7 +291,7 @@ def cast(field: ty.Any, new_type: type[U]) -> U:
 class WorkflowOutputs(base.Outputs):
 
     @classmethod
-    def _from_task(cls, job: "Job[WorkflowTask]") -> ty.Self:
+    def _from_job(cls, job: "Job[WorkflowTask]") -> ty.Self:
         """Collect the outputs of a workflow job from the outputs of the nodes in the
 
         Parameters

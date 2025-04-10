@@ -56,7 +56,7 @@ class ShellOutputs(base.Outputs):
     stderr: str = field.out(name="stderr", type=str, help=STDERR_HELP)
 
     @classmethod
-    def _from_task(cls, job: "Job[Task]") -> ty.Self:
+    def _from_job(cls, job: "Job[Task]") -> ty.Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 

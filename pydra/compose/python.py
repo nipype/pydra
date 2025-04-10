@@ -203,7 +203,7 @@ def define(
 class PythonOutputs(base.Outputs):
 
     @classmethod
-    def _from_task(cls, job: "Job[PythonTask]") -> ty.Self:
+    def _from_job(cls, job: "Job[PythonTask]") -> ty.Self:
         """Collect the outputs of a job from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
