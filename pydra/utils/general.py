@@ -587,8 +587,8 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
     }
 
 
-def task_def_as_dict(
-    task_def: "type[Task]",
+def task_class_as_dict(
+    task_class: "type[Task]",
     filter: ty.Callable[[attrs.Attribute, ty.Any], bool] | None = None,
     value_serializer: (
         ty.Callable[[ty.Any, attrs.Attribute, ty.Any], ty.Any] | None
@@ -596,12 +596,12 @@ def task_def_as_dict(
     **kwargs: ty.Any,
 ) -> ty.Dict[str, ty.Any]:
     """Converts a Pydra task class into a dictionary representation that can be serialized
-    and saved to a file, then read and passed to an appropriate `pydra.compose.*.define`
+    (e.g. to a file), then reread and passed to an appropriate `pydra.compose.*.define`
     method to recreate the task.
 
     Parameters
     ----------
-    task_def : type[pydra.compose.base.Task]
+    task_class : type[pydra.compose.base.Task]
         The Pydra task class to convert.
     filter : callable, optional
         A function to filter out certain attributes from the task definition passed
@@ -626,33 +626,33 @@ def task_def_as_dict(
     if filter is None:
         filter = _filter_out_defaults
 
-    input_fields = task_fields(task_def)
-    executor = input_fields.pop(task_def._executor_name).default
+    input_fields = task_fields(task_class)
+    executor = input_fields.pop(task_class._executor_name).default
     input_dicts = [
         attrs.asdict(i, filter=filter, value_serializer=value_serializer, **kwargs)
         for i in input_fields
         if (
             not isinstance(i, Out)  # filter out outarg fields
-            and i.name not in task_def.BASE_ATTRS
+            and i.name not in task_class.BASE_ATTRS
         )
     ]
     output_dicts = [
         attrs.asdict(o, filter=filter, value_serializer=value_serializer, **kwargs)
-        for o in task_fields(task_def.Outputs)
-        if o.name not in task_def.Outputs.BASE_ATTRS
+        for o in task_fields(task_class.Outputs)
+        if o.name not in task_class.Outputs.BASE_ATTRS
     ]
     dct = {
-        "type": task_def._task_type(),
-        task_def._executor_name: executor,
-        "name": task_def.__name__,
+        "type": task_class._task_type(),
+        task_class._executor_name: executor,
+        "name": task_class.__name__,
         "inputs": {d.pop("name"): d for d in input_dicts},
         "outputs": {d.pop("name"): d for d in output_dicts},
     }
-    class_attrs = {a: getattr(task_def, "_" + a) for a in task_def.TASK_CLASS_ATTRS}
+    class_attrs = {a: getattr(task_class, "_" + a) for a in task_class.TASK_CLASS_ATTRS}
     if value_serializer:
-        attrs_fields = {f.name: f for f in attrs.fields(task_def)}
+        attrs_fields = {f.name: f for f in attrs.fields(task_class)}
         class_attrs = {
-            n: value_serializer(task_def, attrs_fields[n], v)
+            n: value_serializer(task_class, attrs_fields[n], v)
             for n, v in class_attrs.items()
         }
     dct.update(class_attrs)
@@ -660,12 +660,12 @@ def task_def_as_dict(
     return dct
 
 
-def task_def_from_dict(task_def_dict: dict[str, ty.Any]) -> type["Task"]:
-    """Unserializes a task definition from a dictionary created by `task_def_as_dict`
+def task_class_from_dict(task_class_dict: dict[str, ty.Any]) -> type["Task"]:
+    """Unserializes a task definition from a dictionary created by `task_class_as_dict`
 
     Parameters
     ----------
-    task_def_dict: dict[str, Any]
+    task_class_dict: dict[str, Any]
         the dictionary representation to unserialize
 
     Returns
@@ -673,7 +673,7 @@ def task_def_from_dict(task_def_dict: dict[str, ty.Any]) -> type["Task"]:
     type[pydra.compose.base.Task]
         the unserialized task class
     """
-    dct = copy(task_def_dict)
+    dct = copy(task_class_dict)
     task_type = dct.pop("type")
     mod = importlib.import_module(f"pydra.compose.{task_type}")
     return mod.define(dct.pop(mod.Task._executor_name), **dct)
