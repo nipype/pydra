@@ -650,9 +650,15 @@ def task_class_as_dict(
     }
     class_attrs = {a: getattr(task_class, "_" + a) for a in task_class.TASK_CLASS_ATTRS}
     if value_serializer:
-        attrs_fields = {f.name: f for f in attrs.fields(task_class)}
+        # We need to create a mock attrs object for the class attrs to apply the
+        # value_serializer to it
+        mock_cls = _make_attrs_class(
+            {a: task_class.__annotations__.get(a, ty.Any) for a in class_attrs}
+        )
+        attrs_fields = {f.name: f for f in attrs.fields(mock_cls)}
+        mock = mock_cls(**class_attrs)
         class_attrs = {
-            n: value_serializer(task_class, attrs_fields[n], v)
+            n: value_serializer(mock, attrs_fields[n], v)
             for n, v in class_attrs.items()
         }
     dct.update(class_attrs)
@@ -686,3 +692,25 @@ def _filter_out_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
     if value == atr.default:
         return False
     return True
+
+
+def _make_attrs_class(field_types: dict[str, type]) -> type:
+    """Creates an attrs given the a dictionary of field names and their types.
+
+    Parameters
+    ----------
+    field_types : dict[str, type]
+        A dictionary mapping field names to their types.
+
+    Returns
+    -------
+    type
+        the attrs class.
+    """
+    return attrs.define(
+        type(
+            "MockAttrsClass",
+            (),
+            {n: attrs.field(type=t) for n, t in field_types.items()},
+        )
+    )
