@@ -587,7 +587,11 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
     }
 
 
-def task_def_as_dict(task_def: "type[Task]") -> ty.Dict[str, ty.Any]:
+def task_def_as_dict(
+    task_def: "type[Task]",
+    filter: ty.Callable[[attrs.Attribute, ty.Any], bool] | None = None,
+    **kwargs: ty.Any,
+) -> ty.Dict[str, ty.Any]:
     """Converts a Pydra task class into a dictionary representation that can be serialized
     and saved to a file, then read and passed to an appropriate `pydra.compose.*.define`
     method to recreate the task.
@@ -596,6 +600,13 @@ def task_def_as_dict(task_def: "type[Task]") -> ty.Dict[str, ty.Any]:
     ----------
     task_def : type[pydra.compose.base.Task]
         The Pydra task class to convert.
+    filter : callable, optional
+        A function to filter out certain attributes from the task definition passed
+        through to `attrs.asdict`. It should take an attribute and its value as
+        arguments and return a boolean (True to keep the attribute, False to filter it out).
+    **kwargs : dict
+        Additional keyword arguments to pass to `attrs.asdict` (i.e. all except `filter`)
+        See the `attrs` documentation for more details.
 
     Returns
     -------
@@ -604,10 +615,13 @@ def task_def_as_dict(task_def: "type[Task]") -> ty.Dict[str, ty.Any]:
     """
     from pydra.compose.base import Out
 
+    if filter is None:
+        filter = _filter_out_defaults
+
     input_fields = task_fields(task_def)
     executor = input_fields.pop(task_def._executor_name).default
     input_dicts = [
-        attrs.asdict(i, filter=_filter_defaults)
+        attrs.asdict(i, filter=filter, **kwargs)
         for i in input_fields
         if (
             not isinstance(i, Out)  # filter out outarg fields
@@ -615,7 +629,7 @@ def task_def_as_dict(task_def: "type[Task]") -> ty.Dict[str, ty.Any]:
         )
     ]
     output_dicts = [
-        attrs.asdict(o, filter=_filter_defaults)
+        attrs.asdict(o, filter=filter, **kwargs)
         for o in task_fields(task_def.Outputs)
         if o.name not in task_def.Outputs.BASE_ATTRS
     ]
@@ -650,7 +664,10 @@ def task_def_from_dict(task_def_dict: dict[str, ty.Any]) -> type["Task"]:
     return mod.define(dct.pop(mod.Task._executor_name), **dct)
 
 
-def _filter_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
+def _filter_out_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
+    """Filter out values that match the attributes default value."""
+    if isinstance(atr.default, attrs.Factory) and atr.default.factory() == value:
+        return False
     if value == atr.default:
         return False
     return True
