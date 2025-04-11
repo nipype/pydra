@@ -106,6 +106,7 @@ It is also useful to install pre-commit:
 
 .. |codecov| image:: https://codecov.io/gh/nipype/pydra/branch/main/graph/badge.svg
    :alt: codecov
+   :target: https://codecov.io/gh/nipype/pydra
 
 .. |Python Versions| image:: https://img.shields.io/pypi/pyversions/pydra.svg
    :alt: Supported Python versions
