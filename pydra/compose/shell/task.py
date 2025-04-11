@@ -46,7 +46,7 @@ TaskType = ty.TypeVar("TaskType", bound="Task")
 class ShellOutputs(base.Outputs):
     """Output task of a generic shell process."""
 
-    BASE_NAMES = ["return_code", "stdout", "stderr"]
+    BASE_ATTRS = ["return_code", "stdout", "stderr"]
     RETURN_CODE_HELP = """The process' exit code."""
     STDOUT_HELP = """The standard output stream produced by the command."""
     STDERR_HELP = """The standard error stream produced by the command."""
@@ -56,7 +56,7 @@ class ShellOutputs(base.Outputs):
     stderr: str = field.out(name="stderr", type=str, help=STDERR_HELP)
 
     @classmethod
-    def _from_task(cls, job: "Job[Task]") -> ty.Self:
+    def _from_job(cls, job: "Job[Task]") -> ty.Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
@@ -78,7 +78,7 @@ class ShellOutputs(base.Outputs):
         outputs : Outputs
             The outputs of the shell process
         """
-        outputs = super()._from_task(job)
+        outputs = super()._from_job(job)
         fld: field.out
         for fld in task_fields(cls):
             if fld.name in ["return_code", "stdout", "stderr"]:
@@ -232,9 +232,9 @@ def append_args_converter(value: ty.Any) -> list[str]:
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class ShellTask(base.Task[ShellOutputsType]):
 
-    _task_type = "shell"
+    _executor_name = "executable"
 
-    BASE_NAMES = ["append_args"]
+    BASE_ATTRS = ("append_args",)
 
     EXECUTABLE_HELP = (
         "the first part of the command, can be a string, "

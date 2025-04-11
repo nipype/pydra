@@ -114,7 +114,13 @@ def ensure_field_objects(
             out_kwds = copy(out)
             if "help" not in out_kwds:
                 out_kwds["help"] = output_helps.get(output_name, "")
-            outputs[output_name] = out_type(
+            if "path_template" in out_kwds:
+                from pydra.compose.shell import outarg
+
+                out_type_ = outarg
+            else:
+                out_type_ = out_type
+            outputs[output_name] = out_type_(
                 name=output_name,
                 **out_kwds,
             )
@@ -212,6 +218,8 @@ def extract_function_inputs_and_outputs(
                 inpt.default = default
         elif inspect.isclass(inpt) or ty.get_origin(inpt):
             inputs[inpt_name] = arg_type(type=inpt, default=default)
+        elif isinstance(inpt, dict):
+            inputs[inpt_name] = arg_type(**inpt)
         else:
             raise ValueError(
                 f"Unrecognised input type ({inpt}) for input {inpt_name} with default "

@@ -4,6 +4,7 @@ from pathlib import Path
 import inspect
 import sys
 import typing as ty
+from copy import copy
 import re
 import attrs
 import ast
@@ -351,7 +352,7 @@ def task_fields(task: "type[Task] | Task") -> _TaskFieldsList:
     )
 
 
-def task_dict(obj, **kwargs) -> dict[str, ty.Any]:
+def task_as_dict(obj, **kwargs) -> dict[str, ty.Any]:
     """Get the values of an attrs object."""
     return {f.name: getattr(obj, f.name) for f in task_fields(obj)}
 
@@ -584,3 +585,89 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
         for pkg in sub_packages
         if hasattr(pkg, class_name)
     }
+
+
+def task_def_as_dict(
+    task_def: "type[Task]",
+    filter: ty.Callable[[attrs.Attribute, ty.Any], bool] | None = None,
+    **kwargs: ty.Any,
+) -> ty.Dict[str, ty.Any]:
+    """Converts a Pydra task class into a dictionary representation that can be serialized
+    and saved to a file, then read and passed to an appropriate `pydra.compose.*.define`
+    method to recreate the task.
+
+    Parameters
+    ----------
+    task_def : type[pydra.compose.base.Task]
+        The Pydra task class to convert.
+    filter : callable, optional
+        A function to filter out certain attributes from the task definition passed
+        through to `attrs.asdict`. It should take an attribute and its value as
+        arguments and return a boolean (True to keep the attribute, False to filter it out).
+    **kwargs : dict
+        Additional keyword arguments to pass to `attrs.asdict` (i.e. all except `filter`)
+        See the `attrs` documentation for more details.
+
+    Returns
+    -------
+    dict[str, ty.Any]
+        A dictionary representation of the Pydra task.
+    """
+    from pydra.compose.base import Out
+
+    if filter is None:
+        filter = _filter_out_defaults
+
+    input_fields = task_fields(task_def)
+    executor = input_fields.pop(task_def._executor_name).default
+    input_dicts = [
+        attrs.asdict(i, filter=filter, **kwargs)
+        for i in input_fields
+        if (
+            not isinstance(i, Out)  # filter out outarg fields
+            and i.name not in task_def.BASE_ATTRS
+        )
+    ]
+    output_dicts = [
+        attrs.asdict(o, filter=filter, **kwargs)
+        for o in task_fields(task_def.Outputs)
+        if o.name not in task_def.Outputs.BASE_ATTRS
+    ]
+    dct = {
+        "type": task_def._task_type(),
+        task_def._executor_name: executor,
+        "name": task_def.__name__,
+        "inputs": {d.pop("name"): d for d in input_dicts},
+        "outputs": {d.pop("name"): d for d in output_dicts},
+    }
+    dct.update({a: getattr(task_def, "_" + a) for a in task_def.TASK_CLASS_ATTRS})
+
+    return dct
+
+
+def task_def_from_dict(task_def_dict: dict[str, ty.Any]) -> type["Task"]:
+    """Unserializes a task definition from a dictionary created by `task_def_as_dict`
+
+    Parameters
+    ----------
+    task_def_dict: dict[str, Any]
+        the dictionary representation to unserialize
+
+    Returns
+    -------
+    type[pydra.compose.base.Task]
+        the unserialized task class
+    """
+    dct = copy(task_def_dict)
+    task_type = dct.pop("type")
+    mod = importlib.import_module(f"pydra.compose.{task_type}")
+    return mod.define(dct.pop(mod.Task._executor_name), **dct)
+
+
+def _filter_out_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
+    """Filter out values that match the attributes default value."""
+    if isinstance(atr.default, attrs.Factory) and atr.default.factory() == value:
+        return False
+    if value == atr.default:
+        return False
+    return True
