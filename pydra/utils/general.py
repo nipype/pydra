@@ -596,7 +596,7 @@ def task_class_as_dict(
     **kwargs: ty.Any,
 ) -> ty.Dict[str, ty.Any]:
     """Converts a Pydra task class into a dictionary representation that can be serialized
-    and saved to a file, then read and passed to an appropriate `pydra.compose.*.define`
+    (e.g. to a file), then reread and passed to an appropriate `pydra.compose.*.define`
     method to recreate the task.
 
     Parameters
