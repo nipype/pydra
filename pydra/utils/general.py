@@ -590,6 +590,9 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
 def task_def_as_dict(
     task_def: "type[Task]",
     filter: ty.Callable[[attrs.Attribute, ty.Any], bool] | None = None,
+    value_serializer: (
+        ty.Callable[[ty.Any, attrs.Attribute, ty.Any], ty.Any] | None
+    ) = None,
     **kwargs: ty.Any,
 ) -> ty.Dict[str, ty.Any]:
     """Converts a Pydra task class into a dictionary representation that can be serialized
@@ -604,9 +607,14 @@ def task_def_as_dict(
         A function to filter out certain attributes from the task definition passed
         through to `attrs.asdict`. It should take an attribute and its value as
         arguments and return a boolean (True to keep the attribute, False to filter it out).
+    value_serializer : callable, optional
+        A function to serialize the value of an attribute. It should take the task
+        definition, the attribute, and its value as arguments and return a serialized
+        value.
     **kwargs : dict
-        Additional keyword arguments to pass to `attrs.asdict` (i.e. all except `filter`)
-        See the `attrs` documentation for more details.
+        Additional keyword arguments to pass to `attrs.asdict` (i.e. all except `filter`,
+        and `value_serializer`), e.g. `recurse`. See the `attrs` documentation for more
+        details.
 
     Returns
     -------
@@ -621,7 +629,7 @@ def task_def_as_dict(
     input_fields = task_fields(task_def)
     executor = input_fields.pop(task_def._executor_name).default
     input_dicts = [
-        attrs.asdict(i, filter=filter, **kwargs)
+        attrs.asdict(i, filter=filter, value_serializer=value_serializer, **kwargs)
         for i in input_fields
         if (
             not isinstance(i, Out)  # filter out outarg fields
@@ -629,7 +637,7 @@ def task_def_as_dict(
         )
     ]
     output_dicts = [
-        attrs.asdict(o, filter=filter, **kwargs)
+        attrs.asdict(o, filter=filter, value_serializer=value_serializer, **kwargs)
         for o in task_fields(task_def.Outputs)
         if o.name not in task_def.Outputs.BASE_ATTRS
     ]
@@ -640,7 +648,14 @@ def task_def_as_dict(
         "inputs": {d.pop("name"): d for d in input_dicts},
         "outputs": {d.pop("name"): d for d in output_dicts},
     }
-    dct.update({a: getattr(task_def, "_" + a) for a in task_def.TASK_CLASS_ATTRS})
+    class_attrs = {a: getattr(task_def, "_" + a) for a in task_def.TASK_CLASS_ATTRS}
+    if value_serializer:
+        attrs_fields = {f.name: f for f in attrs.fields(task_def)}
+        class_attrs = {
+            n: value_serializer(task_def, attrs_fields[n], v)
+            for n, v in class_attrs.items()
+        }
+    dct.update(class_attrs)
 
     return dct
 
