@@ -404,7 +404,7 @@ class Task(ty.Generic[OutputsType]):
     def __eq__(self, other: ty.Any) -> bool:
         """Check if two tasks are equal"""
         values = attrs.asdict(self, recurse=False)
-        if not attrs.has(other):
+        if not isinstance(other, Task):
             return False
         try:
             other_values = attrs.asdict(other, recurse=False)
