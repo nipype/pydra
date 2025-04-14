@@ -8,7 +8,7 @@
         "@container": "@type"
       }
     },
-    "https://raw.githubusercontent.com/openprov/prov-jsonld/69964ed16818f78dc5f71bdf97add026288291d4/context.json",
+    "https://raw.githubusercontent.com/bids-standard/BEP028_BIDSprov/master/context.json",
     {
       "pydra": "http://s.pydra.org/",
       "uid": "pydra:id/",
@@ -24,10 +24,6 @@
         "@id": "pydra:runtimeInformation",
         "@type": "@vocab"
       },
-      "prov:wasGeneratedBy": {
-        "@id": "prov:wasGeneratedBy",
-        "@type": "@vocab"
-      },
       "rss_peak_gb": {
         "@id": "pydra:rss_peak_gb",
         "@type": "xsd:float"
@@ -39,6 +35,15 @@
       "cpu_peak_percent": {
         "@id": "pydra:cpu_peak_percent",
         "@type": "xsd:float"
+      },
+      "wasStartedBy": {
+        "@id": "uid"
+      },
+      "wasEndedBy": {
+        "@id": "uid"
+      },
+      "hadActivity": {
+        "@id": "uid"
       },
       "errored": {
         "@id": "pydra:errored",
