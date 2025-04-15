@@ -375,6 +375,13 @@ def test_bytes_special_form5():
     )
 
 
+def test_bytes_special_form6():
+    obj_repr = join_bytes_repr(ty.Tuple[float, ...])
+    assert obj_repr == (
+        b"type:(origin:(type:(builtins.tuple)),args:(type:(builtins.float)type:(...)))"
+    )
+
+
 def test_recursive_object():
     a = []
     b = [a]

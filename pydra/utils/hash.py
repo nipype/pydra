@@ -497,7 +497,9 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
                 yield from bytes_repr_type(arg, cache)
         yield b")"
     else:
-        if inspect.isclass(klass) and issubclass(klass, FileSet):
+        if klass is Ellipsis:
+            yield b"..."
+        elif inspect.isclass(klass) and issubclass(klass, FileSet):
             try:
                 yield b"mime-like:(" + klass.mime_like.encode() + b")"
             except fileformats.core.exceptions.FormatDefinitionError:
