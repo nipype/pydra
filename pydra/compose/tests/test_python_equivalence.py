@@ -237,3 +237,13 @@ def test_return_annotated_task_multiple_output():
     outputs = Square(in_val=2.0)()
     assert outputs.squared == 4.0
     assert outputs.cubed == 8.0
+
+
+def test_non_task_eq():
+    """Checks tasks can be compared to non-tasks"""
+
+    @python.define
+    def Square(in_val):
+        return in_val**2, in_val**3
+
+    assert Square(in_val=1) != 42
