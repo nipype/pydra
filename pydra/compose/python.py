@@ -239,6 +239,10 @@ class PythonTask(base.Task[PythonOutputsType]):
         return_names = [f.name for f in task_fields(self.Outputs)]
         if returned is None:
             job.return_values = {nm: None for nm in return_names}
+        elif not return_names:
+            raise ValueError(
+                f"No output fields were specified, but the function returned {returned}"
+            )
         elif len(return_names) == 1:
             # if only one element in the fields, everything should be returned together
             job.return_values[return_names[0]] = returned
