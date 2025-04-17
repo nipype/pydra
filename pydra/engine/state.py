@@ -123,25 +123,6 @@ class State:
             f"and combiner: {self.combiner}"
         )
 
-    @property
-    def names(self):
-        """Return the names of the states."""
-        previous_states_keys = {
-            f"_{v.name}": v.keys_final for v in self.inner_inputs.values()
-        }
-        names = []
-        # iterating splitter_rpn
-        for token in self.splitter_rpn:
-            if token in [".", "*"]:  # token is one of the input var
-                continue
-                # adding variable to the stack
-            if token.startswith("_"):
-                new_keys = previous_states_keys[token]
-                names += new_keys
-            else:
-                names.append(token)
-        return names
-
     def depth(self, before_combine: bool = False) -> int:
         """Return the number of splits of the state, i.e. the number nested
         state arrays to wrap around the type of lazy out fields

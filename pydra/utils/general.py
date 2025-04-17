@@ -4,6 +4,7 @@ from pathlib import Path
 import inspect
 import sys
 import typing as ty
+from copy import copy
 import re
 import attrs
 import ast
@@ -351,7 +352,7 @@ def task_fields(task: "type[Task] | Task") -> _TaskFieldsList:
     )
 
 
-def task_dict(obj, **kwargs) -> dict[str, ty.Any]:
+def task_as_dict(obj, **kwargs) -> dict[str, ty.Any]:
     """Get the values of an attrs object."""
     return {f.name: getattr(obj, f.name) for f in task_fields(obj)}
 
@@ -584,3 +585,132 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
         for pkg in sub_packages
         if hasattr(pkg, class_name)
     }
+
+
+def task_class_as_dict(
+    task_class: "type[Task]",
+    filter: ty.Callable[[attrs.Attribute, ty.Any], bool] | None = None,
+    value_serializer: (
+        ty.Callable[[ty.Any, attrs.Attribute, ty.Any], ty.Any] | None
+    ) = None,
+    **kwargs: ty.Any,
+) -> ty.Dict[str, ty.Any]:
+    """Converts a Pydra task class into a dictionary representation that can be serialized
+    (e.g. to a file), then reread and passed to an appropriate `pydra.compose.*.define`
+    method to recreate the task.
+
+    Parameters
+    ----------
+    task_class : type[pydra.compose.base.Task]
+        The Pydra task class to convert.
+    filter : callable, optional
+        A function to filter out certain attributes from the task definition passed
+        through to `attrs.asdict`. It should take an attribute and its value as
+        arguments and return a boolean (True to keep the attribute, False to filter it out).
+    value_serializer : callable, optional
+        A function to serialize the value of an attribute. It should take the task
+        definition, the attribute, and its value as arguments and return a serialized
+        value.
+    **kwargs : dict
+        Additional keyword arguments to pass to `attrs.asdict` (i.e. all except `filter`,
+        and `value_serializer`), e.g. `recurse`. See the `attrs` documentation for more
+        details.
+
+    Returns
+    -------
+    dict[str, ty.Any]
+        A dictionary representation of the Pydra task.
+    """
+    from pydra.compose.base import Out
+
+    if filter is None:
+        filter = _filter_out_defaults
+
+    input_fields = task_fields(task_class)
+    executor = input_fields.pop(task_class._executor_name).default
+    input_dicts = [
+        attrs.asdict(i, filter=filter, value_serializer=value_serializer, **kwargs)
+        for i in input_fields
+        if (
+            not isinstance(i, Out)  # filter out outarg fields
+            and i.name not in task_class.BASE_ATTRS
+        )
+    ]
+    output_dicts = [
+        attrs.asdict(o, filter=filter, value_serializer=value_serializer, **kwargs)
+        for o in task_fields(task_class.Outputs)
+        if o.name not in task_class.Outputs.BASE_ATTRS
+    ]
+    dct = {
+        "type": task_class._task_type(),
+        task_class._executor_name: executor,
+        "name": task_class.__name__,
+        "inputs": {d.pop("name"): d for d in input_dicts},
+        "outputs": {d.pop("name"): d for d in output_dicts},
+    }
+    class_attrs = {a: getattr(task_class, "_" + a) for a in task_class.TASK_CLASS_ATTRS}
+    if value_serializer:
+        # We need to create a mock attrs object for the class attrs to apply the
+        # value_serializer to it
+        mock_cls = _make_attrs_class(
+            {a: task_class.__annotations__.get(a, ty.Any) for a in class_attrs}
+        )
+        attrs_fields = {f.name: f for f in attrs.fields(mock_cls)}
+        mock = mock_cls(**class_attrs)
+        class_attrs = {
+            n: value_serializer(mock, attrs_fields[n], v)
+            for n, v in class_attrs.items()
+        }
+    dct.update(class_attrs)
+
+    return dct
+
+
+def task_class_from_dict(task_class_dict: dict[str, ty.Any]) -> type["Task"]:
+    """Unserializes a task definition from a dictionary created by `task_class_as_dict`
+
+    Parameters
+    ----------
+    task_class_dict: dict[str, Any]
+        the dictionary representation to unserialize
+
+    Returns
+    -------
+    type[pydra.compose.base.Task]
+        the unserialized task class
+    """
+    dct = copy(task_class_dict)
+    task_type = dct.pop("type")
+    mod = importlib.import_module(f"pydra.compose.{task_type}")
+    return mod.define(dct.pop(mod.Task._executor_name), **dct)
+
+
+def _filter_out_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
+    """Filter out values that match the attributes default value."""
+    if isinstance(atr.default, attrs.Factory) and atr.default.factory() == value:
+        return False
+    if value == atr.default:
+        return False
+    return True
+
+
+def _make_attrs_class(field_types: dict[str, type]) -> type:
+    """Creates an attrs given the a dictionary of field names and their types.
+
+    Parameters
+    ----------
+    field_types : dict[str, type]
+        A dictionary mapping field names to their types.
+
+    Returns
+    -------
+    type
+        the attrs class.
+    """
+    return attrs.define(
+        type(
+            "MockAttrsClass",
+            (),
+            {n: attrs.field(type=t) for n, t in field_types.items()},
+        )
+    )

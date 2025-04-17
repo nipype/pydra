@@ -37,6 +37,7 @@ class Outputs:
     """Base class for all output definitions"""
 
     RESERVED_FIELD_NAMES = ("inputs",)
+    BASE_ATTRS = ()
 
     _cache_dir: Path = attrs.field(default=None, init=False, repr=False)
     _node = attrs.field(default=None, init=False, repr=False)
@@ -51,7 +52,7 @@ class Outputs:
         return self._node.inputs
 
     @classmethod
-    def _from_task(cls, job: "Job[TaskType]") -> Self:
+    def _from_job(cls, job: "Job[TaskType]") -> Self:
         """Collect the outputs of a job. This is just an abstract base method that
         should be used by derived classes to set default values for the outputs.
 
@@ -149,7 +150,24 @@ OutputsType = ty.TypeVar("OutputType", bound=Outputs)
 class Task(ty.Generic[OutputsType]):
     """Base class for all tasks"""
 
+    # Task type to be overridden in derived classes
+    @classmethod
+    def _task_type(cls) -> str:
+        for base in cls.__mro__:
+            parts = base.__module__.split(".")
+            if parts[:2] == ["pydra", "compose"]:
+                return parts[2]
+        raise RuntimeError(
+            f"Cannot determine task type for {cls.__name__} in module {cls.__module__} "
+            "because none of its base classes are in the pydra.compose namespace:\n"
+            + "\n".join(f"{b.__name__!r} in {b.__module__!r}" for b in cls.__mro__)
+        )
+
+    # The attribute containing the function/executable used to run the task
+    _executor_name = None
+
     # Class attributes
+    TASK_CLASS_ATTRS = ("xor",)
     _xor: frozenset[frozenset[str | None]] = (
         frozenset()
     )  # overwritten in derived classes
@@ -161,6 +179,7 @@ class Task(ty.Generic[OutputsType]):
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
+    BASE_ATTRS = ()
 
     def __call__(
         self,
@@ -456,7 +475,7 @@ class Task(ty.Generic[OutputsType]):
 
     @property
     def _checksum(self):
-        return f"{self._task_type}-{self._hash}"
+        return f"{self._task_type()}-{self._hash}"
 
     def _hash_changes(self):
         """Detects any changes in the hashed values between the current inputs and the
@@ -605,7 +624,7 @@ class Task(ty.Generic[OutputsType]):
 
 @register_serializer
 def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
-    yield f"task[{obj._task_type}]:(".encode()
+    yield f"task[{obj._task_type()}]:(".encode()
     for field in task_fields(obj):
         yield f"{field.name}=".encode()
         yield hash_single(getattr(obj, field.name), cache)
