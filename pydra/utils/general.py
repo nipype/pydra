@@ -352,7 +352,7 @@ def task_fields(task: "type[Task] | Task") -> _TaskFieldsList:
     )
 
 
-def task_as_dict(obj, **kwargs) -> dict[str, ty.Any]:
+def get_fields(obj, **kwargs) -> dict[str, ty.Any]:
     """Get the values of an attrs object."""
     return {f.name: getattr(obj, f.name) for f in task_fields(obj)}
 
