@@ -5,7 +5,7 @@ from fileformats.text import TextFile
 from pydra.utils.general import (
     serialize_task_class,
     unserialize_task_class,
-    task_fields,
+    get_fields,
 )
 from pydra.utils.tests.utils import Concatenate
 
@@ -34,7 +34,7 @@ def test_python_serialize_task_class(tmp_path):
 
     dct = serialize_task_class(Add)
     Reloaded = unserialize_task_class(dct)
-    assert task_fields(Add) == task_fields(Reloaded)
+    assert get_fields(Add) == get_fields(Reloaded)
 
     add = Reloaded(a=1, b=2)
     assert add(cache_root=tmp_path / "cache").out_int == 3
@@ -48,7 +48,7 @@ def test_shell_serialize_task_class():
 
     dct = serialize_task_class(MyCmd)
     Reloaded = unserialize_task_class(dct)
-    assert task_fields(MyCmd) == task_fields(Reloaded)
+    assert get_fields(MyCmd) == get_fields(Reloaded)
 
 
 def test_workflow_serialize_task_class(tmp_path):
@@ -62,7 +62,7 @@ def test_workflow_serialize_task_class(tmp_path):
 
     dct = serialize_task_class(AWorkflow)
     Reloaded = unserialize_task_class(dct)
-    assert task_fields(AWorkflow) == task_fields(Reloaded)
+    assert get_fields(AWorkflow) == get_fields(Reloaded)
 
     foo_file = tmp_path / "file1.txt"
     foo_file.write_text("foo")

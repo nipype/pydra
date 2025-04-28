@@ -4,7 +4,7 @@ import attrs
 import re
 from copy import copy
 from pydra.utils.typing import is_type, is_optional
-from pydra.utils.general import task_fields
+from pydra.utils.general import get_fields
 from .field import Field, Arg, Out, NO_DEFAULT
 
 
@@ -418,7 +418,7 @@ def extract_fields_from_class(
         """Get the fields from a class"""
         fields_dict = {}
         # Get fields defined in base classes if present
-        for field in task_fields(klass):
+        for field in get_fields(klass):
             if field.name not in skip_fields:
                 fields_dict[field.name] = field
         type_hints = ty.get_type_hints(klass)

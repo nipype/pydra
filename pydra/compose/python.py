@@ -2,7 +2,7 @@ import typing as ty
 import inspect
 from typing import dataclass_transform
 import attrs
-from pydra.utils.general import task_fields, task_as_dict
+from pydra.utils.general import get_fields, asdict
 from pydra.compose import base
 from pydra.compose.base import (
     ensure_field_objects,
@@ -226,12 +226,12 @@ class PythonTask(base.Task[PythonOutputsType]):
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
-        inputs = task_as_dict(self)
+        inputs = asdict(self)
         del inputs["function"]
         # Run the actual function
         returned = self.function(**inputs)
         # Collect the outputs and save them into the job.return_values dictionary
-        return_names = [f.name for f in task_fields(self.Outputs)]
+        return_names = [f.name for f in get_fields(self.Outputs)]
         if returned is None:
             job.return_values = {nm: None for nm in return_names}
         elif not return_names:

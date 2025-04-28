@@ -337,7 +337,7 @@ class _TaskFieldsList(dict[str, "Field"]):
         return sorted(self.keys())
 
 
-def task_fields(task: "type[Task] | Task") -> _TaskFieldsList:
+def get_fields(task: "type[Task] | Task") -> _TaskFieldsList:
     """List the fields of a task"""
     if not inspect.isclass(task):
         task = type(task)
@@ -352,9 +352,9 @@ def task_fields(task: "type[Task] | Task") -> _TaskFieldsList:
     )
 
 
-def task_as_dict(obj, **kwargs) -> dict[str, ty.Any]:
+def asdict(obj, **kwargs) -> dict[str, ty.Any]:
     """Get the values of an attrs object."""
-    return {f.name: getattr(obj, f.name) for f in task_fields(obj)}
+    return {f.name: getattr(obj, f.name) for f in get_fields(obj)}
 
 
 def from_list_if_single(obj: ty.Any) -> ty.Any:
@@ -411,7 +411,7 @@ def task_help(
     header = f"Help for {plugin_name} task '{task_type.__name__}'"
     hyphen_line = "-" * len(header)
     lines = [hyphen_line, header, hyphen_line]
-    inputs = task_fields(task_type)
+    inputs = get_fields(task_type)
     if inputs:
         lines.extend(["", "Inputs:"])
     if any(hasattr(i, "position") for i in inputs):
@@ -422,7 +422,7 @@ def task_help(
                 line_width, help_indent=help_indent, as_input=True
             ).split("\n")
         )
-    outputs = task_fields(task_type.Outputs)
+    outputs = get_fields(task_type.Outputs)
     if outputs:
         lines.extend(["", "Outputs:"])
     for output in outputs:
@@ -626,7 +626,7 @@ def serialize_task_class(
     if filter is None:
         filter = _filter_out_defaults
 
-    input_fields = task_fields(task_class)
+    input_fields = get_fields(task_class)
     executor = input_fields.pop(task_class._executor_name).default
     input_dicts = [
         attrs.asdict(i, filter=filter, value_serializer=value_serializer, **kwargs)
@@ -638,7 +638,7 @@ def serialize_task_class(
     ]
     output_dicts = [
         attrs.asdict(o, filter=filter, value_serializer=value_serializer, **kwargs)
-        for o in task_fields(task_class.Outputs)
+        for o in get_fields(task_class.Outputs)
         if o.name not in task_class.Outputs.BASE_ATTRS
     ]
     dct = {

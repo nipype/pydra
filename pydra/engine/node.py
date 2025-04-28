@@ -3,7 +3,7 @@ from copy import deepcopy
 from enum import Enum
 import attrs
 from pydra.engine import lazy
-from pydra.utils.general import attrs_values, task_as_dict
+from pydra.utils.general import attrs_values, asdict
 from pydra.utils.typing import is_lazy
 from pydra.engine.state import State, add_name_splitter, add_name_combiner
 
@@ -162,7 +162,7 @@ class Node(ty.Generic[OutputType]):
     def _check_if_outputs_have_been_used(self, msg):
         used = []
         if self._lzout:
-            for outpt_name, outpt_val in task_as_dict(self._lzout).items():
+            for outpt_name, outpt_val in asdict(self._lzout).items():
                 if outpt_val._type_checked:
                     used.append(outpt_name)
         if used:

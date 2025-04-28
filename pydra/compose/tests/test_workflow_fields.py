@@ -7,7 +7,7 @@ import attrs
 from pydra.engine.lazy import LazyInField, LazyOutField
 import typing as ty
 from pydra.compose import shell, python, workflow
-from pydra.utils.general import task_fields
+from pydra.utils.general import get_fields
 from pydra.engine.workflow import Workflow
 from pydra.utils.hash import hash_function
 from fileformats import video, image
@@ -55,14 +55,14 @@ def test_workflow():
     # The constructor function is included as a part of the task so it is
     # included in the hash by default and can be overridden if needed. Not 100% sure
     # if this is a good idea or not
-    assert list(task_fields(MyTestWorkflow)) == [
+    assert list(get_fields(MyTestWorkflow)) == [
         workflow.arg(name="a"),
         workflow.arg(name="b"),
         workflow.arg(
             name="constructor", type=ty.Callable, hash_eq=True, default=constructor
         ),
     ]
-    assert list(task_fields(MyTestWorkflow.Outputs)) == [
+    assert list(get_fields(MyTestWorkflow.Outputs)) == [
         workflow.out(name="out"),
     ]
     workflow_spec = MyTestWorkflow(a=1, b=2.0)
@@ -118,7 +118,7 @@ def test_shell_workflow():
 
     constructor = MyTestShellWorkflow().constructor
     assert constructor.__name__ == "MyTestShellWorkflow"
-    assert list(task_fields(MyTestShellWorkflow)) == [
+    assert list(get_fields(MyTestShellWorkflow)) == [
         workflow.arg(name="input_video", type=video.Mp4),
         workflow.arg(name="watermark", type=image.Png),
         workflow.arg(name="watermark_dims", type=tuple[int, int], default=(10, 10)),
@@ -126,7 +126,7 @@ def test_shell_workflow():
             name="constructor", type=ty.Callable, hash_eq=True, default=constructor
         ),
     ]
-    assert list(task_fields(MyTestShellWorkflow.Outputs)) == [
+    assert list(get_fields(MyTestShellWorkflow.Outputs)) == [
         workflow.out(name="output_video", type=video.Mp4),
     ]
     input_video = video.Mp4.mock("input.mp4")
@@ -174,14 +174,14 @@ def test_workflow_canonical():
     # The constructor function is included as a part of the task so it is
     # included in the hash by default and can be overridden if needed. Not 100% sure
     # if this is a good idea or not
-    assert sorted(task_fields(MyTestWorkflow), key=attrgetter("name")) == [
+    assert sorted(get_fields(MyTestWorkflow), key=attrgetter("name")) == [
         workflow.arg(name="a", type=int),
         workflow.arg(name="b", type=float, help="A float input", converter=a_converter),
         workflow.arg(
             name="constructor", type=ty.Callable, hash_eq=True, default=constructor
         ),
     ]
-    assert list(task_fields(MyTestWorkflow.Outputs)) == [
+    assert list(get_fields(MyTestWorkflow.Outputs)) == [
         workflow.out(name="out", type=float),
     ]
     workflow_spec = MyTestWorkflow(a=1, b=2.0)
@@ -306,7 +306,7 @@ def test_direct_access_of_workflow_object():
 
         return mul.out, divide.divided
 
-    assert list(task_fields(MyTestWorkflow)) == [
+    assert list(get_fields(MyTestWorkflow)) == [
         workflow.arg(name="a", type=int, help="An integer input"),
         workflow.arg(name="b", type=float, help="A float input"),
         workflow.arg(
@@ -316,7 +316,7 @@ def test_direct_access_of_workflow_object():
             default=MyTestWorkflow().constructor,
         ),
     ]
-    assert list(task_fields(MyTestWorkflow.Outputs)) == [
+    assert list(get_fields(MyTestWorkflow.Outputs)) == [
         workflow.out(name="out1", type=float, help="The first output"),
         workflow.out(name="out2", type=float, help="The second output"),
     ]
@@ -349,7 +349,7 @@ def test_workflow_set_outputs_directly():
 
         # no return is used when the outputs are set directly
 
-    assert list(task_fields(MyTestWorkflow)) == [
+    assert list(get_fields(MyTestWorkflow)) == [
         workflow.arg(name="a", type=int),
         workflow.arg(name="b", type=float),
         workflow.arg(
@@ -359,7 +359,7 @@ def test_workflow_set_outputs_directly():
             default=MyTestWorkflow().constructor,
         ),
     ]
-    assert list(task_fields(MyTestWorkflow.Outputs)) == [
+    assert list(get_fields(MyTestWorkflow.Outputs)) == [
         workflow.out(name="out1", type=float),
         workflow.out(name="out2", type=float),
     ]

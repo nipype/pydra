@@ -3,7 +3,7 @@ import typing as ty
 from decimal import Decimal
 import attrs
 import pytest
-from pydra.utils.general import task_fields
+from pydra.utils.general import get_fields
 from pydra.compose import python
 
 
@@ -18,8 +18,8 @@ def test_interface_wrap_function(tmp_path):
     SampleDef = python.define(func)
 
     assert issubclass(SampleDef, python.Task)
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
         python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
@@ -69,8 +69,8 @@ def test_interface_wrap_function_with_default():
     SampleDef = python.define(func)
 
     assert issubclass(SampleDef, python.Task)
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
         python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
@@ -93,8 +93,8 @@ def test_interface_wrap_function_overrides():
     )
 
     assert issubclass(SampleDef, python.Task)
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help="The argument to be doubled"),
         python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
@@ -118,8 +118,8 @@ def test_interface_wrap_function_types():
     )
 
     assert issubclass(SampleDef, python.Task)
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=float),
         python.arg(name="function", type=ty.Callable, hash_eq=True, default=func),
@@ -138,8 +138,8 @@ def test_decorated_function_interface():
         return a + b, a * b
 
     assert issubclass(SampleDef, python.Task)
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
         python.arg(name="b", type=float),
@@ -170,8 +170,8 @@ def test_interface_with_function_docstr():
         """
         return a + b, a * b
 
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help="First input to be inputted"),
         python.arg(name="b", type=float, help="Second input"),
@@ -205,8 +205,8 @@ def test_interface_with_function_google_docstr():
         """
         return a + b, a * b
 
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help="First input to be inputted"),
         python.arg(name="b", type=float, help="Second input"),
@@ -248,8 +248,8 @@ def test_interface_with_function_numpy_docstr():
         """
         return a + b, a * b
 
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help="First input to be inputted"),
         python.arg(name="b", type=float, help="Second input"),
@@ -296,8 +296,8 @@ def test_interface_with_class():
             return a + b, a * b
 
     assert issubclass(SampleDef, python.Task)
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help="First input to be inputted"),
         python.arg(name="b", type=float, default=2.0, help="Second input"),
@@ -367,8 +367,8 @@ def test_interface_with_class_no_auto_attribs():
         def function(a, b):
             return a + b, a * b
 
-    inputs = sorted(task_fields(SampleDef), key=sort_key)
-    outputs = sorted(task_fields(SampleDef.Outputs), key=sort_key)
+    inputs = sorted(get_fields(SampleDef), key=sort_key)
+    outputs = sorted(get_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help="First input to be inputted"),
         python.arg(name="b", type=float, help="Second input"),
