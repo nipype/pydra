@@ -185,10 +185,15 @@ def extract_function_inputs_and_outputs(
             input_defaults[p.name] = p.default
     if inputs is not None:
         if not isinstance(inputs, dict):
-            raise ValueError(
-                f"Input names ({inputs}) should not be provided when "
-                "wrapping/decorating a function as "
-            )
+            if non_named_args := [
+                i for i in inputs if not isinstance(i, Arg) or i.name is None
+            ]:
+                raise ValueError(
+                    "Only named Arg objects should be provided as inputs (i.e. not names or "
+                    "other objects should not be provided when wrapping/decorating a "
+                    f"function: found {non_named_args} when wrapping/decorating {function!r}"
+                )
+            inputs = {i.name: i for i in inputs}
         if not has_varargs:
             if unrecognised := set(inputs) - set(input_types):
                 raise ValueError(

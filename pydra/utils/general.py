@@ -21,7 +21,7 @@ from ._version import __version__
 
 logger = logging.getLogger("pydra")
 if ty.TYPE_CHECKING:
-    from pydra.compose.base import Task
+    from pydra.compose.base import Task, Field  # noqa
     from pydra.compose import workflow
 
 

@@ -41,6 +41,26 @@ def test_function_arg_fail():
             return function
 
 
+def test_function_arg_fail2():
+
+    with pytest.raises(
+        ValueError, match="Only named Arg objects should be provided as inputs"
+    ):
+
+        @python.define(inputs=[python.arg(help="an int")])
+        def func(a: int) -> int:
+            return a * 2
+
+
+def test_function_arg_add_help():
+
+    @python.define(inputs=[python.arg(name="a", help="an int")])
+    def func(a: int) -> int:
+        return a * 2
+
+    assert task_fields(func).a.help == "an int"
+
+
 def test_interface_wrap_function_with_default():
     def func(a: int, k: float = 2.0) -> float:
         """Sample function with inputs and outputs"""
