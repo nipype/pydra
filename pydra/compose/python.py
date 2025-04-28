@@ -83,15 +83,6 @@ class out(base.Out):
 
 @dataclass_transform(
     kw_only_default=True,
-    field_specifiers=(out,),
-)
-def outputs(wrapped):
-    """Decorator to specify the output fields of a shell command is a dataclass-style type"""
-    return wrapped
-
-
-@dataclass_transform(
-    kw_only_default=True,
     field_specifiers=(arg,),
 )
 def define(
@@ -225,7 +216,7 @@ class PythonOutputs(base.Outputs):
         return outputs
 
 
-PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
+PythonOutputsType = ty.TypeVar("PythonOutputsType", bound=PythonOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
