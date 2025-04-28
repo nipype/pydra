@@ -19,7 +19,7 @@ from pydra.engine.hooks import (
 from pydra.engine.submitter import Submitter, NodeExecution
 from pydra.utils.general import (
     attrs_values,
-    get_fields,
+    task_as_dict,
     task_fields,
 )
 from pydra.utils.typing import is_lazy
@@ -147,7 +147,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         constructor = input_values.pop("constructor")
         # Call the user defined constructor to set the outputs
         output_lazy_fields = constructor(**input_values)
-        if all(v is attrs.NOTHING for v in get_fields(outputs).values()):
+        if all(v is attrs.NOTHING for v in task_as_dict(outputs).values()):
             if output_lazy_fields is None:
                 raise ValueError(
                     f"Constructor function for {task} returned None, must a lazy field "
@@ -160,7 +160,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     "if any of the outputs are already set explicitly"
                 )
             if unset_outputs := [
-                n for n, v in get_fields(outputs).items() if v is attrs.NOTHING
+                n for n, v in task_as_dict(outputs).items() if v is attrs.NOTHING
             ]:
                 raise ValueError(
                     f"Mandatory outputs {unset_outputs} are not set by the "

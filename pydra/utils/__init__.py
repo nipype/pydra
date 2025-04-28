@@ -1,6 +1,6 @@
 from .general import (
     task_fields,
-    get_fields,
+    task_as_dict,
     plot_workflow,
     show_workflow,
     task_help,
@@ -13,7 +13,7 @@ from ._version import __version__
 __all__ = [
     "__version__",
     "task_fields",
-    "get_fields",
+    "task_as_dict",
     "plot_workflow",
     "show_workflow",
     "task_help",
