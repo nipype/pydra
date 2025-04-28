@@ -60,7 +60,7 @@ class Requirement:
 
     name: str
     allowed_values: list[str] | None = attrs.field(
-        factory=None, converter=allowed_values_converter
+        default=None, converter=allowed_values_converter
     )
 
     def satisfied(self, inputs: "Task") -> bool:
