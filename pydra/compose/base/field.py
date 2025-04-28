@@ -60,7 +60,7 @@ class Requirement:
 
     name: str
     allowed_values: list[str] | None = attrs.field(
-        default=None, converter=allowed_values_converter
+        factory=None, converter=allowed_values_converter
     )
 
     def satisfied(self, inputs: "Task") -> bool:
@@ -326,7 +326,7 @@ class Arg(Field):
         it is False
     """
 
-    allowed_values: frozenset = attrs.field(default=(), converter=frozenset)
+    allowed_values: frozenset = attrs.field(factory=frozenset, converter=frozenset)
     copy_mode: File.CopyMode = File.CopyMode.any
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single

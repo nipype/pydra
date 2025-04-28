@@ -4,6 +4,7 @@ from pathlib import Path
 import inspect
 import sys
 import typing as ty
+from collections.abc import Mapping, Collection
 from copy import copy
 import re
 import attrs
@@ -624,12 +625,28 @@ def serialize_task_class(
     from pydra.compose.base import Out
 
     if filter is None:
-        filter = _filter_out_defaults
+        filter = filter_out_defaults
+
+    def full_val_serializer(
+        obj: ty.Any, field: attrs.Attribute, value: ty.Any
+    ) -> ty.Any:
+        """A wrapper for the value serializer to handle the case where it is None."""
+        if value_serializer is not None:
+            value = value_serializer(obj, field, value)
+        if isinstance(value, str):
+            return value
+        if isinstance(value, Mapping) and not isinstance(value, dict):
+            # If the value is a mapping, convert it to a dict
+            value = dict(value)
+        elif isinstance(value, Collection) and not isinstance(value, list):
+            # If the value is not a collection or string, convert it to a list
+            value = list(value)
+        return value
 
     input_fields = get_fields(task_class)
     executor = input_fields.pop(task_class._executor_name).default
     input_dicts = [
-        attrs.asdict(i, filter=filter, value_serializer=value_serializer, **kwargs)
+        attrs.asdict(i, filter=filter, value_serializer=full_val_serializer, **kwargs)
         for i in input_fields
         if (
             not isinstance(i, Out)  # filter out outarg fields
@@ -637,7 +654,7 @@ def serialize_task_class(
         )
     ]
     output_dicts = [
-        attrs.asdict(o, filter=filter, value_serializer=value_serializer, **kwargs)
+        attrs.asdict(o, filter=filter, value_serializer=full_val_serializer, **kwargs)
         for o in get_fields(task_class.Outputs)
         if o.name not in task_class.Outputs.BASE_ATTRS
     ]
@@ -649,6 +666,8 @@ def serialize_task_class(
         "outputs": {d.pop("name"): d for d in output_dicts},
     }
     class_attrs = {a: getattr(task_class, "_" + a) for a in task_class.TASK_CLASS_ATTRS}
+    # Convert the frozensets to lists for serialization
+    class_attrs["xor"] = [list(x) for x in class_attrs.pop("xor")]
     if value_serializer:
         # We need to create a mock attrs object for the class attrs to apply the
         # value_serializer to it
@@ -658,7 +677,7 @@ def serialize_task_class(
         attrs_fields = {f.name: f for f in attrs.fields(mock_cls)}
         mock = mock_cls(**class_attrs)
         class_attrs = {
-            n: value_serializer(mock, attrs_fields[n], v)
+            n: full_val_serializer(mock, attrs_fields[n], v)
             for n, v in class_attrs.items()
         }
     dct.update(class_attrs)
@@ -685,7 +704,7 @@ def unserialize_task_class(task_class_dict: dict[str, ty.Any]) -> type["Task"]:
     return mod.define(dct.pop(mod.Task._executor_name), **dct)
 
 
-def _filter_out_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
+def filter_out_defaults(atr: attrs.Attribute, value: ty.Any) -> bool:
     """Filter out values that match the attributes default value."""
     if isinstance(atr.default, attrs.Factory) and atr.default.factory() == value:
         return False

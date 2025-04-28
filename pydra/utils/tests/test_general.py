@@ -1,13 +1,32 @@
 import typing as ty
 import attrs
+from collections.abc import Collection
 from pydra.compose import python, workflow, shell
 from fileformats.text import TextFile
 from pydra.utils.general import (
     serialize_task_class,
     unserialize_task_class,
     get_fields,
+    filter_out_defaults,
 )
 from pydra.utils.tests.utils import Concatenate
+
+
+def check_dict_fully_serialized(dct: dict):
+    """Checks if there are any Pydra objects or non list/dict containers in the dict."""
+    stack = [dct]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+        elif isinstance(item, str):
+            pass
+        elif isinstance(item, Collection):
+            raise ValueError(f"Unserializable container object {item} found in dict")
+        elif type(item).__module__.split(".")[0] == "pydra":
+            raise ValueError(f"Unserialized Pydra object {item} found in dict")
 
 
 @python.define(outputs=["out_int"], xor=["b", "c"])
@@ -32,12 +51,15 @@ def Add(a: int, b: int | None = None, c: int | None = None) -> int:
 
 def test_python_serialize_task_class(tmp_path):
 
+    assert Add(a=1, b=2)(cache_root=tmp_path / "cache1").out_int == 3
+
     dct = serialize_task_class(Add)
+    assert isinstance(dct, dict)
+    check_dict_fully_serialized(dct)
     Reloaded = unserialize_task_class(dct)
     assert get_fields(Add) == get_fields(Reloaded)
 
-    add = Reloaded(a=1, b=2)
-    assert add(cache_root=tmp_path / "cache").out_int == 3
+    assert Reloaded(a=1, b=2)(cache_root=tmp_path / "cache2").out_int == 3
 
 
 def test_shell_serialize_task_class():
@@ -47,6 +69,8 @@ def test_shell_serialize_task_class():
     )
 
     dct = serialize_task_class(MyCmd)
+    assert isinstance(dct, dict)
+    check_dict_fully_serialized(dct)
     Reloaded = unserialize_task_class(dct)
     assert get_fields(MyCmd) == get_fields(Reloaded)
 
@@ -61,6 +85,8 @@ def test_workflow_serialize_task_class(tmp_path):
         return concatenate.out_file
 
     dct = serialize_task_class(AWorkflow)
+    assert isinstance(dct, dict)
+    check_dict_fully_serialized(dct)
     Reloaded = unserialize_task_class(dct)
     assert get_fields(AWorkflow) == get_fields(Reloaded)
 
@@ -73,15 +99,57 @@ def test_workflow_serialize_task_class(tmp_path):
 
 def test_serialize_task_class_with_value_serializer():
 
-    def frozen_set_to_list_serializer(
-        mock_class: ty.Any, atr: attrs.Attribute, value: ty.Any
+    @python.define
+    def Identity(a: int) -> int:
+        """
+        Parameters
+        ----------
+        a: int
+            the arg
+
+        Returns
+        -------
+        out : int
+            a returned as is
+        """
+        return a
+
+    def type_to_str_serializer(
+        klass: ty.Any, atr: attrs.Attribute, value: ty.Any
     ) -> ty.Any:
-        # This is just a dummy serializer
-        if isinstance(value, frozenset):
-            return list(
-                frozen_set_to_list_serializer(mock_class, atr, v) for v in value
-            )
+        if isinstance(value, type):
+            return value.__module__ + "." + value.__name__
         return value
 
-    dct = serialize_task_class(Add, value_serializer=frozen_set_to_list_serializer)
-    assert dct["xor"] == [["b", "c"]] or dct["xor"] == [["c", "b"]]
+    dct = serialize_task_class(Identity, value_serializer=type_to_str_serializer)
+    assert isinstance(dct, dict)
+    check_dict_fully_serialized(dct)
+    assert dct["inputs"] == {"a": {"type": "builtins.int", "help": "the arg"}}
+
+
+def test_serialize_task_class_with_filter():
+
+    @python.define
+    def Identity(a: int) -> int:
+        """
+        Parameters
+        ----------
+        a: int
+            the arg
+
+        Returns
+        -------
+        out : int
+            a returned as is
+        """
+        return a
+
+    def no_helps_filter(atr: attrs.Attribute, value: ty.Any) -> bool:
+        if atr.name == "help":
+            return False
+        return filter_out_defaults(atr, value)
+
+    dct = serialize_task_class(Identity, filter=no_helps_filter)
+    assert isinstance(dct, dict)
+    check_dict_fully_serialized(dct)
+    assert dct["inputs"] == {"a": {"type": int}}
