@@ -66,8 +66,7 @@ class Audit:
             start_message = {
                 "@id": self.aid,
                 "@type": "job",
-                "startedAtTime": now(),
-                "executedBy": user_id,
+                "StartedAtTime": now(),
             }
 
         os.chdir(self.odir)
@@ -88,7 +87,7 @@ class Audit:
                     {
                         "@id": self.mid,
                         "@type": "monitor",
-                        "startedAtTime": now(),
+                        "StartedAtTime": now(),
                         "wasStartedBy": self.aid,
                     },
                     AuditFlag.PROV,
@@ -103,7 +102,7 @@ class Audit:
             result.runtime = gather_runtime_info(self.resource_monitor.fname)
             if self.audit_check(AuditFlag.PROV):
                 self.audit_message(
-                    {"@id": self.mid, "endedAtTime": now(), "wasEndedBy": self.aid},
+                    {"@id": self.mid, "EndedAtTime": now(), "wasEndedBy": self.aid},
                     AuditFlag.PROV,
                 )
                 # audit resources/runtime information
@@ -113,14 +112,14 @@ class Audit:
                     **{
                         "@id": self.eid,
                         "@type": "runtime",
-                        "prov:wasGeneratedBy": self.aid,
+                        "GeneratedBy": self.aid,
                     }
                 )
                 self.audit_message(entity, AuditFlag.PROV)
                 self.audit_message(
                     {
                         "@type": "prov:Generation",
-                        "entity_generated": self.eid,
+                        "runtime": self.eid,
                         "hadActivity": self.mid,
                     },
                     AuditFlag.PROV,
@@ -129,7 +128,7 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             # audit outputs
             self.audit_message(
-                {"@id": self.aid, "endedAtTime": now(), "errored": result.errored},
+                {"@id": self.aid, "EndedAtTime": now(), "errored": result.errored},
                 AuditFlag.PROV,
             )
 
@@ -188,8 +187,10 @@ class Audit:
 
         label = job.name
 
+        # YC: currently command only support shellcommand task
+        # we can make function itself a command too
         command = job.task.cmdline if hasattr(job.task, "executable") else None
-        attr_list = task_fields(job.task)
+        attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
             input_name = attrs.name
             value = job.inputs[input_name]
@@ -231,7 +232,14 @@ class Audit:
             "Label": label,
             "Command": command,
             "StartedAtTime": now(),
-            "AssociatedWith": version_cmd,
+            "AssociatedWith": {
+                "@id": self.aid,
+                # YC: need to add Label, which should be
+                # the software name in a shellcommand task
+                # the function's package in a function task
+                # else be python
+                "Version": version_cmd,
+            },
         }
 
         self.audit_message(start_message, AuditFlag.PROV)
