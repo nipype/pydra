@@ -183,12 +183,17 @@ def extract_function_inputs_and_outputs(
         input_types[p.name] = type_hints.get(p.name, ty.Any)
         if p.default is not inspect.Parameter.empty:
             input_defaults[p.name] = p.default
-    if inputs:
+    if inputs is not None:
         if not isinstance(inputs, dict):
-            raise ValueError(
-                f"Input names ({inputs}) should not be provided when "
-                "wrapping/decorating a function as "
-            )
+            if non_named_args := [
+                i for i in inputs if not isinstance(i, Arg) or i.name is None
+            ]:
+                raise ValueError(
+                    "Only named Arg objects should be provided as inputs (i.e. not names or "
+                    "other objects should not be provided when wrapping/decorating a "
+                    f"function: found {non_named_args} when wrapping/decorating {function!r}"
+                )
+            inputs = {i.name: i for i in inputs}
         if not has_varargs:
             if unrecognised := set(inputs) - set(input_types):
                 raise ValueError(
@@ -218,41 +223,43 @@ def extract_function_inputs_and_outputs(
                 f"value {default}"
             )
     return_type = type_hints.get("return", ty.Any)
-    if outputs and len(outputs) > 1:
-        if return_type is not ty.Any:
-            if ty.get_origin(return_type) is not tuple:
-                raise ValueError(
-                    f"Multiple outputs specified ({outputs}) but non-tuple "
-                    f"return value {return_type}"
-                )
-            return_types = ty.get_args(return_type)
-            if len(return_types) != len(outputs):
-                raise ValueError(
-                    f"Length of the outputs ({outputs}) does not match that "
-                    f"of the return types ({return_types})"
-                )
-            output_types = dict(zip(outputs, return_types))
+    if outputs:
+        if len(outputs) > 1:
+            if return_type is not ty.Any:
+                if ty.get_origin(return_type) is not tuple:
+                    raise ValueError(
+                        f"Multiple outputs specified ({outputs}) but non-tuple "
+                        f"return value {return_type}"
+                    )
+                return_types = ty.get_args(return_type)
+                if len(return_types) != len(outputs):
+                    raise ValueError(
+                        f"Length of the outputs ({outputs}) does not match that "
+                        f"of the return types ({return_types})"
+                    )
+                output_types = dict(zip(outputs, return_types))
+            else:
+                output_types = {o: ty.Any for o in outputs}
+            if isinstance(outputs, dict):
+                for output_name, output in outputs.items():
+                    if isinstance(output, Out) and output.type is ty.Any:
+                        output.type = output_types[output_name]
+            else:
+                outputs = output_types
         else:
-            output_types = {o: ty.Any for o in outputs}
-        if isinstance(outputs, dict):
-            for output_name, output in outputs.items():
-                if isinstance(output, Out) and output.type is ty.Any:
-                    output.type = output_types[output_name]
-        else:
-            outputs = output_types
-
-    elif outputs:
-        if isinstance(outputs, dict):
-            output_name, output = next(iter(outputs.items()))
-        elif isinstance(outputs, list):
-            output_name = outputs[0]
-            output = ty.Any
-        if isinstance(output, Out):
-            if output.type is ty.Any:
-                output.type = return_type
-        elif output is ty.Any:
-            output = return_type
-        outputs = {output_name: output}
+            if isinstance(outputs, dict):
+                output_name, output = next(iter(outputs.items()))
+            elif isinstance(outputs, list):
+                output_name = outputs[0]
+                output = ty.Any
+            if isinstance(output, Out):
+                if output.type is ty.Any:
+                    output.type = return_type
+            elif output is ty.Any:
+                output = return_type
+            outputs = {output_name: output}
+    elif outputs == [] or return_type in (None, type(None)):
+        outputs = {}
     else:
         outputs = {"out": return_type}
     return inputs, outputs

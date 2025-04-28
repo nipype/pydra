@@ -41,6 +41,26 @@ def test_function_arg_fail():
             return function
 
 
+def test_function_arg_fail2():
+
+    with pytest.raises(
+        ValueError, match="Only named Arg objects should be provided as inputs"
+    ):
+
+        @python.define(inputs=[python.arg(help="an int")])
+        def func(a: int) -> int:
+            return a * 2
+
+
+def test_function_arg_add_help():
+
+    @python.define(inputs=[python.arg(name="a", help="an int")])
+    def func(a: int) -> int:
+        return a * 2
+
+    assert task_fields(func).a.help == "an int"
+
+
 def test_interface_wrap_function_with_default():
     def func(a: int, k: float = 2.0) -> float:
         """Sample function with inputs and outputs"""
@@ -424,3 +444,54 @@ def test_object_input():
 
     outputs = TestFunc(a=A(x=7))()
     assert outputs.out == 7
+
+
+def test_no_outputs1():
+    """Test function tasks with no outputs specified by None return type"""
+
+    @python.define
+    def TestFunc1(a: A) -> None:
+        print(a)
+
+    outputs = TestFunc1(a=A(x=7))()
+    assert not task_fields(outputs)
+
+
+def test_no_outputs2():
+    """Test function tasks with no outputs set explicitly"""
+
+    @python.define(outputs=[])
+    def TestFunc2(a: A):
+        print(a)
+
+    outputs = TestFunc2(a=A(x=7))()
+    assert not task_fields(outputs)
+
+
+def test_no_outputs_fail():
+    """Test function tasks with object inputs"""
+
+    @python.define(outputs=[])
+    def TestFunc3(a: A):
+        return a
+
+    with pytest.raises(ValueError, match="No output fields were specified"):
+        TestFunc3(a=A(x=7))()
+
+
+def test_only_one_output_fail():
+
+    with pytest.raises(ValueError, match="Multiple outputs specified"):
+
+        @python.define(outputs=["out1", "out2"])
+        def TestFunc4(a: A) -> A:
+            return a
+
+
+def test_incorrect_num_outputs_fail():
+
+    with pytest.raises(ValueError, match="Length of the outputs"):
+
+        @python.define(outputs=["out1", "out2"])
+        def TestFunc5(a: A) -> tuple[A, A, A]:
+            return a, a, a

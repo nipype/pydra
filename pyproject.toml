@@ -140,7 +140,7 @@ testpaths = ["pydra"]
 log_cli_level = "INFO"
 xfail_strict = true
 addopts = [
-  "-svx",
+  "-svv",
   "-ra",
   "--strict-config",
   "--strict-markers",
