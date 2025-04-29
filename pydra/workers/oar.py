@@ -139,7 +139,9 @@ class OarWorker(base.Worker):
                         # for pyt3.8 we could you missing_ok=True
                         (job.cache_root / f"{checksum}.lock").unlink()
                 cmd_re = ("oarstat", "-J", "--sql", f"resubmit_job_id='{jobid}'")
-                _, stdout, _ = await base.read_and_display_async(*cmd_re, hide_display=True)
+                _, stdout, _ = await base.read_and_display_async(
+                    *cmd_re, hide_display=True
+                )
                 if not stdout:
                     raise RuntimeError(
                         "Job information about resubmission of job {jobid} not found"

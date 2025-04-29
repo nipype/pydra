@@ -626,7 +626,7 @@ def test_oar_wf_cf(tmpdir):
     wf.plugin = "cf"
     with Submitter(worker="oar", cache_root=tmpdir) as sub:
         res = sub(wf)
-    
+
     outputs = res.outputs
     assert outputs.out == 9
     script_dir = tmpdir / "oar_scripts"
@@ -672,7 +672,9 @@ def test_oar_args_2(tmpdir):
     task = SleepAddOne(x=1)
     # submit workflow and every task as oar job
     with pytest.raises(RuntimeError, match="Error returned from oarsub:"):
-        with Submitter(worker="oar", cache_root=tmpdir, oarsub_args="-l nodes=2 --invalid") as sub:
+        with Submitter(
+            worker="oar", cache_root=tmpdir, oarsub_args="-l nodes=2 --invalid"
+        ) as sub:
             sub(task)
 
 
