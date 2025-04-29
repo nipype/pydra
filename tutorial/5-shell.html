@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Workflows" href="6-workflow.html" /><link rel="prev" title="Python-tasks" href="4-python.html" />
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>Shell-tasks - Pydra v1.0a0</title>
+        <title>Shell-tasks - Pydra v1.0a1</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a0</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a1</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a0</span>
+  <span class="sidebar-brand-text">Pydra v1.0a1</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -220,7 +220,7 @@
 <li class="toctree-l1"><a class="reference internal" href="4-python.html">Python-tasks</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Shell-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="6-workflow.html">Workflows</a></li>
-<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical task form</a></li>
+<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical form and serialisation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
@@ -338,8 +338,8 @@
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Command-line to be run: cp /tmp/tmpb4iwy0x2/in.txt /tmp/tmpb4iwy0x2/out.txt
-Contents of copied file (&#39;/tmp/tmpb4iwy0x2/out.txt&#39;): &#39;Contents to be copied&#39;
+Command-line to be run: cp /tmp/tmpsr0ggjxr/in.txt /tmp/tmpsr0ggjxr/out.txt
+Contents of copied file (&#39;/tmp/tmpsr0ggjxr/out.txt&#39;): &#39;Contents to be copied&#39;
 </pre></div></div>
 </div>
 <p>If paths to output files are not provided in the parameterisation, it will default to the name of the field</p>
@@ -357,7 +357,7 @@ Contents of copied file (&#39;/tmp/tmpb4iwy0x2/out.txt&#39;): &#39;Contents to b
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-cp /tmp/tmpb4iwy0x2/in.txt /home/runner/work/pydra/pydra/docs/source/tutorial/destination
+cp /tmp/tmpsr0ggjxr/in.txt /home/runner/work/pydra/pydra/docs/source/tutorial/destination
 </pre></div></div>
 </div>
 <section id="Defining-input/output-types">
@@ -452,7 +452,7 @@ Outputs:
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">task_fields</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_fields</span>
 
 <span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
     <span class="s2">&quot;cp &lt;in_fs_objects:fs-object+&gt; &lt;out|out_dir:directory&gt; &quot;</span>
@@ -462,7 +462,7 @@ Outputs:
     <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str=(1,&#39;bar&#39;)&gt; &quot;</span>
 <span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;--int-arg&#39; default: </span><span class="si">{</span><span class="n">task_fields</span><span class="p">(</span><span class="n">Cp</span><span class="p">)</span><span class="o">.</span><span class="n">int_arg</span><span class="o">.</span><span class="n">default</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;--int-arg&#39; default: </span><span class="si">{</span><span class="n">get_fields</span><span class="p">(</span><span class="n">Cp</span><span class="p">)</span><span class="o">.</span><span class="n">int_arg</span><span class="o">.</span><span class="n">default</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -840,7 +840,7 @@ Outputs:
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=b9561ecd"></script>
+</div><script src="../_static/documentation_options.js?v=26148a57"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=5fa4622c"></script>

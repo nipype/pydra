@@ -5,7 +5,7 @@
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../../genindex.html" /><link rel="search" title="Search" href="../../../../search.html" />
 
     <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>pydra.compose.shell.builder - Pydra v1.0a0</title>
+        <title>pydra.compose.shell.builder - Pydra v1.0a1</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=302659d7" />
@@ -172,7 +172,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../../index.html"><div class="brand">Pydra v1.0a0</div></a>
+      <a href="../../../../index.html"><div class="brand">Pydra v1.0a1</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -199,7 +199,7 @@
     <img class="sidebar-logo" src="../../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a0</span>
+  <span class="sidebar-brand-text">Pydra v1.0a1</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -218,7 +218,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/4-python.html">Python-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/5-shell.html">Shell-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/6-workflow.html">Workflows</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/7-canonical-form.html">Canonical task form</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial/7-canonical-form.html">Canonical form and serialisation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
@@ -467,8 +467,8 @@
                 <span class="n">class_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">&quot;</span>
 
             <span class="c1"># Add in fields from base classes</span>
-            <span class="n">parsed_inputs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">n</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Task</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">Task</span><span class="o">.</span><span class="n">BASE_NAMES</span><span class="p">})</span>
-            <span class="n">parsed_outputs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">n</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Outputs</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">Outputs</span><span class="o">.</span><span class="n">BASE_NAMES</span><span class="p">})</span>
+            <span class="n">parsed_inputs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">n</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Task</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">Task</span><span class="o">.</span><span class="n">BASE_ATTRS</span><span class="p">})</span>
+            <span class="n">parsed_outputs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">n</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Outputs</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">Outputs</span><span class="o">.</span><span class="n">BASE_ATTRS</span><span class="p">})</span>
 
         <span class="k">if</span> <span class="s2">&quot;executable&quot;</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -635,7 +635,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">tokens</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">executable</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span>
     <span class="n">arg_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|(?:=|\$)[^&gt;]+)?)&gt;&quot;</span>
-    <span class="n">opt_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;--?[a-zA-Z0-9_]+&quot;</span>
+    <span class="n">opt_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;--?[a-zA-Z0-9_\-]+&quot;</span>
     <span class="n">arg_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">arg_pattern</span><span class="p">)</span>
     <span class="n">opt_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">opt_pattern</span><span class="p">)</span>
     <span class="n">bool_arg_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">opt_pattern</span><span class="si">}</span><span class="s2">)</span><span class="si">{</span><span class="n">arg_pattern</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -790,12 +790,16 @@
             <span class="n">add_arg</span><span class="p">(</span>
                 <span class="n">var</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="s2">&quot;argstr&quot;</span><span class="p">:</span> <span class="n">argstr</span><span class="p">,</span> <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="n">default</span><span class="p">}</span>
             <span class="p">)</span>
+            <span class="n">option</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">elif</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">opt_re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">token</span><span class="p">):</span>
             <span class="n">option</span> <span class="o">=</span> <span class="n">token</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Found unknown token </span><span class="si">{</span><span class="n">token</span><span class="si">!r}</span><span class="s2"> in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">option</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found an option without a field: </span><span class="si">{</span><span class="n">option</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="n">remaining_pos</span> <span class="o">=</span> <span class="n">remaining_positions</span><span class="p">(</span><span class="n">arguments</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">arguments</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
@@ -904,7 +908,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=b9561ecd"></script>
+</div><script src="../../../../_static/documentation_options.js?v=26148a57"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=5fa4622c"></script>

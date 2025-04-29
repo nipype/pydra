@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" />
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>Glossary - Pydra v1.0a0</title>
+        <title>Glossary - Pydra v1.0a1</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=302659d7" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a0</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a1</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a0</span>
+  <span class="sidebar-brand-text">Pydra v1.0a1</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -219,7 +219,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../tutorial/4-python.html">Python-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial/5-shell.html">Shell-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial/6-workflow.html">Workflows</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/7-canonical-form.html">Canonical task form</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/7-canonical-form.html">Canonical form and serialisation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
@@ -289,52 +289,59 @@
           <section id="glossary">
 <h1>Glossary<a class="headerlink" href="#glossary" title="Link to this heading">¶</a></h1>
 <dl class="simple glossary">
-<dt id="term-Cache-root">Cache-root<a class="headerlink" href="#term-Cache-root" title="Link to this term">¶</a></dt><dd><p>The directory where cache directories for tasks to be executed are created.
-Task cache directories are named within the cache root directory using a hash
-of the task's parameters, so that the same task with the same parameters can be
-reused.</p>
+<dt id="term-Cache-root">Cache-root<a class="headerlink" href="#term-Cache-root" title="Link to this term">¶</a></dt><dd><p>The root directory in which separate cache directories for each job are created.
+Job cache directories are named within the cache-root directory using a unique
+checksum for the job based on the task's parameters and software environment,
+so that if the same job is run again the outputs from the previous run can be
+reuused.</p>
 </dd>
 <dt id="term-Combiner">Combiner<a class="headerlink" href="#term-Combiner" title="Link to this term">¶</a></dt><dd><p>A combiner is used to combine <span class="xref std std-ref">State-array</span> values created by a split operation
 defined by a <span class="xref std std-ref">Splitter</span> on the current node, upstream workflow nodes or
 stand-alone tasks.</p>
 </dd>
-<dt id="term-Container-ndim">Container-ndim<a class="headerlink" href="#term-Container-ndim" title="Link to this term">¶</a></dt><dd><p>The number of dimensions of the container object to be iterated over when using
-a <span class="xref std std-ref">Splitter</span> to split over an iterable value. For example, a list-of-lists
-or a 2D array with <cite>container_ndim=2</cite> would be split over the elements of the
-inner lists into a single 1-D state array. However, if <cite>container_ndim=1</cite>,
-the outer list/2D would be split into a 1-D state array of lists/1D arrays.</p>
+<dt id="term-Container-ndim">Container-ndim<a class="headerlink" href="#term-Container-ndim" title="Link to this term">¶</a></dt><dd><p>The number of dimensions of the container object to be flattened into a single
+state array when splitting over nested containers/multi-dimension arrays.
+For example, a list-of-list-of-floats or a 2D numpy array with <cite>container_ndim=1</cite>,
+the outer list/2D would be split into a 1-D state array consisting of
+list-of-floats or 1D numpy arrays, respectively. Whereas with
+<cite>container_ndim=2</cite> they would be split into a state-array of floats consisiting
+of all the elements of the inner-lists/array.</p>
 </dd>
 <dt id="term-Environment">Environment<a class="headerlink" href="#term-Environment" title="Link to this term">¶</a></dt><dd><p>An environment refers to a specific software encapsulation, such as a Docker
-or Singularity image, that is used to run a task.</p>
+or Singularity image, in which a shell tasks are run. They are specified in the
+Submitter object to be used when executing a task.</p>
 </dd>
-<dt id="term-Field">Field<a class="headerlink" href="#term-Field" title="Link to this term">¶</a></dt><dd><p>A field is a parameter of a task, or a task outputs object, that can be set to
-a specific value. Fields are specified to be of any types, including objects
-and file-system objects.</p>
+<dt id="term-Field">Field<a class="headerlink" href="#term-Field" title="Link to this term">¶</a></dt><dd><p>A field is a parameter of a task, or an output in a task outputs class.
+Fields define the expected datatype of the parameter and other metadata
+parameters that control how the field is validated and passed through to the
+execution of the task.</p>
 </dd>
-<dt id="term-Hook">Hook<a class="headerlink" href="#term-Hook" title="Link to this term">¶</a></dt><dd><p>A hook is a user-defined function that is executed at a specific point in the task
-execution process. Hooks can be used to prepare/finalise the task cache directory
+<dt id="term-Hook">Hook<a class="headerlink" href="#term-Hook" title="Link to this term">¶</a></dt><dd><p>A hook is a user-defined function that is executed at a specific point either before
+or after a task is run. Hooks can be used to prepare/finalise the task cache directory
 or send notifications</p>
 </dd>
-<dt id="term-Job">Job<a class="headerlink" href="#term-Job" title="Link to this term">¶</a></dt><dd><p>A job is a discrete unit of work, a <span class="xref std std-ref">Task</span>, with all inputs resolved
-(i.e. not lazy-values or state-arrays) that has been assigned to a worker.
-A task describes &quot;what&quot; is to be done and a submitter object describes
-&quot;how&quot; it is to be done, a job combines both objects to describe a concrete unit
-of processing.</p>
+<dt id="term-Job">Job<a class="headerlink" href="#term-Job" title="Link to this term">¶</a></dt><dd><p>A job consists of a <span class="xref std std-ref">Task</span> with all inputs resolved
+(i.e. not lazy-values or state-arrays) and a Submitter object. It therefore
+represents a concrete unit of work to be executed, be combining &quot;what&quot; is to be
+done (Task) with &quot;how&quot; it is to be done (Submitter).</p>
 </dd>
 <dt id="term-Lazy-fields">Lazy-fields<a class="headerlink" href="#term-Lazy-fields" title="Link to this term">¶</a></dt><dd><p>A lazy-field is a field that is not immediately resolved to a value. Instead,
-it is a placeholder that will be resolved at runtime, allowing for dynamic
-parameterisation of tasks.</p>
+it is a placeholder that will be resolved at runtime when a workflow is executed,
+allowing for dynamic parameterisation of tasks.</p>
 </dd>
-<dt id="term-Node">Node<a class="headerlink" href="#term-Node" title="Link to this term">¶</a></dt><dd><p>A single task within the context of a workflow, which is assigned a name and
-references a state. Note this task can be nested workflow task.</p>
+<dt id="term-Node">Node<a class="headerlink" href="#term-Node" title="Link to this term">¶</a></dt><dd><p>A single task within the context of a workflow. It is assigned a unique name
+within the workflow and references a state object that determines the
+state-array of jobs to be run if present (if the state is None then a single
+job will be run for each node).</p>
 </dd>
 <dt id="term-Read-only-caches">Read-only-caches<a class="headerlink" href="#term-Read-only-caches" title="Link to this term">¶</a></dt><dd><p>A read-only cache is a cache root directory that was created by a previous
-pydra runs, which is checked for matching task caches to be reused if present
-but not written not modified during the execution of a task.</p>
+pydra run. The read-only caches are checked for matching job checksums, which
+are reused if present. However, new job cache dirs are written to the cache root
+so the read-only caches are not modified during the execution.</p>
 </dd>
 <dt id="term-State">State<a class="headerlink" href="#term-State" title="Link to this term">¶</a></dt><dd><p>The combination of all upstream splits and combines with any splitters and
-combiners for a given node, it is used to track how many jobs, and their
-parameterisations, need to be run for a given workflow node.</p>
+combiners for a given node. It is used to track how many jobs, and their
+parameterisations, that need to be run for a given workflow node.</p>
 </dd>
 <dt id="term-State-array">State-array<a class="headerlink" href="#term-State-array" title="Link to this term">¶</a></dt><dd><p>A state array is a collection of parameterised tasks or values that were generated
 by a split operation either at the current or upstream node of a workflow. The
@@ -354,8 +361,9 @@ including Python functions, shell commands, and nested workflows. Tasks are
 parameterised, meaning they can accept inputs and produce</p>
 </dd>
 <dt id="term-Worker">Worker<a class="headerlink" href="#term-Worker" title="Link to this term">¶</a></dt><dd><p>Encapsulation of a task execution environment. It is responsible for executing
-tasks and managing their lifecycle. Workers can be local (e.g., a thread or
-process) or remote (e.g., high-performance cluster).</p>
+tasks and managing their lifecycle. Workers can be local (e.g., debug and
+concurrent-futures multiprocess) or orchestrated through a remote scheduler
+(e.g., SLURM, SGE).</p>
 </dd>
 <dt id="term-Workflow">Workflow<a class="headerlink" href="#term-Workflow" title="Link to this term">¶</a></dt><dd><p>A Directed-Acyclic-Graph (DAG) of parameterised tasks, to be executed in order.
 Note that a Workflow object is created by a <code class="xref py py-class docutils literal notranslate"><span class="pre">WorkflowTask</span></code>'s
@@ -395,7 +403,7 @@ Note that a Workflow object is created by a <code class="xref py py-class docuti
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=b9561ecd"></script>
+</div><script src="../_static/documentation_options.js?v=26148a57"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=5fa4622c"></script>

@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Python-tasks" href="4-python.html" /><link rel="prev" title="Advanced execution" href="2-advanced-execution.html" />
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>Troubleshooting - Pydra v1.0a0</title>
+        <title>Troubleshooting - Pydra v1.0a1</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a0</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a1</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a0</span>
+  <span class="sidebar-brand-text">Pydra v1.0a1</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -220,7 +220,7 @@
 <li class="toctree-l1"><a class="reference internal" href="4-python.html">Python-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="5-shell.html">Shell-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="6-workflow.html">Workflows</a></li>
-<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical task form</a></li>
+<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical form and serialisation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
@@ -368,7 +368,7 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
 <div class="highlight"><pre>
 
 Task execution failed
-Full crash report for &#39;Split&#39; job is here: /home/runner/.cache/pydra/1.0a0/run-cache/workflow-48785a3059140267a09dfabcd2f1682a/_error.pklz
+Full crash report for &#39;Split&#39; job is here: /home/runner/.cache/pydra/1.0a1/run-cache/workflow-48785a3059140267a09dfabcd2f1682a/_error.pklz
 </pre></div></div>
 </div>
 <p>The error pickle files can be loaded using the <code class="docutils literal notranslate"><span class="pre">cloudpickle</span></code> library, noting that it is important to use the same Python version to load the files that was used to run the Pydra workflow</p>
@@ -402,7 +402,7 @@ Full crash report for &#39;Split&#39; job is here: /home/runner/.cache/pydra/1.0
                    &#39;    self.task._run(self, rerun)\n&#39;,
                    &#39;  File &#39;
                    &#39;&#34;/usr/share/miniconda/lib/python3.12/site-packages/pydra/compose/python.py&#34;, &#39;
-                   &#39;line 237, in _run\n&#39;
+                   &#39;line 232, in _run\n&#39;
                    &#39;    returned = self.function(**inputs)\n&#39;
                    &#39;               ^^^^^^^^^^^^^^^^^^^^^^^\n&#39;,
                    &#39;  File &#39;
@@ -413,7 +413,7 @@ Full crash report for &#39;Split&#39; job is here: /home/runner/.cache/pydra/1.0
                    &#39;ZeroDivisionError: float division by zero\n&#39;],
  &#39;login name&#39;: &#39;runner&#39;,
  &#39;name with checksum&#39;: &#39;python-7e3cdc473ae1c9ffcda3f1b64579577b&#39;,
- &#39;time of crash&#39;: &#39;20250401-010415&#39;}
+ &#39;time of crash&#39;: &#39;20250429-080311&#39;}
 </pre></div></div>
 </div>
 </section>
@@ -446,7 +446,7 @@ all the task dirs in your cache root to find the issue.</p>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Workflow completed successfully, results saved in: /home/runner/.cache/pydra/1.0a0/run-cache/workflow-1e2439ed0771726a4503d3b26efcba41
+Workflow completed successfully, results saved in: /home/runner/.cache/pydra/1.0a1/run-cache/workflow-1e2439ed0771726a4503d3b26efcba41
 </pre></div></div>
 </div>
 <p>To find the task directory where the issue first surfaced, iterate through every task cache dir and check the results for <code class="docutils literal notranslate"><span class="pre">float(&quot;inf&quot;)</span></code>s</p>
@@ -553,7 +553,7 @@ Workflow completed successfully, results saved in: /home/runner/.cache/pydra/1.0
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=b9561ecd"></script>
+</div><script src="../_static/documentation_options.js?v=26148a57"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=5fa4622c"></script>

@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Troubleshooting" href="3-troubleshooting.html" /><link rel="prev" title="Getting started" href="1-getting-started.html" />
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>Advanced execution - Pydra v1.0a0</title>
+        <title>Advanced execution - Pydra v1.0a1</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a0</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a1</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a0</span>
+  <span class="sidebar-brand-text">Pydra v1.0a1</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -220,7 +220,7 @@
 <li class="toctree-l1"><a class="reference internal" href="4-python.html">Python-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="5-shell.html">Shell-tasks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="6-workflow.html">Workflows</a></li>
-<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical task form</a></li>
+<li class="toctree-l1"><a class="reference internal" href="7-canonical-form.html">Canonical form and serialisation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
@@ -289,8 +289,8 @@
         <article role="main" id="furo-main-content">
           <section id="Advanced-execution">
 <h1>Advanced execution<a class="headerlink" href="#Advanced-execution" title="Link to this heading">¶</a></h1>
+<p><a class="reference external" href="https://mybinder.org/v2/gh/nipype/pydra/main/notebooks/tutorial/advanced_execution.ipynb"><img alt="Binder" src="https://mybinder.org/badge_logo.svg" /></a></p>
 <p>One of the key design features of Pydra is the separation between the parameterisation of the task to be executed, and the parameresiation of where and how the task should be executed (e.g. on the cloud, on a HPC cluster, …). This tutorial steps you through some of the available options for executing a task.</p>
-<p><a class="reference external" href="https://mybinder.org/v2/gh/nipype/pydra-tutorial/develop/notebooks/tutorial/advanced_execution.ipynb"><img alt="Binder" src="https://mybinder.org/badge_logo.svg" /></a></p>
 <p>Remember that before attempting to run multi-process code in Jupyter notebooks, the following snippet must be called</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
@@ -327,7 +327,7 @@
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/python-c2d7b5fda7cdf238279c3ceab3cae3f9&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, task=TenToThePower(p=3))
+Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a1/run-cache/python-c2d7b5fda7cdf238279c3ceab3cae3f9&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, task=TenToThePower(p=3))
 </pre></div></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">Result</span></code> object contains</p>
@@ -561,11 +561,11 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/python
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/shell-cc1c66c8695b0df72632ee1e0c950c20/out_file.mif&#39;)
+ImageFormat(&#39;/home/runner/.cache/pydra/1.0a1/run-cache/shell-cc1c66c8695b0df72632ee1e0c950c20/out_file.mif&#39;)
 </pre></div></div>
 </div>
 <p>Of course for this to work Docker needs to work and be configured for <a class="reference external" href="https://docs.docker.com/engine/install/linux-postinstall/">sudo-less execution</a>. See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>
-<p>It is also possible to specify functions to run at hooks that are immediately before and after the task is executed by passing a <code class="docutils literal notranslate"><span class="pre">pydra.engine.spec.TaskHooks</span></code> object to the <code class="docutils literal notranslate"><span class="pre">hooks</span></code> keyword arg. The callable should take the <code class="docutils literal notranslate"><span class="pre">pydra.engine.core.Job</span></code> object as its only argument and return None. The available hooks to attach functions are:</p>
+<p>It is also possible to specify functions to run at hooks that are immediately before and after the task is executed by passing a <code class="docutils literal notranslate"><span class="pre">pydra.engine.hooks.TaskHooks</span></code> object to the <code class="docutils literal notranslate"><span class="pre">hooks</span></code> keyword arg. The callable should take the <code class="docutils literal notranslate"><span class="pre">pydra.engine.job.Job</span></code> object as its only argument and return None. The available hooks to attach functions are:</p>
 <ul class="simple">
 <li><p>pre_run: before the task cache directory is created</p></li>
 <li><p>pre_run_task: after the cache directory has been created and the inputs resolved but before the task is executed</p></li>
@@ -615,8 +615,8 @@ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a0/run-cache/shell-cc1c66c8695b0df
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Job completed! Results are stored in &#39;/tmp/tmp6ra1pbac/shell-cc1c66c8695b0df72632ee1e0c950c20&#39;
-ImageFormat(&#39;/tmp/tmp6ra1pbac/shell-cc1c66c8695b0df72632ee1e0c950c20/out_file.mif&#39;)
+Job completed! Results are stored in &#39;/tmp/tmpywz8kp8a/shell-cc1c66c8695b0df72632ee1e0c950c20&#39;
+ImageFormat(&#39;/tmp/tmpywz8kp8a/shell-cc1c66c8695b0df72632ee1e0c950c20/out_file.mif&#39;)
 </pre></div></div>
 </div>
 </section>
@@ -698,7 +698,7 @@ ImageFormat(&#39;/tmp/tmp6ra1pbac/shell-cc1c66c8695b0df72632ee1e0c950c20/out_fil
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=b9561ecd"></script>
+</div><script src="../_static/documentation_options.js?v=26148a57"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=5fa4622c"></script>
