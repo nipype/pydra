@@ -350,7 +350,7 @@ def parse_command_line_template(
     if not tokens:
         return executable, inputs, outputs
     arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|(?:=|\$)[^>]+)?)>"
-    opt_pattern = r"--?[a-zA-Z0-9_]+"
+    opt_pattern = r"--?[a-zA-Z0-9_\-]+"
     arg_re = re.compile(arg_pattern)
     opt_re = re.compile(opt_pattern)
     bool_arg_re = re.compile(f"({opt_pattern}){arg_pattern}")
@@ -505,6 +505,7 @@ def parse_command_line_template(
             add_arg(
                 var, field.arg, {"type": bool, "argstr": argstr, "default": default}
             )
+            option = None
         elif match := opt_re.match(token):
             option = token
         else:
