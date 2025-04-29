@@ -58,7 +58,7 @@ def test_function_arg_add_help():
     def func(a: int) -> int:
         return a * 2
 
-    assert task_fields(func).a.help == "an int"
+    assert get_fields(func).a.help == "an int"
 
 
 def test_interface_wrap_function_with_default():
@@ -454,7 +454,7 @@ def test_no_outputs1():
         print(a)
 
     outputs = TestFunc1(a=A(x=7))()
-    assert not task_fields(outputs)
+    assert not get_fields(outputs)
 
 
 def test_no_outputs2():
@@ -465,7 +465,7 @@ def test_no_outputs2():
         print(a)
 
     outputs = TestFunc2(a=A(x=7))()
-    assert not task_fields(outputs)
+    assert not get_fields(outputs)
 
 
 def test_no_outputs_fail():
