@@ -5,8 +5,8 @@ from .general import (
     show_workflow,
     task_help,
     print_help,
-    serialize_task_class,
-    unserialize_task_class,
+    unstructure,
+    structure,
 )
 from ._version import __version__
 
@@ -18,6 +18,6 @@ __all__ = [
     "show_workflow",
     "task_help",
     "print_help",
-    "serialize_task_class",
-    "unserialize_task_class",
+    "unstructure",
+    "structure",
 ]

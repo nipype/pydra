@@ -588,7 +588,7 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
     }
 
 
-def serialize_task_class(
+def unstructure(
     task_class: "type[Task]",
     filter: ty.Callable[[attrs.Attribute, ty.Any], bool] | None = None,
     value_serializer: (
@@ -685,8 +685,8 @@ def serialize_task_class(
     return dct
 
 
-def unserialize_task_class(task_class_dict: dict[str, ty.Any]) -> type["Task"]:
-    """Unserializes a task definition from a dictionary created by `serialize_task_class`
+def structure(task_class_dict: dict[str, ty.Any]) -> type["Task"]:
+    """Unserializes a task definition from a dictionary created by `unstructure`
 
     Parameters
     ----------

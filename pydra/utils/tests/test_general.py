@@ -4,8 +4,8 @@ from collections.abc import Collection
 from pydra.compose import python, workflow, shell
 from fileformats.text import TextFile
 from pydra.utils.general import (
-    serialize_task_class,
-    unserialize_task_class,
+    unstructure,
+    structure,
     get_fields,
     filter_out_defaults,
 )
@@ -49,33 +49,33 @@ def Add(a: int, b: int | None = None, c: int | None = None) -> int:
     return a + (b if b is not None else c)
 
 
-def test_python_serialize_task_class(tmp_path):
+def test_python_unstructure(tmp_path):
 
     assert Add(a=1, b=2)(cache_root=tmp_path / "cache1").out_int == 3
 
-    dct = serialize_task_class(Add)
+    dct = unstructure(Add)
     assert isinstance(dct, dict)
     check_dict_fully_serialized(dct)
-    Reloaded = unserialize_task_class(dct)
+    Reloaded = structure(dct)
     assert get_fields(Add) == get_fields(Reloaded)
 
     assert Reloaded(a=1, b=2)(cache_root=tmp_path / "cache2").out_int == 3
 
 
-def test_shell_serialize_task_class():
+def test_shell_unstructure():
 
     MyCmd = shell.define(
         "my-cmd <in_file> <out|out_file> --an-arg <an_arg:int=2> --a-flag<a_flag>"
     )
 
-    dct = serialize_task_class(MyCmd)
+    dct = unstructure(MyCmd)
     assert isinstance(dct, dict)
     check_dict_fully_serialized(dct)
-    Reloaded = unserialize_task_class(dct)
+    Reloaded = structure(dct)
     assert get_fields(MyCmd) == get_fields(Reloaded)
 
 
-def test_workflow_serialize_task_class(tmp_path):
+def test_workflow_unstructure(tmp_path):
 
     @workflow.define(outputs=["out_file"])
     def AWorkflow(in_file: TextFile, a_param: int) -> TextFile:
@@ -84,10 +84,10 @@ def test_workflow_serialize_task_class(tmp_path):
         )
         return concatenate.out_file
 
-    dct = serialize_task_class(AWorkflow)
+    dct = unstructure(AWorkflow)
     assert isinstance(dct, dict)
     check_dict_fully_serialized(dct)
-    Reloaded = unserialize_task_class(dct)
+    Reloaded = structure(dct)
     assert get_fields(AWorkflow) == get_fields(Reloaded)
 
     foo_file = tmp_path / "file1.txt"
@@ -97,7 +97,7 @@ def test_workflow_serialize_task_class(tmp_path):
     assert outputs.out_file.contents == "foo\nfoo\nfoo\nfoo"
 
 
-def test_serialize_task_class_with_value_serializer():
+def test_unstructure_with_value_serializer():
 
     @python.define
     def Identity(a: int) -> int:
@@ -121,13 +121,13 @@ def test_serialize_task_class_with_value_serializer():
             return value.__module__ + "." + value.__name__
         return value
 
-    dct = serialize_task_class(Identity, value_serializer=type_to_str_serializer)
+    dct = unstructure(Identity, value_serializer=type_to_str_serializer)
     assert isinstance(dct, dict)
     check_dict_fully_serialized(dct)
     assert dct["inputs"] == {"a": {"type": "builtins.int", "help": "the arg"}}
 
 
-def test_serialize_task_class_with_filter():
+def test_unstructure_with_filter():
 
     @python.define
     def Identity(a: int) -> int:
@@ -149,7 +149,7 @@ def test_serialize_task_class_with_filter():
             return False
         return filter_out_defaults(atr, value)
 
-    dct = serialize_task_class(Identity, filter=no_helps_filter)
+    dct = unstructure(Identity, filter=no_helps_filter)
     assert isinstance(dct, dict)
     check_dict_fully_serialized(dct)
     assert dct["inputs"] == {"a": {"type": int}}
