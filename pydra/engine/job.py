@@ -27,7 +27,7 @@ from pydra.engine.result import (
 from pydra.utils.general import (
     attrs_values,
     attrs_fields,
-    task_fields,
+    get_fields,
     ensure_list,
     is_workflow,
 )
@@ -252,7 +252,7 @@ class Job(ty.Generic[TaskType]):
         }
         map_copyfiles = {}
         fld: "Arg"
-        for fld in task_fields(self.task):
+        for fld in get_fields(self.task):
             name = fld.name
             value = self._inputs[name]
             if value and TypeParser.contains_type(FileSet, fld.type):
@@ -331,7 +331,7 @@ class Job(ty.Generic[TaskType]):
             try:
                 self.audit.monitor()
                 self.task._run(self, rerun)
-                result.outputs = self.task.Outputs._from_task(self)
+                result.outputs = self.task.Outputs._from_job(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -385,7 +385,7 @@ class Job(ty.Generic[TaskType]):
             try:
                 self.audit.monitor()
                 await self.task._run_async(self, rerun)
-                result.outputs = self.task.Outputs._from_task(self)
+                result.outputs = self.task.Outputs._from_job(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)

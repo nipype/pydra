@@ -3,7 +3,7 @@ from copy import deepcopy
 from enum import Enum
 import attrs
 from pydra.engine import lazy
-from pydra.utils.general import attrs_values, task_dict
+from pydra.utils.general import attrs_values, asdict
 from pydra.utils.typing import is_lazy
 from pydra.engine.state import State, add_name_splitter, add_name_combiner
 
@@ -114,13 +114,13 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def lzout(self) -> OutputType:
-        from pydra.utils.general import task_fields
+        from pydra.utils.general import get_fields
 
         """The output task of the node populated with lazy fields"""
         if self._lzout is not None:
             return self._lzout
         lazy_fields = {}
-        for field in task_fields(self.inputs.Outputs):
+        for field in get_fields(self.inputs.Outputs):
             lazy_fields[field.name] = lazy.LazyOutField(
                 node=self,
                 field=field.name,
@@ -162,7 +162,7 @@ class Node(ty.Generic[OutputType]):
     def _check_if_outputs_have_been_used(self, msg):
         used = []
         if self._lzout:
-            for outpt_name, outpt_val in task_dict(self._lzout).items():
+            for outpt_name, outpt_val in asdict(self._lzout).items():
                 if outpt_val._type_checked:
                     used.append(outpt_name)
         if used:

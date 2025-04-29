@@ -5,7 +5,7 @@ import inspect
 from copy import copy
 from pathlib import Path
 from fileformats.generic import FileSet
-from pydra.utils.general import attrs_values, task_fields
+from pydra.utils.general import attrs_values, get_fields
 from pydra.utils.typing import is_lazy
 from . import field
 
@@ -32,7 +32,7 @@ def template_update(
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
         fld
-        for fld in task_fields(task)
+        for fld in get_fields(task)
         if isinstance(fld, field.outarg)
         and fld.path_template
         and getattr(task, fld.name)

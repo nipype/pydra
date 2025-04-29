@@ -11,7 +11,7 @@ import attrs
 from fileformats.generic import FileSet, File
 from pydra.utils.general import (
     attrs_values,
-    task_fields,
+    get_fields,
     ensure_list,
     position_sort,
 )
@@ -46,7 +46,7 @@ TaskType = ty.TypeVar("TaskType", bound="Task")
 class ShellOutputs(base.Outputs):
     """Output task of a generic shell process."""
 
-    BASE_NAMES = ["return_code", "stdout", "stderr"]
+    BASE_ATTRS = ["return_code", "stdout", "stderr"]
     RETURN_CODE_HELP = """The process' exit code."""
     STDOUT_HELP = """The standard output stream produced by the command."""
     STDERR_HELP = """The standard error stream produced by the command."""
@@ -56,7 +56,7 @@ class ShellOutputs(base.Outputs):
     stderr: str = field.out(name="stderr", type=str, help=STDERR_HELP)
 
     @classmethod
-    def _from_task(cls, job: "Job[Task]") -> ty.Self:
+    def _from_job(cls, job: "Job[Task]") -> ty.Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
@@ -78,9 +78,9 @@ class ShellOutputs(base.Outputs):
         outputs : Outputs
             The outputs of the shell process
         """
-        outputs = super()._from_task(job)
+        outputs = super()._from_job(job)
         fld: field.out
-        for fld in task_fields(cls):
+        for fld in get_fields(cls):
             if fld.name in ["return_code", "stdout", "stderr"]:
                 resolved_value = job.return_values[fld.name]
             # Get the corresponding value from the inputs if it exists, which will be
@@ -232,9 +232,9 @@ def append_args_converter(value: ty.Any) -> list[str]:
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class ShellTask(base.Task[ShellOutputsType]):
 
-    _task_type = "shell"
+    _executor_name = "executable"
 
-    BASE_NAMES = ["append_args"]
+    BASE_ATTRS = ("append_args",)
 
     EXECUTABLE_HELP = (
         "the first part of the command, can be a string, "
@@ -281,7 +281,7 @@ class ShellTask(base.Task[ShellOutputsType]):
         self._check_rules()
         # Drop none/empty values and optional path fields that are set to false
         values = copy(values)  # Create a copy so we can drop items from the dictionary
-        for fld in task_fields(self):
+        for fld in get_fields(self):
             fld_value = values[fld.name]
             if fld_value is None or (is_multi_input(fld.type) and fld_value == []):
                 del values[fld.name]
@@ -295,7 +295,7 @@ class ShellTask(base.Task[ShellOutputsType]):
             self._command_shelltask_executable(fld, self.executable),
         ]  # list for (position, command arg)
         positions_provided = [0]
-        fields = {f.name: f for f in task_fields(self)}
+        fields = {f.name: f for f in get_fields(self)}
         for field_name in values:
             pos_val = self._command_pos_args(
                 fld=fields[field_name],
@@ -449,7 +449,7 @@ class ShellTask(base.Task[ShellOutputsType]):
         errors = super()._rule_violations()
         # if there is a value that has to be updated (e.g. single value from a list)
         # getting all fields that should be formatted, i.e. {field_name}, ...
-        fields = task_fields(self)
+        fields = get_fields(self)
         available_template_names = [f.name for f in fields] + ["field", "inputs"]
         for fld in fields:
             if fld.argstr:

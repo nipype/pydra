@@ -5,7 +5,7 @@ import attrs
 import pytest
 import cloudpickle as cp
 from pydra.compose import shell
-from pydra.utils.general import task_fields, task_help, wrap_text
+from pydra.utils.general import get_fields, task_help, wrap_text
 from pydra.compose.shell.builder import _InputPassThrough
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
@@ -1032,7 +1032,7 @@ def list_entries(stdout):
 
 
 def sorted_fields(interface):
-    fields = task_fields(interface)
+    fields = get_fields(interface)
     length = len(fields) - 1
 
     def pos_key(out: shell.out) -> int:

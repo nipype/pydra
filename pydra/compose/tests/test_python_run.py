@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 import glob as glob
 from pydra.compose import python
-from pydra.utils.general import task_fields, task_help
+from pydra.utils.general import get_fields, task_help
 from pydra.utils.general import default_run_cache_root
 from pydra.utils.typing import (
     MultiInputObj,
@@ -48,7 +48,7 @@ def test_python_output():
     assert getattr(funky, "a") == 1
     assert getattr(funky, "b") == 0.1
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in task_fields(funky.Outputs)) == {"output"}
+    assert set(f.name for f in get_fields(funky.Outputs)) == {"output"}
 
     outputs = funky()
     assert hasattr(outputs, "output")
@@ -118,7 +118,7 @@ def test_python_output_multreturn():
     assert hasattr(funky, "function")
     assert getattr(funky, "a") == 3.5
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in task_fields(funky.Outputs)) == {"fractional", "integer"}
+    assert set(f.name for f in get_fields(funky.Outputs)) == {"fractional", "integer"}
 
     outputs = funky()
     assert os.path.exists(
@@ -424,7 +424,7 @@ def test_halfpython_output(tmp_path):
     assert getattr(funky, "a") == 10
     assert getattr(funky, "b") == 20
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in task_fields(funky.Outputs)) == {"out"}
+    assert set(f.name for f in get_fields(funky.Outputs)) == {"out"}
 
     outputs = funky(cache_root=cache_root)
     assert hasattr(outputs, "out")
@@ -471,7 +471,7 @@ def test_halfpython_output_multreturn(tmp_path):
     assert getattr(funky, "a") == 10
     assert getattr(funky, "b") == 20
     assert getattr(funky, "function") is not None
-    assert set(f.name for f in task_fields(funky.Outputs)) == {"out1", "out2"}
+    assert set(f.name for f in get_fields(funky.Outputs)) == {"out1", "out2"}
 
     outputs = funky(cache_root=cache_root)
     assert hasattr(outputs, "out1")

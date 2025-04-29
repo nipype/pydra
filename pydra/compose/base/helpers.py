@@ -4,7 +4,7 @@ import attrs
 import re
 from copy import copy
 from pydra.utils.typing import is_type, is_optional
-from pydra.utils.general import task_fields
+from pydra.utils.general import get_fields
 from .field import Field, Arg, Out, NO_DEFAULT
 
 
@@ -114,7 +114,13 @@ def ensure_field_objects(
             out_kwds = copy(out)
             if "help" not in out_kwds:
                 out_kwds["help"] = output_helps.get(output_name, "")
-            outputs[output_name] = out_type(
+            if "path_template" in out_kwds:
+                from pydra.compose.shell import outarg
+
+                out_type_ = outarg
+            else:
+                out_type_ = out_type
+            outputs[output_name] = out_type_(
                 name=output_name,
                 **out_kwds,
             )
@@ -217,6 +223,8 @@ def extract_function_inputs_and_outputs(
                 inpt.default = default
         elif inspect.isclass(inpt) or ty.get_origin(inpt):
             inputs[inpt_name] = arg_type(type=inpt, default=default)
+        elif isinstance(inpt, dict):
+            inputs[inpt_name] = arg_type(**inpt)
         else:
             raise ValueError(
                 f"Unrecognised input type ({inpt}) for input {inpt_name} with default "
@@ -406,11 +414,11 @@ def extract_fields_from_class(
 
     input_helps, _ = parse_doc_string(klass.__doc__)
 
-    def get_fields(klass, field_type, auto_attribs, helps) -> dict[str, Field]:
+    def extract_fields(klass, field_type, auto_attribs, helps) -> dict[str, Field]:
         """Get the fields from a class"""
         fields_dict = {}
         # Get fields defined in base classes if present
-        for field in task_fields(klass):
+        for field in get_fields(klass):
             if field.name not in skip_fields:
                 fields_dict[field.name] = field
         type_hints = ty.get_type_hints(klass)
@@ -460,7 +468,7 @@ def extract_fields_from_class(
             f"tasks, {klass} must inherit from {spec_type}"
         )
 
-    inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
+    inputs = extract_fields(klass, arg_type, auto_attribs, input_helps)
 
     try:
         outputs_klass = klass.Outputs
@@ -475,7 +483,7 @@ def extract_fields_from_class(
         )
 
     output_helps, _ = parse_doc_string(outputs_klass.__doc__)
-    outputs = get_fields(outputs_klass, out_type, auto_attribs, output_helps)
+    outputs = extract_fields(outputs_klass, out_type, auto_attribs, output_helps)
 
     return inputs, outputs
 

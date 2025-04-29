@@ -3,11 +3,11 @@ import random
 import typing as ty
 from pydra.compose.base import Field
 from pydra.compose import python
-from pydra.utils.general import task_fields, attrs_values
+from pydra.utils.general import get_fields, attrs_values
 
 
 def non_func_fields(defn: python.Task) -> list[Field]:
-    return [f for f in task_fields(defn) if f.name != "function"]
+    return [f for f in get_fields(defn) if f.name != "function"]
 
 
 def non_func_values(defn: python.Task) -> dict:
@@ -79,8 +79,8 @@ def test_annotation_equivalence_1():
     assert non_func_fields(Direct) == non_func_fields(Partial)
     assert non_func_fields(Direct) == non_func_fields(Indirect)
 
-    assert task_fields(Direct.Outputs) == task_fields(Partial.Outputs)
-    assert task_fields(Direct.Outputs) == task_fields(Indirect.Outputs)
+    assert get_fields(Direct.Outputs) == get_fields(Partial.Outputs)
+    assert get_fields(Direct.Outputs) == get_fields(Indirect.Outputs)
 
     # Run functions to ensure behavior is unaffected
     a = random.randint(0, (1 << 32) - 3)
@@ -88,7 +88,7 @@ def test_annotation_equivalence_1():
     assert non_func_values(Direct(a=a)) == non_func_values(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    assert task_fields(Direct.Outputs).out == python.out(name="out", type=int)
+    assert get_fields(Direct.Outputs).out == python.out(name="out", type=int)
 
 
 def test_annotation_equivalence_2():
@@ -117,7 +117,7 @@ def test_annotation_equivalence_2():
     assert hashes(Direct(a=a)) == hashes(Partial(a=a)) == hashes(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    assert list(task_fields(Direct.Outputs)) == [
+    assert list(get_fields(Direct.Outputs)) == [
         python.out(name="out1", type=int),
         python.out(name="out2", type=float),
     ]
@@ -149,7 +149,7 @@ def test_annotation_equivalence_3():
     assert hashes(Direct(a=a)) == hashes(Partial(a=a)) == hashes(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    assert task_fields(Direct.Outputs).out1 == python.out(name="out1", type=int)
+    assert get_fields(Direct.Outputs).out1 == python.out(name="out1", type=int)
 
 
 def test_annotation_equivalence_4():
@@ -169,14 +169,14 @@ def test_annotation_equivalence_4():
 
     # checking if the annotations are equivalent
     assert (
-        task_fields(Direct.Outputs)
-        == task_fields(Partial.Outputs)
-        == task_fields(Indirect.Outputs)
+        get_fields(Direct.Outputs)
+        == get_fields(Partial.Outputs)
+        == get_fields(Indirect.Outputs)
     )
     assert (
-        task_fields(Direct.Outputs)
-        == task_fields(Partial.Outputs)
-        == task_fields(Indirect.Outputs)
+        get_fields(Direct.Outputs)
+        == get_fields(Partial.Outputs)
+        == get_fields(Indirect.Outputs)
     )
 
     # Run functions to ensure behavior is unaffected
@@ -184,7 +184,7 @@ def test_annotation_equivalence_4():
     assert hashes(Direct(a=a)) == hashes(Partial(a=a)) == hashes(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    assert list(task_fields(Direct.Outputs)) == [
+    assert list(get_fields(Direct.Outputs)) == [
         python.out(name="sum", type=int),
         python.out(name="sub", type=int),
     ]

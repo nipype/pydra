@@ -9,7 +9,7 @@ import operator
 import subprocess as sp
 import pytest
 from fileformats.generic import File
-from pydra.utils.general import task_fields
+from pydra.utils.general import get_fields
 from pydra.engine.submitter import Submitter
 from pydra.compose import workflow, python, shell
 
@@ -44,7 +44,7 @@ def num_python_cache_roots(cache_path: Path) -> int:
 
 
 def get_output_names(task):
-    return sorted(f.name for f in task_fields(task.Outputs))
+    return sorted(f.name for f in get_fields(task.Outputs))
 
 
 def run_no_submitter(

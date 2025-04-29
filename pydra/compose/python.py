@@ -2,7 +2,7 @@ import typing as ty
 import inspect
 from typing import dataclass_transform
 import attrs
-from pydra.utils.general import task_fields, task_dict
+from pydra.utils.general import get_fields, asdict
 from pydra.compose import base
 from pydra.compose.base import (
     ensure_field_objects,
@@ -83,15 +83,6 @@ class out(base.Out):
 
 @dataclass_transform(
     kw_only_default=True,
-    field_specifiers=(out,),
-)
-def outputs(wrapped):
-    """Decorator to specify the output fields of a shell command is a dataclass-style type"""
-    return wrapped
-
-
-@dataclass_transform(
-    kw_only_default=True,
     field_specifiers=(arg,),
 )
 def define(
@@ -102,6 +93,7 @@ def define(
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
+    name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
 ) -> "Task":
     """
@@ -117,6 +109,8 @@ def define(
         The outputs of the function or class.
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
+    name: str | None
+        The name of the returned class
     xor: Sequence[str | None] | Sequence[Sequence[str | None]], optional
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
@@ -132,7 +126,7 @@ def define(
         if inspect.isclass(wrapped):
             klass = wrapped
             function = klass.function
-            name = klass.__name__
+            class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
                 Task,
@@ -154,7 +148,8 @@ def define(
             inferred_inputs, inferred_outputs = extract_function_inputs_and_outputs(
                 function, arg, inputs, outputs
             )
-            name = function.__name__
+
+            class_name = function.__name__ if name is None else name
 
             parsed_inputs, parsed_outputs = ensure_field_objects(
                 arg_type=arg,
@@ -179,7 +174,7 @@ def define(
             Outputs,
             parsed_inputs,
             parsed_outputs,
-            name=name,
+            name=class_name,
             klass=klass,
             bases=bases,
             outputs_bases=outputs_bases,
@@ -199,7 +194,7 @@ def define(
 class PythonOutputs(base.Outputs):
 
     @classmethod
-    def _from_task(cls, job: "Job[PythonTask]") -> ty.Self:
+    def _from_job(cls, job: "Job[PythonTask]") -> ty.Self:
         """Collect the outputs of a job from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
@@ -215,28 +210,28 @@ class PythonOutputs(base.Outputs):
         outputs : Outputs
             The outputs of the job in dataclass
         """
-        outputs = super()._from_task(job)
+        outputs = super()._from_job(job)
         for name, val in job.return_values.items():
             setattr(outputs, name, val)
         return outputs
 
 
-PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
+PythonOutputsType = ty.TypeVar("PythonOutputsType", bound=PythonOutputs)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonTask(base.Task[PythonOutputsType]):
 
-    _task_type = "python"
+    _executor_name = "function"
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
         # Prepare the inputs to the function
-        inputs = task_dict(self)
+        inputs = asdict(self)
         del inputs["function"]
         # Run the actual function
         returned = self.function(**inputs)
         # Collect the outputs and save them into the job.return_values dictionary
-        return_names = [f.name for f in task_fields(self.Outputs)]
+        return_names = [f.name for f in get_fields(self.Outputs)]
         if returned is None:
             job.return_values = {nm: None for nm in return_names}
         elif not return_names:

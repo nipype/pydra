@@ -14,7 +14,7 @@ import attrs
 import logging
 from pydra.engine.graph import DiGraph
 from pydra.utils.general import (
-    task_fields,
+    get_fields,
     attrs_values,
 )
 from pydra.utils.hash import PersistentCache
@@ -225,9 +225,7 @@ class Submitter:
                 tp = state.combine_state_arrays(tp)
                 return tp
 
-            output_types = {
-                o.name: wrap_type(o.type) for o in task_fields(task.Outputs)
-            }
+            output_types = {o.name: wrap_type(o.type) for o in get_fields(task.Outputs)}
 
             @workflow.define(outputs=output_types)
             def Split(defn: Task, output_types: dict, environment: Environment | None):

@@ -184,12 +184,12 @@ class Audit:
 
     def audit_task(self, job: "Job"):
         import subprocess as sp
-        from pydra.utils.general import task_fields
+        from pydra.utils.general import get_fields
 
         label = job.name
 
         command = job.task.cmdline if hasattr(job.task, "executable") else None
-        attr_list = task_fields(job.task)
+        attr_list = get_fields(job.task)
         for attrs in attr_list:
             input_name = attrs.name
             value = job.inputs[input_name]

@@ -19,8 +19,8 @@ from pydra.engine.hooks import (
 from pydra.engine.submitter import Submitter, NodeExecution
 from pydra.utils.general import (
     attrs_values,
-    task_dict,
-    task_fields,
+    asdict,
+    get_fields,
 )
 from pydra.utils.typing import is_lazy
 from pydra.environments.base import Environment
@@ -119,7 +119,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
         # Initialise the outputs of the workflow
         outputs = task.Outputs(
-            **{f.name: attrs.NOTHING for f in task_fields(task.Outputs)}
+            **{f.name: attrs.NOTHING for f in get_fields(task.Outputs)}
         )
 
         # Initialise the lzin fields
@@ -131,7 +131,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         )
         # Set lazy inputs to the workflow, need to do it after the workflow is initialised
         # so a back ref to the workflow can be set in the lazy field
-        for field in task_fields(task):
+        for field in get_fields(task):
             if field.name not in non_lazy_keys:
                 setattr(
                     lazy_spec,
@@ -147,7 +147,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         constructor = input_values.pop("constructor")
         # Call the user defined constructor to set the outputs
         output_lazy_fields = constructor(**input_values)
-        if all(v is attrs.NOTHING for v in task_dict(outputs).values()):
+        if all(v is attrs.NOTHING for v in asdict(outputs).values()):
             if output_lazy_fields is None:
                 raise ValueError(
                     f"Constructor function for {task} returned None, must a lazy field "
@@ -160,7 +160,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     "if any of the outputs are already set explicitly"
                 )
             if unset_outputs := [
-                n for n, v in task_dict(outputs).items() if v is attrs.NOTHING
+                n for n, v in asdict(outputs).items() if v is attrs.NOTHING
             ]:
                 raise ValueError(
                     f"Mandatory outputs {unset_outputs} are not set by the "
@@ -174,7 +174,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         if output_lazy_fields:
             if not isinstance(output_lazy_fields, (list, tuple)):
                 output_lazy_fields = [output_lazy_fields]
-            output_fields = task_fields(task.Outputs)
+            output_fields = get_fields(task.Outputs)
             if len(output_lazy_fields) != len(output_fields):
                 raise ValueError(
                     f"Expected {len(output_fields)} outputs, got "
@@ -251,11 +251,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         if (
             environment
             and not isinstance(environment, native.Environment)
-            and task._task_type != "shell"
+            and task._task_type() != "shell"
         ):
             raise ValueError(
                 "Environments can only be used with 'shell' tasks not "
-                f"{task._task_type!r} tasks ({task!r})"
+                f"{task._task_type()!r} tasks ({task!r})"
             )
         node = Node[OutputsType](
             name=name,
@@ -324,7 +324,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         # TODO: create connection is run twice
         for node in nodes:
             other_states = {}
-            for field in task_fields(node._task):
+            for field in get_fields(node._task):
                 lf = node._task[field.name]
                 if isinstance(lf, LazyOutField):
                     # adding an edge to the graph if job id expecting output from a different job

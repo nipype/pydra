@@ -6,7 +6,7 @@ from attrs.converters import default_if_none
 from fileformats.core import to_mime
 from fileformats.generic import File, FileSet
 from pydra.utils.typing import TypeParser, is_optional, is_type, is_union
-from pydra.utils.general import task_fields, wrap_text
+from pydra.utils.general import get_fields, wrap_text
 import attrs
 
 if ty.TYPE_CHECKING:
@@ -66,7 +66,7 @@ class Requirement:
     def satisfied(self, inputs: "Task") -> bool:
         """Check if the requirement is satisfied by the inputs"""
         value = getattr(inputs, self.name)
-        field = {f.name: f for f in task_fields(inputs)}[self.name]
+        field = {f.name: f for f in get_fields(inputs)}[self.name]
         if value is None or field.type is bool and value is False:
             return False
         if self.allowed_values is None:
@@ -326,7 +326,7 @@ class Arg(Field):
         it is False
     """
 
-    allowed_values: frozenset = attrs.field(default=(), converter=frozenset)
+    allowed_values: frozenset = attrs.field(factory=frozenset, converter=frozenset)
     copy_mode: File.CopyMode = File.CopyMode.any
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single

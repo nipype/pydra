@@ -7,7 +7,7 @@ from pathlib import Path
 import logging
 from fileformats.generic import FileSet
 from pydra.compose import shell
-from pydra.utils.general import task_fields, get_plugin_classes
+from pydra.utils.general import get_fields, get_plugin_classes
 from pydra.utils.typing import TypeParser
 import pydra.environments
 
@@ -140,7 +140,7 @@ class Container(Environment):
         if root is None:
             return bindings
         fld: shell.arg
-        for fld in task_fields(job.task):
+        for fld in get_fields(job.task):
             if TypeParser.contains_type(FileSet, fld.type):
                 value: FileSet | None = job.inputs[fld.name]
                 if not value:
