@@ -512,6 +512,9 @@ def parse_command_line_template(
                 f"Found unknown token {token!r} in command line template: {template}"
             )
 
+    if option:
+        raise ValueError(f"Found an option without a field: {option!r}")
+
     remaining_pos = remaining_positions(arguments, len(arguments) + 1, 1)
 
     for argument in arguments:

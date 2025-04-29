@@ -984,6 +984,13 @@ def test_shell_missing_executable_dynamic():
         )
 
 
+def test_shell_trailing_option_fail():
+
+    with pytest.raises(ValueError, match="Found an option without a field"):
+
+        shell.define("ls <directory:generic/directory> --unparameterized-option ")
+
+
 def test_shell_help1():
 
     Shelly = shell.define(
