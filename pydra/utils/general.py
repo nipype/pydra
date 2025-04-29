@@ -686,7 +686,8 @@ def unstructure(
 
 
 def structure(task_class_dict: dict[str, ty.Any]) -> type["Task"]:
-    """Unserializes a task definition from a dictionary created by `unstructure`
+    """Converts a dictionary representation created by `unstructure` into a Pydra task
+    class.
 
     Parameters
     ----------

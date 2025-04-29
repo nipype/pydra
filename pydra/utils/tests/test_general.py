@@ -12,7 +12,7 @@ from pydra.utils.general import (
 from pydra.utils.tests.utils import Concatenate
 
 
-def check_dict_fully_serialized(dct: dict):
+def check_dict_fully_unstructured(dct: dict):
     """Checks if there are any Pydra objects or non list/dict containers in the dict."""
     stack = [dct]
     while stack:
@@ -55,7 +55,7 @@ def test_python_unstructure(tmp_path):
 
     dct = unstructure(Add)
     assert isinstance(dct, dict)
-    check_dict_fully_serialized(dct)
+    check_dict_fully_unstructured(dct)
     Reloaded = structure(dct)
     assert get_fields(Add) == get_fields(Reloaded)
 
@@ -70,7 +70,7 @@ def test_shell_unstructure():
 
     dct = unstructure(MyCmd)
     assert isinstance(dct, dict)
-    check_dict_fully_serialized(dct)
+    check_dict_fully_unstructured(dct)
     Reloaded = structure(dct)
     assert get_fields(MyCmd) == get_fields(Reloaded)
 
@@ -86,7 +86,7 @@ def test_workflow_unstructure(tmp_path):
 
     dct = unstructure(AWorkflow)
     assert isinstance(dct, dict)
-    check_dict_fully_serialized(dct)
+    check_dict_fully_unstructured(dct)
     Reloaded = structure(dct)
     assert get_fields(AWorkflow) == get_fields(Reloaded)
 
@@ -123,7 +123,7 @@ def test_unstructure_with_value_serializer():
 
     dct = unstructure(Identity, value_serializer=type_to_str_serializer)
     assert isinstance(dct, dict)
-    check_dict_fully_serialized(dct)
+    check_dict_fully_unstructured(dct)
     assert dct["inputs"] == {"a": {"type": "builtins.int", "help": "the arg"}}
 
 
@@ -151,5 +151,5 @@ def test_unstructure_with_filter():
 
     dct = unstructure(Identity, filter=no_helps_filter)
     assert isinstance(dct, dict)
-    check_dict_fully_serialized(dct)
+    check_dict_fully_unstructured(dct)
     assert dct["inputs"] == {"a": {"type": int}}
