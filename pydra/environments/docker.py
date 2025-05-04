@@ -28,19 +28,11 @@ class Docker(base.Container):
             ).split()
         )
         docker_args.extend(["-w", f"{self.root}{job.cache_dir}"])
-        keys = ["return_code", "stdout", "stderr"]
 
         job.cache_dir.mkdir(exist_ok=True)
-        values = base.execute(
-            docker_args + [docker_img] + job.task._command_args(values=values),
+        return base.read_and_display(
+            *(docker_args + [docker_img] + job.task._command_args(values=values)),
         )
-        output = dict(zip(keys, values))
-        if output["return_code"]:
-            if output["stderr"]:
-                raise RuntimeError(output["stderr"])
-            else:
-                raise RuntimeError(output["stdout"])
-        return output
 
 
 # Alias so it can be referred to as docker.Environment

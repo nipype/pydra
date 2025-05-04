@@ -31,21 +31,12 @@ class Singularity(base.Container):
         singularity_args.extend(
             ["--pwd", f"{self.root.rstrip('/')}{job.cache_dir.absolute()}"]
         )
-        keys = ["return_code", "stdout", "stderr"]
-
         job.cache_dir.mkdir(exist_ok=True)
-        values = base.execute(
+        return base.read_and_display(
             singularity_args
             + [singularity_img]
             + job.task._command_args(values=values),
         )
-        output = dict(zip(keys, values))
-        if output["return_code"]:
-            if output["stderr"]:
-                raise RuntimeError(output["stderr"])
-            else:
-                raise RuntimeError(output["stdout"])
-        return output
 
 
 # Alias so it can be referred to as singularity.Environment
