@@ -26,6 +26,7 @@ from pydra.utils.typing import (
 )
 from pydra.compose import base
 from pydra.compose.base.field import RequirementSet
+from pydra.environments.base import Container
 from pydra.compose.base.helpers import is_set
 from . import field
 from .templating import (
@@ -254,6 +255,11 @@ class ShellTask(base.Task[ShellOutputsType]):
 
     def _run(self, job: "Job[ShellTask]", rerun: bool = True) -> None:
         """Run the shell command."""
+        if self.executable is None and not isinstance(job.environment, Container):
+            raise ValueError(
+                "executable is not set, and the environment is not a container "
+                f"({job.environment}) with an entrypoint"
+            )
         job.return_values = job.environment.execute(job)
 
     @property
@@ -291,9 +297,9 @@ class ShellTask(base.Task[ShellOutputsType]):
         del values["executable"]
         del values["append_args"]
         # Add executable
-        pos_args = [
-            self._command_shelltask_executable(fld, self.executable),
-        ]  # list for (position, command arg)
+        pos_args = []
+        if self.executable is not None:
+            pos_args.append(self._executable_pos_arg(fld, self.executable))
         positions_provided = [0]
         fields = {f.name: f for f in get_fields(self)}
         for field_name in values:
@@ -312,9 +318,9 @@ class ShellTask(base.Task[ShellOutputsType]):
         command_args += self.append_args
         return command_args
 
-    def _command_shelltask_executable(
-        self, fld: field.arg, value: ty.Any
-    ) -> tuple[int, ty.Any]:
+    def _executable_pos_arg(
+        self, fld: field.arg, value: str | list[str] | None
+    ) -> tuple[int, str | list[str] | None]:
         """Returning position and value for executable Task input"""
         pos = 0  # executable should be the first el. of the command
         assert value

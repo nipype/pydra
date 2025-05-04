@@ -130,13 +130,17 @@ def define(
                         f"Shell task class {wrapped} must have an `executable` "
                         "attribute that specifies the command to run"
                     ) from None
-            if not isinstance(executable, str) and not (
-                isinstance(executable, ty.Sequence)
-                and all(isinstance(e, str) for e in executable)
+            if (
+                executable is not None
+                and not isinstance(executable, str)
+                and not (
+                    isinstance(executable, ty.Sequence)
+                    and all(isinstance(e, str) for e in executable)
+                )
             ):
                 raise ValueError(
-                    "executable must be a string or a sequence of strings"
-                    f", not {executable!r}"
+                    "executable must be a string or a sequence of strings or None if "
+                    f"the command run is the entrypoint of a container, not {executable!r}"
                 )
             class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
@@ -199,7 +203,7 @@ def define(
         )
         parsed_inputs["executable"] = field.arg(
             name="executable",
-            type=str | ty.Sequence[str],
+            type=str | ty.Sequence[str] | None,
             argstr="",
             position=0,
             default=executable,
