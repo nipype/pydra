@@ -33,9 +33,11 @@ class Singularity(base.Container):
         )
         job.cache_dir.mkdir(exist_ok=True)
         return base.read_and_display(
-            singularity_args
-            + [singularity_img]
-            + job.task._command_args(values=values),
+            *(
+                singularity_args
+                + [singularity_img]
+                + job.task._command_args(values=values)
+            )
         )
 
 

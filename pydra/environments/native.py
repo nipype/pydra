@@ -16,7 +16,7 @@ class Native(base.Environment):
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         cmd_args = job.task._command_args(values=job.inputs)
-        return base.read_and_display(cmd_args)
+        return base.read_and_display(*cmd_args)
 
 
 # Alias so it can be referred to as native.Environment
