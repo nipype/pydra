@@ -294,12 +294,12 @@ class ShellTask(base.Task[ShellOutputsType]):
             if is_fileset_or_union(fld.type) and type(fld_value) is bool:
                 del values[fld.name]
         # Drop special fields that are added separately
-        del values["executable"]
         del values["append_args"]
         # Add executable
         pos_args = []
         if self.executable is not None:
             pos_args.append(self._executable_pos_arg(fld, self.executable))
+            del values["executable"]
         positions_provided = [0]
         fields = {f.name: f for f in get_fields(self)}
         for field_name in values:
