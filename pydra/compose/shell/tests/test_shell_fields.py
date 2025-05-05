@@ -6,7 +6,7 @@ import pytest
 import cloudpickle as cp
 from pydra.compose import shell
 from pydra.utils.general import get_fields, task_help, wrap_text
-from pydra.compose.shell.builder import _InputPassThrough
+from pydra.compose.shell.builder import _InputPassThrough, executable_validator
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
 from pydra.utils.typing import MultiInputObj
@@ -26,7 +26,7 @@ def test_interface_template():
     assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -81,7 +81,7 @@ def test_interface_template_w_types_and_path_template_ext():
     assert sorted_fields(TrimPng) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
@@ -122,7 +122,7 @@ def test_interface_template_w_modify():
     assert sorted_fields(TrimPng) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
@@ -181,7 +181,7 @@ def test_interface_template_more_complex():
     assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -281,7 +281,7 @@ def test_interface_template_with_overrides_and_optionals():
     assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -353,7 +353,7 @@ def test_interface_template_with_defaults():
     assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -421,7 +421,7 @@ def test_interface_template_with_type_overrides():
     assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -738,7 +738,7 @@ def test_shell_output_field_name_static():
     assert sorted_fields(A) == [
         shell.arg(
             name="executable",
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             default="cp",
             type=str | ty.Sequence[str],
             argstr="",

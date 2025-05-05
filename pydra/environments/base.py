@@ -236,7 +236,7 @@ def read_and_display(
         stdout = stdout.strip()
     stderr = process.stderr.decode("utf-8")
     if process.returncode:
-        msg = f"Error executing command {cmd} (code: {process.returncode}):"
+        msg = f"Error executing command {' '.join(cmd)!r} (code: {process.returncode}):"
         if stdout:
             msg += "\n\nstderr:\n" + stderr
         if stdout:

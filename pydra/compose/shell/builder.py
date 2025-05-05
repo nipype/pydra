@@ -33,6 +33,18 @@ from . import field
 from .task import Task, Outputs
 
 
+def executable_validator(_, __, value):
+    """Validator for the executable attribute of a task"""
+    if value is None:
+        return
+    if not isinstance(value, (str, list)):
+        raise TypeError(
+            f"executable must be a string or a list of strings, not {value!r}"
+        )
+    if len(value) == 0:
+        raise ValueError("executable must be a non-empty string or a list of strings")
+
+
 @dataclass_transform(
     kw_only_default=True,
     field_specifiers=(field.out, field.outarg),
@@ -207,7 +219,7 @@ def define(
             argstr="",
             position=0,
             default=executable,
-            validator=attrs.validators.min_len(1),
+            validator=executable_validator,
             help=Task.EXECUTABLE_HELP,
         )
 
