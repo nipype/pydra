@@ -1,6 +1,5 @@
 from pathlib import Path
 import typing as ty
-import docker as docker_engine
 from pydra.environments import native, docker, singularity
 from pydra.engine.submitter import Submitter
 from fileformats.generic import File
@@ -510,6 +509,8 @@ def test_docker_fileout_st(tmp_path):
 @need_docker
 def test_entrypoint(tmp_path):
     """docker env: task with a file in the output"""
+
+    import docker as docker_engine
 
     dc = docker_engine.from_env()
 
