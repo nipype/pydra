@@ -1175,7 +1175,7 @@ class State:
         val_ind = range(prod(shape))
         if op_single in self.inner_inputs:
             # TODO: have to be changed if differ length
-            inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1], 1)
+            inner_len = [shape[-1]] * prod(shape[:-1])
 
             # this come from the previous node
             outer_ind = self.inner_inputs[op_single].ind_l
