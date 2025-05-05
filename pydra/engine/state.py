@@ -1150,7 +1150,7 @@ class State:
         else:
             container_ndim = self.container_ndim_all.get(term, 1)
             shape = input_shape(self.inputs[term], container_ndim=container_ndim)
-            var_ind = range(reduce(lambda x, y: x * y, shape, 1))
+            var_ind = range(prod(shape))
             new_keys = [term]
             # checking if the term is in inner_inputs
             if term in self.inner_inputs:
