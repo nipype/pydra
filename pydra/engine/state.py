@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 import itertools
-from functools import reduce
+from math import prod
 import logging
 import typing as ty
 from pydra.utils.typing import StateArray, TypeParser
