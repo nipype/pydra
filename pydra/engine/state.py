@@ -1172,7 +1172,7 @@ class State:
             self.inputs[op_single],
             container_ndim=self.container_ndim_all.get(op_single, 1),
         )
-        val_ind = range(reduce(lambda x, y: x * y, shape, 1))
+        val_ind = range(prod(shape))
         if op_single in self.inner_inputs:
             # TODO: have to be changed if differ length
             inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1], 1)
