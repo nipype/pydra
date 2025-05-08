@@ -342,14 +342,14 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         graph.node(lf._node.name).state
                         and graph.node(lf._node.name).state.splitter_rpn_final
                     ):
-                        # variables that are part of inner splitters should be
+                        # variables that are part of scoped splitters should be
                         # treated as a containers
                         if (
                             node.state
                             and f"{node.name}.{field.name}"
                             in node.state._current_splitter_rpn
                         ):
-                            node.state._inner_container_ndim[
+                            node.state._scoped_container_ndim[
                                 f"{node.name}.{field.name}"
                             ] = 1
                         # adding task_name: (job.state, [a field from the connection]
