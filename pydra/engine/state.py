@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 import itertools
-from functools import reduce
+from math import prod
 import logging
 import typing as ty
 from pydra.utils.typing import StateArray, TypeParser
@@ -1150,12 +1150,12 @@ class State:
         else:
             container_ndim = self.container_ndim_all.get(term, 1)
             shape = input_shape(self.inputs[term], container_ndim=container_ndim)
-            var_ind = range(reduce(lambda x, y: x * y, shape))
+            var_ind = range(prod(shape))
             new_keys = [term]
             # checking if the term is in inputs_previous_states
             if term in self.inputs_previous_states:
                 # TODO: have to be changed if differ length
-                inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+                inner_len = [shape[-1]] * prod(shape[:-1])
                 # this come from the previous node
                 outer_ind = self.inputs_previous_states[term].ind_l
                 var_ind_out = itertools.chain.from_iterable(
@@ -1172,10 +1172,10 @@ class State:
             self.inputs[op_single],
             container_ndim=self.container_ndim_all.get(op_single, 1),
         )
-        val_ind = range(reduce(lambda x, y: x * y, shape))
+        val_ind = range(prod(shape))
         if op_single in self.inputs_previous_states:
             # TODO: have to be changed if differ length
-            inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1], 1)
+            inner_len = [shape[-1]] * prod(shape[:-1])
 
             # this come from the previous node
             outer_ind = self.inputs_previous_states[op_single].ind_l
