@@ -26,6 +26,8 @@ class Environment:
     TODO: add setup and teardown methods
     """
 
+    has_entrypoint = False
+
     def setup(self):
         pass
 
@@ -106,6 +108,8 @@ class Container(Environment):
     xargs : Union[str, List[str]]
         Extra arguments to be passed to the container
     """
+
+    has_entrypoint = True
 
     image: str
     tag: str = "latest"
