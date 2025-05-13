@@ -26,7 +26,6 @@ from pydra.utils.typing import (
 )
 from pydra.compose import base
 from pydra.compose.base.field import RequirementSet
-from pydra.environments.base import Container
 from pydra.compose.base.helpers import is_set
 from . import field
 from .templating import (
@@ -255,7 +254,8 @@ class ShellTask(base.Task[ShellOutputsType]):
 
     def _run(self, job: "Job[ShellTask]", rerun: bool = True) -> None:
         """Run the shell command."""
-        if self.executable is None and not isinstance(job.environment, Container):
+
+        if self.executable is None and not job.environment.has_entrypoint:
             raise ValueError(
                 "executable is not set, and the environment is not a container "
                 f"({job.environment}) with an entrypoint"
