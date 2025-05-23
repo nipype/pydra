@@ -2,7 +2,6 @@ import typing as ty
 import types
 from pathlib import Path
 from copy import copy
-import attrs.validators
 from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union
 import attrs
 from .task import Task, Outputs
