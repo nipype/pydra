@@ -34,6 +34,8 @@ def pytest_generate_tests(metafunc):
                 available_workers.append("dask")
             if bool(shutil.which("sbatch")):
                 available_workers.append("slurm")
+            if bool(shutil.which("oarsub")):
+                available_workers.append("oar")
         else:
             available_workers = [only_worker]
         # Set the available workers as a parameter to the
