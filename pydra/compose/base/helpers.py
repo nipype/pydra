@@ -67,7 +67,7 @@ def ensure_field_objects(
             else:
                 arg.name = input_name
             if not arg.help:
-                arg.help = input_helps.get(input_name, "")
+                arg.help = input_helps.get(input_name, "") if input_helps else ""
         elif is_type(arg):
             inputs[input_name] = arg_type(
                 type=arg,
@@ -101,7 +101,7 @@ def ensure_field_objects(
             else:
                 out.name = output_name
             if not out.help:
-                out.help = output_helps.get(output_name, "")
+                out.help = output_helps.get(output_name, "") if output_helps else ""
         elif is_type(out):
             outputs[output_name] = out_type(
                 type=out,
