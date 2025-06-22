@@ -1,16 +1,20 @@
+import pytest
 from pydra.scripts.cli import crash
-from pydra.utils.general import default_run_cache_root
 from pydra.tasks.testing import Divide
 from traceback import format_exception
 import typing as ty
 
 
 # @pytest.mark.xfail(reason="Need to fix a couple of things after syntax changes")
-def test_crash_cli(cli_runner):
+def test_crash_cli(cli_runner, tmp_path):
+    divide = Divide(x=15, y=0)
+    with pytest.raises(ZeroDivisionError):
+        divide(cache_root=tmp_path)
+
     result = cli_runner(
         crash,
         [
-            f"{default_run_cache_root}/{Divide(x=15, y=0)._checksum}/_error.pklz",
+            f"{tmp_path}/{divide._checksum}/_error.pklz",
             "--rerun",
             "--debugger",
             "pdb",
