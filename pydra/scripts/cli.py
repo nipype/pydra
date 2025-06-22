@@ -2,7 +2,6 @@ from pathlib import Path
 import pdb
 import sys
 
-from IPython.core import ultratb
 import click
 import cloudpickle as cp
 
@@ -40,9 +39,16 @@ def crash(crashfile, rerun, debugger=None):
                     job_obj = cp.load(f)
 
                 if debugger == "ipython":
-                    sys.excepthook = ultratb.FormattedTB(
-                        mode="Verbose", theme_name="Linux", call_pdb=True
-                    )
+                    try:
+                        from IPython.core import ultratb
+
+                        sys.excepthook = ultratb.FormattedTB(
+                            mode="Verbose", theme_name="Linux", call_pdb=True
+                        )
+                    except ImportError:
+                        raise ImportError(
+                            "'Ipython' needs to be installed to use the 'ipython' debugger"
+                        )
 
                 try:
                     job_obj.run(rerun=True)
