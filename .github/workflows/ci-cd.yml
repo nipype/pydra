@@ -182,7 +182,7 @@ jobs:
         docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
         docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v ${{ matrix.python-version }}"
         docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
-        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
+        docker exec slurm bash -c "pip install --upgrade pip && pip install 'numpy<2' -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
         docker exec slurm bash -c "cd /pydra; pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
@@ -315,9 +315,12 @@ jobs:
       with:
         auto-activate-base: true
         activate-environment: ""
+    # We generate dummy aliases so they can be deleted by conda later without throwing an error
     - name: Install MRtrix via Conda
       run: |
-        conda install -c mrtrix3 mrtrix3
+        alias shview='ls'
+        alias mrview='ls'
+        conda install -c conda-forge -c MRtrix3 mrtrix3 libstdcxx-ng
         mrconvert --version
     - name: Set up Python
       uses: actions/setup-python@v5
