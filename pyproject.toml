@@ -14,7 +14,6 @@ dependencies = [
     "filelock >=3.0.0",
     "fileformats >=0.15.0a7",
     "platformdirs >=2",
-    "ipython",
 ]
 license = { file = "LICENSE" }
 authors = [{ name = "Nipype developers", email = "neuroimaging@python.org" }]
@@ -44,6 +43,7 @@ doc = [
     "fileformats-medimage >= v0.10.0a2",
     "fileformats-medimage-extras >= v0.10.0a2",
     "furo>=2022.2.14.1",
+    "ipython",
     "ipykernel",
     "ipywidgets",
     "matplotlib",
