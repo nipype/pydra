@@ -315,8 +315,11 @@ jobs:
       with:
         auto-activate-base: true
         activate-environment: ""
+    # We generate dummy aliases so they can be deleted by conda later without throwing an error
     - name: Install MRtrix via Conda
       run: |
+        alias shview='ls'
+        alias mrview='ls'
         conda install -c conda-forge -c MRtrix3 mrtrix3 libstdcxx-ng
         mrconvert --version
     - name: Set up Python
