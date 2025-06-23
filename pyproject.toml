@@ -114,6 +114,9 @@ documentation = "https://nipype.github.io/pydra/"
 homepage = "https://nipype.github.io/pydra/"
 repository = "https://github.com/nipype/pydra.git"
 
+[project.scripts]
+pydracli = "pydra.scripts.cli:cli"
+
 [tool.hatch.build]
 packages = ["pydra"]
 exclude = ["tests"]
