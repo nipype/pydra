@@ -1,6 +1,8 @@
 import shutil
 import os
 import pytest
+import typing as ty
+from click.testing import CliRunner, Result as CliResult
 
 os.environ["NO_ET"] = "true"
 
@@ -43,17 +45,39 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("any_worker", available_workers)
 
 
+@pytest.fixture
+def cli_runner(catch_cli_exceptions: bool) -> ty.Callable[..., ty.Any]:
+    def invoke(
+        *args: ty.Any, catch_exceptions: bool = catch_cli_exceptions, **kwargs: ty.Any
+    ) -> CliResult:
+        runner = CliRunner()
+        result = runner.invoke(*args, catch_exceptions=catch_exceptions, **kwargs)  # type: ignore[misc]
+        return result
+
+    return invoke
+
+
 # For debugging in IDE's don't catch raised exceptions and let the IDE
 # break at it
-if os.getenv("_PYTEST_RAISE", "0") != "0":  # pragma: no cover
+if os.getenv("_PYTEST_RAISE", "0") != "0":
 
-    @pytest.hookimpl(tryfirst=True)  # pragma: no cover
-    def pytest_exception_interact(call):  # pragma: no cover
-        raise call.excinfo.value  # pragma: no cover
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_exception_interact(call: pytest.CallInfo[ty.Any]) -> None:
+        if call.excinfo is not None:
+            raise call.excinfo.value
 
-    @pytest.hookimpl(tryfirst=True)  # pragma: no cover
-    def pytest_internalerror(excinfo):  # pragma: no cover
-        raise excinfo.value  # pragma: no cover
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_internalerror(excinfo: pytest.ExceptionInfo[BaseException]) -> None:
+        raise excinfo.value
+
+    CATCH_CLI_EXCEPTIONS = False
+else:
+    CATCH_CLI_EXCEPTIONS = True
+
+
+@pytest.fixture
+def catch_cli_exceptions() -> bool:
+    return CATCH_CLI_EXCEPTIONS
 
 
 # Example VSCode launch configuration for debugging unittests
