@@ -229,7 +229,12 @@ class Field:
 
     @requires.validator
     def _requires_validator(self, _, value):
-        if value and self.type not in (ty.Any, bool) and not is_optional(self.type):
+        if (
+            value
+            and self.type not in (ty.Any, bool)
+            and not is_optional(self.type)
+            and not issubclass(self.type, ty.Sequence)
+        ):
             raise ValueError(
                 f"Fields with requirements must be of optional type (i.e. in union "
                 f"with None) or boolean, not type {self.type} ({self!r})"
