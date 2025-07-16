@@ -26,6 +26,8 @@ class Environment:
     TODO: add setup and teardown methods
     """
 
+    has_entrypoint = False
+
     def setup(self):
         pass
 
@@ -106,6 +108,8 @@ class Container(Environment):
     xargs : Union[str, List[str]]
         Extra arguments to be passed to the container
     """
+
+    has_entrypoint = True
 
     image: str
     tag: str = "latest"
@@ -200,52 +204,46 @@ class Container(Environment):
         return bindings, values
 
 
-def execute(cmd, strip=False):
-    """
-    Run the event loop with coroutine.
-
-    Uses :func:`read_and_display_async` unless a loop is
-    already running, in which case :func:`read_and_display`
-    is used.
+def read_and_display(
+    *cmd: str, strip: bool = False, hide_display: bool = False
+) -> dict[str, int | str]:
+    """Capture a process' standard output.
 
     Parameters
     ----------
-    cmd : :obj:`list` or :obj:`tuple`
-        The command line to be executed.
-    strip : :obj:`bool`
-        TODO
+    cmd : str
+        The command to execute, as a list of strings.
+    strip : bool, optional
+        If True, the output will be stripped of leading and trailing whitespace.
+    hide_display : bool, optional
+        If True, the output will not be displayed.
 
-    """
-    rc, stdout, stderr = read_and_display(*cmd, strip=strip)
-    """
-    loop = get_open_loop()
-    if loop.is_running():
-        rc, stdout, stderr = read_and_display(*cmd, strip=strip)
-    else:
-        rc, stdout, stderr = loop.run_until_complete(
-            read_and_display_async(*cmd, strip=strip)
-        )
-    """
-    return rc, stdout, stderr
+    Returns
+    -------
+        dict[str, Any]
+            A dictionary containing the return code, standard output, and standard error.
 
-
-def read_and_display(*cmd, strip=False, hide_display=False):
-    """Capture a process' standard output."""
+    Raises
+    ------
+        RuntimeError
+            If the return code is not 0, a RuntimeError is raised with a formatted
+            error message.
+    """
     try:
         process = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
     except Exception:
         # TODO editing some tracing?
         raise
 
+    stdout = process.stdout.decode("utf-8")
     if strip:
-        return (
-            process.returncode,
-            process.stdout.decode("utf-8").strip(),
-            process.stderr.decode("utf-8"),
-        )
-    else:
-        return (
-            process.returncode,
-            process.stdout.decode("utf-8"),
-            process.stderr.decode("utf-8"),
-        )
+        stdout = stdout.strip()
+    stderr = process.stderr.decode("utf-8")
+    if process.returncode:
+        msg = f"Error executing command {' '.join(cmd)!r} (code: {process.returncode}):"
+        if stdout:
+            msg += "\n\nstderr:\n" + stderr
+        if stdout:
+            msg += "\n\nstdout:\n" + stdout
+        raise RuntimeError(msg)
+    return {"return_code": process.returncode, "stdout": stdout, "stderr": stderr}
