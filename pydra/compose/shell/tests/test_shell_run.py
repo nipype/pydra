@@ -2296,7 +2296,7 @@ def test_shell_cmd_outputspec_7(tmp_path, worker, results_function):
         files_id=new_files_id,
     )
 
-    print(os.environ)
+    raise Exception(str(os.environ))
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == ""
