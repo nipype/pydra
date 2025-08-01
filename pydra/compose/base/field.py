@@ -5,7 +5,13 @@ import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.core import to_mime
 from fileformats.generic import File, FileSet
-from pydra.utils.typing import TypeParser, is_optional, is_truthy_falsy, is_type, is_union
+from pydra.utils.typing import (
+    TypeParser,
+    is_optional,
+    is_truthy_falsy,
+    is_type,
+    is_union,
+)
 from pydra.utils.general import get_fields, wrap_text
 import attrs
 
