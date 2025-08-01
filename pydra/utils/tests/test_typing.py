@@ -11,7 +11,7 @@ from pydra.compose import python
 from fileformats.generic import File
 from pydra.engine.lazy import LazyOutField
 from pydra.compose import workflow
-from pydra.utils.typing import TypeParser, MultiInputObj
+from pydra.utils.typing import TypeParser, MultiInputObj, is_container
 from fileformats.application import Json, Yaml, Xml
 from .utils import (
     GenericFuncTask,
@@ -864,6 +864,34 @@ def test_none_is_subclass1a():
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
 def test_none_is_subclass2a():
     assert not TypeParser.is_subclass(None, int | float)
+
+
+@pytest.mark.parametrize(
+    ("type_",),
+    [
+        (str,),
+        (ty.List[int],),
+        (ty.Tuple[int, ...],),
+        (ty.Dict[str, int],),
+        (ty.Union[ty.List[int], ty.Tuple[int, ...]],),
+        (ty.Union[ty.List[int], ty.Dict[str, int]],),
+        (ty.Union[ty.List[int], ty.Tuple[int, ...], ty.Dict[str, int]],),
+    ],
+)
+def test_is_container(type_):
+    assert is_container(type_)
+
+
+@pytest.mark.parametrize(
+    ("type_",),
+    [
+        (int,),
+        (bool,),
+        (ty.Union[bool, str],),
+    ],
+)
+def test_is_not_container(type_):
+    assert not is_container(type_)
 
 
 @pytest.mark.skipif(

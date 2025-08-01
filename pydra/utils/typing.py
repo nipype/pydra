@@ -1073,6 +1073,8 @@ def is_optional(type_: type) -> bool:
 def is_container(type_: type) -> bool:
     """Check if the type is a container, i.e. a list, tuple, or MultiOutputObj"""
     origin = ty.get_origin(type_)
+    if origin is ty.Union:
+        return all(is_container(a) for a in ty.get_args(type_))
     tp = origin if origin else type_
     return inspect.isclass(tp) and issubclass(tp, ty.Container)
 
