@@ -21,6 +21,7 @@ from pydra.compose.base import (
     extract_fields_from_class,
     ensure_field_objects,
     build_task_class,
+    sanitize_xor,
     NO_DEFAULT,
 )
 from pydra.utils.typing import (
@@ -208,7 +209,7 @@ def define(
         )
 
         # Set positions for the remaining inputs that don't have an explicit position
-        position_stack = remaining_positions(list(parsed_inputs.values()))
+        position_stack = remaining_positions(list(parsed_inputs.values()), xor=xor)
         for inpt in parsed_inputs.values():
             if inpt.name == "append_args":
                 continue
@@ -526,7 +527,10 @@ def parse_command_line_template(
 
 
 def remaining_positions(
-    args: list[Arg], num_args: int | None = None, start: int = 0
+    args: list[Arg],
+    num_args: int | None = None,
+    start: int = 0,
+    xor: set[frozenset[str]] | None = None,
 ) -> ty.List[int]:
     """Get the remaining positions for input fields
 
@@ -536,6 +540,10 @@ def remaining_positions(
         The list of input fields
     num_args : int, optional
         The number of arguments, by default it is the length of the args
+    start : int, optional
+        The starting position, by default 0
+    xor : set[frozenset[str]], optional
+        A set of mutually exclusive fields, by default None
 
     Returns
     -------
@@ -547,6 +555,7 @@ def remaining_positions(
     ValueError
         If multiple fields have the same position
     """
+    xor = sanitize_xor(xor)
     if num_args is None:
         num_args = len(args) - 1  # Subtract 1 for the 'append_args' field
     # Check for multiple positions
@@ -562,7 +571,7 @@ def remaining_positions(
     if multiple_positions := {
         k: [f"{a.name}({a.position})" for a in v]
         for k, v in positions.items()
-        if len(v) > 1
+        if len(v) > 1 and frozenset(a.name for a in v) not in xor
     }:
         raise ValueError(
             f"Multiple fields have the overlapping positions: {multiple_positions}"

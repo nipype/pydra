@@ -5,7 +5,7 @@ import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.core import to_mime
 from fileformats.generic import File, FileSet
-from pydra.utils.typing import TypeParser, is_optional, is_type, is_union
+from pydra.utils.typing import TypeParser, is_optional, is_truthy_falsy, is_type, is_union
 from pydra.utils.general import get_fields, wrap_text
 import attrs
 
@@ -229,10 +229,10 @@ class Field:
 
     @requires.validator
     def _requires_validator(self, _, value):
-        if value and self.type not in (ty.Any, bool) and not is_optional(self.type):
+        if value and not is_truthy_falsy(self.type):
             raise ValueError(
-                f"Fields with requirements must be of optional type (i.e. in union "
-                f"with None) or boolean, not type {self.type} ({self!r})"
+                f"Fields with requirements must be of optional (i.e. in union "
+                f"with None) or truthy/falsy type, not type {self.type} ({self!r})"
             )
 
     def markdown_listing(

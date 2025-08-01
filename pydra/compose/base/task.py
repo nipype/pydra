@@ -4,7 +4,7 @@ from pathlib import Path
 from copy import copy
 from typing import Self
 import attrs.validators
-from pydra.utils.typing import is_optional, is_fileset_or_union
+from pydra.utils.typing import is_optional, is_fileset_or_union, is_truthy_falsy
 from pydra.utils.general import get_fields
 from pydra.utils.typing import StateArray, is_lazy
 from pydra.utils.hash import hash_function
@@ -595,17 +595,17 @@ class Task(ty.Generic[OutputsType]):
         for xor_set in xor:
             if unrecognised := xor_set - (input_names | {None}):
                 raise ValueError(
-                    f"'Unrecognised' field names in referenced in the xor {xor_set} "
+                    f"Unrecognised field names in referenced in the xor {xor_set}: "
                     + str(list(unrecognised))
                 )
             for field_name in xor_set:
                 if field_name is None:  # i.e. none of the fields being set is valid
                     continue
                 type_ = inputs[field_name].type
-                if type_ not in (ty.Any, bool) and not is_optional(type_):
+                if not is_truthy_falsy(type_):
                     raise ValueError(
-                        f"Fields included in a 'xor' ({field_name!r}) must be of boolean "
-                        f"or optional types, not type {type_}"
+                        f"Fields included in a 'xor' ({field_name!r}) must be an optional type or a"
+                        f"truthy/falsy type, not type {type_}"
                     )
 
     def _check_resolved(self):

@@ -1070,6 +1070,24 @@ def is_optional(type_: type) -> bool:
     return False
 
 
+def is_container(type_: type) -> bool:
+    """Check if the type is a container, i.e. a list, tuple, or MultiOutputObj"""
+    origin = ty.get_origin(type_)
+    tp = origin if origin else type_
+    return inspect.isclass(tp) and issubclass(tp, ty.Container)
+
+
+def is_truthy_falsy(type_: type) -> bool:
+    """Check if the type is a truthy type, i.e. not None, bool, or typing.Any"""
+    return (
+        type_ in (ty.Any, bool, int, str)
+        or is_optional(type_)
+        or is_container(type_)
+        or hasattr(type_, "__bool__")
+        or hasattr(type_, "__len__")
+    )
+
+
 def optional_type(type_: type) -> type:
     """Gets the non-None args of an optional type (i.e. a union with a None arg)"""
     if is_optional(type_):
