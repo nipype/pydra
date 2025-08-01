@@ -379,6 +379,20 @@ def check_explicit_fields_are_none(klass, inputs, outputs):
         )
 
 
+def sanitize_xor(
+    xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]],
+) -> set[frozenset[str]]:
+    """Convert a list of xor sets into a set of frozensets"""
+    # Convert a single xor set into a set of xor sets
+    if not xor:
+        xor = frozenset()
+    elif all(isinstance(x, str) or x is None for x in xor):
+        xor = frozenset([frozenset(xor)])
+    else:
+        xor = frozenset(frozenset(x) for x in xor)
+    return xor
+
+
 def extract_fields_from_class(
     spec_type: type["Task"],
     outputs_type: type["Outputs"],

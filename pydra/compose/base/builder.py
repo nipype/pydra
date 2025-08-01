@@ -19,6 +19,7 @@ from pydra.utils.typing import (
     is_lazy,
 )
 from .field import Field, Arg, Out
+from .helpers import sanitize_xor
 
 
 def build_task_class(
@@ -65,15 +66,7 @@ def build_task_class(
     klass : type
         The class created using the attrs package
     """
-
-    # Convert a single xor set into a set of xor sets
-    if not xor:
-        xor = frozenset()
-    elif all(isinstance(x, str) or x is None for x in xor):
-        xor = frozenset([frozenset(xor)])
-    else:
-        xor = frozenset(frozenset(x) for x in xor)
-
+    xor = sanitize_xor(xor)
     spec_type._check_arg_refs(inputs, outputs, xor)
 
     # Check that the field attributes are valid after all fields have been set
