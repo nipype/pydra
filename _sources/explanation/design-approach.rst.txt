@@ -7,16 +7,16 @@ Rationale
 
 Scientific workflows often require sophisticated analyses that encompass a large collection
 of algorithms.
-The algorithms, that were originally not necessarily designed to work together,
-and were written by different authors.
-Some may be written in Python, while others might require calling external programs.
+These algorithms are frequently written by different authors, and rarely designed to work together.
+Some may be written in Python, our language of choice,
+while others might require calling external programs.
 It is a common practice to create semi-manual workflows that require the scientists
 to handle the files and interact with partial results from algorithms and external tools.
 This approach is conceptually simple and easy to implement, but the resulting workflow
 is often time consuming, error-prone and difficult to share with others.
 Consistency, reproducibility and scalability demand scientific workflows
-to be organized into fully automated pipelines.
-This was the motivation behind Pydra - a new dataflow engine written in Python.
+to be organized into fully-automated pipelines.
+This was the motivation behind Pydra - a dataflow engine written in Python.
 
 History
 -------
@@ -39,8 +39,8 @@ Goals
 
 The goal of Pydra is to provide a lightweight dataflow engine for computational graph construction,
 manipulation, and distributed execution, as well as ensuring reproducibility of scientific pipelines.
-In Pydra, a dataflow is represented as a directed acyclic graph, where each node represents a Python
-function, execution of an external tool, or another reusable dataflow.
+In Pydra, a dataflow is represented as a directed acyclic graph, where each node represents
+the invocation of a Python function, an external tool, or another reusable dataflow.
 The combination of several key features makes Pydra a customizable and powerful dataflow engine:
 
 - Composable dataflows: Any node of a dataflow graph can be another dataflow, allowing for nested

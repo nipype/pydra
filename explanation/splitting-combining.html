@@ -4,12 +4,13 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Dynamic construction" href="conditional-lazy.html" /><link rel="prev" title="Design philosophy" href="design-approach.html" />
+        <link rel="prefetch" href="../_static/pydra_logo.png" as="image" />
 
-    <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>Splitting and combining - Pydra v1.0a1</title>
+    <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2025.07.19 -->
+        <title>Splitting and combining - Pydra v1.0a2</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=302659d7" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=25af2a20" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=1e8e7625" />
     
     
@@ -173,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a1</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a2</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -195,12 +196,11 @@
     <div class="sidebar-container">
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
-  
   <div class="sidebar-logo-container">
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a1</span>
+  <span class="sidebar-brand-text">Pydra v1.0a2</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -316,16 +316,15 @@ nodes represent stateless copies of the original Task after splitting the input,
 </figure>
 <section id="types-of-splitter">
 <h2>Types of Splitter<a class="headerlink" href="#types-of-splitter" title="Link to this heading">¶</a></h2>
-<p>Whenever a <em>Task</em> has more complicated inputs,
-i.e. multiple fields, there are two ways of creating the mapping,
-each one is used for different application.
-These <em>splitters</em> are called <em>scalar splitter</em> and <em>outer splitter</em>.
+<p>Whenever a <em>Task</em> has more complicated inputs, for example, multiple fields,
+there are two ways of creating the mapping, each one is used for different application.
+These <em>splitters</em> are called <em>inner splitter</em> and <em>outer splitter</em>.
 They use a special, but Python-based syntax as described next.</p>
 </section>
-<section id="scalar-splitter">
-<h2>Scalar Splitter<a class="headerlink" href="#scalar-splitter" title="Link to this heading">¶</a></h2>
-<p>A <em>scalar splitter</em> performs element-wise mapping and requires that the lists of
-values for two or more fields to have the same length. The <em>scalar splitter</em> uses
+<section id="inner-splitter">
+<h2>Inner Splitter<a class="headerlink" href="#inner-splitter" title="Link to this heading">¶</a></h2>
+<p>A <em>inner splitter</em> performs element-wise mapping and requires that the lists of
+values for two or more fields to have the same length. The <em>inner splitter</em> uses
 Python tuples and its operation is therefore represented by a parenthesis, <code class="docutils literal notranslate"><span class="pre">()</span></code>:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -337,6 +336,7 @@ This is also represented as a diagram:</p>
 <a class="reference internal image-reference" href="../_images/nd_spl_4.png"><img alt="../_images/nd_spl_4.png" src="../_images/nd_spl_4.png" style="width: 302.40000000000003px; height: 224.0px;" />
 </a>
 </figure>
+<p>Inner splitters can be analogized to the Python builtin function <a class="reference external" href="https://docs.python.org/3/library/functions.html#zip" title="(in Python v3.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">zip()</span></code></a>.</p>
 </section>
 <section id="outer-splitter">
 <h2>Outer Splitter<a class="headerlink" href="#outer-splitter" title="Link to this heading">¶</a></h2>
@@ -361,6 +361,7 @@ combinations of values of <cite>inp1</cite> with pairwise combinations of values
 and <cite>inp3</cite>. This can be extended to arbitrary complexity.
 In additional, the output can be merge at the end if needed.
 This will be explained in the next section.</p>
+<p>Outer splitters can be analogized to the Python function <a class="reference external" href="https://docs.python.org/3/library/itertools.html#itertools.product" title="(in Python v3.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">itertools.product()</span></code></a>.</p>
 </section>
 </section>
 
@@ -421,7 +422,7 @@ This will be explained in the next section.</p>
             <ul>
 <li><a class="reference internal" href="#">Splitting and combining</a><ul>
 <li><a class="reference internal" href="#types-of-splitter">Types of Splitter</a></li>
-<li><a class="reference internal" href="#scalar-splitter">Scalar Splitter</a></li>
+<li><a class="reference internal" href="#inner-splitter">Inner Splitter</a></li>
 <li><a class="reference internal" href="#outer-splitter">Outer Splitter</a></li>
 </ul>
 </li>
@@ -434,10 +435,10 @@ This will be explained in the next section.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=26148a57"></script>
+</div><script src="../_static/documentation_options.js?v=5ca231b8"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="../_static/scripts/furo.js?v=5fa4622c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>

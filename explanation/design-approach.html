@@ -4,12 +4,13 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Splitting and combining" href="splitting-combining.html" /><link rel="prev" title="Port interfaces from Nipype" href="../howto/port-from-nipype.html" />
+        <link rel="prefetch" href="../_static/pydra_logo.png" as="image" />
 
-    <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>Design philosophy - Pydra v1.0a1</title>
+    <link rel="shortcut icon" href="../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2025.07.19 -->
+        <title>Design philosophy - Pydra v1.0a2</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=302659d7" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=25af2a20" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=1e8e7625" />
     
     
@@ -173,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a1</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a2</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -195,12 +196,11 @@
     <div class="sidebar-container">
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
-  
   <div class="sidebar-logo-container">
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a1</span>
+  <span class="sidebar-brand-text">Pydra v1.0a2</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -292,16 +292,16 @@
 <h2>Rationale<a class="headerlink" href="#rationale" title="Link to this heading">¶</a></h2>
 <p>Scientific workflows often require sophisticated analyses that encompass a large collection
 of algorithms.
-The algorithms, that were originally not necessarily designed to work together,
-and were written by different authors.
-Some may be written in Python, while others might require calling external programs.
+These algorithms are frequently written by different authors, and rarely designed to work together.
+Some may be written in Python, our language of choice,
+while others might require calling external programs.
 It is a common practice to create semi-manual workflows that require the scientists
 to handle the files and interact with partial results from algorithms and external tools.
 This approach is conceptually simple and easy to implement, but the resulting workflow
 is often time consuming, error-prone and difficult to share with others.
 Consistency, reproducibility and scalability demand scientific workflows
-to be organized into fully automated pipelines.
-This was the motivation behind Pydra - a new dataflow engine written in Python.</p>
+to be organized into fully-automated pipelines.
+This was the motivation behind Pydra - a dataflow engine written in Python.</p>
 </section>
 <section id="history">
 <h2>History<a class="headerlink" href="#history" title="Link to this heading">¶</a></h2>
@@ -322,8 +322,8 @@ to support any scientific domain.</p>
 <h2>Goals<a class="headerlink" href="#goals" title="Link to this heading">¶</a></h2>
 <p>The goal of Pydra is to provide a lightweight dataflow engine for computational graph construction,
 manipulation, and distributed execution, as well as ensuring reproducibility of scientific pipelines.
-In Pydra, a dataflow is represented as a directed acyclic graph, where each node represents a Python
-function, execution of an external tool, or another reusable dataflow.
+In Pydra, a dataflow is represented as a directed acyclic graph, where each node represents
+the invocation of a Python function, an external tool, or another reusable dataflow.
 The combination of several key features makes Pydra a customizable and powerful dataflow engine:</p>
 <ul class="simple">
 <li><p>Composable dataflows: Any node of a dataflow graph can be another dataflow, allowing for nested
@@ -415,10 +415,10 @@ and outputs of each task in a dataflow, and the resources consumed by the task.<
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=26148a57"></script>
+</div><script src="../_static/documentation_options.js?v=5ca231b8"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="../_static/scripts/furo.js?v=5fa4622c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     </body>
 </html>

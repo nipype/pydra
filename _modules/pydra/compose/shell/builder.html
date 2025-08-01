@@ -3,12 +3,13 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../../genindex.html" /><link rel="search" title="Search" href="../../../../search.html" />
+        <link rel="prefetch" href="../../../../_static/pydra_logo.png" as="image" />
 
-    <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>pydra.compose.shell.builder - Pydra v1.0a1</title>
+    <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"/><!-- Generated with Sphinx 8.1.3 and Furo 2025.07.19 -->
+        <title>pydra.compose.shell.builder - Pydra v1.0a2</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=beddf052" />
-    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=354aac6f" />
-    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=302659d7" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=25af2a20" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=1e8e7625" />
     
     
@@ -172,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../../index.html"><div class="brand">Pydra v1.0a1</div></a>
+      <a href="../../../../index.html"><div class="brand">Pydra v1.0a2</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,12 +195,11 @@
     <div class="sidebar-container">
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../../index.html">
-  
   <div class="sidebar-logo-container">
     <img class="sidebar-logo" src="../../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a1</span>
+  <span class="sidebar-brand-text">Pydra v1.0a2</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -303,6 +303,7 @@
     <span class="n">extract_fields_from_class</span><span class="p">,</span>
     <span class="n">ensure_field_objects</span><span class="p">,</span>
     <span class="n">build_task_class</span><span class="p">,</span>
+    <span class="n">sanitize_xor</span><span class="p">,</span>
     <span class="n">NO_DEFAULT</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -492,7 +493,7 @@
         <span class="p">)</span>
 
         <span class="c1"># Set positions for the remaining inputs that don&#39;t have an explicit position</span>
-        <span class="n">position_stack</span> <span class="o">=</span> <span class="n">remaining_positions</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">parsed_inputs</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+        <span class="n">position_stack</span> <span class="o">=</span> <span class="n">remaining_positions</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">parsed_inputs</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span> <span class="n">xor</span><span class="o">=</span><span class="n">xor</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">inpt</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">inpt</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;append_args&quot;</span><span class="p">:</span>
                 <span class="k">continue</span>
@@ -811,7 +812,10 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">remaining_positions</span><span class="p">(</span>
-    <span class="n">args</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Arg</span><span class="p">],</span> <span class="n">num_args</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">args</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Arg</span><span class="p">],</span>
+    <span class="n">num_args</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">xor</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the remaining positions for input fields</span>
 
@@ -821,6 +825,10 @@
 <span class="sd">        The list of input fields</span>
 <span class="sd">    num_args : int, optional</span>
 <span class="sd">        The number of arguments, by default it is the length of the args</span>
+<span class="sd">    start : int, optional</span>
+<span class="sd">        The starting position, by default 0</span>
+<span class="sd">    xor : set[frozenset[str]], optional</span>
+<span class="sd">        A set of mutually exclusive fields, by default None</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -832,6 +840,7 @@
 <span class="sd">    ValueError</span>
 <span class="sd">        If multiple fields have the same position</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">xor</span> <span class="o">=</span> <span class="n">sanitize_xor</span><span class="p">(</span><span class="n">xor</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">num_args</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">num_args</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>  <span class="c1"># Subtract 1 for the &#39;append_args&#39; field</span>
     <span class="c1"># Check for multiple positions</span>
@@ -847,7 +856,7 @@
     <span class="k">if</span> <span class="n">multiple_positions</span> <span class="o">:=</span> <span class="p">{</span>
         <span class="n">k</span><span class="p">:</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">position</span><span class="si">}</span><span class="s2">)&quot;</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">v</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">positions</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">issuperset</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">xor</span><span class="p">)</span>
     <span class="p">}:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Multiple fields have the overlapping positions: </span><span class="si">{</span><span class="n">multiple_positions</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -908,10 +917,10 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=26148a57"></script>
+</div><script src="../../../../_static/documentation_options.js?v=5ca231b8"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="../../../../_static/scripts/furo.js?v=5fa4622c"></script>
+    <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     </body>
 </html>
