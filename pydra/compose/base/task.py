@@ -604,7 +604,7 @@ class Task(ty.Generic[OutputsType]):
                 type_ = inputs[field_name].type
                 if not is_truthy_falsy(type_):
                     raise ValueError(
-                        f"Fields included in a 'xor' ({field_name!r}) must be an optional type or a"
+                        f"Fields included in a 'xor' ({field_name!r}) must be an optional type or a "
                         f"truthy/falsy type, not type {type_}"
                     )
 

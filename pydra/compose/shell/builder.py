@@ -571,7 +571,7 @@ def remaining_positions(
     if multiple_positions := {
         k: [f"{a.name}({a.position})" for a in v]
         for k, v in positions.items()
-        if len(v) > 1 and frozenset(a.name for a in v) not in xor
+        if len(v) > 1 and not any(x.issuperset(a.name for a in v) for x in xor)
     }:
         raise ValueError(
             f"Multiple fields have the overlapping positions: {multiple_positions}"
