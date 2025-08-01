@@ -2251,9 +2251,7 @@ def test_shell_cmd_outputspec_6a(tmp_path):
 
 
 @pytest.mark.xfail(
-    sys.platform == "linux"
-    and sys.version_info < (3, 12)
-    and os.environ.get("DEPENDS") == "pre",
+    sys.platform == "linux" and os.environ.get("TOX_ENV_NAME") == "py311-pre",
     reason="I'm not sure why this is failing only on this part of the test matrix, hoping it will just go away :)",
 )
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -2295,8 +2293,6 @@ def test_shell_cmd_outputspec_7(tmp_path, worker, results_function):
         script=file,
         files_id=new_files_id,
     )
-
-    raise Exception(str(os.environ))
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == ""
