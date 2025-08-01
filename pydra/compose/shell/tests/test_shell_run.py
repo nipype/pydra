@@ -2252,7 +2252,7 @@ def test_shell_cmd_outputspec_6a(tmp_path):
 
 @pytest.mark.xfail(
     sys.platform == "linux" and sys.version_info < (3, 12),
-    reason="I'm not sure why this requirements specification should fail",
+    reason="I'm not sure why this is failing but only on Linux pre with Python < 3.12",
 )
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_outputspec_7(tmp_path, worker, results_function):
