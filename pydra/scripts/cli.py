@@ -6,7 +6,9 @@ import click
 import cloudpickle as cp
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
-ExistingFilePath = click.Path(exists=True, dir_okay=False, resolve_path=True)
+ExistingFilePath = click.Path(
+    exists=True, dir_okay=False, resolve_path=True, path_type=Path
+)
 
 
 @click.group(context_settings=CONTEXT_SETTINGS)
@@ -25,9 +27,9 @@ def cli():
     type=click.Choice([None, "ipython", "pdb"]),
     help="Debugger to use when rerunning",
 )
-def crash(crashfile, rerun, debugger=None):
+def crash(crashfile: Path, rerun: bool, debugger: str | None = None):
     """Display a crash file and rerun if required."""
-    if crashfile.endswith(("pkl", "pklz")):
+    if crashfile.name.endswith(("pkl", "pklz")):
         with open(crashfile, "rb") as f:
             crash_content = cp.load(f)
         print("".join(crash_content["error message"]))

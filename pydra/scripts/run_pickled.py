@@ -1,5 +1,6 @@
 import cloudpickle as cp
 import sys
+import typing as ty
 from pathlib import Path
 from pydra.engine.job import load_and_run
 
@@ -8,8 +9,8 @@ from pydra.engine.job import load_and_run
 sys.path.append(str(Path(__file__).parent.parent))
 
 
-def run_pickled(*file_paths, rerun=False):
-    loaded_objects = []
+def run_pickled(*file_paths: list[Path], rerun: bool = False):
+    loaded_objects: list[ty.Any] = []
 
     for file_path in file_paths:
         with open(file_path, "rb") as file:
