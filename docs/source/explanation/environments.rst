@@ -24,8 +24,11 @@ Example:
 
     from pydra.environments import native, docker, singularity
     from pydra.compose import shell
+
     # Define a simple shell task
-    shelly = shell.fuse("echo hello")
+    Shelly = shell.define("echo <text:str>")
+
+    shelly = Shelly(text="Hello, Pydra!")
 
     # Execute with a native environment
     outputs_native = shelly(environment=native.Environment())
@@ -34,7 +37,9 @@ Example:
     outputs_docker = shelly(environment=docker.Environment(image="busybox"))
 
     # Execute with a Singularity environment (assuming an image is available)
-    outputs_singularity = shelly(environment=singularity.Environment(image="/path/to/image.sif"))
+    outputs_singularity = shelly(
+        environment=singularity.Environment(image="/path/to/image.sif")
+    )
 
 Alternatively, when using a `pydra.engine.submitter.Submitter`, the environment can be specified in the Submitter constructor:
 
@@ -44,7 +49,8 @@ Alternatively, when using a `pydra.engine.submitter.Submitter`, the environment 
     from pydra.environments import native
     from pydra.compose import shell
 
-    shelly = shell.fuse("echo hello")
+    Shelly = shell.define("echo <text:str>")
+    shelly = Shelly(text="Hello, Pydra!")
     with Submitter(environment=native.Environment()) as sub:
         result = sub(shelly)
 
@@ -63,9 +69,10 @@ Example:
     from pydra.compose import workflow, shell
     from fileformats.generic import File
 
-    image = "/path/to/my_singularity_image.sif" # Replace with your Singularity image path
+    image = "/path/to/my_singularity_image.sif"  # Replace with your Singularity image path
 
-    Singu = shell.define("cat {file}")
+    Singu = shell.define("cat <file>")
+
 
     def MyWorkflow(file: File) -> str:
         singu_task = workflow.add(
@@ -87,25 +94,27 @@ Example (simplified custom environment):
 
 .. code-block:: python
 
-    from pydra.environments import Environment as PydraEnvironment
+    from pydra.environments.base import Environment as PydraEnvironment
+    import typing as ty
+
 
     class MyCustomEnvironment(PydraEnvironment):
         def __init__(self, some_config: str):
             super().__init__()
             self.some_config = some_config
 
-        def _setup(self):
+        def setup(self):
             # Logic to set up the custom environment
             print(f"Setting up custom environment with config: {self.some_config}")
 
-        def _execute(self, command: list):
+        def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
             # Logic to execute a command within the custom environment
             # This is where you would integrate with a custom execution system
-            print(f"Executing command: {' '.join(command)} in custom environment")
+            print(f"Executing command: '{job.task.cmdline}' in custom environment")
             # For demonstration, just return a dummy result
-            return {"stdout": "Custom environment output", "return_code": 0}
+            return {"stdout": "Custom environment output", "stderr": "", "return_code": 0}
 
-        def _tear_down(self):
+        def teardown(self):
             # Logic to tear down the custom environment
             print("Tearing down custom environment")
 
@@ -114,8 +123,10 @@ Then, you can use your custom environment like any other built-in environment:
 .. code-block:: python
 
     from pydra.compose import shell
+    from pydra.engine.job import Job
+
     # Assume MyCustomEnvironment is defined as above
-    my_task = shell.fuse("echo Hello from custom env")
+    my_task = shell.define("echo <text:str>")(text="Hello from custom env")
     outputs = my_task(environment=MyCustomEnvironment(some_config="test"))
     print(outputs.stdout)
 
