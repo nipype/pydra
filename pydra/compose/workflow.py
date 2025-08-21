@@ -228,11 +228,11 @@ def this() -> "Workflow":
     return Workflow.under_construction()
 
 
-OutputsType = ty.TypeVar("OutputsType", bound="Outputs")
+OutputsType = ty.TypeVar("OutputsType", bound="base.Outputs")
 
 
 def add(
-    task: "Task[OutputsType]",
+    task: "base.Task[OutputsType]",
     name: str | None = None,
     environment: "Environment | None" = None,
     hooks: "TaskHooks | None" = None,
