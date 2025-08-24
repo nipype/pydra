@@ -503,3 +503,50 @@ def test_docker_fileout_st(tmp_path):
         "file_1_copy.txt",
         "file_2_copy.txt",
     ]
+
+
+@no_win
+@need_docker
+def test_entrypoint(tmp_path):
+    """docker env: task with a file in the output"""
+
+    import docker as docker_engine
+
+    dc = docker_engine.from_env()
+
+    # Create executable that runs validator then produces some mock output
+    # files
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    entrypoint = build_dir / "entrypoint.sh"
+    with open(entrypoint, "w") as f:
+        f.write("#!/bin/sh\necho hello $1")
+
+    IMAGE_TAG = "pydra-test-entrypoint"
+
+    # Build mock BIDS app image
+    with open(build_dir / "Dockerfile", "w") as f:
+        f.write(
+            """FROM busybox
+ADD ./entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]"""
+        )
+
+    dc.images.build(path=str(build_dir), tag=IMAGE_TAG + ":latest")
+
+    @shell.define
+    class TestEntrypoint(shell.Task):
+        """task with a file in the output"""
+
+        executable = None
+        persons_name: str = shell.arg(help="the name of the person to say hello to")
+
+        class Outputs(shell.Outputs):
+            pass
+
+    test_entrypoint = TestEntrypoint(persons_name="Guido")
+
+    outputs = test_entrypoint(environment=docker.Environment(image=IMAGE_TAG))
+
+    assert outputs.stdout == "hello Guido\n"
