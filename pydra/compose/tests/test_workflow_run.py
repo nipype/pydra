@@ -1420,12 +1420,12 @@ def test_wf_ndstLR_2a(worker: str, tmp_path: Path):
     ]
 
 
-# workflows with inner splitters A -> B (inner spl)
+# workflows with "scoped" splitters A -> B
 
 
-def test_wf_ndstinner_1(worker: str, tmp_path: Path):
+def test_wf_ndst_scoped_1(worker: str, tmp_path: Path):
     """workflow with 2 tasks,
-    the second task has inner splitter
+    the second task has scoped splitter
     """
 
     @workflow.define(outputs=["out_list", "out"])
@@ -1446,9 +1446,9 @@ def test_wf_ndstinner_1(worker: str, tmp_path: Path):
     assert outputs.out == [3, 4, 5]
 
 
-def test_wf_ndstinner_2(worker: str, tmp_path: Path):
+def test_wf_ndst_scoped_2(worker: str, tmp_path: Path):
     """workflow with 2 tasks,
-    the second task has two inputs and inner splitter from one of the input
+    the second task has two inputs and scoped splitter from one of the input
     """
 
     @workflow.define(outputs=["out_list", "out"])
@@ -1469,9 +1469,9 @@ def test_wf_ndstinner_2(worker: str, tmp_path: Path):
     assert outputs.out == [10, 20, 30]
 
 
-def test_wf_ndstinner_3(worker: str, tmp_path: Path):
+def test_wf_ndst_scoped_3(worker: str, tmp_path: Path):
     """workflow with 2 tasks,
-    the second task has two inputs and outer splitter that includes an inner field
+    the second task has two inputs and outer splitter that includes an scoped field
     """
 
     @workflow.define(outputs=["out_list", "out"])
@@ -1492,9 +1492,9 @@ def test_wf_ndstinner_3(worker: str, tmp_path: Path):
     assert outputs.out == [10, 100, 20, 200, 30, 300]
 
 
-def test_wf_ndstinner_4(worker: str, tmp_path: Path):
+def test_wf_ndst_scoped_4(worker: str, tmp_path: Path):
     """workflow with 3 tasks,
-    the second task has two inputs and inner splitter from one of the input,
+    the second task has two inputs and scoped splitter from one of the input,
     the third task has no its own splitter
     """
 
@@ -1520,10 +1520,10 @@ def test_wf_ndstinner_4(worker: str, tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_wf_ndstinner_5(worker: str, tmp_path: Path):
+def test_wf_ndst_scoped_5(worker: str, tmp_path: Path):
     """workflow with 3 tasks,
-    the second task has two inputs and inner splitter from one of the input,
-    (inner input come from the first task that has its own splitter,
+    the second task has two inputs and scoped splitter from one of the input,
+    (scoped input come from the first task that has its own splitter,
     there is a inner_container_ndim)
     the third task has no new splitter
     """
