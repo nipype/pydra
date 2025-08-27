@@ -4606,3 +4606,27 @@ def test_wf_input_output_typing(tmp_path: Path):
     outputs = Worky(x=10, y=[1, 2, 3, 4])(cache_root=tmp_path)
     assert outputs.sum == 100
     assert outputs.products == [10, 20, 30, 40]
+
+
+def test_basic_workflow(tmp_path: Path):
+
+    # Example python tasks
+    @python.define
+    def Add(a, b):
+        return a + b
+
+    @python.define
+    def Mul(a, b):
+        return a * b
+
+    @workflow.define
+    def BasicWorkflow(a, b):
+        add = workflow.add(Add(a=a, b=b))
+        mul = workflow.add(Mul(a=add.out, b=b))
+        return mul.out
+
+    plot_workflow(BasicWorkflow, tmp_path / "plot-out")
+
+    wf = BasicWorkflow(a=2, b=3)
+    outputs = wf(cache_root=tmp_path / "cache")
+    assert outputs.out == 15

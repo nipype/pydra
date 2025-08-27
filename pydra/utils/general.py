@@ -4,6 +4,7 @@ from pathlib import Path
 import inspect
 import sys
 import typing as ty
+import shutil
 from collections.abc import Mapping, Collection
 from copy import copy
 import re
@@ -43,6 +44,11 @@ user_cache_root = Path(
 )
 
 default_run_cache_root = user_cache_root / "run-cache"
+
+
+def clean_run_cache():
+    """Deletes the cache run directory to remove any stale data."""
+    shutil.rmtree(default_run_cache_root)
 
 
 def add_exc_note(e: Exception, note: str) -> Exception:
