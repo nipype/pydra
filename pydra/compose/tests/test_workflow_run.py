@@ -4608,7 +4608,7 @@ def test_wf_input_output_typing(tmp_path: Path):
     assert outputs.products == [10, 20, 30, 40]
 
 
-def test_basic_workflow(tmp_path: Path):
+def test_plot_exec_workflow(tmp_path: Path):
 
     # Example python tasks
     @python.define
@@ -4625,8 +4625,9 @@ def test_basic_workflow(tmp_path: Path):
         mul = workflow.add(Mul(a=add.out, b=b))
         return mul.out
 
+    wf = BasicWorkflow(a=2, b=3)
+
     plot_workflow(BasicWorkflow, tmp_path / "plot-out")
 
-    wf = BasicWorkflow(a=2, b=3)
     outputs = wf(cache_root=tmp_path / "cache")
     assert outputs.out == 15
