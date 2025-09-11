@@ -527,7 +527,7 @@ class TypeParser(ty.Generic[T]):
                         except TypeError as e:
                             reasons.append(e)
                         else:
-                            reasons = None
+                            reasons = []
                             break
                     if self.match_any_of_union and len(reasons) < len(tp_args):
                         # Just need one of the union args to match
