@@ -57,7 +57,7 @@ doc = [
     "packaging",
     "pandas",
     "pandoc",
-    "pydra-mrtrix3 >=3.0.4a17",
+    "pydra-tasks-mrtrix3 >=3.1.0a1",
     "scipy",
     "sphinx",
     "sphinx-argparse",
@@ -100,7 +100,7 @@ tutorial = [
     "openneuro-py",
     "pandas",
     "psutil",
-    "pydra-mrtrix3 >=3.0.4a17",
+    "pydra-tasks-mrtrix3 >=3.1.0a1",
     "scipy",
     "sh",
 ]

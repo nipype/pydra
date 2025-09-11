@@ -15,7 +15,7 @@ class Docker(base.Container):
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts, values = self.get_bindings(job=job, root=self.root)
+        mounts, arg_values = self.get_bindings(job=job, root=self.root)
 
         docker_args = [
             "docker",
@@ -32,7 +32,7 @@ class Docker(base.Container):
 
         job.cache_dir.mkdir(exist_ok=True)
         values = base.execute(
-            docker_args + [docker_img] + job.task._command_args(values=values),
+            docker_args + [docker_img] + job.task._command_args(values=arg_values),
         )
         output = dict(zip(keys, values))
         if output["return_code"]:
