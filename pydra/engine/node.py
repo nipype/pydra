@@ -215,9 +215,10 @@ class Node(ty.Generic[OutputType]):
                 and val._node.state.depth()
             ):
                 node: Node = val._node
-                # variables that are part of inner splitters should be treated as a containers
+                # variables that are part of scoped splitters (previously known as inner splitter)
+                # should be treated as a containers
                 if node.state and f"{node.name}.{val._field}" in node.state.splitter:
-                    node.state._inner_container_ndim[f"{node.name}.{val._field}"] = 1
+                    node.state._scoped_container_ndim[f"{node.name}.{val._field}"] = 1
                 # adding task_name: (task.state, [a field from the connection]
                 if node.name not in upstream_states:
                     upstream_states[node.name] = (node.state, [val._field])
