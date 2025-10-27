@@ -9,6 +9,7 @@ readme = "README.rst"
 requires-python = ">=3.11"
 dependencies = [
     "attrs >=24.2.0",
+    "click >=8.2.0",
     "cloudpickle >=3.0.0",
     "etelemetry >=0.3.1",
     "filelock >=3.0.0",
