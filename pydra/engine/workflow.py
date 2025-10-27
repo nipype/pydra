@@ -120,6 +120,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                             # Set any additional non-lazy inputs that were not in the
                             # cached workflow.
                             setattr(wf.inputs, key, non_lazy_vals[key])
+                        return wf
 
         # Initialise the outputs of the workflow
         outputs = task.Outputs(
