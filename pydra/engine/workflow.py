@@ -1,7 +1,7 @@
 import logging
 import inspect
 import typing as ty
-from copy import copy
+from copy import copy, deepcopy
 from collections import defaultdict
 from typing import Self
 import attrs
@@ -115,7 +115,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     }
                     subset_hash = hash_function(subset_vals, cache=hash_cache)
                     if subset_hash in key_set_cache:
-                        return key_set_cache[subset_hash]
+                        wf = deepcopy(key_set_cache[subset_hash])
+                        for key in non_lazy_keys - key_set:
+                            # Set any additional non-lazy inputs that were not in the
+                            # cached workflow
+                            setattr(wf.inputs, key, non_lazy_vals[key])
 
         # Initialise the outputs of the workflow
         outputs = task.Outputs(
