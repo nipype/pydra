@@ -118,7 +118,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         wf = deepcopy(key_set_cache[subset_hash])
                         for key in non_lazy_keys - key_set:
                             # Set any additional non-lazy inputs that were not in the
-                            # cached workflow
+                            # cached workflow.
                             setattr(wf.inputs, key, non_lazy_vals[key])
 
         # Initialise the outputs of the workflow
