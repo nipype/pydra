@@ -266,9 +266,10 @@ def test_workflow_lazy():
 
     # check to see that the cache is used if we provide a concrete value for one of the
     # lazy fields
+    wf2.name = "tagged"
     workflow_spec.input_video = video.Mp4.mock("input.mp4")
     wf3 = Workflow.construct(workflow_spec)
-    assert wf3 is wf2
+    assert wf3.name == "tagged"
     assert list(workflow_cache) == [key_set]
     assert len(workflow_cache[key_set]) == 2
 

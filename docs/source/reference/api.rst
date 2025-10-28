@@ -25,10 +25,10 @@ Workflows
    :undoc-members:
    :show-inheritance:
 
-Specification classes
----------------------
+Engine classes
+--------------
 
-.. automodule:: pydra.engine.specs
+.. automodule:: pydra.engine
    :members:
    :undoc-members:
    :show-inheritance:

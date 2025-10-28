@@ -9,6 +9,7 @@ readme = "README.rst"
 requires-python = ">=3.11"
 dependencies = [
     "attrs >=24.2.0",
+    "click >=8.2.0",
     "cloudpickle >=3.0.0",
     "etelemetry >=0.3.1",
     "filelock >=3.0.0",
@@ -39,9 +40,11 @@ dynamic = ["version"]
 [project.optional-dependencies]
 dev = ["black", "pre-commit", "pydra[test]", "matplotlib"]
 doc = [
-    "fileformats-extras >= v0.15.0a6",
+    "fileformats-extras[application,image] >= v0.15.0a6",
     "fileformats-medimage >= v0.10.0a2",
     "fileformats-medimage-extras >= v0.10.0a2",
+    "fileformats-vendor-mrtrix3 >=3.1.0a5",
+    "fileformats-vendor-mrtrix3-extras >=3.1.0a5",
     "furo>=2022.2.14.1",
     "ipython",
     "ipykernel",
@@ -57,7 +60,7 @@ doc = [
     "packaging",
     "pandas",
     "pandoc",
-    "pydra-tasks-mrtrix3 >=3.1.0a1",
+    "pydra-tasks-mrtrix3 >=3.1.0a5",
     "scipy",
     "sphinx",
     "sphinx-argparse",
@@ -75,7 +78,7 @@ test = [
     "pytest-rerunfailures >=15.0",
     "pytest-timeout >=2.3",
     "pympler >=1.1",
-    "fileformats-extras >=0.15.0a7",
+    "fileformats-extras[application,image] >=0.15.0a7",
     "numpy >=1.26",
     "pyld >=2.0",
     "psutil >=5.9.0",
@@ -83,9 +86,11 @@ test = [
     "tornado >=6.1",
 ]
 tutorial = [
-    "fileformats-extras >= v0.15.0a6",
+    "fileformats-extras[application,image] >= v0.15.0a6",
     "fileformats-medimage >= v0.10.0a2",
     "fileformats-medimage-extras >= v0.10.0a2",
+    "fileformats-vendor-mrtrix3 >=3.1.0a5",
+    "fileformats-vendor-mrtrix3-extras >=3.1.0a5",
     "jupyter",
     "jupyter_contrib_nbextensions",
     "jupytext",
@@ -100,7 +105,7 @@ tutorial = [
     "openneuro-py",
     "pandas",
     "psutil",
-    "pydra-tasks-mrtrix3 >=3.1.0a1",
+    "pydra-tasks-mrtrix3 >=3.1.0a5",
     "scipy",
     "sh",
 ]
