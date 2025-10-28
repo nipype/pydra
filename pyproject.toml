@@ -60,6 +60,7 @@ doc = [
     "pandoc",
     "pydra-tasks-mrtrix3 >=3.1.0a1",
     "fileformats-vendor-mrtrix3 >=3.1.0a1",
+    "fileformats-vendor-mrtrix3-extras >=3.1.0a1",
     "scipy",
     "sphinx",
     "sphinx-argparse",
@@ -104,6 +105,7 @@ tutorial = [
     "psutil",
     "pydra-tasks-mrtrix3 >=3.1.0a1",
     "fileformats-vendor-mrtrix3 >=3.1.0a1",
+    "fileformats-vendor-mrtrix3-extras >=3.1.0a1",
     "scipy",
     "sh",
 ]
