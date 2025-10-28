@@ -59,6 +59,7 @@ doc = [
     "pandas",
     "pandoc",
     "pydra-tasks-mrtrix3 >=3.1.0a1",
+    "fileformats-vendor-mrtrix3 >=3.1.0a1",
     "scipy",
     "sphinx",
     "sphinx-argparse",
