@@ -334,7 +334,11 @@ class WorkflowOutputs(base.Outputs):
         values = {}
         lazy_field: LazyOutField
         for name, lazy_field in attrs_values(workflow.outputs).items():
-            val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
+            val_out = (
+                lazy_field._get_value(workflow=workflow, graph=exec_graph)
+                if isinstance(lazy_field, LazyOutField)
+                else lazy_field
+            )
             if isinstance(val_out, StateArray):
                 val_out = list(val_out)  # implicitly combine state arrays
             values[name] = val_out
