@@ -6,6 +6,7 @@ import time
 import typing as ty
 import attr
 from pathlib import Path
+from fileformats.generic import File
 from pydra.engine.tests.utils import (
     Add2,
     Add2Wait,
@@ -4606,3 +4607,18 @@ def test_wf_input_output_typing(tmp_path: Path):
     outputs = Worky(x=10, y=[1, 2, 3, 4])(cache_root=tmp_path)
     assert outputs.sum == 100
     assert outputs.products == [10, 20, 30, 40]
+
+
+def test_wf_lzin_passthrough(tmp_path: Path) -> None:
+    @workflow.define
+    def IdentityWorkflow(x: int) -> int:
+        return x
+
+    @workflow.define
+    def OuterWorkflow(x: int) -> int:
+        ident = workflow.add(IdentityWorkflow(x=x))
+        add2 = workflow.add(Add2(x=ident.out))
+        return add2.out
+
+    wf = OuterWorkflow(x=1)
+    assert wf(cache_root=tmp_path).out == 3

@@ -187,7 +187,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                 )
             for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
                 # Automatically combine any uncombined state arrays into a single lists
-                outpt_lf._type = State.combine_state_arrays(outpt_lf._type)
+                if isinstance(outpt_lf, LazyOutField):
+                    outpt_lf._type = State.combine_state_arrays(outpt_lf._type)
                 setattr(outputs, outpt.name, outpt_lf)
         else:
             if unset_outputs := [
