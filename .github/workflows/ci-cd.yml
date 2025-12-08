@@ -57,9 +57,6 @@ jobs:
       DEPENDS: ${{ matrix.dependencies }}
 
     steps:
-      - name: Install Lmod
-        run: |
-          sudo apt-get install -y lmod
       - name: Fetch repository
         uses: actions/checkout@v5
         with:
