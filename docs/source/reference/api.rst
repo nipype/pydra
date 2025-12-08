@@ -32,3 +32,21 @@ Engine classes
    :members:
    :undoc-members:
    :show-inheritance:
+
+
+Environments
+------------
+
+.. automodule:: pydra.environments.docker.Docker
+   :members:
+   :show-inheritance:
+
+
+.. automodule:: pydra.environments.singularity.Singularity
+   :members:
+   :show-inheritance:
+
+
+.. automodule:: pydra.environments.lmod.Lmod
+   :members:
+   :show-inheritance:

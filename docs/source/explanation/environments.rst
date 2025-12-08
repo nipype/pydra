@@ -7,7 +7,7 @@ construction, and allows tasks to be run in environments that are isolated from 
 host system, and that have specific software dependencies.
 
 The environment a task runs within is specified by the ``environment`` argument passed
-to the execution call (e.g. ``my_task(worker="cf", environment="docker")``) or in the
+to the execution call (e.g. ``my_task(worker="cf", environment=Docker("brainlife/fsl")``) or in the
 ``workflow.add()`` call in workflow constructors.
 
 Specifying at execution
@@ -15,8 +15,10 @@ Specifying at execution
 
 The environment for a task can be specified at execution time by passing the ``environment`` argument to the task call.
 This can be an instance of `pydra.environments.native.Environment` (for the host system),
-`pydra.environments.docker.Environment` (for Docker containers), or
-`pydra.environments.singularity.Environment` (for Singularity containers), or a custom environment.
+`pydra.environments.docker.Environment` (for Docker containers),
+`pydra.environments.singularity.Environment` (for Singularity containers),
+`pydra.environments.lmod.Lmod` (for lmod environment modules, e.g. ``module load fsl/6.0.7``)
+or a your own custom environment.
 
 Example:
 
