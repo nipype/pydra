@@ -1206,6 +1206,7 @@ def copy_nested_files(
     value: ty.Any,
     dest_dir: os.PathLike,
     supported_modes: generic.FileSet.CopyMode = generic.FileSet.CopyMode.any,
+    clashes_to_avoid: set[Path] | None = None,
     **kwargs,
 ) -> ty.Any:
     """Copies all "file-sets" found within the nested value (e.g. dict, list,...) into the
@@ -1229,7 +1230,8 @@ def copy_nested_files(
 
     # Set to keep track of file paths that have already been copied
     # to allow FileSet.copy to avoid name clashes
-    clashes_to_avoid = set()
+    if clashes_to_avoid is None:
+        clashes_to_avoid = set()
 
     def copy_fileset(fileset: generic.FileSet):
         try:
