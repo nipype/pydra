@@ -200,7 +200,12 @@ class Container(Environment):
         return bindings, values
 
 
-def execute(cmd, strip=False):
+def execute(
+    cmd: ty.Sequence[str],
+    strip: bool = False,
+    hide_display: bool = False,
+    **kwargs: ty.Any,
+) -> tuple[int, str, str]:
     """
     Run the event loop with coroutine.
 
@@ -213,14 +218,18 @@ def execute(cmd, strip=False):
     cmd : :obj:`list` or :obj:`tuple`
         The command line to be executed.
     strip : :obj:`bool`
-        TODO
+        Whether to strip the output strings. Default is ``False``.
+    kwargs : keyword arguments
+        Additional keyword arguments passed to the subprocess call.
 
     """
-    rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+    rc, stdout, stderr = read_and_display(
+        *cmd, strip=strip, hide_display=hide_display, **kwargs
+    )
     """
     loop = get_open_loop()
     if loop.is_running():
-        rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+        rc, stdout, stderr = read_and_display(*cmd, strip=strip, hide_display=hide_display)
     else:
         rc, stdout, stderr = loop.run_until_complete(
             read_and_display_async(*cmd, strip=strip)
@@ -229,10 +238,14 @@ def execute(cmd, strip=False):
     return rc, stdout, stderr
 
 
-def read_and_display(*cmd, strip=False, hide_display=False):
+def read_and_display(
+    *cmd: str, strip: bool = False, hide_display: bool = False, **kwargs: ty.Any
+) -> tuple[int, str, str]:
     """Capture a process' standard output."""
     try:
-        process = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+        process: sp.CompletedProcess = sp.run(
+            cmd, stdout=sp.PIPE, stderr=sp.PIPE, **kwargs
+        )
     except Exception:
         # TODO editing some tracing?
         raise

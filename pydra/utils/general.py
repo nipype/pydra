@@ -476,7 +476,9 @@ def position_sort(args):
     return [arg for _, arg in pos] + none + [arg for _, arg in neg]
 
 
-def ensure_list(obj, tuple2list=False):
+def ensure_list(
+    obj: ty.Any, tuple2list: bool = False
+) -> list[ty.Any] | tuple[ty.Any, ...]:
     """
     Return a list whatever the input object is.
 
