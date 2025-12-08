@@ -57,6 +57,9 @@ jobs:
       DEPENDS: ${{ matrix.dependencies }}
 
     steps:
+      - name: Install Lmod
+        run: |
+          sudo apt-get install -y lmod
       - name: Fetch repository
         uses: actions/checkout@v5
         with:
@@ -71,7 +74,9 @@ jobs:
       - name: Show tox config
         run: tox c
       - name: Run tox
-        run: tox -v --exit-and-dump-after 1200
+        run: |
+          source /etc/profile.d/lmod.sh
+          tox -v --exit-and-dump-after 1200
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -182,47 +187,6 @@ jobs:
     - name: Run pytest
       run: |
         docker exec slurm bash -c "cd /pydra; pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
-      with:
-        fail_ci_if_error: true
-        token: ${{ secrets.CODECOV_TOKEN }}
-
-
-  test-modules:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.11', '3.12', '3.13']
-        dependencies: [latest]
-      fail-fast: false
-
-    steps:
-    - name: Removed unnecessary tools to free space
-      run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-    - name: Checkout repo
-      uses: actions/checkout@v4
-    - name: Install Lmod
-      run: |
-        sudo apt-get install -y lmod
-    - name: Install Modules
-      run: |
-        source /etc/profile.d/lmod.sh
-    - name: Install the latest version of uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install tox
-      run: |
-        uv tool install tox --with=tox-uv --with=tox-gh-actions
-    - name: Show tox config
-      run: tox c
-    - name: Run tox
-      # Run test files with singularity tests; re-add the overridable "-n auto"
-      run: |
-        tox -v --exit-and-dump-after 1200 pydra/environments/tests/test_modules.py
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:
