@@ -74,9 +74,7 @@ jobs:
       - name: Show tox config
         run: tox c
       - name: Run tox
-        run: |
-          source /etc/profile.d/lmod.sh
-          tox -v --exit-and-dump-after 1200
+        run: tox -v --exit-and-dump-after 1200
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -147,6 +145,50 @@ jobs:
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+
+test-lmod:
+  runs-on: ubuntu-22.04
+  strategy:
+    matrix:
+      python-version: ['3.11', '3.12', '3.13']
+      dependencies: [latest]
+    fail-fast: False
+
+  env:
+    DEPENDS: ${{ matrix.dependencies }}
+
+  steps:
+    - name: Install Lmod
+      run: sudo apt-get install -y lmod
+    - name: Set env
+      run: |
+        echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
+        echo "NO_ET=TRUE" >> $GITHUB_ENV
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Install the latest version of uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install tox
+      run: |
+        uv tool install tox --with=tox-uv --with=tox-gh-actions
+    - name: Show tox config
+      run: tox c
+    - name: Run tox
+      # Run test files with singularity tests; re-add the overridable "-n auto"
+      run: |
+        source /etc/profile.d/lmod.sh
+        tox -v --exit-and-dump-after 1200 -- -n auto \
+          pydra/environments/tests/test_lmod.py
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        fail_ci_if_error: true
+        token: ${{ secrets.CODECOV_TOKEN }}
+
 
   test-slurm:
     strategy:
@@ -339,7 +381,7 @@ jobs:
         path: docs/build/html
 
   deploy:
-    needs: [build, build-docs, test, test-singularity, test-slurm]
+    needs: [build, build-docs, test, test-singularity, test-slurm, test-lmod]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     permissions:
