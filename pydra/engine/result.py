@@ -233,12 +233,16 @@ def copyfile_workflow(
 ) -> workflow.Outputs:
     """if file in the wf results, the file will be copied to the workflow directory"""
 
+    clashes_to_avoid: set[Path] = set()
     for field in attrs_fields(outputs):
         value = getattr(outputs, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
         new_value = copy_nested_files(
-            value, wf_path, mode=FileSet.CopyMode.hardlink_or_copy
+            value,
+            wf_path,
+            mode=FileSet.CopyMode.hardlink_or_copy,
+            clashes_to_avoid=clashes_to_avoid,
         )
         setattr(outputs, field.name, new_value)
     return outputs
