@@ -34,7 +34,8 @@ def test_copyfile_workflow_conflicting_filenames(tmp_path: Path) -> None:
     file3 = TextFile.sample(stem="out")
 
     workflow_dir = tmp_path / "output"
-    outputs = MockTask.Outputs(d=file1, e=file2, f=file3)
+    mock = MockTask(a=file1, b=file2, c=file3)
+    outputs = mock()
     workflow_dir.mkdir()
 
     copyfile_workflow(workflow_dir, outputs)
