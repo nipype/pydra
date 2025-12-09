@@ -166,6 +166,3 @@ junit_family = "xunit2"
 
 [tool.coverage.run]
 branch = true
-
-[tool.tox.env_run_base]
-pass_env = ["MODULEPATH", "LMOD_*", "LOADEDMODULES"]
