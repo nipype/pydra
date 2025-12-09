@@ -2,7 +2,6 @@ import os
 import typing as ty
 import logging
 from pathlib import Path
-from collections import defaultdict
 import re
 import subprocess as sp
 
@@ -32,7 +31,7 @@ class Lmod(base.Environment):
             raise ValueError("All module names must be strings")
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, int | str]:
-        env_src = self._run_module_cmd("load", *self.modules)
+        env_src = self.run_module_cmd("python", "load", *self.modules)
         env = {}
         for key, value in re.findall(
             r"os\.environ\[['\"](.*?)['\"]\]\s*=\s*['\"](.*?)['\"]", env_src
@@ -51,23 +50,11 @@ class Lmod(base.Environment):
         return {"return_code": return_code, "stdout": stdout, "stderr": stderr}
 
     @classmethod
-    def available_modules(cls) -> dict[str, list[str]]:
-        out_text = cls._run_module_cmd("avail")
-        sanitized: list[str] = []
-        for ln in out_text.split("\n"):
-            if not ln.startswith("-"):
-                sanitized.append(ln)
-        available: dict[str, list[str]] = defaultdict(list)
-        for module, ver in re.findall(r"(\w+)/([\w\d\.\-\_]+)", " ".join(sanitized)):
-            available[module.lower()].append(ver)
-        return available
-
-    @classmethod
     def modules_are_installed(cls) -> bool:
         return "MODULESHOME" in os.environ
 
     @classmethod
-    def _run_module_cmd(cls, *args: str) -> str:
+    def run_module_cmd(cls, *args: str) -> str:
         if not cls.modules_are_installed():
             raise RuntimeError(
                 "Could not find Lmod installation, please ensure it is installed and MODULESHOME is set"
@@ -76,12 +63,12 @@ class Lmod(base.Environment):
 
         try:
             output_bytes, error_bytes = sp.Popen(
-                [str(lmod_exec), "python"] + list(args),
+                [str(lmod_exec)] + list(args),
                 stdout=sp.PIPE,
                 stderr=sp.PIPE,
             ).communicate()
         except (sp.CalledProcessError, OSError) as e:
-            raise RuntimeError(f"Error running modulecmd: {e}")
+            raise RuntimeError(f"Error running 'lmod': {e}")
 
         output = output_bytes.decode("utf-8")
         error = error_bytes.decode("utf-8")

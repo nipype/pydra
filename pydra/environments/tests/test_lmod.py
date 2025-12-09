@@ -8,7 +8,7 @@ from pydra.environments.lmod import Lmod
 from pydra.engine.job import Job
 from pydra.engine.tests.utils import (
     no_win,
-    need_modules,
+    need_lmod,
 )
 
 
@@ -94,6 +94,21 @@ def baz_module(commandspath: Path, modulespath: Path) -> str:
     return create_module("baz", module_src, modulespath)
 
 
+@pytest.fixture
+def always_error_module(commandspath: Path, modulespath: Path) -> str:
+    cmd_dir = create_command(
+        "always-error",
+        """
+echo 'Error message' >&2;
+exit 1;
+""",
+        commandspath,
+    )
+    return create_module(
+        "always-error", f'prepend_path("PATH", "{cmd_dir}")', modulespath
+    )
+
+
 @shell.define
 class Foo(shell.Task["Foo.Outputs"]):
     executable = "foo"
@@ -116,8 +131,16 @@ class Bar(shell.Task["Bar.Outputs"]):
         )
 
 
+@shell.define
+class AlwaysError(shell.Task["AlwaysError.Outputs"]):
+    executable = "always-error"
+
+    class Outputs(shell.Outputs):
+        pass
+
+
 @no_win
-@need_modules
+@need_lmod
 def test_module_load_unload1(foo_module: str, tmp_path: Path):
     foo = Foo()
     with pytest.raises(FileNotFoundError, match="No such file or directory: 'foo'"):
@@ -129,7 +152,7 @@ def test_module_load_unload1(foo_module: str, tmp_path: Path):
 
 
 @no_win
-@need_modules
+@need_lmod
 def test_modules_submitter(foo_module: str, cache_root: Path):
     foo = Foo()
     foo_task = Job(
@@ -142,10 +165,32 @@ def test_modules_submitter(foo_module: str, cache_root: Path):
 
 
 @no_win
-@need_modules
+@need_lmod
 def test_double_modules(bar_module: str, baz_module: str, tmp_path: Path):
     bar = Bar()
     outputs = bar(environment=Lmod(bar_module), cache_root=tmp_path / "1")
     assert outputs.out_file.contents == "BAR == BAR\n"
     outputs = bar(environment=Lmod([bar_module, baz_module]), cache_root=tmp_path / "2")
     assert outputs.out_file.contents == "BAR == BAZ\n"
+
+
+@no_win
+@need_lmod
+def test_lmod_module_validator_fail1() -> None:
+    with pytest.raises(ValueError, match="At least one module"):
+        Lmod([])
+
+
+@no_win
+@need_lmod
+def test_lmod_module_validator_fail2() -> None:
+    with pytest.raises(ValueError, match="All module names must be strings"):
+        assert Lmod(1)
+
+
+@no_win
+@need_lmod
+def test_always_error(always_error_module: str):
+    always_error = AlwaysError()
+    with pytest.raises(RuntimeError, match="Error running 'main'"):
+        always_error(environment=Lmod(always_error_module))

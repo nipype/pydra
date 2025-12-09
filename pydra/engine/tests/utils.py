@@ -26,7 +26,7 @@ need_docker = pytest.mark.skipif(
 need_singularity = pytest.mark.skipif(
     shutil.which("singularity") is None, reason="no singularity available"
 )
-need_modules = pytest.mark.skipif(
+need_lmod = pytest.mark.skipif(
     "MODULEPATH" not in os.environ, reason="modules not available"
 )
 no_win = pytest.mark.skipif(
