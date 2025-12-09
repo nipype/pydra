@@ -31,7 +31,7 @@ class Lmod(base.Environment):
             raise ValueError("All module names must be strings")
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, int | str]:
-        env_src = self.run_lmod("python", "load", *self.modules)
+        env_src = self.run_lmod_cmd("python", "load", *self.modules)
         env = {}
         for key, value in re.findall(
             r"""os\.environ\[['"](.*?)['"]\]\s*=\s*['"](.*?)['"]""", env_src
@@ -54,7 +54,7 @@ class Lmod(base.Environment):
         return "MODULESHOME" in os.environ
 
     @classmethod
-    def run_lmod(cls, *args: str) -> str:
+    def run_lmod_cmd(cls, *args: str) -> str:
         if not cls.modules_are_installed():
             raise RuntimeError(
                 "Could not find Lmod installation, please ensure it is installed and MODULESHOME is set"
