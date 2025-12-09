@@ -34,7 +34,7 @@ class Lmod(base.Environment):
         env_src = self.run_module_cmd("python", "load", *self.modules)
         env = {}
         for key, value in re.findall(
-            r"os\.environ\[['\"](.*?)['\"]\]\s*=\s*['\"](.*?)['\"]", env_src
+            r"""os\.environ\[['"](.*?)['"]\]\s*=\s*['"](.*?)['"]""", env_src
         ):
             env[key] = value
         cmd_args = job.task._command_args(values=job.inputs)
