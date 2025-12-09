@@ -203,7 +203,6 @@ class Container(Environment):
 def execute(
     cmd: ty.Sequence[str],
     strip: bool = False,
-    hide_display: bool = False,
     **kwargs: ty.Any,
 ) -> tuple[int, str, str]:
     """
@@ -223,23 +222,12 @@ def execute(
         Additional keyword arguments passed to the subprocess call.
 
     """
-    rc, stdout, stderr = read_and_display(
-        *cmd, strip=strip, hide_display=hide_display, **kwargs
-    )
-    """
-    loop = get_open_loop()
-    if loop.is_running():
-        rc, stdout, stderr = read_and_display(*cmd, strip=strip, hide_display=hide_display)
-    else:
-        rc, stdout, stderr = loop.run_until_complete(
-            read_and_display_async(*cmd, strip=strip)
-        )
-    """
+    rc, stdout, stderr = read_and_display(*cmd, strip=strip, **kwargs)
     return rc, stdout, stderr
 
 
 def read_and_display(
-    *cmd: str, strip: bool = False, hide_display: bool = False, **kwargs: ty.Any
+    *cmd: str, strip: bool = False, **kwargs: ty.Any
 ) -> tuple[int, str, str]:
     """Capture a process' standard output."""
     try:
