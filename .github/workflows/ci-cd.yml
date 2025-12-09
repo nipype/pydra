@@ -177,9 +177,7 @@ jobs:
         # Run test files with singularity tests; re-add the overridable "-n auto"
         run: |
           source /etc/profile.d/lmod.sh
-          echo "MODULEPATH=$MODULEPATH"
-          echo "LMOD_CMD=$LMOD_CMD"
-          module avail || echo "module command not working"
+          export
           tox -v --exit-and-dump-after 1200 -- -n auto \
             pydra/environments/tests/test_lmod.py
       - name: Upload coverage to Codecov
