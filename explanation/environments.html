@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Software environments - Pydra v1.0a6</title>
+        <title>Software environments - Pydra v1.0a7</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -169,7 +169,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a6</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a7</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -193,7 +193,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a6</span>
+  <span class="sidebar-brand-text">Pydra v1.0a7</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -284,14 +284,16 @@ and <a class="reference external" href="https://sylabs.io/singularity/">Singular
 construction, and allows tasks to be run in environments that are isolated from the
 host system, and that have specific software dependencies.</p>
 <p>The environment a task runs within is specified by the <code class="docutils literal notranslate"><span class="pre">environment</span></code> argument passed
-to the execution call (e.g. <code class="docutils literal notranslate"><span class="pre">my_task(worker=&quot;cf&quot;,</span> <span class="pre">environment=&quot;docker&quot;)</span></code>) or in the
+to the execution call (e.g. <code class="docutils literal notranslate"><span class="pre">my_task(worker=&quot;cf&quot;,</span> <span class="pre">environment=Docker(&quot;brainlife/fsl&quot;)</span></code>) or in the
 <code class="docutils literal notranslate"><span class="pre">workflow.add()</span></code> call in workflow constructors.</p>
 <section id="specifying-at-execution">
 <h2>Specifying at execution<a class="headerlink" href="#specifying-at-execution" title="Link to this heading">¶</a></h2>
 <p>The environment for a task can be specified at execution time by passing the <code class="docutils literal notranslate"><span class="pre">environment</span></code> argument to the task call.
 This can be an instance of <cite>pydra.environments.native.Environment</cite> (for the host system),
-<cite>pydra.environments.docker.Environment</cite> (for Docker containers), or
-<cite>pydra.environments.singularity.Environment</cite> (for Singularity containers), or a custom environment.</p>
+<cite>pydra.environments.docker.Environment</cite> (for Docker containers),
+<cite>pydra.environments.singularity.Environment</cite> (for Singularity containers),
+<cite>pydra.environments.lmod.Lmod</cite> (for lmod environment modules, e.g. <code class="docutils literal notranslate"><span class="pre">module</span> <span class="pre">load</span> <span class="pre">fsl/6.0.7</span></code>)
+or a your own custom environment.</p>
 <p>Example:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.environments</span><span class="w"> </span><span class="kn">import</span> <span class="n">native</span><span class="p">,</span> <span class="n">docker</span><span class="p">,</span> <span class="n">singularity</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
@@ -463,7 +465,7 @@ These custom environment classes are typically located in the <cite>pydra/enviro
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=4c3b6913"></script>
+</div><script src="../_static/documentation_options.js?v=d379fd89"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
