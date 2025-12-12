@@ -1,4 +1,5 @@
 # Tasks for testing
+import os
 import time
 import sys
 import shutil
@@ -24,6 +25,9 @@ need_docker = pytest.mark.skipif(
 )
 need_singularity = pytest.mark.skipif(
     shutil.which("singularity") is None, reason="no singularity available"
+)
+need_lmod = pytest.mark.skipif(
+    "MODULEPATH" not in os.environ, reason="modules not available"
 )
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
