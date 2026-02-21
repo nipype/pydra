@@ -59,7 +59,11 @@ class Job(ty.Generic[TaskType]):
     """
 
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
-    _etelemetry_version_data = None  # class variable to store etelemetry information
+    # Sentinel meaning "check not yet performed". Distinct from None so that a
+    # failed/empty etelemetry response (which returns None) does not cause the
+    # network check to be repeated on every subsequent task invocation.
+    _ETELEMETRY_UNCHECKED = object()
+    _etelemetry_version_data = _ETELEMETRY_UNCHECKED  # class variable
     _version: str  # Version of tool being wrapped
     _task_version: ty.Optional[str] = None
     # Job writers encouraged to define and increment when implementation changes sufficiently
@@ -141,6 +145,10 @@ class Job(ty.Generic[TaskType]):
         self.hooks = hooks if hooks is not None else TaskHooks()
         self._errored = False
         self._lzout = None
+        # In-memory result cache: avoids reading back from disk the result that
+        # was just written by run(). Not included in __getstate__ so it is
+        # never pickled (subprocess workers will still use the disk path).
+        self._cached_result = None
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
@@ -179,11 +187,18 @@ class Job(ty.Generic[TaskType]):
     def __getstate__(self):
         state = self.__dict__.copy()
         state["task"] = cp.dumps(state["task"])
+        # Never serialise the in-memory result cache: subprocess workers must
+        # go through the normal disk-based load_result() path.
+        state.pop("_cached_result", None)
         return state
 
     def __setstate__(self, state):
         state["task"] = cp.loads(state["task"])
         self.__dict__.update(state)
+        # _cached_result is excluded from __getstate__; ensure it always exists
+        # so that result() works correctly on deserialized jobs.
+        if "_cached_result" not in self.__dict__:
+            self._cached_result = None
 
     @property
     def errored(self):
@@ -349,6 +364,10 @@ class Job(ty.Generic[TaskType]):
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
         self._check_for_hash_changes()
+        # Cache the completed result in memory so that callers who immediately
+        # call job.result() (e.g. Submitter.__call__) do not need to deserialise
+        # it back from disk.
+        self._cached_result = result
         return result
 
     async def run_async(self, rerun: bool = False) -> Result:
@@ -487,6 +506,11 @@ class Job(ty.Generic[TaskType]):
                 task=self.task,
             )
 
+        # Fast path: return the in-memory result cached by run() to avoid
+        # deserialising from disk for callers in the same process.
+        if self._cached_result is not None and not return_inputs:
+            return self._cached_result
+
         checksum = self.checksum
         result = load_result(checksum, self.all_caches)
         if result and result.errored:
@@ -504,6 +528,23 @@ class Job(ty.Generic[TaskType]):
             return result
 
     def _check_for_hash_changes(self):
+        from pydra.utils.typing import TypeParser
+
+        # For tasks whose input fields contain no FileSet types, hashes cannot
+        # change during execution (scalar/pure-Python values are immutable from
+        # Pydra's perspective). Skip the expensive full recomputation in that
+        # common case.
+        if not any(
+            TypeParser.contains_type(FileSet, f.type) for f in get_fields(self.task)
+        ):
+            logger.debug(
+                "Input values and hashes for '%s' %s node:\n%s\n%s",
+                self.name,
+                type(self).__name__,
+                self.task,
+                self.task._hashes,
+            )
+            return
         hash_changes = self.task._hash_changes()
         details = ""
         for changed in hash_changes:
