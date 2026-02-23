@@ -7,7 +7,6 @@ import glob as glob
 from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
 
-
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
     reason="docker/singularity command not adjusted for windows",

@@ -7,7 +7,6 @@ from collections import Counter
 import subprocess as sp
 from pydra.utils.general import ensure_list, is_workflow
 
-
 NodeType = ty.TypeVar("NodeType")
 
 INPUTS_NODE_NAME = "__INPUTS__"

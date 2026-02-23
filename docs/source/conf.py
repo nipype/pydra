@@ -17,7 +17,6 @@ import datetime
 
 from pydra.utils import __version__  # noqa
 
-
 authors = [("Nipype developers", "neuroimaging@python.org")]
 
 # If extensions (or modules to document with autodoc) are in another directory,

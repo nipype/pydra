@@ -20,7 +20,6 @@ import logging
 import pydra.scripts
 from ._version import __version__
 
-
 logger = logging.getLogger("pydra")
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task, Field  # noqa

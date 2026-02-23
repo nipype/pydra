@@ -6,7 +6,6 @@ import pytest
 from pydra.utils.general import get_fields
 from pydra.compose import python
 
-
 sort_key = attrgetter("name")
 
 
