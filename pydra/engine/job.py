@@ -529,13 +529,17 @@ class Job(ty.Generic[TaskType]):
 
     def _check_for_hash_changes(self):
         from pydra.utils.typing import TypeParser
+        from pydra.utils.hash import HasBytesRepr
 
-        # For tasks whose input fields contain no FileSet types, hashes cannot
-        # change during execution (scalar/pure-Python values are immutable from
-        # Pydra's perspective). Skip the expensive full recomputation in that
-        # common case.
+        # For tasks whose input fields contain no FileSet types and no values
+        # with custom __bytes_repr__ methods, hashes cannot change during
+        # execution (scalar/pure-Python values are immutable from Pydra's
+        # perspective). Skip the expensive full recomputation in that common case.
         if not any(
             TypeParser.contains_type(FileSet, f.type) for f in get_fields(self.task)
+        ) and not any(
+            isinstance(getattr(self.task, f.name), HasBytesRepr)
+            for f in get_fields(self.task)
         ):
             logger.debug(
                 "Input values and hashes for '%s' %s node:\n%s\n%s",
