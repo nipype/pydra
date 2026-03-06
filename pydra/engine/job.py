@@ -533,7 +533,6 @@ class Job(ty.Generic[TaskType]):
 
     def _check_for_hash_changes(self):
         from pydra.utils.typing import TypeParser
-        from pydra.utils.hash import HasBytesRepr
 
         # For tasks whose input fields contain no FileSet types and no values
         # with custom __bytes_repr__ methods, hashes cannot change during
