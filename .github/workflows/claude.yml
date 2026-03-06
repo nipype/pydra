@@ -34,7 +34,9 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          allowed_bots: "claude"
+          allowed_bots: 
+            - "claude"
+            - "pre-commit-ci"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
           # This is an optional setting that allows Claude to read CI results on PRs
