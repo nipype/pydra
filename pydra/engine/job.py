@@ -37,6 +37,7 @@ from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
 from pydra.environments.base import Environment
+from pydra.utils.etelemetry import check_latest_version
 
 logger = logging.getLogger("pydra")
 
@@ -203,8 +204,6 @@ class Job(ty.Generic[TaskType]):
     @classmethod
     def check_etelemetry(cls) -> None:
         """Run the etelemetry version check at most once per session."""
-        from pydra.utils.etelemetry import check_latest_version
-
         if cls._etelemetry_version_data is cls._ETELEMETRY_UNCHECKED:
             cls._etelemetry_version_data = check_latest_version()
 
