@@ -540,9 +540,8 @@ class Job(ty.Generic[TaskType]):
         # execution (scalar/pure-Python values are immutable from Pydra's
         # perspective). Skip the expensive full recomputation in that common case.
         if not any(
-            TypeParser.contains_type(FileSet, f.type) for f in get_fields(self.task)
-        ) and not any(
-            isinstance(getattr(self.task, f.name), HasBytesRepr)
+            TypeParser.contains_type(FileSet, f.type) or
+            hasattr(getattr(self.task, f.name), '__bytes_repr__')
             for f in get_fields(self.task)
         ):
             logger.debug(

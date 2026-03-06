@@ -684,7 +684,7 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
         # Build a cache key from (module, qualname, source-file mtime).
         # os.stat() is a single cheap syscall; if successful we can avoid
         # both inspect.getsource() and ast.parse() on repeated calls.
-        cache_key: tuple | None = None
+        cache_key: tuple[str, str, int] | None = None
         try:
             source_file = inspect.getfile(obj)
             mtime_ns = os.stat(source_file).st_mtime_ns
