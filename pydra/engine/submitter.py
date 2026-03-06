@@ -113,10 +113,7 @@ class Submitter:
         if worker is None:
             worker = "debug"
 
-        from pydra.utils.etelemetry import check_latest_version
-
-        if Job._etelemetry_version_data is Job._ETELEMETRY_UNCHECKED:
-            Job._etelemetry_version_data = check_latest_version()
+        Job.check_etelemetry()
 
         self.audit = Audit(
             audit_flags=audit_flags,

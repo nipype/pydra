@@ -200,6 +200,14 @@ class Job(ty.Generic[TaskType]):
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
 
+    @classmethod
+    def check_etelemetry(cls) -> None:
+        """Run the etelemetry version check at most once per session."""
+        from pydra.utils.etelemetry import check_latest_version
+
+        if cls._etelemetry_version_data is cls._ETELEMETRY_UNCHECKED:
+            cls._etelemetry_version_data = check_latest_version()
+
     @property
     def errored(self):
         """Check if the job has raised an error"""
