@@ -60,11 +60,7 @@ class Job(ty.Generic[TaskType]):
     """
 
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
-    # Sentinel meaning "check not yet performed". Distinct from None so that a
-    # failed/empty etelemetry response (which returns None) does not cause the
-    # network check to be repeated on every subsequent task invocation.
-    _ETELEMETRY_UNCHECKED = object()
-    _etelemetry_version_data = _ETELEMETRY_UNCHECKED  # class variable
+    _etelemetry_checked: ty.ClassVar[bool] = False
     _version: str  # Version of tool being wrapped
     _task_version: ty.Optional[str] = None
     # Job writers encouraged to define and increment when implementation changes sufficiently
@@ -204,8 +200,9 @@ class Job(ty.Generic[TaskType]):
     @classmethod
     def check_etelemetry(cls) -> None:
         """Run the etelemetry version check at most once per session."""
-        if cls._etelemetry_version_data is cls._ETELEMETRY_UNCHECKED:
-            cls._etelemetry_version_data = check_latest_version()
+        if not cls._etelemetry_checked:
+            cls._etelemetry_checked = True
+            check_latest_version()
 
     @property
     def errored(self):
