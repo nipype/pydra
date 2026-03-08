@@ -32,7 +32,7 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: hynek/build-and-inspect-python-package@v2
@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
@@ -95,7 +95,7 @@ jobs:
           echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Setup Singularity
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: hpcng/singularity
           ref: 'v3.7.1'
@@ -120,7 +120,7 @@ jobs:
         run: |
           echo ${{ github.ref }}
           singularity --version
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
@@ -161,7 +161,7 @@ jobs:
         run: |
           echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
@@ -198,7 +198,7 @@ jobs:
     steps:
     - name: Disable etelemetry
       run: echo "NO_ET=TRUE" >> $GITHUB_ENV
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Pull docker image
@@ -244,7 +244,7 @@ jobs:
   #   steps:
   #   - name: Disable etelemetry
   #     run: echo "NO_ET=TRUE" >> $GITHUB_ENV
-  #   - uses: actions/checkout@v5
+  #   - uses: actions/checkout@v6
   #   - name: Fetch tags
   #     run: git fetch --prune --unshallow
   #   - name: Set up Python ${{ matrix.python-version }}
@@ -347,7 +347,7 @@ jobs:
         ps aux | grep xfce4-notifyd
         dbus-monitor --session &
         sleep 3
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Install Minconda
@@ -372,7 +372,7 @@ jobs:
       run: python -m ipykernel install --user
     - name: Build docs
       run: make -C docs html
-    - uses: actions/upload-artifact@v5
+    - uses: actions/upload-artifact@v6
       with:
         name: docs
         path: docs/build/html
@@ -386,7 +386,7 @@ jobs:
       id-token: write
     steps:
     - name: Download dist
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: Packages
         path: dist
@@ -399,7 +399,7 @@ jobs:
     if: github.event_name == 'release'
     steps:
     - name: Download docs
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: docs
         path: docs-build
