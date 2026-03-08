@@ -8,7 +8,6 @@ import typing as ty
 from pydra.utils.typing import StateArray, TypeParser
 from pydra.utils.general import ensure_list, attrs_values
 
-
 logger = logging.getLogger("pydra")
 
 

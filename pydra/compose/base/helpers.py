@@ -7,7 +7,6 @@ from pydra.utils.typing import is_type, is_optional
 from pydra.utils.general import get_fields
 from .field import Field, Arg, Out, NO_DEFAULT
 
-
 if ty.TYPE_CHECKING:
     from .task import Task, Outputs
 
