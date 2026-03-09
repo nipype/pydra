@@ -206,6 +206,7 @@ def define(
             xor=xor,
         )
 
+        defn.__doc__ = constructor.__doc__
         return defn
 
     if wrapped is not None:

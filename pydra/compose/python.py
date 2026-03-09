@@ -181,6 +181,7 @@ def define(
             xor=xor,
         )
 
+        defn.__doc__ = function.__doc__
         return defn
 
     if wrapped is not None:
