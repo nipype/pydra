@@ -96,7 +96,7 @@ def test_task_numpyinput_2(tmp_path: Path):
 
 
 def test_numpy_fft():
-    """checking if mark.task works for numpy functions"""
+    """checking if python.define works for numpy functions"""
     np = pytest.importorskip("numpy")
     FFT = python.define(inputs={"a": np.ndarray}, outputs={"out": np.ndarray})(
         np.fft.fft

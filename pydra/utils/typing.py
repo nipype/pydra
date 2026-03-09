@@ -346,6 +346,10 @@ class TypeParser(ty.Generic[T]):
         def coerce_multi_input(obj, pattern_args):
             # Attempt to coerce the object into arg type of the MultiInputObj first,
             # and if that fails, try to coerce it into a list of the arg type
+            # Strings are sequences, but a single string should be wrapped as [str],
+            # not iterated over character-by-character.
+            if isinstance(obj, str):
+                return [expand_and_coerce(obj, pattern_args[0])]
             try:
                 return coerce_sequence(list, obj, pattern_args)
             except TypeError as e1:

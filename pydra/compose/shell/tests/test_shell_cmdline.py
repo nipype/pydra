@@ -1449,6 +1449,42 @@ def test_shell_cmd_inputs_denoise_image(
     assert "value of image_dimensionality" in str(excinfo.value)
 
 
+def test_allowed_values_multi_input_obj(tmp_path):
+    """MultiInputObj[str] fields with allowed_values must:
+    - accept a single valid string (regression: was iterated char-by-char)
+    - accept a list of valid strings (regression: whole list was checked, not elements)
+    - reject a list containing an invalid string
+    """
+
+    @shell.define
+    class MultiChoice(shell.Task["MultiChoice.Outputs"]):
+        executable = "dummy"
+        output: MultiInputObj[str] | None = shell.arg(
+            default=None,
+            argstr="-output",
+            allowed_values=["mean", "median", "std", "min", "max"],
+        )
+
+        class Outputs(shell.Outputs):
+            pass
+
+    # Single valid string must be wrapped as a one-element list, not char-by-char
+    task = MultiChoice(output="mean")
+    assert task.output == ["mean"]
+
+    # Multiple valid strings in a list
+    task = MultiChoice(output=["mean", "std"])
+    assert task.output == ["mean", "std"]
+
+    # Invalid value in list must raise ValueError
+    with pytest.raises(ValueError, match="value of output"):
+        MultiChoice(output=["mean", "invalid"])
+
+    # Single invalid string must raise ValueError
+    with pytest.raises(ValueError, match="value of output"):
+        MultiChoice(output="invalid")
+
+
 # tests with XOR in input metadata
 
 

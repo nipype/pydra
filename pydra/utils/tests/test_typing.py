@@ -972,6 +972,10 @@ def test_type_is_instance11a():
     [
         (MultiInputObj[str], "a", ["a"]),
         (MultiInputObj[str], ["a"], ["a"]),
+        # Multi-character strings must be wrapped as a single element, not iterated
+        # char-by-char (regression test for coerce_multi_input bug fix)
+        (MultiInputObj[str], "mean", ["mean"]),
+        (MultiInputObj[str], "std_rv", ["std_rv"]),
         (MultiInputObj[ty.List[str]], ["a"], [["a"]]),
         (MultiInputObj[ty.Union[int, ty.List[str]]], ["a"], [["a"]]),
         (MultiInputObj[ty.Union[int, ty.List[str]]], [["a"]], [["a"]]),
