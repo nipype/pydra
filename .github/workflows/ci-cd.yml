@@ -406,5 +406,5 @@ jobs:
     - name: Deploy Docs to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
       with:
-        github_token: ${{ secrets.GHPAGES_DEPLOY_KEY }}
+        deploy_key: ${{ secrets.GHPAGES_DEPLOY_KEY }}
         publish_dir: docs-build
