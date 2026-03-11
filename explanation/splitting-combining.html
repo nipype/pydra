@@ -6,10 +6,10 @@
 <link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Dynamic construction" href="conditional-lazy.html"><link rel="prev" title="Design philosophy" href="design-approach.html">
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
-    <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Splitting and combining - Pydra v1.0a7</title>
+    <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Splitting and combining - Pydra v1.0a9</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=1e8e7625" />
     
@@ -169,7 +169,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a7</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -193,7 +193,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a7</span>
+  <span class="sidebar-brand-text">Pydra v1.0a9</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -302,7 +302,7 @@ This is also represented in the diagram, where <span class="math notranslate noh
 nodes represent stateless copies of the original Task after splitting the input,
 (these are the runnables that are executed).</p>
 <figure class="h align-default">
-<a class="reference internal image-reference" href="../_images/nd_spl_1.png"><img alt="../_images/nd_spl_1.png" src="../_images/nd_spl_1.png" style="width: 296.0px; height: 258.0px;" />
+<a class="reference internal image-reference" href="../_images/nd_spl_1.png"><img alt="../_images/nd_spl_1.png" height="258" src="../_images/nd_spl_1.png" width="296" />
 </a>
 </figure>
 <section id="types-of-splitter">
@@ -324,7 +324,7 @@ Python tuples and its operation is therefore represented by a parenthesis, <code
 <p>where <cite>S</cite> represents the <em>splitter</em>, <cite>x</cite> and <cite>y</cite> are the input fields.
 This is also represented as a diagram:</p>
 <figure class="h align-default">
-<a class="reference internal image-reference" href="../_images/nd_spl_4.png"><img alt="../_images/nd_spl_4.png" src="../_images/nd_spl_4.png" style="width: 302.40000000000003px; height: 224.0px;" />
+<a class="reference internal image-reference" href="../_images/nd_spl_4.png"><img alt="../_images/nd_spl_4.png" height="224" src="../_images/nd_spl_4.png" width="302" />
 </a>
 </figure>
 <p>Inner splitters can be analogized to the Python builtin function <a class="reference external" href="https://docs.python.org/3/library/functions.html#zip" title="(in Python v3.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">zip()</span></code></a>.</p>
@@ -343,7 +343,7 @@ brackets, <code class="docutils literal notranslate"><span class="pre">[]</span>
 </div>
 <p>The <em>outer splitter</em> for a node with two input fields is schematically represented in the diagram:</p>
 <figure class="h align-default">
-<a class="reference internal image-reference" href="../_images/nd_spl_3.png"><img alt="../_images/nd_spl_3.png" src="../_images/nd_spl_3.png" style="width: 407.20000000000005px; height: 239.20000000000002px;" />
+<a class="reference internal image-reference" href="../_images/nd_spl_3.png"><img alt="../_images/nd_spl_3.png" height="239" src="../_images/nd_spl_3.png" width="407" />
 </a>
 </figure>
 <p>Different types of splitters can be combined over inputs such as
@@ -385,7 +385,7 @@ This will be explained in the next section.</p>
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2025, Nipype developers
+                Copyright &#169; 2026, Nipype developers
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -426,12 +426,12 @@ This will be explained in the next section.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=d379fd89"></script>
-    <script src="../_static/doctools.js?v=9bcbadda"></script>
-    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     </body>
 </html>

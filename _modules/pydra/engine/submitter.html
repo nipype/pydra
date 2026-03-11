@@ -5,10 +5,10 @@
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
         <link rel="prefetch" href="../../../_static/pydra_logo.png" as="image">
 
-    <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>pydra.engine.submitter - Pydra v1.0a7</title>
+    <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>pydra.engine.submitter - Pydra v1.0a9</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=beddf052" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
     <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=1e8e7625" />
     
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../index.html"><div class="brand">Pydra v1.0a7</div></a>
+      <a href="../../../index.html"><div class="brand">Pydra v1.0a9</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a7</span>
+  <span class="sidebar-brand-text">Pydra v1.0a9</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -590,7 +590,7 @@
 
 <div class="viewcode-block" id="Submitter.expand_workflow">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.engine.Submitter.expand_workflow">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">expand_workflow</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workflow_task</span><span class="p">:</span> <span class="s2">&quot;Job[workflow.Task]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">expand_workflow</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wf_job</span><span class="p">:</span> <span class="s2">&quot;Job[workflow.Task]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Expands and executes a workflow job synchronously. Typically only used during</span>
 <span class="sd">        debugging and testing, as the asynchronous version is more efficient.</span>
 
@@ -601,10 +601,10 @@
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Construct the workflow</span>
-        <span class="n">wf</span> <span class="o">=</span> <span class="n">workflow_task</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">construct</span><span class="p">()</span>
+        <span class="n">wf</span> <span class="o">=</span> <span class="n">wf_job</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">construct</span><span class="p">()</span>
         <span class="c1"># Generate the execution graph</span>
         <span class="n">exec_graph</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">execution_graph</span><span class="p">(</span><span class="n">submitter</span><span class="o">=</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">workflow_task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;workflow&quot;</span><span class="p">:</span> <span class="n">wf</span><span class="p">,</span> <span class="s2">&quot;exec_graph&quot;</span><span class="p">:</span> <span class="n">exec_graph</span><span class="p">}</span>
+        <span class="n">wf_job</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;workflow&quot;</span><span class="p">:</span> <span class="n">wf</span><span class="p">,</span> <span class="s2">&quot;exec_graph&quot;</span><span class="p">:</span> <span class="n">exec_graph</span><span class="p">}</span>
         <span class="n">tasks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_runnable_tasks</span><span class="p">(</span><span class="n">exec_graph</span><span class="p">)</span>
         <span class="k">while</span> <span class="n">tasks</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">done</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
@@ -1270,7 +1270,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2025, Nipype developers
+                Copyright &#169; 2026, Nipype developers
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -1290,9 +1290,9 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=d379fd89"></script>
-    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+</div><script src="../../../_static/documentation_options.js?v=07263b01"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     </body>
