@@ -867,6 +867,41 @@ def test_wf_ndst_9(worker: str, tmp_path: Path):
     assert outputs.out == [11, 12, 22, 24, 33, 36]
 
 
+def test_wf_ndst_combine_two_upstreams(worker: str, tmp_path: Path):
+    """Regression test for GH#845.
+
+    A node with no splitter of its own that takes inputs from two separate
+    upstream nodes which have each been split and combined used to raise
+    ``AttributeError: property 'state' of 'NodeExecution' object has no setter``
+    while building the execution graph (``Workflow._create_graph``).
+    """
+
+    @python.define
+    def Step1(a: int) -> int:
+        return a
+
+    @python.define
+    def Step2(a: int, b: int) -> int:
+        return a + b
+
+    @python.define
+    def Step3(a: list, b: list) -> list:
+        return a
+
+    @workflow.define
+    def Worky(a: list):
+        step1 = workflow.add(Step1().split(a=a).combine("a"))
+        step2 = workflow.add(Step2().split(("a", "b"), a=a, b=step1.out).combine("a"))
+        step3 = workflow.add(Step3(a=step2.out, b=step1.out))
+        return step3.out
+
+    worky = Worky(a=[1, 2, 3])
+
+    outputs = worky(worker=worker, cache_root=tmp_path)
+
+    assert outputs.out == [2, 4, 6]
+
+
 # workflows with structures A ->  B -> C
 
 
