@@ -388,7 +388,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         new_other_states=other_states, new_combiner=combiner
                     )
                 else:
-                    node.state = state.State(
+                    node._state = state.State(
                         node.name,
                         splitter=None,
                         other_states=other_states,
