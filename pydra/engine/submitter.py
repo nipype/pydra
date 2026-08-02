@@ -433,15 +433,16 @@ class Submitter:
                                 )
                             raise RuntimeError(msg)
                 for job in tasks:
-                    if job.is_async:  # Only workflows at this stage
-                        await self.worker.submit(
-                            job, rerun=rerun and self.propagate_rerun
-                        )
-                    elif job.checksum not in futured:
-                        asyncio_task = asyncio.Task(
-                            self.worker.run(job, rerun=rerun and self.propagate_rerun),
-                            name=job.checksum,
-                        )
+                    if job.checksum not in futured:
+                        if job.is_async:  # Only workflows at this stage
+                            coroutine = self.worker.submit(
+                                job, rerun=rerun and self.propagate_rerun
+                            )
+                        else:
+                            coroutine = self.worker.run(
+                                job, rerun=rerun and self.propagate_rerun
+                            )
+                        asyncio_task = asyncio.Task(coroutine, name=job.checksum)
                         task_futures.add(asyncio_task)
                         futured[job.checksum] = job
                 task_futures, completed = await self.fetch_finished(task_futures)
