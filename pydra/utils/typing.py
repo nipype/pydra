@@ -464,6 +464,16 @@ class TypeParser(ty.Generic[T]):
                 raise TypeError(
                     f"Splits with more than one type argument ({args}) are invalid{self.label_str}"
                 )
+            # If the target pattern is also a StateArray (e.g. the field being
+            # checked is itself downstream of another split), unwrap it in
+            # lock-step with the incoming type, the same way MultiInputObj target
+            # patterns are unwrapped below, otherwise the unwrapped incoming type
+            # would be checked against the still-wrapped `(StateArray, [...])`
+            # pattern and never match, even against itself
+            if isinstance(self.pattern, tuple) and self.pattern[0] is StateArray:
+                inner_type_parser = copy(self)
+                inner_type_parser.pattern = self.pattern[1][0]
+                return inner_type_parser.check_type(args[0])
             return self.check_type(args[0])
 
         def expand_and_check(tp, pattern: ty.Union[type, tuple]):
