@@ -41,7 +41,7 @@ dynamic = ["version"]
 [project.optional-dependencies]
 dev = ["black", "pre-commit", "pydra[test]", "matplotlib"]
 doc = [
-    "fileformats-extras[application,image] >= v0.15.0a6",
+    "fileformats-extras[application,image] >=0.18.1",
     "fileformats-medimage >= v0.10.0a2",
     "fileformats-medimage-extras >= v0.10.0a2",
     "fileformats-vendor-mrtrix3 >=3.1.0a5",
@@ -79,7 +79,7 @@ test = [
     "pytest-rerunfailures >=15.0",
     "pytest-timeout >=2.3",
     "pympler >=1.1",
-    "fileformats-extras[application,image] >=0.15.0a7",
+    "fileformats-extras[application,image] >=0.18.1",
     "numpy >=1.26",
     "pyld >=2.0",
     "psutil >=5.9.0",
@@ -87,7 +87,7 @@ test = [
     "tornado >=6.1",
 ]
 tutorial = [
-    "fileformats-extras[application,image] >= v0.15.0a6",
+    "fileformats-extras[application,image] >=0.18.1",
     "fileformats-medimage >= v0.10.0a2",
     "fileformats-medimage-extras >= v0.10.0a2",
     "fileformats-vendor-mrtrix3 >=3.1.0a5",
