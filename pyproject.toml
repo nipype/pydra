@@ -13,7 +13,7 @@ dependencies = [
     "cloudpickle >=3.0.0",
     "etelemetry >=0.3.1",
     "filelock >=3.0.0",
-    "fileformats >=0.15.0a7",
+    "fileformats >=0.18.1",
     "platformdirs >=2",
 ]
 license = { file = "LICENSE" }
