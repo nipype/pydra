@@ -313,7 +313,7 @@ jobs:
   #       files: ./cov.xml
 
   build-docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Set up the environment so that it finds conda
     defaults:
       run:
