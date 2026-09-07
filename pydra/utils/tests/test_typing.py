@@ -699,6 +699,36 @@ def test_union_source_not_coercible(source, target):
     assert not exc_info_matches(exc_info, "issubclass")
 
 
+def test_optional_source_permit_superclass():
+    """Optional[X] should match a non-optional target, but only when the caller has
+    opted into the permissive treatment via superclass_auto_cast"""
+    # Json is a subclass of File, so dropping the None leaves a clean match
+    TypeParser(File, superclass_auto_cast=True).check_type(ty.Optional[Json])
+    # Without the flag the None is not dropped and the connection is rejected
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(File).check_type(ty.Optional[Json])
+    assert exc_info_matches(exc_info, "Cannot coerce")
+
+
+def test_optional_source_permit_superclass_fails():
+    """The optional auto-cast should only drop the None, not smuggle through union
+    members that don't relate to the target in their own right"""
+    # int doesn't relate to File, with or without the None
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(File, superclass_auto_cast=True).check_type(ty.Optional[int])
+    assert exc_info_matches(exc_info, "Cannot coerce")
+    # ... and neither does a union that mixes a matching member with a bad one
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(File, superclass_auto_cast=True).check_type(ty.Union[Json, int, None])
+    assert exc_info_matches(exc_info, "Cannot coerce")
+    # Both optional, but the non-None args still have to relate to each other
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(ty.Optional[Yaml], superclass_auto_cast=True).check_type(
+            ty.Optional[int]
+        )
+    assert exc_info_matches(exc_info, "Cannot coerce")
+
+
 def test_type_matches():
     assert TypeParser.matches([1, 2, 3], ty.List[int])
     assert TypeParser.matches((1, 2, 3), ty.Tuple[int, ...])

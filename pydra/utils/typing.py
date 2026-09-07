@@ -106,7 +106,9 @@ class TypeParser(ty.Generic[T]):
         not_coercible=[(str, list)])
     superclass_auto_cast : bool
         Allow lazy fields to pass the type check if their types are superclasses of the
-        specified pattern (instead of matching or being subclasses of the pattern)
+        specified pattern (instead of matching or being subclasses of the pattern).
+        Also allows an optional type to pass the type check against a non-optional
+        pattern, deferring the None case to runtime
     label : str
         the label to be used to identify the type parser in error messages. Especially
         useful when TypeParser is used as a converter in attrs.fields
@@ -527,6 +529,14 @@ class TypeParser(ty.Generic[T]):
                         f"{self.label_str}:\n\n"
                         + "\n\n".join(f"{a} -> {e}" for a, e in zip(tp_args, reasons))
                     )
+            if self.superclass_auto_cast and is_optional(tp) and not is_optional(target):
+                # Treat Optional[X] like X when connecting to a non-optional
+                # target, deferring the None case to runtime rather than
+                # rejecting the connection outright. Gated on
+                # superclass_auto_cast, which already signals that the caller
+                # (i.e. field connection, see compose.base.builder) wants the
+                # permissive treatment, so direct TypeParser uses stay strict.
+                tp = optional_type(tp)
             if not self.is_subclass(tp, target):
                 if get_origin(tp) in UNION_TYPES:
                     # check_type_coercible collapses its source arg onto
