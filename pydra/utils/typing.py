@@ -529,7 +529,11 @@ class TypeParser(ty.Generic[T]):
                         f"{self.label_str}:\n\n"
                         + "\n\n".join(f"{a} -> {e}" for a, e in zip(tp_args, reasons))
                     )
-            if self.superclass_auto_cast and is_optional(tp) and not is_optional(target):
+            if (
+                self.superclass_auto_cast
+                and is_optional(tp)
+                and not is_optional(target)
+            ):
                 # Treat Optional[X] like X when connecting to a non-optional
                 # target, deferring the None case to runtime rather than
                 # rejecting the connection outright. Gated on

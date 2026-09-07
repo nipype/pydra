@@ -719,7 +719,9 @@ def test_optional_source_permit_superclass_fails():
     assert exc_info_matches(exc_info, "Cannot coerce")
     # ... and neither does a union that mixes a matching member with a bad one
     with pytest.raises(TypeError) as exc_info:
-        TypeParser(File, superclass_auto_cast=True).check_type(ty.Union[Json, int, None])
+        TypeParser(File, superclass_auto_cast=True).check_type(
+            ty.Union[Json, int, None]
+        )
     assert exc_info_matches(exc_info, "Cannot coerce")
     # Both optional, but the non-None args still have to relate to each other
     with pytest.raises(TypeError) as exc_info:
