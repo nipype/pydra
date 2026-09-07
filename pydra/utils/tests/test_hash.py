@@ -331,9 +331,10 @@ def test_bytes_special_form1():
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form1a():
     obj_repr = join_bytes_repr(int | float)
-    assert obj_repr == (
-        b"type:(origin:(type:(types.UnionType)),args:(type:(builtins.int)"
-        b"type:(builtins.float)))"
+    assert re.match(
+        rb"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(builtins.int\)"
+        rb"type:\(builtins.float\)\)\)",
+        obj_repr,
     )
 
 
@@ -353,9 +354,10 @@ def test_bytes_special_form3():
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form3a():
     obj_repr = join_bytes_repr(Path | None)
-    assert obj_repr == (
-        b"type:(origin:(type:(types.UnionType)),args:(type:(pathlib.Path)"
-        b"type:(builtins.NoneType)))"
+    assert re.match(
+        b"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(pathlib.Path\)"
+        b"type:\(builtins.NoneType\)\)\)",
+        obj_repr,
     )
 
 
