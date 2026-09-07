@@ -313,7 +313,7 @@ jobs:
   #       files: ./cov.xml
 
   build-docs:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     # Set up the environment so that it finds conda
     defaults:
       run:
@@ -322,7 +322,7 @@ jobs:
     - name: Install Pandoc for NBSphinx and graphviz for workflow plotting (dot)
       run: |
         sudo apt-get update
-        sudo apt-get install -y pandoc graphviz
+        sudo apt-get install -y pandoc graphviz mrtrix3
     - name: Install Dependencies for virtual notifications in Adv.-Exec Tutorial
       run: |
           sudo apt update
@@ -350,18 +350,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - name: Install Minconda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        auto-activate-base: true
-        activate-environment: ""
-    # We generate dummy aliases so they can be deleted by conda later without throwing an error
-    - name: Install MRtrix via Conda
-      run: |
-        alias shview='ls'
-        alias mrview='ls'
-        conda install -c conda-forge -c MRtrix3 mrtrix3 libstdcxx-ng
-        mrconvert --version
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
