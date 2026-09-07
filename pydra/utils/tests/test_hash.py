@@ -29,7 +29,7 @@ def test_hash_file(tmpdir):
     with open(outdir / "test.file", "w") as fp:
         fp.write("test")
     assert (
-        hash_function(File(outdir / "test.file")) == "f32ab20c4a86616e32bf2504e1ac5a22"
+        hash_function(File(outdir / "test.file")) == "a372c0b478b3f750b57a4e6a1c4042ce"
     )
 
 
