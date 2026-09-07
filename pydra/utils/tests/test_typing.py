@@ -678,6 +678,45 @@ def test_union_superclass_check_type():
 
 
 @pytest.mark.parametrize(
+    "source,target,match_any,expected",
+    [
+        # With match_any_of_union, one source arg matching one target arg is enough,
+        # wherever it appears in the union
+        (ty.Union[Json, int], ty.Union[File, bytes], True, True),  # first arg matches
+        (ty.Union[int, Json], ty.Union[File, bytes], True, True),  # last arg matches
+        (ty.Union[int, float, Yaml], ty.Union[File, Json], True, True),  # last of three
+        (ty.Union[int, float], ty.Union[File, Json], True, False),  # none match
+        # ... including when the source has more args than the target, which used to
+        # be read as a match regardless of whether anything actually matched
+        (ty.Union[int, float, complex], ty.Union[File, Json], True, False),
+        # Without the flag every source arg has to match one of the target args
+        (ty.Union[Json, Yaml], ty.Union[File, bytes], False, True),
+        (ty.Union[Json, int], ty.Union[File, bytes], False, False),
+        (ty.Union[int, Json], ty.Union[File, bytes], False, False),
+    ],
+)
+def test_check_union_against_union(source, target, match_any, expected):
+    """Union sources are matched against union targets arg-by-arg, independently of the
+    order the args are declared in and of how many args either union has"""
+    parser = TypeParser(target, match_any_of_union=match_any)
+    if expected:
+        parser.check_type(source)
+    else:
+        with pytest.raises(TypeError) as exc_info:
+            parser.check_type(source)
+        assert exc_info_matches(exc_info, "Cannot coerce")
+
+
+def test_union_source_coercible():
+    """A union source should match a target its args are coercible to, even though the
+    union itself is not a subclass of that target"""
+    # int is not a subclass of float, so the union as a whole isn't a subclass of the
+    # target, but both of its args are coercible to it
+    assert not TypeParser.is_subclass(ty.Union[int, float], float)
+    TypeParser(float).check_type(ty.Union[int, float])
+
+
+@pytest.mark.parametrize(
     "source,target",
     [
         (ty.Union[Json, Yaml], int),  # no member relates to the target

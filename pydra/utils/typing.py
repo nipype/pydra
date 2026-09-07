@@ -559,7 +559,9 @@ class TypeParser(ty.Generic[T]):
         def check_union(tp, pattern_args):
             if get_origin(tp) in UNION_TYPES:
                 tp_args = get_args(tp)
-                for tp_arg in tp_args:
+                error_msg = ""
+                for i, tp_arg in enumerate(tp_args, 1):
+                    final_iteration: bool = i == len(tp_args)
                     reasons = []
                     for pattern_arg in pattern_args:
                         try:
@@ -569,19 +571,23 @@ class TypeParser(ty.Generic[T]):
                         else:
                             reasons = []
                             break
-                    if self.match_any_of_union and len(reasons) < len(tp_args):
+                    if self.match_any_of_union and len(reasons) < len(pattern_args):
                         # Just need one of the union args to match
                         return
                     if reasons:
                         determiner = "any" if self.match_any_of_union else "all"
-                        raise TypeError(
+                        error_msg += (
                             f"Cannot coerce {tp} to ty.Union["
                             f"{', '.join(str(a) for a in pattern_args)}]{self.label_str}, "
                             f"because {tp_arg} cannot be coerced to {determiner} of its args:\n\n"
                             + "\n\n".join(
                                 f"{a} -> {e}" for a, e in zip(pattern_args, reasons)
                             )
+                            + "\n"
                         )
+                        if not self.match_any_of_union or final_iteration:
+                            raise TypeError(error_msg)
+
                 return
             reasons = []
             for pattern_arg in pattern_args:
