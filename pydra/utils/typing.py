@@ -1098,7 +1098,7 @@ class TypeParser(ty.Generic[T]):
     get_args = staticmethod(get_args)
 
 
-def is_union(type_: type, args: list[type] = None) -> bool:
+def is_union(type_: type, args: list[type] | None = None) -> bool:
     """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form
 
     Parameters
@@ -1115,7 +1115,7 @@ def is_union(type_: type, args: list[type] = None) -> bool:
     """
     if ty.get_origin(type_) in UNION_TYPES:
         if args is not None:
-            return ty.get_args(type_) == args
+            return ty.get_args(type_) == tuple(args)
         return True
     return False
 

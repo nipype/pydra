@@ -11,7 +11,7 @@ from pydra.compose import python
 from fileformats.generic import File
 from pydra.engine.lazy import LazyOutField
 from pydra.compose import workflow
-from pydra.utils.typing import TypeParser, MultiInputObj, is_container
+from pydra.utils.typing import TypeParser, MultiInputObj, is_container, is_union
 from fileformats.application import Json, Yaml, Xml
 from .utils import (
     GenericFuncTask,
@@ -1032,6 +1032,30 @@ def test_is_container(type_):
 )
 def test_is_not_container(type_):
     assert not is_container(type_)
+
+
+@pytest.mark.parametrize(
+    ("type_", "args", "expected"),
+    [
+        # both spellings of a union are matched
+        (ty.Union[int, str], None, True),
+        (int | str, None, True),
+        (int, None, False),
+        (ty.List[int], None, False),
+        # required args can be given as either a list (as documented) or a tuple
+        # (as returned by ty.get_args)
+        (ty.Union[int, str], [int, str], True),
+        (ty.Union[int, str], (int, str), True),
+        (int | str, [int, str], True),
+        # and have to match the args of the union
+        (ty.Union[int, str], [int, float], False),
+        (ty.Union[int, str], [int], False),
+        (ty.Union[int, str], [], False),
+        (int, [int], False),  # not a union in the first place
+    ],
+)
+def test_is_union(type_, args, expected):
+    assert is_union(type_, args) is expected
 
 
 @pytest.mark.skipif(
