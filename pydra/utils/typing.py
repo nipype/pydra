@@ -528,6 +528,18 @@ class TypeParser(ty.Generic[T]):
                         + "\n\n".join(f"{a} -> {e}" for a, e in zip(tp_args, reasons))
                     )
             if not self.is_subclass(tp, target):
+                if get_origin(tp) in UNION_TYPES:
+                    # check_type_coercible collapses its source arg onto
+                    # get_origin(source) to handle parameterised generics
+                    # (e.g. list[int] -> list), but that collapses a Union
+                    # onto the bare `typing.Union` special form, which isn't
+                    # a class, so is_subclass's fallback issubclass() call
+                    # crashes with "issubclass() arg 1 must be a class"
+                    # instead of raising a proper coercion error. Check each
+                    # of the union's args separately instead.
+                    for tp_arg in get_args(tp):
+                        check_basic(tp_arg, target)
+                    return
                 self.check_type_coercible(tp, target)
 
         def check_union(tp, pattern_args):

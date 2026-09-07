@@ -677,6 +677,28 @@ def test_union_superclass_check_type():
     TypeParser(ty.Union[ty.List[File], Json], superclass_auto_cast=True)(lz(File))
 
 
+@pytest.mark.parametrize(
+    "source,target",
+    [
+        (ty.Union[Json, Yaml], int),  # no member relates to the target
+        (ty.Union[int, str], File),
+        (ty.Optional[Json], File),  # NoneType is what fails to relate here
+    ],
+)
+def test_union_source_not_coercible(source, target):
+    """A union source that doesn't match the target should raise a coercion error.
+
+    check_type_coercible() collapses its source onto get_origin(source) to handle
+    parameterised generics (e.g. list[int] -> list), but get_origin() of a union is
+    the bare `typing.Union` special form, which isn't a class, so issubclass() used
+    to be handed a non-class and raise "issubclass() arg 1 must be a class" instead.
+    """
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(target).check_type(source)
+    assert exc_info_matches(exc_info, "Cannot coerce")
+    assert not exc_info_matches(exc_info, "issubclass")
+
+
 def test_type_matches():
     assert TypeParser.matches([1, 2, 3], ty.List[int])
     assert TypeParser.matches((1, 2, 3), ty.Tuple[int, ...])
