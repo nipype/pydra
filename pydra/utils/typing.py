@@ -511,7 +511,7 @@ class TypeParser(ty.Generic[T]):
             # Note that we are deliberately more permissive than typical type-checking
             # here, allowing parents of the target type as well as children,
             # to avoid users having to cast from loosely typed tasks to strict ones
-            if self.match_any_of_union and get_origin(tp) is ty.Union:
+            if self.match_any_of_union and get_origin(tp) in UNION_TYPES:
                 reasons = []
                 tp_args = get_args(tp)
                 for tp_arg in tp_args:
@@ -1121,7 +1121,7 @@ def is_optional(type_: type) -> bool:
 def is_container(type_: type) -> bool:
     """Check if the type is a container, i.e. a list, tuple, or MultiOutputObj"""
     origin = ty.get_origin(type_)
-    if origin is ty.Union:
+    if origin in UNION_TYPES:
         return all(is_container(a) for a in ty.get_args(type_))
     tp = origin if origin else type_
     return inspect.isclass(tp) and issubclass(tp, ty.Container)

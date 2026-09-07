@@ -670,6 +670,18 @@ def test_any_union():
     TypeParser(File, match_any_of_union=True).check_type(ty.Union[ty.List[File], Json])
 
 
+@pytest.mark.parametrize(
+    "source",
+    [ty.Union[Json, int], Json | int],  # both spellings of the same union
+)
+def test_any_union_spellings(source):
+    """A union should be matched the same way however it is spelled, i.e. whether its
+    origin is typing.Union or types.UnionType (which are only the same object in
+    Python >= 3.14)"""
+    # Json matches File, int doesn't, which is enough with match_any_of_union set
+    TypeParser(File, match_any_of_union=True).check_type(source)
+
+
 def test_union_superclass_check_type():
     """Check that the superclass auto-cast matches if any of the union args match instead
     of all"""
@@ -998,6 +1010,10 @@ def test_none_is_subclass2a():
         (ty.Union[ty.List[int], ty.Tuple[int, ...]],),
         (ty.Union[ty.List[int], ty.Dict[str, int]],),
         (ty.Union[ty.List[int], ty.Tuple[int, ...], ty.Dict[str, int]],),
+        # unions of builtin generics, whose origin is types.UnionType rather than
+        # typing.Union (note that ty.List[int] | ... would give the latter)
+        (list[int] | tuple[int, ...],),
+        (list[int] | dict[str, int],),
     ],
 )
 def test_is_container(type_):
@@ -1010,6 +1026,8 @@ def test_is_container(type_):
         (int,),
         (bool,),
         (ty.Union[bool, str],),
+        (bool | str,),
+        (list[int] | int,),  # not every arg is a container
     ],
 )
 def test_is_not_container(type_):
