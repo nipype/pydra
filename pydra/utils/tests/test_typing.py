@@ -770,6 +770,35 @@ def test_optional_source_permit_superclass_fails():
     assert exc_info_matches(exc_info, "Cannot coerce")
 
 
+def test_apply_to_instances_caches_repeated_references():
+    """Repeated references to the same object should only have the function applied to
+    them once, however deeply they are nested, and the modified object should be shared
+    between all of the positions the original appeared in"""
+
+    class Obj:
+        def __init__(self, name):
+            self.name = name
+
+    applied = []
+
+    def func(obj):
+        applied.append(obj.name)
+        return Obj(obj.name + "-modified")
+
+    shared = Obj("shared")
+    modified = TypeParser.apply_to_instances(
+        Obj, func, [shared, shared, [shared], {"key": shared}]
+    )
+    assert applied == ["shared"]  # not once per reference
+    in_result = [modified[0], modified[1], modified[2][0], modified[3]["key"]]
+    assert len({id(o) for o in in_result}) == 1
+
+    # Distinct objects are still handled separately, even if they are equivalent
+    applied.clear()
+    TypeParser.apply_to_instances(Obj, func, [Obj("a"), Obj("a")])
+    assert applied == ["a", "a"]
+
+
 def test_type_matches():
     assert TypeParser.matches([1, 2, 3], ty.List[int])
     assert TypeParser.matches((1, 2, 3), ty.Tuple[int, ...])

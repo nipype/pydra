@@ -1007,14 +1007,16 @@ class TypeParser(ty.Generic[T]):
         elif cls.is_instance(value, ty.Mapping):
             modified = type(value)(  # type: ignore
                 (
-                    cls.apply_to_instances(target_type, func, key),
-                    cls.apply_to_instances(target_type, func, val),
+                    cls.apply_to_instances(target_type, func, key, cache),
+                    cls.apply_to_instances(target_type, func, val, cache),
                 )
                 for (key, val) in value.items()
             )
         else:
             assert cls.is_instance(value, (ty.Sequence, MultiOutputObj))
-            args = [cls.apply_to_instances(target_type, func, val) for val in value]
+            args = [
+                cls.apply_to_instances(target_type, func, val, cache) for val in value
+            ]
             modified = type(value)(args)  # type: ignore
         cache[obj_id] = modified
         return modified
