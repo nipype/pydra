@@ -1073,6 +1073,10 @@ def test_generic_is_subclass4():
         (None, type(None)),
         (None, ty.Union[int, None]),
         (1, ty.Union[int, None]),
+        # a non-matching ty.Type[*] candidate shouldn't stop later candidates from
+        # being checked
+        (1, [ty.Type[File], int]),
+        (File, [int, ty.Type[File]]),
     ],
 )
 def test_type_is_instance(tp, obj):
@@ -1086,10 +1090,35 @@ def test_type_is_instance(tp, obj):
         (None, int),
         (1, None),
         (None, ty.Union[int, str]),
+        # a ty.Type[*] candidate that doesn't match should give False rather than
+        # being passed to isinstance(), which raises on a subscripted generic
+        (1, ty.Type[File]),
+        (1, [ty.Type[File]]),
+        (File, [ty.Type[Json]]),
     ],
 )
 def test_type_is_not_instance(tp, obj):
     assert not TypeParser.is_instance(tp, obj)
+
+
+@pytest.mark.parametrize(
+    ("klass", "candidates", "expected"),
+    [
+        # the matching candidate is found wherever it appears in the sequence
+        # (Yaml is a sibling of Json, so it doesn't match it either way round)
+        (ty.Type[Json], [ty.Type[Yaml], ty.Type[Json]], True),
+        (ty.Type[Json], [ty.Type[Json], ty.Type[Yaml]], True),
+        (Json, [ty.Type[Yaml], Json], True),
+        (Json, [Json, ty.Type[Yaml]], True),
+        # and no candidate matches these
+        (ty.Type[Json], [ty.Type[Yaml]], False),
+        (Json, [ty.Type[Yaml]], False),
+    ],
+)
+def test_is_subclass_type_candidates(klass, candidates, expected):
+    """A ty.Type[*] candidate that doesn't match should only rule itself out, not the
+    candidates following it"""
+    assert TypeParser.is_subclass(klass, candidates) is expected
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")

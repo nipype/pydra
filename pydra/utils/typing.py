@@ -836,12 +836,17 @@ class TypeParser(ty.Generic[T]):
                 return True
             # Handle ty.Type[*] candidates
             if ty.get_origin(candidate) is type:
-                return inspect.isclass(obj) and cls.is_subclass(
+                if inspect.isclass(obj) and cls.is_subclass(
                     obj, ty.get_args(candidate)[0]
-                )
+                ):
+                    return True
+                # Move on to the next candidate rather than falling through to the
+                # isinstance() check below, which raises on a subscripted generic
+                continue
             if NO_GENERIC_ISSUBCLASS:
                 if inspect.isclass(obj):
-                    return candidate is type
+                    if candidate is type:
+                        return True
                 if issubtype(type(obj), candidate) or (
                     type(obj) is dict and candidate is ty.Mapping  # noqa: E721
                 ):
@@ -892,9 +897,13 @@ class TypeParser(ty.Generic[T]):
             if origin is type and (candidate is type or candidate_origin is type):
                 if candidate is type:
                     return True
-                return cls.is_subclass(args[0], candidate_args[0])
+                if cls.is_subclass(args[0], candidate_args[0]):
+                    return True
+                continue
             elif origin is type or candidate_origin is type:
-                return False
+                # Only this candidate is ruled out, the remaining ones still need to
+                # be checked
+                continue
             if NO_GENERIC_ISSUBCLASS:
                 if klass is type and candidate is not type:
                     return False
