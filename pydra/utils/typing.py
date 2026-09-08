@@ -106,7 +106,9 @@ class TypeParser(ty.Generic[T]):
         not_coercible=[(str, list)])
     superclass_auto_cast : bool
         Allow lazy fields to pass the type check if their types are superclasses of the
-        specified pattern (instead of matching or being subclasses of the pattern)
+        specified pattern (instead of matching or being subclasses of the pattern).
+        Also allows an optional type to pass the type check against a non-optional
+        pattern, deferring the None case to runtime
     label : str
         the label to be used to identify the type parser in error messages. Especially
         useful when TypeParser is used as a converter in attrs.fields
@@ -464,6 +466,16 @@ class TypeParser(ty.Generic[T]):
                 raise TypeError(
                     f"Splits with more than one type argument ({args}) are invalid{self.label_str}"
                 )
+            # If the target pattern is also a StateArray (e.g. the field being
+            # checked is itself downstream of another split), unwrap it in
+            # lock-step with the incoming type, the same way MultiInputObj target
+            # patterns are unwrapped below, otherwise the unwrapped incoming type
+            # would be checked against the still-wrapped `(StateArray, [...])`
+            # pattern and never match, even against itself
+            if isinstance(self.pattern, tuple) and self.pattern[0] is StateArray:
+                inner_type_parser = copy(self)
+                inner_type_parser.pattern = self.pattern[1][0]
+                return inner_type_parser.check_type(args[0])
             return self.check_type(args[0])
 
         def expand_and_check(tp, pattern: ty.Union[type, tuple]):
@@ -499,7 +511,7 @@ class TypeParser(ty.Generic[T]):
             # Note that we are deliberately more permissive than typical type-checking
             # here, allowing parents of the target type as well as children,
             # to avoid users having to cast from loosely typed tasks to strict ones
-            if self.match_any_of_union and get_origin(tp) is ty.Union:
+            if self.match_any_of_union and get_origin(tp) in UNION_TYPES:
                 reasons = []
                 tp_args = get_args(tp)
                 for tp_arg in tp_args:
@@ -517,13 +529,39 @@ class TypeParser(ty.Generic[T]):
                         f"{self.label_str}:\n\n"
                         + "\n\n".join(f"{a} -> {e}" for a, e in zip(tp_args, reasons))
                     )
+            if (
+                self.superclass_auto_cast
+                and is_optional(tp)
+                and not is_optional(target)
+            ):
+                # Treat Optional[X] like X when connecting to a non-optional
+                # target, deferring the None case to runtime rather than
+                # rejecting the connection outright. Gated on
+                # superclass_auto_cast, which already signals that the caller
+                # (i.e. field connection, see compose.base.builder) wants the
+                # permissive treatment, so direct TypeParser uses stay strict.
+                tp = optional_type(tp)
             if not self.is_subclass(tp, target):
+                if get_origin(tp) in UNION_TYPES:
+                    # check_type_coercible collapses its source arg onto
+                    # get_origin(source) to handle parameterised generics
+                    # (e.g. list[int] -> list), but that collapses a Union
+                    # onto the bare `typing.Union` special form, which isn't
+                    # a class, so is_subclass's fallback issubclass() call
+                    # crashes with "issubclass() arg 1 must be a class"
+                    # instead of raising a proper coercion error. Check each
+                    # of the union's args separately instead.
+                    for tp_arg in get_args(tp):
+                        check_basic(tp_arg, target)
+                    return
                 self.check_type_coercible(tp, target)
 
         def check_union(tp, pattern_args):
             if get_origin(tp) in UNION_TYPES:
                 tp_args = get_args(tp)
-                for tp_arg in tp_args:
+                error_msg = ""
+                for i, tp_arg in enumerate(tp_args, 1):
+                    final_iteration: bool = i == len(tp_args)
                     reasons = []
                     for pattern_arg in pattern_args:
                         try:
@@ -533,19 +571,23 @@ class TypeParser(ty.Generic[T]):
                         else:
                             reasons = []
                             break
-                    if self.match_any_of_union and len(reasons) < len(tp_args):
+                    if self.match_any_of_union and len(reasons) < len(pattern_args):
                         # Just need one of the union args to match
                         return
                     if reasons:
                         determiner = "any" if self.match_any_of_union else "all"
-                        raise TypeError(
+                        error_msg += (
                             f"Cannot coerce {tp} to ty.Union["
                             f"{', '.join(str(a) for a in pattern_args)}]{self.label_str}, "
                             f"because {tp_arg} cannot be coerced to {determiner} of its args:\n\n"
                             + "\n\n".join(
                                 f"{a} -> {e}" for a, e in zip(pattern_args, reasons)
                             )
+                            + "\n"
                         )
+                        if not self.match_any_of_union or final_iteration:
+                            raise TypeError(error_msg)
+
                 return
             reasons = []
             for pattern_arg in pattern_args:
@@ -794,12 +836,17 @@ class TypeParser(ty.Generic[T]):
                 return True
             # Handle ty.Type[*] candidates
             if ty.get_origin(candidate) is type:
-                return inspect.isclass(obj) and cls.is_subclass(
+                if inspect.isclass(obj) and cls.is_subclass(
                     obj, ty.get_args(candidate)[0]
-                )
+                ):
+                    return True
+                # Move on to the next candidate rather than falling through to the
+                # isinstance() check below, which raises on a subscripted generic
+                continue
             if NO_GENERIC_ISSUBCLASS:
                 if inspect.isclass(obj):
-                    return candidate is type
+                    if candidate is type:
+                        return True
                 if issubtype(type(obj), candidate) or (
                     type(obj) is dict and candidate is ty.Mapping  # noqa: E721
                 ):
@@ -850,9 +897,13 @@ class TypeParser(ty.Generic[T]):
             if origin is type and (candidate is type or candidate_origin is type):
                 if candidate is type:
                     return True
-                return cls.is_subclass(args[0], candidate_args[0])
+                if cls.is_subclass(args[0], candidate_args[0]):
+                    return True
+                continue
             elif origin is type or candidate_origin is type:
-                return False
+                # Only this candidate is ruled out, the remaining ones still need to
+                # be checked
+                continue
             if NO_GENERIC_ISSUBCLASS:
                 if klass is type and candidate is not type:
                     return False
@@ -965,14 +1016,16 @@ class TypeParser(ty.Generic[T]):
         elif cls.is_instance(value, ty.Mapping):
             modified = type(value)(  # type: ignore
                 (
-                    cls.apply_to_instances(target_type, func, key),
-                    cls.apply_to_instances(target_type, func, val),
+                    cls.apply_to_instances(target_type, func, key, cache),
+                    cls.apply_to_instances(target_type, func, val, cache),
                 )
                 for (key, val) in value.items()
             )
         else:
             assert cls.is_instance(value, (ty.Sequence, MultiOutputObj))
-            args = [cls.apply_to_instances(target_type, func, val) for val in value]
+            args = [
+                cls.apply_to_instances(target_type, func, val, cache) for val in value
+            ]
             modified = type(value)(args)  # type: ignore
         cache[obj_id] = modified
         return modified
@@ -1045,7 +1098,7 @@ class TypeParser(ty.Generic[T]):
     get_args = staticmethod(get_args)
 
 
-def is_union(type_: type, args: list[type] = None) -> bool:
+def is_union(type_: type, args: list[type] | None = None) -> bool:
     """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form
 
     Parameters
@@ -1062,7 +1115,7 @@ def is_union(type_: type, args: list[type] = None) -> bool:
     """
     if ty.get_origin(type_) in UNION_TYPES:
         if args is not None:
-            return ty.get_args(type_) == args
+            return ty.get_args(type_) == tuple(args)
         return True
     return False
 
@@ -1077,7 +1130,7 @@ def is_optional(type_: type) -> bool:
 def is_container(type_: type) -> bool:
     """Check if the type is a container, i.e. a list, tuple, or MultiOutputObj"""
     origin = ty.get_origin(type_)
-    if origin is ty.Union:
+    if origin in UNION_TYPES:
         return all(is_container(a) for a in ty.get_args(type_))
     tp = origin if origin else type_
     return inspect.isclass(tp) and issubclass(tp, ty.Container)

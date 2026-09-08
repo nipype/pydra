@@ -194,7 +194,9 @@ def _single_template_formatting(
     # if field is MultiOutputFile and some elements from val_dict are lists,
     # each element of the list should be used separately in the template
     # and return a list with formatted values
-    if fld.type is MultiOutputFile and any(
+    # NB: compared by equality not identity, as unions are no longer cached/interned
+    # in Python >= 3.14 so an equivalent union is not necessarily the same object
+    if fld.type == MultiOutputFile and any(
         [isinstance(el, (list, MultiInputObj)) for el in val_dict.values()]
     ):
         # all fields that are lists

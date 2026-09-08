@@ -107,39 +107,39 @@ def test_traceback_wf(tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_rerun_errored(tmp_path, capfd):
+def test_rerun_errored(tmp_path):
     """Test rerunning a task containing errors.
     Only the errored tasks should be rerun"""
 
+    # NB: the jobs record themselves by touching marker files rather than printing,
+    # as the worker runs them in separate processes and whether their stdout reaches
+    # the test depends on the multiprocessing start method
+    markers = tmp_path / "markers"
+    markers.mkdir()
+
     @python.define
-    def PassOdds(x):
+    def PassOdds(x, marker_dir: str):
+        from pathlib import Path
+        from uuid import uuid4
+
+        marker_path = Path(marker_dir)
+        (marker_path / f"run-{x}-{uuid4().hex}").touch()
         if x % 2 == 0:
-            print(f"x={x} -> x%2 = {bool(x % 2)} (even error)\n")
+            (marker_path / f"error-{x}-{uuid4().hex}").touch()
             raise Exception("even error")
         else:
-            print(f"x={x} -> x%2 = {bool(x % 2)}\n")
             return x
 
-    pass_odds = PassOdds().split("x", x=[1, 2, 3, 4, 5])
+    pass_odds = PassOdds(marker_dir=str(markers)).split("x", x=[1, 2, 3, 4, 5])
 
     with pytest.raises(Exception):
-        pass_odds(cache_root=tmp_path, worker="cf", n_procs=3)
+        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
     with pytest.raises(Exception):
-        pass_odds(cache_root=tmp_path, worker="cf", n_procs=3)
+        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
 
-    out, err = capfd.readouterr()
-    stdout_lines = out.splitlines()
+    tasks_run = len(list(markers.glob("run-*")))
+    errors_found = len(list(markers.glob("error-*")))
 
-    tasks_run = 0
-    errors_found = 0
-
-    for line in stdout_lines:
-        if "-> x%2" in line:
-            tasks_run += 1
-        if "(even error)" in line:
-            errors_found += 1
-
-    # There should have been 5 messages of the form "x%2 = XXX" after calling task() the first time
-    # and another 2 messagers after calling the second time
+    # All 5 jobs run the first time, and only the 2 that errored are rerun the second
     assert tasks_run == 7
     assert errors_found == 4

@@ -4461,49 +4461,47 @@ def test_inner_outer_wf_duplicate(tmp_path: Path):
 
 
 @pytest.mark.flaky(reruns=3)
-def test_rerun_errored(tmp_path, capfd):
+def test_rerun_errored(tmp_path):
     """Test rerunning a workflow containing errors.
     Only the errored tasks and workflow should be rerun"""
 
+    # NB: the jobs record themselves by touching marker files rather than printing,
+    # as the worker runs them in separate processes and whether their stdout reaches
+    # the test depends on the multiprocessing start method
+    markers = tmp_path / "markers"
+    markers.mkdir()
+
     @python.define
-    def PassOdds(x):
+    def PassOdds(x, marker_dir: str):
+        from pathlib import Path
+        from uuid import uuid4
+
+        marker_path = Path(marker_dir)
+        (marker_path / f"run-{x}-{uuid4().hex}").touch()
         if x % 2 == 0:
-            print(f"x={x}, running x%2 = {x % 2} (even error)\n")
+            (marker_path / f"error-{x}-{uuid4().hex}").touch()
             raise ValueError("even error")
         else:
-            print(f"x={x}, running x%2 = {x % 2}\n")
             return x
 
     @workflow.define
-    def WorkyPassOdds(x):
-        pass_odds = workflow.add(PassOdds().split("x", x=x))
+    def WorkyPassOdds(x, marker_dir: str):
+        pass_odds = workflow.add(PassOdds(marker_dir=marker_dir).split("x", x=x))
         return pass_odds.out
 
-    worky = WorkyPassOdds(x=[1, 2, 3, 4, 5])
+    worky = WorkyPassOdds(x=[1, 2, 3, 4, 5], marker_dir=str(markers))
 
-    print("Starting run 1")
     with pytest.raises(RuntimeError):
         # Must be cf to get the error from all tasks, otherwise will only get the first error
-        worky(worker="cf", cache_root=tmp_path)
+        worky(worker="cf", cache_root=tmp_path / "cache")
 
-    print("Starting run 2")
     with pytest.raises(RuntimeError):
-        worky(worker="cf", cache_root=tmp_path)
+        worky(worker="cf", cache_root=tmp_path / "cache")
 
-    out, err = capfd.readouterr()
-    stdout_lines = out.splitlines()
+    tasks_run = len(list(markers.glob("run-*")))
+    errors_found = len(list(markers.glob("error-*")))
 
-    tasks_run = 0
-    errors_found = 0
-
-    for line in stdout_lines:
-        if "running x%2" in line:
-            tasks_run += 1
-        if "(even error)" in line:
-            errors_found += 1
-
-    # There should have been 5 messages of the form "x%2 = XXX" after calling task() the first time
-    # and another 2 messagers after calling the second time
+    # All 5 jobs run the first time, and only the 2 that errored are rerun the second
     assert tasks_run == 7
     assert errors_found == 4
 
