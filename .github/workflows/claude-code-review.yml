@@ -12,6 +12,12 @@ on:
 
 jobs:
   claude-review:
+    # Skip PRs opened from forks. GitHub withholds both the OIDC token
+    # (ACTIONS_ID_TOKEN_REQUEST_URL is never set, regardless of the `id-token: write`
+    # permission below) and repository secrets from `pull_request` runs originating in a
+    # forked repo, so the action cannot authenticate and the job always fails.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
