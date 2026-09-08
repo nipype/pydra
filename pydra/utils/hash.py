@@ -32,6 +32,11 @@ logger = logging.getLogger("pydra")
 
 FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 
+# Module-level cache for function source bytes to avoid repeated disk I/O and
+# AST parsing. Key: (module, qualname, source_file_mtime_ns); value: bytes of
+# the function's inner content (between "function:(" and ")").
+_function_bytes_cache: dict[tuple, bytes] = {}
+
 try:
     from typing import Protocol
 except ImportError:
@@ -102,6 +107,12 @@ class PersistentCache:
     cleanup_period: int = attrs.field()
     _hashes: ty.Dict[CacheKey, Hash] = attrs.field(factory=dict)
 
+    # Class-level guard so clean_up() runs at most once per Python session per
+    # cache location. Iterating and stat()-ing every entry in the cache
+    # directory is expensive when the cache is large; doing it after every task
+    # invocation causes significant overhead for batch workloads.
+    _session_cleanups_done: ty.ClassVar[Set[Path]] = set()
+
     # Set the location of the persistent hash cache
     LOCATION_ENV_VAR = "PYDRA_HASH_CACHE"
     CLEANUP_ENV_VAR = "PYDRA_HASH_CACHE_CLEANUP_PERIOD"
@@ -156,14 +167,22 @@ class PersistentCache:
         return Hash(hsh)
 
     def clean_up(self):
-        """Cleans up old hash caches that haven't been accessed in the last 30 days"""
+        """Cleans up old hash caches that haven't been accessed in the last 30 days.
+
+        Cleanup for a given cache location runs at most once per Python session
+        to avoid the O(n) directory scan becoming a per-task overhead for large
+        persistent caches.
+        """
+        if self.location in PersistentCache._session_cleanups_done:
+            return
+        PersistentCache._session_cleanups_done.add(self.location)
         now = datetime.now()
         for path in self.location.iterdir():
             if path.name.endswith(".lock"):
                 continue
             days = (now - datetime.fromtimestamp(path.lstat().st_atime)).days
             if days > self.cleanup_period:
-                path.unlink()
+                path.unlink(missing_ok=True)
 
     @classmethod
     def from_path(
@@ -615,6 +634,45 @@ def bytes_repr_code(obj: types.CodeType, cache: Cache) -> Iterator[bytes]:
     yield b")"
 
 
+def _parse_function_source_bytes(src: str) -> bytes:
+    """Parse function source code into a stable bytes representation.
+
+    Strips type annotations (which may reference objects that are not stable
+    across runs) and returns AST-dump bytes, falling back to raw source bytes
+    on a SyntaxError.
+    """
+
+    def dump_ast(node: ast.AST) -> bytes:
+        return ast.dump(node, annotate_fields=False, include_attributes=False).encode()
+
+    def strip_annotations(node: ast.AST) -> None:
+        if hasattr(node, "args"):
+            for arg in node.args.args:
+                arg.annotation = None
+            for arg in node.args.kwonlyargs:
+                arg.annotation = None
+            if node.args.vararg:
+                node.args.vararg.annotation = None
+            if node.args.kwarg:
+                node.args.kwarg.annotation = None
+
+    indent = re.match(r"(\s*)", src).group(1)
+    if indent:
+        src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
+    parts: list[bytes] = []
+    try:
+        func_ast = ast.parse(src).body[0]
+        strip_annotations(func_ast)
+        if hasattr(func_ast, "args"):
+            parts.append(dump_ast(func_ast.args))
+        if hasattr(func_ast, "body"):
+            for stmt in func_ast.body:
+                parts.append(dump_ast(stmt))
+    except SyntaxError:
+        parts.append(src.encode())
+    return b"".join(parts)
+
+
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
     """Serialize a function, attempting to use the AST of the source code if available
@@ -623,43 +681,31 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
     if in_stdlib(obj):
         yield f"{obj.__module__}.{obj.__name__}".encode()
     else:
+        # Build a cache key from (module, qualname, source-file mtime).
+        # os.stat() is a single cheap syscall; if successful we can avoid
+        # both inspect.getsource() and ast.parse() on repeated calls.
+        cache_key: tuple[str, str, int] | None = None
         try:
-            src = inspect.getsource(obj)
-        except OSError:
-            # Fallback to using the bytes representation of the code object
-            yield from bytes_repr(obj.__code__, cache)
+            source_file = inspect.getfile(obj)
+            mtime_ns = os.stat(source_file).st_mtime_ns
+            cache_key = (obj.__module__, obj.__qualname__, mtime_ns)
+        except (OSError, TypeError):
+            pass
+
+        if cache_key is not None and cache_key in _function_bytes_cache:
+            yield _function_bytes_cache[cache_key]
         else:
-
-            def dump_ast(node: ast.AST) -> bytes:
-                return ast.dump(
-                    node, annotate_fields=False, include_attributes=False
-                ).encode()
-
-            def strip_annotations(node: ast.AST):
-                """Remove annotations from function arguments."""
-                if hasattr(node, "args"):
-                    for arg in node.args.args:
-                        arg.annotation = None
-                    for arg in node.args.kwonlyargs:
-                        arg.annotation = None
-                    if node.args.vararg:
-                        node.args.vararg.annotation = None
-                    if node.args.kwarg:
-                        node.args.kwarg.annotation = None
-
-            indent = re.match(r"(\s*)", src).group(1)
-            if indent:
-                src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
             try:
-                func_ast = ast.parse(src).body[0]
-                strip_annotations(func_ast)
-                if hasattr(func_ast, "args"):
-                    yield dump_ast(func_ast.args)
-                if hasattr(func_ast, "body"):
-                    for stmt in func_ast.body:
-                        yield dump_ast(stmt)
-            except SyntaxError:
-                yield src.encode()
+                src = inspect.getsource(obj)
+            except OSError:
+                # Fallback to using the bytes representation of the code object.
+                # This path is not cached because it depends on the cache arg.
+                yield from bytes_repr(obj.__code__, cache)
+            else:
+                result = _parse_function_source_bytes(src)
+                if cache_key is not None:
+                    _function_bytes_cache[cache_key] = result
+                yield result
     yield b")"
 
 
