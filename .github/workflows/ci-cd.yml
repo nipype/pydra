@@ -32,7 +32,7 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: hynek/build-and-inspect-python-package@2abe76da66d0a6a4a227101f9348ee855797cfa5 # v3.0.1
@@ -58,11 +58,11 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install tox
@@ -73,7 +73,7 @@ jobs:
       - name: Run tox
         run: tox -v --exit-and-dump-after 1200
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -95,13 +95,13 @@ jobs:
           echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Setup Singularity
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: hpcng/singularity
           ref: 'v3.7.1'
           path: 'singularity'
       - name: Setup GO
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '^1.13'
       - name: Install OS deps
@@ -120,11 +120,11 @@ jobs:
         run: |
           echo ${{ github.ref }}
           singularity --version
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install tox
@@ -138,7 +138,7 @@ jobs:
           tox -v --exit-and-dump-after 1200 -- -n auto \
             pydra/environments/tests/test_singularity.py pydra/environments/tests/test_environments.py
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -161,11 +161,11 @@ jobs:
         run: |
           echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install tox
@@ -181,7 +181,7 @@ jobs:
           tox -v --exit-and-dump-after 1200 -- -n auto \
             pydra/environments/tests/test_lmod.py
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -198,7 +198,7 @@ jobs:
     steps:
     - name: Disable etelemetry
       run: echo "NO_ET=TRUE" >> $GITHUB_ENV
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
     - name: Pull docker image
@@ -227,7 +227,7 @@ jobs:
       run: |
         docker exec slurm bash -c "cd /pydra; pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v7
       with:
         fail_ci_if_error: true
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -244,11 +244,11 @@ jobs:
   #   steps:
   #   - name: Disable etelemetry
   #     run: echo "NO_ET=TRUE" >> $GITHUB_ENV
-  #   - uses: actions/checkout@v6
+  #   - uses: actions/checkout@v7
   #   - name: Fetch tags
   #     run: git fetch --prune --unshallow
   #   - name: Set up Python ${{ matrix.python-version }}
-  #     uses: actions/setup-python@v6
+  #     uses: actions/setup-python@v7
   #     with:
   #       python-version: ${{ matrix.python-version }}
   #   - name: Install SGE
@@ -306,7 +306,7 @@ jobs:
   #     run: |
   #       pytest pydra/workers/tests/test_worker.py --import-mode=importlib --rootdir . --only-worker=sge --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
   #   - name: Upload coverage to Codecov
-  #     uses: codecov/codecov-action@v5
+  #     uses: codecov/codecov-action@v7
   #     with:
   #       fail_ci_if_error: true
   #       token: ${{ secrets.CODECOV_TOKEN }}
@@ -347,11 +347,11 @@ jobs:
         ps aux | grep xfce4-notifyd
         dbus-monitor --session &
         sleep 3
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.x'
     - name: Install package
