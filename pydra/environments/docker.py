@@ -37,7 +37,7 @@ class Docker(base.Container):
         output = dict(zip(keys, values))
         if output["return_code"]:
             if output["stderr"]:
-                raise RuntimeError(output["stderr"])
+                raise RuntimeError(output["stdout"] + "\n" + output["stderr"])
             else:
                 raise RuntimeError(output["stdout"])
         return output
