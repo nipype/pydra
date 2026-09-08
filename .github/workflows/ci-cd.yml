@@ -32,10 +32,10 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: hynek/build-and-inspect-python-package@v2
+      - uses: hynek/build-and-inspect-python-package@2abe76da66d0a6a4a227101f9348ee855797cfa5 # v3.0.1
         with:
           attest-build-provenance-github: ${{ github.event_name != 'pull_request' }}
 
@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
         dependencies: [latest, pre]
         include:
           # Test minimum dependencies on oldest supported Python
@@ -58,13 +58,11 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v6
-      - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install tox
@@ -97,13 +95,13 @@ jobs:
           echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Setup Singularity
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: hpcng/singularity
           ref: 'v3.7.1'
           path: 'singularity'
       - name: Setup GO
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '^1.13'
       - name: Install OS deps
@@ -122,13 +120,11 @@ jobs:
         run: |
           echo ${{ github.ref }}
           singularity --version
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v6
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install tox
@@ -147,6 +143,50 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  test-lmod:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+        dependencies: [latest]
+      fail-fast: False
+
+    env:
+      DEPENDS: ${{ matrix.dependencies }}
+
+    steps:
+      - name: Install Lmod
+        run: sudo apt-get install -y lmod
+      - name: Set env
+        run: |
+          echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
+          echo "NO_ET=TRUE" >> $GITHUB_ENV
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install tox
+        run: |
+          uv tool install tox --with=tox-uv --with=tox-gh-actions
+      - name: Show tox config
+        run: tox c
+      - name: Run tox
+        # Run test files with singularity tests; re-add the overridable "-n auto"
+        run: |
+          source /etc/profile.d/lmod.sh
+          export
+          tox -v --exit-and-dump-after 1200 -- -n auto \
+            pydra/environments/tests/test_lmod.py
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+
   test-slurm:
     strategy:
       matrix:
@@ -158,7 +198,7 @@ jobs:
     steps:
     - name: Disable etelemetry
       run: echo "NO_ET=TRUE" >> $GITHUB_ENV
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Pull docker image
@@ -182,7 +222,7 @@ jobs:
         docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
         docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v ${{ matrix.python-version }}"
         docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
-        docker exec slurm bash -c "pip install --upgrade pip && pip install 'numpy<2' -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
+        docker exec slurm bash -c "pip install --upgrade pip && pip install 'numpy<2' 'pillow<12.3' -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
         docker exec slurm bash -c "cd /pydra; pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
@@ -204,11 +244,11 @@ jobs:
   #   steps:
   #   - name: Disable etelemetry
   #     run: echo "NO_ET=TRUE" >> $GITHUB_ENV
-  #   - uses: actions/checkout@v4
+  #   - uses: actions/checkout@v6
   #   - name: Fetch tags
   #     run: git fetch --prune --unshallow
   #   - name: Set up Python ${{ matrix.python-version }}
-  #     uses: actions/setup-python@v5
+  #     uses: actions/setup-python@v6
   #     with:
   #       python-version: ${{ matrix.python-version }}
   #   - name: Install SGE
@@ -282,7 +322,7 @@ jobs:
     - name: Install Pandoc for NBSphinx and graphviz for workflow plotting (dot)
       run: |
         sudo apt-get update
-        sudo apt-get install -y pandoc graphviz
+        sudo apt-get install -y pandoc graphviz mrtrix3
     - name: Install Dependencies for virtual notifications in Adv.-Exec Tutorial
       run: |
           sudo apt update
@@ -307,23 +347,11 @@ jobs:
         ps aux | grep xfce4-notifyd
         dbus-monitor --session &
         sleep 3
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - name: Install Minconda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        auto-activate-base: true
-        activate-environment: ""
-    # We generate dummy aliases so they can be deleted by conda later without throwing an error
-    - name: Install MRtrix via Conda
-      run: |
-        alias shview='ls'
-        alias mrview='ls'
-        conda install -c conda-forge -c MRtrix3 mrtrix3 libstdcxx-ng
-        mrconvert --version
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.x'
     - name: Install package
@@ -332,13 +360,13 @@ jobs:
       run: python -m ipykernel install --user
     - name: Build docs
       run: make -C docs html
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: docs
         path: docs/build/html
 
   deploy:
-    needs: [build, build-docs, test, test-singularity, test-slurm]
+    needs: [build, build-docs, test, test-singularity, test-slurm, test-lmod]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     permissions:
@@ -346,7 +374,7 @@ jobs:
       id-token: write
     steps:
     - name: Download dist
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: Packages
         path: dist
@@ -359,12 +387,12 @@ jobs:
     if: github.event_name == 'release'
     steps:
     - name: Download docs
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: docs
         path: docs-build
     - name: Deploy Docs to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
       with:
-        github_token: ${{ secrets.GHPAGES_DEPLOY_KEY }}
+        deploy_key: ${{ secrets.GHPAGES_DEPLOY_KEY }}
         publish_dir: docs-build

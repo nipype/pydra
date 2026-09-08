@@ -397,7 +397,9 @@ class ShellTask(base.Task[ShellOutputsType]):
             # if False, nothing is added to the command.
             if value is True:
                 cmd_add.append(fld.argstr)
-        elif is_multi_input(tp) or tp is MultiOutputObj or tp is MultiOutputFile:
+        # NB: unions compared by equality not identity, as they are no longer
+        # cached/interned in Python >= 3.14
+        elif is_multi_input(tp) or tp == MultiOutputObj or tp == MultiOutputFile:
             # if the field is MultiInputObj, it is used to create a list of arguments
             for val in value or []:
                 split_values = copy(values)

@@ -8,7 +8,6 @@ from pydra.engine.hooks import TaskHooks
 from pydra.engine.submitter import Submitter
 from pydra.engine.job import Job
 
-
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
     reason="docker/singularity command not adjusted for windows",

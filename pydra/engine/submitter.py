@@ -310,7 +310,7 @@ class Submitter:
         self.loop = get_open_loop()
         self.worker.loop = self.loop
 
-    def expand_workflow(self, workflow_task: "Job[workflow.Task]", rerun: bool) -> None:
+    def expand_workflow(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
         """Expands and executes a workflow job synchronously. Typically only used during
         debugging and testing, as the asynchronous version is more efficient.
 
@@ -321,10 +321,10 @@ class Submitter:
 
         """
         # Construct the workflow
-        wf = workflow_task.task.construct()
+        wf = wf_job.task.construct()
         # Generate the execution graph
         exec_graph = wf.execution_graph(submitter=self)
-        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
+        wf_job.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
             for job in tasks:

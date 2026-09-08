@@ -1,7 +1,7 @@
 import logging
 import inspect
 import typing as ty
-from copy import copy
+from copy import copy, deepcopy
 from collections import defaultdict
 from typing import Self
 import attrs
@@ -115,7 +115,12 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     }
                     subset_hash = hash_function(subset_vals, cache=hash_cache)
                     if subset_hash in key_set_cache:
-                        return key_set_cache[subset_hash]
+                        wf = deepcopy(key_set_cache[subset_hash])
+                        for key in non_lazy_keys - key_set:
+                            # Set any additional non-lazy inputs that were not in the
+                            # cached workflow.
+                            setattr(wf.inputs, key, non_lazy_vals[key])
+                        return wf
 
         # Initialise the outputs of the workflow
         outputs = task.Outputs(
@@ -182,7 +187,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                 )
             for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
                 # Automatically combine any uncombined state arrays into a single lists
-                outpt_lf._type = State.combine_state_arrays(outpt_lf._type)
+                if isinstance(outpt_lf, LazyOutField):
+                    outpt_lf._type = State.combine_state_arrays(outpt_lf._type)
                 setattr(outputs, outpt.name, outpt_lf)
         else:
             if unset_outputs := [

@@ -11,7 +11,7 @@ from pydra.compose import python
 from fileformats.generic import File
 from pydra.engine.lazy import LazyOutField
 from pydra.compose import workflow
-from pydra.utils.typing import TypeParser, MultiInputObj
+from pydra.utils.typing import TypeParser, MultiInputObj, is_container, is_union
 from fileformats.application import Json, Yaml, Xml
 from .utils import (
     GenericFuncTask,
@@ -670,11 +670,145 @@ def test_any_union():
     TypeParser(File, match_any_of_union=True).check_type(ty.Union[ty.List[File], Json])
 
 
+@pytest.mark.parametrize(
+    "source",
+    [ty.Union[Json, int], Json | int],  # both spellings of the same union
+)
+def test_any_union_spellings(source):
+    """A union should be matched the same way however it is spelled, i.e. whether its
+    origin is typing.Union or types.UnionType (which are only the same object in
+    Python >= 3.14)"""
+    # Json matches File, int doesn't, which is enough with match_any_of_union set
+    TypeParser(File, match_any_of_union=True).check_type(source)
+
+
 def test_union_superclass_check_type():
     """Check that the superclass auto-cast matches if any of the union args match instead
     of all"""
     # In this case, File matches Json due to the `superclass_auto_cast=True` flag being set
     TypeParser(ty.Union[ty.List[File], Json], superclass_auto_cast=True)(lz(File))
+
+
+@pytest.mark.parametrize(
+    "source,target,match_any,expected",
+    [
+        # With match_any_of_union, one source arg matching one target arg is enough,
+        # wherever it appears in the union
+        (ty.Union[Json, int], ty.Union[File, bytes], True, True),  # first arg matches
+        (ty.Union[int, Json], ty.Union[File, bytes], True, True),  # last arg matches
+        (ty.Union[int, float, Yaml], ty.Union[File, Json], True, True),  # last of three
+        (ty.Union[int, float], ty.Union[File, Json], True, False),  # none match
+        # ... including when the source has more args than the target, which used to
+        # be read as a match regardless of whether anything actually matched
+        (ty.Union[int, float, complex], ty.Union[File, Json], True, False),
+        # Without the flag every source arg has to match one of the target args
+        (ty.Union[Json, Yaml], ty.Union[File, bytes], False, True),
+        (ty.Union[Json, int], ty.Union[File, bytes], False, False),
+        (ty.Union[int, Json], ty.Union[File, bytes], False, False),
+    ],
+)
+def test_check_union_against_union(source, target, match_any, expected):
+    """Union sources are matched against union targets arg-by-arg, independently of the
+    order the args are declared in and of how many args either union has"""
+    parser = TypeParser(target, match_any_of_union=match_any)
+    if expected:
+        parser.check_type(source)
+    else:
+        with pytest.raises(TypeError) as exc_info:
+            parser.check_type(source)
+        assert exc_info_matches(exc_info, "Cannot coerce")
+
+
+def test_union_source_coercible():
+    """A union source should match a target its args are coercible to, even though the
+    union itself is not a subclass of that target"""
+    # int is not a subclass of float, so the union as a whole isn't a subclass of the
+    # target, but both of its args are coercible to it
+    assert not TypeParser.is_subclass(ty.Union[int, float], float)
+    TypeParser(float).check_type(ty.Union[int, float])
+
+
+@pytest.mark.parametrize(
+    "source,target",
+    [
+        (ty.Union[Json, Yaml], int),  # no member relates to the target
+        (ty.Union[int, str], File),
+        (ty.Optional[Json], File),  # NoneType is what fails to relate here
+    ],
+)
+def test_union_source_not_coercible(source, target):
+    """A union source that doesn't match the target should raise a coercion error.
+
+    check_type_coercible() collapses its source onto get_origin(source) to handle
+    parameterised generics (e.g. list[int] -> list), but get_origin() of a union is
+    the bare `typing.Union` special form, which isn't a class, so issubclass() used
+    to be handed a non-class and raise "issubclass() arg 1 must be a class" instead.
+    """
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(target).check_type(source)
+    assert exc_info_matches(exc_info, "Cannot coerce")
+    assert not exc_info_matches(exc_info, "issubclass")
+
+
+def test_optional_source_permit_superclass():
+    """Optional[X] should match a non-optional target, but only when the caller has
+    opted into the permissive treatment via superclass_auto_cast"""
+    # Json is a subclass of File, so dropping the None leaves a clean match
+    TypeParser(File, superclass_auto_cast=True).check_type(ty.Optional[Json])
+    # Without the flag the None is not dropped and the connection is rejected
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(File).check_type(ty.Optional[Json])
+    assert exc_info_matches(exc_info, "Cannot coerce")
+
+
+def test_optional_source_permit_superclass_fails():
+    """The optional auto-cast should only drop the None, not smuggle through union
+    members that don't relate to the target in their own right"""
+    # int doesn't relate to File, with or without the None
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(File, superclass_auto_cast=True).check_type(ty.Optional[int])
+    assert exc_info_matches(exc_info, "Cannot coerce")
+    # ... and neither does a union that mixes a matching member with a bad one
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(File, superclass_auto_cast=True).check_type(
+            ty.Union[Json, int, None]
+        )
+    assert exc_info_matches(exc_info, "Cannot coerce")
+    # Both optional, but the non-None args still have to relate to each other
+    with pytest.raises(TypeError) as exc_info:
+        TypeParser(ty.Optional[Yaml], superclass_auto_cast=True).check_type(
+            ty.Optional[int]
+        )
+    assert exc_info_matches(exc_info, "Cannot coerce")
+
+
+def test_apply_to_instances_caches_repeated_references():
+    """Repeated references to the same object should only have the function applied to
+    them once, however deeply they are nested, and the modified object should be shared
+    between all of the positions the original appeared in"""
+
+    class Obj:
+        def __init__(self, name):
+            self.name = name
+
+    applied = []
+
+    def func(obj):
+        applied.append(obj.name)
+        return Obj(obj.name + "-modified")
+
+    shared = Obj("shared")
+    modified = TypeParser.apply_to_instances(
+        Obj, func, [shared, shared, [shared], {"key": shared}]
+    )
+    assert applied == ["shared"]  # not once per reference
+    in_result = [modified[0], modified[1], modified[2][0], modified[3]["key"]]
+    assert len({id(o) for o in in_result}) == 1
+
+    # Distinct objects are still handled separately, even if they are equivalent
+    applied.clear()
+    TypeParser.apply_to_instances(Obj, func, [Obj("a"), Obj("a")])
+    assert applied == ["a", "a"]
 
 
 def test_type_matches():
@@ -866,6 +1000,64 @@ def test_none_is_subclass2a():
     assert not TypeParser.is_subclass(None, int | float)
 
 
+@pytest.mark.parametrize(
+    ("type_",),
+    [
+        (str,),
+        (ty.List[int],),
+        (ty.Tuple[int, ...],),
+        (ty.Dict[str, int],),
+        (ty.Union[ty.List[int], ty.Tuple[int, ...]],),
+        (ty.Union[ty.List[int], ty.Dict[str, int]],),
+        (ty.Union[ty.List[int], ty.Tuple[int, ...], ty.Dict[str, int]],),
+        # unions of builtin generics, whose origin is types.UnionType rather than
+        # typing.Union (note that ty.List[int] | ... would give the latter)
+        (list[int] | tuple[int, ...],),
+        (list[int] | dict[str, int],),
+    ],
+)
+def test_is_container(type_):
+    assert is_container(type_)
+
+
+@pytest.mark.parametrize(
+    ("type_",),
+    [
+        (int,),
+        (bool,),
+        (ty.Union[bool, str],),
+        (bool | str,),
+        (list[int] | int,),  # not every arg is a container
+    ],
+)
+def test_is_not_container(type_):
+    assert not is_container(type_)
+
+
+@pytest.mark.parametrize(
+    ("type_", "args", "expected"),
+    [
+        # both spellings of a union are matched
+        (ty.Union[int, str], None, True),
+        (int | str, None, True),
+        (int, None, False),
+        (ty.List[int], None, False),
+        # required args can be given as either a list (as documented) or a tuple
+        # (as returned by ty.get_args)
+        (ty.Union[int, str], [int, str], True),
+        (ty.Union[int, str], (int, str), True),
+        (int | str, [int, str], True),
+        # and have to match the args of the union
+        (ty.Union[int, str], [int, float], False),
+        (ty.Union[int, str], [int], False),
+        (ty.Union[int, str], [], False),
+        (int, [int], False),  # not a union in the first place
+    ],
+)
+def test_is_union(type_, args, expected):
+    assert is_union(type_, args) is expected
+
+
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="Cannot subscript tuple in < Py3.9"
 )
@@ -905,6 +1097,10 @@ def test_generic_is_subclass4():
         (None, type(None)),
         (None, ty.Union[int, None]),
         (1, ty.Union[int, None]),
+        # a non-matching ty.Type[*] candidate shouldn't stop later candidates from
+        # being checked
+        (1, [ty.Type[File], int]),
+        (File, [int, ty.Type[File]]),
     ],
 )
 def test_type_is_instance(tp, obj):
@@ -918,10 +1114,35 @@ def test_type_is_instance(tp, obj):
         (None, int),
         (1, None),
         (None, ty.Union[int, str]),
+        # a ty.Type[*] candidate that doesn't match should give False rather than
+        # being passed to isinstance(), which raises on a subscripted generic
+        (1, ty.Type[File]),
+        (1, [ty.Type[File]]),
+        (File, [ty.Type[Json]]),
     ],
 )
 def test_type_is_not_instance(tp, obj):
     assert not TypeParser.is_instance(tp, obj)
+
+
+@pytest.mark.parametrize(
+    ("klass", "candidates", "expected"),
+    [
+        # the matching candidate is found wherever it appears in the sequence
+        # (Yaml is a sibling of Json, so it doesn't match it either way round)
+        (ty.Type[Json], [ty.Type[Yaml], ty.Type[Json]], True),
+        (ty.Type[Json], [ty.Type[Json], ty.Type[Yaml]], True),
+        (Json, [ty.Type[Yaml], Json], True),
+        (Json, [Json, ty.Type[Yaml]], True),
+        # and no candidate matches these
+        (ty.Type[Json], [ty.Type[Yaml]], False),
+        (Json, [ty.Type[Yaml]], False),
+    ],
+)
+def test_is_subclass_type_candidates(klass, candidates, expected):
+    """A ty.Type[*] candidate that doesn't match should only rule itself out, not the
+    candidates following it"""
+    assert TypeParser.is_subclass(klass, candidates) is expected
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
@@ -944,6 +1165,10 @@ def test_type_is_instance11a():
     [
         (MultiInputObj[str], "a", ["a"]),
         (MultiInputObj[str], ["a"], ["a"]),
+        # Multi-character strings must be wrapped as a single element, not iterated
+        # char-by-char (regression test for coerce_multi_input bug fix)
+        (MultiInputObj[str], "mean", ["mean"]),
+        (MultiInputObj[str], "std_rv", ["std_rv"]),
         (MultiInputObj[ty.List[str]], ["a"], [["a"]]),
         (MultiInputObj[ty.Union[int, ty.List[str]]], ["a"], [["a"]]),
         (MultiInputObj[ty.Union[int, ty.List[str]]], [["a"]], [["a"]]),

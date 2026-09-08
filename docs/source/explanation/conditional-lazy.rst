@@ -13,7 +13,7 @@ Lazy fields
 
 Pydra workflows are constructed by the assignment of "lazy field" placeholders from
 the outputs of upstream nodes to the inputs of downstream nodes. These placeholders,
-which are instances of the :class:`pydra.engine.specs.LazyField` class, are replaced
+which are instances of the :class:`pydra.engine.lazy.LazyField` class, are replaced
 by the actual values they represent when the workflow is run.
 
 

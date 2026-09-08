@@ -6,6 +6,7 @@ from .helpers import (
     check_explicit_fields_are_none,
     extract_fields_from_class,
     is_set,
+    sanitize_xor,
 )
 from .task import Task, Outputs
 from .builder import build_task_class

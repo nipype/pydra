@@ -11,7 +11,6 @@ import attrs
 from pydra.engine.job import Job, save
 from pydra.workers import base
 
-
 logger = logging.getLogger("pydra.worker")
 
 if ty.TYPE_CHECKING:

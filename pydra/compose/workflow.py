@@ -12,7 +12,7 @@ from pydra.compose.base import (
     extract_fields_from_class,
 )
 from pydra.utils.general import attrs_values
-from pydra.utils.typing import StateArray
+from pydra.utils.typing import StateArray, is_lazy
 
 if ty.TYPE_CHECKING:
     from pydra.engine.workflow import Workflow
@@ -206,6 +206,7 @@ def define(
             xor=xor,
         )
 
+        defn.__doc__ = constructor.__doc__
         return defn
 
     if wrapped is not None:
@@ -334,7 +335,10 @@ class WorkflowOutputs(base.Outputs):
         values = {}
         lazy_field: LazyOutField
         for name, lazy_field in attrs_values(workflow.outputs).items():
-            val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
+            if is_lazy(lazy_field):
+                val_out = lazy_field._get_value(workflow=workflow, graph=exec_graph)
+            else:
+                val_out = lazy_field  # handle non-lazy inputs that are passed through
             if isinstance(val_out, StateArray):
                 val_out = list(val_out)  # implicitly combine state arrays
             values[name] = val_out
