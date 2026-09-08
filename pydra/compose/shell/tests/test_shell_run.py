@@ -3527,11 +3527,9 @@ def test_shellcommand_error_msg(tmp_path):
     script_path = Path(tmp_path) / "script.sh"
 
     with open(script_path, "w") as f:
-        f.write(
-            """#!/bin/bash
+        f.write("""#!/bin/bash
                 echo "first line is ok, it prints '$1'"
-                /command-that-doesnt-exist"""
-        )
+                /command-that-doesnt-exist""")
 
     os.chmod(
         script_path,
@@ -3563,8 +3561,7 @@ def test_shellcommand_error_msg(tmp_path):
     path_str = str(script_path)
 
     assert (
-        str(excinfo.value)
-        == f"""Error running 'main' job with ['{path_str}', 'hello']:
+        str(excinfo.value) == f"""Error running 'main' job with ['{path_str}', 'hello']:
 
 stderr:
 {path_str}: line 3: /command-that-doesnt-exist: No such file or directory

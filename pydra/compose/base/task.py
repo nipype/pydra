@@ -21,7 +21,6 @@ from pydra.utils.general import (
 from pydra.utils.hash import Cache, hash_single, register_serializer
 from .field import Field, Arg, Out
 
-
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.environments.base import Environment

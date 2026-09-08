@@ -34,16 +34,14 @@ def create_module(
     module_dir.mkdir(parents=True)
 
     with open(module_dir / f"{version}.lua", "w") as f:
-        f.write(
-            f"""
+        f.write(f"""
         -- -*- lua -*-
 help([===[
 ----------------------------------
 ## {name}/{version} ##
 A {name} command
 ----------------------------------
-]===])"""
-        )
+]===])""")
         f.write(module_src)
     return f"{name}/{version}"
 

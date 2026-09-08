@@ -299,6 +299,12 @@ def allowed_values_validator(_, attribute, value):
         pass
     elif value is None and is_optional(attribute.type):
         pass
+    elif isinstance(value, list):
+        for v in value:
+            if v not in allowed:
+                raise ValueError(
+                    f"value of {attribute.name} has to be from {allowed}, but {v!r} provided"
+                )
     elif value not in allowed:
         raise ValueError(
             f"value of {attribute.name} has to be from {allowed}, but {value} provided"

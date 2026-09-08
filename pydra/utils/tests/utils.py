@@ -1,8 +1,10 @@
 import typing as ty
 from pathlib import Path
 from fileformats.generic import File, BinaryFile
+from fileformats.core import FileSet, extra_implementation, SampleFileGenerator
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
 from pydra.compose import shell, python
+import fileformats.extras.generic  # noqa: F401
 
 
 class MyFormat(WithMagicNumber, BinaryFile):

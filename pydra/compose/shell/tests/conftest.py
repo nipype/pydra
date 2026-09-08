@@ -1,7 +1,6 @@
 from pathlib import Path
 import pytest
 
-
 try:
     import importlib_resources
 except ImportError:

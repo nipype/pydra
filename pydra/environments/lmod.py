@@ -10,7 +10,6 @@ from pydra.compose import shell
 from pydra.environments import base
 from pydra.utils.general import ensure_list
 
-
 logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
