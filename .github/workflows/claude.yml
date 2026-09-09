@@ -1,60 +1,63 @@
-name: Claude Code
+name: Claude Code Review
 
 on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
-  issues:
-    types: [opened, assigned]
-  pull_request_review:
-    types: [submitted]
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.py"
 
 jobs:
-  claude:
-    if: |
-      (
-        (github.event_name == 'issue_comment' &&
-         contains(github.event.comment.body, '@claude') &&
-         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
-        (github.event_name == 'pull_request_review_comment' &&
-         contains(github.event.comment.body, '@claude') &&
-         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
-        (github.event_name == 'pull_request_review' &&
-         contains(github.event.review.body, '@claude') &&
-         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
-        (github.event_name == 'issues' &&
-         (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
-         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
-      )
+  claude-review:
+    # Skip PRs opened from forks. GitHub withholds both the OIDC token
+    # (ACTIONS_ID_TOKEN_REQUEST_URL is never set, regardless of the `id-token: write`
+    # permission below) and repository secrets from `pull_request` runs originating in a
+    # forked repo, so the action cannot authenticate and the job always fails.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
       issues: read
       id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - name: Run Claude Code
-        id: claude
+      # Workaround for anthropics/claude-code-action#1290: the bundled native
+      # installer exits 0 and reports success even when it fails to place the
+      # launcher, because ~/.local/bin doesn't exist on the runner. The action
+      # then spawns the missing path and dies with ENOENT during marketplace
+      # setup. Install it ourselves, create the directory first, and fail loudly
+      # if the binary isn't where we expect.
+      - name: Install Claude Code
+        id: install-claude
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://claude.ai/install.sh | bash
+          if [ ! -x "$HOME/.local/bin/claude" ]; then
+            echo "::error::claude launcher not created; candidate binaries below"
+            find "$HOME/.local/share" "$HOME/.claude" -name 'claude*' -type f 2>/dev/null || true
+            exit 1
+          fi
+          "$HOME/.local/bin/claude" --version
+          echo "path=$HOME/.local/bin/claude" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude Code Review
+        id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
+          path_to_claude_code_executable: ${{ steps.install-claude.outputs.path }}
           allowed_bots: "claude,pre-commit-ci"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-          # This is an optional setting that allows Claude to read CI results on PRs
-          additional_permissions: |
-            actions: read
-
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr:*)'
