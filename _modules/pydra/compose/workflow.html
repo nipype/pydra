@@ -6,7 +6,7 @@
         <link rel="prefetch" href="../../../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pydra.compose.workflow - Pydra v1.0a9</title>
+        <title>pydra.compose.workflow - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../../../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -297,14 +297,14 @@
     <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">TaskHooks</span>
 
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;define&quot;</span><span class="p">,</span> <span class="s2">&quot;add&quot;</span><span class="p">,</span> <span class="s2">&quot;this&quot;</span><span class="p">,</span> <span class="s2">&quot;arg&quot;</span><span class="p">,</span> <span class="s2">&quot;out&quot;</span><span class="p">,</span> <span class="s2">&quot;Task&quot;</span><span class="p">,</span> <span class="s2">&quot;Outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;cast&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"define"</span><span class="p">,</span> <span class="s2">"add"</span><span class="p">,</span> <span class="s2">"this"</span><span class="p">,</span> <span class="s2">"arg"</span><span class="p">,</span> <span class="s2">"out"</span><span class="p">,</span> <span class="s2">"Task"</span><span class="p">,</span> <span class="s2">"Outputs"</span><span class="p">,</span> <span class="s2">"cast"</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="arg">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.compose.workflow.arg">[docs]</a>
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">arg</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="n">Arg</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Argument of a workflow task</span>
+<span class="w">    </span><span class="sd">"""Argument of a workflow task</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -335,7 +335,7 @@
 <span class="sd">    lazy: bool, optional</span>
 <span class="sd">        If True the input field is not required at construction time but is passed straight</span>
 <span class="sd">        through to the tasks, by default it is False</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">pass</span></div>
 
@@ -345,7 +345,7 @@
 <a class="viewcode-back" href="../../../reference/api.html#pydra.compose.workflow.out">[docs]</a>
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">out</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="n">Out</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Output of a workflow task</span>
+<span class="w">    </span><span class="sd">"""Output of a workflow task</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -362,7 +362,7 @@
 <span class="sd">        The converter for the field passed through to the attrs.field, by default it is None</span>
 <span class="sd">    validator: callable | iterable[callable], optional</span>
 <span class="sd">        The validator(s) for the field passed through to the attrs.field, by default it is None</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">pass</span></div>
 
@@ -373,7 +373,7 @@
     <span class="n">field_specifiers</span><span class="o">=</span><span class="p">(</span><span class="n">out</span><span class="p">,),</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">outputs</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator to specify the output fields of a shell command is a dataclass-style type&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Decorator to specify the output fields of a shell command is a dataclass-style type"""</span>
     <span class="k">return</span> <span class="n">wrapped</span>
 
 
@@ -394,10 +394,10 @@
     <span class="n">auto_attribs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">xor</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(),</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Task&quot;</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Task"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Create an interface for a function or a class. Can be used either as a decorator on</span>
-<span class="sd">    a constructor function or the &quot;canonical&quot; dataclass-form of a task.</span>
+<span class="sd">    a constructor function or the "canonical" dataclass-form of a task.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -420,7 +420,7 @@
 <span class="sd">    -------</span>
 <span class="sd">    Task</span>
 <span class="sd">        The interface for the function or class.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">if</span> <span class="n">lazy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">lazy</span> <span class="o">=</span> <span class="p">[]</span>
@@ -438,12 +438,12 @@
                 <span class="n">arg</span><span class="p">,</span>
                 <span class="n">out</span><span class="p">,</span>
                 <span class="n">auto_attribs</span><span class="p">,</span>
-                <span class="n">skip_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;constructor&quot;</span><span class="p">],</span>
+                <span class="n">skip_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">"constructor"</span><span class="p">],</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;wrapped must be a class or a function, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                    <span class="sa">f</span><span class="s2">"wrapped must be a class or a function, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">"</span>
                 <span class="p">)</span>
             <span class="n">klass</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">constructor</span> <span class="o">=</span> <span class="n">wrapped</span>
@@ -463,14 +463,14 @@
                 <span class="n">output_helps</span><span class="o">=</span><span class="n">output_helps</span><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="s2">&quot;constructor&quot;</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">"constructor"</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;The argument &#39;constructor&#39; is reserved and cannot be used as an &quot;</span>
-                <span class="s2">&quot;argument name&quot;</span>
+                <span class="s2">"The argument 'constructor' is reserved and cannot be used as an "</span>
+                <span class="s2">"argument name"</span>
             <span class="p">)</span>
 
-        <span class="n">parsed_inputs</span><span class="p">[</span><span class="s2">&quot;constructor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg</span><span class="p">(</span>
-            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;constructor&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">hash_eq</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">constructor</span>
+        <span class="n">parsed_inputs</span><span class="p">[</span><span class="s2">"constructor"</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">"constructor"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">hash_eq</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">constructor</span>
         <span class="p">)</span>
         <span class="k">for</span> <span class="n">inpt_name</span> <span class="ow">in</span> <span class="n">lazy</span><span class="p">:</span>
             <span class="n">parsed_inputs</span><span class="p">[</span><span class="n">inpt_name</span><span class="p">]</span><span class="o">.</span><span class="n">lazy</span> <span class="o">=</span> <span class="kc">True</span>
@@ -492,7 +492,7 @@
 
     <span class="k">if</span> <span class="n">wrapped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="nb">type</span><span class="p">)):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;wrapped must be a class or a callable, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"wrapped must be a class or a callable, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">make</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">make</span></div>
 
@@ -500,32 +500,32 @@
 
 <div class="viewcode-block" id="this">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.compose.workflow.this">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">this</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="s2">&quot;Workflow&quot;</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the workflow currently being constructed.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">this</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="s2">"Workflow"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get the workflow currently being constructed.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    Workflow</span>
 <span class="sd">        The workflow currently being constructed.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.workflow</span><span class="w"> </span><span class="kn">import</span> <span class="n">Workflow</span>
 
     <span class="k">return</span> <span class="n">Workflow</span><span class="o">.</span><span class="n">under_construction</span><span class="p">()</span></div>
 
 
 
-<span class="n">OutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputsType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">&quot;Outputs&quot;</span><span class="p">)</span>
+<span class="n">OutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">"OutputsType"</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">"Outputs"</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="add">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.compose.workflow.add">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span>
-    <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[OutputsType]&quot;</span><span class="p">,</span>
+    <span class="n">task</span><span class="p">:</span> <span class="s2">"Task[OutputsType]"</span><span class="p">,</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">environment</span><span class="p">:</span> <span class="s2">&quot;Environment | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">hooks</span><span class="p">:</span> <span class="s2">&quot;TaskHooks | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">environment</span><span class="p">:</span> <span class="s2">"Environment | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="s2">"TaskHooks | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputsType</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Add a node to the workflow currently being constructed</span>
+<span class="w">    </span><span class="sd">"""Add a node to the workflow currently being constructed</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -536,7 +536,7 @@
 <span class="sd">        class</span>
 <span class="sd">    environment : Environment, optional</span>
 <span class="sd">        The environment to run the task in, such as the Docker or Singularity container,</span>
-<span class="sd">        by default it will be the &quot;native&quot;</span>
+<span class="sd">        by default it will be the "native"</span>
 <span class="sd">    hooks : TaskHooks, optional</span>
 <span class="sd">        The hooks to run before or after the task, by default no hooks will be run</span>
 
@@ -544,18 +544,18 @@
 <span class="sd">    -------</span>
 <span class="sd">    Outputs</span>
 <span class="sd">        The outputs of the node</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">return</span> <span class="n">this</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">)</span></div>
 
 
 
-<span class="n">U</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;U&quot;</span><span class="p">)</span>
+<span class="n">U</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">"U"</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="cast">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.compose.workflow.cast">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">cast</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="n">new_type</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">U</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">U</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cast a lazy field to a new type. Note that the typing in the signature is a white</span>
+<span class="w">    </span><span class="sd">"""Cast a lazy field to a new type. Note that the typing in the signature is a white</span>
 <span class="sd">    lie, as the return field is actually a LazyField as placeholder for the object of</span>
 <span class="sd">    type U.</span>
 
@@ -570,7 +570,7 @@
 <span class="sd">    -------</span>
 <span class="sd">    LazyField[U]</span>
 <span class="sd">        A copy of the lazy field with the new type</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">return</span> <span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span>
         <span class="n">field</span><span class="p">,</span>
         <span class="nb">type</span><span class="o">=</span><span class="n">new_type</span><span class="p">,</span>
@@ -583,8 +583,8 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">WorkflowOutputs</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="n">Outputs</span><span class="p">):</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_job</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">&quot;Job[WorkflowTask]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Self</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect the outputs of a workflow job from the outputs of the nodes in the</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_job</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">"Job[WorkflowTask]"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Self</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Collect the outputs of a workflow job from the outputs of the nodes in the</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -595,10 +595,10 @@
 <span class="sd">        -------</span>
 <span class="sd">        outputs : Outputs</span>
 <span class="sd">            The outputs of the job</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
-        <span class="n">workflow</span><span class="p">:</span> <span class="s2">&quot;Workflow&quot;</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;workflow&quot;</span><span class="p">]</span>
-        <span class="n">exec_graph</span><span class="p">:</span> <span class="s2">&quot;DiGraph[NodeExecution]&quot;</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">&quot;exec_graph&quot;</span><span class="p">]</span>
+        <span class="n">workflow</span><span class="p">:</span> <span class="s2">"Workflow"</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">"workflow"</span><span class="p">]</span>
+        <span class="n">exec_graph</span><span class="p">:</span> <span class="s2">"DiGraph[NodeExecution]"</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">return_values</span><span class="p">[</span><span class="s2">"exec_graph"</span><span class="p">]</span>
 
         <span class="c1"># Check for errors in any of the workflow nodes</span>
         <span class="k">if</span> <span class="n">errored</span> <span class="o">:=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span> <span class="k">if</span> <span class="n">n</span><span class="o">.</span><span class="n">errored</span><span class="p">]:</span>
@@ -607,19 +607,19 @@
                 <span class="k">for</span> <span class="n">node_task</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">errored</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">node_task</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
                     <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">:</span>
-                        <span class="n">time_of_crash</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;time of crash&quot;</span><span class="p">]</span>
-                        <span class="n">error_message</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;error message&quot;</span><span class="p">])</span>
+                        <span class="n">time_of_crash</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">"time of crash"</span><span class="p">]</span>
+                        <span class="n">error_message</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">"error message"</span><span class="p">])</span>
                     <span class="k">else</span><span class="p">:</span>
-                        <span class="n">time_of_crash</span> <span class="o">=</span> <span class="s2">&quot;UNKNOWN-TIME&quot;</span>
-                        <span class="n">error_message</span> <span class="o">=</span> <span class="s2">&quot;NOT RETRIEVED&quot;</span>
+                        <span class="n">time_of_crash</span> <span class="o">=</span> <span class="s2">"UNKNOWN-TIME"</span>
+                        <span class="n">error_message</span> <span class="o">=</span> <span class="s2">"NOT RETRIEVED"</span>
                     <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Job </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> failed @ </span><span class="si">{</span><span class="n">time_of_crash</span><span class="si">}</span><span class="s2"> running &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">_task</span><span class="si">}</span><span class="s2"> with the following errors:</span><span class="se">\n</span><span class="si">{</span><span class="n">error_message</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">To inspect, please load the pickled job object from here: &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">cache_dir</span><span class="si">}</span><span class="s2">/_job.pklz&quot;</span>
+                        <span class="sa">f</span><span class="s2">"Job </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> failed @ </span><span class="si">{</span><span class="n">time_of_crash</span><span class="si">}</span><span class="s2"> running "</span>
+                        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">_task</span><span class="si">}</span><span class="s2"> with the following errors:</span><span class="se">\n</span><span class="si">{</span><span class="n">error_message</span><span class="si">}</span><span class="s2">"</span>
+                        <span class="s2">"</span><span class="se">\n</span><span class="s2">To inspect, please load the pickled job object from here: "</span>
+                        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">cache_dir</span><span class="si">}</span><span class="s2">/_job.pklz"</span>
                     <span class="p">)</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Workflow </span><span class="si">{</span><span class="n">job</span><span class="si">!r}</span><span class="s2"> failed with errors:</span><span class="se">\n\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
+                <span class="sa">f</span><span class="s2">"Workflow </span><span class="si">{</span><span class="n">job</span><span class="si">!r}</span><span class="s2"> failed with errors:</span><span class="se">\n\n</span><span class="s2">"</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
             <span class="p">)</span>
 
         <span class="c1"># Retrieve values from the output fields</span>
@@ -641,27 +641,27 @@
         <span class="k">return</span> <span class="n">outputs</span>
 
 
-<span class="n">WorkflowOutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">WorkflowOutputs</span><span class="p">)</span>
+<span class="n">WorkflowOutputsType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">"OutputType"</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">WorkflowOutputs</span><span class="p">)</span>
 
 
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_attribs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">WorkflowTask</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="n">WorkflowOutputsType</span><span class="p">]):</span>
 
-    <span class="n">_executor_name</span> <span class="o">=</span> <span class="s2">&quot;constructor&quot;</span>
+    <span class="n">_executor_name</span> <span class="o">=</span> <span class="s2">"constructor"</span>
 
-    <span class="n">RESERVED_FIELD_NAMES</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">Task</span><span class="o">.</span><span class="n">RESERVED_FIELD_NAMES</span> <span class="o">+</span> <span class="p">(</span><span class="s2">&quot;construct&quot;</span><span class="p">,)</span>
+    <span class="n">RESERVED_FIELD_NAMES</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">Task</span><span class="o">.</span><span class="n">RESERVED_FIELD_NAMES</span> <span class="o">+</span> <span class="p">(</span><span class="s2">"construct"</span><span class="p">,)</span>
 
     <span class="n">_constructed</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">&quot;Job[WorkflowTask]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the workflow.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">"Job[WorkflowTask]"</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run the workflow."""</span>
         <span class="n">job</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_run_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">&quot;Job[WorkflowTask]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the workflow asynchronously.&quot;&quot;&quot;</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_run_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">"Job[WorkflowTask]"</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run the workflow asynchronously."""</span>
         <span class="k">await</span> <span class="n">job</span><span class="o">.</span><span class="n">submitter</span><span class="o">.</span><span class="n">expand_workflow_async</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">construct</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Workflow&quot;</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">construct</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Workflow"</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.workflow</span><span class="w"> </span><span class="kn">import</span> <span class="n">Workflow</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -705,7 +705,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../../../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

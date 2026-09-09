@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Canonical form and serialisation - Pydra v1.0a9</title>
+        <title>Canonical form and serialisation - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -170,7 +170,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,7 +194,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -299,24 +299,24 @@ it is too magical for linters follow. Therefore, when designing tasks to be used
 
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalPythonTask</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">&quot;CanonicalPythonTask.Outputs&quot;</span><span class="p">]):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Canonical Python task class for testing</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalPythonTask</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">"CanonicalPythonTask.Outputs"</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">"""Canonical Python task class for testing</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        a: First input</span>
 <span class="sd">            to be inputted</span>
 <span class="sd">        b: Second input</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span>  <span class="c1"># set default value</span>
 
     <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">Outputs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Args:</span>
 <span class="sd">            c: Sum of a and b</span>
 <span class="sd">            d: Product of a and b</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="n">c</span><span class="p">:</span> <span class="nb">float</span>
         <span class="n">d</span><span class="p">:</span> <span class="nb">float</span>
@@ -363,24 +363,24 @@ Outputs:
 
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalPythonTask</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">&quot;CanonicalPythonTask.Outputs&quot;</span><span class="p">]):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Canonical Python task class for testing</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalPythonTask</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">"CanonicalPythonTask.Outputs"</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">"""Canonical Python task class for testing</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        a: First input</span>
 <span class="sd">            to be inputted</span>
 <span class="sd">        b: Second input</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">allowed_values</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
     <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">attrs</span><span class="o">.</span><span class="n">validators</span><span class="o">.</span><span class="n">not_</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
 
     <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">Outputs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Args:</span>
 <span class="sd">            c: Sum of a and b</span>
 <span class="sd">            d: Product of a and b</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="n">c</span><span class="p">:</span> <span class="nb">float</span>
         <span class="n">d</span><span class="p">:</span> <span class="nb">float</span>
@@ -432,25 +432,25 @@ Outputs:
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
 
 
-<span class="c1"># the &quot;copied&quot; output is magically passed to this function because the name matches</span>
+<span class="c1"># the "copied" output is magically passed to this function because the name matches</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">get_file_size</span><span class="p">(</span><span class="n">copied</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate the file size&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Calculate the file size"""</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">copied</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">st_size</span>
 
 
 <span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CpFileWithSize</span><span class="p">(</span><span class="n">shell</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">&quot;CpFileWithSize.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CpFileWithSize</span><span class="p">(</span><span class="n">shell</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">"CpFileWithSize.Outputs"</span><span class="p">]):</span>
 
-    <span class="n">executable</span> <span class="o">=</span> <span class="s2">&quot;cp&quot;</span>
+    <span class="n">executable</span> <span class="o">=</span> <span class="s2">"cp"</span>
 
     <span class="n">in_file</span><span class="p">:</span> <span class="n">generic</span><span class="o">.</span><span class="n">File</span>  <span class="c1"># = shell.arg() is assumed</span>
-    <span class="n">archive_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;-a&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">archive_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">"-a"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
     <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">shell</span><span class="o">.</span><span class="n">Outputs</span><span class="p">):</span>
 
         <span class="n">copied</span><span class="p">:</span> <span class="n">generic</span><span class="o">.</span><span class="n">File</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span>
-            <span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">path_template</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{in_file}</span><span class="s2">_copied&quot;</span>
+            <span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">path_template</span><span class="o">=</span><span class="s2">"</span><span class="si">{in_file}</span><span class="s2">_copied"</span>
         <span class="p">)</span>
         <span class="n">file_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="nb">callable</span><span class="o">=</span><span class="n">get_file_size</span><span class="p">)</span>
 
@@ -518,16 +518,16 @@ Outputs:
 
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalWorkflowTask</span><span class="p">(</span><span class="n">workflow</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">&quot;CanonicalWorkflowTask.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CanonicalWorkflowTask</span><span class="p">(</span><span class="n">workflow</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">"CanonicalWorkflowTask.Outputs"</span><span class="p">]):</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">str2num</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^\d+(\.\d+)?$&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^\d+(\.\d+)?$"</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
             <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>  <span class="c1"># use eval to convert string to number</span>
         <span class="k">return</span> <span class="n">value</span>
 
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">help</span><span class="o">=</span><span class="s2">&quot;A float input&quot;</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">str2num</span><span class="p">)</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">help</span><span class="o">=</span><span class="s2">"A float input"</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">str2num</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">constructor</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
@@ -580,8 +580,8 @@ Outputs:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">MyCmd</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="s2">&quot;my-cmd &lt;in_file&gt; &lt;out|out_file&gt; --an-arg &lt;an_arg?&gt; &quot;</span>
-    <span class="s2">&quot;--a-flag&lt;a_flag&gt; --arg-with-default &lt;arg_with_default:int=3&gt;&quot;</span>
+    <span class="s2">"my-cmd &lt;in_file&gt; &lt;out|out_file&gt; --an-arg &lt;an_arg?&gt; "</span>
+    <span class="s2">"--a-flag&lt;a_flag&gt; --arg-with-default &lt;arg_with_default:int=3&gt;"</span>
 <span class="p">)</span>
 
 <span class="n">print_help</span><span class="p">(</span><span class="n">MyCmd</span><span class="p">)</span>
@@ -691,7 +691,7 @@ Outputs:
  &#39;outputs&#39;: {&#39;copied&#39;: {&#39;path_template&#39;: &#39;{in_file}_copied&#39;,
                         &#39;position&#39;: -1,
                         &#39;type&#39;: &lt;class &#39;fileformats.generic.file.File&#39;&gt;},
-             &#39;file_size&#39;: {&#39;callable&#39;: &lt;function get_file_size at 0x7fbf1825f740&gt;,
+             &#39;file_size&#39;: {&#39;callable&#39;: &lt;function get_file_size at 0x7fb540484720&gt;,
                            &#39;type&#39;: &lt;class &#39;int&#39;&gt;}},
  &#39;type&#39;: &#39;shell&#39;,
  &#39;xor&#39;: []}
@@ -719,11 +719,11 @@ Outputs:
 
 <span class="n">tmp_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">())</span>
 
-<span class="n">a_file</span> <span class="o">=</span> <span class="n">tmp_dir</span> <span class="o">/</span> <span class="s2">&quot;hello-world.txt&quot;</span>
-<span class="n">a_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">&quot;Hello world&quot;</span><span class="p">)</span>
+<span class="n">a_file</span> <span class="o">=</span> <span class="n">tmp_dir</span> <span class="o">/</span> <span class="s2">"hello-world.txt"</span>
+<span class="n">a_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">"Hello world"</span><span class="p">)</span>
 
 <span class="n">cp_file_with_size</span> <span class="o">=</span> <span class="n">ReloadedCpFileWithSize</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">a_file</span><span class="p">)</span>
-<span class="n">outputs</span> <span class="o">=</span> <span class="n">cp_file_with_size</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">tmp_dir</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span><span class="p">)</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">cp_file_with_size</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">tmp_dir</span> <span class="o">/</span> <span class="s2">"cache"</span><span class="p">)</span>
 
 <span class="n">pprint</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">outputs</span><span class="p">))</span>
 </pre></div>
@@ -734,7 +734,7 @@ Outputs:
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-{&#39;copied&#39;: File(&#39;/tmp/tmpwrxck7pb/cache/shell-5453cd2a4d6067a63dd1753d255d9c41/hello-world_copied.txt&#39;),
+{&#39;copied&#39;: File(&#39;/tmp/tmp169o3rmo/cache/shell-70afa836de6fc7136cf2ffd52f43fc1e/hello-world_copied.txt&#39;),
  &#39;file_size&#39;: 11,
  &#39;return_code&#39;: 0,
  &#39;stderr&#39;: &#39;&#39;,
@@ -816,7 +816,7 @@ Outputs:
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

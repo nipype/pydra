@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Advanced execution - Pydra v1.0a9</title>
+        <title>Advanced execution - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -170,7 +170,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,7 +194,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -318,7 +318,7 @@
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python-9d3f425553896afa77aff38def3692af&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, task=TenToThePower(p=3))
+Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a10/run-cache/python-9d3f425553896afa77aff38def3692af&#39;), outputs=TenToThePowerOutputs(out=1000), runtime=None, errored=False, task=TenToThePower(p=3))
 </pre></div></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">Result</span></code> object contains</p>
@@ -354,16 +354,16 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
 
 <span class="n">cache_root</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
 
     <span class="n">ten_to_the_power</span> <span class="o">=</span> <span class="n">TenToThePower</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
 
     <span class="c1"># Run the 5 tasks in parallel split across 3 processes</span>
-    <span class="n">outputs</span> <span class="o">=</span> <span class="n">ten_to_the_power</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">&quot;cf&quot;</span><span class="p">,</span> <span class="n">n_procs</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">cache_root</span><span class="o">=</span><span class="n">cache_root</span><span class="p">)</span>
+    <span class="n">outputs</span> <span class="o">=</span> <span class="n">ten_to_the_power</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">"cf"</span><span class="p">,</span> <span class="n">n_procs</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">cache_root</span><span class="o">=</span><span class="n">cache_root</span><span class="p">)</span>
 
     <span class="n">p1</span><span class="p">,</span> <span class="n">p2</span><span class="p">,</span> <span class="n">p3</span><span class="p">,</span> <span class="n">p4</span><span class="p">,</span> <span class="n">p5</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">out</span>
 
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;10^5 = </span><span class="si">{</span><span class="n">p5</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"10^5 = </span><span class="si">{</span><span class="n">p5</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -389,7 +389,7 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
 
 <span class="n">p6</span><span class="p">,</span> <span class="n">p7</span><span class="p">,</span> <span class="n">p8</span><span class="p">,</span> <span class="n">p9</span><span class="p">,</span> <span class="n">p10</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">out</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;10^10 = </span><span class="si">{</span><span class="n">p10</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"10^10 = </span><span class="si">{</span><span class="n">p10</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -420,7 +420,7 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
 
 <span class="c1"># Make a temporary directory</span>
 <span class="n">test_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">())</span>
-<span class="n">nifti_dir</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;nifti&quot;</span>
+<span class="n">nifti_dir</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">"nifti"</span>
 <span class="n">nifti_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">()</span>
 
 <span class="c1"># Generate some random NIfTI files to work with</span>
@@ -439,21 +439,21 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
     <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
 <span class="p">]</span>
 
-<span class="n">mrgrid_varying_vox</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+<span class="n">mrgrid_varying_vox</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">"regrid"</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"in_file"</span><span class="p">,</span> <span class="s2">"voxel"</span><span class="p">),</span>
     <span class="n">in_file</span><span class="o">=</span><span class="n">nifti_files</span><span class="p">,</span>
     <span class="n">voxel</span><span class="o">=</span><span class="n">VOX_SIZES</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">submitter</span> <span class="o">=</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span><span class="p">)</span>
+<span class="n">submitter</span> <span class="o">=</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">"cache"</span><span class="p">)</span>
 
 
 <span class="k">with</span> <span class="n">submitter</span><span class="p">:</span>
     <span class="n">result1</span> <span class="o">=</span> <span class="n">submitter</span><span class="p">(</span><span class="n">mrgrid_varying_vox</span><span class="p">)</span>
 
 
-<span class="n">mrgrid_varying_vox2</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+<span class="n">mrgrid_varying_vox2</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">"regrid"</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"in_file"</span><span class="p">,</span> <span class="s2">"voxel"</span><span class="p">),</span>
     <span class="n">in_file</span><span class="o">=</span><span class="n">nifti_files</span><span class="p">,</span>
     <span class="n">voxel</span><span class="o">=</span><span class="n">copy</span><span class="p">(</span><span class="n">VOX_SIZES</span><span class="p">),</span>
 <span class="p">)</span>
@@ -484,11 +484,11 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Rename a NIfTI file within the test directory</span>
 <span class="n">nifti_files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">Nifti1</span><span class="p">(</span>
-    <span class="n">nifti_files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">fspath</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">nifti_files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">fspath</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">&quot;first.nii&quot;</span><span class="p">))</span>
+    <span class="n">nifti_files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">fspath</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">nifti_files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">fspath</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">"first.nii"</span><span class="p">))</span>
 <span class="p">)</span>
 
-<span class="n">mrgrid_varying_vox3</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+<span class="n">mrgrid_varying_vox3</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">"regrid"</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"in_file"</span><span class="p">,</span> <span class="s2">"voxel"</span><span class="p">),</span>
     <span class="n">in_file</span><span class="o">=</span><span class="n">nifti_files</span><span class="p">,</span>
     <span class="n">voxel</span><span class="o">=</span><span class="n">VOX_SIZES</span><span class="p">,</span>
 <span class="p">)</span>
@@ -504,8 +504,8 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
 <span class="n">nifti_files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">Nifti1</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">nifti_dir</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 
 <span class="c1"># Update the in_file input field to include the new file</span>
-<span class="n">mrgrid_varying_vox4</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+<span class="n">mrgrid_varying_vox4</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">operation</span><span class="o">=</span><span class="s2">"regrid"</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"in_file"</span><span class="p">,</span> <span class="s2">"voxel"</span><span class="p">),</span>
     <span class="n">in_file</span><span class="o">=</span><span class="n">nifti_files</span><span class="p">,</span>
     <span class="n">voxel</span><span class="o">=</span><span class="n">VOX_SIZES</span><span class="p">,</span>
 <span class="p">)</span>
@@ -535,12 +535,12 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
 
 <span class="n">nifti_file</span> <span class="o">=</span> <span class="n">Nifti1</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">test_dir</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
-<span class="c1"># Instantiate the task, &quot;splitting&quot; over all NIfTI files in the test directory</span>
-<span class="c1"># by splitting the &quot;input&quot; input field over all files in the directory</span>
-<span class="n">mrgrid</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">nifti_file</span><span class="p">,</span> <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;regrid&quot;</span><span class="p">,</span> <span class="n">voxel</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">))</span>
+<span class="c1"># Instantiate the task, "splitting" over all NIfTI files in the test directory</span>
+<span class="c1"># by splitting the "input" input field over all files in the directory</span>
+<span class="n">mrgrid</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">nifti_file</span><span class="p">,</span> <span class="n">operation</span><span class="o">=</span><span class="s2">"regrid"</span><span class="p">,</span> <span class="n">voxel</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">))</span>
 
 <span class="c1"># Run the task to resample all NIfTI files</span>
-<span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">&quot;mrtrix3/mrtrix3&quot;</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">))</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"mrtrix3/mrtrix3"</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">"latest"</span><span class="p">))</span>
 
 <span class="c1"># Print the locations of the output files</span>
 <span class="n">pprint</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">out_file</span><span class="p">)</span>
@@ -552,7 +552,7 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/python
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-ImageFormat(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/shell-425d358e41ba5cd19aaacd92f2d9f3e9/out_file.mif&#39;)
+ImageFormat(&#39;/home/runner/.cache/pydra/1.0a10/run-cache/shell-72d1b547fd00972cc6ea6a5f4d9bbc69/out_file.mif&#39;)
 </pre></div></div>
 </div>
 <p>Of course for this to work Docker needs to work and be configured for <a class="reference external" href="https://docs.docker.com/engine/install/linux-postinstall/">sudo-less execution</a>. See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>
@@ -577,18 +577,18 @@ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/shell-425d358e41ba5cd
 
 <span class="k">def</span><span class="w"> </span><span class="nf">notify_task_completion</span><span class="p">(</span><span class="n">task</span><span class="p">:</span> <span class="n">Job</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Result</span><span class="p">):</span>
     <span class="c1"># Print a message to the terminal</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Job completed! Results are stored in </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Job completed! Results are stored in </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
 
     <span class="c1"># Platform-specific notifications</span>
-    <span class="k">if</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;Darwin&quot;</span><span class="p">:</span>  <span class="c1"># macOS</span>
+    <span class="k">if</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"Darwin"</span><span class="p">:</span>  <span class="c1"># macOS</span>
         <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span>
-            <span class="s1">&#39;osascript -e </span><span class="se">\&#39;</span><span class="s1">display notification &quot;Job has completed successfully!&quot; &#39;</span>
-            <span class="s1">&#39;with title &quot;Job Notification&quot;</span><span class="se">\&#39;</span><span class="s1">&#39;</span>
+            <span class="s1">'osascript -e </span><span class="se">\'</span><span class="s1">display notification "Job has completed successfully!" '</span>
+            <span class="s1">'with title "Job Notification"</span><span class="se">\'</span><span class="s1">'</span>
         <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;Linux&quot;</span><span class="p">:</span>  <span class="c1"># Linux</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s1">&#39;notify-send &quot;Job Notification&quot; &quot;Job has completed successfully!&quot;&#39;</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;Windows&quot;</span><span class="p">:</span>  <span class="c1"># Windows</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s1">&#39;msg * &quot;Job has completed successfully!&quot;&#39;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"Linux"</span><span class="p">:</span>  <span class="c1"># Linux</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s1">'notify-send "Job Notification" "Job has completed successfully!"'</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">platform</span><span class="o">.</span><span class="n">system</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"Windows"</span><span class="p">:</span>  <span class="c1"># Windows</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s1">'msg * "Job has completed successfully!"'</span><span class="p">)</span>
 
 
 <span class="c1"># Run the task to resample all NIfTI files</span>
@@ -606,8 +606,8 @@ ImageFormat(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/shell-425d358e41ba5cd
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Job completed! Results are stored in &#39;/tmp/tmpff9_lrp8/shell-425d358e41ba5cd19aaacd92f2d9f3e9&#39;
-ImageFormat(&#39;/tmp/tmpff9_lrp8/shell-425d358e41ba5cd19aaacd92f2d9f3e9/out_file.mif&#39;)
+Job completed! Results are stored in &#39;/tmp/tmp_rayk_6d/shell-72d1b547fd00972cc6ea6a5f4d9bbc69&#39;
+ImageFormat(&#39;/tmp/tmp_rayk_6d/shell-72d1b547fd00972cc6ea6a5f4d9bbc69/out_file.mif&#39;)
 </pre></div></div>
 </div>
 </section>
@@ -689,7 +689,7 @@ ImageFormat(&#39;/tmp/tmpff9_lrp8/shell-425d358e41ba5cd19aaacd92f2d9f3e9/out_fil
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

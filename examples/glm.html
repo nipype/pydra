@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>General Linear Model (GLM) - Pydra v1.0a9</title>
+        <title>General Linear Model (GLM) - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -170,7 +170,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,7 +194,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -301,7 +301,7 @@
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="k">if</span> <span class="ow">not</span> <span class="n">sys</span><span class="o">.</span><span class="n">warnoptions</span><span class="p">:</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+    <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">"ignore"</span><span class="p">)</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
@@ -316,7 +316,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
 <span class="c1"># These functions were removed within nilearn, so this notebook needs to be rewritten</span>
-<span class="c1"># to use the &#39;openneuro&#39; module instead</span>
+<span class="c1"># to use the 'openneuro' module instead</span>
 <span class="c1"># from nilearn.datasets import (</span>
 <span class="c1">#         fetch_openneuro_dataset_index,</span>
 <span class="c1">#         fetch_openneuro_dataset,</span>
@@ -341,8 +341,8 @@
 <span class="n">pydra_tutorial_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">())</span>
 
 <span class="c1"># set up output directory</span>
-<span class="n">workflow_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">pydra_tutorial_dir</span><span class="p">)</span> <span class="o">/</span> <span class="s1">&#39;outputs&#39;</span>
-<span class="n">workflow_out_dir</span> <span class="o">=</span> <span class="n">workflow_dir</span> <span class="o">/</span> <span class="s1">&#39;6_glm&#39;</span>
+<span class="n">workflow_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">pydra_tutorial_dir</span><span class="p">)</span> <span class="o">/</span> <span class="s1">'outputs'</span>
+<span class="n">workflow_out_dir</span> <span class="o">=</span> <span class="n">workflow_dir</span> <span class="o">/</span> <span class="s1">'6_glm'</span>
 
 <span class="c1"># create the output directory if not exit</span>
 <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">workflow_out_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -388,7 +388,7 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data_dir&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"data_dir"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">GetOpenneuroDataset</span><span class="p">(</span><span class="n">exclusion_patterns</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">n_subjects</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">urls</span> <span class="o">=</span> <span class="n">fetch_openneuro_dataset_index</span><span class="p">()</span>
     <span class="n">urls</span> <span class="o">=</span> <span class="n">select_from_index</span><span class="p">(</span>
@@ -420,7 +420,7 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;imgs&quot;</span><span class="p">,</span> <span class="s2">&quot;subject&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"model"</span><span class="p">,</span> <span class="s2">"imgs"</span><span class="p">,</span> <span class="s2">"subject"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">GetInfoFromBids</span><span class="p">(</span>
     <span class="n">data_dir</span><span class="p">:</span> <span class="n">Directory</span><span class="p">,</span>
     <span class="n">task_label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -446,7 +446,7 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
         <span class="n">models_events</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
         <span class="n">models_confounds</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
     <span class="p">)</span>
-    <span class="n">subject</span> <span class="o">=</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">subject_label</span>
+    <span class="n">subject</span> <span class="o">=</span> <span class="s1">'sub-'</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">subject_label</span>
     <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">imgs</span><span class="p">,</span> <span class="n">subject</span>
 </pre></div>
 </div>
@@ -465,26 +465,26 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;dm_path&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"dm_path"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">GetDesignMatrix</span><span class="p">(</span><span class="n">data_dir</span><span class="p">:</span> <span class="n">Directory</span><span class="p">,</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Csv</span><span class="p">:</span>
     <span class="n">fsl_design_matrix_path</span> <span class="o">=</span> <span class="n">data_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span>
-        <span class="s1">&#39;derivatives&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;task&#39;</span><span class="p">,</span>
+        <span class="s1">'derivatives'</span><span class="p">,</span>
+        <span class="s1">'task'</span><span class="p">,</span>
         <span class="n">subject</span><span class="p">,</span>
-        <span class="s1">&#39;stopsignal.feat&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;design.mat&#39;</span><span class="p">,</span>
+        <span class="s1">'stopsignal.feat'</span><span class="p">,</span>
+        <span class="s1">'design.mat'</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">design_matrix</span> <span class="o">=</span> <span class="n">get_design_from_fslmat</span><span class="p">(</span>
         <span class="n">fsl_design_matrix_path</span><span class="p">,</span> <span class="n">column_names</span><span class="o">=</span><span class="kc">None</span>
     <span class="p">)</span>
 
     <span class="n">design_columns</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="s1">&#39;cond_</span><span class="si">%02d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">design_matrix</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
+        <span class="s1">'cond_</span><span class="si">%02d</span><span class="s1">'</span> <span class="o">%</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">design_matrix</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
     <span class="p">]</span>
-    <span class="n">design_columns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;Go&#39;</span>
-    <span class="n">design_columns</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;StopSuccess&#39;</span>
+    <span class="n">design_columns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s1">'Go'</span>
+    <span class="n">design_columns</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="s1">'StopSuccess'</span>
     <span class="n">design_matrix</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="n">design_columns</span>
-    <span class="n">dm_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;designmatrix.csv&#39;</span><span class="p">)</span>
+    <span class="n">dm_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'designmatrix.csv'</span><span class="p">)</span>
     <span class="n">design_matrix</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">dm_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">dm_path</span>
 </pre></div>
@@ -504,16 +504,16 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;z_map_path&quot;</span><span class="p">,</span> <span class="s2">&quot;masker&quot;</span><span class="p">,</span> <span class="s2">&quot;glm_report_file&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"model"</span><span class="p">,</span> <span class="s2">"z_map_path"</span><span class="p">,</span> <span class="s2">"masker"</span><span class="p">,</span> <span class="s2">"glm_report_file"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ModelFit</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">imgs</span><span class="p">,</span> <span class="n">dm_path</span><span class="p">,</span> <span class="n">contrast</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
     <span class="n">design_matrix</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">dm_path</span><span class="p">)</span>
     <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">imgs</span><span class="p">,</span> <span class="n">design_matrices</span><span class="o">=</span><span class="p">[</span><span class="n">design_matrix</span><span class="p">])</span>
     <span class="n">z_map</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">compute_contrast</span><span class="p">(</span><span class="n">contrast</span><span class="p">)</span>
-    <span class="n">z_map_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;firstlevel_z_map.nii.gz&#39;</span><span class="p">)</span>
+    <span class="n">z_map_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'firstlevel_z_map.nii.gz'</span><span class="p">)</span>
     <span class="n">z_map</span><span class="o">.</span><span class="n">to_filename</span><span class="p">(</span><span class="n">z_map_path</span><span class="p">)</span>
-    <span class="n">masker_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;firstlevel_masker.nii.gz&#39;</span><span class="p">)</span>
+    <span class="n">masker_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'firstlevel_masker.nii.gz'</span><span class="p">)</span>
     <span class="n">masker</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">masker_</span>
-    <span class="n">glm_report_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;glm_report.html&#39;</span><span class="p">)</span>
+    <span class="n">glm_report_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'glm_report.html'</span><span class="p">)</span>
     <span class="n">report</span> <span class="o">=</span> <span class="n">make_glm_report</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">contrast</span><span class="p">)</span>
     <span class="n">report</span><span class="o">.</span><span class="n">save_as_html</span><span class="p">(</span><span class="n">glm_report_file</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">z_map_path</span><span class="p">,</span> <span class="n">masker</span><span class="p">,</span> <span class="n">glm_report_file</span>
@@ -528,10 +528,10 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output_file&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"output_file"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ClusterTable</span><span class="p">(</span><span class="n">z_map_path</span><span class="p">:</span> <span class="n">File</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Csv</span><span class="p">:</span>
     <span class="n">stat_img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">z_map_path</span><span class="p">)</span>
-    <span class="n">output_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;cluster_table.csv&#39;</span><span class="p">)</span>
+    <span class="n">output_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'cluster_table.csv'</span><span class="p">)</span>
     <span class="n">df</span> <span class="o">=</span> <span class="n">get_clusters_table</span><span class="p">(</span>
         <span class="n">stat_img</span><span class="p">,</span> <span class="n">stat_threshold</span><span class="o">=</span><span class="n">norm</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="mf">0.001</span><span class="p">),</span> <span class="n">cluster_threshold</span><span class="o">=</span><span class="mi">10</span>
     <span class="p">)</span>
@@ -555,7 +555,7 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output_file1&quot;</span><span class="p">,</span> <span class="s2">&quot;output_file2&quot;</span><span class="p">,</span> <span class="s2">&quot;output_file3&quot;</span><span class="p">,</span> <span class="s2">&quot;output_file4&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"output_file1"</span><span class="p">,</span> <span class="s2">"output_file2"</span><span class="p">,</span> <span class="s2">"output_file3"</span><span class="p">,</span> <span class="s2">"output_file4"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">Plots</span><span class="p">(</span>
     <span class="n">data_dir</span><span class="p">:</span> <span class="n">Directory</span><span class="p">,</span>
     <span class="n">dm_path</span><span class="p">:</span> <span class="n">File</span><span class="p">,</span>
@@ -566,38 +566,38 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
     <span class="c1"># plot and save nilearn z-map</span>
     <span class="n">z_map</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">z_map_path</span><span class="p">)</span>
-    <span class="n">output_file1</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;nilearn_z_map.jpg&#39;</span><span class="p">)</span>
+    <span class="n">output_file1</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'nilearn_z_map.jpg'</span><span class="p">)</span>
     <span class="n">plot_glass_brain</span><span class="p">(</span>
         <span class="n">z_map</span><span class="p">,</span>
         <span class="n">output_file</span><span class="o">=</span><span class="n">output_file1</span><span class="p">,</span>
         <span class="n">colorbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">threshold</span><span class="o">=</span><span class="n">norm</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="mf">0.001</span><span class="p">),</span>
-        <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Nilearn Z map of &quot;StopSuccess - Go&quot; (unc p&lt;0.001)&#39;</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="s1">'Nilearn Z map of "StopSuccess - Go" (unc p&lt;0.001)'</span><span class="p">,</span>
         <span class="n">plot_abs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">display_mode</span><span class="o">=</span><span class="s1">&#39;ortho&#39;</span><span class="p">,</span>
+        <span class="n">display_mode</span><span class="o">=</span><span class="s1">'ortho'</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="c1"># plot and save fsl z-map</span>
     <span class="n">fsl_z_map</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
         <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
             <span class="n">data_dir</span><span class="p">,</span>
-            <span class="s1">&#39;derivatives&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;task&#39;</span><span class="p">,</span>
+            <span class="s1">'derivatives'</span><span class="p">,</span>
+            <span class="s1">'task'</span><span class="p">,</span>
             <span class="n">subject</span><span class="p">,</span>
-            <span class="s1">&#39;stopsignal.feat&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;stats&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;zstat12.nii.gz&#39;</span><span class="p">,</span>
+            <span class="s1">'stopsignal.feat'</span><span class="p">,</span>
+            <span class="s1">'stats'</span><span class="p">,</span>
+            <span class="s1">'zstat12.nii.gz'</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="p">)</span>
-    <span class="n">output_file2</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;fsl_z_map.jpg&#39;</span><span class="p">)</span>
+    <span class="n">output_file2</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'fsl_z_map.jpg'</span><span class="p">)</span>
     <span class="n">plot_glass_brain</span><span class="p">(</span>
         <span class="n">fsl_z_map</span><span class="p">,</span>
         <span class="n">output_file</span><span class="o">=</span><span class="n">output_file2</span><span class="p">,</span>
         <span class="n">colorbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">threshold</span><span class="o">=</span><span class="n">norm</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="mf">0.001</span><span class="p">),</span>
-        <span class="n">title</span><span class="o">=</span><span class="s1">&#39;FSL Z map of &quot;StopSuccess - Go&quot; (unc p&lt;0.001)&#39;</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="s1">'FSL Z map of "StopSuccess - Go" (unc p&lt;0.001)'</span><span class="p">,</span>
         <span class="n">plot_abs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">display_mode</span><span class="o">=</span><span class="s1">&#39;ortho&#39;</span><span class="p">,</span>
+        <span class="n">display_mode</span><span class="o">=</span><span class="s1">'ortho'</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="c1"># plot and save nilearn and fsl comparison</span>
@@ -606,18 +606,18 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
         <span class="p">[</span><span class="n">fsl_z_map</span><span class="p">],</span>
         <span class="n">masker</span><span class="p">,</span>
         <span class="n">output_dir</span><span class="o">=</span><span class="n">workflow_out_dir</span><span class="p">,</span>
-        <span class="n">ref_label</span><span class="o">=</span><span class="s1">&#39;Nilearn&#39;</span><span class="p">,</span>
-        <span class="n">src_label</span><span class="o">=</span><span class="s1">&#39;FSL&#39;</span><span class="p">,</span>
+        <span class="n">ref_label</span><span class="o">=</span><span class="s1">'Nilearn'</span><span class="p">,</span>
+        <span class="n">src_label</span><span class="o">=</span><span class="s1">'FSL'</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">old</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;0000.png&#39;</span><span class="p">)</span>
-    <span class="n">new</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;nilearn_fsl_comp.jpg&#39;</span><span class="p">)</span>
+    <span class="n">old</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'0000.png'</span><span class="p">)</span>
+    <span class="n">new</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'nilearn_fsl_comp.jpg'</span><span class="p">)</span>
     <span class="n">os</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">)</span>
     <span class="n">output_file3</span> <span class="o">=</span> <span class="n">new</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">output_file3</span><span class="p">)</span>
 
     <span class="c1"># plot and save design matrix contrast</span>
     <span class="n">design_matrix</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">dm_path</span><span class="p">)</span>
-    <span class="n">output_file4</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;firstlevel_contrast.jpg&#39;</span><span class="p">)</span>
+    <span class="n">output_file4</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'firstlevel_contrast.jpg'</span><span class="p">)</span>
     <span class="n">plot_contrast_matrix</span><span class="p">(</span><span class="n">contrast</span><span class="p">,</span> <span class="n">design_matrix</span><span class="p">,</span> <span class="n">output_file</span><span class="o">=</span><span class="n">output_file4</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">output_file1</span><span class="p">,</span> <span class="n">output_file2</span><span class="p">,</span> <span class="n">output_file3</span><span class="p">,</span> <span class="n">output_file4</span>
 </pre></div>
@@ -638,14 +638,14 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;z_map&quot;</span><span class="p">,</span> <span class="s2">&quot;masker&quot;</span><span class="p">,</span> <span class="s2">&quot;subject&quot;</span><span class="p">,</span> <span class="s2">&quot;dm_path&quot;</span><span class="p">,</span> <span class="s2">&quot;cluster_table&quot;</span><span class="p">,</span> <span class="s2">&quot;glm_report&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"z_map"</span><span class="p">,</span> <span class="s2">"masker"</span><span class="p">,</span> <span class="s2">"subject"</span><span class="p">,</span> <span class="s2">"dm_path"</span><span class="p">,</span> <span class="s2">"cluster_table"</span><span class="p">,</span> <span class="s2">"glm_report"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">FirstLevelWorkflow</span><span class="p">(</span>
     <span class="n">data_dir</span><span class="p">:</span> <span class="n">Directory</span><span class="p">,</span>
     <span class="n">contrast</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
-    <span class="n">task_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;stopsignal&#39;</span><span class="p">,</span>
-    <span class="n">space_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;MNI152NLin2009cAsym&#39;</span><span class="p">,</span>
-    <span class="n">derivatives_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;derivatives/fmriprep&#39;</span><span class="p">,</span>
+    <span class="n">task_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">'stopsignal'</span><span class="p">,</span>
+    <span class="n">space_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">'MNI152NLin2009cAsym'</span><span class="p">,</span>
+    <span class="n">derivatives_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">'derivatives/fmriprep'</span><span class="p">,</span>
     <span class="n">smoothing_fwhm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">File</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 
@@ -701,28 +701,28 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output1&quot;</span><span class="p">,</span> <span class="s2">&quot;output2&quot;</span><span class="p">,</span> <span class="s2">&quot;output3&quot;</span><span class="p">,</span> <span class="s2">&quot;output4&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"output1"</span><span class="p">,</span> <span class="s2">"output2"</span><span class="p">,</span> <span class="s2">"output3"</span><span class="p">,</span> <span class="s2">"output4"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">FullWorkflow</span><span class="p">(</span>
     <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
     <span class="n">n_subjects</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-    <span class="n">contrast</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;StopSuccess - Go&#39;</span><span class="p">,</span>
+    <span class="n">contrast</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">'StopSuccess - Go'</span><span class="p">,</span>
     <span class="n">exclusion_patterns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]:</span>
     <span class="k">if</span> <span class="n">exclusion_patterns</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">exclusion_patterns</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="s1">&#39;*group*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*phenotype*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*mriqc*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*parameter_plots*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*physio_plots*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*space-fsaverage*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*space-T1w*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*dwi*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*beh*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*task-bart*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*task-rest*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*task-scap*&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;*task-task*&#39;</span><span class="p">,</span>
+            <span class="s1">'*group*'</span><span class="p">,</span>
+            <span class="s1">'*phenotype*'</span><span class="p">,</span>
+            <span class="s1">'*mriqc*'</span><span class="p">,</span>
+            <span class="s1">'*parameter_plots*'</span><span class="p">,</span>
+            <span class="s1">'*physio_plots*'</span><span class="p">,</span>
+            <span class="s1">'*space-fsaverage*'</span><span class="p">,</span>
+            <span class="s1">'*space-T1w*'</span><span class="p">,</span>
+            <span class="s1">'*dwi*'</span><span class="p">,</span>
+            <span class="s1">'*beh*'</span><span class="p">,</span>
+            <span class="s1">'*task-bart*'</span><span class="p">,</span>
+            <span class="s1">'*task-rest*'</span><span class="p">,</span>
+            <span class="s1">'*task-scap*'</span><span class="p">,</span>
+            <span class="s1">'*task-task*'</span><span class="p">,</span>
         <span class="p">]</span>
 
     <span class="n">get_openneuro_dataset</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
@@ -767,10 +767,10 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">wf</span> <span class="o">=</span> <span class="n">FullWorkflow</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="n">workflow_out_dir</span><span class="p">,</span> <span class="n">n_subjects</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">contrast</span><span class="o">=</span><span class="s1">&#39;StopSuccess - Go&#39;</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">wf</span> <span class="o">=</span> <span class="n">FullWorkflow</span><span class="p">(</span><span class="n">output_dir</span><span class="o">=</span><span class="n">workflow_out_dir</span><span class="p">,</span> <span class="n">n_subjects</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">contrast</span><span class="o">=</span><span class="s1">'StopSuccess - Go'</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-    <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s1">&#39;cf&#39;</span><span class="p">,</span> <span class="n">n_procs</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s1">'cf'</span><span class="p">,</span> <span class="n">n_procs</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
         <span class="n">results</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">wf</span><span class="p">)</span>
 
     <span class="nb">print</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
@@ -784,7 +784,7 @@ PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)
 <div class="highlight"><pre>
 
 Task execution failed
-Full crash report for &#39;FullWorkflow&#39; job is here: /home/runner/.cache/pydra/1.0a9/run-cache/workflow-c77021246874a4d491a321ae51fffe39/_error.pklz
+Full crash report for &#39;FullWorkflow&#39; job is here: /home/runner/.cache/pydra/1.0a10/run-cache/workflow-c77021246874a4d491a321ae51fffe39/_error.pklz
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -792,7 +792,7 @@ Full crash report for &#39;FullWorkflow&#39; job is here: /home/runner/.cache/py
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/workflow-c77021246874a4d491a321ae51fffe39&#39;), outputs=None, runtime=None, errored=True, task=FullWorkflow(output_dir=PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)))
+Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a10/run-cache/workflow-c77021246874a4d491a321ae51fffe39&#39;), outputs=None, runtime=None, errored=True, task=FullWorkflow(output_dir=PosixPath(&#39;/home/runner/work/pydra/pydra/docs/source/outputs/6_glm&#39;)))
 </pre></div></div>
 </div>
 </section>
@@ -822,16 +822,16 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/workfl
 
 <span class="k">if</span> <span class="ow">not</span> <span class="n">results</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
     <span class="c1"># First-level contrast</span>
-    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/firstlevel_contrast.jpg&#39;</span><span class="p">)</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">'../outputs/6_glm/firstlevel_contrast.jpg'</span><span class="p">)</span>
 
     <span class="c1"># Nilearn Z map</span>
-    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/nilearn_z_map.jpg&#39;</span><span class="p">)</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">'../outputs/6_glm/nilearn_z_map.jpg'</span><span class="p">)</span>
 
     <span class="c1"># FSL Z map</span>
-    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/fsl_z_map.jpg&#39;</span><span class="p">)</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">'../outputs/6_glm/fsl_z_map.jpg'</span><span class="p">)</span>
 
     <span class="c1"># Nilearn and FSL comparison</span>
-    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">&#39;../outputs/6_glm/nilearn_fsl_comp.jpg&#39;</span><span class="p">)</span>
+    <span class="n">Image</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s1">'../outputs/6_glm/nilearn_fsl_comp.jpg'</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -930,7 +930,7 @@ Result(cache_dir=PosixPath(&#39;/home/runner/.cache/pydra/1.0a9/run-cache/workfl
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Shell-tasks - Pydra v1.0a9</title>
+        <title>Shell-tasks - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -170,7 +170,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,7 +194,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -289,7 +289,7 @@
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
 
-<span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;cp &lt;in_file&gt; &lt;out|destination&gt;&quot;</span><span class="p">)</span>
+<span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"cp &lt;in_file&gt; &lt;out|destination&gt;"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -304,22 +304,22 @@
 
 <span class="c1"># Make a test file to copy</span>
 <span class="n">test_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">mkdtemp</span><span class="p">())</span>
-<span class="n">test_file</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;in.txt&quot;</span>
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">test_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;Contents to be copied&quot;</span><span class="p">)</span>
+<span class="n">test_file</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">"in.txt"</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">test_file</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"Contents to be copied"</span><span class="p">)</span>
 
 <span class="c1"># Parameterise the task</span>
-<span class="n">cp</span> <span class="o">=</span> <span class="n">Cp</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">test_file</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;out.txt&quot;</span><span class="p">)</span>
+<span class="n">cp</span> <span class="o">=</span> <span class="n">Cp</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">test_file</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">"out.txt"</span><span class="p">)</span>
 
 <span class="c1"># Print the cmdline to be run to double check</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Command-line to be run: </span><span class="si">{</span><span class="n">cp</span><span class="o">.</span><span class="n">cmdline</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Command-line to be run: </span><span class="si">{</span><span class="n">cp</span><span class="o">.</span><span class="n">cmdline</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 <span class="c1"># Run the shell-comand task</span>
 <span class="n">outputs</span> <span class="o">=</span> <span class="n">cp</span><span class="p">()</span>
 
 <span class="nb">print</span><span class="p">(</span>
-    <span class="sa">f</span><span class="s2">&quot;Contents of copied file (&#39;</span><span class="si">{</span><span class="n">outputs</span><span class="o">.</span><span class="n">destination</span><span class="si">}</span><span class="s2">&#39;): &quot;</span>
-    <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">destination</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+    <span class="sa">f</span><span class="s2">"Contents of copied file ('</span><span class="si">{</span><span class="n">outputs</span><span class="o">.</span><span class="n">destination</span><span class="si">}</span><span class="s2">'): "</span>
+    <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">destination</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="si">}</span><span class="s2">'"</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -329,8 +329,8 @@
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Command-line to be run: cp /tmp/tmp5mdbhlo4/in.txt /tmp/tmp5mdbhlo4/out.txt
-Contents of copied file (&#39;/tmp/tmp5mdbhlo4/out.txt&#39;): &#39;Contents to be copied&#39;
+Command-line to be run: cp /tmp/tmplg_0z1iw/in.txt /tmp/tmplg_0z1iw/out.txt
+Contents of copied file (&#39;/tmp/tmplg_0z1iw/out.txt&#39;): &#39;Contents to be copied&#39;
 </pre></div></div>
 </div>
 <p>If paths to output files are not provided in the parameterisation, it will default to the name of the field</p>
@@ -348,7 +348,7 @@ Contents of copied file (&#39;/tmp/tmp5mdbhlo4/out.txt&#39;): &#39;Contents to b
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-cp /tmp/tmp5mdbhlo4/in.txt /home/runner/work/pydra/pydra/docs/source/tutorial/destination
+cp /tmp/tmplg_0z1iw/in.txt /home/runner/work/pydra/pydra/docs/source/tutorial/destination
 </pre></div></div>
 </div>
 <section id="Defining-input/output-types">
@@ -361,9 +361,9 @@ cp /tmp/tmp5mdbhlo4/in.txt /home/runner/work/pydra/pydra/docs/source/tutorial/de
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.image</span><span class="w"> </span><span class="kn">import</span> <span class="n">Png</span>
 
-<span class="n">TrimPng</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;trim-png &lt;in_image:image/png&gt; &lt;out|out_image:image/png&gt;&quot;</span><span class="p">)</span>
+<span class="n">TrimPng</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"trim-png &lt;in_image:image/png&gt; &lt;out|out_image:image/png&gt;"</span><span class="p">)</span>
 
-<span class="n">trim_png</span> <span class="o">=</span> <span class="n">TrimPng</span><span class="p">(</span><span class="n">in_image</span><span class="o">=</span><span class="n">Png</span><span class="o">.</span><span class="n">mock</span><span class="p">(),</span> <span class="n">out_image</span><span class="o">=</span><span class="s2">&quot;/path/to/output.png&quot;</span><span class="p">)</span>
+<span class="n">trim_png</span> <span class="o">=</span> <span class="n">TrimPng</span><span class="p">(</span><span class="n">in_image</span><span class="o">=</span><span class="n">Png</span><span class="o">.</span><span class="n">mock</span><span class="p">(),</span> <span class="n">out_image</span><span class="o">=</span><span class="s2">"/path/to/output.png"</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="n">trim_png</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
 </pre></div>
@@ -389,11 +389,11 @@ trim-png /mock/png.png /path/to/output.png
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">print_help</span>
 
 <span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="s2">&quot;cp &lt;in_fs_objects:fs-object+&gt; &lt;out|out_dir:directory&gt; &quot;</span>
-    <span class="s2">&quot;-R&lt;recursive&gt; &quot;</span>
-    <span class="s2">&quot;--text-arg &lt;text_arg?&gt; &quot;</span>
-    <span class="s2">&quot;--int-arg &lt;int_arg:int?&gt; &quot;</span>
-    <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str*&gt; &quot;</span>
+    <span class="s2">"cp &lt;in_fs_objects:fs-object+&gt; &lt;out|out_dir:directory&gt; "</span>
+    <span class="s2">"-R&lt;recursive&gt; "</span>
+    <span class="s2">"--text-arg &lt;text_arg?&gt; "</span>
+    <span class="s2">"--int-arg &lt;int_arg:int?&gt; "</span>
+    <span class="s2">"--tuple-arg &lt;tuple_arg:int,str*&gt; "</span>
 <span class="p">)</span>
 
 <span class="n">print_help</span><span class="p">(</span><span class="n">Cp</span><span class="p">)</span>
@@ -446,14 +446,14 @@ Outputs:
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_fields</span>
 
 <span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="s2">&quot;cp &lt;in_fs_objects:fs-object+&gt; &lt;out|out_dir:directory&gt; &quot;</span>
-    <span class="s2">&quot;-R&lt;recursive=True&gt; &quot;</span>
-    <span class="s2">&quot;--text-arg &lt;text_arg=&#39;foo&#39;&gt; &quot;</span>
-    <span class="s2">&quot;--int-arg &lt;int_arg:int=99&gt; &quot;</span>
-    <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str=(1,&#39;bar&#39;)&gt; &quot;</span>
+    <span class="s2">"cp &lt;in_fs_objects:fs-object+&gt; &lt;out|out_dir:directory&gt; "</span>
+    <span class="s2">"-R&lt;recursive=True&gt; "</span>
+    <span class="s2">"--text-arg &lt;text_arg='foo'&gt; "</span>
+    <span class="s2">"--int-arg &lt;int_arg:int=99&gt; "</span>
+    <span class="s2">"--tuple-arg &lt;tuple_arg:int,str=(1,'bar')&gt; "</span>
 <span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;--int-arg&#39; default: </span><span class="si">{</span><span class="n">get_fields</span><span class="p">(</span><span class="n">Cp</span><span class="p">)</span><span class="o">.</span><span class="n">int_arg</span><span class="o">.</span><span class="n">default</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"'--int-arg' default: </span><span class="si">{</span><span class="n">get_fields</span><span class="p">(</span><span class="n">Cp</span><span class="p">)</span><span class="o">.</span><span class="n">int_arg</span><span class="o">.</span><span class="n">default</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -477,8 +477,8 @@ Outputs:
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">File</span>
 
-<span class="n">Gzip</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;gzip &lt;out|out_file:application/gzip&gt; &lt;in_files+&gt;&quot;</span><span class="p">)</span>
-<span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">&quot;/a/file.txt&quot;</span><span class="p">))</span>
+<span class="n">Gzip</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"gzip &lt;out|out_file:application/gzip&gt; &lt;in_files+&gt;"</span><span class="p">)</span>
+<span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">"/a/file.txt"</span><span class="p">))</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">gzip</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -496,8 +496,8 @@ gzip /home/runner/work/pydra/pydra/docs/source/tutorial/out_file.gz /a/file.txt
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Gzip</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;gzip &lt;out|out_file:application/gzip$zipped.gz&gt; &lt;in_files+&gt;&quot;</span><span class="p">)</span>
-<span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">&quot;/a/file.txt&quot;</span><span class="p">))</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Gzip</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"gzip &lt;out|out_file:application/gzip$zipped.gz&gt; &lt;in_files+&gt;"</span><span class="p">)</span>
+<span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">"/a/file.txt"</span><span class="p">))</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">gzip</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -515,7 +515,7 @@ gzip /home/runner/work/pydra/pydra/docs/source/tutorial/zipped.gz /a/file.txt
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">&quot;/a/file.txt&quot;</span><span class="p">),</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">&quot;/path/to/archive.gz&quot;</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gzip</span> <span class="o">=</span> <span class="n">Gzip</span><span class="p">(</span><span class="n">in_files</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">mock</span><span class="p">(</span><span class="s2">"/a/file.txt"</span><span class="p">),</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">"/path/to/archive.gz"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">gzip</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -537,23 +537,23 @@ gzip /path/to/archive.gz /a/file.txt
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
     <span class="p">(</span>
-        <span class="s2">&quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &lt;out|out_file:file?&gt; &quot;</span>
-        <span class="s2">&quot;-R&lt;recursive&gt; &quot;</span>
-        <span class="s2">&quot;--text-arg &lt;text_arg&gt; &quot;</span>
-        <span class="s2">&quot;--int-arg &lt;int_arg:int?&gt; &quot;</span>
-        <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str&gt; &quot;</span>
+        <span class="s2">"cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &lt;out|out_file:file?&gt; "</span>
+        <span class="s2">"-R&lt;recursive&gt; "</span>
+        <span class="s2">"--text-arg &lt;text_arg&gt; "</span>
+        <span class="s2">"--int-arg &lt;int_arg:int?&gt; "</span>
+        <span class="s2">"--tuple-arg &lt;tuple_arg:int,str&gt; "</span>
     <span class="p">),</span>
     <span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;recursive&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
+        <span class="s2">"recursive"</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
             <span class="n">help</span><span class="o">=</span><span class="p">(</span>
-                <span class="s2">&quot;If source_file designates a directory, cp copies the directory and &quot;</span>
-                <span class="s2">&quot;the entire subtree connected at that point.&quot;</span>
+                <span class="s2">"If source_file designates a directory, cp copies the directory and "</span>
+                <span class="s2">"the entire subtree connected at that point."</span>
             <span class="p">)</span>
         <span class="p">)</span>
     <span class="p">},</span>
     <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;out_dir&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">),</span>
-        <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="s2">"out_dir"</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">),</span>
+        <span class="s2">"out_file"</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
     <span class="p">},</span>
 <span class="p">)</span>
 
@@ -605,8 +605,8 @@ Outputs:
 </pre></div></div>
 </div>
 </section>
-<section id="Callable-outptus">
-<h3>Callable outptus<a class="headerlink" href="#Callable-outptus" title="Link to this heading">¶</a></h3>
+<section id="Callable-outputs">
+<h3>Callable outputs<a class="headerlink" href="#Callable-outputs" title="Link to this heading">¶</a></h3>
 <p>In addition to outputs that are specified to the tool on the command line, outputs can be derived from the outputs of the tool by providing a Python function that can take the output directory and inputs as arguments and return the output value. Callables can be either specified in the <code class="docutils literal notranslate"><span class="pre">callable</span></code> attribute of the <code class="docutils literal notranslate"><span class="pre">shell.out</span></code> field, or in a dictionary mapping the output name to the callable</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
@@ -620,14 +620,14 @@ Outputs:
 
 <span class="c1"># Arguments to the callable function can be one of</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">get_file_size</span><span class="p">(</span><span class="n">out_file</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate the file size&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Calculate the file size"""</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">out_file</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">st_size</span>
 
 
 <span class="n">CpWithSize</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="s2">&quot;cp &lt;in_file:file&gt; &lt;out|out_file:file&gt;&quot;</span><span class="p">,</span>
-    <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out_file_size&quot;</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">},</span>
+    <span class="s2">"cp &lt;in_file:file&gt; &lt;out|out_file:file&gt;"</span><span class="p">,</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"out_file_size"</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">},</span>
 <span class="p">)</span>
 
 <span class="c1"># Parameterise the task</span>
@@ -637,7 +637,7 @@ Outputs:
 <span class="n">outputs</span> <span class="o">=</span> <span class="n">cp_with_size</span><span class="p">()</span>
 
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Size of the output file is: </span><span class="si">{</span><span class="n">outputs</span><span class="o">.</span><span class="n">out_file_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Size of the output file is: </span><span class="si">{</span><span class="n">outputs</span><span class="o">.</span><span class="n">out_file_size</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -668,18 +668,18 @@ Size of the output file is: 256
 
 
 <span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Cp</span><span class="p">(</span><span class="n">shell</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">&quot;Cp.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Cp</span><span class="p">(</span><span class="n">shell</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="s2">"Cp.Outputs"</span><span class="p">]):</span>
 
-    <span class="n">executable</span> <span class="o">=</span> <span class="s2">&quot;cp&quot;</span>
+    <span class="n">executable</span> <span class="o">=</span> <span class="s2">"cp"</span>
 
     <span class="n">in_fs_objects</span><span class="p">:</span> <span class="n">MultiInputObj</span><span class="p">[</span><span class="n">FsObject</span><span class="p">]</span>
-    <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;-R&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">text_arg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--text-arg&quot;</span><span class="p">)</span>
-    <span class="n">int_arg</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--int-arg&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-    <span class="n">tuple_arg</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--tuple-arg&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">"-R"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">text_arg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">"--text-arg"</span><span class="p">)</span>
+    <span class="n">int_arg</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">"--int-arg"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">tuple_arg</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">"--tuple-arg"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 
     <span class="k">class</span><span class="w"> </span><span class="nc">Outputs</span><span class="p">(</span><span class="n">shell</span><span class="o">.</span><span class="n">Outputs</span><span class="p">):</span>
-        <span class="n">out_dir</span><span class="p">:</span> <span class="n">Directory</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">path_template</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{out_dir}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">out_dir</span><span class="p">:</span> <span class="n">Directory</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">path_template</span><span class="o">=</span><span class="s2">"</span><span class="si">{out_dir}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -696,16 +696,16 @@ Size of the output file is: 256
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">print_help</span>
 
 <span class="n">ACommand</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="s2">&quot;a-command&quot;</span><span class="p">,</span>
+    <span class="s2">"a-command"</span><span class="p">,</span>
     <span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;in_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="s2">"in_file"</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"output file"</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
     <span class="p">},</span>
     <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
-        <span class="s2">&quot;out_file_size&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-            <span class="s2">&quot;help&quot;</span><span class="p">:</span> <span class="s2">&quot;size of the output directory&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;callable&quot;</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">,</span>
+        <span class="s2">"out_file"</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"output file"</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="s2">"out_file_size"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"type"</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+            <span class="s2">"help"</span><span class="p">:</span> <span class="s2">"size of the output directory"</span><span class="p">,</span>
+            <span class="s2">"callable"</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">,</span>
         <span class="p">},</span>
     <span class="p">},</span>
 <span class="p">)</span>
@@ -816,7 +816,7 @@ Outputs:
 </li>
 <li><a class="reference internal" href="#Path-templates-for-output-files">Path templates for output files</a><ul>
 <li><a class="reference internal" href="#Additional-field-attributes">Additional field attributes</a></li>
-<li><a class="reference internal" href="#Callable-outptus">Callable outptus</a></li>
+<li><a class="reference internal" href="#Callable-outputs">Callable outputs</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#Dynamic-definitions">Dynamic definitions</a></li>
@@ -831,7 +831,7 @@ Outputs:
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

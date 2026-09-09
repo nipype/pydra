@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Python-tasks - Pydra v1.0a9</title>
+        <title>Python-tasks - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -170,7 +170,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,7 +194,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -294,7 +294,7 @@
 <span class="c1"># Note that we use PascalCase because the object returned by the decorator is actually a class</span>
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">MyFirstTask</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Sample function for testing"""</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
 </pre></div>
 </div>
@@ -327,9 +327,9 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">NamedOutputTask</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Sample function for testing"""</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">-</span> <span class="n">b</span>
 
 
@@ -355,14 +355,14 @@ NamedOutputTaskOutputs(c=3, d=1)
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">allowed_values</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)},</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">allowed_values</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)},</span>
     <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;the sum of the inputs&quot;</span><span class="p">),</span>
-        <span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;the difference of the inputs&quot;</span><span class="p">),</span>
+        <span class="s2">"c"</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"the sum of the inputs"</span><span class="p">),</span>
+        <span class="s2">"d"</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"the difference of the inputs"</span><span class="p">),</span>
     <span class="p">},</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">AugmentedTask</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Sample function for testing"""</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">-</span> <span class="n">b</span>
 </pre></div>
 </div>
@@ -380,7 +380,7 @@ NamedOutputTaskOutputs(c=3, d=1)
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">MyTypedTask</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Sample function for testing"""</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
 
 
@@ -388,9 +388,9 @@ NamedOutputTaskOutputs(c=3, d=1)
     <span class="c1"># 1.5 is not an integer so this should raise a TypeError</span>
     <span class="n">my_typed_task</span> <span class="o">=</span> <span class="n">MyTypedTask</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
 <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Type error caught: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Type error caught: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="k">assert</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Expected a TypeError&quot;</span>
+    <span class="k">assert</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">"Expected a TypeError"</span>
 
 <span class="c1"># While 2 is an integer, it can be implicitly coerced to a float</span>
 <span class="n">my_typed_task</span> <span class="o">=</span> <span class="n">MyTypedTask</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
@@ -416,9 +416,9 @@ Type error caught: Incorrect type for field in &#39;a&#39; field of MyTypedTask 
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">print_help</span>
 
 
-<span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
+<span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">APythonTask</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Example python task with help strings pulled from doc-string</span>
+<span class="w">    </span><span class="sd">"""Example python task with help strings pulled from doc-string</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        a: First input</span>
@@ -428,7 +428,7 @@ Type error caught: Incorrect type for field in &#39;a&#39; field of MyTypedTask 
 <span class="sd">    Returns:</span>
 <span class="sd">        c: Sum of a and b</span>
 <span class="sd">        d: Product of a and b</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
 
@@ -495,7 +495,7 @@ Outputs:
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="n">NumpyCorrelate</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">correlate</span><span class="p">,</span> <span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;correlation&quot;</span><span class="p">])</span>
+<span class="n">NumpyCorrelate</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">correlate</span><span class="p">,</span> <span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"correlation"</span><span class="p">])</span>
 
 <span class="n">numpy_correlate</span> <span class="o">=</span> <span class="n">NumpyCorrelate</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">v</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
 
@@ -587,7 +587,7 @@ Outputs:
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

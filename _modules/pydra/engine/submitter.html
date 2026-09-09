@@ -6,7 +6,7 @@
         <link rel="prefetch" href="../../../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pydra.engine.submitter - Pydra v1.0a9</title>
+        <title>pydra.engine.submitter - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../../../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -271,7 +271,7 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for pydra.engine.submitter</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;Handle execution backends.&quot;&quot;&quot;</span>
+<span></span><span class="sd">"""Handle execution backends."""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
@@ -301,7 +301,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.workers.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Worker</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Task</span><span class="p">,</span> <span class="n">Outputs</span>
 
-<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;pydra.submitter&quot;</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pydra.submitter"</span><span class="p">)</span>
 
 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.node</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
@@ -311,19 +311,19 @@
     <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.environments.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Environment</span>
 
 
-<span class="n">TaskType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;TaskType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">&quot;Task&quot;</span><span class="p">)</span>
-<span class="n">OutputType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;OutputType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">&quot;Outputs&quot;</span><span class="p">)</span>
+<span class="n">TaskType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">"TaskType"</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">"Task"</span><span class="p">)</span>
+<span class="n">OutputType</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">"OutputType"</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">"Outputs"</span><span class="p">)</span>
 
 <span class="c1"># Used to flag development mode of Audit</span>
 <span class="n">develop</span> <span class="o">=</span> <span class="kc">False</span>
 
-<span class="n">WORKER_KWARG_FAIL_NOTE</span> <span class="o">=</span> <span class="s2">&quot;Attempting to instantiate worker submitter&quot;</span>
+<span class="n">WORKER_KWARG_FAIL_NOTE</span> <span class="o">=</span> <span class="s2">"Attempting to instantiate worker submitter"</span>
 
 
 <div class="viewcode-block" id="Submitter">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.engine.Submitter">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Submitter</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Send a job to the execution backend.</span>
+<span class="w">    </span><span class="sd">"""Send a job to the execution backend.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -331,13 +331,13 @@
 <span class="sd">        Cache directory where the working directory/results for the job will be</span>
 <span class="sd">        stored, by default None</span>
 <span class="sd">    worker : str or Worker, optional</span>
-<span class="sd">        The worker to use, by default &quot;cf&quot;</span>
+<span class="sd">        The worker to use, by default "cf"</span>
 <span class="sd">    environment: Environment, optional</span>
 <span class="sd">        The execution environment to use, by default None</span>
 <span class="sd">    readonly_caches : list[os.PathLike], optional</span>
 <span class="sd">        Alternate cache locations to check for pre-computed results, by default None</span>
 <span class="sd">    max_concurrent: int | float, optional</span>
-<span class="sd">        Maximum number of concurrent tasks to run, by default float(&quot;inf&quot;) (unlimited)</span>
+<span class="sd">        Maximum number of concurrent tasks to run, by default float("inf") (unlimited)</span>
 <span class="sd">    audit_flags : AuditFlag, optional</span>
 <span class="sd">        Configure provenance tracking. available flags: :class:`~pydra.utils.messenger.AuditFlag`</span>
 <span class="sd">        Default is no provenance tracking.</span>
@@ -348,16 +348,16 @@
 <span class="sd">        Argument(s) used by `messegner`. Saved in the `audit` attribu</span>
 <span class="sd">    clean_stale_locks : bool, optional</span>
 <span class="sd">        Whether to clean stale lock files, i.e. lock files that were created before the</span>
-<span class="sd">        start of the current run. Don&#39;t set if using a global cache where there are</span>
+<span class="sd">        start of the current run. Don't set if using a global cache where there are</span>
 <span class="sd">        potentially multiple workflows that are running concurrently. By default (None),</span>
 <span class="sd">        lock files will be cleaned if the *debug* worker is used</span>
 <span class="sd">    **kwargs : dict</span>
 <span class="sd">        Keyword arguments to pass on to the worker initialisation</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">cache_root</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span>
     <span class="n">worker</span><span class="p">:</span> <span class="n">Worker</span>
-    <span class="n">environment</span><span class="p">:</span> <span class="s2">&quot;Environment | None&quot;</span>
+    <span class="n">environment</span><span class="p">:</span> <span class="s2">"Environment | None"</span>
     <span class="n">readonly_caches</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">]</span>
     <span class="n">audit_flags</span><span class="p">:</span> <span class="n">AuditFlag</span>
     <span class="n">messengers</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n">Messenger</span><span class="p">]</span>
@@ -371,13 +371,13 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">/</span><span class="p">,</span>
         <span class="n">cache_root</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">worker</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">ty</span><span class="o">.</span><span class="n">Type</span><span class="p">[</span><span class="n">Worker</span><span class="p">]</span> <span class="o">|</span> <span class="n">Worker</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;debug&quot;</span><span class="p">,</span>
-        <span class="n">environment</span><span class="p">:</span> <span class="s2">&quot;Environment | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">ty</span><span class="o">.</span><span class="n">Type</span><span class="p">[</span><span class="n">Worker</span><span class="p">]</span> <span class="o">|</span> <span class="n">Worker</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">"debug"</span><span class="p">,</span>
+        <span class="n">environment</span><span class="p">:</span> <span class="s2">"Environment | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">readonly_caches</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">audit_flags</span><span class="p">:</span> <span class="n">AuditFlag</span> <span class="o">=</span> <span class="n">AuditFlag</span><span class="o">.</span><span class="n">NONE</span><span class="p">,</span>
         <span class="n">messengers</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n">Messenger</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">messenger_args</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">max_concurrent</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">),</span>
+        <span class="n">max_concurrent</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">),</span>
         <span class="n">propagate_rerun</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">clean_stale_locks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -386,12 +386,9 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.environments</span><span class="w"> </span><span class="kn">import</span> <span class="n">native</span>
 
         <span class="k">if</span> <span class="n">worker</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">worker</span> <span class="o">=</span> <span class="s2">&quot;debug&quot;</span>
+            <span class="n">worker</span> <span class="o">=</span> <span class="s2">"debug"</span>
 
-        <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.etelemetry</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_latest_version</span>
-
-        <span class="k">if</span> <span class="n">Job</span><span class="o">.</span><span class="n">_etelemetry_version_data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">Job</span><span class="o">.</span><span class="n">_etelemetry_version_data</span> <span class="o">=</span> <span class="n">check_latest_version</span><span class="p">()</span>
+        <span class="n">Job</span><span class="o">.</span><span class="n">check_etelemetry</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">audit</span> <span class="o">=</span> <span class="n">Audit</span><span class="p">(</span>
             <span class="n">audit_flags</span><span class="o">=</span><span class="n">audit_flags</span><span class="p">,</span>
@@ -408,11 +405,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">readonly_caches</span> <span class="o">=</span> <span class="n">readonly_caches</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">propagate_rerun</span> <span class="o">=</span> <span class="n">propagate_rerun</span>
         <span class="k">if</span> <span class="n">max_concurrent</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="n">max_concurrent</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="ow">and</span> <span class="n">max_concurrent</span> <span class="o">!=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">max_concurrent</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="ow">and</span> <span class="n">max_concurrent</span> <span class="o">!=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)</span>
         <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;&#39;max_concurrent&#39; arg must be a positive integer or float(&#39;inf&#39;), &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;not </span><span class="si">{</span><span class="n">max_concurrent</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="s2">"'max_concurrent' arg must be a positive integer or float('inf'), "</span>
+                <span class="sa">f</span><span class="s2">"not </span><span class="si">{</span><span class="n">max_concurrent</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_concurrent</span> <span class="o">=</span> <span class="n">max_concurrent</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">environment</span> <span class="o">=</span> <span class="p">(</span>
@@ -427,8 +424,8 @@
                 <span class="n">worker_cls</span> <span class="o">=</span> <span class="n">worker</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                    <span class="s2">&quot;Worker must be a Worker object, name of a worker or a Worker &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;class, not </span><span class="si">{</span><span class="n">worker</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="s2">"Worker must be a Worker object, name of a worker or a Worker "</span>
+                    <span class="sa">f</span><span class="s2">"class, not </span><span class="si">{</span><span class="n">worker</span><span class="si">}</span><span class="s2">"</span>
                 <span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">worker</span> <span class="o">=</span> <span class="n">worker_cls</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -440,19 +437,19 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">clean_stale_locks</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">clean_stale_locks</span>
             <span class="k">if</span> <span class="n">clean_stale_locks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">plugin_name</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;debug&quot;</span><span class="p">)</span>
+            <span class="k">else</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">plugin_name</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"debug"</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">loop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loop</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task[OutputType]&quot;</span><span class="p">,</span>
-        <span class="n">hooks</span><span class="p">:</span> <span class="s2">&quot;TaskHooks | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">task</span><span class="p">:</span> <span class="s2">"Task[OutputType]"</span><span class="p">,</span>
+        <span class="n">hooks</span><span class="p">:</span> <span class="s2">"TaskHooks | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">raise_errors</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Result[OutputType]&quot;</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Submitter run function.</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Result[OutputType]"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Submitter run function.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -462,7 +459,7 @@
 <span class="sd">            Job hooks, callable functions called as the job is setup and torn down,</span>
 <span class="sd">            by default no functions are called at the hooks</span>
 <span class="sd">        raise_errors : bool, optional</span>
-<span class="sd">            Whether to raise errors, by default True if the &#39;debug&#39; worker is used,</span>
+<span class="sd">            Whether to raise errors, by default True if the 'debug' worker is used,</span>
 <span class="sd">            otherwise False</span>
 <span class="sd">        rerun : bool, optional</span>
 <span class="sd">            Whether to force the re-computation of the job results even if existing</span>
@@ -474,14 +471,14 @@
 <span class="sd">        -------</span>
 <span class="sd">        result : Any</span>
 <span class="sd">            The result of the job</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.environments.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Environment</span>
 
         <span class="k">if</span> <span class="n">raise_errors</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">raise_errors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">plugin_name</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;debug&quot;</span>
+            <span class="n">raise_errors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">plugin_name</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"debug"</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raise_errors</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;&#39;raise_errors&#39; must be a boolean or None, not </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">raise_errors</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">"'raise_errors' must be a boolean or None, not </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">raise_errors</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
 
         <span class="n">task</span><span class="o">.</span><span class="n">_check_rules</span><span class="p">()</span>
@@ -489,7 +486,7 @@
         <span class="k">if</span> <span class="n">task</span><span class="o">.</span><span class="n">_splitter</span><span class="p">:</span>
 
             <span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span>
-                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;outer_split&quot;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">"outer_split"</span><span class="p">,</span>
                 <span class="n">splitter</span><span class="o">=</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">_splitter</span><span class="p">),</span>
                 <span class="n">combiner</span><span class="o">=</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">_combiner</span><span class="p">),</span>
                 <span class="n">container_ndim</span><span class="o">=</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">_container_ndim</span><span class="p">),</span>
@@ -514,8 +511,8 @@
             <span class="n">environment</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">elif</span> <span class="n">task</span><span class="o">.</span><span class="n">_combiner</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Job </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> is marked for combining, but not splitting. &quot;</span>
-                <span class="s2">&quot;Use the `split` method to split the job before combining.&quot;</span>
+                <span class="sa">f</span><span class="s2">"Job </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2"> is marked for combining, but not splitting. "</span>
+                <span class="s2">"Use the `split` method to split the job before combining."</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">environment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span>
@@ -523,7 +520,7 @@
         <span class="n">job</span> <span class="o">=</span> <span class="n">Job</span><span class="p">(</span>
             <span class="n">task</span><span class="p">,</span>
             <span class="n">submitter</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
-            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">"main"</span><span class="p">,</span>
             <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
             <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
         <span class="p">)</span>
@@ -532,14 +529,14 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
             <span class="n">error_msg</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Full crash report for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">task</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> job is here: &quot;</span>
-                <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">cache_dir</span> <span class="o">/</span> <span class="s2">&quot;_error.pklz&quot;</span><span class="p">)</span>
+                <span class="sa">f</span><span class="s2">"Full crash report for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">task</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> job is here: "</span>
+                <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">cache_dir</span> <span class="o">/</span> <span class="s2">"_error.pklz"</span><span class="p">)</span>
             <span class="p">)</span>
             <span class="n">exc</span><span class="o">.</span><span class="n">add_note</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">raise_errors</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">job</span><span class="o">.</span><span class="n">result</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="n">exc</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Task execution failed</span><span class="se">\n</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">error_msg</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Task execution failed</span><span class="se">\n</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">error_msg</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">run_start_time</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">PersistentCache</span><span class="p">()</span><span class="o">.</span><span class="n">clean_up</span><span class="p">()</span>
@@ -547,19 +544,19 @@
         <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">lockfile</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Job </span><span class="si">{</span><span class="n">job</span><span class="si">}</span><span class="s2"> has a lockfile, but no result was found. &quot;</span>
-                    <span class="s2">&quot;This may be due to another submission that is currently running, or the hard &quot;</span>
-                    <span class="s2">&quot;interrupt (e.g. a debugging abortion) interrupting a previous run. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;In the case of an interrupted run, please remove </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">lockfile</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> &quot;</span>
-                    <span class="s2">&quot;and resubmit.&quot;</span>
+                    <span class="sa">f</span><span class="s2">"Job </span><span class="si">{</span><span class="n">job</span><span class="si">}</span><span class="s2"> has a lockfile, but no result was found. "</span>
+                    <span class="s2">"This may be due to another submission that is currently running, or the hard "</span>
+                    <span class="s2">"interrupt (e.g. a debugging abortion) interrupting a previous run. "</span>
+                    <span class="sa">f</span><span class="s2">"In the case of an interrupted run, please remove </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">lockfile</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> "</span>
+                    <span class="s2">"and resubmit."</span>
                 <span class="p">)</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Job </span><span class="si">{</span><span class="n">job</span><span class="si">}</span><span class="s2"> has no result in </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Job </span><span class="si">{</span><span class="n">job</span><span class="si">}</span><span class="s2"> has no result in </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 
 <div class="viewcode-block" id="Submitter.submit">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.engine.Submitter.submit">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Submit a job to the worker.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">"Job[TaskType]"</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Submit a job to the worker.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -568,7 +565,7 @@
 <span class="sd">        rerun : bool, optional</span>
 <span class="sd">            Whether to force the re-computation of the job results even if existing</span>
 <span class="sd">            results are found, by default False</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">is_async</span><span class="p">:</span>  <span class="c1"># Only workflow tasks can be async</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span><span class="p">))</span>
         <span class="k">else</span><span class="p">:</span>
@@ -578,8 +575,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="c1"># Remove the unpicklable entries or those that should not be pickled</span>
-        <span class="c1"># When unpickled (in another process) the submitter can&#39;t be called</span>
-        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;loop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># When unpickled (in another process) the submitter can't be called</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">"loop"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="n">state</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
@@ -590,8 +587,8 @@
 
 <div class="viewcode-block" id="Submitter.expand_workflow">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.engine.Submitter.expand_workflow">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">expand_workflow</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wf_job</span><span class="p">:</span> <span class="s2">&quot;Job[workflow.Task]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expands and executes a workflow job synchronously. Typically only used during</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">expand_workflow</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wf_job</span><span class="p">:</span> <span class="s2">"Job[workflow.Task]"</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Expands and executes a workflow job synchronously. Typically only used during</span>
 <span class="sd">        debugging and testing, as the asynchronous version is more efficient.</span>
 
 <span class="sd">        Parameters</span>
@@ -599,12 +596,12 @@
 <span class="sd">        job : :obj:`~pydra.engine.job.Job[workflow.Task]`</span>
 <span class="sd">            Workflow Job object</span>
 
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="c1"># Construct the workflow</span>
         <span class="n">wf</span> <span class="o">=</span> <span class="n">wf_job</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">construct</span><span class="p">()</span>
         <span class="c1"># Generate the execution graph</span>
         <span class="n">exec_graph</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">execution_graph</span><span class="p">(</span><span class="n">submitter</span><span class="o">=</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">wf_job</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;workflow&quot;</span><span class="p">:</span> <span class="n">wf</span><span class="p">,</span> <span class="s2">&quot;exec_graph&quot;</span><span class="p">:</span> <span class="n">exec_graph</span><span class="p">}</span>
+        <span class="n">wf_job</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"workflow"</span><span class="p">:</span> <span class="n">wf</span><span class="p">,</span> <span class="s2">"exec_graph"</span><span class="p">:</span> <span class="n">exec_graph</span><span class="p">}</span>
         <span class="n">tasks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_runnable_tasks</span><span class="p">(</span><span class="n">exec_graph</span><span class="p">)</span>
         <span class="k">while</span> <span class="n">tasks</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">done</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
@@ -615,20 +612,20 @@
 <div class="viewcode-block" id="Submitter.expand_workflow_async">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.engine.Submitter.expand_workflow_async">[docs]</a>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">expand_workflow_async</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">workflow_task</span><span class="p">:</span> <span class="s2">&quot;Job[workflow.Task]&quot;</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">workflow_task</span><span class="p">:</span> <span class="s2">"Job[workflow.Task]"</span><span class="p">,</span> <span class="n">rerun</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Expand and execute a workflow job asynchronously.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        job : :obj:`~pydra.engine.job.Job[workflow.Task]`</span>
 <span class="sd">            Workflow Job object</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="n">wf</span> <span class="o">=</span> <span class="n">workflow_task</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">construct</span><span class="p">()</span>
         <span class="c1"># Generate the execution graph</span>
         <span class="n">exec_graph</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">execution_graph</span><span class="p">(</span><span class="n">submitter</span><span class="o">=</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">workflow_task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;workflow&quot;</span><span class="p">:</span> <span class="n">wf</span><span class="p">,</span> <span class="s2">&quot;exec_graph&quot;</span><span class="p">:</span> <span class="n">exec_graph</span><span class="p">}</span>
+        <span class="n">workflow_task</span><span class="o">.</span><span class="n">return_values</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"workflow"</span><span class="p">:</span> <span class="n">wf</span><span class="p">,</span> <span class="s2">"exec_graph"</span><span class="p">:</span> <span class="n">exec_graph</span><span class="p">}</span>
         <span class="c1"># keep track of pending futures</span>
         <span class="n">task_futures</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="n">futured</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Job</span><span class="p">[</span><span class="n">TaskType</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
@@ -637,7 +634,7 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="k">while</span> <span class="n">tasks</span> <span class="ow">or</span> <span class="n">task_futures</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">done</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">):</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">tasks</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">task_futures</span><span class="p">:</span>
-                    <span class="c1"># it&#39;s possible that task_futures is empty, but not able to get any</span>
+                    <span class="c1"># it's possible that task_futures is empty, but not able to get any</span>
                     <span class="c1"># tasks from graph_copy (using get_runnable_tasks)</span>
                     <span class="c1"># this might be related to some delays saving the files</span>
                     <span class="c1"># so try to get_runnable_tasks for another minute</span>
@@ -645,26 +642,26 @@
                     <span class="k">while</span> <span class="ow">not</span> <span class="n">tasks</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">done</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">):</span>
                         <span class="n">tasks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_runnable_tasks</span><span class="p">(</span><span class="n">exec_graph</span><span class="p">)</span>
                         <span class="n">ii</span> <span class="o">+=</span> <span class="mi">1</span>
-                        <span class="c1"># don&#39;t block the event loop!</span>
+                        <span class="c1"># don't block the event loop!</span>
                         <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
                         <span class="k">if</span> <span class="n">ii</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">:</span>
-                            <span class="n">not_done</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                            <span class="n">not_done</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
                                 <span class="p">(</span>
-                                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: started=</span><span class="si">{</span><span class="nb">bool</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">started</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
-                                    <span class="sa">f</span><span class="s2">&quot;blocked=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">blocked</span><span class="p">)</span><span class="si">}</span><span class="s2">, queued=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">queued</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: started=</span><span class="si">{</span><span class="nb">bool</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">started</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
+                                    <span class="sa">f</span><span class="s2">"blocked=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">blocked</span><span class="p">)</span><span class="si">}</span><span class="s2">, queued=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">queued</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
                                 <span class="p">)</span>
                                 <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span>
                                 <span class="k">if</span> <span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">done</span>
                             <span class="p">)</span>
                             <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
-                                <span class="s2">&quot;Something has gone wrong when retrieving the predecessor &quot;</span>
-                                <span class="sa">f</span><span class="s2">&quot;results. Not able to get any more tasks but he following &quot;</span>
-                                <span class="sa">f</span><span class="s2">&quot;nodes of the </span><span class="si">{</span><span class="n">wf</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> workflow are not done:&quot;</span>
-                                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="n">not_done</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                                <span class="s2">"Something has gone wrong when retrieving the predecessor "</span>
+                                <span class="sa">f</span><span class="s2">"results. Not able to get any more tasks but he following "</span>
+                                <span class="sa">f</span><span class="s2">"nodes of the </span><span class="si">{</span><span class="n">wf</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> workflow are not done:"</span>
+                                <span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="si">{</span><span class="n">not_done</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">"</span>
                             <span class="p">)</span>
                             <span class="n">not_done</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">exec_graph</span><span class="o">.</span><span class="n">nodes</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">done</span><span class="p">]</span>
-                            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">done</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">done</span><span class="si">}</span><span class="s2">"</span>
                                 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">not_done</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">queued</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
                             <span class="p">)</span>
                             <span class="c1"># Get blocked tasks and the predecessors they are blocked on</span>
@@ -681,50 +678,51 @@
                             <span class="k">for</span> <span class="n">job</span><span class="p">,</span> <span class="n">blocked_on</span> <span class="ow">in</span> <span class="n">outstanding</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                                 <span class="k">if</span> <span class="ow">not</span> <span class="n">blocked_on</span><span class="p">:</span>
                                     <span class="k">continue</span>
-                                <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;- &#39;</span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; node blocked due to</span><span class="se">\n</span><span class="s2">&quot;</span>
+                                <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">"- '</span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' node blocked due to</span><span class="se">\n</span><span class="s2">"</span>
                                 <span class="k">for</span> <span class="n">pred</span> <span class="ow">in</span> <span class="n">blocked_on</span><span class="p">:</span>
                                     <span class="k">if</span> <span class="p">(</span>
                                         <span class="n">pred</span><span class="o">.</span><span class="n">checksum</span>
                                         <span class="o">!=</span> <span class="n">wf</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">_graph_checksums</span><span class="p">[</span><span class="n">pred</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
                                     <span class="p">):</span>
                                         <span class="n">msg</span> <span class="o">+=</span> <span class="p">(</span>
-                                            <span class="sa">f</span><span class="s2">&quot;    - hash changes in &#39;</span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; node &quot;</span>
-                                            <span class="sa">f</span><span class="s2">&quot;inputs. Current values and hashes: &quot;</span>
-                                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">inputs</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">_hashes</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                                            <span class="sa">f</span><span class="s2">"    - hash changes in '</span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' node "</span>
+                                            <span class="sa">f</span><span class="s2">"inputs. Current values and hashes: "</span>
+                                            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">inputs</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">_hashes</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
                                         <span class="p">)</span>
                                         <span class="n">hashes_have_changed</span> <span class="o">=</span> <span class="kc">True</span>
                                     <span class="k">elif</span> <span class="n">pred</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">outstanding</span><span class="p">:</span>
                                         <span class="n">msg</span> <span class="o">+=</span> <span class="p">(</span>
-                                            <span class="sa">f</span><span class="s2">&quot;    - undiagnosed issues in &#39;</span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; &quot;</span>
-                                            <span class="s2">&quot;node, potentially related to file-system &quot;</span>
-                                            <span class="s2">&quot;access issues &quot;</span>
+                                            <span class="sa">f</span><span class="s2">"    - undiagnosed issues in '</span><span class="si">{</span><span class="n">pred</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' "</span>
+                                            <span class="s2">"node, potentially related to file-system "</span>
+                                            <span class="s2">"access issues "</span>
                                         <span class="p">)</span>
-                                <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                                <span class="n">msg</span> <span class="o">+=</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span>
                             <span class="k">if</span> <span class="n">hashes_have_changed</span><span class="p">:</span>
                                 <span class="n">msg</span> <span class="o">+=</span> <span class="p">(</span>
-                                    <span class="s2">&quot;Set loglevel to &#39;debug&#39; in order to track hash &quot;</span>
-                                    <span class="s2">&quot;changes throughout the execution of the workflow.&quot;</span>
-                                    <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2"> These issues may have been caused by &quot;</span>
-                                    <span class="s2">&quot;`bytes_repr()` methods that don&#39;t return stable &quot;</span>
-                                    <span class="s2">&quot;hash values for specific object types across &quot;</span>
-                                    <span class="s2">&quot;multiple processes (see bytes_repr() &quot;</span>
-                                    <span class="s1">&#39;&quot;singledispatch &quot;function in pydra/utils/hash.py).&#39;</span>
-                                    <span class="s2">&quot;You may need to write specific `bytes_repr()` &quot;</span>
-                                    <span class="s2">&quot;implementations (see `pydra.utils.hash.register_serializer`) &quot;</span>
-                                    <span class="s2">&quot;or `__bytes_repr__()` dunder methods to handle one &quot;</span>
-                                    <span class="s2">&quot;or more types in your interface inputs.&quot;</span>
+                                    <span class="s2">"Set loglevel to 'debug' in order to track hash "</span>
+                                    <span class="s2">"changes throughout the execution of the workflow."</span>
+                                    <span class="s2">"</span><span class="se">\n\n</span><span class="s2"> These issues may have been caused by "</span>
+                                    <span class="s2">"`bytes_repr()` methods that don't return stable "</span>
+                                    <span class="s2">"hash values for specific object types across "</span>
+                                    <span class="s2">"multiple processes (see bytes_repr() "</span>
+                                    <span class="s1">'"singledispatch "function in pydra/utils/hash.py).'</span>
+                                    <span class="s2">"You may need to write specific `bytes_repr()` "</span>
+                                    <span class="s2">"implementations (see `pydra.utils.hash.register_serializer`) "</span>
+                                    <span class="s2">"or `__bytes_repr__()` dunder methods to handle one "</span>
+                                    <span class="s2">"or more types in your interface inputs."</span>
                                 <span class="p">)</span>
                             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">is_async</span><span class="p">:</span>  <span class="c1"># Only workflows at this stage</span>
-                        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
-                            <span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagate_rerun</span>
-                        <span class="p">)</span>
-                    <span class="k">elif</span> <span class="n">job</span><span class="o">.</span><span class="n">checksum</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">futured</span><span class="p">:</span>
-                        <span class="n">asyncio_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">(</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagate_rerun</span><span class="p">),</span>
-                            <span class="n">name</span><span class="o">=</span><span class="n">job</span><span class="o">.</span><span class="n">checksum</span><span class="p">,</span>
-                        <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">checksum</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">futured</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">is_async</span><span class="p">:</span>  <span class="c1"># Only workflows at this stage</span>
+                            <span class="n">coroutine</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+                                <span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagate_rerun</span>
+                            <span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">coroutine</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                                <span class="n">job</span><span class="p">,</span> <span class="n">rerun</span><span class="o">=</span><span class="n">rerun</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagate_rerun</span>
+                            <span class="p">)</span>
+                        <span class="n">asyncio_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">(</span><span class="n">coroutine</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">job</span><span class="o">.</span><span class="n">checksum</span><span class="p">)</span>
                         <span class="n">task_futures</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">asyncio_task</span><span class="p">)</span>
                         <span class="n">futured</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">checksum</span><span class="p">]</span> <span class="o">=</span> <span class="n">job</span>
                 <span class="n">task_futures</span><span class="p">,</span> <span class="n">completed</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_finished</span><span class="p">(</span><span class="n">task_futures</span><span class="p">)</span>
@@ -734,7 +732,7 @@
                     <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
                         <span class="n">error_msg</span> <span class="o">=</span> <span class="n">format_exc</span><span class="p">()</span>
                         <span class="k">if</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span>
-                            <span class="sa">r</span><span class="s1">&#39;.*&quot;&quot;&quot;(.*)&quot;&quot;&quot;.*&#39;</span><span class="p">,</span>
+                            <span class="sa">r</span><span class="s1">'.*"""(.*)""".*'</span><span class="p">,</span>
                             <span class="n">error_msg</span><span class="p">,</span>
                             <span class="n">flags</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span> <span class="o">|</span> <span class="n">re</span><span class="o">.</span><span class="n">MULTILINE</span><span class="p">,</span>
                         <span class="p">):</span>
@@ -742,17 +740,17 @@
                         <span class="n">job</span> <span class="o">=</span> <span class="n">futured</span><span class="p">[</span><span class="n">task_future</span><span class="o">.</span><span class="n">get_name</span><span class="p">()]</span>
                         <span class="n">task_name</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">name</span>
                         <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">state_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                            <span class="n">task_name</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">state_index</span><span class="si">}</span><span class="s2">)&quot;</span>
+                            <span class="n">task_name</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">state_index</span><span class="si">}</span><span class="s2">)"</span>
                         <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Job </span><span class="si">{</span><span class="n">task_name</span><span class="si">!r}</span><span class="s2">, </span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">task</span><span class="si">!r}</span><span class="s2">, errored:</span><span class="si">{</span><span class="n">error_msg</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="sa">f</span><span class="s2">"Job </span><span class="si">{</span><span class="n">task_name</span><span class="si">!r}</span><span class="s2">, </span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">task</span><span class="si">!r}</span><span class="s2">, errored:</span><span class="si">{</span><span class="n">error_msg</span><span class="si">}</span><span class="s2">"</span>
                         <span class="p">)</span>
                 <span class="n">tasks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_runnable_tasks</span><span class="p">(</span><span class="n">exec_graph</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">errors</span><span class="p">:</span>
-                <span class="n">all_errors</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
+                <span class="n">all_errors</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\n\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Workflow job </span><span class="si">{</span><span class="n">workflow_task</span><span class="si">}</span><span class="s2"> failed with errors&quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;:</span><span class="se">\n\n</span><span class="si">{</span><span class="n">all_errors</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">See output directory for details: </span><span class="si">{</span><span class="n">workflow_task</span><span class="o">.</span><span class="n">cache_dir</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="sa">f</span><span class="s2">"Workflow job </span><span class="si">{</span><span class="n">workflow_task</span><span class="si">}</span><span class="s2"> failed with errors"</span>
+                    <span class="sa">f</span><span class="s2">":</span><span class="se">\n\n</span><span class="si">{</span><span class="n">all_errors</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">See output directory for details: </span><span class="si">{</span><span class="n">workflow_task</span><span class="o">.</span><span class="n">cache_dir</span><span class="si">}</span><span class="s2">"</span>
                 <span class="p">)</span></div>
 
 
@@ -761,8 +759,8 @@
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">fetch_finished</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">futures</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">set</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">],</span> <span class="nb">set</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Awaits asyncio&#39;s :class:`asyncio.Task` until one is finished.</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Awaits asyncio's :class:`asyncio.Task` until one is finished.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -776,7 +774,7 @@
 <span class="sd">        done: set</span>
 <span class="sd">            Completed asyncio :class:`asyncio.Task`</span>
 
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="n">done</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">done</span><span class="p">,</span> <span class="n">pending</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span>
@@ -785,7 +783,7 @@
         <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
             <span class="c1"># nothing pending!</span>
             <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tasks finished: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">done</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Tasks finished: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">done</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">pending</span><span class="p">,</span> <span class="n">done</span></div>
 
 
@@ -798,19 +796,19 @@
 <div class="viewcode-block" id="Submitter.close">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.engine.Submitter.close">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Close submitter.</span>
 
 <span class="sd">        Do not close previously queued loop.</span>
 
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_own_loop</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_check_locks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tasks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Job</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check for stale lock files and remove them.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Check for stale lock files and remove them."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">clean_stale_locks</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
                 <span class="n">start_time</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">run_start_time</span>
@@ -819,8 +817,8 @@
 
 <div class="viewcode-block" id="Submitter.get_runnable_tasks">
 <a class="viewcode-back" href="../../../reference/api.html#pydra.engine.Submitter.get_runnable_tasks">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_runnable_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">graph</span><span class="p">:</span> <span class="n">DiGraph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse a graph and return all runnable tasks.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_runnable_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">graph</span><span class="p">:</span> <span class="n">DiGraph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Parse a graph and return all runnable tasks.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -833,7 +831,7 @@
 <span class="sd">            List of runnable tasks</span>
 <span class="sd">        following_err : dict[NodeToExecute, list[str]]</span>
 <span class="sd">            Dictionary of tasks that are blocked by errored tasks</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="n">tasks</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">not_started</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="n">node</span><span class="p">:</span> <span class="n">NodeExecution</span>
@@ -852,7 +850,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_locks</span><span class="p">(</span><span class="n">tasks</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tasks</span><span class="p">)</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_concurrent</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                <span class="s2">&quot;Reducing number of tasks to run concurrently from </span><span class="si">%d</span><span class="s2"> to </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="s2">"Reducing number of tasks to run concurrently from </span><span class="si">%d</span><span class="s2"> to </span><span class="si">%d</span><span class="s2">"</span><span class="p">,</span>
                 <span class="nb">len</span><span class="p">(</span><span class="n">tasks</span><span class="p">),</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">max_concurrent</span><span class="p">,</span>
             <span class="p">)</span>
@@ -862,7 +860,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">cache_root</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the location of the cache directory.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Get the location of the cache directory."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span>
 
     <span class="nd">@cache_root</span><span class="o">.</span><span class="n">setter</span>
@@ -877,37 +875,37 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">NodeExecution</span><span class="p">(</span><span class="n">ty</span><span class="o">.</span><span class="n">Generic</span><span class="p">[</span><span class="n">TaskType</span><span class="p">]):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A wrapper around a workflow node containing the execution state of the tasks that</span>
-<span class="sd">    are generated from it&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""A wrapper around a workflow node containing the execution state of the tasks that</span>
+<span class="sd">    are generated from it"""</span>
 
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">node</span><span class="p">:</span> <span class="s2">&quot;Node&quot;</span>
+    <span class="n">node</span><span class="p">:</span> <span class="s2">"Node"</span>
     <span class="n">submitter</span><span class="p">:</span> <span class="n">Submitter</span>
 
     <span class="c1"># List of tasks that were completed successfully</span>
-    <span class="n">successful</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]]</span>
+    <span class="n">successful</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">]]</span>
     <span class="c1"># List of tasks that failed</span>
-    <span class="n">errored</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]</span>
-    <span class="c1"># List of tasks that couldn&#39;t be run due to upstream errors</span>
-    <span class="n">unrunnable</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]]</span>
+    <span class="n">errored</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">"Job[TaskType]"</span><span class="p">]</span>
+    <span class="c1"># List of tasks that couldn't be run due to upstream errors</span>
+    <span class="n">unrunnable</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">]]</span>
     <span class="c1"># List of tasks that are queued</span>
-    <span class="n">queued</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]</span>
+    <span class="n">queued</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">"Job[TaskType]"</span><span class="p">]</span>
     <span class="c1"># List of tasks that are queued</span>
-    <span class="n">running</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]]</span>
+    <span class="n">running</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]]</span>
     <span class="c1"># List of tasks that are blocked on other tasks to complete before they can be run</span>
-    <span class="n">blocked</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">blocked</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">"Job[TaskType]"</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
 
-    <span class="n">_tasks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">_tasks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"Job[TaskType]"</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
 
-    <span class="n">workflow</span><span class="p">:</span> <span class="s2">&quot;Workflow&quot;</span>
+    <span class="n">workflow</span><span class="p">:</span> <span class="s2">"Workflow"</span>
 
-    <span class="n">graph</span><span class="p">:</span> <span class="n">DiGraph</span><span class="p">[</span><span class="s2">&quot;NodeExecution&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">graph</span><span class="p">:</span> <span class="n">DiGraph</span><span class="p">[</span><span class="s2">"NodeExecution"</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">node</span><span class="p">:</span> <span class="s2">&quot;Node&quot;</span><span class="p">,</span>
+        <span class="n">node</span><span class="p">:</span> <span class="s2">"Node"</span><span class="p">,</span>
         <span class="n">submitter</span><span class="p">:</span> <span class="n">Submitter</span><span class="p">,</span>
-        <span class="n">workflow</span><span class="p">:</span> <span class="s2">&quot;Workflow&quot;</span><span class="p">,</span>
+        <span class="n">workflow</span><span class="p">:</span> <span class="s2">"Workflow"</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">node</span> <span class="o">=</span> <span class="n">node</span>
@@ -929,34 +927,34 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;NodeExecution(name=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, blocked=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">blocked</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;queued=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queued</span><span class="p">)</span><span class="si">}</span><span class="s2">, running=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">running</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;successful=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">successful</span><span class="p">)</span><span class="si">}</span><span class="s2">, errored=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">errored</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;unrunnable=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">unrunnable</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="sa">f</span><span class="s2">"NodeExecution(name=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, blocked=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">blocked</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"queued=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queued</span><span class="p">)</span><span class="si">}</span><span class="s2">, running=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">running</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"successful=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">successful</span><span class="p">)</span><span class="si">}</span><span class="s2">, errored=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">errored</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"unrunnable=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">unrunnable</span><span class="p">)</span><span class="si">}</span><span class="s2">)"</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Node.Inputs&quot;</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Node.Inputs"</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">inputs</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_task</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Node&quot;</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_task</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Node"</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">_task</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Generator</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Generator</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tasks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Tasks have not been generated&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"Tasks have not been generated"</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tasks</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare the execution node so that it can be processed&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Prepare the execution node so that it can be processed"""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_tasks</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">:</span>
             <span class="n">values</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">state_values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">current_splitter_rpn</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">,</span> <span class="s2">&quot;.&quot;</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"*"</span><span class="p">,</span> <span class="s2">"."</span><span class="p">):</span>
                         <span class="k">continue</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">LazyField</span><span class="p">):</span>
                         <span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">_get_value</span><span class="p">(</span>
@@ -1010,7 +1008,7 @@
         <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">errored</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update_status</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the status of the tasks in the node.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Updates the status of the tasks in the node."""</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">started</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="c1"># Check to see if any previously queued tasks have completed</span>
@@ -1046,10 +1044,10 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_lazy_inputs</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">task</span><span class="p">:</span> <span class="s2">&quot;Task&quot;</span><span class="p">,</span>
+        <span class="n">task</span><span class="p">:</span> <span class="s2">"Task"</span><span class="p">,</span>
         <span class="n">state_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Task&quot;</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolves lazy fields in the task by replacing them with their</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Task"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Resolves lazy fields in the task by replacing them with their</span>
 <span class="sd">        actual values calculated by upstream jobs.</span>
 
 <span class="sd">        Parameters</span>
@@ -1063,7 +1061,7 @@
 <span class="sd">        -------</span>
 <span class="sd">        Task</span>
 <span class="sd">            The task with all lazy fields resolved</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="n">resolved</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">attrs_values</span><span class="p">(</span><span class="n">task</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">LazyField</span><span class="p">):</span>
@@ -1072,15 +1070,15 @@
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="o">**</span><span class="n">resolved</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_split_task</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;Task[OutputType]&quot;</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Split the task into the different states it will be run over</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_split_task</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">"Task[OutputType]"</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Split the task into the different states it will be run over</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        values : dict[str, Any]</span>
 <span class="sd">            The values to use for the split</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># TODO: doesn&#39;t work properly for more cmplicated wf (check if still an issue)</span>
+<span class="sd">        """</span>
+        <span class="c1"># TODO: doesn't work properly for more cmplicated wf (check if still an issue)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">state</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">{</span><span class="kc">None</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">_task</span><span class="p">}</span>
         <span class="n">split_defs</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1088,7 +1086,7 @@
             <span class="n">resolved</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">inpt_name</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">input_names</span><span class="p">):</span>
                 <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="p">,</span> <span class="n">inpt_name</span><span class="p">)</span>
-                <span class="n">state_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">inpt_name</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">state_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">inpt_name</span><span class="si">}</span><span class="s2">"</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">resolved</span><span class="p">[</span><span class="n">inpt_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">vals</span><span class="p">[</span><span class="n">state_key</span><span class="p">]</span>
                 <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
@@ -1101,9 +1099,9 @@
             <span class="n">split_defs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">evolve</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">_task</span><span class="p">,</span> <span class="o">**</span><span class="n">resolved</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">split_defs</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_runnable_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">graph</span><span class="p">:</span> <span class="n">DiGraph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;For a given node, check to see which tasks have been successfully run, are ready</span>
-<span class="sd">        to run, can&#39;t be run due to upstream errors, or are blocked on other tasks to complete.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_runnable_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">graph</span><span class="p">:</span> <span class="n">DiGraph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""For a given node, check to see which tasks have been successfully run, are ready</span>
+<span class="sd">        to run, can't be run due to upstream errors, or are blocked on other tasks to complete.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1117,9 +1115,9 @@
 <span class="sd">        -------</span>
 <span class="sd">        runnable : list[NodeExecution]</span>
 <span class="sd">            List of tasks that are ready to run</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">runnable</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">predecessors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Job[TaskType]&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">predecessors</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+<span class="sd">        """</span>
+        <span class="n">runnable</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">predecessors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">"Job[TaskType]"</span><span class="p">]</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">predecessors</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
 
         <span class="c1"># If there is a split, we need to wait for all predecessor nodes to finish</span>
         <span class="c1"># In theory, if the current splitter splits an already split state we should</span>
@@ -1128,7 +1126,7 @@
         <span class="c1"># in order to assign consistent state indices across the new split</span>
 
         <span class="c1"># FIXME: The branch for handling partially completed/errored/unrunnable</span>
-        <span class="c1"># predecessor nodes can&#39;t be used until the State class can be partially</span>
+        <span class="c1"># predecessor nodes can't be used until the State class can be partially</span>
         <span class="c1"># initialised with lazy-fields.</span>
         <span class="k">if</span> <span class="kc">True</span><span class="p">:</span>  <span class="c1"># self.node.splitter:</span>
             <span class="k">if</span> <span class="n">unrunnable</span> <span class="o">:=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">predecessors</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">errored</span> <span class="ow">or</span> <span class="n">p</span><span class="o">.</span><span class="n">unrunnable</span><span class="p">]:</span>
@@ -1164,7 +1162,7 @@
                         <span class="n">pred_states_ind</span> <span class="o">=</span> <span class="p">{</span>
                             <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
                             <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">states_ind</span>
-                            <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">pred</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">)</span>
+                            <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">pred</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">"."</span><span class="p">)</span>
                         <span class="p">}</span>
                         <span class="n">pred_inds</span> <span class="o">=</span> <span class="p">[</span>
                             <span class="n">i</span>
@@ -1202,8 +1200,8 @@
 
 
 <span class="c1"># def _list_blocked_tasks(graph):</span>
-<span class="c1">#     &quot;&quot;&quot;Generates a list of tasks that can&#39;t be run and predecessors that are blocking</span>
-<span class="c1">#     them to help debugging of broken workflows&quot;&quot;&quot;</span>
+<span class="c1">#     """Generates a list of tasks that can't be run and predecessors that are blocking</span>
+<span class="c1">#     them to help debugging of broken workflows"""</span>
 <span class="c1">#     blocked = []</span>
 <span class="c1">#     for tsk in graph.sorted_nodes:</span>
 <span class="c1">#         blocking = []</span>
@@ -1212,19 +1210,19 @@
 <span class="c1">#                 matching_name = []</span>
 <span class="c1">#                 for cache_loc in tsk.readonly_caches:</span>
 <span class="c1">#                     for tsk_work_dir in cache_loc.iterdir():</span>
-<span class="c1">#                         if (tsk_work_dir / &quot;_job.pklz&quot;).exists():</span>
-<span class="c1">#                             with open(tsk_work_dir / &quot;_job.pklz&quot;, &quot;rb&quot;) as f:</span>
+<span class="c1">#                         if (tsk_work_dir / "_job.pklz").exists():</span>
+<span class="c1">#                             with open(tsk_work_dir / "_job.pklz", "rb") as f:</span>
 <span class="c1">#                                 saved_tsk = pickle.load(f)</span>
 <span class="c1">#                             if saved_tsk.name == pred.name:</span>
 <span class="c1">#                                 matching_name.append(</span>
-<span class="c1">#                                     f&quot;{saved_tsk.name} ({tsk_work_dir.name})&quot;</span>
+<span class="c1">#                                     f"{saved_tsk.name} ({tsk_work_dir.name})"</span>
 <span class="c1">#                                 )</span>
-<span class="c1">#                 blocking.append((pred, &quot;, &quot;.join(matching_name)))</span>
+<span class="c1">#                 blocking.append((pred, ", ".join(matching_name)))</span>
 <span class="c1">#         if blocking:</span>
 <span class="c1">#             blocked.append(</span>
-<span class="c1">#                 f&quot;\n{tsk.name} ({tsk.checksum}) is blocked by &quot;</span>
-<span class="c1">#                 + &quot;; &quot;.join(</span>
-<span class="c1">#                     f&quot;{pred.name} ({pred.checksum}), which matches names of [{matching}]&quot;</span>
+<span class="c1">#                 f"\n{tsk.name} ({tsk.checksum}) is blocked by "</span>
+<span class="c1">#                 + "; ".join(</span>
+<span class="c1">#                     f"{pred.name} ({pred.checksum}), which matches names of [{matching}]"</span>
 <span class="c1">#                     for pred, matching in blocking</span>
 <span class="c1">#                 )</span>
 <span class="c1">#             )</span>
@@ -1232,7 +1230,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">get_open_loop</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Get current event loop.</span>
 
 <span class="sd">    If the loop is closed, a new</span>
@@ -1243,13 +1241,13 @@
 <span class="sd">    loop : :obj:`asyncio.EventLoop`</span>
 <span class="sd">        The current event loop</span>
 
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;nt&quot;</span><span class="p">:</span>
-        <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">ProactorEventLoop</span><span class="p">()</span>  <span class="c1"># for subprocess&#39; pipes on Windows</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"nt"</span><span class="p">:</span>
+        <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">ProactorEventLoop</span><span class="p">()</span>  <span class="c1"># for subprocess' pipes on Windows</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
-        <span class="c1"># in case RuntimeError: There is no current event loop in thread &#39;MainThread&#39;</span>
+        <span class="c1"># in case RuntimeError: There is no current event loop in thread 'MainThread'</span>
         <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
             <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
             <span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
@@ -1290,7 +1288,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../../../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Workflows - Pydra v1.0a9</title>
+        <title>Workflows - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -170,7 +170,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,7 +194,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -347,7 +347,7 @@ Outputs:
 <img alt="../_images/tutorial_6-workflow_4_1.png" src="../_images/tutorial_6-workflow_4_1.png" />
 </div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> returns an &quot;outputs&quot; object corresponding to the definition added to the workflow. The fields of the outptus object can be referenced as inputs to downstream workflow nodes. Note that these output fields are just placeholders for the values that will be returned and can’t be used in conditional statements during workflow construction (see <a class="reference external" href="../explanation/conditional-lazy.html">Dynamic construction</a> on how to work around this limitation). The fields of the outputs to be
+<p><code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> returns an &quot;outputs&quot; object corresponding to the definition added to the workflow. The fields of the outputs object can be referenced as inputs to downstream workflow nodes. Note that these output fields are just placeholders for the values that will be returned and can’t be used in conditional statements during workflow construction (see <a class="reference external" href="../explanation/conditional-lazy.html">Dynamic construction</a> on how to work around this limitation). The fields of the outputs to be
 returned by the workflow should be returned in a tuple.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
@@ -366,18 +366,18 @@ returned by the workflow should be returned in a tuple.</p>
 
     <span class="n">add_watermark</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
         <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-            <span class="s2">&quot;ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; &quot;</span>
-            <span class="s2">&quot;-filter_complex &lt;filter&gt; &lt;out|out_video&gt;&quot;</span>
+            <span class="s2">"ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; "</span>
+            <span class="s2">"-filter_complex &lt;filter&gt; &lt;out|out_video&gt;"</span>
         <span class="p">)(</span>
             <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>
             <span class="n">watermark</span><span class="o">=</span><span class="n">watermark</span><span class="p">,</span>
-            <span class="nb">filter</span><span class="o">=</span><span class="s2">&quot;overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="s2">"overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
         <span class="p">)</span>
     <span class="p">)</span>
     <span class="n">output_video</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
         <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-            <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; &quot;</span>
-            <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+            <span class="s2">"HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; "</span>
+            <span class="s2">"--width &lt;width:int&gt; --height &lt;height:int&gt;"</span><span class="p">,</span>
         <span class="p">)(</span><span class="n">in_video</span><span class="o">=</span><span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span><span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">out_video</span>
 
@@ -433,7 +433,7 @@ Outputs:
 <span class="k">def</span><span class="w"> </span><span class="nf">SplitWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
     <span class="c1"># Multiply over all combinations of the elements of a and b, then combine the results</span>
     <span class="c1"># for each a element into a list over each b element</span>
-    <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">))</span>
+    <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">"a"</span><span class="p">))</span>
     <span class="c1"># Sume the multiplications across all all b elements for each a element</span>
     <span class="nb">sum</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Sum</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">))</span>
     <span class="k">return</span> <span class="nb">sum</span><span class="o">.</span><span class="n">out</span>
@@ -478,7 +478,7 @@ Outputs:
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">SplitThenCombineWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
-    <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;Mul.a&quot;</span><span class="p">))</span>
+    <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">"Mul.a"</span><span class="p">))</span>
     <span class="nb">sum</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Sum</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">))</span>
     <span class="k">return</span> <span class="nb">sum</span><span class="o">.</span><span class="n">out</span>
 
@@ -534,12 +534,12 @@ Outputs:
     <span class="k">if</span> <span class="n">watermark_dims</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">add_watermark</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
             <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-                <span class="s2">&quot;ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; &quot;</span>
-                <span class="s2">&quot;-filter_complex &lt;filter&gt; &lt;out|out_video&gt;&quot;</span>
+                <span class="s2">"ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; "</span>
+                <span class="s2">"-filter_complex &lt;filter&gt; &lt;out|out_video&gt;"</span>
             <span class="p">)(</span>
                 <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>
                 <span class="n">watermark</span><span class="o">=</span><span class="n">watermark</span><span class="p">,</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="s2">&quot;overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
+                <span class="nb">filter</span><span class="o">=</span><span class="s2">"overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
             <span class="p">)</span>
         <span class="p">)</span>
         <span class="n">handbrake_input</span> <span class="o">=</span> <span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span>
@@ -548,8 +548,8 @@ Outputs:
 
     <span class="n">output_video</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
         <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-            <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; &quot;</span>
-            <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+            <span class="s2">"HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; "</span>
+            <span class="s2">"--width &lt;width:int&gt; --height &lt;height:int&gt;"</span><span class="p">,</span>
         <span class="p">)(</span><span class="n">in_video</span><span class="o">=</span><span class="n">handbrake_input</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span><span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">out_video</span>
 
@@ -648,14 +648,14 @@ Outputs:
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">fileformats</span><span class="w"> </span><span class="kn">import</span> <span class="n">generic</span>
 
 <span class="n">Mp4Handbrake</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; &quot;</span>
-    <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+    <span class="s2">"HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; "</span>
+    <span class="s2">"--width &lt;width:int&gt; --height &lt;height:int&gt;"</span><span class="p">,</span>
 <span class="p">)</span>
 
 
 <span class="n">QuicktimeHandbrake</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-    <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/quicktime&gt; -o &lt;out|out_video:video/quicktime&gt; &quot;</span>
-    <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+    <span class="s2">"HandBrakeCLI -i &lt;in_video:video/quicktime&gt; -o &lt;out|out_video:video/quicktime&gt; "</span>
+    <span class="s2">"--width &lt;width:int&gt; --height &lt;height:int&gt;"</span><span class="p">,</span>
 <span class="p">)</span>
 
 
@@ -668,14 +668,14 @@ Outputs:
 
     <span class="n">add_watermark</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
         <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
-            <span class="s2">&quot;ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; &quot;</span>
-            <span class="s2">&quot;-filter_complex &lt;filter&gt; &lt;out|out_video:video/mp4&gt;&quot;</span>
+            <span class="s2">"ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; "</span>
+            <span class="s2">"-filter_complex &lt;filter&gt; &lt;out|out_video:video/mp4&gt;"</span>
         <span class="p">)(</span>
             <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>  <span class="c1"># This is OK because in_video is typed Any</span>
             <span class="n">watermark</span><span class="o">=</span><span class="n">watermark</span><span class="p">,</span>  <span class="c1"># Type is OK because generic.File is superclass of image.Png</span>
-            <span class="nb">filter</span><span class="o">=</span><span class="s2">&quot;overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="s2">"overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
         <span class="p">),</span>
-        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;add_watermark&quot;</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"add_watermark"</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="k">try</span><span class="p">:</span>
@@ -693,7 +693,7 @@ Outputs:
 
 
 <span class="n">print_help</span><span class="p">(</span><span class="n">TypeErrorWorkflow</span><span class="p">)</span>
-<span class="n">show_workflow</span><span class="p">(</span><span class="n">TypeErrorWorkflow</span><span class="p">,</span> <span class="n">plot_type</span><span class="o">=</span><span class="s2">&quot;detailed&quot;</span><span class="p">)</span>
+<span class="n">show_workflow</span><span class="p">(</span><span class="n">TypeErrorWorkflow</span><span class="p">,</span> <span class="n">plot_type</span><span class="o">=</span><span class="s2">"detailed"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -733,14 +733,14 @@ Outputs:
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;divided&quot;</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"divided"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">Divide</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">x</span> <span class="o">/</span> <span class="n">y</span>
 
 
-<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;out1&quot;</span><span class="p">,</span> <span class="s2">&quot;out2&quot;</span><span class="p">])</span>
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"out1"</span><span class="p">,</span> <span class="s2">"out2"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">DirectAccesWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A test workflow demonstration a few alternative ways to set and connect nodes</span>
+<span class="w">    </span><span class="sd">"""A test workflow demonstration a few alternative ways to set and connect nodes</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        a: An integer input</span>
@@ -749,22 +749,22 @@ Outputs:
 <span class="sd">    Returns:</span>
 <span class="sd">        out1: The first output</span>
 <span class="sd">        out2: The second output</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">wf</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">this</span><span class="p">()</span>
 
-    <span class="n">add</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;addition&quot;</span><span class="p">)</span>
+    <span class="n">add</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"addition"</span><span class="p">)</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
-    <span class="n">divide</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">wf</span><span class="p">[</span><span class="s2">&quot;addition&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lzout</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;division&quot;</span><span class="p">)</span>
+    <span class="n">divide</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">wf</span><span class="p">[</span><span class="s2">"addition"</span><span class="p">]</span><span class="o">.</span><span class="n">lzout</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"division"</span><span class="p">)</span>
 
     <span class="c1"># Alter one of the inputs to a node after it has been initialised</span>
-    <span class="n">wf</span><span class="p">[</span><span class="s2">&quot;Mul&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">b</span> <span class="o">*=</span> <span class="mi">2</span>
+    <span class="n">wf</span><span class="p">[</span><span class="s2">"Mul"</span><span class="p">]</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">b</span> <span class="o">*=</span> <span class="mi">2</span>
 
     <span class="k">return</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">divide</span><span class="o">.</span><span class="n">divided</span>
 
 
 <span class="n">print_help</span><span class="p">(</span><span class="n">DirectAccesWorkflow</span><span class="p">)</span>
-<span class="n">show_workflow</span><span class="p">(</span><span class="n">DirectAccesWorkflow</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">plot_type</span><span class="o">=</span><span class="s2">&quot;detailed&quot;</span><span class="p">)</span>
+<span class="n">show_workflow</span><span class="p">(</span><span class="n">DirectAccesWorkflow</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">plot_type</span><span class="o">=</span><span class="s2">"detailed"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -804,9 +804,9 @@ Outputs:
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out1&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">&quot;out2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">})</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"out1"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">"out2"</span><span class="p">:</span> <span class="nb">float</span><span class="p">})</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">SetOutputsOfWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A test workflow demonstration a few alternative ways to set and connect nodes</span>
+<span class="w">    </span><span class="sd">"""A test workflow demonstration a few alternative ways to set and connect nodes</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        a: An integer input</span>
@@ -815,16 +815,16 @@ Outputs:
 <span class="sd">    Returns:</span>
 <span class="sd">        out1: The first output</span>
 <span class="sd">        out2: The second output</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">wf</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">this</span><span class="p">()</span>
 
-    <span class="n">add</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;addition&quot;</span><span class="p">)</span>
+    <span class="n">add</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"addition"</span><span class="p">)</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
-    <span class="n">divide</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">wf</span><span class="p">[</span><span class="s2">&quot;addition&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lzout</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;division&quot;</span><span class="p">)</span>
+    <span class="n">divide</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">wf</span><span class="p">[</span><span class="s2">"addition"</span><span class="p">]</span><span class="o">.</span><span class="n">lzout</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"division"</span><span class="p">)</span>
 
     <span class="c1"># Alter one of the inputs to a node after it has been initialised</span>
-    <span class="n">wf</span><span class="p">[</span><span class="s2">&quot;Mul&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">b</span> <span class="o">*=</span> <span class="mi">2</span>
+    <span class="n">wf</span><span class="p">[</span><span class="s2">"Mul"</span><span class="p">]</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">b</span> <span class="o">*=</span> <span class="mi">2</span>
 
     <span class="c1"># Set the outputs of the workflow directly</span>
     <span class="n">wf</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">out1</span> <span class="o">=</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span>
@@ -832,7 +832,7 @@ Outputs:
 
 
 <span class="n">print_help</span><span class="p">(</span><span class="n">SetOutputsOfWorkflow</span><span class="p">)</span>
-<span class="n">show_workflow</span><span class="p">(</span><span class="n">SetOutputsOfWorkflow</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="mi">3</span><span class="p">),</span> <span class="n">plot_type</span><span class="o">=</span><span class="s2">&quot;detailed&quot;</span><span class="p">)</span>
+<span class="n">show_workflow</span><span class="p">(</span><span class="n">SetOutputsOfWorkflow</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="mi">3</span><span class="p">),</span> <span class="n">plot_type</span><span class="o">=</span><span class="s2">"detailed"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -885,64 +885,64 @@ Outputs:
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.tasks.mrtrix3.v3_1</span><span class="w"> </span><span class="kn">import</span> <span class="n">MrConvert</span><span class="p">,</span> <span class="n">MrThreshold</span>
 
 <span class="n">MRTRIX2NUMPY_DTYPES</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;Int8&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;i1&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;UInt8&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;u1&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Int16LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;i2&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Int16BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;i2&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;UInt16LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;u2&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;UInt16BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;u2&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Int32LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;i4&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Int32BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;i4&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;UInt32LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;u4&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;UInt32BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;u4&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Float32LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;f4&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Float32BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;f4&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Float64LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;f8&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;Float64BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;f8&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;CFloat32LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;c8&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;CFloat32BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;c8&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;CFloat64LE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&lt;c16&quot;</span><span class="p">),</span>
-    <span class="s2">&quot;CFloat64BE&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;c16&quot;</span><span class="p">),</span>
+    <span class="s2">"Int8"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"i1"</span><span class="p">),</span>
+    <span class="s2">"UInt8"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"u1"</span><span class="p">),</span>
+    <span class="s2">"Int16LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">),</span>
+    <span class="s2">"Int16BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;i2"</span><span class="p">),</span>
+    <span class="s2">"UInt16LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;u2"</span><span class="p">),</span>
+    <span class="s2">"UInt16BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;u2"</span><span class="p">),</span>
+    <span class="s2">"Int32LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;i4"</span><span class="p">),</span>
+    <span class="s2">"Int32BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;i4"</span><span class="p">),</span>
+    <span class="s2">"UInt32LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;u4"</span><span class="p">),</span>
+    <span class="s2">"UInt32BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;u4"</span><span class="p">),</span>
+    <span class="s2">"Float32LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;f4"</span><span class="p">),</span>
+    <span class="s2">"Float32BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;f4"</span><span class="p">),</span>
+    <span class="s2">"Float64LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;f8"</span><span class="p">),</span>
+    <span class="s2">"Float64BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;f8"</span><span class="p">),</span>
+    <span class="s2">"CFloat32LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;c8"</span><span class="p">),</span>
+    <span class="s2">"CFloat32BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;c8"</span><span class="p">),</span>
+    <span class="s2">"CFloat64LE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&lt;c16"</span><span class="p">),</span>
+    <span class="s2">"CFloat64BE"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">"&gt;c16"</span><span class="p">),</span>
 <span class="p">}</span>
 
 
-<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;out_image&quot;</span><span class="p">])</span>
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">"out_image"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ToyMedianThreshold</span><span class="p">(</span><span class="n">in_image</span><span class="p">:</span> <span class="n">Nifti1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">mrtrix3</span><span class="o">.</span><span class="n">ImageFormat</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A toy example workflow that</span>
+<span class="w">    </span><span class="sd">"""A toy example workflow that</span>
 
 <span class="sd">    * converts a NIfTI image to MRTrix3 image format with a separate header</span>
 <span class="sd">    * loads the separate data file and selects the median value</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">input_conversion</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
-        <span class="n">MrConvert</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">in_image</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">&quot;out_file.mih&quot;</span><span class="p">),</span>
-        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;input_conversion&quot;</span><span class="p">,</span>
-        <span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="s2">&quot;mrtrix3/mrtrix3&quot;</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">),</span>
+        <span class="n">MrConvert</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">in_image</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">"out_file.mih"</span><span class="p">),</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"input_conversion"</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="s2">"mrtrix3/mrtrix3"</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">"latest"</span><span class="p">),</span>
     <span class="p">)</span>
 
     <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">Median</span><span class="p">(</span><span class="n">mih</span><span class="p">:</span> <span class="n">mrtrix3</span><span class="o">.</span><span class="n">ImageHeader</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;A bespoke function that reads the separate data file in the MRTrix3 image</span>
+<span class="w">        </span><span class="sd">"""A bespoke function that reads the separate data file in the MRTrix3 image</span>
 <span class="sd">        header format (i.e. .mih) and calculates the median value.</span>
 
 <span class="sd">        NB: We could use a MrStats task here, but this is just an example to show how</span>
 <span class="sd">        to use a bespoke function in a workflow.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">dtype</span> <span class="o">=</span> <span class="n">MRTRIX2NUMPY_DTYPES</span><span class="p">[</span><span class="n">mih</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;datatype&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span>
+<span class="sd">        """</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">MRTRIX2NUMPY_DTYPES</span><span class="p">[</span><span class="n">mih</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"datatype"</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">Path</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">(</span><span class="n">mih</span><span class="o">.</span><span class="n">data_file</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
     <span class="n">median</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Median</span><span class="p">(</span><span class="n">mih</span><span class="o">=</span><span class="n">input_conversion</span><span class="o">.</span><span class="n">out_file</span><span class="p">))</span>
 
     <span class="n">threshold</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
-        <span class="n">MrThreshold</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">in_image</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">&quot;binary.mif&quot;</span><span class="p">,</span> <span class="nb">abs</span><span class="o">=</span><span class="n">median</span><span class="o">.</span><span class="n">out</span><span class="p">),</span>
-        <span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="s2">&quot;mrtrix3/mrtrix3&quot;</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">),</span>
+        <span class="n">MrThreshold</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">in_image</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">"binary.mif"</span><span class="p">,</span> <span class="nb">abs</span><span class="o">=</span><span class="n">median</span><span class="o">.</span><span class="n">out</span><span class="p">),</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="s2">"mrtrix3/mrtrix3"</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">"latest"</span><span class="p">),</span>
     <span class="p">)</span>
 
     <span class="n">output_conversion</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
-        <span class="n">MrConvert</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">threshold</span><span class="o">.</span><span class="n">out_file</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">&quot;out_image.mif&quot;</span><span class="p">),</span>
-        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;output_conversion&quot;</span><span class="p">,</span>
-        <span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="s2">&quot;mrtrix3/mrtrix3&quot;</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">),</span>
+        <span class="n">MrConvert</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">threshold</span><span class="o">.</span><span class="n">out_file</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="s2">"out_image.mif"</span><span class="p">),</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"output_conversion"</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="s2">"mrtrix3/mrtrix3"</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">"latest"</span><span class="p">),</span>
     <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">output_conversion</span><span class="o">.</span><span class="n">out_file</span>
@@ -954,7 +954,7 @@ Outputs:
 
 <span class="n">wf</span> <span class="o">=</span> <span class="n">ToyMedianThreshold</span><span class="p">(</span><span class="n">in_image</span><span class="o">=</span><span class="n">nifti_file</span><span class="p">)</span>
 
-<span class="n">outputs</span> <span class="o">=</span> <span class="n">wf</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span><span class="p">)</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">wf</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">"cache"</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
 </pre></div>
@@ -965,7 +965,7 @@ Outputs:
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/tmp/tmpkjb5365u/cache/workflow-7bc507503c44596cd02a0a6eb59dd71e/out_image.mif&#39;))
+ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/tmp/tmpkvz2uhfj/cache/workflow-fbe285ac05672e7ec104b259c908830c/out_image.mif&#39;))
 </pre></div></div>
 </div>
 <p>See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>
@@ -1045,7 +1045,7 @@ ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/tmp/tmpkjb5365u/cache/work
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

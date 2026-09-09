@@ -6,7 +6,7 @@
         <link rel="prefetch" href="../../../../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pydra.compose.shell.builder - Pydra v1.0a9</title>
+        <title>pydra.compose.shell.builder - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../../../../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -271,7 +271,7 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for pydra.compose.shell.builder</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;Decorators and helper functions to create ShellTasks used in Pydra workflows&quot;&quot;&quot;</span>
+<span></span><span class="sd">"""Decorators and helper functions to create ShellTasks used in Pydra workflows"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
@@ -312,7 +312,7 @@
     <span class="n">field_specifiers</span><span class="o">=</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">outarg</span><span class="p">),</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">outputs</span><span class="p">(</span><span class="n">wrapped</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator to specify the output fields of a shell command is a dataclass-style type&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Decorator to specify the output fields of a shell command is a dataclass-style type"""</span>
     <span class="k">return</span> <span class="n">wrapped</span>
 
 
@@ -332,13 +332,13 @@
     <span class="n">auto_attribs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">xor</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(),</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Task&quot;</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a task for a shell command. Can be used either as a decorator on</span>
-<span class="sd">    the &quot;canonical&quot; dataclass-form of a task or as a function that takes a</span>
-<span class="sd">    &quot;shell-command template string&quot; of the form</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Task"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Create a task for a shell command. Can be used either as a decorator on</span>
+<span class="sd">    the "canonical" dataclass-form of a task or as a function that takes a</span>
+<span class="sd">    "shell-command template string" of the form</span>
 
 <span class="sd">    ```</span>
-<span class="sd">    shell.define(&quot;command &lt;input1&gt; &lt;input2&gt; --output &lt;out|output1&gt;&quot;)</span>
+<span class="sd">    shell.define("command &lt;input1&gt; &lt;input2&gt; --output &lt;out|output1&gt;")</span>
 <span class="sd">    ```</span>
 
 <span class="sd">    Fields are inferred from the template if not provided. In the template, inputs are</span>
@@ -387,7 +387,7 @@
 <span class="sd">    -------</span>
 <span class="sd">    Task</span>
 <span class="sd">        The interface for the shell command</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">make</span><span class="p">(</span>
         <span class="n">wrapped</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -403,16 +403,16 @@
                     <span class="n">executable</span> <span class="o">=</span> <span class="n">klass</span><span class="o">.</span><span class="n">executable</span>
                 <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Shell task class </span><span class="si">{</span><span class="n">wrapped</span><span class="si">}</span><span class="s2"> must have an `executable` &quot;</span>
-                        <span class="s2">&quot;attribute that specifies the command to run&quot;</span>
+                        <span class="sa">f</span><span class="s2">"Shell task class </span><span class="si">{</span><span class="n">wrapped</span><span class="si">}</span><span class="s2"> must have an `executable` "</span>
+                        <span class="s2">"attribute that specifies the command to run"</span>
                     <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">executable</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
                 <span class="nb">isinstance</span><span class="p">(</span><span class="n">executable</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span>
                 <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">executable</span><span class="p">)</span>
             <span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;executable must be a string or a sequence of strings&quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;, not </span><span class="si">{</span><span class="n">executable</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                    <span class="s2">"executable must be a string or a sequence of strings"</span>
+                    <span class="sa">f</span><span class="s2">", not </span><span class="si">{</span><span class="n">executable</span><span class="si">!r}</span><span class="s2">"</span>
                 <span class="p">)</span>
             <span class="n">class_name</span> <span class="o">=</span> <span class="n">klass</span><span class="o">.</span><span class="vm">__name__</span>
             <span class="n">check_explicit_fields_are_none</span><span class="p">(</span><span class="n">klass</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span><span class="p">)</span>
@@ -423,12 +423,12 @@
                 <span class="n">field</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span>
                 <span class="n">field</span><span class="o">.</span><span class="n">out</span><span class="p">,</span>
                 <span class="n">auto_attribs</span><span class="p">,</span>
-                <span class="n">skip_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;executable&quot;</span><span class="p">],</span>
+                <span class="n">skip_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">"executable"</span><span class="p">],</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;wrapped must be a class or a string, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                    <span class="sa">f</span><span class="s2">"wrapped must be a class or a string, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">"</span>
                 <span class="p">)</span>
             <span class="n">klass</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">input_helps</span><span class="p">,</span> <span class="n">output_helps</span> <span class="o">=</span> <span class="p">{},</span> <span class="p">{}</span>
@@ -452,20 +452,20 @@
                 <span class="n">class_name</span> <span class="o">=</span> <span class="n">name</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">class_name</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">executable</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">executable</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="n">executable</span>
+                    <span class="s2">"_"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">executable</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">executable</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="n">executable</span>
                 <span class="p">)</span>
-                <span class="n">class_name</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;[^\w]&quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="n">class_name</span><span class="p">)</span>
+                <span class="n">class_name</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[^\w]"</span><span class="p">,</span> <span class="s2">"_"</span><span class="p">,</span> <span class="n">class_name</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">class_name</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
-                <span class="n">class_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">class_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"_</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">"</span>
 
             <span class="c1"># Add in fields from base classes</span>
             <span class="n">parsed_inputs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">n</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Task</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">Task</span><span class="o">.</span><span class="n">BASE_ATTRS</span><span class="p">})</span>
             <span class="n">parsed_outputs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">n</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Outputs</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">Outputs</span><span class="o">.</span><span class="n">BASE_ATTRS</span><span class="p">})</span>
 
-        <span class="k">if</span> <span class="s2">&quot;executable&quot;</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">"executable"</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;The argument &#39;executable&#39; is reserved for a field to hold the command &quot;</span>
-                <span class="s2">&quot;to be run&quot;</span>
+                <span class="s2">"The argument 'executable' is reserved for a field to hold the command "</span>
+                <span class="s2">"to be run"</span>
             <span class="p">)</span>
 
         <span class="c1"># Update the inputs (overriding inputs from base classes) with the executable</span>
@@ -473,20 +473,20 @@
         <span class="n">parsed_inputs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
             <span class="p">{</span><span class="n">o</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">o</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">parsed_outputs</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span><span class="p">)}</span>
         <span class="p">)</span>
-        <span class="n">parsed_inputs</span><span class="p">[</span><span class="s2">&quot;executable&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
-            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;executable&quot;</span><span class="p">,</span>
+        <span class="n">parsed_inputs</span><span class="p">[</span><span class="s2">"executable"</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">"executable"</span><span class="p">,</span>
             <span class="nb">type</span><span class="o">=</span><span class="nb">str</span> <span class="o">|</span> <span class="n">ty</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-            <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">argstr</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
             <span class="n">position</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
             <span class="n">default</span><span class="o">=</span><span class="n">executable</span><span class="p">,</span>
             <span class="n">validator</span><span class="o">=</span><span class="n">attrs</span><span class="o">.</span><span class="n">validators</span><span class="o">.</span><span class="n">min_len</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
             <span class="n">help</span><span class="o">=</span><span class="n">Task</span><span class="o">.</span><span class="n">EXECUTABLE_HELP</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="c1"># Set positions for the remaining inputs that don&#39;t have an explicit position</span>
+        <span class="c1"># Set positions for the remaining inputs that don't have an explicit position</span>
         <span class="n">position_stack</span> <span class="o">=</span> <span class="n">remaining_positions</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">parsed_inputs</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span> <span class="n">xor</span><span class="o">=</span><span class="n">xor</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">inpt</span> <span class="ow">in</span> <span class="n">parsed_inputs</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">inpt</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;append_args&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">inpt</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"append_args"</span><span class="p">:</span>
                 <span class="k">continue</span>
             <span class="k">if</span> <span class="n">inpt</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">inpt</span><span class="o">.</span><span class="n">position</span> <span class="o">=</span> <span class="n">position_stack</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
@@ -529,16 +529,16 @@
                 <span class="k">break</span>
         <span class="k">if</span> <span class="n">wrapped</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;name (</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">) can only be provided when creating a class &quot;</span>
-                <span class="s2">&quot;dynamically, i.e. not using it as a decorator. Check to see &quot;</span>
-                <span class="s2">&quot;whether you have forgotten to provide the command line template&quot;</span>
+                <span class="sa">f</span><span class="s2">"name (</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">) can only be provided when creating a class "</span>
+                <span class="s2">"dynamically, i.e. not using it as a decorator. Check to see "</span>
+                <span class="s2">"whether you have forgotten to provide the command line template"</span>
             <span class="p">)</span>
     <span class="c1"># If wrapped is provided (i.e. this is not being used as a decorator), return the</span>
     <span class="c1"># interface class</span>
     <span class="k">if</span> <span class="n">wrapped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wrapped</span><span class="p">,</span> <span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;wrapped must be a class, a string or a list, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">"wrapped must be a class, a string or a list, not </span><span class="si">{</span><span class="n">wrapped</span><span class="si">!r}</span><span class="s2">"</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">make</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">make</span></div>
@@ -550,7 +550,7 @@
     <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Arg</span><span class="p">]</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Arg</span> <span class="o">|</span> <span class="nb">type</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Out</span><span class="p">]</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Out</span> <span class="o">|</span> <span class="nb">type</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Arg</span> <span class="o">|</span> <span class="nb">type</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Out</span> <span class="o">|</span> <span class="nb">type</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parses a command line template into a name and input and output fields. Fields</span>
+<span class="w">    </span><span class="sd">"""Parses a command line template into a name and input and output fields. Fields</span>
 <span class="sd">    are inferred from the template if not explicitly provided.</span>
 
 <span class="sd">    In the template, inputs are specified with `&lt;fieldname&gt;` and outputs with `&lt;out|fieldname&gt;`.</span>
@@ -593,18 +593,18 @@
 <span class="sd">        If an unknown token is found in the command line template</span>
 <span class="sd">    TypeError</span>
 <span class="sd">        If an unknown type is found in the command line template</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="p">{</span><span class="n">arg</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">}</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="n">inputs</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>  <span class="c1"># We don&#39;t want to modify the original</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>  <span class="c1"># We don't want to modify the original</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">assert</span> <span class="n">inputs</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
         <span class="n">outputs</span> <span class="o">=</span> <span class="p">{</span><span class="n">o</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">o</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">}</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>  <span class="c1"># We don&#39;t want to modify the original</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>  <span class="c1"># We don't want to modify the original</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">assert</span> <span class="n">outputs</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="n">outputs</span> <span class="o">=</span> <span class="p">{}</span>
@@ -615,28 +615,28 @@
     <span class="n">executable</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">start_args_index</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">part</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;&lt;&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">part</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">part</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"&lt;"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">part</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"-"</span><span class="p">):</span>
             <span class="k">break</span>
         <span class="n">executable</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
         <span class="n">start_args_index</span> <span class="o">+=</span> <span class="mi">1</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">executable</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found no executable in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Found no executable in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">executable</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
         <span class="n">executable</span> <span class="o">=</span> <span class="n">executable</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">tokens</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="n">start_args_index</span><span class="p">:]</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">tokens</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">executable</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span>
-    <span class="n">arg_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|(?:=|\$)[^&gt;]+)?)&gt;&quot;</span>
-    <span class="n">opt_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;--?[a-zA-Z0-9_\-]+&quot;</span>
+    <span class="n">arg_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"&lt;([:a-zA-Z0-9_,\|\-\.\/\+\*]+(?:\?|(?:=|\$)[^&gt;]+)?)&gt;"</span>
+    <span class="n">opt_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"--?[a-zA-Z0-9_\-]+"</span>
     <span class="n">arg_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">arg_pattern</span><span class="p">)</span>
     <span class="n">opt_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">opt_pattern</span><span class="p">)</span>
-    <span class="n">bool_arg_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">opt_pattern</span><span class="si">}</span><span class="s2">)</span><span class="si">{</span><span class="n">arg_pattern</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">bool_arg_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">opt_pattern</span><span class="si">}</span><span class="s2">)</span><span class="si">{</span><span class="n">arg_pattern</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
     <span class="n">arguments</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">option</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field_type</span><span class="p">,</span> <span class="n">kwds</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Merge the typing information with an existing field if it exists&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Merge the typing information with an existing field if it exists"""</span>
         <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">field_type</span><span class="p">,</span> <span class="n">Out</span><span class="p">):</span>
             <span class="n">dct</span> <span class="o">=</span> <span class="n">outputs</span>
         <span class="k">else</span><span class="p">:</span>
@@ -649,12 +649,12 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                 <span class="n">fld</span> <span class="o">=</span> <span class="n">field_type</span><span class="p">(</span><span class="o">**</span><span class="n">fld</span><span class="p">)</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">or</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">fld</span><span class="p">):</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fld</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"type"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fld</span>
                 <span class="n">fld</span> <span class="o">=</span> <span class="n">field_type</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwds</span><span class="p">)</span>
             <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fld</span><span class="p">,</span> <span class="n">field_type</span><span class="p">):</span>  <span class="c1"># If fld type is outarg not out</span>
                 <span class="n">fld</span> <span class="o">=</span> <span class="n">field_type</span><span class="p">(</span><span class="o">**</span><span class="n">attrs_values</span><span class="p">(</span><span class="n">fld</span><span class="p">))</span>
             <span class="n">fld</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
-            <span class="n">type_</span> <span class="o">=</span> <span class="n">kwds</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="n">fld</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+            <span class="n">type_</span> <span class="o">=</span> <span class="n">kwds</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"type"</span><span class="p">,</span> <span class="n">fld</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">fld</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">:</span>
                 <span class="n">fld</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">type_</span>
             <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwds</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -665,23 +665,23 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">from_type_str</span><span class="p">(</span><span class="n">type_str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">:</span>
         <span class="n">types</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">tp</span> <span class="ow">in</span> <span class="n">type_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">):</span>
-            <span class="k">if</span> <span class="s2">&quot;/&quot;</span> <span class="ow">in</span> <span class="n">tp</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">tp</span> <span class="ow">in</span> <span class="n">type_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">","</span><span class="p">):</span>
+            <span class="k">if</span> <span class="s2">"/"</span> <span class="ow">in</span> <span class="n">tp</span><span class="p">:</span>
                 <span class="n">type_</span> <span class="o">=</span> <span class="n">from_mime</span><span class="p">(</span><span class="n">tp</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">tp</span> <span class="o">==</span> <span class="s2">&quot;...&quot;</span><span class="p">:</span>
-                <span class="n">type_</span> <span class="o">=</span> <span class="s2">&quot;...&quot;</span>
+            <span class="k">elif</span> <span class="n">tp</span> <span class="o">==</span> <span class="s2">"..."</span><span class="p">:</span>
+                <span class="n">type_</span> <span class="o">=</span> <span class="s2">"..."</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">tp</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;int&quot;</span><span class="p">,</span> <span class="s2">&quot;float&quot;</span><span class="p">,</span> <span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="s2">&quot;bool&quot;</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">tp</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"int"</span><span class="p">,</span> <span class="s2">"float"</span><span class="p">,</span> <span class="s2">"str"</span><span class="p">,</span> <span class="s2">"bool"</span><span class="p">):</span>
                     <span class="n">type_</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">builtins</span><span class="p">,</span> <span class="n">tp</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">try</span><span class="p">:</span>
-                        <span class="n">type_</span> <span class="o">=</span> <span class="n">from_mime</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;generic/</span><span class="si">{</span><span class="n">tp</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="n">type_</span> <span class="o">=</span> <span class="n">from_mime</span><span class="p">(</span><span class="sa">f</span><span class="s2">"generic/</span><span class="si">{</span><span class="n">tp</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
                     <span class="k">except</span> <span class="n">FormatRecognitionError</span><span class="p">:</span>
                         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Found unknown type, </span><span class="si">{</span><span class="n">tp</span><span class="si">!r}</span><span class="s2">, in command template: </span><span class="si">{</span><span class="n">template</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                            <span class="sa">f</span><span class="s2">"Found unknown type, </span><span class="si">{</span><span class="n">tp</span><span class="si">!r}</span><span class="s2">, in command template: </span><span class="si">{</span><span class="n">template</span><span class="si">!r}</span><span class="s2">"</span>
                         <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
             <span class="n">types</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">type_</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">types</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">types</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;...&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">types</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">types</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"..."</span><span class="p">:</span>
             <span class="n">type_</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">types</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span>
         <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">types</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">type_</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">[</span><span class="o">*</span><span class="n">types</span><span class="p">]</span>
@@ -693,65 +693,65 @@
         <span class="k">if</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">arg_re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">token</span><span class="p">):</span>
             <span class="n">name</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">modify</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;out|&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"out|"</span><span class="p">):</span>
                 <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[</span><span class="mi">4</span><span class="p">:]</span>
                 <span class="n">field_type</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">outarg</span>
-            <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;modify|&quot;</span><span class="p">):</span>
+            <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"modify|"</span><span class="p">):</span>
                 <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[</span><span class="mi">7</span><span class="p">:]</span>
                 <span class="n">field_type</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span>
                 <span class="n">modify</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">field_type</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span>
-            <span class="c1"># Identify type after &#39;:&#39; symbols</span>
+            <span class="c1"># Identify type after ':' symbols</span>
             <span class="n">kwds</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="n">is_multi</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="n">optional</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;?&quot;</span><span class="p">):</span>
-                <span class="k">assert</span> <span class="s2">&quot;=&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">name</span>
+            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"?"</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="s2">"="</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">name</span>
                 <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
                 <span class="n">optional</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;+&quot;</span><span class="p">):</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"+"</span><span class="p">):</span>
                 <span class="n">is_multi</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-            <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">):</span>
+            <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"*"</span><span class="p">):</span>
                 <span class="n">is_multi</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">Factory</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="s2">&quot;=&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
-                <span class="n">name</span><span class="p">,</span> <span class="n">default</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">default</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(&#39;|</span><span class="se">\&quot;</span><span class="s2">).*\1&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span> <span class="k">else</span> <span class="nb">eval</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">Factory</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="s2">"="</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+                <span class="n">name</span><span class="p">,</span> <span class="n">default</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"="</span><span class="p">)</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">default</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">"('|</span><span class="se">\"</span><span class="s2">).*\1"</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span> <span class="k">else</span> <span class="nb">eval</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
                 <span class="p">)</span>
-            <span class="k">elif</span> <span class="s2">&quot;$&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
-                <span class="n">name</span><span class="p">,</span> <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;$&quot;</span><span class="p">)</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;path_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">path_template</span>
+            <span class="k">elif</span> <span class="s2">"$"</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+                <span class="n">name</span><span class="p">,</span> <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"$"</span><span class="p">)</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"path_template"</span><span class="p">]</span> <span class="o">=</span> <span class="n">path_template</span>
                 <span class="k">if</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">outarg</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Path templates can only be used with output fields, not </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">"Path templates can only be used with output fields, not </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">"</span>
                     <span class="p">)</span>
-            <span class="k">if</span> <span class="s2">&quot;:&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
-                <span class="n">name</span><span class="p">,</span> <span class="n">type_str</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">":"</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+                <span class="n">name</span><span class="p">,</span> <span class="n">type_str</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">":"</span><span class="p">)</span>
                 <span class="n">type_</span> <span class="o">=</span> <span class="n">from_type_str</span><span class="p">(</span><span class="n">type_str</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">type_</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">tuple</span><span class="p">:</span>
-                    <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;sep&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span>
+                    <span class="n">kwds</span><span class="p">[</span><span class="s2">"sep"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">" "</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">type_</span> <span class="o">=</span> <span class="n">generic</span><span class="o">.</span><span class="n">FsObject</span> <span class="k">if</span> <span class="n">option</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span>
             <span class="k">if</span> <span class="n">is_multi</span><span class="p">:</span>
                 <span class="n">type_</span> <span class="o">=</span> <span class="n">MultiInputObj</span><span class="p">[</span><span class="n">type_</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">optional</span><span class="p">:</span>
                 <span class="n">type_</span> <span class="o">|=</span> <span class="kc">None</span>  <span class="c1"># Make the arguments optional</span>
-            <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">type_</span>
+            <span class="n">kwds</span><span class="p">[</span><span class="s2">"type"</span><span class="p">]</span> <span class="o">=</span> <span class="n">type_</span>
             <span class="k">if</span> <span class="n">modify</span><span class="p">:</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;copy_mode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">generic</span><span class="o">.</span><span class="n">File</span><span class="o">.</span><span class="n">CopyMode</span><span class="o">.</span><span class="n">copy</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"copy_mode"</span><span class="p">]</span> <span class="o">=</span> <span class="n">generic</span><span class="o">.</span><span class="n">File</span><span class="o">.</span><span class="n">CopyMode</span><span class="o">.</span><span class="n">copy</span>
                 <span class="c1"># Add field to outputs with the same name as the input</span>
                 <span class="n">add_arg</span><span class="p">(</span>
                     <span class="n">name</span><span class="p">,</span>
                     <span class="n">field</span><span class="o">.</span><span class="n">out</span><span class="p">,</span>
-                    <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">type_</span><span class="p">,</span> <span class="s2">&quot;callable&quot;</span><span class="p">:</span> <span class="n">_InputPassThrough</span><span class="p">(</span><span class="n">name</span><span class="p">)},</span>
+                    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="n">type_</span><span class="p">,</span> <span class="s2">"callable"</span><span class="p">:</span> <span class="n">_InputPassThrough</span><span class="p">(</span><span class="n">name</span><span class="p">)},</span>
                 <span class="p">)</span>
-            <span class="c1"># If name contains a &#39;.&#39;, treat it as a file template and strip it from the name</span>
-            <span class="k">if</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="n">field</span><span class="o">.</span><span class="n">outarg</span> <span class="ow">and</span> <span class="s2">&quot;path_template&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwds</span><span class="p">:</span>
+            <span class="c1"># If name contains a '.', treat it as a file template and strip it from the name</span>
+            <span class="k">if</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="n">field</span><span class="o">.</span><span class="n">outarg</span> <span class="ow">and</span> <span class="s2">"path_template"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwds</span><span class="p">:</span>
                 <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span>
                 <span class="k">if</span> <span class="n">is_fileset_or_union</span><span class="p">(</span><span class="n">type_</span><span class="p">):</span>
                     <span class="k">if</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_origin</span><span class="p">(</span><span class="n">type_</span><span class="p">):</span>
@@ -760,38 +760,38 @@
                         <span class="n">ext_type</span> <span class="o">=</span> <span class="n">type_</span>
                     <span class="k">if</span> <span class="n">ext_type</span><span class="o">.</span><span class="n">ext</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">path_template</span> <span class="o">=</span> <span class="n">name</span> <span class="o">+</span> <span class="n">ext_type</span><span class="o">.</span><span class="n">ext</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;path_template&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">path_template</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"path_template"</span><span class="p">]</span> <span class="o">=</span> <span class="n">path_template</span>
             <span class="c1"># Set the default value to None if the field is optional and no default is</span>
             <span class="c1"># provided</span>
-            <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">type_</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;default&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwds</span><span class="p">:</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="n">type_</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">"default"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwds</span><span class="p">:</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="n">option</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field_type</span><span class="p">,</span> <span class="n">kwds</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">kwds</span><span class="p">[</span><span class="s2">&quot;argstr&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">option</span>
+                <span class="n">kwds</span><span class="p">[</span><span class="s2">"argstr"</span><span class="p">]</span> <span class="o">=</span> <span class="n">option</span>
                 <span class="n">add_arg</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field_type</span><span class="p">,</span> <span class="n">kwds</span><span class="p">)</span>
                 <span class="n">option</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">elif</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">bool_arg_re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">token</span><span class="p">):</span>
             <span class="n">argstr</span><span class="p">,</span> <span class="n">var</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">groups</span><span class="p">()</span>
-            <span class="k">if</span> <span class="s2">&quot;=&quot;</span> <span class="ow">in</span> <span class="n">var</span><span class="p">:</span>
-                <span class="n">var</span><span class="p">,</span> <span class="n">default</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">"="</span> <span class="ow">in</span> <span class="n">var</span><span class="p">:</span>
+                <span class="n">var</span><span class="p">,</span> <span class="n">default</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"="</span><span class="p">)</span>
                 <span class="n">default</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">default</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="n">add_arg</span><span class="p">(</span>
-                <span class="n">var</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="s2">&quot;argstr&quot;</span><span class="p">:</span> <span class="n">argstr</span><span class="p">,</span> <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="n">default</span><span class="p">}</span>
+                <span class="n">var</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="s2">"argstr"</span><span class="p">:</span> <span class="n">argstr</span><span class="p">,</span> <span class="s2">"default"</span><span class="p">:</span> <span class="n">default</span><span class="p">}</span>
             <span class="p">)</span>
             <span class="n">option</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">elif</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">opt_re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">token</span><span class="p">):</span>
             <span class="n">option</span> <span class="o">=</span> <span class="n">token</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Found unknown token </span><span class="si">{</span><span class="n">token</span><span class="si">!r}</span><span class="s2"> in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">"Found unknown token </span><span class="si">{</span><span class="n">token</span><span class="si">!r}</span><span class="s2"> in command line template: </span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">option</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found an option without a field: </span><span class="si">{</span><span class="n">option</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Found an option without a field: </span><span class="si">{</span><span class="n">option</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
 
     <span class="n">remaining_pos</span> <span class="o">=</span> <span class="n">remaining_positions</span><span class="p">(</span><span class="n">arguments</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">arguments</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
@@ -808,7 +808,7 @@
     <span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="n">xor</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ty</span><span class="o">.</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the remaining positions for input fields</span>
+<span class="w">    </span><span class="sd">"""Get the remaining positions for input fields</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -830,14 +830,14 @@
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If multiple fields have the same position</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="n">xor</span> <span class="o">=</span> <span class="n">sanitize_xor</span><span class="p">(</span><span class="n">xor</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">num_args</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">num_args</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>  <span class="c1"># Subtract 1 for the &#39;append_args&#39; field</span>
+        <span class="n">num_args</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>  <span class="c1"># Subtract 1 for the 'append_args' field</span>
     <span class="c1"># Check for multiple positions</span>
     <span class="n">positions</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">arg</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;append_args&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">arg</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"append_args"</span><span class="p">:</span>
             <span class="k">continue</span>
         <span class="k">if</span> <span class="n">arg</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">arg</span><span class="o">.</span><span class="n">position</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
@@ -845,19 +845,19 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">positions</span><span class="p">[</span><span class="n">num_args</span> <span class="o">+</span> <span class="n">arg</span><span class="o">.</span><span class="n">position</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">multiple_positions</span> <span class="o">:=</span> <span class="p">{</span>
-        <span class="n">k</span><span class="p">:</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">position</span><span class="si">}</span><span class="s2">)&quot;</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">v</span><span class="p">]</span>
+        <span class="n">k</span><span class="p">:</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">position</span><span class="si">}</span><span class="s2">)"</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">v</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">positions</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">issuperset</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">xor</span><span class="p">)</span>
     <span class="p">}:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Multiple fields have the overlapping positions: </span><span class="si">{</span><span class="n">multiple_positions</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">"Multiple fields have the overlapping positions: </span><span class="si">{</span><span class="n">multiple_positions</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">num_args</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">]</span>
 
 
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">_InputPassThrough</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class that can be used to pass through an input to the output&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""A class that can be used to pass through an input to the output"""</span>
 
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
 
@@ -866,7 +866,7 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">GlobCallable</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Callable that can be used to glob files&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Callable that can be used to glob files"""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span> <span class="o">=</span> <span class="n">pattern</span>
@@ -874,7 +874,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">generic</span><span class="o">.</span><span class="n">FileSet</span><span class="p">:</span>
         <span class="n">matches</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">matches</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No files found matching pattern: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"No files found matching pattern: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">matches</span>
 </pre></div>
         </article>
@@ -908,7 +908,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../../../../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>

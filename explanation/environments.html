@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Software environments - Pydra v1.0a9</title>
+        <title>Software environments - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -169,7 +169,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -193,7 +193,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -299,19 +299,19 @@ or a your own custom environment.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
 
 <span class="c1"># Define a simple shell task</span>
-<span class="n">Shelly</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;echo &lt;text:str&gt;&quot;</span><span class="p">)</span>
+<span class="n">Shelly</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"echo &lt;text:str&gt;"</span><span class="p">)</span>
 
-<span class="n">shelly</span> <span class="o">=</span> <span class="n">Shelly</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;Hello, Pydra!&quot;</span><span class="p">)</span>
+<span class="n">shelly</span> <span class="o">=</span> <span class="n">Shelly</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Hello, Pydra!"</span><span class="p">)</span>
 
 <span class="c1"># Execute with a native environment</span>
 <span class="n">outputs_native</span> <span class="o">=</span> <span class="n">shelly</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">native</span><span class="o">.</span><span class="n">Environment</span><span class="p">())</span>
 
 <span class="c1"># Execute with a Docker environment (assuming busybox image is available)</span>
-<span class="n">outputs_docker</span> <span class="o">=</span> <span class="n">shelly</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">&quot;busybox&quot;</span><span class="p">))</span>
+<span class="n">outputs_docker</span> <span class="o">=</span> <span class="n">shelly</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"busybox"</span><span class="p">))</span>
 
 <span class="c1"># Execute with a Singularity environment (assuming an image is available)</span>
 <span class="n">outputs_singularity</span> <span class="o">=</span> <span class="n">shelly</span><span class="p">(</span>
-    <span class="n">environment</span><span class="o">=</span><span class="n">singularity</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">&quot;/path/to/image.sif&quot;</span><span class="p">)</span>
+    <span class="n">environment</span><span class="o">=</span><span class="n">singularity</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"/path/to/image.sif"</span><span class="p">)</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -320,8 +320,8 @@ or a your own custom environment.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.environments</span><span class="w"> </span><span class="kn">import</span> <span class="n">native</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">shell</span>
 
-<span class="n">Shelly</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;echo &lt;text:str&gt;&quot;</span><span class="p">)</span>
-<span class="n">shelly</span> <span class="o">=</span> <span class="n">Shelly</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;Hello, Pydra!&quot;</span><span class="p">)</span>
+<span class="n">Shelly</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"echo &lt;text:str&gt;"</span><span class="p">)</span>
+<span class="n">shelly</span> <span class="o">=</span> <span class="n">Shelly</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Hello, Pydra!"</span><span class="p">)</span>
 <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">native</span><span class="o">.</span><span class="n">Environment</span><span class="p">())</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">shelly</span><span class="p">)</span>
 </pre></div>
@@ -336,9 +336,9 @@ This ensures that all tasks within that workflow branch will execute in the spec
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">File</span>
 
-<span class="n">image</span> <span class="o">=</span> <span class="s2">&quot;/path/to/my_singularity_image.sif&quot;</span>  <span class="c1"># Replace with your Singularity image path</span>
+<span class="n">image</span> <span class="o">=</span> <span class="s2">"/path/to/my_singularity_image.sif"</span>  <span class="c1"># Replace with your Singularity image path</span>
 
-<span class="n">Singu</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;cat &lt;file&gt;&quot;</span><span class="p">)</span>
+<span class="n">Singu</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"cat &lt;file&gt;"</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">MyWorkflow</span><span class="p">(</span><span class="n">file</span><span class="p">:</span> <span class="n">File</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -348,7 +348,7 @@ This ensures that all tasks within that workflow branch will execute in the spec
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">singu_task</span><span class="o">.</span><span class="n">stdout</span>
 
-<span class="c1"># Now you can use MyWorkflow, and the &#39;cat&#39; task will run in the Singularity environment</span>
+<span class="c1"># Now you can use MyWorkflow, and the 'cat' task will run in the Singularity environment</span>
 </pre></div>
 </div>
 </section>
@@ -368,18 +368,18 @@ These custom environment classes are typically located in the <cite>pydra/enviro
 
     <span class="k">def</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Logic to set up the custom environment</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Setting up custom environment with config: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">some_config</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Setting up custom environment with config: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">some_config</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">&quot;Job[shell.Task]&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="s2">"Job[shell.Task]"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">]:</span>
         <span class="c1"># Logic to execute a command within the custom environment</span>
         <span class="c1"># This is where you would integrate with a custom execution system</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Executing command: &#39;</span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">cmdline</span><span class="si">}</span><span class="s2">&#39; in custom environment&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Executing command: '</span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">cmdline</span><span class="si">}</span><span class="s2">' in custom environment"</span><span class="p">)</span>
         <span class="c1"># For demonstration, just return a dummy result</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;stdout&quot;</span><span class="p">:</span> <span class="s2">&quot;Custom environment output&quot;</span><span class="p">,</span> <span class="s2">&quot;stderr&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;return_code&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"stdout"</span><span class="p">:</span> <span class="s2">"Custom environment output"</span><span class="p">,</span> <span class="s2">"stderr"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"return_code"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">teardown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Logic to tear down the custom environment</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Tearing down custom environment&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"Tearing down custom environment"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Then, you can use your custom environment like any other built-in environment:</p>
@@ -387,8 +387,8 @@ These custom environment classes are typically located in the <cite>pydra/enviro
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.engine.job</span><span class="w"> </span><span class="kn">import</span> <span class="n">Job</span>
 
 <span class="c1"># Assume MyCustomEnvironment is defined as above</span>
-<span class="n">my_task</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;echo &lt;text:str&gt;&quot;</span><span class="p">)(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;Hello from custom env&quot;</span><span class="p">)</span>
-<span class="n">outputs</span> <span class="o">=</span> <span class="n">my_task</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">MyCustomEnvironment</span><span class="p">(</span><span class="n">some_config</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">))</span>
+<span class="n">my_task</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">"echo &lt;text:str&gt;"</span><span class="p">)(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Hello from custom env"</span><span class="p">)</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">my_task</span><span class="p">(</span><span class="n">environment</span><span class="o">=</span><span class="n">MyCustomEnvironment</span><span class="p">(</span><span class="n">some_config</span><span class="o">=</span><span class="s2">"test"</span><span class="p">))</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -465,7 +465,7 @@ These custom environment classes are typically located in the <cite>pydra/enviro
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -6,7 +6,7 @@
         <link rel="prefetch" href="../../../../_static/pydra_logo.png" as="image">
 
     <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pydra.compose.shell.field - Pydra v1.0a9</title>
+        <title>pydra.compose.shell.field - Pydra v1.0a10</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../../index.html"><div class="brand">Pydra v1.0a9</div></a>
+      <a href="../../../../index.html"><div class="brand">Pydra v1.0a10</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a9</span>
+  <span class="sidebar-brand-text">Pydra v1.0a10</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -287,7 +287,7 @@
 <a class="viewcode-back" href="../../../../reference/api.html#pydra.compose.shell.arg">[docs]</a>
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">arg</span><span class="p">(</span><span class="n">Arg</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;An input field that specifies a command line argument</span>
+<span class="w">    </span><span class="sd">"""An input field that specifies a command line argument</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -328,7 +328,7 @@
 <span class="sd">        If nothing is provided the field will be inserted between all fields with</span>
 <span class="sd">        nonnegative positions and fields with negative positions.</span>
 <span class="sd">    sep: str, optional</span>
-<span class="sd">        A separator if a sequence type is provided as a value, by default &quot; &quot;.</span>
+<span class="sd">        A separator if a sequence type is provided as a value, by default " ".</span>
 <span class="sd">    container_path: bool, optional</span>
 <span class="sd">        If True a path will be consider as a path inside the container (and not as a</span>
 <span class="sd">        local path, by default it is False</span>
@@ -338,11 +338,11 @@
 <span class="sd">        function can take field (this input field will be passed to the function),</span>
 <span class="sd">        inputs (entire inputs will be passed) or any input field name (a specific input</span>
 <span class="sd">        field will be sent).</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
-    <span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">""</span>
     <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span>
+    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">" "</span>
     <span class="n">allowed_values</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">container_path</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># IS THIS STILL USED??</span>
     <span class="n">formatter</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -350,12 +350,12 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_additional_descriptors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">as_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">argstr</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">as_input</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">descriptors</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">argstr</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">]</span>
+        <span class="n">descriptors</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">argstr</span><span class="si">!r}</span><span class="s2">"</span><span class="p">]</span>
         <span class="n">descriptors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">descriptors</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;arg&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compare two fields based on their position&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">"arg"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compare two fields based on their position"""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__lt__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -363,7 +363,7 @@
         <span class="k">elif</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">True</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="s2">&quot;positions should be unique&quot;</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="s2">"positions should be unique"</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">&gt;</span> <span class="n">other</span><span class="o">.</span><span class="n">position</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -378,7 +378,7 @@
 <a class="viewcode-back" href="../../../../reference/api.html#pydra.compose.shell.out">[docs]</a>
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">out</span><span class="p">(</span><span class="n">Out</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;An output field that specifies a command line argument</span>
+<span class="w">    </span><span class="sd">"""An output field that specifies a command line argument</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -388,33 +388,33 @@
 <span class="sd">        to the function), cache_dir (task cache_dir will be used), stdout, stderr</span>
 <span class="sd">        (stdout and stderr of the task will be sent) inputs (entire inputs will be</span>
 <span class="sd">        passed) or any input field name (a specific input field will be sent).</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="nb">callable</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Set type from return annotation of callable if not set</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_type_hints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;return&quot;</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">ty</span><span class="o">.</span><span class="n">get_type_hints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">callable</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"return"</span><span class="p">,</span> <span class="n">ty</span><span class="o">.</span><span class="n">Any</span><span class="p">)</span>
 
     <span class="nd">@callable</span><span class="o">.</span><span class="n">validator</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_callable_validator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
 
         <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;callable must be a function, not </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"callable must be a function, not </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">elif</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mandatory</span>
-            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;path_template&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"path_template"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
             <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span>
-                <span class="s2">&quot;return_code&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;stdout&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;stderr&quot;</span><span class="p">,</span>
+                <span class="s2">"return_code"</span><span class="p">,</span>
+                <span class="s2">"stdout"</span><span class="p">,</span>
+                <span class="s2">"stderr"</span><span class="p">,</span>
             <span class="p">]</span>
         <span class="p">):</span>  <span class="c1"># shell.Outputs.BASE_ATTRS</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;A shell output field must have either a callable or a path_template&quot;</span>
+                <span class="s2">"A shell output field must have either a callable or a path_template"</span>
             <span class="p">)</span></div>
 
 
@@ -423,7 +423,7 @@
 <a class="viewcode-back" href="../../../../reference/api.html#pydra.compose.shell.outarg">[docs]</a>
 <span class="nd">@attrs</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">outarg</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Out</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;An input field that specifies where to save the output file</span>
+<span class="w">    </span><span class="sd">"""An input field that specifies where to save the output file</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -476,7 +476,7 @@
 <span class="sd">    path_template: str, optional</span>
 <span class="sd">        The template used to specify where the output file will be written to can use</span>
 <span class="sd">        other fields, e.g. {file1}. Used in order to create an output definition.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">path_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
     <span class="n">keep_extension</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -486,8 +486,8 @@
         <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">default</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">NO_DEFAULT</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;path_template (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when there is no &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;default value provided (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">default</span><span class="si">!r}</span><span class="s2">)&quot;</span>
+                    <span class="sa">f</span><span class="s2">"path_template (</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">) can only be provided when there is no "</span>
+                    <span class="sa">f</span><span class="s2">"default value provided (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">default</span><span class="si">!r}</span><span class="s2">)"</span>
                 <span class="p">)</span>
 
 <div class="viewcode-block" id="outarg.markdown_listing">
@@ -499,7 +499,7 @@
         <span class="n">as_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the listing for the field in markdown-like format</span>
+<span class="w">        </span><span class="sd">"""Get the listing for the field in markdown-like format</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -517,16 +517,16 @@
 <span class="sd">        -------</span>
 <span class="sd">        str</span>
 <span class="sd">            The listing for the field in markdown-like format</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">as_input</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">markdown_listing</span><span class="p">(</span>
                 <span class="n">width</span><span class="o">=</span><span class="n">line_width</span><span class="p">,</span> <span class="n">help_indent</span><span class="o">=</span><span class="n">help_indent</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
             <span class="p">)</span>
 
-        <span class="n">type_str</span> <span class="o">=</span> <span class="s2">&quot;Path | bool&quot;</span>
+        <span class="n">type_str</span> <span class="o">=</span> <span class="s2">"Path | bool"</span>
         <span class="k">if</span> <span class="n">is_optional</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">):</span>
-            <span class="n">type_str</span> <span class="o">+=</span> <span class="s2">&quot; | None&quot;</span>
-            <span class="n">default</span> <span class="o">=</span> <span class="s2">&quot;None&quot;</span>
+            <span class="n">type_str</span> <span class="o">+=</span> <span class="s2">" | None"</span>
+            <span class="n">default</span> <span class="o">=</span> <span class="s2">"None"</span>
             <span class="n">help_text</span> <span class="o">=</span> <span class="n">wrap_text</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">OPTIONAL_PATH_TEMPLATE_HELP</span><span class="p">,</span>
                 <span class="n">width</span><span class="o">=</span><span class="n">line_width</span><span class="p">,</span>
@@ -537,19 +537,19 @@
             <span class="n">help_text</span> <span class="o">=</span> <span class="n">wrap_text</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">PATH_TEMPLATE_HELP</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">line_width</span><span class="p">,</span> <span class="n">indent_size</span><span class="o">=</span><span class="n">help_indent</span>
             <span class="p">)</span>
-        <span class="n">s</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;- </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">type_str</span><span class="si">}</span><span class="s2">; default = </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"- </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">type_str</span><span class="si">}</span><span class="s2">; default = </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2">"</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">):</span>
-            <span class="n">s</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; (</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">))</span><span class="si">}</span><span class="s2">)&quot;</span>
-        <span class="n">s</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">help_text</span>
+            <span class="n">s</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">" (</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_additional_descriptors</span><span class="p">(</span><span class="n">as_input</span><span class="o">=</span><span class="n">as_input</span><span class="p">))</span><span class="si">}</span><span class="s2">)"</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="n">help_text</span>
         <span class="k">return</span> <span class="n">s</span></div>
 
 
     <span class="n">PATH_TEMPLATE_HELP</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="s2">&quot;The path specified for the output file, if True, the default &quot;</span>
-        <span class="s2">&quot;&#39;path template&#39; will be used.&quot;</span>
+        <span class="s2">"The path specified for the output file, if True, the default "</span>
+        <span class="s2">"'path template' will be used."</span>
     <span class="p">)</span>
     <span class="n">OPTIONAL_PATH_TEMPLATE_HELP</span> <span class="o">=</span> <span class="n">PATH_TEMPLATE_HELP</span> <span class="o">+</span> <span class="p">(</span>
-        <span class="s2">&quot;If False or None, the output file will not be saved.&quot;</span>
+        <span class="s2">"If False or None, the output file will not be saved."</span>
     <span class="p">)</span></div>
 
 </pre></div>
@@ -584,7 +584,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=07263b01"></script>
+</div><script src="../../../../_static/documentation_options.js?v=1ebe07b5"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
