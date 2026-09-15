@@ -518,6 +518,69 @@ def test_type_coercion_fail6():
     assert "is not a mapping type" in exc_to_str(excinfo)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+@pytest.mark.parametrize("superclass_auto_cast", [False, True])
+@pytest.mark.parametrize(
+    ("tp", "obj"),
+    [
+        (ty.Type[File], Json),
+        (ty.Type[ty.Any], Json),
+        # union types are coerced if all their members match
+        (ty.Type[File], Json | Yaml),
+        (ty.Type[File], ty.Union[Json, Yaml]),
+        (ty.Type[File | None], Json | None),
+        (ty.Type[ty.Optional[File]], ty.Optional[Json]),
+        (ty.Type[File | None], None),
+    ],
+)
+def test_type_coercion_type(tp, obj, superclass_auto_cast):
+    parser = TypeParser(tp, superclass_auto_cast=superclass_auto_cast)
+    assert parser.coerce(obj) is obj
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+@pytest.mark.parametrize(
+    ("tp", "obj"),
+    [
+        (ty.Type[File], Json | None),
+        (ty.Type[File], ty.Optional[Json]),
+        (ty.Type[File], ty.Union[Json, Yaml, None]),
+    ],
+)
+def test_type_coercion_type_optional_permit_superclass(tp, obj):
+    """An optional type should only be coerced to a non-optional ty.Type[*] when the
+    caller has opted into the permissive treatment via superclass_auto_cast"""
+    assert TypeParser(tp, superclass_auto_cast=True).coerce(obj) is obj
+    # Without the flag the None is not dropped, and it isn't passed to issubclass(),
+    # which raises on non-class args
+    with pytest.raises(TypeError, match="is not one of the specified types"):
+        TypeParser(tp).coerce(obj)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+@pytest.mark.parametrize("superclass_auto_cast", [False, True])
+@pytest.mark.parametrize(
+    ("tp", "obj"),
+    [
+        (ty.Type[Json], File),
+        (ty.Type[File], None),
+        (ty.Type[File | None], Json | int),
+        # dropping the None shouldn't smuggle through members that don't match
+        (ty.Type[File], int | None),
+        (ty.Type[File], Json | int | None),
+    ],
+)
+def test_type_coercion_type_fail(tp, obj, superclass_auto_cast):
+    parser = TypeParser(tp, superclass_auto_cast=superclass_auto_cast)
+    with pytest.raises(TypeError, match="is not one of the specified types"):
+        parser.coerce(obj)
+
+
+def test_type_coercion_type_fail_not_a_type():
+    with pytest.raises(TypeError, match="Incorrect type for field"):
+        TypeParser(ty.Type[File])("not-a-type")
+
+
 def test_type_coercion_realistic():
     tmpdir = Path(tempfile.mkdtemp())
     a_file = tmpdir / "a-file.txt"

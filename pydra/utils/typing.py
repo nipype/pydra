@@ -418,7 +418,26 @@ class TypeParser(ty.Generic[T]):
             )
 
         def coerce_type(type_: ty.Type[ty.Any], pattern_args: ty.List[ty.Type[ty.Any]]):
-            if not any(issubclass(type_, t) for t in pattern_args):
+            # Recombine union patterns (e.g. ty.Type[File | None]) into a single union,
+            # as is_subclass requires union members to all match the same candidate
+            candidates = []
+            for pattern_arg in pattern_args:
+                if isinstance(pattern_arg, tuple) and pattern_arg[0] in UNION_TYPES:
+                    candidates.extend(pattern_arg[1])
+                else:
+                    candidates.append(pattern_arg)
+            target = ty.Union[tuple(candidates)]
+            klass = type_
+            if (
+                self.superclass_auto_cast
+                and is_optional(klass)
+                and not is_optional(target)
+            ):
+                # Treat Optional[X] like X when coercing to a non-optional type, as in
+                # check_basic, but only if the caller has opted into the permissive
+                # treatment via superclass_auto_cast
+                klass = optional_type(klass)
+            if not self.is_subclass(klass, target):
                 raise TypeError(
                     f"{type_} is not one of the specified types {pattern_args}{self.label_str}"
                 )
