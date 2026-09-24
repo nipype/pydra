@@ -1338,9 +1338,9 @@ def test_state_connect_9():
     ]
 
 
-def test_state_connect_innerspl_1():
+def test_state_connect_scopedspl_1():
     """two 'connected' states: testing groups, prepare_states and prepare_inputs,
-    the second state has an inner splitter, full splitter provided
+    the second state has a "scoped" splitter, full splitter provided
     """
     st1 = State(name="NA", splitter="a")
     st1.prepare_states(inputs={"NA.a": [3, 5]})
@@ -1394,9 +1394,9 @@ def test_state_connect_innerspl_1():
     ]
 
 
-def test_state_connect_innerspl_1a():
+def test_state_connect_scopeds_1a():
     """two 'connected' states: testing groups, prepare_states and prepare_inputs,
-    the second state has an inner splitter,
+    the second state has a "scopeds" splitter,
     splitter from the first state (the prev-state part) has to be added
     """
     st1 = State(name="NA", splitter="a")
@@ -1450,7 +1450,7 @@ def test_state_connect_innerspl_1a():
     ]
 
 
-def test_state_connect_innerspl_1b():
+def test_state_connect_scopedspl_1b():
     """incorrect splitter - the current & prev-state parts in scalar splitter"""
     with pytest.raises(PydraStateError):
         st1 = State(name="NA", splitter="a")
@@ -1461,9 +1461,9 @@ def test_state_connect_innerspl_1b():
         )
 
 
-def test_state_connect_innerspl_2():
+def test_state_connect_scopedspl_2():
     """two 'connected' states: testing groups, prepare_states and prepare_inputs,
-    the second state has one inner splitter and one 'normal' splitter
+    the second state has one scoped splitter and one 'normal' splitter
     only the current part of the splitter provided (the prev-state has to be added)
     """
     st1 = State(name="NA", splitter="a")
@@ -1539,9 +1539,9 @@ def test_state_connect_innerspl_2():
     ]
 
 
-def test_state_connect_innerspl_2a():
+def test_state_connect_scopedspl_2a():
     """two 'connected' states: testing groups, prepare_states and prepare_inputs,
-    the second state has one inner splitter and one 'normal' splitter
+    the second state has one scoped splitter and one 'normal' splitter
     only the current part of the splitter provided (different order!),
 
     """
@@ -1614,9 +1614,9 @@ def test_state_connect_innerspl_2a():
     ]
 
 
-def test_state_connect_innerspl_3():
+def test_state_connect_scopedspl_3():
     """three serially 'connected' states: testing groups, prepare_states and prepare_inputs,
-    the second state has one inner splitter and one 'normal' splitter
+    the second state has one scoped splitter and one 'normal' splitter
     the prev-state parts of the splitter have to be added
     """
 
@@ -1767,7 +1767,7 @@ def test_state_connect_innerspl_3():
     ]
 
 
-def test_state_connect_innerspl_4():
+def test_state_connect_scopedspl_4():
     """three'connected' states: testing groups, prepare_states and prepare_inputs,
     the third one connected to two previous, only the current part of splitter provided
     """
@@ -2069,8 +2069,8 @@ def test_state_connect_combine_3():
     ]
 
 
-def test_state_connect_innerspl_combine_1():
-    """one previous node and one inner splitter (and inner splitter combiner);
+def test_state_connect_scopedspl_combine_1():
+    """one previous node and one scoped splitter (and scoped splitter combiner);
     only current part provided - the prev-state part had to be added"""
     st1 = State(name="NA", splitter="a")
     st1.prepare_states(inputs={"NA.a": [3, 5]})
@@ -2087,7 +2087,7 @@ def test_state_connect_innerspl_combine_1():
     assert st2.splitter_rpn_final == ["NA.a", "NB.c", "*"]
     assert st2.prev_state_combiner_all == st2.prev_state_combiner == []
     assert st2.current_combiner_all == st2.current_combiner == st2.combiner == ["NB.b"]
-    # TODO: i think at the end I should merge [0] and [1], because there are no inner splitters anymore
+    # TODO: i think at the end I should merge [0] and [1], because there are no scoped splitters anymore
     # TODO: didn't include it in my code...
     # assert st2.groups_stack_final == [[0, 1]]
 
@@ -2151,8 +2151,8 @@ def test_state_connect_innerspl_combine_1():
     ]
 
 
-def test_state_connect_innerspl_combine_2():
-    """two 'connected' state, the second has inner and normal splitter,
+def test_state_connect_scopedspl_combine_2():
+    """two 'connected' state, the second has scoped and normal splitter,
     and 'normal' combiner
     only the current part of the splitter provided,
     the prev-state part has to be added
