@@ -5,10 +5,7 @@ on:
     types: [opened, synchronize, ready_for_review, reopened]
     # Optional: Only run on specific file changes
     # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    #   - "src/**/*.py"
 
 jobs:
   claude-review:
@@ -17,12 +14,6 @@ jobs:
     # permission below) and repository secrets from `pull_request` runs originating in a
     # forked repo, so the action cannot authenticate and the job always fails.
     if: github.event.pull_request.head.repo.full_name == github.repository
-
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
 
     runs-on: ubuntu-latest
     permissions:
@@ -37,10 +28,32 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Workaround for anthropics/claude-code-action#1290: the bundled native
+      # installer exits 0 and reports success even when it fails to place the
+      # launcher, because ~/.local/bin doesn't exist on the runner. The action
+      # then spawns the missing path and dies with ENOENT during marketplace
+      # setup. Install it ourselves, create the directory first, and fail loudly
+      # if the binary isn't where we expect.
+      - name: Install Claude Code
+        id: install-claude
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://claude.ai/install.sh | bash
+          if [ ! -x "$HOME/.local/bin/claude" ]; then
+            echo "::error::claude launcher not created; candidate binaries below"
+            find "$HOME/.local/share" "$HOME/.claude" -name 'claude*' -type f 2>/dev/null || true
+            exit 1
+          fi
+          "$HOME/.local/bin/claude" --version
+          echo "path=$HOME/.local/bin/claude" >> "$GITHUB_OUTPUT"
+
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
+          path_to_claude_code_executable: ${{ steps.install-claude.outputs.path }}
           allowed_bots: "claude,pre-commit-ci"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
