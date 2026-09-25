@@ -457,8 +457,6 @@ def parse_command_line_template(
             if ":" in name:
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
-                if ty.get_origin(type_) is tuple:
-                    kwds["sep"] = " "
             else:
                 type_ = generic.FsObject if option is None else str
             if is_multi:

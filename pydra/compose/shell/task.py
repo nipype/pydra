@@ -4,6 +4,7 @@ import re
 import glob
 import inspect
 import shlex
+import string
 import platform
 from pathlib import Path
 from copy import copy, deepcopy
@@ -31,7 +32,7 @@ from . import field
 from .templating import (
     template_update,
     template_update_single,
-    argstr_formatting,
+    clean_formatted_argstr,
     fields_in_formatter,
     parse_format_string,
 )
@@ -246,7 +247,7 @@ class ShellTask(base.Task[ShellOutputsType]):
         default=attrs.Factory(list),
         converter=append_args_converter,
         type=list[str | File],
-        sep=" ",
+        sep=None,
         help="Additional free-form arguments to append to the end of the command.",
     )
 
@@ -264,16 +265,9 @@ class ShellTask(base.Task[ShellOutputsType]):
         values = attrs_values(self)
         values.update(template_update(self, cache_dir=Path.cwd()))
         cmd_args = self._command_args(values=values)
-        cmdline = cmd_args[0]
-        for arg in cmd_args[1:]:
-            # If there are spaces in the arg, and it is not enclosed by matching
-            # quotes, add quotes to escape the space. Not sure if this should
-            # be expanded to include other special characters apart from spaces
-            if " " in arg:
-                cmdline += " '" + arg + "'"
-            else:
-                cmdline += " " + arg
-        return cmdline
+        # NB: this string is only for display/debugging purposes, the command is run
+        # by passing the list of arguments directly to subprocess (i.e. no shell)
+        return shlex.join(str(a) for a in cmd_args)
 
     def _command_args(self, values: dict[str, ty.Any]) -> list[str]:
         """Get command line arguments"""
@@ -388,10 +382,14 @@ class ShellTask(base.Task[ShellOutputsType]):
                             f"arguments of the formatter function from {fld.name} "
                             f"has to be in inputs or be field, but {argnm} is used"
                         )
-            cmd_el_str = fld.formatter(**call_args_val)
-            cmd_el_str = cmd_el_str.strip().replace("  ", " ")
-            if cmd_el_str != "":
-                cmd_add += split_cmd(cmd_el_str)
+            formatted = fld.formatter(**call_args_val)
+            if isinstance(formatted, str):
+                # Formatters returning a single string are split into arguments,
+                # so any values within it that contain spaces need to be quoted.
+                # Return a list of strings to avoid this.
+                cmd_add += split_cmd(formatted)
+            elif formatted is not None:
+                cmd_add += [str(a) for a in formatted]
         elif tp is bool and "{" not in fld.argstr:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command.
@@ -410,41 +408,109 @@ class ShellTask(base.Task[ShellOutputsType]):
         return fld.position, cmd_add
 
     def _format_arg(self, fld: field.arg, values: dict[str, ty.Any]) -> list[str]:
-        """Returning arguments used to specify the command args for a single inputs"""
+        """Returning arguments used to specify the command args for a single inputs
+
+        The argstr is split into tokens *before* the values are substituted into it,
+        so each value is always passed as (part of) a single argument, regardless of
+        whether it contains spaces or other special characters. The exception is
+        sequence values with sep=None, whose items are passed as separate arguments.
+        """
         value = values[fld.name]
-        if (
-            fld.argstr.endswith("...")
-            and isinstance(value, ty.Iterable)
-            and not isinstance(value, (str, bytes))
-        ):
-            argstr = fld.argstr.replace("...", "")
-            # if argstr has a more complex form, with "{input_field}"
-            if "{" in argstr and "}" in argstr:
-                argstr_formatted_l = []
-                for val in value:
-                    split_values = copy(values)
-                    split_values[fld.name] = val
-                    argstr_f = argstr_formatting(argstr, split_values)
-                    argstr_formatted_l.append(f" {argstr_f}")
-                cmd_el_str = fld.sep.join(argstr_formatted_l)
-            else:  # argstr has a simple form, e.g. "-f", or "--f"
-                cmd_el_str = fld.sep.join([f" {argstr} {val}" for val in value])
-        else:
-            # in case there are ... when input is not a list
-            argstr = fld.argstr.replace("...", "")
-            if isinstance(value, ty.Iterable) and not isinstance(value, (str, bytes)):
-                cmd_el_str = fld.sep.join([str(val) for val in value])
-                value = cmd_el_str
-            # if argstr has a more complex form, with "{input_field}"
-            if "{" in argstr and "}" in argstr:
-                cmd_el_str = argstr.replace(f"{{{fld.name}}}", str(value))
-                cmd_el_str = argstr_formatting(cmd_el_str, values)
-            else:  # argstr has a simple form, e.g. "-f", or "--f"
-                if value:
-                    cmd_el_str = f"{argstr} {value}"
-                else:
-                    cmd_el_str = ""
-        return split_cmd(cmd_el_str)
+        # NB: only a trailing "..." marks the argstr as repeated, others are literal
+        argstr = fld.argstr.removesuffix("...")
+        if fld.argstr.endswith("...") and _is_sequence(value):
+            # repeat the argstr for every item in the sequence
+            args = []
+            for val in value:
+                args.extend(
+                    self._render_argstr(
+                        argstr, fld, {**values, fld.name: val}, omit_falsy=False
+                    )
+                )
+            return args
+        # a single value (e.g. an item of a MultiInputObj) with a repeated argstr
+        return self._render_argstr(argstr, fld, values)
+
+    @classmethod
+    def _render_argstr(
+        cls,
+        argstr: str,
+        fld: field.arg,
+        values: dict[str, ty.Any],
+        omit_falsy: bool = True,
+    ) -> list[str]:
+        """Render a single instance of an argstr template into command-line args
+
+        Parameters
+        ----------
+        omit_falsy : bool
+            whether to omit simple-form args (e.g. "-v") when the value is falsy (e.g.
+            0), as opposed to just empty (items of "..." sequences are never omitted)
+        """
+        value = values[fld.name]
+        if not parse_format_string(argstr):
+            # argstr has a simple form, e.g. "-f", or "--f", or ""
+            if (omit_falsy and not value) or _is_empty(value):
+                return []
+            return split_cmd(argstr) + cls._value_args(value, fld.sep)
+        # argstr has a more complex form, with "{input_field}". Each replacement field
+        # is swapped for a unique placeholder so that the template can be split into
+        # arguments *before* the values (which may contain spaces) are substituted
+        template = ""
+        placeholders: dict[str, str] = {}  # placeholder -> original replacement field
+        for literal, field_expr, spec, conversion in string.Formatter().parse(argstr):
+            template += literal
+            if field_expr is None:
+                continue
+            name = re.match(r"\w+", field_expr).group(0)
+            val = value if name == fld.name else values.get(name)
+            if _is_empty(val):
+                continue  # missing values are dropped from the template
+            # create a unique placeholder for this field expression
+            # so the template can be safely split into separate command-line arguments
+            # (i.e. in case the format string contains spaces or other special characters)
+            placeholder = f"\ue000{len(placeholders)}\ue001"
+            placeholders[placeholder] = (
+                "{"
+                + field_expr
+                + (f"!{conversion}" if conversion else "")
+                + (f":{spec}" if spec else "")
+                + "}"
+            )
+            template += placeholder
+        # sequence values embedded within a token are joined into a single argument
+        if _is_sequence(value):
+            sep = " " if fld.sep is None else fld.sep
+            values = {**values, fld.name: sep.join(str(v) for v in value)}
+        args = []
+        for token in split_cmd(clean_formatted_argstr(template)):
+            if (
+                fld.sep is None
+                and _is_sequence(value)
+                and placeholders.get(token) == "{" + fld.name + "}"
+            ):
+                # the token consists solely of the field, so its items are passed as
+                # separate arguments (str.format can only produce a single string)
+                args.extend(str(v) for v in value)
+                continue
+            # the field(s) are embedded in the token (e.g. "--opt={field}"), so the
+            # token is converted back into a format string (escaping any literal
+            # braces) and formatted into a single argument
+            token_template = token.replace("{", "{{").replace("}", "}}")
+            for placeholder, field_str in placeholders.items():
+                token_template = token_template.replace(placeholder, field_str)
+            args.append(token_template.format(**values))
+        return args
+
+    @staticmethod
+    def _value_args(value: ty.Any, sep: str | None) -> list[str]:
+        """Convert a value into command-line args, one per item for sequences unless
+        a separator is provided"""
+        if not _is_sequence(value):
+            return [str(value)]
+        if sep is None:
+            return [str(v) for v in value]
+        return [sep.join(str(v) for v in value)]
 
     def _rule_violations(self) -> list[str]:
 
@@ -455,21 +521,23 @@ class ShellTask(base.Task[ShellOutputsType]):
         available_template_names = [f.name for f in fields] + ["field", "inputs"]
         for fld in fields:
             if fld.argstr:
-                if unrecognised := [
+                unrecognised = [
                     f
                     for f in parse_format_string(fld.argstr)
                     if f not in available_template_names
-                ]:
+                ]
+                if unrecognised:
                     errors.append(
                         f"Unrecognised field names in the argstr of {fld.name} "
                         f"({fld.argstr}): {unrecognised}"
                     )
             if getattr(fld, "path_template", None):
-                if unrecognised := [
+                unrecognised = [
                     f
                     for f in fields_in_formatter(fld.path_template)
                     if f not in available_template_names
-                ]:
+                ]
+                if unrecognised:
                     errors.append(
                         f"Unrecognised field names in the path_template of {fld.name} "
                         f"({fld.path_template}): {unrecognised}"
@@ -478,6 +546,20 @@ class ShellTask(base.Task[ShellOutputsType]):
         return errors
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
+
+
+def _is_sequence(value: ty.Any) -> bool:
+    return isinstance(value, ty.Iterable) and not isinstance(value, (str, bytes))
+
+
+def _is_empty(value: ty.Any) -> bool:
+    """Whether a value should be omitted from the command line (NB: zero and False
+    are not considered empty)"""
+    if value is None or value is attrs.NOTHING:
+        return True
+    if isinstance(value, str) or _is_sequence(value):
+        return len(value) == 0
+    return False
 
 
 def split_cmd(cmd: str | None):

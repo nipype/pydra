@@ -3412,7 +3412,7 @@ def test_shellspec_formatter_1(tmp_path):
 
     def formatter_1(inputs):
         print("FORMATTER:", inputs)
-        return f"-t [{inputs['in1']}, {inputs['in2']}]"
+        return ["-t", f"[{inputs['in1']}, {inputs['in2']}]"]
 
     def make_shelly(formatter):
         @shell.define
@@ -3441,25 +3441,25 @@ def test_shellspec_formatter_1(tmp_path):
 
     Shelly = make_shelly(formatter=formatter_1)
     shelly = Shelly(in1="i1", in2="i2")
-    assert shelly.cmdline == "exec -t [i1, i2]"
+    assert shelly.cmdline == "exec -t '[i1, i2]'"
 
     # testing that the formatter can overwrite a provided value for together.
     shelly = Shelly(in1="i1", in2="i2", together=[1])
-    assert shelly.cmdline == "exec -t [i1, i2]"
+    assert shelly.cmdline == "exec -t '[i1, i2]'"
 
     # asking for specific inputs
     def formatter_2(in1, in2):
         print("FORMATTER:", in1, in2)
-        return f"-t [{in1}, {in2}]"
+        return ["-t", f"[{in1}, {in2}]"]
 
     Shelly = make_shelly(formatter_2)
 
     shelly = Shelly(in1="i1", in2="i2")
-    assert shelly.cmdline == "exec -t [i1, i2]"
+    assert shelly.cmdline == "exec -t '[i1, i2]'"
 
     def formatter_3(in1, in3):
         print("FORMATTER:", in1, in3)
-        return f"-t [{in1}, {in3}]"
+        return ["-t", f"[{in1}, {in3}]"]
 
     Shelly = make_shelly(formatter_3)
 

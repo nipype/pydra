@@ -333,8 +333,8 @@ def test_shell_cmd_inputs_list_sep_3():
         )
 
     shelly = Shelly(inpA=["aaa", "bbb", "ccc"])
-    # a flag is repeated
-    assert shelly.cmdline == "executable -v aaa, -v bbb, -v ccc"
+    # a flag is repeated (sep is not relevant as each item is a separate argument)
+    assert shelly.cmdline == "executable -v aaa -v bbb -v ccc"
 
 
 def test_shell_cmd_inputs_list_sep_3a():
@@ -355,8 +355,8 @@ def test_shell_cmd_inputs_list_sep_3a():
         )
 
     shelly = Shelly(inpA=["aaa", "bbb", "ccc"])
-    # a flag is repeated
-    assert shelly.cmdline == "executable -v aaa, -v bbb, -v ccc"
+    # a flag is repeated (sep is not relevant as each item is a separate argument)
+    assert shelly.cmdline == "executable -v aaa -v bbb -v ccc"
 
 
 def test_shell_cmd_inputs_sep_4():
@@ -1394,7 +1394,7 @@ def test_shell_cmd_inputs_denoise_image(
     )
     assert (
         denoise_image.cmdline
-        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o [{Path.cwd() / 'a_file_out.ext'}]"
+        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o '[{Path.cwd() / 'a_file_out.ext'}]'"
     )
 
     # input file name, noiseImage is set to True, so template is used in the output
@@ -1406,7 +1406,7 @@ def test_shell_cmd_inputs_denoise_image(
     assert (
         denoise_image.cmdline
         == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 "
-        f"-o [{Path.cwd() / 'a_file_out.ext'}, {str(Path.cwd() / 'a_file_noise.ext')}]"
+        f"-o '[{Path.cwd() / 'a_file_out.ext'},' '{str(Path.cwd() / 'a_file_noise.ext')}]'"
     )
 
     # input file name and help_short
@@ -1417,7 +1417,7 @@ def test_shell_cmd_inputs_denoise_image(
     )
     assert (
         denoise_image.cmdline
-        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -h -o [{Path.cwd() / 'a_file_out.ext'}]"
+        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -h -o '[{Path.cwd() / 'a_file_out.ext'}]'"
     )
 
     assert get_output_names(denoise_image) == [
@@ -1436,7 +1436,7 @@ def test_shell_cmd_inputs_denoise_image(
     )
     assert (
         denoise_image.cmdline
-        == f"DenoiseImage -d 2 -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o [{Path.cwd() / 'a_file_out.ext'}]"
+        == f"DenoiseImage -d 2 -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o '[{Path.cwd() / 'a_file_out.ext'}]'"
     )
 
     # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised
