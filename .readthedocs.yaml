@@ -1,0 +1,36 @@
+# .readthedocs.yaml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+# Required
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.14"
+  # Pandoc is required by nbsphinx, graphviz (dot) for workflow plotting and MRtrix3
+  # for the shell-task examples in the tutorials (mirrors the 'build-docs' CI job)
+  apt_packages:
+    - pandoc
+    - graphviz
+    - mrtrix3
+  jobs:
+    # hatch-vcs needs the full history + tags to determine the package version
+    post_checkout:
+      - git fetch --unshallow --tags || true
+    # the tutorial notebooks are executed by nbsphinx during the build
+    post_install:
+      - python -m ipykernel install --user
+
+# Build documentation in the docs/source directory with Sphinx.
+sphinx:
+  configuration: docs/source/conf.py
+
+# Install the package with the extra requirements for the documentation.
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - doc
