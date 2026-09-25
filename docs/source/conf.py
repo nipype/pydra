@@ -50,6 +50,10 @@ extensions = [
 
 
 nbsphinx_allow_errors = False
+# Fail with a CellTimeoutError (showing the offending cell) instead of hanging
+# indefinitely if a notebook cell doesn't complete. Generous enough to allow for
+# pulling the MRtrix3 Docker image in the advanced execution tutorial.
+nbsphinx_timeout = 900
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
