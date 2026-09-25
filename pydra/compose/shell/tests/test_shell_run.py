@@ -779,7 +779,7 @@ def test_shell_cmd_inputspec_7b(worker, results_function, tmp_path):
                 help="output file",
             )
 
-    shelly = Shelly(executable=cmd, newfile=File.mock("newfile_tmp.txt"))
+    shelly = Shelly(executable=cmd, newfile=File.mock(tmp_path / "newfile_tmp.txt"))
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == ""
@@ -793,7 +793,7 @@ def test_shell_cmd_inputspec_7c(worker, results_function, tmp_path):
     using name_tamplate with txt extension (extension from args should be removed
     """
     cmd = "touch"
-    arg = File.mock("newfile_tmp.txt")
+    arg = File.mock(tmp_path / "newfile_tmp.txt")
 
     @shell.define
     class Shelly(shell.Task["Shelly.Outputs"]):
@@ -2808,7 +2808,7 @@ def test_shell_cmd_inputspec_outputspec_4(tmp_path):
     shelly = Shelly(
         executable=cmd,
     )
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     shelly.additional_inp = 2
 
     outputs = shelly(cache_root=tmp_path)
@@ -2846,7 +2846,7 @@ def test_shell_cmd_inputspec_outputspec_4a(tmp_path):
             )
 
     shelly = Shelly(executable=cmd)
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     # the value is not in the list from requires
     shelly.additional_inp = 1
 
@@ -2885,7 +2885,7 @@ def test_shell_cmd_inputspec_outputspec_5(tmp_path):
     shelly = Shelly(
         executable=cmd,
     )
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     shelly.additional_inp_A = 2
 
     outputs = shelly(cache_root=tmp_path)
@@ -2923,7 +2923,7 @@ def test_shell_cmd_inputspec_outputspec_5a(tmp_path):
     shelly = Shelly(
         executable=cmd,
     )
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     shelly.additional_inp_B = 2
 
     outputs = shelly(cache_root=tmp_path)
