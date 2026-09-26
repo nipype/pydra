@@ -6,6 +6,7 @@ import inspect
 import shlex
 import string
 import platform
+import subprocess
 from pathlib import Path
 from copy import copy, deepcopy
 import attrs
@@ -267,7 +268,7 @@ class ShellTask(base.Task[ShellOutputsType]):
         cmd_args = self._command_args(values=values)
         # NB: this string is only for display/debugging purposes, the command is run
         # by passing the list of arguments directly to subprocess (i.e. no shell)
-        return shlex.join(str(a) for a in cmd_args)
+        return join_cmd(cmd_args)
 
     def _command_args(self, values: dict[str, ty.Any]) -> list[str]:
         """Get command line arguments"""
@@ -560,6 +561,27 @@ def _is_empty(value: ty.Any) -> bool:
     if isinstance(value, str) or _is_sequence(value):
         return len(value) == 0
     return False
+
+
+def join_cmd(args: ty.Iterable[ty.Any]) -> str:
+    """Joins command-line arguments into a single string, quoted for the current
+    platform (i.e. the inverse of split_cmd)
+
+    Parameters
+    ----------
+    args : Iterable[Any]
+        the command-line arguments
+
+    Returns
+    -------
+    str
+        the command-line string
+    """
+    args = [str(a) for a in args]
+    if platform.system() == "Windows":
+        # the same quoting that subprocess uses to build the command line on Windows
+        return subprocess.list2cmdline(args)
+    return shlex.join(args)
 
 
 def split_cmd(cmd: str | None):

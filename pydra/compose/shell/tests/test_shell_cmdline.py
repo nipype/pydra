@@ -4,6 +4,7 @@ import attrs
 import pytest
 from fileformats.generic import File
 from pydra.compose import shell
+from pydra.compose.shell.task import join_cmd
 from pydra.utils.typing import MultiInputObj
 from pydra.engine.tests.utils import get_output_names
 
@@ -1392,9 +1393,9 @@ def test_shell_cmd_inputs_denoise_image(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,
     )
-    assert (
-        denoise_image.cmdline
-        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o '[{Path.cwd() / 'a_file_out.ext'}]'"
+    assert denoise_image.cmdline == join_cmd(
+        ["DenoiseImage", "-i", tmp_path / "a_file.ext", "-s", "1", "-p", "1", "-r", "2"]
+        + ["-o", f"[{Path.cwd() / 'a_file_out.ext'}]"]
     )
 
     # input file name, noiseImage is set to True, so template is used in the output
@@ -1403,10 +1404,13 @@ def test_shell_cmd_inputs_denoise_image(
         inputImageFilename=my_input_file,
         noiseImage=True,
     )
-    assert (
-        denoise_image.cmdline
-        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 "
-        f"-o '[{Path.cwd() / 'a_file_out.ext'},' '{str(Path.cwd() / 'a_file_noise.ext')}]'"
+    assert denoise_image.cmdline == join_cmd(
+        ["DenoiseImage", "-i", tmp_path / "a_file.ext", "-s", "1", "-p", "1", "-r", "2"]
+        + [
+            "-o",
+            f"[{Path.cwd() / 'a_file_out.ext'},",
+            f"{Path.cwd() / 'a_file_noise.ext'}]",
+        ]
     )
 
     # input file name and help_short
@@ -1415,9 +1419,20 @@ def test_shell_cmd_inputs_denoise_image(
         inputImageFilename=my_input_file,
         help_short=True,
     )
-    assert (
-        denoise_image.cmdline
-        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -h -o '[{Path.cwd() / 'a_file_out.ext'}]'"
+    assert denoise_image.cmdline == join_cmd(
+        [
+            "DenoiseImage",
+            "-i",
+            tmp_path / "a_file.ext",
+            "-s",
+            "1",
+            "-p",
+            "1",
+            "-r",
+            "2",
+            "-h",
+        ]
+        + ["-o", f"[{Path.cwd() / 'a_file_out.ext'}]"]
     )
 
     assert get_output_names(denoise_image) == [
@@ -1434,9 +1449,21 @@ def test_shell_cmd_inputs_denoise_image(
         inputImageFilename=my_input_file,
         image_dimensionality=2,
     )
-    assert (
-        denoise_image.cmdline
-        == f"DenoiseImage -d 2 -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o '[{Path.cwd() / 'a_file_out.ext'}]'"
+    assert denoise_image.cmdline == join_cmd(
+        [
+            "DenoiseImage",
+            "-d",
+            "2",
+            "-i",
+            tmp_path / "a_file.ext",
+            "-s",
+            "1",
+            "-p",
+            "1",
+            "-r",
+            "2",
+        ]
+        + ["-o", f"[{Path.cwd() / 'a_file_out.ext'}]"]
     )
 
     # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised

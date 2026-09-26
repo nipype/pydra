@@ -8,6 +8,7 @@ import stat
 import attrs
 from pydra.engine.submitter import Submitter
 from pydra.compose import shell, workflow, python
+from pydra.compose.shell.task import join_cmd
 from fileformats.generic import (
     File,
     Directory,
@@ -284,7 +285,7 @@ def test_shell_cmd_inputspec_1(worker, results_function, tmp_path):
     shelly = Shelly(append_args=cmd_args, opt_n=cmd_opt)
     assert shelly.executable == cmd_exec
     assert shelly.append_args == cmd_args
-    assert shelly.cmdline == "echo -n 'hello from pydra'"
+    assert shelly.cmdline == join_cmd(["echo", "-n", "hello from pydra"])
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == "hello from pydra"
@@ -322,7 +323,7 @@ def test_shell_cmd_inputspec_2(worker, results_function, tmp_path):
     shelly = Shelly(append_args=cmd_args, opt_n=cmd_opt, opt_hello=cmd_opt_hello)
     assert shelly.executable == cmd_exec
     assert shelly.append_args == cmd_args
-    assert shelly.cmdline == "echo -n HELLO 'from pydra'"
+    assert shelly.cmdline == join_cmd(["echo", "-n", "HELLO", "from pydra"])
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == "HELLO from pydra"
 
@@ -3441,11 +3442,11 @@ def test_shellspec_formatter_1(tmp_path):
 
     Shelly = make_shelly(formatter=formatter_1)
     shelly = Shelly(in1="i1", in2="i2")
-    assert shelly.cmdline == "exec -t '[i1, i2]'"
+    assert shelly.cmdline == join_cmd(["exec", "-t", "[i1, i2]"])
 
     # testing that the formatter can overwrite a provided value for together.
     shelly = Shelly(in1="i1", in2="i2", together=[1])
-    assert shelly.cmdline == "exec -t '[i1, i2]'"
+    assert shelly.cmdline == join_cmd(["exec", "-t", "[i1, i2]"])
 
     # asking for specific inputs
     def formatter_2(in1, in2):
@@ -3455,7 +3456,7 @@ def test_shellspec_formatter_1(tmp_path):
     Shelly = make_shelly(formatter_2)
 
     shelly = Shelly(in1="i1", in2="i2")
-    assert shelly.cmdline == "exec -t '[i1, i2]'"
+    assert shelly.cmdline == join_cmd(["exec", "-t", "[i1, i2]"])
 
     def formatter_3(in1, in3):
         print("FORMATTER:", in1, in3)
