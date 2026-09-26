@@ -22,11 +22,8 @@ class Docker(base.Container):
             "run",
             *self.xargs,
         ]
-        docker_args.extend(
-            " ".join(
-                [f"-v {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
-            ).split()
-        )
+        for key, val in mounts.items():
+            docker_args.extend(["-v", f"{key}:{val[0]}:{val[1]}"])
         docker_args.extend(["-w", f"{self.root}{job.cache_dir}"])
         keys = ["return_code", "stdout", "stderr"]
 
