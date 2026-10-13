@@ -498,6 +498,10 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
         )
         return f"{mod_path}.{type_name}".encode()
 
+    # The metadata of annotated types isn't included in the hash as it doesn't change
+    # how values of the type are handled
+    while ty.get_origin(klass) is ty.Annotated:
+        klass = ty.get_args(klass)[0]
     yield b"type:("
     origin = ty.get_origin(klass)
     args = ty.get_args(klass)

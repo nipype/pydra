@@ -191,6 +191,8 @@ class TypeParser(ty.Generic[T]):
                 )
             return (origin, [expand_pattern(a) for a in args])
 
+        # The metadata of annotated types isn't relevant to type-checking/coercion
+        tp = strip_annotated(tp)
         self.label = label
         self.tp = tp
         self.coercible = (
@@ -475,6 +477,7 @@ class TypeParser(ty.Generic[T]):
         TypeError
             if the type is not either the specified type, a sub-type or coercible to it
         """
+        type_ = strip_annotated(type_)
         if self.pattern is None or type_ is ty.Any:
             return
         if self.is_subclass(type_, StateArray):
@@ -696,6 +699,7 @@ class TypeParser(ty.Generic[T]):
             If the object cannot be coerced into the target type depending on the explicit
             inclusions and exclusions set in the `coercible` and `not_coercible` member attrs
         """
+        target = strip_annotated(target)
         if (
             isinstance(source, ty.Sequence)
             and issubclass(target, core.FileSet)
@@ -729,6 +733,8 @@ class TypeParser(ty.Generic[T]):
         """
         if source_repr is None:
             source_repr = repr(source)
+        source = strip_annotated(source)
+        target = strip_annotated(target)
         # Short-circuit the basic cases where the source and target are the same
         if source is target:
             return
@@ -851,6 +857,7 @@ class TypeParser(ty.Generic[T]):
         if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
         for candidate in candidates:
+            candidate = strip_annotated(candidate)
             if candidate is ty.Any:
                 return True
             # Handle ty.Type[*] candidates
@@ -899,6 +906,8 @@ class TypeParser(ty.Generic[T]):
             klass = type(None)
         if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
+        klass = strip_annotated(klass)
+        candidates = [strip_annotated(c) for c in candidates]
         if ty.Any in candidates:
             return True
         if klass is ty.Any:
@@ -969,6 +978,7 @@ class TypeParser(ty.Generic[T]):
         type_: type
             the type to check for nested types that are sub-classes of target
         """
+        type_ = strip_annotated(type_)
         if cls.is_subclass(type_, target):
             return True
         if type_ in (str, bytes, int, bool, float):  # shortcut primitive types
@@ -1065,6 +1075,7 @@ class TypeParser(ty.Generic[T]):
         item_type: type or None
             the type of the items
         """
+        sequence_type = strip_annotated(sequence_type)
         if not TypeParser.is_subclass(sequence_type, ty.Sequence):
             raise TypeError(
                 f"Cannot get item type from {sequence_type}, as it is not a sequence type"
@@ -1097,6 +1108,7 @@ class TypeParser(ty.Generic[T]):
             the number of splits outside the inner_type
         """
         depth = 0
+        type_ = strip_annotated(type_)
         while cls.is_subclass(type_, StateArray) and not cls.is_subclass(type_, str):
             origin = get_origin(type_)
             # If type is a union, pick the first sequence type in the union
@@ -1117,8 +1129,41 @@ class TypeParser(ty.Generic[T]):
     get_args = staticmethod(get_args)
 
 
+def strip_annotated(type_: ty.Any) -> ty.Any:
+    """Strips the metadata from `typing.Annotated` types, including those nested within
+    unions and the arguments of generic types, e.g. ``Annotated[A | B, meta] | None``
+    is stripped to ``A | B | None``. Types without any annotations are returned as is
+
+    Parameters
+    ----------
+    type_ : type
+        the type to strip the annotations from
+
+    Returns
+    -------
+    type
+        the type without the annotations
+    """
+    origin = ty.get_origin(type_)
+    if origin is None:
+        return type_
+    args = ty.get_args(type_)
+    if origin is ty.Annotated:
+        return strip_annotated(args[0])
+    stripped = tuple(strip_annotated(a) for a in args)
+    if all(s is a for s, a in zip(stripped, args)):
+        return type_
+    if origin in UNION_TYPES:
+        return ty.Union[stripped]  # flattens the unions that were annotated
+    try:
+        return origin[stripped]
+    except TypeError:
+        return type_
+
+
 def is_union(type_: type, args: list[type] | None = None) -> bool:
-    """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form
+    """Checks whether a type is a Union, in either ty.Union[T, U] or T | U form. The
+    metadata of annotated types is ignored (see `strip_annotated`)
 
     Parameters
     ----------
@@ -1132,6 +1177,7 @@ def is_union(type_: type, args: list[type] | None = None) -> bool:
     is_union : bool
         whether the type is a Union type
     """
+    type_ = strip_annotated(type_)
     if ty.get_origin(type_) in UNION_TYPES:
         if args is not None:
             return ty.get_args(type_) == tuple(args)
@@ -1141,6 +1187,7 @@ def is_union(type_: type, args: list[type] | None = None) -> bool:
 
 def is_optional(type_: type) -> bool:
     """Check if the type is Optional, i.e. a union containing None"""
+    type_ = strip_annotated(type_)
     if is_union(type_):
         return any(a is type(None) or is_optional(a) for a in ty.get_args(type_))
     return False
@@ -1148,6 +1195,7 @@ def is_optional(type_: type) -> bool:
 
 def is_container(type_: type) -> bool:
     """Check if the type is a container, i.e. a list, tuple, or MultiOutputObj"""
+    type_ = strip_annotated(type_)
     origin = ty.get_origin(type_)
     if origin in UNION_TYPES:
         return all(is_container(a) for a in ty.get_args(type_))
@@ -1168,6 +1216,7 @@ def is_truthy_falsy(type_: type) -> bool:
 
 def optional_type(type_: type) -> type:
     """Gets the non-None args of an optional type (i.e. a union with a None arg)"""
+    type_ = strip_annotated(type_)
     if is_optional(type_):
         non_none = [a for a in ty.get_args(type_) if a is not type(None)]
         if len(non_none) == 1:
@@ -1222,6 +1271,7 @@ def is_subclass_or_union(
     bool
         whether the type is a FileSet or a Union containing a FileSet
     """
+    type_ = strip_annotated(type_)
     if type_ is None and allow_none:
         return True
     if is_union(type_):
