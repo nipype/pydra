@@ -8,7 +8,7 @@ from unittest import mock
 import attrs
 import pytest
 import typing as ty
-from fileformats.application import Zip, Json
+from fileformats.application import Zip, Json, Yaml
 from fileformats.text import TextFile
 from pydra.utils.hash import (
     Cache,
@@ -579,3 +579,21 @@ def test_hash_task(tmp_path):
     concatenate2 = Concatenate()
 
     assert hash_function(concatenate1) == hash_function(concatenate2)
+
+
+def test_bytes_repr_annotated_type():
+    """The metadata of annotated types doesn't change the hash"""
+
+    @attrs.define(frozen=True)
+    class Marker:
+        format: type
+
+    annotated = ty.Annotated[ty.Union[Json, Yaml], Marker(Json)]
+    assert hash_function(annotated) == hash_function(ty.Union[Json, Yaml])
+    assert hash_function(annotated) == hash_function(
+        ty.Annotated[ty.Union[Json, Yaml], Marker(Yaml)]
+    )
+    assert hash_function(ty.List[annotated]) == hash_function(
+        ty.List[ty.Union[Json, Yaml]]
+    )
+    assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])

@@ -11,7 +11,16 @@ from pydra.compose import python
 from fileformats.generic import File
 from pydra.engine.lazy import LazyOutField
 from pydra.compose import workflow
-from pydra.utils.typing import TypeParser, MultiInputObj, is_container, is_union
+from pydra.utils.typing import (
+    TypeParser,
+    MultiInputObj,
+    is_container,
+    is_fileset_or_union,
+    is_optional,
+    is_union,
+    optional_type,
+    strip_annotated,
+)
 from fileformats.application import Json, Yaml, Xml
 from .utils import (
     GenericFuncTask,
@@ -1271,3 +1280,61 @@ def test_multi_input_obj_check_type(reference, to_be_checked):
 def test_multi_input_obj_check_type_fail(reference, to_be_checked):
     with pytest.raises(TypeError):
         TypeParser(reference)(lz(to_be_checked))
+
+
+class _Marker:
+    """Metadata for annotated types"""
+
+
+ANNOTATED_UNION = ty.Annotated[ty.Union[Json, Yaml], _Marker()]
+
+
+@pytest.mark.parametrize(
+    ["annotated", "stripped"],
+    [
+        (ty.Annotated[int, _Marker()], int),
+        (ANNOTATED_UNION, ty.Union[Json, Yaml]),
+        (ty.Optional[ANNOTATED_UNION], ty.Union[Json, Yaml, None]),
+        (
+            ty.Union[ANNOTATED_UNION, ty.Annotated[int, _Marker()]],
+            ty.Union[Json, Yaml, int],
+        ),
+        (ty.List[ANNOTATED_UNION], list[ty.Union[Json, Yaml]]),
+        (ty.Dict[str, ty.Annotated[int, _Marker()]], dict[str, int]),
+        (ty.Annotated[ty.Annotated[int, _Marker()], "other"], int),
+    ],
+)
+def test_strip_annotated(annotated, stripped):
+    assert strip_annotated(annotated) == stripped
+
+
+@pytest.mark.parametrize("tp", [int, ty.List[int], ty.Union[Json, Yaml], ty.Any, None])
+def test_strip_annotated_unchanged(tp):
+    assert strip_annotated(tp) is tp
+
+
+def test_annotated_type_predicates():
+    assert is_union(ANNOTATED_UNION)
+    assert not is_optional(ANNOTATED_UNION)
+    assert is_optional(ty.Optional[ANNOTATED_UNION])
+    assert optional_type(ty.Optional[ANNOTATED_UNION]) == ty.Union[Json, Yaml]
+    assert is_fileset_or_union(ANNOTATED_UNION)
+    assert is_fileset_or_union(ty.Annotated[Json, _Marker()])
+    assert not is_fileset_or_union(ty.Annotated[int, _Marker()])
+    assert is_container(ty.Annotated[ty.List[int], _Marker()])
+
+
+def test_annotated_type_parser(tmp_path):
+    fspath = tmp_path / "file.json"
+    fspath.write_text("{}")
+    assert isinstance(TypeParser(ANNOTATED_UNION)(fspath), Json)
+    assert TypeParser(ty.Annotated[int, _Marker()])(1) == 1
+    with pytest.raises(TypeError):
+        TypeParser(ty.Annotated[int, _Marker()])("a-string")
+    assert TypeParser.matches_type(Json, ANNOTATED_UNION)
+    assert TypeParser.matches_type(ty.Annotated[Json, _Marker()], Json)
+    assert not TypeParser.matches_type(ty.Annotated[int, _Marker()], Json)
+    assert TypeParser.is_subclass(ty.Annotated[Json, _Marker()], File)
+    assert TypeParser.is_subclass(Json, ty.Annotated[File, _Marker()])
+    assert TypeParser.is_instance(Json(fspath), ANNOTATED_UNION)
+    assert TypeParser.contains_type(Json, ty.List[ANNOTATED_UNION])
