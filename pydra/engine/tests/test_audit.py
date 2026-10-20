@@ -302,3 +302,15 @@ def test_audit_all(
     # commented out to speed up testing
     collect_messages(tmpdir / funky._checksum, message_path, ld_op="compact")
     assert (tmpdir / funky._checksum / "messages.jsonld").exists()
+
+
+def test_audit_resource():
+
+    @python.define(outputs=["out"])
+    def AddVar(a: int, b: int) -> int:
+        return a + b
+
+    task0 = AddVar(a=4, b=5)
+    outputs = task0(audit_flags=AuditFlag.RESOURCE)
+
+    print(outputs)
