@@ -13,7 +13,7 @@ dependencies = [
     "cloudpickle >=3.0.0",
     "etelemetry >=0.3.1",
     "filelock >=3.0.0",
-    "fileformats >=0.18.1",
+    "fileformats >=0.22.2",
     "platformdirs >=2",
 ]
 license = { file = "LICENSE" }
@@ -41,11 +41,11 @@ dynamic = ["version"]
 [project.optional-dependencies]
 dev = ["black", "pre-commit", "pydra[test]", "matplotlib"]
 doc = [
-    "fileformats-extras[application,image] >=0.18.1",
+    "fileformats-extras[application,image] >=0.22.2",
     "fileformats-medimage >= v0.10.0a2",
-    "fileformats-medimage-extras >= v0.10.0a2",
-    "fileformats-vendor-mrtrix3 >=3.1.0a5",
-    "fileformats-vendor-mrtrix3-extras >=3.1.0a5",
+    "fileformats-medimage-extras >= v0.15.4",
+    "fileformats-vendor-mrtrix3 >=3.1.0a9",
+    "fileformats-vendor-mrtrix3-extras >=3.1.0a9",
     "furo>=2022.2.14.1",
     "ipython",
     "ipykernel",
@@ -88,10 +88,10 @@ test = [
 ]
 tutorial = [
     "fileformats-extras[application,image] >=0.18.1",
-    "fileformats-medimage >= v0.10.0a2",
-    "fileformats-medimage-extras >= v0.10.0a2",
-    "fileformats-vendor-mrtrix3 >=3.1.0a5",
-    "fileformats-vendor-mrtrix3-extras >=3.1.0a5",
+    "fileformats-medimage >= v0.15.4",
+    "fileformats-medimage-extras >= v0.15.4",
+    "fileformats-vendor-mrtrix3 >=3.1.0a9",
+    "fileformats-vendor-mrtrix3-extras >=3.1.0a9",
     "jupyter",
     "jupyter_contrib_nbextensions",
     "jupytext",
