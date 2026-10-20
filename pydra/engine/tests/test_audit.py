@@ -158,12 +158,19 @@ def test_audit_shellcommandtask_file(tmp_path):
 def test_audit_shellcommandtask_version(tmpdir):
     import subprocess as sp
 
-    version_cmd = sp.run("less --version", shell=True, stdout=sp.PIPE).stdout.decode(
+    # Python is used as the executable as it is available on all platforms
+    version_cmd = sp.run("python --version", shell=True, stdout=sp.PIPE).stdout.decode(
         "utf-8"
     )
     version_cmd = version_cmd.splitlines()[0]
-    cmd = "less test_task.py"
-    Shelly = shell.define(cmd)
+
+    @shell.define
+    class Shelly(shell.Task["Shelly.Outputs"]):
+        executable = ["python", "-c", "pass"]
+
+        class Outputs(shell.Outputs):
+            pass
+
     shelly = Shelly()
 
     import glob
