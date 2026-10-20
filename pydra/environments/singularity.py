@@ -23,11 +23,8 @@ class Singularity(base.Container):
             "exec",
             *self.xargs,
         ]
-        singularity_args.extend(
-            " ".join(
-                [f"-B {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
-            ).split()
-        )
+        for key, val in mounts.items():
+            singularity_args.extend(["-B", f"{key}:{val[0]}:{val[1]}"])
         singularity_args.extend(
             ["--pwd", f"{self.root.rstrip('/')}{job.cache_dir.absolute()}"]
         )

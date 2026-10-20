@@ -455,6 +455,10 @@ class Submitter:
                         ):
                             error_msg = match.group(1)
                         job = futured[task_future.get_name()]
+                        # The job may have failed before it could save a result (e.g. if
+                        # the worker was unable to run it), in which case it would
+                        # otherwise remain queued indefinitely
+                        job._errored = True
                         task_name = job.name
                         if job.state_index is not None:
                             task_name += f"({job.state_index})"
@@ -463,6 +467,11 @@ class Submitter:
                         )
                 tasks = self.get_runnable_tasks(exec_graph)
         finally:
+            # Cancel any outstanding jobs if exiting early (e.g. due to an exception)
+            # so they aren't left running unattended on the event loop, which may be
+            # shared with other code (e.g. in Jupyter notebooks)
+            for task_future in task_futures:
+                task_future.cancel()
             if errors:
                 all_errors = "\n\n".join(errors)
                 raise RuntimeError(
@@ -737,9 +746,16 @@ class NodeExecution(ty.Generic[TaskType]):
                 )
         # Check to see if any previously running tasks have completed
         for index, (job, _) in list(self.running.items()):
-            if job.done:
+            try:
+                is_done = job.done
+            except ValueError:  # raised by Job.done if the job has errored
+                errored = True
+                is_done = False
+            else:
+                errored = False
+            if is_done:
                 self.successful[job.state_index] = self.running.pop(index)[0]
-            elif job.errored:
+            elif job.errored or errored:
                 self.errored[job.state_index] = self.running.pop(index)[0]
 
     @property

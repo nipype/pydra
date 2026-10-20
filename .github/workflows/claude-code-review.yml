@@ -55,6 +55,7 @@ jobs:
         with:
           path_to_claude_code_executable: ${{ steps.install-claude.outputs.path }}
           allowed_bots: "claude,pre-commit-ci"
+          show_full_output: true
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'

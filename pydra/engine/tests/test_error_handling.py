@@ -1,5 +1,6 @@
 import typing as ty
 import sys
+import time
 import pytest
 import cloudpickle as cp
 from pathlib import Path
@@ -143,3 +144,55 @@ def test_rerun_errored(tmp_path):
     # All 5 jobs run the first time, and only the 2 that errored are rerun the second
     assert tasks_run == 7
     assert errors_found == 4
+
+
+@pytest.mark.timeout(90)
+def test_worker_error_before_job_saved(tmp_path: Path):
+    """If a job fails in the worker before it is able to save a result (e.g. if the
+    worker is unable to run it), the workflow should fail rather than spinning
+    indefinitely waiting for the job to complete"""
+    from pydra.tasks.testing import UnsafeDivisionWorkflow
+    from pydra.workers import cf
+
+    class FailingWorker(cf.Worker):
+        _plugin_name = "failing-cf"
+
+        async def run(self, job, rerun=False):
+            if job.name == "Divide":
+                raise RuntimeError("worker was unable to run the job")
+            return await super().run(job, rerun=rerun)
+
+    wf = UnsafeDivisionWorkflow(a=10, b=5, denominator=2)
+    start = time.monotonic()
+    with Submitter(worker=FailingWorker(n_procs=2), cache_root=tmp_path) as sub:
+        result = sub(wf)
+    assert result.errored
+    # NB: if the workflow spins, the pytest timeout is raised within it and captured
+    # as a job error, so also check that it didn't take anywhere near that long
+    assert time.monotonic() - start < 45
+
+
+def test_node_update_status_errored_running_job():
+    """Jobs that error while "running" should be moved to errored rather than raising
+    the ValueError from Job.done (as is already the case for "queued" jobs)"""
+    from datetime import datetime
+    from types import SimpleNamespace
+    from pydra.engine.submitter import NodeExecution
+
+    class ErroredJob:
+        state_index = 0
+        errored = False
+
+        @property
+        def done(self):
+            raise ValueError("Job failed")
+
+    job = ErroredJob()
+    node_exec = NodeExecution(
+        node=SimpleNamespace(name="node"), submitter=None, workflow=None
+    )
+    node_exec.blocked = {}
+    node_exec.running = {0: (job, datetime.now())}
+    node_exec.update_status()
+    assert node_exec.errored == {0: job}
+    assert node_exec.running == {}

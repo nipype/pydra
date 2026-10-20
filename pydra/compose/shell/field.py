@@ -1,5 +1,6 @@
 from __future__ import annotations
 import typing as ty
+import warnings
 import attrs
 from pydra.compose.base import (
     Arg,
@@ -8,6 +9,23 @@ from pydra.compose.base import (
 )
 from pydra.utils.typing import is_optional
 from pydra.utils.general import wrap_text
+
+
+def sep_converter(sep: str | None) -> str | None:
+    """Whitespace separators used to be the (implicit) way to pass the items of a
+    sequence as separate arguments, which is now done by setting sep=None (the default)
+    """
+    if sep is not None and not sep.strip():
+        warnings.warn(
+            f"Setting sep={sep!r} is deprecated and is currently treated the same as "
+            "sep=None (the default), i.e. sequence items are passed as separate "
+            "command-line arguments. In a future release, whitespace separators will "
+            "join the items into a single argument like other separators do.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return None
+    return sep
 
 
 @attrs.define(kw_only=True)
@@ -53,7 +71,9 @@ class arg(Arg):
         If nothing is provided the field will be inserted between all fields with
         nonnegative positions and fields with negative positions.
     sep: str, optional
-        A separator if a sequence type is provided as a value, by default " ".
+        If provided, the items of a sequence value are joined by the separator into a
+        single command-line argument (e.g. sep="," gives "a,b,c"). By default (None)
+        each item is passed as a separate argument.
     container_path: bool, optional
         If True a path will be consider as a path inside the container (and not as a
         local path, by default it is False
@@ -67,7 +87,7 @@ class arg(Arg):
 
     argstr: str | None = ""
     position: int | None = None
-    sep: str = " "
+    sep: str | None = attrs.field(default=None, converter=sep_converter)
     allowed_values: list | None = None
     container_path: bool = False  # IS THIS STILL USED??
     formatter: ty.Callable | None = None
@@ -182,7 +202,9 @@ class outarg(arg, Out):
         If nothing is provided the field will be inserted between all fields with
         nonnegative positions and fields with negative positions.
     sep: str, optional
-        A separator if a list is provided as a value.
+        If provided, the items of a sequence value are joined by the separator into a
+        single command-line argument (e.g. sep="," gives "a,b,c"). By default (None)
+        each item is passed as a separate argument.
     container_path: bool, optional
         If True a path will be consider as a path inside the container (and not as a
         local path, by default it is False

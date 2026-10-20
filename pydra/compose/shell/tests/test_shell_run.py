@@ -8,6 +8,7 @@ import stat
 import attrs
 from pydra.engine.submitter import Submitter
 from pydra.compose import shell, workflow, python
+from pydra.compose.shell.task import join_cmd
 from fileformats.generic import (
     File,
     Directory,
@@ -284,7 +285,7 @@ def test_shell_cmd_inputspec_1(worker, results_function, tmp_path):
     shelly = Shelly(append_args=cmd_args, opt_n=cmd_opt)
     assert shelly.executable == cmd_exec
     assert shelly.append_args == cmd_args
-    assert shelly.cmdline == "echo -n 'hello from pydra'"
+    assert shelly.cmdline == join_cmd(["echo", "-n", "hello from pydra"])
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == "hello from pydra"
@@ -322,7 +323,7 @@ def test_shell_cmd_inputspec_2(worker, results_function, tmp_path):
     shelly = Shelly(append_args=cmd_args, opt_n=cmd_opt, opt_hello=cmd_opt_hello)
     assert shelly.executable == cmd_exec
     assert shelly.append_args == cmd_args
-    assert shelly.cmdline == "echo -n HELLO 'from pydra'"
+    assert shelly.cmdline == join_cmd(["echo", "-n", "HELLO", "from pydra"])
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == "HELLO from pydra"
 
@@ -779,7 +780,7 @@ def test_shell_cmd_inputspec_7b(worker, results_function, tmp_path):
                 help="output file",
             )
 
-    shelly = Shelly(executable=cmd, newfile=File.mock("newfile_tmp.txt"))
+    shelly = Shelly(executable=cmd, newfile=File.mock(tmp_path / "newfile_tmp.txt"))
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == ""
@@ -793,7 +794,7 @@ def test_shell_cmd_inputspec_7c(worker, results_function, tmp_path):
     using name_tamplate with txt extension (extension from args should be removed
     """
     cmd = "touch"
-    arg = File.mock("newfile_tmp.txt")
+    arg = File.mock(tmp_path / "newfile_tmp.txt")
 
     @shell.define
     class Shelly(shell.Task["Shelly.Outputs"]):
@@ -2808,7 +2809,7 @@ def test_shell_cmd_inputspec_outputspec_4(tmp_path):
     shelly = Shelly(
         executable=cmd,
     )
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     shelly.additional_inp = 2
 
     outputs = shelly(cache_root=tmp_path)
@@ -2846,7 +2847,7 @@ def test_shell_cmd_inputspec_outputspec_4a(tmp_path):
             )
 
     shelly = Shelly(executable=cmd)
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     # the value is not in the list from requires
     shelly.additional_inp = 1
 
@@ -2885,7 +2886,7 @@ def test_shell_cmd_inputspec_outputspec_5(tmp_path):
     shelly = Shelly(
         executable=cmd,
     )
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     shelly.additional_inp_A = 2
 
     outputs = shelly(cache_root=tmp_path)
@@ -2923,7 +2924,7 @@ def test_shell_cmd_inputspec_outputspec_5a(tmp_path):
     shelly = Shelly(
         executable=cmd,
     )
-    shelly.file1 = File.mock("new_file_1.txt")
+    shelly.file1 = File.mock(tmp_path / "new_file_1.txt")
     shelly.additional_inp_B = 2
 
     outputs = shelly(cache_root=tmp_path)
@@ -3412,7 +3413,7 @@ def test_shellspec_formatter_1(tmp_path):
 
     def formatter_1(inputs):
         print("FORMATTER:", inputs)
-        return f"-t [{inputs['in1']}, {inputs['in2']}]"
+        return ["-t", f"[{inputs['in1']}, {inputs['in2']}]"]
 
     def make_shelly(formatter):
         @shell.define
@@ -3441,25 +3442,25 @@ def test_shellspec_formatter_1(tmp_path):
 
     Shelly = make_shelly(formatter=formatter_1)
     shelly = Shelly(in1="i1", in2="i2")
-    assert shelly.cmdline == "exec -t [i1, i2]"
+    assert shelly.cmdline == join_cmd(["exec", "-t", "[i1, i2]"])
 
     # testing that the formatter can overwrite a provided value for together.
     shelly = Shelly(in1="i1", in2="i2", together=[1])
-    assert shelly.cmdline == "exec -t [i1, i2]"
+    assert shelly.cmdline == join_cmd(["exec", "-t", "[i1, i2]"])
 
     # asking for specific inputs
     def formatter_2(in1, in2):
         print("FORMATTER:", in1, in2)
-        return f"-t [{in1}, {in2}]"
+        return ["-t", f"[{in1}, {in2}]"]
 
     Shelly = make_shelly(formatter_2)
 
     shelly = Shelly(in1="i1", in2="i2")
-    assert shelly.cmdline == "exec -t [i1, i2]"
+    assert shelly.cmdline == join_cmd(["exec", "-t", "[i1, i2]"])
 
     def formatter_3(in1, in3):
         print("FORMATTER:", in1, in3)
-        return f"-t [{in1}, {in3}]"
+        return ["-t", f"[{in1}, {in3}]"]
 
     Shelly = make_shelly(formatter_3)
 

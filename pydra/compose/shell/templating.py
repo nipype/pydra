@@ -319,12 +319,15 @@ def argstr_formatting(argstr: str, values: dict[str, ty.Any]):
     inp_fields = parse_format_string(argstr)
     # formatting string based on the val_dict
     argstr_formatted = argstr.format(**{n: values.get(n, "") for n in inp_fields})
-    # removing extra commas and spaces after removing the field that have NOTHING
-    argstr_formatted = (
+    return clean_formatted_argstr(argstr_formatted)
+
+
+def clean_formatted_argstr(argstr_formatted: str) -> str:
+    """removing extra commas and spaces after removing the field that have NOTHING"""
+    return (
         argstr_formatted.replace("[ ", "[")
         .replace(" ]", "]")
         .replace("[,", "[")
         .replace(",]", "]")
         .strip()
     )
-    return argstr_formatted
