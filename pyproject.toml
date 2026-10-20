@@ -61,7 +61,7 @@ doc = [
     "packaging",
     "pandas",
     "pandoc",
-    "pydra-tasks-mrtrix3 >=3.1.0a5",
+    "pydra-tasks-mrtrix3 >=3.1.0a9",
     "scipy",
     "sphinx",
     "sphinx-argparse",
@@ -79,7 +79,7 @@ test = [
     "pytest-rerunfailures >=15.0",
     "pytest-timeout >=2.3",
     "pympler >=1.1",
-    "fileformats-extras[application,image] >=0.18.1",
+    "fileformats-extras[application,image] >=0.22.2",
     "numpy >=1.26",
     "pyld >=2.0",
     "psutil >=5.9.0",
@@ -87,7 +87,7 @@ test = [
     "tornado >=6.1",
 ]
 tutorial = [
-    "fileformats-extras[application,image] >=0.18.1",
+    "fileformats-extras[application,image] >=0.22.2",
     "fileformats-medimage >= v0.15.4",
     "fileformats-medimage-extras >= v0.15.4",
     "fileformats-vendor-mrtrix3 >=3.1.0a9",
@@ -106,7 +106,7 @@ tutorial = [
     "openneuro-py",
     "pandas",
     "psutil",
-    "pydra-tasks-mrtrix3 >=3.1.0a5",
+    "pydra-tasks-mrtrix3 >=3.1.0a9",
     "scipy",
     "sh",
 ]
