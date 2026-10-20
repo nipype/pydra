@@ -583,7 +583,11 @@ def bytes_repr_fileset(
     )
     cls = type(fileset)
     yield f"{cls.__module__}.{cls.__name__}:".encode()
-    for key, chunk_iter in fileset.byte_chunks():
+    # Hidden files and directories are set explicitly to be included, so that they are
+    # always part of the hash regardless of the defaults of the fileformats version
+    for key, chunk_iter in fileset.byte_chunks(
+        ignore_hidden_files=False, ignore_hidden_dirs=False
+    ):
         yield (",'" + key + "'=").encode()
         yield from chunk_iter
 
@@ -595,7 +599,9 @@ def bytes_repr_mock_fileset(
 ) -> Iterator[ty.Union[CacheKey, bytes]]:
     cls = type(mock_fileset)
     yield f"{cls.__module__}.{cls.__name__}:".encode()
-    for key, _ in mock_fileset.byte_chunks():
+    for key, _ in mock_fileset.byte_chunks(
+        ignore_hidden_files=False, ignore_hidden_dirs=False
+    ):
         yield (",'" + key + "'").encode()
 
 
