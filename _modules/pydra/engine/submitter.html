@@ -5,8 +5,8 @@
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
         <link rel="prefetch" href="../../../_static/pydra_logo.png" as="image">
 
-    <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pydra.engine.submitter - Pydra v1.0a11</title>
+    <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>pydra.engine.submitter - Pydra v1.0a12</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../index.html"><div class="brand">Pydra v1.0a11</div></a>
+      <a href="../../../index.html"><div class="brand">Pydra v1.0a12</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a11</span>
+  <span class="sidebar-brand-text">Pydra v1.0a12</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -738,6 +738,10 @@
                         <span class="p">):</span>
                             <span class="n">error_msg</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
                         <span class="n">job</span> <span class="o">=</span> <span class="n">futured</span><span class="p">[</span><span class="n">task_future</span><span class="o">.</span><span class="n">get_name</span><span class="p">()]</span>
+                        <span class="c1"># The job may have failed before it could save a result (e.g. if</span>
+                        <span class="c1"># the worker was unable to run it), in which case it would</span>
+                        <span class="c1"># otherwise remain queued indefinitely</span>
+                        <span class="n">job</span><span class="o">.</span><span class="n">_errored</span> <span class="o">=</span> <span class="kc">True</span>
                         <span class="n">task_name</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">name</span>
                         <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">state_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                             <span class="n">task_name</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">state_index</span><span class="si">}</span><span class="s2">)"</span>
@@ -746,6 +750,11 @@
                         <span class="p">)</span>
                 <span class="n">tasks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_runnable_tasks</span><span class="p">(</span><span class="n">exec_graph</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
+            <span class="c1"># Cancel any outstanding jobs if exiting early (e.g. due to an exception)</span>
+            <span class="c1"># so they aren't left running unattended on the event loop, which may be</span>
+            <span class="c1"># shared with other code (e.g. in Jupyter notebooks)</span>
+            <span class="k">for</span> <span class="n">task_future</span> <span class="ow">in</span> <span class="n">task_futures</span><span class="p">:</span>
+                <span class="n">task_future</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">errors</span><span class="p">:</span>
                 <span class="n">all_errors</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\n\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1031,9 +1040,16 @@
                 <span class="p">)</span>
         <span class="c1"># Check to see if any previously running tasks have completed</span>
         <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">running</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
-            <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">done</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">is_done</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">done</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>  <span class="c1"># raised by Job.done if the job has errored</span>
+                <span class="n">errored</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">is_done</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">errored</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="n">is_done</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">successful</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">state_index</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">running</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">index</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="k">elif</span> <span class="n">job</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="n">job</span><span class="o">.</span><span class="n">errored</span> <span class="ow">or</span> <span class="n">errored</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">errored</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">state_index</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">running</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">index</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="nd">@property</span>
@@ -1288,7 +1304,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=81fc932f"></script>
+</div><script src="../../../_static/documentation_options.js?v=fb4a28c0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

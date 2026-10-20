@@ -5,8 +5,8 @@
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../../genindex.html"><link rel="search" title="Search" href="../../../../search.html">
         <link rel="prefetch" href="../../../../_static/pydra_logo.png" as="image">
 
-    <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pydra.compose.shell.field - Pydra v1.0a11</title>
+    <link rel="shortcut icon" href="../../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>pydra.compose.shell.field - Pydra v1.0a12</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../../index.html"><div class="brand">Pydra v1.0a11</div></a>
+      <a href="../../../../index.html"><div class="brand">Pydra v1.0a12</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a11</span>
+  <span class="sidebar-brand-text">Pydra v1.0a12</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -273,6 +273,7 @@
           <h1>Source code for pydra.compose.shell.field</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ty</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">attrs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.compose.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Arg</span><span class="p">,</span>
@@ -281,6 +282,23 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_optional</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydra.utils.general</span><span class="w"> </span><span class="kn">import</span> <span class="n">wrap_text</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">sep_converter</span><span class="p">(</span><span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whitespace separators used to be the (implicit) way to pass the items of a</span>
+<span class="sd">    sequence as separate arguments, which is now done by setting sep=None (the default)</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">sep</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">sep</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Setting sep=</span><span class="si">{</span><span class="n">sep</span><span class="si">!r}</span><span class="s2"> is deprecated and is currently treated the same as "</span>
+            <span class="s2">"sep=None (the default), i.e. sequence items are passed as separate "</span>
+            <span class="s2">"command-line arguments. In a future release, whitespace separators will "</span>
+            <span class="s2">"join the items into a single argument like other separators do."</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">sep</span>
 
 
 <div class="viewcode-block" id="arg">
@@ -328,7 +346,9 @@
 <span class="sd">        If nothing is provided the field will be inserted between all fields with</span>
 <span class="sd">        nonnegative positions and fields with negative positions.</span>
 <span class="sd">    sep: str, optional</span>
-<span class="sd">        A separator if a sequence type is provided as a value, by default " ".</span>
+<span class="sd">        If provided, the items of a sequence value are joined by the separator into a</span>
+<span class="sd">        single command-line argument (e.g. sep="," gives "a,b,c"). By default (None)</span>
+<span class="sd">        each item is passed as a separate argument.</span>
 <span class="sd">    container_path: bool, optional</span>
 <span class="sd">        If True a path will be consider as a path inside the container (and not as a</span>
 <span class="sd">        local path, by default it is False</span>
@@ -342,7 +362,7 @@
 
     <span class="n">argstr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">""</span>
     <span class="n">position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">" "</span>
+    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">converter</span><span class="o">=</span><span class="n">sep_converter</span><span class="p">)</span>
     <span class="n">allowed_values</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">container_path</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># IS THIS STILL USED??</span>
     <span class="n">formatter</span><span class="p">:</span> <span class="n">ty</span><span class="o">.</span><span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -463,7 +483,9 @@
 <span class="sd">        If nothing is provided the field will be inserted between all fields with</span>
 <span class="sd">        nonnegative positions and fields with negative positions.</span>
 <span class="sd">    sep: str, optional</span>
-<span class="sd">        A separator if a list is provided as a value.</span>
+<span class="sd">        If provided, the items of a sequence value are joined by the separator into a</span>
+<span class="sd">        single command-line argument (e.g. sep="," gives "a,b,c"). By default (None)</span>
+<span class="sd">        each item is passed as a separate argument.</span>
 <span class="sd">    container_path: bool, optional</span>
 <span class="sd">        If True a path will be consider as a path inside the container (and not as a</span>
 <span class="sd">        local path, by default it is False</span>
@@ -584,7 +606,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=81fc932f"></script>
+</div><script src="../../../../_static/documentation_options.js?v=fb4a28c0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>

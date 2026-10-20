@@ -477,6 +477,7 @@
             "metadata": {},
             "outputs": [],
             "source": [
+                "import shutil\n",
                 "import tempfile\n",
                 "from pathlib import Path\n",
                 "import numpy as np\n",
@@ -556,9 +557,13 @@
                 "\n",
                 "wf = ToyMedianThreshold(in_image=nifti_file)\n",
                 "\n",
-                "outputs = wf(cache_root=test_dir / \"cache\")\n",
-                "\n",
-                "print(outputs)"
+                "# Run the workflow (skipped if Docker isn't available, e.g. when building these docs\n",
+                "# on Read the Docs)\n",
+                "if shutil.which(\"docker\"):\n",
+                "    outputs = wf(cache_root=test_dir / \"cache\")\n",
+                "    print(outputs)\n",
+                "else:\n",
+                "    print(\"Docker is not available so the workflow was not run\")"
             ]
         },
         {

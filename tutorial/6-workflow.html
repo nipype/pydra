@@ -6,8 +6,8 @@
 <link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Canonical form and serialisation" href="7-canonical-form.html"><link rel="prev" title="Shell-tasks" href="5-shell.html">
         <link rel="prefetch" href="../_static/pydra_logo.png" as="image">
 
-    <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Workflows - Pydra v1.0a11</title>
+    <link rel="shortcut icon" href="../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>Workflows - Pydra v1.0a12</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
@@ -170,7 +170,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v1.0a11</div></a>
+      <a href="../index.html"><div class="brand">Pydra v1.0a12</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -194,7 +194,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a11</span>
+  <span class="sidebar-brand-text">Pydra v1.0a12</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -875,7 +875,8 @@ Outputs:
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">fileformats.medimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">Nifti1</span>
@@ -954,9 +955,13 @@ Outputs:
 
 <span class="n">wf</span> <span class="o">=</span> <span class="n">ToyMedianThreshold</span><span class="p">(</span><span class="n">in_image</span><span class="o">=</span><span class="n">nifti_file</span><span class="p">)</span>
 
-<span class="n">outputs</span> <span class="o">=</span> <span class="n">wf</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">"cache"</span><span class="p">)</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
+<span class="c1"># Run the workflow (skipped if Docker isn't available, e.g. when building these docs</span>
+<span class="c1"># on Read the Docs)</span>
+<span class="k">if</span> <span class="n">shutil</span><span class="o">.</span><span class="n">which</span><span class="p">(</span><span class="s2">"docker"</span><span class="p">):</span>
+    <span class="n">outputs</span> <span class="o">=</span> <span class="n">wf</span><span class="p">(</span><span class="n">cache_root</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">"cache"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"Docker is not available so the workflow was not run"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -965,7 +970,7 @@ Outputs:
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/tmp/tmpy8e8z6_t/cache/workflow-fbe285ac05672e7ec104b259c908830c/out_image.mif&#39;))
+ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/tmp/tmpabeok9u5/cache/workflow-fbe285ac05672e7ec104b259c908830c/out_image.mif&#39;))
 </pre></div></div>
 </div>
 <p>See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details on how to utilise containers and add support for other software environments.</p>
@@ -1045,7 +1050,7 @@ ToyMedianThresholdOutputs(out_image=ImageFormat(&#39;/tmp/tmpy8e8z6_t/cache/work
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=81fc932f"></script>
+</div><script src="../_static/documentation_options.js?v=fb4a28c0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
