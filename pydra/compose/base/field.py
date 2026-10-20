@@ -10,6 +10,7 @@ from pydra.utils.typing import (
     is_truthy_falsy,
     is_type,
     is_union,
+    strip_annotated,
 )
 from pydra.utils.general import get_fields, wrap_text
 import attrs
@@ -210,7 +211,10 @@ class Field:
 
     name: str | None = None
     type: ty.Type[ty.Any] = attrs.field(
-        validator=is_type, default=ty.Any, converter=default_if_none(ty.Any)
+        validator=is_type,
+        default=ty.Any,
+        # The metadata of annotated types isn't used, see `strip_annotated`
+        converter=attrs.converters.pipe(default_if_none(ty.Any), strip_annotated),
     )
     default: ty.Any = attrs.field(
         default=NO_DEFAULT,
