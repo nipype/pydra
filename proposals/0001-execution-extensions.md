@@ -6,13 +6,18 @@ Status: proposed, for maintainer discussion. Branch `enh/execution-extensions`, 
 ## 1. Motivation
 
 Pydra's graph model (typed tasks, lazy fields, split/combine, nested workflows, content-hash
-caching) fits pipelines that are large and heterogeneous. Two examples:
-- a per-subject split over thousands of subjects, with GPU segmentation on a cluster partition
-  and CPU post-processing locally;
-- a corpus of 10⁵ recordings where some steps need a different Python or library stack.
+caching) is general-purpose. These proposals widen the workloads its execution layer serves, from
+neuroimaging to other scientific domains:
+- **neuroimaging:** a per-subject split over thousands of subjects, with GPU segmentation on a
+  cluster partition and CPU post-processing locally;
+- **behavioural and physiological signals:** a corpus of 10⁵ audio, video or wearable recordings,
+  where a GPU model serves many items and some steps need a different Python or library stack;
+- **other domains** with the same shape, such as genomics per-sample pipelines and ML evaluation
+  sweeps: many small items, mixed CPU/GPU steps, shared cluster storage.
 
-Such users currently work around pydra's execution layer rather than through it. One motivating
-downstream user is senselab (sensein/senselab#617).
+Today such users work around pydra's execution layer rather than through it. senselab
+(sensein/senselab#617) is one motivating user. Nipype 2 and pydra-tasks users get the same
+benefits, and the defaults stay unchanged for them (§2).
 
 The following was measured on `c5081a6`. The scripts are in `benchmarks/proposal_0001/`. The machine
 was loaded, so treat timings as upper bounds.
@@ -26,7 +31,7 @@ was loaded, so treat timings as upper bounds.
 | Python tasks ignore environments | `compose/python.py:228-233` never consults `job.environment` (shell tasks do, at `compose/shell/task.py:259`); the checksum is task-only (`compose/base/task.py:476`) (#826, #840) |
 | Resources are per worker, not per task | `sbatch_args` is worker-wide. The SGE worker does read a per-job `qsub_args` (`workers/sge.py:111,119`), which is the precedent to generalise |
 | Slurm worker | one `squeue -j` per job per second (`workers/slurm.py:29,145`); requeue is unbounded and includes a user's `CANCELLED` (`slurm.py:128-139`; `--no-requeue` opts out); `--error` in `sbatch_args` crashes it (`slurm.py:104,118`), as `_verify_exit_code` would too (`slurm.py:168`) |
-| No long-lived state across jobs | expensive objects, such as a loaded model or an atlas held in memory, are rebuilt per job |
+| No long-lived state across jobs | expensive objects, such as a loaded neural network, a template or atlas held in memory, or a reference index, are rebuilt per job |
 | No plan before execution | the static graph prints, but splits and expected cache hits are not shown |
 
 ## 2. Goals, non-goals, compatibility
@@ -152,7 +157,7 @@ Anything new is opt-in until maintainers decide otherwise.
 - **Field attribute:** a new `Arg` attribute `provided=<name>` (following the hash-exclusion
   precedent of `container_path`, `task.py:494`). It marks an input as supplied by the worker. Only
   the provider's declared key enters the checksum.
-- **Provider registry:** `Submitter(providers={"atlas": provider})`. A provider maps a key to an
+- **Provider registry:** `Submitter(providers={"segmenter": provider, "template": provider})`. A provider maps a key to an
   object, with LRU eviction and a memory budget, and workers keep providers alive across jobs.
   "Provided" avoids a clash with `ComputeResources`.
 - **Batching:**
