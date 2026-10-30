@@ -193,6 +193,23 @@ Anything new is opt-in until maintainers decide otherwise.
 - Nodes inside workflows built at run time are marked deferred.
 - Depends on 3.4 and on the cache-existence scan in 3.2.
 
+### 3.11 Declared task identity and context-aware cache reuse
+- **Problem.** Function hashing uses the AST, falling back to bytecode. It misses changes in called
+  functions (#777), generic objects hash brittlely (#776), and the same function can hash
+  differently across platforms or Python versions. A hash can show exactness but cannot measure
+  distance.
+- **Declared identity.** A task may declare a `version` (`@python.define(version="2")`). The
+  checksum then uses that version instead of the function's code. CI in the defining project
+  guards it: changing the source without bumping the version fails. Types can register their own
+  byte representation, extending `__bytes_repr__`, so domain objects hash portably.
+- **Execution context.** Each cache entry records the context that produced it (environment
+  checksum from 3.5, platform, Python version) beside the result, outside the checksum.
+- **Reuse policy.** `Submitter(reuse="exact" | "any")`, with `exact` as the default and today's
+  behaviour. `"exact"` reuses only entries from the same context; `"any"` reuses across contexts
+  and marks the result as such. Downstream projects can plug in richer policies, such as measured
+  equivalence classes.
+- **Risk:** low to medium. It is opt-in, and the default keeps today's checksums.
+
 ### 3.10 Graph runner and executor split: a separate RFC
 - Separating `ready()`, `complete()` and `plan()` from execution would let external orchestrators
   drive pydra's graph.
@@ -222,6 +239,7 @@ Anything new is opt-in until maintainers decide otherwise.
 | I | `pydra-workers-pool` | C, D2, F2 |
 | J1 | provenance via messengers | G1, D1 |
 | J2 | `plan()` | F2, B2 |
+| K1 | declared task identity + context-aware reuse | G1, D1 |
 
 Each PR has tests on `debug` and `cf`, and on Slurm where relevant. PRs merge to `main` when the
 maintainers accept them and ship in the next 1.0 alpha. Downstream projects can track this branch
