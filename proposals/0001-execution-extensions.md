@@ -1,244 +1,230 @@
 # Proposal 0001: execution extensions for large, heterogeneous workloads
 
-Status: draft, for discussion. Branch: `enh/execution-extensions`, off `main` at `c5081a6`
-(1.0a12). Changes land in 1.0 alphas as they are ready.
+Status: proposed, for maintainer discussion. Branch `enh/execution-extensions`, off `main` at
+`c5081a6` (1.0a12).
 
 ## 1. Motivation
 
 Pydra's graph model (typed tasks, lazy fields, split/combine, nested workflows, content-hash
-caching) fits pipelines that are large and heterogeneous:
-- 10⁴–10⁶ items;
-- some steps on GPUs holding a large model;
-- some steps needing a different Python or library stack;
-- running on a laptop and on Slurm clusters with shared network filesystems.
+caching) fits pipelines that are large and heterogeneous. Two examples:
+- a per-subject split over thousands of subjects, with GPU segmentation on a cluster partition
+  and CPU post-processing locally;
+- a corpus of 10⁵ recordings where some steps need a different Python or library stack.
 
-Users with these workloads (neuroimaging at scale, and senselab for behavioural signals) currently
-work around pydra's execution layer rather than through it.
+Such users currently work around pydra's execution layer rather than through it. One motivating
+downstream user is senselab (sensein/senselab#617).
 
-The following problems were measured on `c5081a6`. Scripts are in senselab
-`specs/20261030-140022-senselab-2x-api/bench/`. A loaded laptop was used, so treat timings as upper
-bounds.
+The following was measured on `c5081a6`. The scripts are in `benchmarks/proposal_0001/`. The machine
+was loaded, so treat timings as upper bounds.
 
 | Problem | Evidence |
 |---|---|
-| One failed element blocks all downstream work in a split | 8-way split, 1 failure: the 7 healthy elements never run their downstream node. Barrier semantics in `engine/submitter.py` (`get_runnable_tasks`). |
-| Per-item overhead dominates small tasks | about 4–5 ms per trivial item cold and 2–3 ms per cached item; about 34 KB of pickles and 3.3 files per item; `cf` no faster than `debug`, with about 45% of time spent pickling |
-| The cache is not safe on shared filesystems | run-long `SoftFileLock` left stale by SIGKILL (#778); non-atomic writes; cloudpickle results tie a cache to one Python and are unsafe to share across users |
-| A Submitter has exactly one worker | `engine/submitter.py:160`; there is no way to send GPU nodes to Slurm and CPU nodes to local processes in one run |
-| Python tasks ignore environments | `compose/python.py` `_run` never consults an environment (#840); environments do not enter the checksum (#826) |
-| No per-task resources | only worker-wide `sbatch_args` |
-| Slurm worker | one `sbatch` per job; a `squeue` poll per job every second; unbounded requeue, including a user's own `scancel`; crashes when `--error` is passed in `sbatch_args` (`workers/slurm.py:118` calls `.replace` on `None`) |
-| No long-lived state across jobs | a loaded model survives only by accident in `cf` processes |
+| One failed element blocks all downstream elements of a split | `pydra_partial_failure.py`: 8-way split, 1 failure, and the 7 healthy elements never run the next node. `engine/submitter.py:853` (`if True:  # self.node.splitter:`) marks the whole downstream node unrunnable; the per-index path exists but is disabled (FIXME at `submitter.py:850`) |
+| Per-item overhead dominates small tasks | `pydra_overhead.py`: about 4–5 ms per trivial item cold and 2–3 ms per cached item; about 34 KB and 3.3 files per item; `cf` no faster than `debug`, with about 45% of the time spent pickling. Under `cf` the job is pickled (`workers/cf.py:75`) with the task pickled again inside it (`Job.__getstate__`, `engine/job.py:185`); `_job.pklz` is written on every run (`job.py:311`) |
+| The cache is not safe when shared | run-long `SoftFileLock` (`job.py:331`); rmtree then rewrite (`job.py:307-308`); `_result.pklz` written in place (`engine/result.py:219`). `clean_stale_locks` (`submitter.py:107,162-166,529-535`) unlinks any lock older than this run's start, which on a shared cache can remove another submitter's live lock (#778). Cloudpickle results tie a cache to one Python version |
+| A Submitter has exactly one worker | `submitter.py:160` |
+| Python tasks ignore environments | `compose/python.py:228-233` never consults `job.environment` (shell tasks do, at `compose/shell/task.py:259`); the checksum is task-only (`compose/base/task.py:476`) (#826, #840) |
+| Resources are per worker, not per task | `sbatch_args` is worker-wide. The SGE worker does read a per-job `qsub_args` (`workers/sge.py:111,119`), which is the precedent to generalise |
+| Slurm worker | one `squeue -j` per job per second (`workers/slurm.py:29,145`); requeue is unbounded and includes a user's `CANCELLED` (`slurm.py:128-139`; `--no-requeue` opts out); `--error` in `sbatch_args` crashes it (`slurm.py:104,118`), as `_verify_exit_code` would too (`slurm.py:168`) |
+| No long-lived state across jobs | expensive objects, such as a loaded model or an atlas held in memory, are rebuilt per job |
 | No plan before execution | the static graph prints, but splits and expected cache hits are not shown |
 
-## 2. Goals and non-goals
+## 2. Goals, non-goals, compatibility
 
-**Goals**
-- Per-element dataflow.
-- Cheap per-item execution.
-- A shared-filesystem-safe, Python-version-neutral cache.
-- Several workers per run, with routing per node.
-- Python tasks in environments, with environment identity in the checksum.
-- Per-task resources.
-- Long-lived worker-scoped resources with batching.
-- A robust Slurm worker and a pool worker.
-- Provenance records.
-- A printable plan.
-- In the long term, a graph runner separable from execution.
+**Goals:**
+- per-element dataflow;
+- cheap per-item execution;
+- a cache that is safe to share, with an optional Python-version-neutral result format;
+- several workers per run;
+- Python tasks in environments, with environment identity in the checksum;
+- per-task resources;
+- long-lived worker-scoped objects with batching;
+- a robust Slurm worker;
+- a printable plan.
 
-**Non-goals**
+**Non-goals:**
 - Changing the task definition language or lazy-field semantics.
 - Making containers mandatory.
 - Multi-node model parallelism.
 
-**Compatibility.** Each change keeps current behaviour by default. Where a default must change (the
-cache layout, hashes that gain environment identity), the change is a one-time recompute,
-announced in the alpha's release notes.
+**Defaults that do not change:**
+- `PickleStore`;
+- the cache layout until a major version;
+- the `debug` default worker;
+- Slurm requeue on `PREEMPTED`/`TIMEOUT`;
+- error semantics under `debug`;
+- the `os.chdir` behaviour for Python tasks that write relative paths;
+- checksums of tasks that use no environment, or `Native`/`Lmod`.
+
+Anything new is opt-in until maintainers decide otherwise.
 
 ## 3. Proposals
 
-Each proposal gives the API sketch, where it attaches, the risk, and its tests. They are numbered
-in delivery order: 1–5 are the foundation, 6–11 build on them, and 12 is the end state.
-
 ### 3.1 Per-element dataflow and keep-going
-- **API:** `Submitter(on_error="stop" | "continue")`, default `"stop"` for now. `Result.errors`
-  gives a summary of failed elements with their tracebacks.
-- **How:**
-  - Enable the per-index readiness path in `NodeExecution.get_runnable_tasks`. A downstream
-    element becomes runnable when *its* upstream indices succeed.
-  - An errored element marks only its own descendants unrunnable.
-  - This needs the partial-state-from-lazy-fields refactor that the FIXME in `engine/state.py`
-    names.
-- **Risk:** high. It touches splitter/combiner index bookkeeping.
-- **Tests:**
-  - partial failure in split, nested split, combine after partial failure, outer and scalar
-    splitters;
-  - `stop` keeps today's behaviour.
+- **Behaviour:** a downstream element becomes runnable when its own upstream indices succeed. An
+  errored element marks only its own descendants unrunnable.
+- **API:** `Submitter(on_error="raise_at_end" | "fail_fast")`.
+  - `raise_at_end` is today's async-worker behaviour (`submitter.py:446-476`): independent nodes
+    keep running, and errors are raised together at the end.
+  - `fail_fast` stops at the first error.
+  - The per-element change applies under both modes.
+  - The error summary is attached to the raised workflow error and kept on the Submitter, not on
+    the per-job `Result`.
+- **Two steps:**
+  1. Enable the per-index path where the downstream splitter does not re-split an already split
+     state.
+  2. The partial-`State` refactor that the FIXME names.
+- **Risk:** high. The tests need the full splitter/combiner matrix (outer, scalar, nested, combine
+  after partial failure) and `debug` parity.
 
 ### 3.2 Cheap submission path
-- **How:**
-  - Do not re-pickle tasks for in-process workers (`Job.__getstate__`).
-  - Write `_job.pklz` lazily, only for remote workers or crash dumps.
-  - Memoise the checksum per job.
+- **Step 1:** extend `benchmark.py` with the scripts above, so maintainers can reproduce the
+  numbers.
+- **Step 2:**
+  - Avoid re-pickling the task inside the job for in-process workers.
+  - Write `_job.pklz` only for remote workers and on failure, which keeps
+    `pydracli crash --rerun` working; announce that it is gone on success.
   - Check cache existence with one `scandir` per cache root per scheduling round.
+  - Avoid recomputing `Task._hash` (`task.py:471`). The job checksum is already memoised
+    (`job.py:219-222`).
 - **Target:** under 0.5 ms per item cold and under 0.1 ms per cached item for trivial tasks.
-  A benchmark script is added to `benchmark.py`.
-- **Risk:** medium. `pydracli crash --rerun` depends on `_job.pklz`; keep it for failures.
 
-### 3.3 Atomic cache with leases
-- **How:**
-  - Run each job in `cache_root/tmp/<uuid>` and `rename` into `<checksum>/` on success. The first
-    writer wins; later writers discard their copy.
-  - Replace the run-long `SoftFileLock` with a lease file (`owner`, `host`, `pid`, `heartbeat`)
-    renewed periodically. Stale leases are taken over after a TTL.
-  - The protocol is the one senselab's `work_pool` measured on NFS v4.2: 2000/2000 items, no
-    double or lost runs.
-- **Risk:** medium. Tasks that record their own output paths during the run need path rewriting
-  after the rename. `copyfile` outputs are relocated as part of the commit.
-- **Tests:**
-  - two processes racing on one checksum;
-  - SIGKILL mid-run, then a rerun takes over the lease;
-  - a read-only shared cache.
-- Closes #778.
-
-### 3.4 `ResultStore` and a portable result format
-- **API:**
+### 3.3 Result store interface (first), then safe commits
+- **Step 1:** a `ResultStore` interface that touches the four call sites (`Job.checksum`,
+  `cache_dir`, `save`, `load_result`), with a behaviour-identical `PickleStore`. No behaviour
+  changes.
   ```python
   class ResultStore(Protocol):
       def lookup(self, checksum: str) -> Result | None: ...
-      def begin(self, checksum: str) -> Staging: ...          # tmp dir + lease
-      def commit(self, staging: Staging, result: Result) -> Result: ...
+      def acquire(self, checksum: str) -> Lease: ...   # replaces the run-long SoftFileLock
+      def commit(self, lease: Lease, result: Result) -> None: ...
   ```
-  `Submitter(result_store=...)`. The default is `PickleStore`, which behaves as today.
-  `PortableStore` writes JSON for scalars and attrs records, `.npy` for arrays, files as files,
-  and falls back to pickle only for types with no registered serialiser. Serialisers are
-  registered per type.
-- **Cache layout** versioned independently of pydra (`tasks-v1/…`). Upgrading pydra does not
-  invalidate a cache unless the layout version changes (#825).
-- **How:** all reads and writes go through four places today (`Job.checksum`, `cache_dir`,
-  `save`, `load_result`). The store slots in there.
-- **Risk:** medium. Every result reader is affected.
+- **Step 2: safe commits inside the store.**
+  - The job runs in `<checksum>/` under a **lease** (owner, host, pid, heartbeat, TTL takeover)
+    instead of a run-long soft lock.
+  - The result is committed by an atomic write-then-rename of the result file.
+  - Shell tasks resolve `output_file_template` and copy destinations against `cache_dir`
+    (`job.py:280-288`), and `can_resume` needs a stable directory. Running in place and
+    committing atomically keeps both working. This is lower risk than running in a temporary
+    directory and renaming it.
+  - `clean_stale_locks` becomes lease expiry, so it never removes a live holder's lock.
+- **Step 3: `PortableStore`** (opt-in). JSON for scalars and attrs records, `.npy` for arrays,
+  files as files, and pickle only for types without a registered serialiser. It uses a versioned
+  layout (`tasks-v<N>/`) (#825).
+- **Tests:**
+  - two processes racing on one checksum;
+  - SIGKILL mid-run, then the rerun takes over the lease;
+  - a read-only shared cache;
+  - `debug` and `cf` parity.
 
-### 3.5 Several workers per run, with routing
-- **API:**
-  ```python
-  sub = Submitter(worker={"default": "cf", "gpu": SlurmWorker(partition="gpu"), "pool": PoolWorker(...)})
-  wf.add(SegmentModel(...), worker="gpu")
-  ```
-  Alternatively, a `router(job) -> worker_name` callable, for example routing from
-  `ComputeResources` (3.6).
-- **How:** a router called at the two dispatch sites in `engine/submitter.py`. Nested workflows
-  inherit the routing unless they override it.
-- **Risk:** low to medium.
+### 3.4 Per-task resources and worker routing
+- **`ComputeResources`:**
+  - `ComputeResources(cpus, mem, gpus, gpu_type, time, tags)` is set by the define machinery in
+    `compose/base`, so it works for `python.define` and `shell.define` alike.
+  - It can be overridden per node with `workflow.add(task, resources=...)`, beside the existing
+    `environment=` and `hooks=` (`compose/workflow.py:235`).
+  - It is never part of the checksum.
+  - The Slurm and SGE workers map it to `sbatch` and `qsub` arguments, generalising SGE's per-job
+    `qsub_args`.
+- **Routing (a separate PR):**
+  - `Submitter(workers={"local": "cf", "gpu": SlurmWorker(...)}, router=...)`.
+  - The router maps a job's resources or tags to a worker name, and is called at the three
+    dispatch sites (`submitter.py:292-295`, `:328`, `:435-441`).
+  - Workflow definitions name no worker, so reusable task packages stay worker-agnostic.
 
-### 3.6 `ComputeResources`
-- **API:** `ComputeResources(cpus, mem, gpus, gpu_class, time, extra)` set on a task definition
-  (`@python.define(resources=...)`) and overridable per node (`wf.add(..., resources=...)`).
-  Workers map it to their own terms: sbatch args, local slots, a pool resource class.
-- **Never part of the checksum.**
-- **Risk:** low. Refs #227, #830.
+### 3.5 Environment identity, and Python tasks in environments
+- **Step 1: identity (independent; closes #826).**
+  - Add `Environment.checksum()`, folded into the job checksum.
+  - `Native` and `Lmod` contribute nothing, so existing caches keep their hashes.
+  - `Docker` and `Singularity` accept a user-supplied `identity=`. That avoids contacting a
+    registry or hashing a multi-GB image at hash time; a resolved digest is used when available.
+- **Step 2: Python tasks in environments** (closes #840; depends on 3.3, step 3).
+  - A `Venv(path=... | python=..., lock=...)` environment.
+  - When the environment's interpreter version matches, the task is cloudpickled as today.
+  - Otherwise it is shipped by import reference with `PortableStore`-encoded inputs. Functions
+    defined in `__main__`, notebooks or closures then raise a clear error asking for an
+    importable function.
+  - A small stdlib runner inside the environment executes the task. The runner is pluggable.
+  - Could ship as `pydra-environments-venv`, using the existing namespace mechanism
+    (`environments/base.py:52-65`).
 
-### 3.7 Environment identity and Python tasks in environments
-- **API:**
-  - `Environment.checksum() -> bytes`, folded into `Job.checksum`. For example: a Docker image
-    digest, a Singularity image hash, or a venv's lock hash.
-  - A new `Venv(python=..., lock=...)` environment, or `Venv(path=...)` for an existing one.
-- **Python tasks in an environment:**
-  - The function is shipped as an **import reference** (`module:function`) with encoded inputs
-    (the `PortableStore` serialisers), not as a cloudpickle, so the env may run a different Python
-    version.
-  - A small stdlib-only runner inside the env imports the function, runs it, and writes a portable
-    result.
-  - The runner is pluggable, so projects can supply their own. senselab's worker runtime is one.
-- **Risk:** medium. Hashes change for tasks that use environments (a one-time recompute).
-- Closes #826 and #840.
+### 3.6 Worker-provided objects and batching
+- **Field attribute:** a new `Arg` attribute `provided=<name>` (following the hash-exclusion
+  precedent of `container_path`, `task.py:494`). It marks an input as supplied by the worker. Only
+  the provider's declared key enters the checksum.
+- **Provider registry:** `Submitter(providers={"atlas": provider})`. A provider maps a key to an
+  object, with LRU eviction and a memory budget, and workers keep providers alive across jobs.
+  "Provided" avoids a clash with `ComputeResources`.
+- **Batching:**
+  - A task may declare a batched implementation.
+  - A batching worker groups ready jobs that share a provider key.
+  - Each batch returns a result per item, and a failing batch is bisected so one item cannot fail
+    its batch-mates.
+- **Prerequisite (its own PR):** an option to run Python tasks without `os.chdir` (`job.py:338`),
+  so several jobs can share one process. Default unchanged.
+- **Packaging:** ships with the pool worker (3.7) as a plugin.
 
-### 3.8 Worker-scoped resources and batching
-- **API:**
-  ```python
-  @python.define
-  def Transcribe(audio: Audio, model: Resource[AsrModel] = resource("asr", key=...)) -> Transcript: ...
+### 3.7 Pool worker (plugin) and Slurm fixes (core)
+- **Slurm, three PRs:**
+  - **A0:** the `--error` crash, in both places, with a test.
+  - **A1:** a requeue budget, and no requeue of a user's `CANCELLED`.
+  - **A2:** one `squeue --me` per poll cycle for all jobs, and `sbatch --array` for split states,
+    reusing the tuple path at `slurm.py:49-62`.
+- **`pydra-workers-pool` (plugin):**
+  - Jobs go to a lease queue on a shared filesystem.
+  - Pool processes on any substrate (local, Slurm, Kubernetes) claim, run and commit through the
+    `ResultStore`.
+  - A controller scales the pool processes from queue depth within caps.
+  - The scheduler then sees a few long jobs instead of one job per element.
 
-  sub = Submitter(worker=..., resources={"asr": provider})   # provider: key -> loaded object, LRU, budget
-  ```
-  - `resource(...)` fields are excluded from the hash, except for their `key`, which is part of
-    identity.
-  - Workers keep providers alive across jobs.
-  - A task may declare `batch=BatchSpec(max_items, max_wait_ms)` and a `run_batch` function. A
-    batching worker then groups ready jobs with the same resource key into one call.
-  - `Worker.run` is async, so batching needs no submitter change.
-- **Risk:** medium. Process-wide `os.chdir` must be removed from the job path first, so that
-  several jobs can share one worker process.
+### 3.8 Provenance through the existing audit and messengers
+- Extend `Audit` and the messengers (`engine/audit.py`, `utils/messenger.py`) to emit one record
+  per job: used checksums, generated outputs, environment checksum (3.5), host, times and status.
+- It uses a JSON-lines messenger and needs no new system.
+- It depends on 3.5 step 1 and on 3.3 step 1.
 
-### 3.9 Pool worker and Slurm fixes
-- **Slurm fixes:**
-  - the `--error` crash;
-  - a requeue budget, and no requeue of a user `CANCELLED`;
-  - one `squeue --me` per poll cycle covering all jobs;
-  - `sbatch --array` for split states.
-- **`PoolWorker`:**
-  - Publishes jobs to a lease queue on a shared filesystem, with one queue per resource class
-    (and resource key, for 3.8 affinity).
-  - Pool processes (`pydra pool work <dir> --classes ...`) run on any substrate (local processes,
-    Slurm jobs, Kubernetes jobs) and claim, run and commit jobs through the `ResultStore`.
-  - A controller scales pool processes from queue depth within caps.
-  - The queue holds items and the scheduler holds workers, so a cluster sees a few long jobs
-    instead of millions of short ones.
-- **Packaging:** the pool can ship as `pydra-workers-pool` to keep core small.
-- **Risk:** low for the fixes; medium for the pool.
+### 3.9 `Submitter.plan()`
+- Lists nodes, split sizes, resources and worker per node, and expected cache hits.
+- Nodes inside workflows built at run time are marked deferred.
+- Depends on 3.4 and on the cache-existence scan in 3.2.
 
-### 3.10 Provenance sink
-- **API:** `Submitter(prov_sink=JsonlProvSink(path))`. One record per job from the
-  `post_run_task` hook (which fires on errors too).
-- **Record contents:**
-  - `used`: input checksums;
-  - `generated`: output ids;
-  - the environment checksum;
-  - host;
-  - times;
-  - status.
-- The record shape follows W3C PROV and maps to BIDS BEP028.
-- The existing network fetch of `context.jsonld` is removed. Refs #798, #566.
-- **Risk:** low.
-
-### 3.11 `Submitter.plan()`
-- **API:** `Submitter.plan(task) -> Plan`, listing nodes, splits and their sizes, the worker and
-  resources for each node, and expected cache hits. Nodes inside workflows built at run time are
-  marked *deferred*. `print(plan)` gives a readable table.
-- **Risk:** low.
-
-### 3.12 Graph runner and executor split (end state)
-- **What:** split the Submitter into a **graph runner** (`ready() -> jobs`,
-  `complete(job, result)`, `plan()`) and an **executor interface** that the current workers
-  implement.
-- **Why:** an external system (a queue, an orchestrator) can then drive pydra's graph semantics
-  without pydra's execution loop, and the workers become ordinary executors.
-- Proposed after 3.4 exists, because job expansion currently needs upstream results from pydra's
-  cache.
+### 3.10 Graph runner and executor split: a separate RFC
+- Separating `ready()`, `complete()` and `plan()` from execution would let external orchestrators
+  drive pydra's graph.
+- It depends on 3.1 (per-element readiness) and 3.3. It will be written up as its own RFC once
+  those land.
 
 ## 4. Delivery
 
 | PR | Contents | Depends on |
 |---|---|---|
-| A | 3.9 Slurm fixes (small, independent) | — |
-| B | 3.2 cheap submission | — |
-| C | 3.3 atomic cache + leases | — |
-| D | 3.4 `ResultStore` + `PortableStore` + versioned layout | C |
-| E | 3.1 per-element dataflow + keep-going | — (State refactor) |
-| F | 3.5 routing + 3.6 resources | — |
-| G | 3.7 env checksum + `Venv` runner | D |
-| H | 3.8 resources + batching | F, D |
-| I | 3.9 pool worker | C, D, F |
-| J | 3.10 provenance sink, 3.11 plan | — |
-| K | 3.12 runner/executor split | D, I |
+| A0 | Slurm `--error` fix | — |
+| A1 | Slurm requeue budget, `CANCELLED` | — |
+| B1 | benchmarks in `benchmark.py` | — |
+| B2 | cheap submission | B1 |
+| D1 | `ResultStore` interface + `PickleStore` (no behaviour change) | — |
+| C | leases + atomic commit inside the store | D1 |
+| G1 | `Environment.checksum()` | — |
+| E1 | per-element readiness, no re-split case | — |
+| E2 | partial `State` refactor | E1 |
+| F1 | `ComputeResources` (+ Slurm/SGE mapping) | A1 |
+| F2 | worker routing | F1 |
+| A2 | Slurm batched polling + arrays | A1 |
+| D2 | `PortableStore` + versioned layout | D1 |
+| G2 | `Venv` environment + runner | D2, G1 |
+| H0 | Python tasks without `chdir` (opt-in) | — |
+| H | provided objects + batching (plugin) | H0, F1, D1 |
+| I | `pydra-workers-pool` | C, D2, F2 |
+| J1 | provenance via messengers | G1, D1 |
+| J2 | `plan()` | F2, B2 |
 
-Each PR comes with tests on `debug` and `cf`, plus Slurm where relevant (`--only-worker=slurm`
-on a cluster). Each merges into `main` and ships in the next 1.0 alpha. Downstream projects can
-track a branch through `uv` git sources until then.
+Each PR has tests on `debug` and `cf`, and on Slurm where relevant. PRs merge to `main` when the
+maintainers accept them and ship in the next 1.0 alpha. Downstream projects can track this branch
+through `uv` git sources in the meantime.
 
-## 5. Open questions for maintainers
+## 5. Open questions
 
-- Should `on_error="continue"` become the default in 1.0?
-- Should the pool worker live in core or in `pydra-workers-pool`?
-- Should `PortableStore` become the default once it is stable?
-- Is the naming of `resource(...)` and `Resource[...]` acceptable alongside `ComputeResources`?
+- Which `on_error` mode should be the 1.0 default?
+- Should `PortableStore` become the default at the next major version?
+- Are `provided=` and `ComputeResources(tags=...)` acceptable names?
+- Which plugins live under `nipype/` and which in separate repositories?
