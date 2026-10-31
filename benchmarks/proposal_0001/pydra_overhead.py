@@ -1,6 +1,10 @@
 """Per-task overhead of pydra 1.0a12: trivial python task split over N ints, and a 2-node workflow."""
 
-import os, sys, time, shutil, tempfile
+import os
+import shutil
+import sys
+import tempfile
+import time
 from pathlib import Path
 from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
@@ -47,9 +51,12 @@ def run(kind, n, worker, **wkw):
         assert not res.errored, res
         out[label] = dt
     files = count_files(root)
+    cold_ms = 1e3 * out["cold"] / n
+    warm_ms = 1e3 * out["warm"] / n
     print(
-        f"{kind:6s} worker={worker:5s} n={n:5d} cold={out['cold']:.2f}s ({1e3*out['cold']/n:.1f} ms/item) "
-        f"warm={out['warm']:.2f}s ({1e3*out['warm']/n:.2f} ms/item) +10%={out['extend10pct']:.2f}s fs_entries={files} ({files/n:.1f}/item)",
+        f"{kind:6s} worker={worker:5s} n={n:5d} cold={out['cold']:.2f}s ({cold_ms:.1f} ms/item) "
+        f"warm={out['warm']:.2f}s ({warm_ms:.2f} ms/item) +10%={out['extend10pct']:.2f}s "
+        f"fs_entries={files} ({files / n:.1f}/item)",
         flush=True,
     )
     shutil.rmtree(root)

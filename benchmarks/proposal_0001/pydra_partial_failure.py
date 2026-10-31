@@ -1,6 +1,7 @@
 """Does one failing split element block downstream work for the other elements? pydra 1.0a12."""
 
-import os, tempfile
+import os
+import tempfile
 from pathlib import Path
 from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
@@ -34,7 +35,6 @@ except Exception as e:
     print("raised:", type(e).__name__, str(e)[:300].replace("\n", " "))
 n_next = sum(1 for d in root.iterdir() if d.is_dir() and (d / "_result.pklz").exists())
 print("result dirs:", n_next)
-import pickle
 
 ran_next = []
 for d in root.iterdir():
