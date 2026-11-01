@@ -660,6 +660,8 @@ class NodeExecution(ty.Generic[TaskType]):
 
     @property
     def tasks(self) -> list["Job[TaskType]"]:
+        """The jobs of all elements, in state order, creating any that do not exist
+        yet (all upstream elements they read must have succeeded)"""
         if self._tasks is None:
             raise RuntimeError("Tasks have not been generated")
         return [self.job(index) for index in self._tasks]
@@ -685,9 +687,8 @@ class NodeExecution(ty.Generic[TaskType]):
         return job
 
     def start(self) -> None:
-        """Prepare the state of the node and the upstream elements each of its elements
-        reads, which only needs the upstream states, not their results (unless the node
-        splits over an upstream output)"""
+        """Prepare the state of the node and record, for each of its elements, the
+        upstream elements it reads"""
         if self.state:
             values = {}
             for name, value in self.node.state_values.items():
@@ -706,7 +707,16 @@ class NodeExecution(ty.Generic[TaskType]):
         else:
             indices = [None]
         self._tasks = dict.fromkeys(indices)
-        self.blocked = {index: self._upstream(index) for index in indices}
+        self.blocked = {}
+        for index in indices:
+            upstream = self._upstream(index)
+            for node, inds in upstream:
+                if missing := [i for i in inds if i not in node._tasks]:
+                    raise RuntimeError(
+                        f"Element {index} of node {self.name!r} reads elements {missing} "
+                        f"of node {node.name!r}, which has elements {list(node._tasks)}"
+                    )
+            self.blocked[index] = upstream
 
     @property
     def started(self) -> bool:
@@ -773,33 +783,23 @@ class NodeExecution(ty.Generic[TaskType]):
             self.successful or self.blocked or self.queued
         )
 
-    def _resolve_lazy_inputs(
-        self,
-        task: "Task",
-        state_index: int | None = None,
-    ) -> "Task":
-        """Resolves lazy fields in the task by replacing them with their
-        actual values calculated by upstream jobs.
+    def _lazy_reads(
+        self, index: int | None
+    ) -> ty.Iterator[tuple[str, LazyField, int | None]]:
+        """The lazy inputs of one element that are read from upstream (i.e. are not
+        state values), with the state index each is read at
 
         Parameters
         ----------
-        task : Task
-            The task to resolve the lazy fields of
-        state_index : int, optional
-            The state index for the workflow, by default None
-
-        Returns
-        -------
-        Task
-            The task with all lazy fields resolved
+        index : int or None
+            The state index of the element, None if the node has no state
         """
-        resolved = {}
-        for name, value in attrs_values(task).items():
-            if isinstance(value, LazyField):
-                resolved[name] = value._get_value(
-                    workflow=self.workflow, graph=self.graph, state_index=state_index
-                )
-        return attrs.evolve(task, **resolved)
+        vals = self.state.states_val[index] if index is not None else {}
+        inputs_ind = self.state.inputs_ind[index] if index is not None else {}
+        for name, value in attrs_values(self.node._task).items():
+            state_key = f"{self.name}.{name}"
+            if isinstance(value, LazyField) and state_key not in vals:
+                yield name, value, inputs_ind.get(state_key)
 
     def _split_task(self, index: int | None) -> "Task[OutputType]":
         """Resolve the task of one element of the node from its state values and the
@@ -810,44 +810,34 @@ class NodeExecution(ty.Generic[TaskType]):
         index : int or None
             The state index of the element, None if the node has no state
         """
-        if index is None:
-            return self._resolve_lazy_inputs(task=self.node._task)
-        vals = self.state.states_val[index]
-        inputs_ind = self.state.inputs_ind[index]
         resolved = {}
-        for inpt_name in set(self.node.input_names):
-            value = getattr(self._task, inpt_name)
-            state_key = f"{self.node.name}.{inpt_name}"
-            try:
-                resolved[inpt_name] = vals[state_key]
-            except KeyError:
-                if isinstance(value, LazyField):
-                    resolved[inpt_name] = value._get_value(
-                        workflow=self.workflow,
-                        graph=self.graph,
-                        state_index=inputs_ind.get(state_key),
-                    )
+        if index is not None:
+            vals = self.state.states_val[index]
+            for name in self.node.input_names:
+                if (state_key := f"{self.name}.{name}") in vals:
+                    resolved[name] = vals[state_key]
+        for name, value, state_index in self._lazy_reads(index):
+            resolved[name] = value._get_value(
+                workflow=self.workflow, graph=self.graph, state_index=state_index
+            )
         return attrs.evolve(self.node._task, **resolved)
 
     def _upstream(
         self, index: int | None
     ) -> list[tuple["NodeExecution", list[int | None]]]:
-        """The upstream nodes, and the indices of their elements, that the lazy inputs
-        of one element read when its task is resolved by ``_split_task``
+        """The upstream nodes, and the indices of their elements, that ``_split_task``
+        reads to resolve one element
 
         Parameters
         ----------
         index : int or None
             The state index of the element, None if the node has no state
         """
-        vals = self.state.states_val[index] if self.state else {}
-        inputs_ind = self.state.inputs_ind[index] if self.state else {}
         upstream = []
-        for name, value in attrs_values(self.node._task).items():
-            state_key = f"{self.name}.{name}"
-            if isinstance(value, LazyOutField) and state_key not in vals:
+        for _, value, state_index in self._lazy_reads(index):
+            if isinstance(value, LazyOutField):
                 node = self.graph.node(value._node.name)
-                upstream.append((node, node._read_indices(inputs_ind.get(state_key))))
+                upstream.append((node, node._read_indices(state_index)))
         return upstream
 
     def _read_indices(self, state_index: int | None) -> list[int | None]:
@@ -861,15 +851,9 @@ class NodeExecution(ty.Generic[TaskType]):
         """
         if not self.state:
             return [None]
-        indices = range(len(self.state.states_ind))
         if state_index is None or (self.state.combiner and not self.state.ind_l_final):
-            return list(indices)
-        if self.state.combiner:
-            group = set(self.state.states_ind_final[state_index].items())
-            return [
-                i for i in indices if group <= set(self.state.states_ind[i].items())
-            ]
-        return [state_index]
+            return list(range(len(self.state.states_ind)))
+        return list(self.state.final_combined_ind_mapping[state_index])
 
     @property
     def _splits_upstream_output(self) -> bool:
