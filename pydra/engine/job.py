@@ -214,12 +214,13 @@ class Job(ty.Generic[TaskType]):
     @property
     def context(self) -> dict[str, str]:
         """The execution context of the job, recorded beside its result and compared
-        with the context recorded on a stored result to decide whether to reuse it."""
+        with the context recorded on a result from an earlier job to decide whether to
+        reuse it."""
         if self._context is None:
             self._context = {
                 "environment_checksum": self.environment.checksum(),
                 "platform": f"{sys.platform}-{platform.machine()}",
-                "python_version": platform.python_version(),
+                "python_version": ".".join(platform.python_version_tuple()[:2]),
             }
         return self._context
 
@@ -343,6 +344,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
+                job_uid=self.uid,
                 **self.context,
             )
             self.hooks.pre_run_task(self)
@@ -404,6 +406,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
+                job_uid=self.uid,
                 **self.context,
             )
             self.hooks.pre_run_task(self)
@@ -519,7 +522,7 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        result = self.store.lookup(self.checksum, self.context)
+        result = self.store.lookup(self.checksum, self.context, produced_by=self.uid)
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":

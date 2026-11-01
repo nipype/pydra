@@ -20,8 +20,8 @@ class RecordingStore(PickleStore):
         with open(self.log, "a") as f:
             f.write(" ".join(entry) + "\n")
 
-    def lookup(self, checksum, context=None):
-        result = super().lookup(checksum, context)
+    def lookup(self, checksum, context=None, produced_by=None):
+        result = super().lookup(checksum, context, produced_by)
         self._record("lookup", checksum, "miss" if result is None else "hit")
         return result
 

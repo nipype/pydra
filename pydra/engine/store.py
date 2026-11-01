@@ -61,11 +61,17 @@ class ResultStore(ty.Protocol):
     def cache_dir(self, checksum: str) -> Path:
         """The directory the job identified by ``checksum`` runs in."""
 
-    def lookup(self, checksum: str, context: Context | None = None) -> Result | None:
+    def lookup(
+        self,
+        checksum: str,
+        context: Context | None = None,
+        produced_by: str | None = None,
+    ) -> Result | None:
         """Return the stored result for ``checksum``, or None if there is none.
 
-        When ``context`` is given, the store's reuse policy decides whether a result
-        recorded in a different context is returned.
+        A result produced by the job with uid ``produced_by`` is always returned.
+        Otherwise, when ``context`` is given, the store's reuse policy decides
+        whether a result recorded in a different context is returned.
         """
 
     def acquire(self, checksum: str) -> Lease:
@@ -105,14 +111,26 @@ class PickleStore:
     def cache_dir(self, checksum: str) -> Path:
         return self.cache_root / checksum
 
-    def lookup(self, checksum: str, context: Context | None = None) -> Result | None:
-        result = load_result(checksum, [self.cache_root] + self.readonly_caches)
-        if result is None or context is None or result.context == dict(context):
-            return result
-        if self.reuse == "exact":
-            return None
-        result.cross_context = True
-        return result
+    def lookup(
+        self,
+        checksum: str,
+        context: Context | None = None,
+        produced_by: str | None = None,
+    ) -> Result | None:
+        for location in [self.cache_root] + self.readonly_caches:
+            result = load_result(checksum, [location])
+            if result is None:
+                continue
+            if (
+                context is None
+                or (produced_by is not None and result.job_uid == produced_by)
+                or result.context == dict(context)
+            ):
+                return result
+            if self.reuse == "any":
+                result.cross_context = True
+                return result
+        return None
 
     def acquire(self, checksum: str) -> Lease:
         cache_dir = self.cache_dir(checksum)
