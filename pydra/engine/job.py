@@ -174,8 +174,8 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
-        # The context is that of the process the job runs in, so is not carried over
-        state.pop("_context", None)
+        # Carry the submitting process's context, so a worker judges reuse as it would
+        state["_context"] = self.context
         return state
 
     def __setstate__(self, state):
@@ -185,7 +185,7 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
-        self._context = None
+        self.__dict__.setdefault("_context", None)
 
     @classmethod
     def check_etelemetry(cls) -> None:
@@ -213,16 +213,20 @@ class Job(ty.Generic[TaskType]):
 
     @property
     def context(self) -> dict[str, str]:
-        """The execution context of the job, recorded beside its result and compared
-        with the context recorded on a result from an earlier job to decide whether to
-        reuse it."""
+        """The execution context of the process that submitted the job, compared with
+        the context recorded on a result from an earlier job to decide whether to reuse
+        it. It travels with the job, so the decision is the same in every process."""
         if self._context is None:
-            self._context = {
-                "environment_checksum": self.environment.checksum(),
-                "platform": f"{sys.platform}-{platform.machine()}",
-                "python_version": ".".join(platform.python_version_tuple()[:2]),
-            }
+            self._context = self._current_context()
         return self._context
+
+    def _current_context(self) -> dict[str, str]:
+        """The execution context of this process, recorded beside the job's result."""
+        return {
+            "environment_checksum": self.environment.checksum(),
+            "platform": f"{sys.platform}-{platform.machine()}",
+            "python_version": ".".join(platform.python_version_tuple()[:2]),
+        }
 
     @property
     def lockfile(self):
@@ -345,7 +349,7 @@ class Job(ty.Generic[TaskType]):
                 cache_dir=self.cache_dir,
                 task=self.task,
                 job_uid=self.uid,
-                **self.context,
+                **self._current_context(),
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -407,7 +411,7 @@ class Job(ty.Generic[TaskType]):
                 cache_dir=self.cache_dir,
                 task=self.task,
                 job_uid=self.uid,
-                **self.context,
+                **self._current_context(),
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
