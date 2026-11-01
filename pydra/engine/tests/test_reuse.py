@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import platform
 import sys
@@ -24,6 +25,13 @@ class PerProcess(native.Native):
 
     def _identity(self):
         return os.getpid()
+
+
+class InWorker(native.Native):
+    """A native environment whose identity tells a worker process from the main one."""
+
+    def _identity(self):
+        return multiprocessing.parent_process() is not None
 
 
 @python.define
@@ -182,3 +190,29 @@ def test_own_result_accepted_across_contexts(tmp_path):
         second = sub(AddOne(a=1))
     assert second.outputs.out == 2
     assert second.job_uid != first.job_uid
+
+
+def test_worker_judges_reuse_with_submitting_context(tmp_path):
+    """An entry written by a worker matches the next worker's context but not the
+    submitting process's, so the job reruns rather than never reading as done"""
+    results = []
+    for _ in range(2):
+        with Submitter(worker="cf", cache_root=tmp_path, environment=InWorker()) as sub:
+            results.append(sub(AddOne(a=1)))
+    first, second = results
+    assert first.environment_checksum != InWorker().checksum()
+    assert second.environment_checksum == first.environment_checksum
+    assert second.outputs.out == 2
+    assert second.job_uid != first.job_uid
+
+
+def test_worker_reuses_entry_accepted_by_submitting_context(tmp_path):
+    """An entry matching the submitting process's context is reused in the worker,
+    although the worker's own context differs, and the parent accepts it"""
+    with Submitter(worker="debug", cache_root=tmp_path, environment=InWorker()) as sub:
+        first = sub(AddOne(a=1))
+    assert first.environment_checksum == InWorker().checksum()
+    with Submitter(worker="cf", cache_root=tmp_path, environment=InWorker()) as sub:
+        second = sub(AddOne(a=1))
+    assert second.outputs.out == 2
+    assert second.job_uid == first.job_uid

@@ -191,7 +191,13 @@ class LazyOutField(LazyField[T]):
                 raise RuntimeError(
                     f"Could not find results of '{job.name}' node in a sub-directory "
                     f"named '{{{job.checksum}}}' in any of the cache locations.\n"
-                    + "\n".join(str(p) for p in set(job.readonly_caches))
+                    + "\n".join(
+                        str(p)
+                        for p in [
+                            job.cache_root,
+                            *getattr(job.store, "readonly_caches", []),
+                        ]
+                    )
                     + f"\n\nThis is likely due to hash changes in '{job.name}' node inputs. "
                     f"Current values and hashes: {job.inputs}, "
                     f"{job.task._hash}\n\n"
