@@ -76,6 +76,12 @@ class Submitter:
         start of the current run. Don't set if using a global cache where there are
         potentially multiple workflows that are running concurrently. By default (None),
         lock files will be cleaned if the *debug* worker is used
+    on_error : str, optional
+        What to do when a job errors: "fail_fast" stops at the first error and raises
+        it, "raise_at_end" keeps running every element that does not read an errored
+        or unrunnable upstream element, and raises the errors together at the end. By
+        default (None), "fail_fast" if the *debug* worker is used, otherwise
+        "raise_at_end"
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -91,6 +97,9 @@ class Submitter:
     clean_stale_locks: bool
     run_start_time: datetime | None
     propagate_rerun: bool
+    on_error: str
+
+    ON_ERROR_MODES = ("raise_at_end", "fail_fast")
 
     def __init__(
         self,
@@ -105,6 +114,7 @@ class Submitter:
         max_concurrent: int | float = float("inf"),
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
+        on_error: ty.Literal["raise_at_end", "fail_fast"] | None = None,
         **kwargs,
     ):
 
@@ -164,6 +174,15 @@ class Submitter:
             if clean_stale_locks is not None
             else (self.worker.plugin_name() == "debug")
         )
+        if on_error is None:
+            on_error = (
+                "fail_fast" if self.worker.plugin_name() == "debug" else "raise_at_end"
+            )
+        if on_error not in self.ON_ERROR_MODES:
+            raise ValueError(
+                f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
+            )
+        self.on_error = on_error
         self.worker_kwargs = kwargs
         self.worker.loop = self.loop
 
@@ -323,10 +342,20 @@ class Submitter:
         exec_graph = wf.execution_graph(submitter=self)
         wf_job.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
+        errors = []
         while tasks or any(not n.done for n in exec_graph.nodes):
             for job in tasks:
-                self.worker.run(job, rerun=rerun and self.propagate_rerun)
+                try:
+                    self.worker.run(job, rerun=rerun and self.propagate_rerun)
+                except Exception:
+                    if self.on_error == "fail_fast":
+                        raise
+                    # The job may have failed before it could save a result
+                    job._errored = True
+                    errors.append(job_error(job))
             tasks = self.get_runnable_tasks(exec_graph)
+        if errors:
+            raise workflow_error(wf_job, errors)
 
     async def expand_workflow_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
@@ -447,24 +476,14 @@ class Submitter:
                     try:
                         task_future.result()
                     except Exception:
-                        error_msg = format_exc()
-                        if match := re.match(
-                            r'.*"""(.*)""".*',
-                            error_msg,
-                            flags=re.DOTALL | re.MULTILINE,
-                        ):
-                            error_msg = match.group(1)
                         job = futured[task_future.get_name()]
                         # The job may have failed before it could save a result (e.g. if
                         # the worker was unable to run it), in which case it would
                         # otherwise remain queued indefinitely
                         job._errored = True
-                        task_name = job.name
-                        if job.state_index is not None:
-                            task_name += f"({job.state_index})"
-                        errors.append(
-                            f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
-                        )
+                        errors.append(job_error(job))
+                if errors and self.on_error == "fail_fast":
+                    break
                 tasks = self.get_runnable_tasks(exec_graph)
         finally:
             # Cancel any outstanding jobs if exiting early (e.g. due to an exception)
@@ -473,11 +492,7 @@ class Submitter:
             for task_future in task_futures:
                 task_future.cancel()
             if errors:
-                all_errors = "\n\n".join(errors)
-                raise RuntimeError(
-                    f"Workflow job {workflow_task} failed with errors"
-                    f":\n\n{all_errors}\n\nSee output directory for details: {workflow_task.cache_dir}"
-                )
+                raise workflow_error(workflow_task, errors)
 
     async def fetch_finished(
         self, futures
@@ -601,8 +616,10 @@ class NodeExecution(ty.Generic[TaskType]):
     successful: dict[int, list["Job[TaskType]"]]
     # List of tasks that failed
     errored: dict[int, "Job[TaskType]"]
-    # List of tasks that couldn't be run due to upstream errors
-    unrunnable: dict[int, list["Job[TaskType]"]]
+    # Elements that couldn't be run due to upstream errors, mapped to the upstream
+    # nodes whose errored or unrunnable elements they read (keyed by None if the whole
+    # node couldn't be started)
+    unrunnable: dict[int | None, list["NodeExecution"]]
     # List of tasks that are queued
     queued: dict[int, "Job[TaskType]"]
     # List of tasks that are queued
@@ -867,8 +884,8 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """For a given node, release the elements whose upstream elements have
-        completed successfully, or mark the node unrunnable if an upstream node has
-        errored.
+        completed successfully, and mark unrunnable the elements that read an errored
+        or unrunnable upstream element.
 
         Parameters
         ----------
@@ -881,20 +898,52 @@ class NodeExecution(ty.Generic[TaskType]):
             List of jobs that are ready to run
         """
         predecessors: list[NodeExecution] = graph.predecessors[self.node.name]
-        if unrunnable := [p for p in predecessors if p.errored or p.unrunnable]:
-            self.unrunnable = {None: unrunnable}
-            self.blocked = {}
-        else:
-            if not self.started and all(
-                p.done if self._splits_upstream_output else p.started
+        if not self.started:
+            resplit = self._splits_upstream_output
+            if unrunnable := [
+                p
                 for p in predecessors
-            ):
+                if (p._tasks is None and p.unrunnable)
+                or (resplit and (p.errored or p.unrunnable))
+            ]:
+                self.unrunnable = {None: unrunnable}
+                self.blocked = {}
+            elif all(p.done if resplit else p.started for p in predecessors):
                 self.start()
-            for index, upstream in list((self.blocked or {}).items()):
-                if all(i in p.successful for p, inds in upstream for i in inds):
-                    del self.blocked[index]
-                    self.queued[index] = self.job(index)
+        for index, upstream in list((self.blocked or {}).items()):
+            if unrunnable := list(
+                dict.fromkeys(
+                    p
+                    for p, inds in upstream
+                    if any(i in p.errored or i in p.unrunnable for i in inds)
+                )
+            ):
+                del self.blocked[index]
+                self.unrunnable[index] = unrunnable
+            elif all(i in p.successful for p, inds in upstream for i in inds):
+                del self.blocked[index]
+                self.queued[index] = self.job(index)
         return list(self.queued.values())
+
+
+def job_error(job: "Job") -> str:
+    """Describe the error of a job, called while its exception is being handled"""
+    error_msg = format_exc()
+    if match := re.match(r'.*"""(.*)""".*', error_msg, flags=re.DOTALL | re.MULTILINE):
+        error_msg = match.group(1)
+    task_name = job.name
+    if job.state_index is not None:
+        task_name += f"({job.state_index})"
+    return f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
+
+
+def workflow_error(wf_job: "Job[workflow.Task]", errors: list[str]) -> RuntimeError:
+    """The error raised at the end of a workflow whose jobs errored"""
+    all_errors = "\n\n".join(errors)
+    return RuntimeError(
+        f"Workflow job {wf_job} failed with errors:\n\n{all_errors}\n\n"
+        f"See output directory for details: {wf_job.cache_dir}"
+    )
 
 
 async def prepare_runnable(runnable):
