@@ -1,3 +1,4 @@
+import attrs
 import pytest
 from pydra.environments import native, docker, singularity, lmod
 
@@ -32,22 +33,43 @@ def test_rebuilt_image_changes_checksum_via_digest(env, monkeypatch):
     assert env(image="busybox").checksum() != before
 
 
-def test_environment_checksum_not_in_job_checksum(tmp_path):
+@attrs.define
+class Tagged(native.Native):
+    """A runnable environment whose identity is set by ``tag``."""
+
+    tag: str = ""
+
+
+def _run(tmp_path, env, worker="debug"):
     from pydra.compose import shell
     from pydra.engine.submitter import Submitter
     from pydra.engine.job import Job
 
-    Shelly = shell.define("whoami")
-    sums = {
-        Job(
-            task=Shelly(),
-            name="j",
-            submitter=Submitter(environment=env, cache_root=tmp_path),
-        ).checksum
-        for env in (
-            native.Native(),
-            docker.Docker(image="busybox", identity="x"),
-            docker.Docker(image="busybox", identity="y"),
-        )
-    }
-    assert len(sums) == 1
+    job = Job(
+        task=shell.define("whoami")(),
+        name="j",
+        submitter=Submitter(worker=worker, environment=env, cache_root=tmp_path),
+    )
+    job.run()
+    return job
+
+
+def test_environment_checksum_recorded_not_in_job_checksum(tmp_path):
+    a = _run(tmp_path / "a", Tagged(tag="a"))
+    b = _run(tmp_path / "b", Tagged(tag="b"))
+    assert a.checksum == b.checksum
+    assert a.result().environment_checksum == Tagged(tag="a").checksum()
+    assert b.result().environment_checksum == Tagged(tag="b").checksum()
+    assert a.result().environment_checksum != b.result().environment_checksum
+
+
+def test_environment_checksum_survives_reload(tmp_path):
+    from pydra.engine.result import load_result
+
+    job = _run(tmp_path, Tagged(tag="a"))
+    stored = load_result(job.checksum, [tmp_path])
+    assert stored.environment_checksum == Tagged(tag="a").checksum()
+
+
+def test_no_environment_records_none(tmp_path):
+    assert _run(tmp_path, None).result().environment_checksum is None
