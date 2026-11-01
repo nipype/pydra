@@ -1,5 +1,7 @@
 import typing as ty
 import os
+import json
+import hashlib
 from copy import copy
 import attrs
 import subprocess as sp
@@ -47,6 +49,24 @@ class Environment:
 
     def teardown(self):
         pass
+
+    def checksum(self) -> str:
+        """Identity of the environment, as a hex digest.
+
+        The job records it in ``Result.environment_checksum``. It is never part of
+        the job checksum, so rebuilding an environment does not change checksums.
+        """
+        return hashlib.sha256(
+            json.dumps(
+                [type(self).__qualname__, self._identity()],
+                sort_keys=True,
+                default=str,
+            ).encode()
+        ).hexdigest()
+
+    def _identity(self) -> ty.Any:
+        """The JSON-serialisable value the checksum is derived from."""
+        return attrs.asdict(self)
 
     @classmethod
     def available_plugins(cls) -> ty.Dict[str, ty.Type["Environment"]]:
@@ -105,12 +125,32 @@ class Container(Environment):
         Base path for mounting host directories into the container
     xargs : Union[str, List[str]]
         Extra arguments to be passed to the container
+    identity : str, optional
+        User-supplied identity of the image (e.g. its digest), used by ``checksum()``
+        instead of contacting a registry or hashing the image
     """
 
     image: str
     tag: str = "latest"
     root: str = "/mnt/pydra"
     xargs: list[str] = attrs.field(factory=list, converter=split_if_str)
+    identity: str | None = None
+    _digests: dict[int, str | None] = attrs.field(
+        factory=dict, init=False, repr=False, eq=False
+    )
+
+    def _identity(self) -> ty.Any:
+        if self.identity is not None:
+            return {"identity": self.identity}
+        # Resolved at most once per process
+        pid = os.getpid()
+        if pid not in self._digests:
+            self._digests[pid] = self._resolve_digest()
+        return {"digest": self._digests[pid], "image": self.image, "tag": self.tag}
+
+    def _resolve_digest(self) -> str | None:
+        """Digest of the image if it can be resolved cheaply, otherwise ``None``."""
+        return None
 
     def bind(self, loc, mode="ro"):
         loc_abs = Path(loc).absolute()

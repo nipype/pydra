@@ -21,6 +21,7 @@ from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
+from pydra.engine.store import PickleStore, ResultStore
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_root
 from pydra.compose import workflow
@@ -76,6 +77,15 @@ class Submitter:
         start of the current run. Don't set if using a global cache where there are
         potentially multiple workflows that are running concurrently. By default (None),
         lock files will be cleaned if the *debug* worker is used
+    store : ResultStore, optional
+        Where jobs run and their results are kept, by default a
+        :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
+        ``readonly_caches``
+    reuse : str, optional
+        Which stored results the default store reuses: ``"exact"`` (default) only
+        those produced in the same execution context (environment checksum, platform,
+        Python version), ``"any"`` those produced in any context. Set the policy on
+        the store itself when passing ``store``
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -89,6 +99,7 @@ class Submitter:
     messenger_args: dict[str, ty.Any]
     max_concurrent: int | float
     clean_stale_locks: bool
+    store: ResultStore
     run_start_time: datetime | None
     propagate_rerun: bool
 
@@ -105,6 +116,8 @@ class Submitter:
         max_concurrent: int | float = float("inf"),
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
+        store: ResultStore | None = None,
+        reuse: str | None = None,
         **kwargs,
     ):
 
@@ -128,6 +141,14 @@ class Submitter:
 
         self.cache_root = cache_root
         self.readonly_caches = readonly_caches
+        if store is None:
+            store = PickleStore(cache_root, readonly_caches, reuse=reuse or "exact")
+        elif reuse is not None:
+            raise ValueError(
+                "'reuse' applies to the default store, set it on the store passed as "
+                "'store' instead"
+            )
+        self.store = store
         self.propagate_rerun = propagate_rerun
         if max_concurrent < 1 or (
             isinstance(max_concurrent, float) and max_concurrent != float("inf")
