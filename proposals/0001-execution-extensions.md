@@ -41,7 +41,7 @@ was loaded, so treat timings as upper bounds.
 - cheap per-item execution;
 - a cache that is safe to share, with an optional Python-version-neutral result format;
 - several workers per run;
-- Python tasks in environments, with environment identity in the checksum;
+- Python tasks in environments, with the environment's identity recorded beside each result;
 - per-task resources;
 - long-lived worker-scoped objects with batching;
 - a robust Slurm worker;
@@ -100,7 +100,7 @@ Anything new is opt-in until maintainers decide otherwise.
   changes.
   ```python
   class ResultStore(Protocol):
-      def lookup(self, checksum: str) -> Result | None: ...
+      def lookup(self, checksum: str, context: Context | None = None) -> Result | None: ...
       def acquire(self, checksum: str) -> Lease: ...   # replaces the run-long SoftFileLock
       def commit(self, lease: Lease, result: Result) -> None: ...
   ```
@@ -139,8 +139,11 @@ Anything new is opt-in until maintainers decide otherwise.
 
 ### 3.5 Environment identity, and Python tasks in environments
 - **Step 1: identity (independent; closes #826).**
-  - Add `Environment.checksum()`, folded into the job checksum.
-  - `Native` and `Lmod` contribute nothing, so existing caches keep their hashes.
+  - Add `Environment.checksum()`. It is recorded in the execution context beside the result
+    (3.11) and is offered to the reuse policy. It is **not** folded into the job checksum by
+    default, so rebuilding an environment or moving between machines does not change checksums.
+  - Folding it is opt-in (`Submitter(fold_environment=True)`), for users who want a result to be
+    reusable only in the same environment. With the option off, existing caches keep their hashes.
   - `Docker` and `Singularity` accept a user-supplied `identity=`. That avoids contacting a
     registry or hashing a multi-GB image at hash time; a resolved digest is used when available.
 - **Step 2: Python tasks in environments** (closes #840; depends on 3.3, step 3).
@@ -203,12 +206,36 @@ Anything new is opt-in until maintainers decide otherwise.
   guards it: changing the source without bumping the version fails. Types can register their own
   byte representation, extending `__bytes_repr__`, so domain objects hash portably.
 - **Execution context.** Each cache entry records the context that produced it (environment
-  checksum from 3.5, platform, Python version) beside the result, outside the checksum.
+  checksum from 3.5, platform, Python version) beside the result, outside the checksum. The
+  context is recorded, not keyed.
 - **Reuse policy.** `Submitter(reuse="exact" | "any")`, with `exact` as the default and today's
   behaviour. `"exact"` reuses only entries from the same context; `"any"` reuses across contexts
-  and marks the result as such. Downstream projects can plug in richer policies, such as measured
-  equivalence classes.
+  and marks the result as such. Richer policies plug in through the hook in K2.
 - **Risk:** low to medium. It is opt-in, and the default keeps today's checksums.
+
+### 3.12 Node-supplied checksum and the reuse hook (K2)
+- **Problem.** K1 lets a task declare a `version`, but pydra still computes the checksum itself,
+  over (version, input byte representations). A downstream project that already has a logical
+  identity for a task (inputs, task, model weights) cannot make pydra's checksum equal it.
+  Hashes show exactness only, not distance, so whether a result from another context may be
+  reused is a policy decision and not something the checksum can answer.
+- **Checksum hook.** A task class may define `__checksum__(self, inputs) -> str`, or the
+  `define` decorator may take `checksum=callable`. When present, pydra uses its return value as
+  the job checksum and does not hash the function or the input values. Nothing else about the job
+  changes. The hook receives the same resolved inputs pydra would hash, so it can digest
+  upstream output identities. Tasks without the hook keep today's checksums.
+- **Equality.** For a task that supplies `__checksum__`, `Job.checksum` equals the supplied value
+  exactly. A downstream project whose logical key is that value therefore has one identifier
+  for the cache entry in pydra and in its own store: pydra's checksum equals the project's key.
+  The key is portable, so the same inputs, task and model weights give the same checksum on
+  every machine, in every environment.
+- **Reuse hook.** `ResultStore.lookup(checksum, context)` receives the current execution
+  context. The store compares it with the context recorded on the entry through a
+  `ReusePolicy` protocol: `accept(stored: Context, current: Context, task) -> bool`. The built-in
+  `exact` and `any` policies implement it. A downstream project registers its own, for example
+  one that accepts contexts in the same measured equivalence class (`equivalent`) or within a
+  numeric tolerance (`tolerant`). An accepted entry is returned marked with the stored context.
+- **Risk:** low. The hooks are opt-in and the defaults keep today's checksums and behaviour.
 
 ### 3.10 Graph runner and executor split: a separate RFC
 - Separating `ready()`, `complete()` and `plan()` from execution would let external orchestrators
@@ -240,6 +267,7 @@ Anything new is opt-in until maintainers decide otherwise.
 | J1 | provenance via messengers | G1, D1 |
 | J2 | `plan()` | F2, B2 |
 | K1 | declared task identity + context-aware reuse | G1, D1 |
+| K2 | node-supplied checksum (`__checksum__`), `lookup(checksum, context)`, `ReusePolicy` hook | K1 |
 
 Each PR has tests on `debug` and `cf`, and on Slurm where relevant. PRs merge to `main` when the
 maintainers accept them and ship in the next 1.0 alpha. Downstream projects can track this branch
