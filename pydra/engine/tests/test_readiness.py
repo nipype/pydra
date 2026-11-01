@@ -296,8 +296,9 @@ def test_readiness_async(tmp_path):
 
 
 # Each case: the workflow, the upstream elements that succeed before the failure (which
-# release downstream element 0), the upstream element that fails, the output of
-# downstream element 0, and the error the failing element raises.
+# release downstream element 0), the upstream element that fails (read by downstream
+# element 1), the output of downstream element 0, and the error the failing element
+# raises.
 FAILING = {
     "per-element": (
         UpstreamFails(x=[2, 1]),
@@ -320,7 +321,7 @@ FAILING = {
 @pytest.mark.parametrize("case", FAILING)
 def test_readiness_upstream_fails_after_release(case, tmp_path):
     """An upstream element that fails after a downstream element has been released
-    marks the rest of the downstream node unrunnable, while the released element
+    marks the downstream element that reads it unrunnable, while the released element
     still runs and the node completes"""
     task, succeed, fail, output, error = FAILING[case]
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
@@ -338,7 +339,7 @@ def test_readiness_upstream_fails_after_release(case, tmp_path):
         assert list(upstream.errored) == [fail]
         released = downstream.get_runnable_tasks(graph)
         assert [j.state_index for j in released] == [0]
-        assert downstream.unrunnable == {None: [upstream]}
+        assert downstream.unrunnable == {1: [upstream]}
         assert downstream.blocked == {}
         assert not downstream.done
         assert released[0].run().outputs.out == output
