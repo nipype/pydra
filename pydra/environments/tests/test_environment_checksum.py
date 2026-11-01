@@ -71,5 +71,7 @@ def test_environment_checksum_survives_reload(tmp_path):
     assert stored.environment_checksum == Tagged(tag="a").checksum()
 
 
-def test_no_environment_records_none(tmp_path):
-    assert _run(tmp_path, None).result().environment_checksum is None
+def test_default_environment_records_native_checksum(tmp_path):
+    assert (
+        _run(tmp_path, None).result().environment_checksum == native.Native().checksum()
+    )
