@@ -46,6 +46,8 @@ develop = False
 
 WORKER_KWARG_FAIL_NOTE = "Attempting to instantiate worker submitter"
 
+OnError = ty.Literal["raise_at_end", "fail_fast"]
+
 
 class Submitter:
     """Send a job to the execution backend.
@@ -80,7 +82,7 @@ class Submitter:
         What to do when a job errors: "fail_fast" stops at the first error and raises
         it, "raise_at_end" keeps running every element that does not read an errored
         or unrunnable upstream element, and raises the errors together at the end. By
-        default (None), "fail_fast" if the *debug* worker is used, otherwise
+        default (None), "fail_fast" for synchronous workers such as *debug*, otherwise
         "raise_at_end"
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
@@ -97,9 +99,11 @@ class Submitter:
     clean_stale_locks: bool
     run_start_time: datetime | None
     propagate_rerun: bool
-    on_error: str
+    on_error: OnError
+    # The error summary of the last run, one entry per errored job
+    errors: list[str]
 
-    ON_ERROR_MODES = ("raise_at_end", "fail_fast")
+    ON_ERROR_MODES = ty.get_args(OnError)
 
     def __init__(
         self,
@@ -114,7 +118,7 @@ class Submitter:
         max_concurrent: int | float = float("inf"),
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
-        on_error: ty.Literal["raise_at_end", "fail_fast"] | None = None,
+        on_error: OnError | None = None,
         **kwargs,
     ):
 
@@ -175,14 +179,13 @@ class Submitter:
             else (self.worker.plugin_name() == "debug")
         )
         if on_error is None:
-            on_error = (
-                "fail_fast" if self.worker.plugin_name() == "debug" else "raise_at_end"
-            )
+            on_error = "raise_at_end" if self.worker.is_async else "fail_fast"
         if on_error not in self.ON_ERROR_MODES:
             raise ValueError(
                 f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
             )
         self.on_error = on_error
+        self.errors = []
         self.worker_kwargs = kwargs
         self.worker.loop = self.loop
 
@@ -268,10 +271,12 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
+        self.errors = []
         try:
             self.run_start_time = datetime.now()
             self.submit(job, rerun=rerun)
         except Exception as exc:
+            self.errors = getattr(exc, "errors", [])
             error_msg = (
                 f"Full crash report for {type(task).__name__!r} job is here: "
                 + str(job.cache_dir / "_error.pklz")
@@ -940,10 +945,12 @@ def job_error(job: "Job") -> str:
 def workflow_error(wf_job: "Job[workflow.Task]", errors: list[str]) -> RuntimeError:
     """The error raised at the end of a workflow whose jobs errored"""
     all_errors = "\n\n".join(errors)
-    return RuntimeError(
+    error = RuntimeError(
         f"Workflow job {wf_job} failed with errors:\n\n{all_errors}\n\n"
         f"See output directory for details: {wf_job.cache_dir}"
     )
+    error.errors = errors
+    return error
 
 
 async def prepare_runnable(runnable):
