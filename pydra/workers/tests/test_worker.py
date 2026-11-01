@@ -746,6 +746,9 @@ def _squeue_job_ids(name):
 def test_slurm_cancelled_not_requeued(tmp_path):
     """A cancelled job fails the submission and is not requeued.
 
+    The job is cancelled as soon as it is queued, so the test does not depend on
+    how long it waits to start.
+
     Only the job id this test submitted is ever cancelled.
     """
     import threading
@@ -764,9 +767,8 @@ def test_slurm_cancelled_not_requeued(tmp_path):
             jobs = _squeue_job_ids(name)
             if jobs:
                 seen.append(jobs[0][0])
-                if jobs[0][1] == "R":
-                    sp.run(["scancel", jobs[0][0]], timeout=30)
-                    return
+                sp.run(["scancel", jobs[0][0]], timeout=30)
+                return
             time.sleep(1)
 
     thread = threading.Thread(target=cancel_when_running, daemon=True)
