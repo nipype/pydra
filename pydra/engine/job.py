@@ -163,7 +163,7 @@ class Job(ty.Generic[TaskType]):
     @property
     def is_async(self) -> bool:
         """Check to see if the job should be run asynchronously."""
-        return self.submitter.worker.is_async and is_workflow(self.task)
+        return is_workflow(self.task) and self.submitter.worker_for(self).is_async
 
     @cache_root.setter
     def cache_root(self, path: os.PathLike):

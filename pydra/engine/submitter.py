@@ -26,6 +26,7 @@ from pydra.utils.general import default_run_cache_root
 from pydra.compose import workflow
 from pydra.engine.state import State
 from pydra.workers.base import Worker
+from pydra.utils.routing import DEFAULT_WORKER, Router, default_router
 from pydra.compose.base import Task, Outputs
 
 logger = logging.getLogger("pydra.submitter")
@@ -56,7 +57,15 @@ class Submitter:
         Cache directory where the working directory/results for the job will be
         stored, by default None
     worker : str or Worker, optional
-        The worker to use, by default "cf"
+        The worker to use, by default "cf". It runs every job the router does not send
+        elsewhere, and is available to the router under the name ``"default"``
+    workers : dict[str, str or Worker], optional
+        Further workers by name (each a worker name, class or object), for the router to
+        choose between. The name ``"default"`` is reserved for ``worker``
+    router : callable, optional
+        Called with each :class:`~pydra.engine.job.Job` at dispatch, returns the name of
+        the worker to run it on (or ``None`` for ``worker``). By default every job goes
+        to ``worker``. See :func:`pydra.utils.routing.tag_router`
     environment: Environment, optional
         The execution environment to use, by default None
     readonly_caches : list[os.PathLike], optional
@@ -82,6 +91,8 @@ class Submitter:
 
     cache_root: os.PathLike
     worker: Worker
+    workers: dict[str, Worker]
+    router: Router
     environment: "Environment | None"
     readonly_caches: list[os.PathLike]
     audit_flags: AuditFlag
@@ -97,6 +108,8 @@ class Submitter:
         /,
         cache_root: os.PathLike | None = None,
         worker: str | ty.Type[Worker] | Worker | None = "debug",
+        workers: "dict[str, str | ty.Type[Worker] | Worker] | None" = None,
+        router: Router | None = None,
         environment: "Environment | None" = None,
         readonly_caches: list[os.PathLike] | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
@@ -112,6 +125,17 @@ class Submitter:
 
         if worker is None:
             worker = "debug"
+        if workers is None:
+            workers = {}
+        if DEFAULT_WORKER in workers:
+            raise ValueError(
+                f"{DEFAULT_WORKER!r} is reserved for the 'worker' argument, "
+                "name the extra worker something else"
+            )
+        if router is None:
+            router = default_router
+        elif not callable(router):
+            raise TypeError(f"'router' must be callable, not {router!r}")
 
         Job.check_etelemetry()
 
@@ -142,22 +166,12 @@ class Submitter:
         )
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
-        if not isinstance(worker, Worker):
-            if isinstance(worker, str):
-                worker_cls = Worker.plugin(worker)
-            elif issubclass(worker, Worker):
-                worker_cls = worker
-            else:
-                raise TypeError(
-                    "Worker must be a Worker object, name of a worker or a Worker "
-                    f"class, not {worker}"
-                )
-            try:
-                worker = worker_cls(**kwargs)
-            except TypeError as e:
-                e.add_note(WORKER_KWARG_FAIL_NOTE)
-                raise
+        worker = self._make_worker(worker, kwargs)
         self.worker = worker
+        self.router = router
+        self.workers = {DEFAULT_WORKER: worker}
+        for name, spec in workers.items():
+            self.workers[name] = self._make_worker(spec, {})
         self.run_start_time = None
         self.clean_stale_locks = (
             clean_stale_locks
@@ -165,7 +179,43 @@ class Submitter:
             else (self.worker.plugin_name() == "debug")
         )
         self.worker_kwargs = kwargs
-        self.worker.loop = self.loop
+        for each in self.workers.values():
+            each.loop = self.loop
+
+    @staticmethod
+    def _make_worker(
+        worker: "str | ty.Type[Worker] | Worker", kwargs: dict[str, ty.Any]
+    ) -> Worker:
+        """Instantiate a worker from its name or class, or pass an object through."""
+        if isinstance(worker, Worker):
+            return worker
+        if isinstance(worker, str):
+            worker_cls = Worker.plugin(worker)
+        elif isinstance(worker, type) and issubclass(worker, Worker):
+            worker_cls = worker
+        else:
+            raise TypeError(
+                "Worker must be a Worker object, name of a worker or a Worker "
+                f"class, not {worker}"
+            )
+        try:
+            return worker_cls(**kwargs)
+        except TypeError as e:
+            e.add_note(WORKER_KWARG_FAIL_NOTE)
+            raise
+
+    def worker_for(self, job: "Job[TaskType]") -> Worker:
+        """The worker the router sends a job to."""
+        name = self.router(job)
+        if name is None:
+            name = DEFAULT_WORKER
+        try:
+            return self.workers[name]
+        except KeyError:
+            raise ValueError(
+                f"The router sent job {job.name!r} to {name!r}, which is not one of "
+                f"the submitter's workers: {sorted(self.workers)}"
+            ) from None
 
     def __call__(
         self,
@@ -289,10 +339,11 @@ class Submitter:
             Whether to force the re-computation of the job results even if existing
             results are found, by default False
         """
-        if self.worker.is_async:  # Only workflow tasks can be async
-            self.loop.run_until_complete(self.worker.submit(job, rerun=rerun))
+        worker = self.worker_for(job)
+        if worker.is_async:  # Only workflow tasks can be async
+            self.loop.run_until_complete(worker.submit(job, rerun=rerun))
         else:
-            self.worker.run(job, rerun=rerun)
+            worker.run(job, rerun=rerun)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -303,9 +354,10 @@ class Submitter:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        # Restore the loop and worker
+        # Restore the loop and workers
         self.loop = get_open_loop()
-        self.worker.loop = self.loop
+        for worker in self.workers.values():
+            worker.loop = self.loop
 
     def expand_workflow(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
         """Expands and executes a workflow job synchronously. Typically only used during
@@ -325,7 +377,7 @@ class Submitter:
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
             for job in tasks:
-                self.worker.run(job, rerun=rerun and self.propagate_rerun)
+                self.submit(job, rerun=rerun and self.propagate_rerun)
             tasks = self.get_runnable_tasks(exec_graph)
 
     async def expand_workflow_async(
@@ -431,14 +483,14 @@ class Submitter:
                             raise RuntimeError(msg)
                 for job in tasks:
                     if job.checksum not in futured:
+                        worker = self.worker_for(job)
+                        job_rerun = rerun and self.propagate_rerun
                         if job.is_async:  # Only workflows at this stage
-                            coroutine = self.worker.submit(
-                                job, rerun=rerun and self.propagate_rerun
-                            )
-                        else:
-                            coroutine = self.worker.run(
-                                job, rerun=rerun and self.propagate_rerun
-                            )
+                            coroutine = worker.submit(job, rerun=job_rerun)
+                        elif worker.is_async:
+                            coroutine = worker.run(job, rerun=job_rerun)
+                        else:  # a synchronous worker, run in this loop
+                            coroutine = _run_blocking(worker, job, job_rerun)
                         asyncio_task = asyncio.Task(coroutine, name=job.checksum)
                         task_futures.add(asyncio_task)
                         futured[job.checksum] = job
@@ -522,7 +574,8 @@ class Submitter:
         Do not close previously queued loop.
 
         """
-        self.worker.close()
+        for worker in self.workers.values():
+            worker.close()
         if self._own_loop:
             self.loop.close()
 
@@ -917,6 +970,11 @@ class NodeExecution(ty.Generic[TaskType]):
                     runnable.append(self.blocked.pop(index))
         self.queued.update({t.state_index: t for t in runnable})
         return list(self.queued.values())
+
+
+async def _run_blocking(worker: Worker, job: "Job", rerun: bool) -> "Result":
+    """Run a job on a synchronous worker from within the event loop."""
+    return worker.run(job, rerun=rerun)
 
 
 async def prepare_runnable(runnable):
