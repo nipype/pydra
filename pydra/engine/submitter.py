@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from traceback import format_exc
 from tempfile import mkdtemp
-from copy import copy, deepcopy
+from copy import deepcopy
 from datetime import datetime
 from collections import defaultdict
 import attrs
@@ -18,7 +18,7 @@ from pydra.utils.general import (
     attrs_values,
 )
 from pydra.utils.hash import PersistentCache
-from pydra.engine.lazy import LazyField
+from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
 from pydra.utils.messenger import AuditFlag, Messenger
@@ -607,10 +607,12 @@ class NodeExecution(ty.Generic[TaskType]):
     queued: dict[int, "Job[TaskType]"]
     # List of tasks that are queued
     running: dict[int, tuple["Job[TaskType]", datetime]]
-    # List of tasks that are blocked on other tasks to complete before they can be run
-    blocked: dict[int, "Job[TaskType]"] | None
+    # Elements that are waiting on upstream elements, mapped to the upstream nodes and
+    # the indices of their elements that they read
+    blocked: dict[int | None, list[tuple["NodeExecution", list[int | None]]]] | None
 
-    _tasks: dict[int | None, "Job[TaskType]"] | None
+    # Jobs of the elements, created when they are released or first read
+    _tasks: dict[int | None, "Job[TaskType] | None"] | None
 
     workflow: "Workflow"
 
@@ -657,14 +659,35 @@ class NodeExecution(ty.Generic[TaskType]):
         return self.node._task
 
     @property
-    def tasks(self) -> ty.Generator["Job[TaskType]", None, None]:
+    def tasks(self) -> list["Job[TaskType]"]:
         if self._tasks is None:
             raise RuntimeError("Tasks have not been generated")
-        return self._tasks.values()
+        return [self.job(index) for index in self._tasks]
+
+    def job(self, index: int | None) -> "Job[TaskType]":
+        """The job of one element of the node, created on first use. The upstream
+        elements that its lazy inputs read must have completed by then.
+
+        Parameters
+        ----------
+        index : int or None
+            The state index of the element, None if the node has no state
+        """
+        if (job := self._tasks[index]) is None:
+            job = self._tasks[index] = Job(
+                task=self._split_task(index),
+                submitter=self.submitter,
+                environment=self.node._environment,
+                name=self.node.name,
+                hooks=self.node._hooks,
+                state_index=index,
+            )
+        return job
 
     def start(self) -> None:
-        """Prepare the execution node so that it can be processed"""
-        self._tasks = {}
+        """Prepare the state of the node and the upstream elements each of its elements
+        reads, which only needs the upstream states, not their results (unless the node
+        splits over an upstream output)"""
         if self.state:
             values = {}
             for name, value in self.node.state_values.items():
@@ -679,25 +702,11 @@ class NodeExecution(ty.Generic[TaskType]):
                         values[name] = value
             self.state.prepare_states(values)
             self.state.prepare_inputs()
-            # Generate the tasks
-            for index, split_defn in enumerate(self._split_task()):
-                self._tasks[index] = Job(
-                    task=split_defn,
-                    submitter=self.submitter,
-                    environment=self.node._environment,
-                    name=self.node.name,
-                    hooks=self.node._hooks,
-                    state_index=index,
-                )
+            indices = range(len(self.state.states_ind))
         else:
-            self._tasks[None] = Job(
-                task=self._resolve_lazy_inputs(task=self.node._task),
-                submitter=self.submitter,
-                environment=self.node._environment,
-                hooks=self.node._hooks,
-                name=self.node.name,
-            )
-        self.blocked = copy(self._tasks)
+            indices = [None]
+        self._tasks = dict.fromkeys(indices)
+        self.blocked = {index: self._upstream(index) for index in indices}
 
     @property
     def started(self) -> bool:
@@ -792,128 +801,115 @@ class NodeExecution(ty.Generic[TaskType]):
                 )
         return attrs.evolve(task, **resolved)
 
-    def _split_task(self) -> dict[int, "Task[OutputType]"]:
-        """Split the task into the different states it will be run over
+    def _split_task(self, index: int | None) -> "Task[OutputType]":
+        """Resolve the task of one element of the node from its state values and the
+        upstream values its lazy inputs read
 
         Parameters
         ----------
-        values : dict[str, Any]
-            The values to use for the split
+        index : int or None
+            The state index of the element, None if the node has no state
         """
-        # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
-        if not self.node.state:
-            return {None: self.node._task}
-        split_defs = []
-        for index, vals in zip(self.node.state.inputs_ind, self.node.state.states_val):
-            resolved = {}
-            for inpt_name in set(self.node.input_names):
-                value = getattr(self._task, inpt_name)
-                state_key = f"{self.node.name}.{inpt_name}"
-                try:
-                    resolved[inpt_name] = vals[state_key]
-                except KeyError:
-                    if isinstance(value, LazyField):
-                        resolved[inpt_name] = value._get_value(
-                            workflow=self.workflow,
-                            graph=self.graph,
-                            state_index=index.get(state_key),
-                        )
-            split_defs.append(attrs.evolve(self.node._task, **resolved))
-        return split_defs
+        if index is None:
+            return self._resolve_lazy_inputs(task=self.node._task)
+        vals = self.state.states_val[index]
+        inputs_ind = self.state.inputs_ind[index]
+        resolved = {}
+        for inpt_name in set(self.node.input_names):
+            value = getattr(self._task, inpt_name)
+            state_key = f"{self.node.name}.{inpt_name}"
+            try:
+                resolved[inpt_name] = vals[state_key]
+            except KeyError:
+                if isinstance(value, LazyField):
+                    resolved[inpt_name] = value._get_value(
+                        workflow=self.workflow,
+                        graph=self.graph,
+                        state_index=inputs_ind.get(state_key),
+                    )
+        return attrs.evolve(self.node._task, **resolved)
+
+    def _upstream(
+        self, index: int | None
+    ) -> list[tuple["NodeExecution", list[int | None]]]:
+        """The upstream nodes, and the indices of their elements, that the lazy inputs
+        of one element read when its task is resolved by ``_split_task``
+
+        Parameters
+        ----------
+        index : int or None
+            The state index of the element, None if the node has no state
+        """
+        vals = self.state.states_val[index] if self.state else {}
+        inputs_ind = self.state.inputs_ind[index] if self.state else {}
+        upstream = []
+        for name, value in attrs_values(self.node._task).items():
+            state_key = f"{self.name}.{name}"
+            if isinstance(value, LazyOutField) and state_key not in vals:
+                node = self.graph.node(value._node.name)
+                upstream.append((node, node._read_indices(inputs_ind.get(state_key))))
+        return upstream
+
+    def _read_indices(self, state_index: int | None) -> list[int | None]:
+        """The indices of the elements of this node that a downstream lazy field reads
+        at the given state index (see ``LazyOutField._get_value``)
+
+        Parameters
+        ----------
+        state_index : int or None
+            The state index the lazy field is read at, None to read all elements
+        """
+        if not self.state:
+            return [None]
+        indices = range(len(self.state.states_ind))
+        if state_index is None or (self.state.combiner and not self.state.ind_l_final):
+            return list(indices)
+        if self.state.combiner:
+            group = set(self.state.states_ind_final[state_index].items())
+            return [
+                i for i in indices if group <= set(self.state.states_ind[i].items())
+            ]
+        return [state_index]
+
+    @property
+    def _splits_upstream_output(self) -> bool:
+        """Whether the node's own splitter splits over an upstream output, in which case
+        its state can only be prepared once the upstream nodes are done"""
+        return bool(self.state) and any(
+            isinstance(value, LazyOutField)
+            for name, value in self.node.state_values.items()
+            if name in self.state.current_splitter_rpn
+        )
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
-        """For a given node, check to see which tasks have been successfully run, are ready
-        to run, can't be run due to upstream errors, or are blocked on other tasks to complete.
+        """For a given node, release the elements whose upstream elements have
+        completed successfully, or mark the node unrunnable if an upstream node has
+        errored.
 
         Parameters
         ----------
-        node : :obj:`~pydra.engine.node.Node`
-            The node object to get the tasks for
         graph : :obj:`~pydra.engine.graph.DiGraph`
             Graph object
 
-
         Returns
         -------
-        runnable : list[NodeExecution]
-            List of tasks that are ready to run
+        runnable : list[Job]
+            List of jobs that are ready to run
         """
-        runnable: list["Job[TaskType]"] = []
-        predecessors: list["Job[TaskType]"] = graph.predecessors[self.node.name]
-
-        # If there is a split, we need to wait for all predecessor nodes to finish
-        # In theory, if the current splitter splits an already split state we should
-        # only need to wait for the direct predecessor jobs to finish, however, this
-        # would require a deep refactor of the State class as we need the whole state
-        # in order to assign consistent state indices across the new split
-
-        # FIXME: The branch for handling partially completed/errored/unrunnable
-        # predecessor nodes can't be used until the State class can be partially
-        # initialised with lazy-fields.
-        if True:  # self.node.splitter:
-            if unrunnable := [p for p in predecessors if p.errored or p.unrunnable]:
-                self.unrunnable = {None: unrunnable}
-                self.blocked = {}
-                assert self.done
-            else:
-                if all(p.done for p in predecessors):
-                    if not self.started:
-                        self.start()
-                    if self.node.state is None:
-                        inds = [None]
-                    else:
-                        inds = list(range(len(self.node.state.states_ind)))
-                    if self.blocked:
-                        for i in inds:
-                            runnable.append(self.blocked.pop(i))
+        predecessors: list[NodeExecution] = graph.predecessors[self.node.name]
+        if unrunnable := [p for p in predecessors if p.errored or p.unrunnable]:
+            self.unrunnable = {None: unrunnable}
+            self.blocked = {}
         else:
-            if not self.started:
+            if not self.started and all(
+                p.done if self._splits_upstream_output else p.started
+                for p in predecessors
+            ):
                 self.start()
-
-            # Check to see if any blocked tasks are now runnable/unrunnable
-            for index, job in list(self.blocked.items()):
-                pred: NodeExecution
-                is_runnable = True
-                states_ind = (
-                    list(self.node.state.states_ind[index].items())
-                    if self.node.state
-                    else []
-                )
-                for pred in predecessors:
-                    if pred.node.state:
-                        pred_states_ind = {
-                            (k, i)
-                            for k, i in states_ind
-                            if k.startswith(pred.name + ".")
-                        }
-                        pred_inds = [
-                            i
-                            for i, ind in enumerate(pred.node.state.states_ind)
-                            if set(ind.items()).issuperset(pred_states_ind)
-                        ]
-                    else:
-                        pred_inds = [None]
-                    if not all(i in pred.successful for i in pred_inds):
-                        is_runnable = False
-                        blocked = True
-                        if pred_errored := [
-                            pred.errored[i] for i in pred_inds if i in pred.errored
-                        ]:
-                            self.unrunnable[index].extend(pred_errored)
-                            blocked = False
-                        if pred_unrunnable := [
-                            pred.unrunnable[i]
-                            for i in pred_inds
-                            if i in pred.unrunnable
-                        ]:
-                            self.unrunnable[index].extend(pred_unrunnable)
-                            blocked = False
-                        if not blocked:
-                            del self.blocked[index]
-                        break
-                if is_runnable:
-                    runnable.append(self.blocked.pop(index))
-        self.queued.update({t.state_index: t for t in runnable})
+            for index, upstream in list((self.blocked or {}).items()):
+                if all(i in p.successful for p, inds in upstream for i in inds):
+                    del self.blocked[index]
+                    self.queued[index] = self.job(index)
         return list(self.queued.values())
 
 
