@@ -16,6 +16,7 @@ from pydra.engine.graph import DiGraph
 from pydra.utils.general import (
     get_fields,
     attrs_values,
+    is_workflow,
 )
 from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField, LazyOutField
@@ -27,6 +28,7 @@ from pydra.utils.general import default_run_cache_root
 from pydra.compose import workflow
 from pydra.engine.state import State
 from pydra.workers.base import Worker
+from pydra.utils.routing import DEFAULT_WORKER, Router, default_router
 from pydra.compose.base import Task, Outputs
 
 logger = logging.getLogger("pydra.submitter")
@@ -59,7 +61,15 @@ class Submitter:
         Cache directory where the working directory/results for the job will be
         stored, by default None
     worker : str or Worker, optional
-        The worker to use, by default "cf"
+        The worker to use, by default "cf". It runs every job the router does not send
+        elsewhere, and is available to the router under the name ``"default"``
+    workers : dict[str, str or Worker], optional
+        Further workers by name (each a worker name, class or object), for the router to
+        choose between. The name ``"default"`` is reserved for ``worker``
+    router : callable, optional
+        Called with each :class:`~pydra.engine.job.Job` at dispatch, returns the name of
+        the worker to run it on (or ``None`` for ``worker``). By default every job goes
+        to ``worker``. See :func:`pydra.utils.routing.tag_router`
     environment: Environment, optional
         The execution environment to use, by default None
     readonly_caches : list[os.PathLike], optional
@@ -92,14 +102,18 @@ class Submitter:
         What to do when a job errors: "fail_fast" stops at the first error and raises
         it, "raise_at_end" keeps running every element that does not read an errored
         or unrunnable upstream element, and raises the errors together at the end. By
-        default (None), "fail_fast" for synchronous workers such as *debug*, otherwise
-        "raise_at_end"
+        default (None), the mode of the loop that expands the workflow: "fail_fast"
+        where the router sends the workflow to a synchronous worker such as *debug*,
+        otherwise "raise_at_end". The ``on_error`` attribute then holds the mode for
+        a workflow sent to ``worker``
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
 
     cache_root: os.PathLike
     worker: Worker
+    workers: dict[str, Worker]
+    router: Router
     environment: "Environment | None"
     readonly_caches: list[os.PathLike]
     audit_flags: AuditFlag
@@ -121,6 +135,8 @@ class Submitter:
         /,
         cache_root: os.PathLike | None = None,
         worker: str | ty.Type[Worker] | Worker | None = "debug",
+        workers: "dict[str, str | ty.Type[Worker] | Worker] | None" = None,
+        router: Router | None = None,
         environment: "Environment | None" = None,
         readonly_caches: list[os.PathLike] | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
@@ -139,6 +155,17 @@ class Submitter:
 
         if worker is None:
             worker = "debug"
+        if workers is None:
+            workers = {}
+        if DEFAULT_WORKER in workers:
+            raise ValueError(
+                f"{DEFAULT_WORKER!r} is reserved for the 'worker' argument, "
+                "name the extra worker something else"
+            )
+        if router is None:
+            router = default_router
+        elif not callable(router):
+            raise TypeError(f"'router' must be callable, not {router!r}")
 
         Job.check_etelemetry()
 
@@ -177,38 +204,70 @@ class Submitter:
         )
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
-        if not isinstance(worker, Worker):
-            if isinstance(worker, str):
-                worker_cls = Worker.plugin(worker)
-            elif issubclass(worker, Worker):
-                worker_cls = worker
-            else:
-                raise TypeError(
-                    "Worker must be a Worker object, name of a worker or a Worker "
-                    f"class, not {worker}"
-                )
-            try:
-                worker = worker_cls(**kwargs)
-            except TypeError as e:
-                e.add_note(WORKER_KWARG_FAIL_NOTE)
-                raise
+        worker = self._make_worker(worker, kwargs)
         self.worker = worker
+        self.router = router
+        self.workers = {DEFAULT_WORKER: worker}
+        for name, spec in workers.items():
+            self.workers[name] = self._make_worker(spec, {})
         self.run_start_time = None
         self.clean_stale_locks = (
             clean_stale_locks
             if clean_stale_locks is not None
             else (self.worker.plugin_name() == "debug")
         )
-        if on_error is None:
-            on_error = "raise_at_end" if self.worker.is_async else "fail_fast"
-        if on_error not in self.ON_ERROR_MODES:
+        if on_error is not None and on_error not in self.ON_ERROR_MODES:
             raise ValueError(
                 f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
             )
-        self.on_error = on_error
+        self._on_error_arg = on_error
+        self.on_error = self._loop_on_error(self.worker.is_async)
         self.errors = []
         self.worker_kwargs = kwargs
-        self.worker.loop = self.loop
+        for each in self.workers.values():
+            each.loop = self.loop
+
+    @staticmethod
+    def _make_worker(
+        worker: "str | ty.Type[Worker] | Worker", kwargs: dict[str, ty.Any]
+    ) -> Worker:
+        """Instantiate a worker from its name or class, or pass an object through."""
+        if isinstance(worker, Worker):
+            return worker
+        if isinstance(worker, str):
+            worker_cls = Worker.plugin(worker)
+        elif isinstance(worker, type) and issubclass(worker, Worker):
+            worker_cls = worker
+        else:
+            raise TypeError(
+                "Worker must be a Worker object, name of a worker or a Worker "
+                f"class, not {worker}"
+            )
+        try:
+            return worker_cls(**kwargs)
+        except TypeError as e:
+            e.add_note(WORKER_KWARG_FAIL_NOTE)
+            raise
+
+    def _loop_on_error(self, is_async: bool) -> OnError:
+        """The on_error mode of an expansion loop: the one passed to the submitter, or
+        the default of the synchronous or asynchronous loop."""
+        if self._on_error_arg is not None:
+            return self._on_error_arg
+        return "raise_at_end" if is_async else "fail_fast"
+
+    def worker_for(self, job: "Job[TaskType]") -> Worker:
+        """The worker the router sends a job to."""
+        name = self.router(job)
+        if name is None:
+            name = DEFAULT_WORKER
+        try:
+            return self.workers[name]
+        except KeyError:
+            raise ValueError(
+                f"The router sent job {job.name!r} to {name!r}, which is not one of "
+                f"the submitter's workers: {sorted(self.workers)}"
+            ) from None
 
     def __call__(
         self,
@@ -334,10 +393,11 @@ class Submitter:
             Whether to force the re-computation of the job results even if existing
             results are found, by default False
         """
-        if self.worker.is_async:  # Only workflow tasks can be async
-            self.loop.run_until_complete(self.worker.submit(job, rerun=rerun))
+        worker = self.worker_for(job)
+        if worker.is_async:  # Only workflow tasks can be async
+            self.loop.run_until_complete(worker.submit(job, rerun=rerun))
         else:
-            self.worker.run(job, rerun=rerun)
+            worker.run(job, rerun=rerun)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -348,9 +408,10 @@ class Submitter:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        # Restore the loop and worker
+        # Restore the loop and workers
         self.loop = get_open_loop()
-        self.worker.loop = self.loop
+        for worker in self.workers.values():
+            worker.loop = self.loop
 
     def expand_workflow(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
         """Expands and executes a workflow job synchronously. Typically only used during
@@ -368,13 +429,17 @@ class Submitter:
         exec_graph = wf.execution_graph(submitter=self)
         wf_job.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
+        on_error = self._loop_on_error(is_async=False)
         errors = []
         while tasks or any(not n.done for n in exec_graph.nodes):
             for job in tasks:
                 try:
-                    self.worker.run(job, rerun=rerun and self.propagate_rerun)
+                    if is_workflow(job.task):  # expanded here, not placed by the router
+                        job.run(rerun=rerun and self.propagate_rerun)
+                    else:
+                        self.submit(job, rerun=rerun and self.propagate_rerun)
                 except Exception:
-                    if self.on_error == "fail_fast":
+                    if on_error == "fail_fast":
                         raise
                     # The job may have failed before it could save a result
                     job._errored = True
@@ -402,6 +467,7 @@ class Submitter:
         task_futures = set()
         futured: dict[str, Job[TaskType]] = {}
         tasks = self.get_runnable_tasks(exec_graph)
+        on_error = self._loop_on_error(is_async=True)
         errors = []
         try:
             while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
@@ -486,14 +552,14 @@ class Submitter:
                             raise RuntimeError(msg)
                 for job in tasks:
                     if job.checksum not in futured:
-                        if job.is_async:  # Only workflows at this stage
-                            coroutine = self.worker.submit(
-                                job, rerun=rerun and self.propagate_rerun
-                            )
-                        else:
-                            coroutine = self.worker.run(
-                                job, rerun=rerun and self.propagate_rerun
-                            )
+                        job_rerun = rerun and self.propagate_rerun
+                        if is_workflow(job.task):
+                            # expanded in this loop, not placed by the router
+                            coroutine = job.run_async(rerun=job_rerun)
+                        elif (worker := self.worker_for(job)).is_async:
+                            coroutine = worker.run(job, rerun=job_rerun)
+                        else:  # a synchronous worker, run in this loop
+                            coroutine = _run_blocking(worker, job, job_rerun)
                         asyncio_task = asyncio.Task(coroutine, name=job.checksum)
                         task_futures.add(asyncio_task)
                         futured[job.checksum] = job
@@ -508,7 +574,7 @@ class Submitter:
                         # otherwise remain queued indefinitely
                         job._errored = True
                         errors.append(job_error(job))
-                if errors and self.on_error == "fail_fast":
+                if errors and on_error == "fail_fast":
                     break
                 tasks = self.get_runnable_tasks(exec_graph)
         finally:
@@ -563,7 +629,8 @@ class Submitter:
         Do not close previously queued loop.
 
         """
-        self.worker.close()
+        for worker in self.workers.values():
+            worker.close()
         if self._own_loop:
             self.loop.close()
 
@@ -725,6 +792,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 environment=self.node._environment,
                 name=self.node.name,
                 hooks=self.node._hooks,
+                resources=self.node._resources,
                 state_index=index,
             )
         return job
@@ -972,6 +1040,11 @@ def workflow_error(wf_job: "Job[workflow.Task]", errors: list[str]) -> RuntimeEr
     )
     error.errors = errors
     return error
+
+
+async def _run_blocking(worker: Worker, job: "Job", rerun: bool) -> "Result":
+    """Run a job on a synchronous worker from within the event loop."""
+    return worker.run(job, rerun=rerun)
 
 
 async def prepare_runnable(runnable):

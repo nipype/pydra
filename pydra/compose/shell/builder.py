@@ -14,6 +14,7 @@ from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from pydra.utils.general import attrs_values
+from pydra.utils.resources import ComputeResources
 from pydra.compose.base import (
     Arg,
     Out,
@@ -57,6 +58,7 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    resources: "ComputeResources | None" = None,
 ) -> "Task":
     """Create a task for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task or as a function that takes a
@@ -107,6 +109,8 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    resources: ComputeResources, optional
+        What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
 
     Returns
     -------
@@ -236,6 +240,7 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
+            resources=resources,
         )
         return defn
 

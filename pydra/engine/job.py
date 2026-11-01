@@ -35,6 +35,7 @@ from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
 from pydra.environments.base import Environment
+from pydra.utils.resources import ComputeResources
 from pydra.utils.etelemetry import check_latest_version
 
 logger = logging.getLogger("pydra")
@@ -94,6 +95,7 @@ class Job(ty.Generic[TaskType]):
         environment: "Environment | None" = None,
         state_index: int | None = None,
         hooks: TaskHooks | None = None,
+        resources: ComputeResources | None = None,
     ):
         """
         Initialize a job.
@@ -126,6 +128,7 @@ class Job(ty.Generic[TaskType]):
         )
         self.name = name
         self.state_index = state_index
+        self.resources = resources if resources is not None else task._resources
 
         self.return_values = {}
         self._result = {}
@@ -159,7 +162,7 @@ class Job(ty.Generic[TaskType]):
     @property
     def is_async(self) -> bool:
         """Check to see if the job should be run asynchronously."""
-        return self.submitter.worker.is_async and is_workflow(self.task)
+        return is_workflow(self.task) and self.submitter.worker_for(self).is_async
 
     @cache_root.setter
     def cache_root(self, path: os.PathLike):

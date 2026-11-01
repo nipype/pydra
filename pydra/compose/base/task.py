@@ -168,6 +168,10 @@ class Task(ty.Generic[OutputsType]):
     # checksum when set (see ``python.define(version=...)``)
     _version: ty.ClassVar[str | None] = None
 
+    # A ComputeResources or None: what the task asks of a scheduler worker. Set by
+    # `define`, never hashed. Unannotated because `get_type_hints` runs on task classes.
+    _resources = None
+
     # Class attributes
     TASK_CLASS_ATTRS = ("xor",)
     _xor: frozenset[frozenset[str | None]] = (
