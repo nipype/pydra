@@ -164,6 +164,9 @@ class Task(ty.Generic[OutputsType]):
 
     # The attribute containing the function/executable used to run the task
     _executor_name = None
+    # Declared version of the task, which stands in for the code of the executor in the
+    # checksum when set (see ``python.define(version=...)``)
+    _version: ty.ClassVar[str | None] = None
 
     # Class attributes
     TASK_CLASS_ATTRS = ("xor",)
@@ -494,6 +497,11 @@ class Task(ty.Generic[OutputsType]):
             if getattr(field, "container_path", False):
                 continue
             inp_dict[field.name] = getattr(self, field.name)
+        if self._version is not None:
+            executor = inp_dict[self._executor_name]
+            inp_dict[self._executor_name] = (
+                f"{executor.__module__}.{executor.__qualname__}=={self._version}"
+            )
         # Include the outputs class, just in case any names or types have changed
         inp_dict["Outputs"] = self.Outputs
         hash_cache = Cache()

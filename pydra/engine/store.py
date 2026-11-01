@@ -12,6 +12,8 @@ from pydra.utils.general import ensure_list
 Context = ty.Mapping[str, ty.Any]
 """The execution context that produced a result, recorded beside it."""
 
+REUSE_POLICIES = ("exact", "any")
+
 
 @attrs.define
 class Lease:
@@ -60,7 +62,11 @@ class ResultStore(ty.Protocol):
         """The directory the job identified by ``checksum`` runs in."""
 
     def lookup(self, checksum: str, context: Context | None = None) -> Result | None:
-        """Return the stored result for ``checksum``, or None if there is none."""
+        """Return the stored result for ``checksum``, or None if there is none.
+
+        When ``context`` is given, the store's reuse policy decides whether a result
+        recorded in a different context is returned.
+        """
 
     def acquire(self, checksum: str) -> Lease:
         """Return the lease guarding the job identified by ``checksum``."""
@@ -78,21 +84,35 @@ class PickleStore:
         The directory jobs run in and results are written to.
     readonly_caches : list[os.PathLike], optional
         Further directories searched for results, in order, after ``cache_root``.
+    reuse : str, optional
+        Which stored results ``lookup`` returns given the current context: ``"exact"``
+        (default) only those recorded in an equal context, ``"any"`` all of them,
+        those from a different context marked with ``Result.cross_context``.
     """
 
     def __init__(
         self,
         cache_root: os.PathLike,
         readonly_caches: list[os.PathLike] | None = None,
+        reuse: str = "exact",
     ):
+        if reuse not in REUSE_POLICIES:
+            raise ValueError(f"reuse must be one of {REUSE_POLICIES}, not {reuse!r}")
         self.cache_root = Path(cache_root)
         self.readonly_caches = [Path(p) for p in ensure_list(readonly_caches)]
+        self.reuse = reuse
 
     def cache_dir(self, checksum: str) -> Path:
         return self.cache_root / checksum
 
     def lookup(self, checksum: str, context: Context | None = None) -> Result | None:
-        return load_result(checksum, [self.cache_root] + self.readonly_caches)
+        result = load_result(checksum, [self.cache_root] + self.readonly_caches)
+        if result is None or context is None or result.context == dict(context):
+            return result
+        if self.reuse == "exact":
+            return None
+        result.cross_context = True
+        return result
 
     def acquire(self, checksum: str) -> Lease:
         cache_dir = self.cache_dir(checksum)

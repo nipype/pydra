@@ -81,6 +81,11 @@ class Submitter:
         Where jobs run and their results are kept, by default a
         :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
         ``readonly_caches``
+    reuse : str, optional
+        Which stored results the default store reuses: ``"exact"`` (default) only
+        those produced in the same execution context (environment checksum, platform,
+        Python version), ``"any"`` those produced in any context. Set the policy on
+        the store itself when passing ``store``
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -112,6 +117,7 @@ class Submitter:
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
         store: ResultStore | None = None,
+        reuse: str | None = None,
         **kwargs,
     ):
 
@@ -135,9 +141,14 @@ class Submitter:
 
         self.cache_root = cache_root
         self.readonly_caches = readonly_caches
-        self.store = (
-            store if store is not None else PickleStore(cache_root, readonly_caches)
-        )
+        if store is None:
+            store = PickleStore(cache_root, readonly_caches, reuse=reuse or "exact")
+        elif reuse is not None:
+            raise ValueError(
+                "'reuse' applies to the default store, set it on the store passed as "
+                "'store' instead"
+            )
+        self.store = store
         self.propagate_rerun = propagate_rerun
         if max_concurrent < 1 or (
             isinstance(max_concurrent, float) and max_concurrent != float("inf")

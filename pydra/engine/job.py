@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import inspect
+import platform
 import sys
 from pathlib import Path
 import typing as ty
@@ -143,6 +144,7 @@ class Job(ty.Generic[TaskType]):
         # was just written by run(). Not included in __getstate__ so it is
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
+        self._context = None
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
@@ -172,6 +174,8 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
+        # The context is that of the process the job runs in, so is not carried over
+        state.pop("_context", None)
         return state
 
     def __setstate__(self, state):
@@ -181,6 +185,7 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
+        self._context = None
 
     @classmethod
     def check_etelemetry(cls) -> None:
@@ -205,6 +210,18 @@ class Job(ty.Generic[TaskType]):
             return self._checksum
         self._checksum = self.task._checksum
         return self._checksum
+
+    @property
+    def context(self) -> dict[str, str]:
+        """The execution context of the job, recorded beside its result and compared
+        with the context recorded on a stored result to decide whether to reuse it."""
+        if self._context is None:
+            self._context = {
+                "environment_checksum": self.environment.checksum(),
+                "platform": f"{sys.platform}-{platform.machine()}",
+                "python_version": platform.python_version(),
+            }
+        return self._context
 
     @property
     def lockfile(self):
@@ -326,9 +343,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
-                environment_checksum=(
-                    self.environment.checksum() if self.environment else None
-                ),
+                **self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -389,9 +404,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
-                environment_checksum=(
-                    self.environment.checksum() if self.environment else None
-                ),
+                **self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -506,7 +519,7 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        result = self.store.lookup(self.checksum)
+        result = self.store.lookup(self.checksum, self.context)
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":
