@@ -140,10 +140,10 @@ Anything new is opt-in until maintainers decide otherwise.
 ### 3.5 Environment identity, and Python tasks in environments
 - **Step 1: identity (independent; closes #826).**
   - Add `Environment.checksum()`. It is recorded in the execution context beside the result
-    (3.11) and is offered to the reuse policy. It is **not** folded into the job checksum by
-    default, so rebuilding an environment or moving between machines does not change checksums.
-  - Folding it is opt-in (`Submitter(fold_environment=True)`), for users who want a result to be
-    reusable only in the same environment. With the option off, existing caches keep their hashes.
+    (3.11) and is never part of the job checksum, so rebuilding an environment or moving between
+    machines does not change checksums and existing caches keep their hashes.
+  - Whether a result from another environment is reused is decided only by the reuse policy hook
+    in K2 (`exact` / `equivalent` / `tolerant`); `exact` is the strict per-environment option.
   - `Docker` and `Singularity` accept a user-supplied `identity=`. That avoids contacting a
     registry or hashing a multi-GB image at hash time; a resolved digest is used when available.
 - **Step 2: Python tasks in environments** (closes #840; depends on 3.3, step 3).
@@ -210,7 +210,8 @@ Anything new is opt-in until maintainers decide otherwise.
   context is recorded, not keyed.
 - **Reuse policy.** `Submitter(reuse="exact" | "any")`, with `exact` as the default and today's
   behaviour. `"exact"` reuses only entries from the same context; `"any"` reuses across contexts
-  and marks the result as such. Richer policies plug in through the hook in K2.
+  and marks the result as such. Richer policies plug in through the hook in K2. The environment
+  checksum affects reuse only through the policy, never through the checksum.
 - **Risk:** low to medium. It is opt-in, and the default keeps today's checksums.
 
 ### 3.12 Node-supplied checksum and the reuse hook (K2)
