@@ -94,6 +94,9 @@ class SlurmWorker(base.Worker):
             logger.warning("Temporary directories may not be shared across computers")
         script_dir = job.cache_root / f"{self.plugin_name()}_scripts" / job.uid
         sargs = self.sbatch_args.split()
+        if job.resources is not None:
+            # after the worker-wide arguments, so the node's resources win
+            sargs += job.resources.slurm_args()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
             jobname = ".".join((job.name, job.uid))

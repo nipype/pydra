@@ -18,6 +18,7 @@ from pydra.compose import python
 from pathlib import Path
 from datetime import datetime
 from pydra.engine.result import Result
+from pydra.utils.resources import ComputeResources
 from pydra.engine.tests.utils import (
     need_sge,
     need_slurm,
@@ -802,3 +803,63 @@ def test_slurm_cancelled_not_requeued(tmp_path):
     ).stdout.splitlines()
     assert len(records) == 1, f"job {jobid} was requeued: {records}"
     assert records[0].startswith("CANCELLED")
+
+
+@need_slurm
+@pytest.mark.timeout(600)
+def test_slurm_allocation_matches_node_resources(tmp_path):
+    """The node's resources, not the definition's, are what Slurm allocates.
+
+    The allocation is read back with ``sacct`` for the one job id this test
+    submitted, and only that id is ever cancelled.
+    """
+
+    @python.define(resources=ComputeResources(cpus=1, mem="64M", time=60))
+    def AddOne(x: int) -> int:
+        return x + 1
+
+    @workflow.define(outputs=["out"])
+    def Wf(x: int):
+        return workflow.add(
+            AddOne(x=x),
+            resources=ComputeResources(cpus=4, mem="128M", time=120),
+        ).out
+
+    jobids: list[str] = []
+    try:
+        with Submitter(
+            worker="slurm",
+            cache_root=tmp_path,
+            sbatch_args=f"-J f1-{secrets.token_hex(4)} --time=00:03:00",
+        ) as sub:
+            res = sub(Wf(x=1))
+        assert res.outputs.out == 2
+        jobids = [
+            re.search(r"(?<=slurm-)\d+", f.name).group()
+            for f in (tmp_path / "slurm_scripts").glob("**/slurm-*.out")
+        ]
+        assert len(jobids) == 1, jobids
+        time.sleep(2)  # allow sacct to collect itself
+        (record,) = sp.run(
+            [
+                "sacct",
+                "-j",
+                jobids[0],
+                "-X",
+                "-n",
+                "-P",
+                "-o",
+                "AllocCPUS,ReqMem,Timelimit",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        ).stdout.splitlines()
+        alloc_cpus, req_mem, time_limit = record.split("|")
+        # the definition asked for 1 cpu; hyperthreading can at most double that
+        assert int(alloc_cpus) >= 4
+        assert req_mem.startswith("128M")
+        assert time_limit == "00:02:00"
+    finally:
+        for jobid in jobids:
+            sp.run(["scancel", jobid], timeout=30)

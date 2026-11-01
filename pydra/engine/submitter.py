@@ -687,6 +687,7 @@ class NodeExecution(ty.Generic[TaskType]):
                     environment=self.node._environment,
                     name=self.node.name,
                     hooks=self.node._hooks,
+                    resources=self.node._resources,
                     state_index=index,
                 )
         else:
@@ -695,6 +696,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 submitter=self.submitter,
                 environment=self.node._environment,
                 hooks=self.node._hooks,
+                resources=self.node._resources,
                 name=self.node.name,
             )
         self.blocked = copy(self._tasks)

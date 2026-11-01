@@ -22,6 +22,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.submitter import NodeExecution
     from pydra.environments.base import Environment
     from pydra.engine.hooks import TaskHooks
+    from pydra.utils.resources import ComputeResources
 
 
 __all__ = ["define", "add", "this", "arg", "out", "Task", "Outputs", "cast"]
@@ -113,6 +114,7 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    resources: "ComputeResources | None" = None,
 ) -> "Task":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
@@ -134,6 +136,8 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    resources: ComputeResources, optional
+        What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
 
     Returns
     -------
@@ -204,6 +208,7 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
+            resources=resources,
         )
 
         defn.__doc__ = constructor.__doc__
@@ -237,6 +242,7 @@ def add(
     name: str | None = None,
     environment: "Environment | None" = None,
     hooks: "TaskHooks | None" = None,
+    resources: "ComputeResources | None" = None,
 ) -> OutputsType:
     """Add a node to the workflow currently being constructed
 
@@ -252,13 +258,18 @@ def add(
         by default it will be the "native"
     hooks : TaskHooks, optional
         The hooks to run before or after the task, by default no hooks will be run
+    resources : ComputeResources, optional
+        The resources to request for the node, overriding those set when the task was
+        defined
 
     Returns
     -------
     Outputs
         The outputs of the node
     """
-    return this().add(task, name=name, environment=environment, hooks=hooks)
+    return this().add(
+        task, name=name, environment=environment, hooks=hooks, resources=resources
+    )
 
 
 U = ty.TypeVar("U")

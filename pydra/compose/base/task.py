@@ -27,6 +27,7 @@ if ty.TYPE_CHECKING:
     from pydra.workers.base import Worker
     from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
+    from pydra.utils.resources import ComputeResources
 
 TaskType = ty.TypeVar("TaskType", bound="Task")
 
@@ -164,6 +165,9 @@ class Task(ty.Generic[OutputsType]):
 
     # The attribute containing the function/executable used to run the task
     _executor_name = None
+
+    # What the task asks of a scheduler worker; set by `define`, never hashed
+    _resources: "ComputeResources | None" = None
 
     # Class attributes
     TASK_CLASS_ATTRS = ("xor",)

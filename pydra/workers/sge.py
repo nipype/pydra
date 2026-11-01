@@ -107,6 +107,7 @@ class SgeWorker(base.Worker):
             cache_root = job.cache_root
             ind = None
             uid = job.uid
+            resources = job.resources
             try:
                 task_qsub_args = job.qsub_args
             except Exception:
@@ -115,10 +116,14 @@ class SgeWorker(base.Worker):
             ind = job[0]
             cache_root = job[-1].cache_root
             uid = f"{job[-1].uid}_{ind}"
+            resources = job[-1].resources
             try:
                 task_qsub_args = job[-1].qsub_args
             except Exception:
                 task_qsub_args = self.default_qsub_args
+        if resources is not None:
+            # after the worker-wide arguments, so the node's resources win
+            task_qsub_args = " ".join([task_qsub_args, *resources.sge_args()]).strip()
 
         script_dir = cache_root / f"{self.plugin_name()}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)

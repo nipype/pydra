@@ -24,6 +24,7 @@ from pydra.utils.general import (
 )
 from pydra.utils.typing import is_lazy
 from pydra.environments.base import Environment
+from pydra.utils.resources import ComputeResources
 
 logger = logging.getLogger("pydra")
 
@@ -227,6 +228,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         name: str | None = None,
         environment: Environment | None = None,
         hooks: TaskHooks | None = None,
+        resources: ComputeResources | None = None,
     ) -> OutputsType:
         """Add a node to the workflow
 
@@ -242,6 +244,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             by default it will be the "native"
         hooks : TaskHooks, optional
             The hooks to run before or after the job, by default no hooks will be run
+        resources : ComputeResources, optional
+            The resources to request for the job, overriding those of the task definition
 
         Returns
         -------
@@ -269,6 +273,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             workflow=self,
             environment=environment,
             hooks=hooks,
+            resources=resources,
         )
         self._nodes[name] = node
         return node.lzout
