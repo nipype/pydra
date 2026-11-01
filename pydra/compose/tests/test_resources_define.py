@@ -27,7 +27,7 @@ def test_decorator_form_sets_resources():
 
 
 def test_shell_define_sets_resources():
-    Echo = shell.define("echo <text>", resources=SMALL)
+    Echo = shell.define("echo <text:str>", resources=SMALL)
     assert Echo(text="hi")._resources == SMALL
 
 
