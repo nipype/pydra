@@ -1,7 +1,6 @@
 """Slurm requeue budget and user cancellation, with sbatch/squeue/sacct faked."""
 
 import asyncio
-import os
 import types
 import pytest
 from pydra.workers import slurm
@@ -21,8 +20,9 @@ class FakeSlurm:
         if cmd[0] == "squeue":
             return 0, "", ""  # never queued: straight to sacct
         if cmd[0] == "sacct":
+            assert "-P" in cmd and "-X" in cmd and "-j" in cmd
             state = self.states.pop(0)
-            exit_code = "0:0" if state == "COMPLETED" else "1:0"
+            exit_code = "0:15" if state.startswith("CANCELLED") else "0:0"
             return 0, f"42|{state}|{exit_code}\n", ""
         if cmd[0] == "scontrol":
             return 0, "", ""
@@ -35,58 +35,46 @@ class FakeSlurm:
 def run_worker(tmp_path, monkeypatch, states, **kwargs):
     fake = FakeSlurm(states)
     monkeypatch.setattr(slurm.base, "read_and_display_async", fake)
-    worker = slurm.SlurmWorker(poll_delay=0, **kwargs)
     monkeypatch.setattr(
-        worker,
+        slurm.SlurmWorker,
         "_prepare_runscripts",
-        lambda job, rerun=False: (tmp_path, tmp_path / "batch.sh"),
-        raising=False,
+        lambda self, job, rerun=False: (tmp_path, tmp_path / "batch.sh"),
     )
+    worker = slurm.SlurmWorker(poll_delay=0, **kwargs)
     job = types.SimpleNamespace(name="t", uid="u", cache_root=tmp_path)
-    try:
-        return fake, asyncio.run(worker.run(job))
-    except Exception as exc:
-        return fake, exc
+    return fake, worker, job
 
 
 def test_requeue_then_complete(tmp_path, monkeypatch):
-    fake, result = run_worker(tmp_path, monkeypatch, ["TIMEOUT", "COMPLETED"])
-    assert result is True
+    fake, worker, job = run_worker(tmp_path, monkeypatch, ["TIMEOUT", "COMPLETED"])
+    assert asyncio.run(worker.run(job)) is True
     assert len(fake.requeues()) == 1
 
 
 def test_requeue_budget_is_spent(tmp_path, monkeypatch):
-    fake, result = run_worker(
+    fake, worker, job = run_worker(
         tmp_path, monkeypatch, ["PREEMPTED"] * 10, requeue_budget=2
     )
-    assert isinstance(result, RuntimeError)
-    assert "requeue budget" in str(result)
+    with pytest.raises(RuntimeError, match="requeue budget"):
+        asyncio.run(worker.run(job))
     assert len(fake.requeues()) == 2
 
 
 def test_zero_budget_never_requeues(tmp_path, monkeypatch):
-    fake, result = run_worker(tmp_path, monkeypatch, ["TIMEOUT"], requeue_budget=0)
-    assert isinstance(result, RuntimeError)
+    fake, worker, job = run_worker(tmp_path, monkeypatch, ["TIMEOUT"], requeue_budget=0)
+    with pytest.raises(RuntimeError, match="requeue budget"):
+        asyncio.run(worker.run(job))
     assert fake.requeues() == []
 
 
-def test_user_cancelled_is_not_requeued(tmp_path, monkeypatch):
-    fake, result = run_worker(
-        tmp_path, monkeypatch, [f"CANCELLED by {os.getuid()}", "COMPLETED"]
-    )
-    assert isinstance(result, slurm.SlurmJobCancelled)
+@pytest.mark.parametrize("state", ["CANCELLED by 1234", "CANCELLED by 0", "CANCELLED"])
+def test_cancelled_is_never_requeued(tmp_path, monkeypatch, state):
+    fake, worker, job = run_worker(tmp_path, monkeypatch, [state, "COMPLETED"])
+    with pytest.raises(slurm.SlurmJobCancelled, match="cancelled"):
+        asyncio.run(worker.run(job))
     assert fake.requeues() == []
-
-
-def test_cancelled_by_another_uid_is_requeued(tmp_path, monkeypatch):
-    other = os.getuid() + 1
-    fake, result = run_worker(
-        tmp_path, monkeypatch, [f"CANCELLED by {other}", "COMPLETED"]
-    )
-    assert result is True
-    assert len(fake.requeues()) == 1
 
 
 def test_negative_budget_rejected():
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         slurm.SlurmWorker(requeue_budget=-1)

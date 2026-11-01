@@ -731,35 +731,65 @@ def test_bad_byo_worker2():
         Submitter(worker=BadWorker)
 
 
+def _squeue_job_ids(name):
+    out = sp.run(
+        ["squeue", "-h", "--me", "-n", name, "-o", "%i %t"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.split()
+    return list(zip(out[0::2], out[1::2]))
+
+
 @need_slurm
-def test_slurm_user_cancel_not_requeued(tmp_path):
-    """A job the user scancels fails the submission instead of being requeued."""
+@pytest.mark.timeout(300)
+def test_slurm_cancelled_not_requeued(tmp_path):
+    """A cancelled job fails the submission and is not requeued.
+
+    Only the job id this test submitted is ever cancelled.
+    """
+    import threading
 
     @python.define
     def Sleeper(x: int) -> int:
         time.sleep(120)
         return x
 
+    name = f"a1-{secrets.token_hex(4)}"
+    seen: list[str] = []
+
     def cancel_when_running():
-        for _ in range(60):
-            out = sp.run(
-                ["squeue", "-h", "--me", "-o", "%i %t"], capture_output=True, text=True
-            ).stdout.split()
-            if "R" in out[1::2]:
-                sp.run(["scancel", "--me"])
-                return
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            jobs = _squeue_job_ids(name)
+            if jobs:
+                seen.append(jobs[0][0])
+                if jobs[0][1] == "R":
+                    sp.run(["scancel", jobs[0][0]], timeout=30)
+                    return
             time.sleep(1)
 
-    import threading
-
-    t = threading.Thread(target=cancel_when_running)
-    t.start()
-    with pytest.raises(Exception):
-        with Submitter(worker="slurm", cache_root=tmp_path) as sub:
-            sub(Sleeper(x=1))
-    t.join()
-    sacct = sp.run(
-        ["sacct", "-n", "-X", "-P", "-o", "State"], capture_output=True, text=True
-    ).stdout
-    assert "CANCELLED" in sacct
-    assert len(list((tmp_path / "slurm_scripts").glob("**/slurm-*.out"))) == 1
+    thread = threading.Thread(target=cancel_when_running, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(RuntimeError, match="cancelled"):
+            with Submitter(
+                worker="slurm",
+                cache_root=tmp_path,
+                sbatch_args=f"-J {name} --time=00:03:00",
+            ) as sub:
+                sub(Sleeper(x=1))
+    finally:
+        thread.join(timeout=150)
+        for jobid in {j for j, _ in _squeue_job_ids(name)} | set(seen):
+            sp.run(["scancel", jobid], timeout=30)
+    assert len(seen) >= 1, "the job was never seen in the queue"
+    jobid = seen[0]
+    records = sp.run(
+        ["sacct", "-j", jobid, "-D", "-X", "-n", "-P", "-o", "State"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    ).stdout.split()
+    assert len(records) == 1, f"job {jobid} was requeued: {records}"
+    assert records[0].startswith("CANCELLED")

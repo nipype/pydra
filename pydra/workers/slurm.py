@@ -1,7 +1,6 @@
 import asyncio
 import sys
 import json
-import os
 import re
 import typing as ty
 from tempfile import gettempdir
@@ -19,7 +18,7 @@ if ty.TYPE_CHECKING:
 
 
 class SlurmJobCancelled(RuntimeError):
-    """A job the user cancelled; it is never requeued."""
+    """A job that was cancelled; it is never requeued."""
 
 
 @attrs.define
@@ -28,13 +27,13 @@ class SlurmWorker(base.Worker):
 
     _cmd = "sbatch"
     _sacct_re = re.compile(
-        r"(?P<jobid>[^|\s]*)\|(?P<status>\w*)(?: by (?P<uid>\d+))?\+?\|"
+        r"(?P<jobid>[^|\s]*)\|(?P<status>\w*)(?: by \d+)?\+?\|"
         r"(?P<exit_code>\d+):\d+"
     )
 
     poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)
     sbatch_args: str = ""
-    requeue_budget: int = attrs.field(default=3, converter=base.ensure_non_negative)
+    requeue_budget: int = attrs.field(default=3, validator=attrs.validators.ge(0))
     error: dict[str, ty.Any] = attrs.field(factory=dict)
 
     def __getstate__(self) -> dict[str, ty.Any]:
@@ -133,7 +132,7 @@ class SlurmWorker(base.Worker):
             done = await self._poll_job(jobid)
             if done:
                 if (
-                    done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
+                    done in ["TIMEOUT", "PREEMPTED"]
                     and "--no-requeue" not in self.sbatch_args
                 ):
                     if requeues >= self.requeue_budget:
@@ -166,7 +165,7 @@ class SlurmWorker(base.Worker):
         return False
 
     async def _verify_exit_code(self, jobid):
-        cmd = (XX, jobid, "-o", "JobID,State,ExitCode")
+        cmd = ("sacct", "-n", "-X", "-P", "-j", jobid, "-o", "JobID,State,ExitCode")
         _, stdout, _ = await base.read_and_display_async(*cmd, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
@@ -174,14 +173,12 @@ class SlurmWorker(base.Worker):
         if m is None:
             raise RuntimeError(f"Could not parse sacct output: {stdout!r}")
         error_file = self.error[jobid]
-        if (
-            m.group("status") == "CANCELLED"
-            and m.group("uid") is not None
-            and int(m.group("uid")) == os.getuid()
-        ):
-            raise SlurmJobCancelled(f"Slurm job {jobid} was cancelled by the user")
+        if m.group("status") == "CANCELLED":
+            raise SlurmJobCancelled(
+                f"Slurm job {jobid} was cancelled and is not requeued"
+            )
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
-            if m.group("status") in ["CANCELLED", "TIMEOUT", "PREEMPTED"]:
+            if m.group("status") in ["TIMEOUT", "PREEMPTED"]:
                 return m.group("status")
             elif m.group("status") in ["RUNNING", "PENDING"]:
                 return False
