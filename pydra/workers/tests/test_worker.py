@@ -711,6 +711,7 @@ def test_bad_byo_worker1():
     import pydra.workers.base as base
 
     class BadWorker(base.Worker):
+
         def run(self, task: Job, rerun: bool = False) -> Result:
             pass
 
