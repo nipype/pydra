@@ -21,6 +21,7 @@ from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
+from pydra.engine.store import PickleStore, ResultStore
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_root
 from pydra.compose import workflow
@@ -76,6 +77,10 @@ class Submitter:
         start of the current run. Don't set if using a global cache where there are
         potentially multiple workflows that are running concurrently. By default (None),
         lock files will be cleaned if the *debug* worker is used
+    store : ResultStore, optional
+        Where jobs run and their results are kept, by default a
+        :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
+        ``readonly_caches``
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -89,6 +94,7 @@ class Submitter:
     messenger_args: dict[str, ty.Any]
     max_concurrent: int | float
     clean_stale_locks: bool
+    store: ResultStore
     run_start_time: datetime | None
     propagate_rerun: bool
 
@@ -105,6 +111,7 @@ class Submitter:
         max_concurrent: int | float = float("inf"),
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
+        store: ResultStore | None = None,
         **kwargs,
     ):
 
@@ -128,6 +135,9 @@ class Submitter:
 
         self.cache_root = cache_root
         self.readonly_caches = readonly_caches
+        self.store = (
+            store if store is not None else PickleStore(cache_root, readonly_caches)
+        )
         self.propagate_rerun = propagate_rerun
         if max_concurrent < 1 or (
             isinstance(max_concurrent, float) and max_concurrent != float("inf")

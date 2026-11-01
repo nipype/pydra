@@ -5,7 +5,6 @@ import logging
 import os
 import inspect
 import sys
-import asyncio
 from pathlib import Path
 import typing as ty
 from uuid import uuid4
@@ -15,7 +14,6 @@ import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
 from pydra.utils.hash import hash_function
-from filelock import SoftFileLock, Timeout
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
@@ -28,11 +26,10 @@ from pydra.utils.general import (
     attrs_values,
     attrs_fields,
     get_fields,
-    ensure_list,
     is_workflow,
 )
 from pydra.utils.typing import is_lazy
-from pydra.engine.result import load_result, save
+from pydra.engine.result import save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
@@ -150,7 +147,7 @@ class Job(ty.Generic[TaskType]):
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
         self.cache_root = submitter.cache_root
-        self.all_caches = submitter.readonly_caches
+        self.store = submitter.store
         self._run_start_time = None
 
     @property
@@ -165,18 +162,6 @@ class Job(ty.Generic[TaskType]):
     @cache_root.setter
     def cache_root(self, path: os.PathLike):
         self._cache_root = Path(path)
-
-    @property
-    def all_caches(self):
-        """Get the list of cache sources."""
-        return ensure_list(self.cache_root) + self._readonly_caches
-
-    @all_caches.setter
-    def all_caches(self, locations):
-        if locations is not None:
-            self._readonly_caches = [Path(loc) for loc in ensure_list(locations)]
-        else:
-            self._readonly_caches = []
 
     def __str__(self):
         return self.name
@@ -246,7 +231,7 @@ class Job(ty.Generic[TaskType]):
     @property
     def cache_dir(self):
         """Get the filesystem path where outputs will be written."""
-        return self.cache_root / self.checksum
+        return self.store.cache_dir(self.checksum)
 
     @property
     def inputs(self) -> dict[str, ty.Any]:
@@ -325,10 +310,9 @@ class Job(ty.Generic[TaskType]):
 
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        logger.debug(
-            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
-        )
-        with SoftFileLock(self.lockfile):
+        lease = self.store.acquire(self.checksum)
+        logger.debug("'%s' is attempting to acquire %s", self.name, lease)
+        with lease:
             if not (rerun):
                 result = self.result()
                 if result is not None and not result.errored:
@@ -360,7 +344,8 @@ class Job(ty.Generic[TaskType]):
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(self.cache_dir, result=result, job=self)
+                self.store.commit(lease, result)
+                save(self.cache_dir, job=self)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -386,10 +371,9 @@ class Job(ty.Generic[TaskType]):
         """
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        logger.debug(
-            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
-        )
-        async with PydraFileLock(self.lockfile):
+        lease = self.store.acquire(self.checksum)
+        logger.debug("'%s' is attempting to acquire %s", self.name, lease)
+        async with lease:
             if not rerun:
                 result = self.result()
                 if result is not None and not result.errored:
@@ -419,7 +403,8 @@ class Job(ty.Generic[TaskType]):
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(self.cache_dir, result=result, job=self)
+                self.store.commit(lease, result)
+                save(self.cache_dir, job=self)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -469,7 +454,7 @@ class Job(ty.Generic[TaskType]):
         for gr, ind_l in self.state.final_combined_ind_mapping.items():
             combined_results_gr = []
             for ind in ind_l:
-                result = load_result(self.checksum_states(ind), self.all_caches)
+                result = self.store.lookup(self.checksum_states(ind))
                 if result is None:
                     return None
                 if return_inputs is True or return_inputs == "val":
@@ -515,8 +500,7 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        checksum = self.checksum
-        result = load_result(checksum, self.all_caches)
+        result = self.store.lookup(self.checksum)
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":
@@ -606,32 +590,6 @@ def has_lazy(obj):
         if is_lazy(getattr(obj, f.name)):
             return True
     return False
-
-
-class PydraFileLock:
-    """Wrapper for filelock's SoftFileLock that makes it work with asyncio."""
-
-    def __init__(self, lockfile):
-        self.lockfile = lockfile
-        self.timeout = 0.1
-
-    async def __aenter__(self):
-        lock = SoftFileLock(self.lockfile)
-        acquired_lock = False
-        while not acquired_lock:
-            try:
-                lock.acquire(timeout=0)
-                acquired_lock = True
-            except Timeout:
-                await asyncio.sleep(self.timeout)
-                if self.timeout <= 2:
-                    self.timeout = self.timeout * 2
-        self.lock = lock
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        self.lock.release()
-        return None
 
 
 def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
