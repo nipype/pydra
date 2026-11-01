@@ -178,6 +178,42 @@ def test_mixed_run_on_a_process_pool_and_in_process(tmp_path):
     assert outputs.post != os.getpid()
 
 
+@workflow.define(outputs=["out"])
+def Inner(x: int):
+    a = workflow.add(AddOne(x=x), name="a")
+    b = workflow.add(AddOne(x=a.out), name="b")
+    return b.out
+
+
+@workflow.define(outputs=["out"])
+def Outer(x: int):
+    prep = workflow.add(AddOne(x=x), name="prep")
+    inner = workflow.add(Inner(x=prep.out), name="inner", resources=GPU)
+    post = workflow.add(AddOne(x=inner.out), name="post")
+    return post.out
+
+
+def test_workflow_node_routed_to_a_sync_worker_keeps_async_children(tmp_path):
+    # the router places the leaf jobs; a workflow node is expanded in its parent's loop
+    with Submitter(
+        worker="cf",
+        workers={"local": "debug"},
+        router=tag_router({"gpu": "local"}),
+        cache_root=tmp_path,
+    ) as sub:
+        assert sub(Outer(x=1), raise_errors=True).outputs.out == 5
+
+
+def test_workflow_node_routed_to_an_async_worker_in_a_sync_run(tmp_path):
+    with Submitter(
+        worker="debug",
+        workers={"pool": "cf"},
+        router=tag_router({"gpu": "pool"}),
+        cache_root=tmp_path,
+    ) as sub:
+        assert sub(Outer(x=1)).outputs.out == 5
+
+
 def test_unknown_worker_name_is_an_error(tmp_path):
     with Submitter(
         worker="debug",

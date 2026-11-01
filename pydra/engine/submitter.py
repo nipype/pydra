@@ -16,6 +16,7 @@ from pydra.engine.graph import DiGraph
 from pydra.utils.general import (
     get_fields,
     attrs_values,
+    is_workflow,
 )
 from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField
@@ -377,7 +378,10 @@ class Submitter:
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
             for job in tasks:
-                self.submit(job, rerun=rerun and self.propagate_rerun)
+                if is_workflow(job.task):  # expanded here, not placed by the router
+                    job.run(rerun=rerun and self.propagate_rerun)
+                else:
+                    self.submit(job, rerun=rerun and self.propagate_rerun)
             tasks = self.get_runnable_tasks(exec_graph)
 
     async def expand_workflow_async(
@@ -483,11 +487,11 @@ class Submitter:
                             raise RuntimeError(msg)
                 for job in tasks:
                     if job.checksum not in futured:
-                        worker = self.worker_for(job)
                         job_rerun = rerun and self.propagate_rerun
-                        if job.is_async:  # Only workflows at this stage
-                            coroutine = worker.submit(job, rerun=job_rerun)
-                        elif worker.is_async:
+                        if is_workflow(job.task):
+                            # expanded in this loop, not placed by the router
+                            coroutine = job.run_async(rerun=job_rerun)
+                        elif (worker := self.worker_for(job)).is_async:
                             coroutine = worker.run(job, rerun=job_rerun)
                         else:  # a synchronous worker, run in this loop
                             coroutine = _run_blocking(worker, job, job_rerun)
