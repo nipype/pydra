@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import json
+import os
 import re
 import typing as ty
 from tempfile import gettempdir
@@ -17,17 +18,23 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
 
 
+class SlurmJobCancelled(RuntimeError):
+    """A job the user cancelled; it is never requeued."""
+
+
 @attrs.define
 class SlurmWorker(base.Worker):
     """A worker to execute tasks on SLURM systems."""
 
     _cmd = "sbatch"
     _sacct_re = re.compile(
-        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
+        r"(?P<jobid>[^|\s]*)\|(?P<status>\w*)(?: by (?P<uid>\d+))?\+?\|"
+        r"(?P<exit_code>\d+):\d+"
     )
 
     poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)
     sbatch_args: str = ""
+    requeue_budget: int = attrs.field(default=3, converter=base.ensure_non_negative)
     error: dict[str, ty.Any] = attrs.field(factory=dict)
 
     def __getstate__(self) -> dict[str, ty.Any]:
@@ -116,6 +123,7 @@ class SlurmWorker(base.Worker):
         if error_file:
             error_file = error_file.replace("%j", jobid)
         self.error[jobid] = error_file.replace("%j", jobid)
+        requeues = 0
         # intermittent polling
         while True:
             # 3 possibilities
@@ -128,6 +136,12 @@ class SlurmWorker(base.Worker):
                     done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
                     and "--no-requeue" not in self.sbatch_args
                 ):
+                    if requeues >= self.requeue_budget:
+                        raise RuntimeError(
+                            f"Slurm job {jobid} ended {done} and the requeue budget "
+                            f"({self.requeue_budget}) is spent"
+                        )
+                    requeues += 1
                     # loading info about job with a specific uid
                     info_file = job.cache_root / f"{job.uid}_info.json"
                     if info_file.exists():
@@ -152,12 +166,20 @@ class SlurmWorker(base.Worker):
         return False
 
     async def _verify_exit_code(self, jobid):
-        cmd = ("sacct", "-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
+        cmd = (XX, jobid, "-o", "JobID,State,ExitCode")
         _, stdout, _ = await base.read_and_display_async(*cmd, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self._sacct_re.search(stdout)
+        if m is None:
+            raise RuntimeError(f"Could not parse sacct output: {stdout!r}")
         error_file = self.error[jobid]
+        if (
+            m.group("status") == "CANCELLED"
+            and m.group("uid") is not None
+            and int(m.group("uid")) == os.getuid()
+        ):
+            raise SlurmJobCancelled(f"Slurm job {jobid} was cancelled by the user")
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
             if m.group("status") in ["CANCELLED", "TIMEOUT", "PREEMPTED"]:
                 return m.group("status")

@@ -52,7 +52,7 @@ class SgeWorker(base.Worker):
 
     _cmd = "qsub"
     _sacct_re = re.compile(
-        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
+        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +(?P<exit_code>\\d+):\\d+"
     )
 
     poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)

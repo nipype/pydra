@@ -711,7 +711,6 @@ def test_bad_byo_worker1():
     import pydra.workers.base as base
 
     class BadWorker(base.Worker):
-
         def run(self, task: Job, rerun: bool = False) -> Result:
             pass
 
@@ -729,3 +728,37 @@ def test_bad_byo_worker2():
         match="Worker must be a Worker object, name of a worker or a Worker class",
     ):
         Submitter(worker=BadWorker)
+
+
+@need_slurm
+def test_slurm_user_cancel_not_requeued(tmp_path):
+    """A job the user scancels fails the submission instead of being requeued."""
+
+    @python.define
+    def Sleeper(x: int) -> int:
+        time.sleep(120)
+        return x
+
+    def cancel_when_running():
+        for _ in range(60):
+            out = sp.run(
+                ["squeue", "-h", "--me", "-o", "%i %t"], capture_output=True, text=True
+            ).stdout.split()
+            if "R" in out[1::2]:
+                sp.run(["scancel", "--me"])
+                return
+            time.sleep(1)
+
+    import threading
+
+    t = threading.Thread(target=cancel_when_running)
+    t.start()
+    with pytest.raises(Exception):
+        with Submitter(worker="slurm", cache_root=tmp_path) as sub:
+            sub(Sleeper(x=1))
+    t.join()
+    sacct = sp.run(
+        ["sacct", "-n", "-X", "-P", "-o", "State"], capture_output=True, text=True
+    ).stdout
+    assert "CANCELLED" in sacct
+    assert len(list((tmp_path / "slurm_scripts").glob("**/slurm-*.out"))) == 1
