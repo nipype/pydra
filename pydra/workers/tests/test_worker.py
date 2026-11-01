@@ -825,12 +825,13 @@ def test_slurm_allocation_matches_node_resources(tmp_path):
             resources=ComputeResources(cpus=4, mem="128M", time=120),
         ).out
 
+    name = f"f1-{secrets.token_hex(4)}"
     jobids: list[str] = []
     try:
         with Submitter(
             worker="slurm",
             cache_root=tmp_path,
-            sbatch_args=f"-J f1-{secrets.token_hex(4)} --time=00:03:00",
+            sbatch_args=f"-J {name} --time=00:03:00",
         ) as sub:
             res = sub(Wf(x=1))
         assert res.outputs.out == 2
@@ -861,5 +862,12 @@ def test_slurm_allocation_matches_node_resources(tmp_path):
         assert req_mem.startswith("128M")
         assert time_limit == "00:02:00"
     finally:
-        for jobid in jobids:
-            sp.run(["scancel", jobid], timeout=30)
+        try:
+            queued = {j for j, _ in _squeue_job_ids(name)}
+        except Exception:
+            queued = set()
+        for jobid in queued | set(jobids):
+            try:
+                sp.run(["scancel", jobid], timeout=30)
+            except Exception:
+                pass

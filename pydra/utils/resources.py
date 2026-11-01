@@ -84,22 +84,38 @@ class ComputeResources:
             args.append(f"--time={_slurm_time(self.time)}")
         return args
 
-    def sge_args(self) -> list[str]:
+    def sge_args(
+        self,
+        pe: str = "smp",
+        mem: str = "mem_free",
+        gpu: str = "gpu",
+        gpu_type: str | None = "gpu_type",
+    ) -> list[str]:
         """The ``qsub`` arguments for these resources.
 
-        ``-pe smp`` and ``-l gpu``/``gpu_type`` follow the common site convention;
-        clusters that name their parallel environment or GPU complexes differently
-        should pass ``qsub_args`` instead.
+        Parameters
+        ----------
+        pe : str
+            Name of the parallel environment that takes the cores
+        mem : str
+            Name of the memory resource
+        gpu : str
+            Name of the GPU-count resource
+        gpu_type : str, optional
+            Name of the GPU-model resource; ``None`` leaves ``gpu_type`` unmapped
+
+        The defaults are a common site convention; ``SgeWorker`` exposes each name
+        as an attribute.
         """
         args = []
         if self.cpus is not None:
-            args += ["-pe", "smp", str(self.cpus)]
+            args += ["-pe", pe, str(self.cpus)]
         if self.mem is not None:
-            args += ["-l", f"mem_free={self.mem}"]
+            args += ["-l", f"{mem}={self.mem}"]
         if self.gpus is not None:
-            args += ["-l", f"gpu={self.gpus}"]
-        if self.gpu_type is not None:
-            args += ["-l", f"gpu_type={self.gpu_type}"]
+            args += ["-l", f"{gpu}={self.gpus}"]
+        if self.gpu_type is not None and gpu_type is not None:
+            args += ["-l", f"{gpu_type}={self.gpu_type}"]
         if self.time is not None:
             args += ["-l", f"h_rt={_hms(self.time)}"]
         return args
