@@ -8,6 +8,13 @@ from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
 from pydra.engine.workflow import Workflow
 from pydra.engine.tests.utils import FunAddVar, Identity, RaiseXeq1
+from pydra.workers.debug import DebugWorker
+
+
+class SyncWorker(DebugWorker):
+    """A synchronous worker that is not *debug*"""
+
+    _plugin_name = "sync"
 
 
 @python.define
@@ -128,6 +135,7 @@ def test_on_error_raise_at_end_debug_parity(case, worker, tmp_path):
         ) as sub:
             result = sub(task, raise_errors=False)
         assert result.errored
+        assert error in "".join(sub.errors)
         message = "".join(result.errors["error message"])
         assert "failed with errors" in message
         assert error in message
@@ -180,10 +188,12 @@ def test_on_error_fail_fast(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "plugin,on_error", [("debug", "fail_fast"), ("cf", "raise_at_end")]
+    "plugin,on_error",
+    [("debug", "fail_fast"), ("cf", "raise_at_end"), (SyncWorker, "fail_fast")],
 )
 def test_on_error_default(plugin, on_error, tmp_path):
-    """The default keeps each worker's existing error behaviour"""
+    """The default keeps each worker's existing error behaviour: synchronous workers
+    stop at the first error, asynchronous ones raise at the end"""
     with Submitter(worker=plugin, cache_root=tmp_path) as sub:
         assert sub.on_error == on_error
 
