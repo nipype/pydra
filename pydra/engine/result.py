@@ -48,6 +48,7 @@ class Result(ty.Generic[OutputsType]):
     runtime: Runtime | None = None
     errored: bool = False
     task: base.Task[OutputsType] | None = None
+    environment_checksum: str | None = None
 
     CLOUD_PICKLE_ATTRS = ("outputs", "task")
 

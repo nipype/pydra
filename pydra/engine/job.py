@@ -326,6 +326,9 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
+                environment_checksum=(
+                    self.environment.checksum() if self.environment else None
+                ),
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -386,6 +389,9 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
+                environment_checksum=(
+                    self.environment.checksum() if self.environment else None
+                ),
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
