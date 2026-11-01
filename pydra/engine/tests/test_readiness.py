@@ -9,9 +9,11 @@ from pydra.engine.workflow import Workflow
 from pydra.engine.tests.utils import (
     FunAddVar,
     FunAddVar3,
+    FunAddVarNoType,
     Identity,
     ListOutput,
     Multiply,
+    RaiseXeq1,
 )
 
 
@@ -94,6 +96,22 @@ def TwoUpstreamScalar(x, y):
 def Resplit(x, y):
     a = workflow.add(ListOutput().split("x", x=x), name="A")
     b = workflow.add(Multiply().split(["y", "x"], x=a.out, y=y), name="B")
+    return b.out
+
+
+@workflow.define
+def UpstreamFails(x):
+    a = workflow.add(RaiseXeq1().split("x", x=x), name="A")
+    b = workflow.add(Identity(x=a.out), name="B")
+    return b.out
+
+
+@workflow.define
+def UpstreamFailsCombined(x, y):
+    a = workflow.add(
+        FunAddVarNoType().split(["a", "b"], a=x, b=y).combine("a"), name="A"
+    )
+    b = workflow.add(Identity(x=a.out), name="B")
     return b.out
 
 
@@ -275,3 +293,65 @@ def test_readiness_async(tmp_path):
     task = Handshake(xs=[0, 1], marker=str(tmp_path / "marker"))
     outputs = task(worker="cf", n_procs=2, cache_root=tmp_path / "cache")
     assert outputs.out == [0, 1]
+
+
+# Each case: the workflow, the upstream elements that succeed before the failure (which
+# release downstream element 0), the upstream element that fails, the output of
+# downstream element 0, and the error the failing element raises.
+FAILING = {
+    "per-element": (
+        UpstreamFails(x=[2, 1]),
+        [0],
+        1,
+        2,
+        "i'm raising an exception!",
+    ),
+    # A is combined into groups b=10 (elements 0, 2) and b="hi" (elements 1, 3)
+    "combined": (
+        UpstreamFailsCombined(x=[1, 2], y=[10, "hi"]),
+        [0, 2],
+        1,
+        [11, 12],
+        "unsupported operand",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", FAILING)
+def test_readiness_upstream_fails_after_release(case, tmp_path):
+    """An upstream element that fails after a downstream element has been released
+    marks the rest of the downstream node unrunnable, while the released element
+    still runs and the node completes"""
+    task, succeed, fail, output, error = FAILING[case]
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        wf = Workflow.construct(task)
+        graph = wf.execution_graph(submitter=sub)
+        upstream, downstream = graph["A"], graph["B"]
+        jobs = upstream.get_runnable_tasks(graph)
+        for i in succeed:
+            jobs[i].run()
+        upstream.update_status()
+        assert [j.state_index for j in downstream.get_runnable_tasks(graph)] == [0]
+        with pytest.raises(Exception, match=error):
+            jobs[fail].run()
+        upstream.update_status()
+        assert list(upstream.errored) == [fail]
+        released = downstream.get_runnable_tasks(graph)
+        assert [j.state_index for j in released] == [0]
+        assert downstream.unrunnable == {None: [upstream]}
+        assert downstream.blocked == {}
+        assert not downstream.done
+        assert released[0].run().outputs.out == output
+        assert downstream.done
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("case", FAILING)
+def test_readiness_upstream_fails_debug_parity(case, worker, tmp_path):
+    """The workflow raises the failing element's error under each worker, as under
+    debug, rather than waiting on the unrunnable elements"""
+    task, *_, error = FAILING[case]
+    with pytest.raises(Exception, match=error):
+        task(worker="debug", cache_root=tmp_path / "debug")
+    with pytest.raises(Exception, match=error):
+        task(worker=worker, cache_root=tmp_path / "worker")
