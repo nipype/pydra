@@ -781,8 +781,15 @@ def test_slurm_cancelled_not_requeued(tmp_path):
                 sub(Sleeper(x=1))
     finally:
         thread.join(timeout=150)
-        for jobid in {j for j, _ in _squeue_job_ids(name)} | set(seen):
-            sp.run(["scancel", jobid], timeout=30)
+        try:
+            queued = {j for j, _ in _squeue_job_ids(name)}
+        except Exception:
+            queued = set()
+        for jobid in queued | set(seen):
+            try:
+                sp.run(["scancel", jobid], timeout=30)
+            except Exception:
+                pass
     assert len(seen) >= 1, "the job was never seen in the queue"
     jobid = seen[0]
     records = sp.run(
@@ -790,6 +797,6 @@ def test_slurm_cancelled_not_requeued(tmp_path):
         capture_output=True,
         text=True,
         timeout=60,
-    ).stdout.split()
+    ).stdout.splitlines()
     assert len(records) == 1, f"job {jobid} was requeued: {records}"
     assert records[0].startswith("CANCELLED")
