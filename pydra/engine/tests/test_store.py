@@ -2,6 +2,7 @@ import asyncio
 import sys
 from pathlib import Path
 import cloudpickle
+import pytest
 from pydra.compose import workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result
@@ -86,6 +87,21 @@ def test_picklestore_readonly_caches(tmp_path):
         store.commit(lease, Result(cache_dir=lease.cache_dir))
     assert lease.cache_dir == primary / "abc"
     assert store.lookup("abc").cache_dir == primary / "abc"
+
+
+@pytest.mark.timeout(30)
+def test_lease_creates_missing_lock_dir(tmp_path):
+    root = tmp_path / "missing" / "cache"
+    with PickleStore(root).acquire("abc") as lease:
+        assert lease.lockfile.exists()
+
+
+@pytest.mark.timeout(30)
+def test_lease_raises_if_lock_dir_cannot_exist(tmp_path):
+    (tmp_path / "file").write_text("")
+    with pytest.raises(OSError):
+        with PickleStore(tmp_path / "file" / "cache").acquire("abc"):
+            pass
 
 
 def test_lease_async_waits_for_holder(tmp_path):
