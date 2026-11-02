@@ -37,6 +37,22 @@ def AddOne(x):
 
 
 @python.define
+def RendezvousAddOne(x, me: str, peer: str, sync_dir: str):
+    """Add one once the peer task is also running, so the two tasks provably overlap"""
+    import time
+    from pathlib import Path
+
+    sync = Path(sync_dir)
+    (sync / me).touch()
+    deadline = time.monotonic() + 60  # bound only
+    while not (sync / peer).exists():
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"{peer} never started: tasks did not run concurrently")
+        time.sleep(0.01)
+    return x + 1
+
+
+@python.define
 def SleepAddOne(x):
     time.sleep(1)
     return x + 1
@@ -99,18 +115,25 @@ def test_concurrent_wf(any_worker, tmpdir):
 @pytest.mark.real_worker
 def test_concurrent_wf_nprocs(tmpdir):
     # concurrent workflow
-    # setting n_procs in Submitter that is passed to the worker
+    # setting n_procs in Submitter that is passed to the worker;
+    # A and B must overlap (each waits for the other to start)
     # A --> C
     # B --> D
     @workflow.define(outputs=["out1", "out2"])
-    def Workflow(x, y):
-        taska = workflow.add(AddOne(x=x), name="taska")
-        taskb = workflow.add(AddOne(x=y), name="taskb")
+    def Workflow(x, y, sync_dir):
+        taska = workflow.add(
+            RendezvousAddOne(x=x, me="a", peer="b", sync_dir=sync_dir), name="taska"
+        )
+        taskb = workflow.add(
+            RendezvousAddOne(x=y, me="b", peer="a", sync_dir=sync_dir), name="taskb"
+        )
         taskc = workflow.add(AddOne(x=taska.out), name="taskc")
         taskd = workflow.add(AddOne(x=taskb.out), name="taskd")
         return taskc.out, taskd.out
 
-    wf = Workflow(x=5, y=10)
+    sync_dir = tmpdir / "sync"
+    sync_dir.mkdir()
+    wf = Workflow(x=5, y=10, sync_dir=str(sync_dir))
     with Submitter(worker="cf", n_procs=2, cache_root=tmpdir) as sub:
         res = sub(wf)
 
