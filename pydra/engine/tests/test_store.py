@@ -1,11 +1,19 @@
 import asyncio
+import sys
 from pathlib import Path
+import cloudpickle
 from pydra.compose import workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result
 from pydra.engine.store import PickleStore, ResultStore
 from pydra.engine.submitter import Submitter
+from pydra.engine.tests import utils as test_utils
 from pydra.engine.tests.utils import FunAddTwo
+
+# The installed package does not ship tests, so worker processes cannot import
+# these modules and must receive their classes by value
+cloudpickle.register_pickle_by_value(sys.modules[__name__])
+cloudpickle.register_pickle_by_value(test_utils)
 
 
 class RecordingStore(PickleStore):
