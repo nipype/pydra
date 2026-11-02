@@ -2,6 +2,7 @@ import asyncio
 import sys
 from pathlib import Path
 import cloudpickle
+import pytest
 from pydra.compose import workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result
