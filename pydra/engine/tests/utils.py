@@ -1,6 +1,5 @@
 # Tasks for testing
 import os
-import time
 import sys
 import shutil
 import typing as ty
@@ -256,9 +255,17 @@ def Ten(x) -> int:
 
 
 @python.define
-def Add2Wait(x: int) -> int:
-    time.sleep(2)
+def Add2Counted(x: int, run_log: str) -> int:
+    """Add two, appending a line to ``run_log`` on every execution (not on cache hits)"""
+    with open(run_log, "a") as f:
+        f.write("run\n")
     return x + 2
+
+
+def count_runs(run_log: str) -> int:
+    """Number of executions of ``Add2Counted`` recorded in ``run_log``"""
+    path = Path(run_log)
+    return len(path.read_text().splitlines()) if path.exists() else 0
 
 
 @python.define

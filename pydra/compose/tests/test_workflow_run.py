@@ -9,7 +9,8 @@ from pathlib import Path
 from fileformats.generic import File
 from pydra.engine.tests.utils import (
     Add2,
-    Add2Wait,
+    Add2Counted,
+    count_runs,
     Multiply,
     Divide,
     # MultiplyList,
@@ -2150,66 +2151,54 @@ def test_wf_nostate_cachedir_relativepath(tmp_path, worker):
     shutil.rmtree(cache_root)
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_root;
     the second worky has readonly_caches and should not recompute the results
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
-
-    # checking execution time (for unix and cf)
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # checking if the second worky didn't run again
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
     """
     the same as previous test, but workflows differ
@@ -2222,29 +2211,24 @@ def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
     @workflow.define
     def Worky1(x, y):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2(x=mult.out), name="add2")
         return add2.out
 
     worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
 
     assert 8 == results1.outputs.out
 
     @workflow.define
     def Worky2(x, y):
         mult = workflow.add(Divide(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2(x=mult.out), name="add2")
         return add2.out
 
     worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
@@ -2258,8 +2242,6 @@ def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
     assert results1.cache_dir != results2.cache_dir
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_b(worker: str, tmp_path: Path):
     """
     the same as previous test, but the 2nd workflows has two outputs
@@ -2267,60 +2249,51 @@ def test_wf_nostate_cachelocations_b(worker: str, tmp_path: Path):
     the task should not be run and it should be fast,
     but the worky itself is triggered and the new output dir is created
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
 
     @workflow.define(outputs=["out", "out_pr"])
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out, add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out == results2.outputs.out_pr
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # execution time for second run should be much shorter
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # checking if the second worky didn't run again
     assert results1.cache_dir != results2.cache_dir
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
     """
     the same as previous test, but worky output names differ,
@@ -2328,175 +2301,147 @@ def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
     but the worky itself is triggered and the new output dir is created
     (the second worky has updated name in its Output)
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define(outputs=["out1"])
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out  # out1
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out1
 
     @workflow.define(outputs=["out2"])
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out  # out2
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out2
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking execution time (the second worky should be fast, nodes do not have to rerun)
-        assert t1 > 2
-        # testing relative values (windows or slurm takes much longer to create worky itself)
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # both worky cache_dirs should be created
     assert results1.cache_dir != results2.cache_dir
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path):
     """
     the same as previous test, but worky names and output names differ,
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define(outputs=["out1"])
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out  # out1
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out1
 
     @workflow.define(outputs=["out2"])
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out2
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        assert t1 > 2
-        # testing relative values (windows or slurm takes much longer to create worky itself)
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # both worky cache_dirs should be created
     assert results1.cache_dir != results2.cache_dir
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_root;
     the second worky has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root2) as sub:
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking execution time
-        assert t1 > 2
-        assert t2 > 2
+    assert runs1 > 0
+    assert count_runs(run_log) > runs1
 
     # checking if the second worky didn't run again
     assert results1.cache_dir != results2.cache_dir
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     worker: str, tmp_path: Path
 ):
@@ -2505,44 +2450,40 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     submitter doesn't have rerun, but the second worky has rerun=True,
     propagate_rerun is True as default, so everything should be rerun
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache1"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache2"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
 
@@ -2553,14 +2494,10 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
     assert len(list(Path(cache_root2).glob("python-*"))) == 2
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # runtime for recomputed workflows should be about the same
-        assert abs(t1 - t2) < t1 / 2
+    assert runs1 > 0
+    assert count_runs(run_log) == 2 * runs1
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     worker: str, tmp_path: Path
 ):
@@ -2570,37 +2507,34 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     propagate_rerun is set to False, so worky will be triggered,
     but tasks will not have rerun, so will use the previous results
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker,
         cache_root=cache_root2,
@@ -2610,32 +2544,26 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
 
     # checking if the second worky runs again
     assert results1.cache_dir != results2.cache_dir
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the time
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # tasks should not be recomputed
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
     assert len(list(Path(cache_root2).glob("python-*"))) == 0
 
 
-@pytest.mark.slow
 @pytest.mark.xfail(
     reason=(
         "Cannot specify tasks within a workflow to be rerun, maybe rerun could take a "
         "list of task names instead"
     )
 )
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     worker: str, tmp_path: Path
 ):
@@ -2644,38 +2572,35 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     submitter doesn't have rerun, but worky has rerun=True,
     since propagate_rerun=False, only tasks that have rerun=True will be rerun
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "cache1"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "cache2"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
         # rerun on the task level needed (wf["propagate_rerun"] is False)
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker,
         cache_root=cache_root2,
@@ -2683,7 +2608,6 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
         propagate_rerun=False,
     ) as sub:
         results2 = sub(worky2, rerun=True)  # rerun will not be propagated to each task)
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
 
@@ -2692,11 +2616,8 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     assert len(list(Path(cache_root1).glob("python-*"))) == 2
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 > 2
+    assert runs1 > 0
+    assert count_runs(run_log) > runs1
 
 
 @pytest.mark.flaky(reruns=3)
@@ -2802,61 +2723,52 @@ def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_root;
     the second worky has readonly_caches and should not recompute the results
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky1 = Worky1(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 4])
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert results1.outputs.out[0] == 8
     assert results1.outputs.out[1] == 82
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2().split(("x", "y"), x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky2 = Worky2(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 4])
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 82]
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # checking all directories
 
@@ -2866,61 +2778,52 @@ def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     assert results1.cache_dir == results2.cache_dir
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_root;
     the second worky has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky1 = Worky1(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 4])
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert results1.outputs.out[0] == 8
     assert results1.outputs.out[1] == 82
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2().split(("x", "y"), x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky2 = Worky2(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 4])
     with Submitter(worker=worker, cache_root=cache_root2) as sub:
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert results2.outputs.out[0] == 8
     assert results2.outputs.out[1] == 82
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 > 2
+    assert runs1 > 0
+    assert count_runs(run_log) > runs1
 
     # checking all directories
 
@@ -2928,8 +2831,6 @@ def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
     # checking all directories
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
     """
     Two identical wfs (with states) with provided cache_root;
@@ -2937,54 +2838,47 @@ def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
     (the lazy input of the node is updated to the correct one,
     i.e. the same as in worky1, after adding the node to the worky)
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky1 = Worky1(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 4])
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert results1.outputs.out[0] == 8
     assert results1.outputs.out[1] == 82
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2().split(("x", "y"), x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky2 = Worky2(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 4])
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert results2.outputs.out[0] == 8
     assert results2.outputs.out[1] == 82
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # checking all directories
 
@@ -2992,8 +2886,6 @@ def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
     # checking all directories
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with provided cache_root, the first one has no state, the second has;
@@ -3007,7 +2899,7 @@ def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     @workflow.define
     def Worky1(x, y):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2(x=mult.out), name="add2")
         return add2.out
 
     worky1 = Worky1(x=2, y=3)
@@ -3023,7 +2915,7 @@ def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     def Worky2(x, y):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2(x=mult.out), name="add2")
         return add2.out
 
     worky2 = Worky2().split(("x", "y"), x=[2, 20], y=[3, 4])
@@ -3039,7 +2931,6 @@ def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     assert results2.outputs.out[1] == 82
 
 
-@pytest.mark.slow
 def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_root;
@@ -3047,6 +2938,7 @@ def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
      that is later overwritten in Submitter.__call__;
     the readonly_caches from call doesn't exist so the second task should run again
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root1_empty = tmp_path / "test_wf_cache3_empty"
@@ -3055,32 +2947,28 @@ def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=2, y=3)
-
-    t0 = time.time()
+    worky2 = Worky2(x=2, y=3, run_log=run_log)
     # changing readonly_caches to non-existing dir
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1_empty
@@ -3088,15 +2976,11 @@ def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results2.outputs.out
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 > 2
+    assert runs1 > 0
+    assert count_runs(run_log) > runs1
 
     # checking if both worky run
     assert results1.cache_dir != results2.cache_dir
@@ -3156,175 +3040,148 @@ def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node states;
     the second worky has readonly_caches and should not recompute the results
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky1 = Worky1(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert results1.outputs.out == [8, 82]
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky2 = Worky2(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 82]
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node states;
     the second worky has readonly_caches,
     but submitter is called with rerun=True, so should recompute
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky1 = Worky1(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert results1.outputs.out == [8, 82]
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky2 = Worky2(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root2) as sub:
         results2 = sub(worky2, rerun=True)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 82]
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 > 2
+    assert runs1 > 0
+    assert count_runs(run_log) > runs1
 
     # checking all directories
 
     # checking if the second worky run again
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
     """
     Two wfs with identical inputs and node state (that is set after adding the node!);
     the second worky has readonly_caches and should not recompute the results
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky1 = Worky1(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert results1.outputs.out == [8, 82]
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky2 = Worky2(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 82]
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
     # checking all directories
 
@@ -3332,60 +3189,51 @@ def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
     # checking all directories
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations_recompute(worker: str, tmp_path: Path):
     """
     Two wfs (with nodes with states) with provided cache_root;
     the second worky has readonly_caches and should not recompute the results
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
     cache_root2 = tmp_path / "test_wf_cache4"
     cache_root2.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply().split(("x", "y"), x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky1 = Worky1(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert results1.outputs.out == [8, 82]
 
     @workflow.define
-    def Worky2(x, y):
+    def Worky2(x, y, run_log):
 
         mult = workflow.add(Multiply().split(["x", "y"], x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky2 = Worky2(x=[2, 20], y=[3, 4])
-
-    t0 = time.time()
+    worky2 = Worky2(x=[2, 20], y=[3, 4], run_log=run_log)
     with Submitter(
         worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
     ) as sub:
         results2 = sub(worky2)
 
     assert not results2.errored, "\n".join(results2.errors["error message"])
-    t2 = time.time() - t0
 
     assert results2.outputs.out == [8, 10, 62, 82]
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 > 2
+    assert runs1 > 0
+    assert count_runs(run_log) > runs1
 
     # checking all directories
 
@@ -3393,30 +3241,27 @@ def test_wf_ndstate_cachelocations_recompute(worker: str, tmp_path: Path):
     # checking all directories
 
 
-@pytest.mark.slow
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_runtwice_usecache(worker: str, tmp_path: Path):
     """
     running workflow (without state) twice,
     the second run should use the results from the first one
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1(x=2, y=3)
-
-    t0 = time.time()
+    worky1 = Worky1(x=2, y=3, run_log=run_log)
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out
     # checkoing cache_dir after the first run
@@ -3425,47 +3270,40 @@ def test_wf_nostate_runtwice_usecache(worker: str, tmp_path: Path):
     cache_root_content = os.listdir(cache_root1)
 
     # running workflow the second time
-    t0 = time.time()
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results1.outputs.out
     # checking if no new directory is created
     assert cache_root_content == os.listdir(cache_root1)
 
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
 
-@pytest.mark.slow
 def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
     """
     running workflow with a state twice,
     the second run should use the results from the first one
     """
+    run_log = str(tmp_path / "add2_runs.log")
     cache_root1 = tmp_path / "test_wf_cache3"
     cache_root1.mkdir()
 
     @workflow.define
-    def Worky1(x, y):
+    def Worky1(x, y, run_log):
         mult = workflow.add(Multiply(x=x, y=y), name="mult")
-        add2 = workflow.add(Add2Wait(x=mult.out), name="add2")
+        add2 = workflow.add(Add2Counted(x=mult.out, run_log=run_log), name="add2")
         return add2.out
 
-    worky1 = Worky1().split(("x", "y"), x=[2, 20], y=[3, 30])
-
-    t0 = time.time()
+    worky1 = Worky1(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 30])
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t1 = time.time() - t0
+    runs1 = count_runs(run_log)
 
     assert 8 == results1.outputs.out[0]
     assert 602 == results1.outputs.out[1]
@@ -3477,22 +3315,17 @@ def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
     cache_root_content = os.listdir(results1.job.cache_root)
 
     # running workflow the second time
-    t0 = time.time()
     with Submitter(worker=worker, cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
-    t2 = time.time() - t0
 
     assert 8 == results1.outputs.out[0]
     assert 602 == results1.outputs.out[1]
     # checking if no new directory is created
     assert cache_root_content == os.listdir(results1.job.cache_root)
-    # for win and dask/slurm the time for dir creation etc. might take much longer
-    if not sys.platform.startswith("win") and worker == "cf":
-        # checking the execution time
-        assert t1 > 2
-        assert t2 < max(1, t1 - 1)
+    assert runs1 > 0
+    assert count_runs(run_log) == runs1
 
 
 @pytest.fixture
