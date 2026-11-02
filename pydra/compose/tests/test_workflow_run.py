@@ -2,7 +2,6 @@ import pytest
 import shutil
 import os
 import sys
-import time
 import typing as ty
 import attr
 from pathlib import Path
