@@ -88,6 +88,21 @@ def test_picklestore_readonly_caches(tmp_path):
     assert store.lookup("abc").cache_dir == primary / "abc"
 
 
+@pytest.mark.timeout(30)
+def test_lease_creates_missing_lock_dir(tmp_path):
+    root = tmp_path / "missing" / "cache"
+    with PickleStore(root).acquire("abc") as lease:
+        assert lease.lockfile.exists()
+
+
+@pytest.mark.timeout(30)
+def test_lease_raises_if_lock_dir_cannot_exist(tmp_path):
+    (tmp_path / "file").write_text("")
+    with pytest.raises(OSError):
+        with PickleStore(tmp_path / "file" / "cache").acquire("abc"):
+            pass
+
+
 def test_lease_async_waits_for_holder(tmp_path):
     store = PickleStore(tmp_path)
 

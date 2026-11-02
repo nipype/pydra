@@ -27,6 +27,7 @@ class Lease:
     _lock: SoftFileLock | None = attrs.field(default=None, init=False, repr=False)
 
     def __enter__(self) -> "Lease":
+        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         self._lock = SoftFileLock(self.lockfile)
         self._lock.acquire()
         return self
@@ -35,6 +36,7 @@ class Lease:
         self._lock.release()
 
     async def __aenter__(self) -> "Lease":
+        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         lock = SoftFileLock(self.lockfile)
         timeout = 0.1
         while True:
