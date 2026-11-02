@@ -1225,6 +1225,7 @@ def test_wf_3nd_ndst_7(worker: str, tmp_path: Path):
 # workflows with structures A -> B -> C with multiple connections
 
 
+@pytest.mark.real_worker
 def test_wf_3nd_8(tmp_path: Path):
     """workflow with three tasks A->B->C vs two tasks A->C with multiple connections"""
 
@@ -2149,6 +2150,7 @@ def test_wf_nostate_cachedir_relativepath(tmp_path, worker):
     shutil.rmtree(cache_root)
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations(worker: str, tmp_path: Path):
     """
@@ -2206,6 +2208,7 @@ def test_wf_nostate_cachelocations(worker: str, tmp_path: Path):
     # checking if the second worky didn't run again
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
     """
@@ -2255,6 +2258,7 @@ def test_wf_nostate_cachelocations_a(worker: str, tmp_path: Path):
     assert results1.cache_dir != results2.cache_dir
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_b(worker: str, tmp_path: Path):
     """
@@ -2315,6 +2319,7 @@ def test_wf_nostate_cachelocations_b(worker: str, tmp_path: Path):
     assert results1.cache_dir != results2.cache_dir
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
     """
@@ -2375,6 +2380,7 @@ def test_wf_nostate_cachelocations_setoutputchange(worker: str, tmp_path: Path):
     assert results1.cache_dir != results2.cache_dir
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path):
     """
@@ -2431,6 +2437,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(worker: str, tmp_path: Path
     assert results1.cache_dir != results2.cache_dir
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
@@ -2488,6 +2495,7 @@ def test_wf_nostate_cachelocations_forcererun(worker: str, tmp_path: Path):
     assert results1.cache_dir != results2.cache_dir
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
     worker: str, tmp_path: Path
@@ -2551,6 +2559,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
         assert abs(t1 - t2) < t1 / 2
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     worker: str, tmp_path: Path
@@ -2619,6 +2628,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     assert len(list(Path(cache_root2).glob("python-*"))) == 0
 
 
+@pytest.mark.slow
 @pytest.mark.xfail(
     reason=(
         "Cannot specify tasks within a workflow to be rerun, maybe rerun could take a "
@@ -2792,6 +2802,7 @@ def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     """
@@ -2855,6 +2866,7 @@ def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     assert results1.cache_dir == results2.cache_dir
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
@@ -2916,6 +2928,7 @@ def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
     # checking all directories
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
     """
@@ -2979,6 +2992,7 @@ def test_wf_state_cachelocations_updateinp(worker: str, tmp_path: Path):
     # checking all directories
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     """
@@ -3025,6 +3039,7 @@ def test_wf_state_n_nostate_cachelocations(worker: str, tmp_path: Path):
     assert results2.outputs.out[1] == 82
 
 
+@pytest.mark.slow
 def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
     """
     Two identical wfs with provided cache_root;
@@ -3141,6 +3156,7 @@ def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations(worker: str, tmp_path: Path):
     """
@@ -3196,6 +3212,7 @@ def test_wf_ndstate_cachelocations(worker: str, tmp_path: Path):
         assert t2 < max(1, t1 - 1)
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations_forcererun(worker: str, tmp_path: Path):
     """
@@ -3254,6 +3271,7 @@ def test_wf_ndstate_cachelocations_forcererun(worker: str, tmp_path: Path):
     # checking if the second worky run again
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
     """
@@ -3314,6 +3332,7 @@ def test_wf_ndstate_cachelocations_updatespl(worker: str, tmp_path: Path):
     # checking all directories
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_ndstate_cachelocations_recompute(worker: str, tmp_path: Path):
     """
@@ -3374,6 +3393,7 @@ def test_wf_ndstate_cachelocations_recompute(worker: str, tmp_path: Path):
     # checking all directories
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_runtwice_usecache(worker: str, tmp_path: Path):
     """
@@ -3423,6 +3443,7 @@ def test_wf_nostate_runtwice_usecache(worker: str, tmp_path: Path):
         assert t2 < max(1, t1 - 1)
 
 
+@pytest.mark.slow
 def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
     """
     running workflow with a state twice,

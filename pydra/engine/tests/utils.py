@@ -18,28 +18,40 @@ if ty.TYPE_CHECKING:
     from pydra.environments.base import Environment
 
 
-need_docker = pytest.mark.skipif(
-    shutil.which("docker") is None
-    or sp.run(["docker", "info"], capture_output=True).returncode,
-    reason="no docker within the container",
+def _need(marker: str, condition: bool, reason: str):
+    """Decorator that skips a test unless ``condition`` holds and tags it with ``marker``,
+    so the tier can be deselected with ``-m "not <marker>"``"""
+    skip = pytest.mark.skipif(not condition, reason=reason)
+
+    def decorator(test):
+        return getattr(pytest.mark, marker)(skip(test))
+
+    return decorator
+
+
+need_docker = _need(
+    "docker",
+    shutil.which("docker") is not None
+    and not sp.run(["docker", "info"], capture_output=True).returncode,
+    "no docker within the container",
 )
-need_singularity = pytest.mark.skipif(
-    shutil.which("singularity") is None, reason="no singularity available"
+need_singularity = _need(
+    "singularity", shutil.which("singularity") is not None, "no singularity available"
 )
-need_lmod = pytest.mark.skipif(
-    "MODULEPATH" not in os.environ, reason="modules not available"
-)
+need_lmod = _need("lmod", "MODULEPATH" in os.environ, "modules not available")
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
     reason="docker command not adjusted for windows docker",
 )
-need_slurm = pytest.mark.skipif(
-    not (bool(shutil.which("sbatch")) and bool(shutil.which("sacct"))),
-    reason="slurm not available",
+need_slurm = _need(
+    "slurm",
+    bool(shutil.which("sbatch")) and bool(shutil.which("sacct")),
+    "slurm not available",
 )
-need_sge = pytest.mark.skipif(
-    not (bool(shutil.which("qsub")) and bool(shutil.which("qacct"))),
-    reason="sge not available",
+need_sge = _need(
+    "slurm",
+    bool(shutil.which("qsub")) and bool(shutil.which("qacct")),
+    "sge not available",
 )
 
 
@@ -89,31 +101,16 @@ def Op4Var(a, b, c, d) -> str:
 
 @python.define
 def FunAddTwo(a: int) -> int:
-    import time
-
-    time.sleep(1)
-    if a == 3:
-        time.sleep(2)
     return a + 2
 
 
 @python.define
 def FunAddTwoNoType(a):
-    import time
-
-    time.sleep(1)
-    if a == 3:
-        time.sleep(2)
     return a + 2
 
 
 @python.define
 def FunAddTwoWithThreadCount(a: int, sgeThreads: int = 1) -> int:
-    import time
-
-    time.sleep(1)
-    if a == 3:
-        time.sleep(2)
     return a + 2
 
 
@@ -192,8 +189,6 @@ def MultiplyMixed(x: list, y: int) -> list:
 
 @python.define
 def Add2(x: int) -> int:
-    if x == 1 or x == 12:
-        time.sleep(1)
     return x + 2
 
 

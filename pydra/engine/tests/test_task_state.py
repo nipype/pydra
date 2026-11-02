@@ -2,7 +2,6 @@ import os
 import shutil
 import attrs
 import numpy as np
-import time
 import pytest
 from pydra.compose import python, workflow
 from pydra.engine.tests.utils import (
@@ -334,10 +333,10 @@ def test_task_init_7(tmp_path):
     hash1 = nn1._hash
 
     # changing the content of the file
-    time.sleep(2)  # need the mtime to be different
     file2 = tmp_path / "file2.txt"
     with open(file2, "w") as f:
         f.write("from pydra")
+    os.utime(file2, (0, file2.stat().st_mtime + 10))  # distinct mtime
 
     nn2 = FunFileList(filename_list=[file1, file2])
     hash2 = nn2._hash

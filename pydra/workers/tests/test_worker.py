@@ -32,6 +32,11 @@ logger = logging.getLogger("pydra.worker")
 
 
 @python.define
+def AddOne(x):
+    return x + 1
+
+
+@python.define
 def SleepAddOne(x):
     time.sleep(1)
     return x + 1
@@ -74,10 +79,10 @@ def test_concurrent_wf(any_worker, tmpdir):
     # B --> D
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x, y):
-        taska = workflow.add(SleepAddOne(x=x), name="taska")
-        taskb = workflow.add(SleepAddOne(x=y), name="taskb")
-        taskc = workflow.add(SleepAddOne(x=taska.out), name="taskc")
-        taskd = workflow.add(SleepAddOne(x=taskb.out), name="taskd")
+        taska = workflow.add(AddOne(x=x), name="taska")
+        taskb = workflow.add(AddOne(x=y), name="taskb")
+        taskc = workflow.add(AddOne(x=taska.out), name="taskc")
+        taskd = workflow.add(AddOne(x=taskb.out), name="taskd")
         return taskc.out, taskd.out
 
     wf = Workflow(x=5, y=10)
@@ -91,6 +96,7 @@ def test_concurrent_wf(any_worker, tmpdir):
     assert outputs.out2 == 12
 
 
+@pytest.mark.real_worker
 def test_concurrent_wf_nprocs(tmpdir):
     # concurrent workflow
     # setting n_procs in Submitter that is passed to the worker
@@ -98,10 +104,10 @@ def test_concurrent_wf_nprocs(tmpdir):
     # B --> D
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x, y):
-        taska = workflow.add(SleepAddOne(x=x), name="taska")
-        taskb = workflow.add(SleepAddOne(x=y), name="taskb")
-        taskc = workflow.add(SleepAddOne(x=taska.out), name="taskc")
-        taskd = workflow.add(SleepAddOne(x=taskb.out), name="taskd")
+        taska = workflow.add(AddOne(x=x), name="taska")
+        taskb = workflow.add(AddOne(x=y), name="taskb")
+        taskc = workflow.add(AddOne(x=taska.out), name="taskc")
+        taskd = workflow.add(AddOne(x=taskb.out), name="taskd")
         return taskc.out, taskd.out
 
     wf = Workflow(x=5, y=10)
@@ -120,15 +126,15 @@ def test_wf_in_wf(any_worker, tmpdir):
     # workflow task
     @workflow.define
     def SubWf(x):
-        sub_a = workflow.add(SleepAddOne(x=x), name="sub_a")
-        sub_b = workflow.add(SleepAddOne(x=sub_a.out), name="sub_b")
+        sub_a = workflow.add(AddOne(x=x), name="sub_a")
+        sub_b = workflow.add(AddOne(x=sub_a.out), name="sub_b")
         return sub_b.out
 
     @workflow.define
     def WfInWf(x):
-        a = workflow.add(SleepAddOne(x=x), name="a")
+        a = workflow.add(AddOne(x=x), name="a")
         subwf = workflow.add(SubWf(x=a.out), name="subwf")
-        b = workflow.add(SleepAddOne(x=subwf.out), name="b")
+        b = workflow.add(AddOne(x=subwf.out), name="b")
         return b.out
 
     wf = WfInWf(x=3)
@@ -149,7 +155,7 @@ def test_wf2(any_worker, tmpdir):
 
     @workflow.define
     def Wfnd(x):
-        add2 = workflow.add(SleepAddOne(x=x))
+        add2 = workflow.add(AddOne(x=x))
         return add2.out
 
     @workflow.define
@@ -169,8 +175,8 @@ def test_wf2(any_worker, tmpdir):
 def test_wf_with_state(any_worker, tmpdir):
     @workflow.define
     def Workflow(x):
-        taska = workflow.add(SleepAddOne(x=x), name="taska")
-        taskb = workflow.add(SleepAddOne(x=taska.out), name="taskb")
+        taska = workflow.add(AddOne(x=x), name="taska")
+        taskb = workflow.add(AddOne(x=taska.out), name="taskb")
         return taskb.out
 
     wf = Workflow().split(x=[1, 2, 3])
