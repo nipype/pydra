@@ -15,6 +15,7 @@ from pydra.compose.base import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+    from pydra.utils.resources import ComputeResources
 
 __all__ = ["arg", "out", "define", "Task", "Outputs"]
 
@@ -95,6 +96,8 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    version: str | None = None,
+    resources: "ComputeResources | None" = None,
 ) -> "Task":
     """
     Create an interface for a function or a class.
@@ -115,6 +118,12 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    version: str, optional
+        Declared version of the task. When given, the checksum uses the function's
+        module, name and this version instead of hashing the function's code, so the
+        version must be changed whenever a change to the code changes its results.
+    resources: ComputeResources, optional
+        What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
 
     Returns
     -------
@@ -179,9 +188,11 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
+            resources=resources,
         )
 
         defn.__doc__ = function.__doc__
+        defn._version = version
         return defn
 
     if wrapped is not None:

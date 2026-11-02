@@ -164,6 +164,13 @@ class Task(ty.Generic[OutputsType]):
 
     # The attribute containing the function/executable used to run the task
     _executor_name = None
+    # Declared version of the task, which stands in for the code of the executor in the
+    # checksum when set (see ``python.define(version=...)``)
+    _version: ty.ClassVar[str | None] = None
+
+    # A ComputeResources or None: what the task asks of a scheduler worker. Set by
+    # `define`, never hashed. Unannotated because `get_type_hints` runs on task classes.
+    _resources = None
 
     # Class attributes
     TASK_CLASS_ATTRS = ("xor",)
@@ -476,6 +483,14 @@ class Task(ty.Generic[OutputsType]):
     def _checksum(self):
         return f"{self._task_type()}-{self._hash}"
 
+    def _hashed_value(self, name: str) -> ty.Any:
+        """The value of field ``name`` as it enters the hash: the executor of a task
+        with a declared version is replaced by its module, name and version."""
+        value = getattr(self, name)
+        if self._version is not None and name == self._executor_name:
+            return f"{value.__module__}.{value.__qualname__}=={self._version}"
+        return value
+
     def _hash_changes(self):
         """Detects any changes in the hashed values between the current inputs and the
         previously calculated values"""
@@ -493,7 +508,7 @@ class Task(ty.Generic[OutputsType]):
                 continue
             if getattr(field, "container_path", False):
                 continue
-            inp_dict[field.name] = getattr(self, field.name)
+            inp_dict[field.name] = self._hashed_value(field.name)
         # Include the outputs class, just in case any names or types have changed
         inp_dict["Outputs"] = self.Outputs
         hash_cache = Cache()
@@ -626,7 +641,7 @@ def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
     yield f"task[{obj._task_type()}]:(".encode()
     for field in get_fields(obj):
         yield f"{field.name}=".encode()
-        yield hash_single(getattr(obj, field.name), cache)
+        yield hash_single(obj._hashed_value(field.name), cache)
         yield b","
     yield b"_splitter="
     yield hash_single(obj._splitter, cache)

@@ -12,6 +12,23 @@ if ty.TYPE_CHECKING:
 class Docker(base.Container):
     """Docker environment."""
 
+    def _resolve_digest(self) -> str | None:
+        try:
+            rc, out, _ = base.execute(
+                [
+                    "docker",
+                    "image",
+                    "inspect",
+                    "--format",
+                    "{{.Id}}",
+                    f"{self.image}:{self.tag}",
+                ],
+                strip=True,
+            )
+        except OSError:
+            return None
+        return out if rc == 0 and out else None
+
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations

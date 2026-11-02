@@ -48,8 +48,21 @@ class Result(ty.Generic[OutputsType]):
     runtime: Runtime | None = None
     errored: bool = False
     task: base.Task[OutputsType] | None = None
+    environment_checksum: str | None = None
+    platform: str | None = None
+    python_version: str | None = None
+    job_uid: str | None = None
+    """Uid of the job that produced the result."""
+    cross_context: bool = False
+    """Whether the result was reused from an entry recorded in another context."""
 
     CLOUD_PICKLE_ATTRS = ("outputs", "task")
+    CONTEXT_ATTRS = ("environment_checksum", "platform", "python_version")
+
+    @property
+    def context(self) -> dict[str, str | None]:
+        """The execution context that produced the result, recorded beside it."""
+        return {name: getattr(self, name) for name in self.CONTEXT_ATTRS}
 
     def __getstate__(self):
         state = attrs_values(self)
@@ -59,6 +72,10 @@ class Result(ty.Generic[OutputsType]):
         return state
 
     def __setstate__(self, state):
+        # Results pickled before a field was added take its default
+        for field in attrs.fields(type(self)):
+            if field.name not in state and field.default is not attrs.NOTHING:
+                setattr(self, field.name, field.default)
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
                 state[attr] = cp.loads(state[attr])
