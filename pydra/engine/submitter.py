@@ -12,6 +12,7 @@ from datetime import datetime
 from collections import defaultdict
 import attrs
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pydra.engine.graph import DiGraph
 from pydra.utils.general import (
     get_fields,
@@ -173,6 +174,7 @@ class Submitter:
         self.workers = {DEFAULT_WORKER: worker}
         for name, spec in workers.items():
             self.workers[name] = self._make_worker(spec, {})
+        self._sync_pool = None
         self.run_start_time = None
         self.clean_stale_locks = (
             clean_stale_locks
@@ -206,7 +208,13 @@ class Submitter:
             raise
 
     def worker_for(self, job: "Job[TaskType]") -> Worker:
-        """The worker the router sends a job to."""
+        """The worker a job runs on.
+
+        Only leaf jobs are routed: a workflow job is expanded by the submitter's own
+        ``worker``, whatever its resources, and its nodes are placed individually.
+        """
+        if is_workflow(job.task):
+            return self.workers[DEFAULT_WORKER]
         name = self.router(job)
         if name is None:
             name = DEFAULT_WORKER
@@ -260,7 +268,6 @@ class Submitter:
         task._check_rules()
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
-
             state = State(
                 name="outer_split",
                 splitter=deepcopy(task._splitter),
@@ -351,6 +358,7 @@ class Submitter:
         # Remove the unpicklable entries or those that should not be pickled
         # When unpickled (in another process) the submitter can't be called
         state["loop"] = None
+        state["_sync_pool"] = None
         return state
 
     def __setstate__(self, state):
@@ -494,7 +502,7 @@ class Submitter:
                         elif (worker := self.worker_for(job)).is_async:
                             coroutine = worker.run(job, rerun=job_rerun)
                         else:  # a synchronous worker, run in this loop
-                            coroutine = _run_blocking(worker, job, job_rerun)
+                            coroutine = self._run_blocking(worker, job, job_rerun)
                         asyncio_task = asyncio.Task(coroutine, name=job.checksum)
                         task_futures.add(asyncio_task)
                         futured[job.checksum] = job
@@ -578,10 +586,37 @@ class Submitter:
         Do not close previously queued loop.
 
         """
-        for worker in self.workers.values():
-            worker.close()
-        if self._own_loop:
-            self.loop.close()
+        errors = []
+        if self._sync_pool is not None:
+            self._sync_pool.shutdown()
+            self._sync_pool = None
+        for worker in {id(w): w for w in self.workers.values()}.values():
+            try:
+                worker.close()
+            except Exception as e:
+                errors.append(e)
+        try:
+            if self._own_loop:
+                self.loop.close()
+        finally:
+            if errors:
+                raise errors[0]
+
+    async def _run_blocking(self, worker: Worker, job: "Job", rerun: bool) -> "Result":
+        """Run a job on a synchronous worker without blocking the event loop.
+
+        Synchronous jobs run one at a time on a single helper thread, so dispatch,
+        result collection and the polling of other workers carry on meanwhile. As
+        ``Job.run`` changes the process's working directory, a job should not rely on
+        it while sibling jobs of an in-process worker run.
+        """
+        if self._sync_pool is None:
+            self._sync_pool = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="pydra-sync-worker"
+            )
+        return await self.loop.run_in_executor(
+            self._sync_pool, lambda: worker.run(job, rerun=rerun)
+        )
 
     def _check_locks(self, tasks: list[Job]) -> None:
         """Check for stale lock files and remove them."""
@@ -974,11 +1009,6 @@ class NodeExecution(ty.Generic[TaskType]):
                     runnable.append(self.blocked.pop(index))
         self.queued.update({t.state_index: t for t in runnable})
         return list(self.queued.values())
-
-
-async def _run_blocking(worker: Worker, job: "Job", rerun: bool) -> "Result":
-    """Run a job on a synchronous worker from within the event loop."""
-    return worker.run(job, rerun=rerun)
 
 
 async def prepare_runnable(runnable):

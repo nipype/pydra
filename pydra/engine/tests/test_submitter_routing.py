@@ -1,6 +1,8 @@
 """Worker routing: the submitter's router picks a worker for each job at dispatch."""
 
+import asyncio
 import os
+import threading
 from types import SimpleNamespace
 import pytest
 from pydra.compose import python, workflow
@@ -222,7 +224,7 @@ def test_unknown_worker_name_is_an_error(tmp_path):
         cache_root=tmp_path,
     ) as sub:
         with pytest.raises(ValueError, match=r"'tpu'.*\['default', 'gpu'\]"):
-            sub.worker_for(SimpleNamespace(name="j", resources=None))
+            sub.worker_for(SimpleNamespace(name="j", resources=None, task=AddOne(x=1)))
 
 
 def test_default_name_is_reserved(tmp_path):
@@ -259,3 +261,122 @@ def test_tag_router_matches_the_first_known_tag():
 
 def test_default_router_names_the_default_worker():
     assert default_router(SimpleNamespace(resources=GPU)) == "default"
+
+
+def test_a_workflow_job_is_never_routed(tmp_path):
+    default, gpu = RecordingDebug(), RecordingDebug()
+
+    @workflow.define(outputs=["out"], lazy=[])
+    def Tagged(x: int):
+        return workflow.add(AddOne(x=x), name="only").out
+
+    job = SimpleNamespace(name="w", resources=GPU, task=Tagged(x=1))
+    with Submitter(
+        worker=default,
+        workers={"gpu": gpu},
+        router=tag_router({"gpu": "gpu"}),
+        cache_root=tmp_path,
+    ) as sub:
+        assert sub.worker_for(job) is default
+        leaf = SimpleNamespace(name="l", resources=GPU, task=AddOne(x=1))
+        assert sub.worker_for(leaf) is gpu
+
+
+def test_top_level_workflow_with_a_routed_tag_is_expanded_by_the_default_worker(
+    tmp_path,
+):
+    default, gpu = RecordingDebug(), RecordingDebug()
+
+    @workflow.define(outputs=["out"])
+    def Tagged(x: int):
+        prep = workflow.add(AddOne(x=x), name="prep")
+        train = workflow.add(AddOne(x=prep.out), name="train", resources=GPU)
+        post = workflow.add(AddOne(x=train.out), name="post")
+        return post.out
+
+    Tagged._resources = GPU  # as a task base class can carry
+    tagged = Tagged(x=1)
+    with Submitter(
+        worker=default,
+        workers={"gpu": gpu},
+        router=tag_router({"gpu": "gpu"}),
+        cache_root=tmp_path,
+    ) as sub:
+        assert sub(tagged).outputs.out == 4
+    assert default.seen == ["main", "prep", "post"]
+    assert gpu.seen == ["train"]
+
+
+SYNC_STARTED = threading.Event()
+ASYNC_STARTED = threading.Event()
+
+
+class SyncSide(debug.Worker):
+    """Finishes only once the asynchronous side has started."""
+
+    _plugin_name = "debug"
+
+    def run(self, job, rerun=False):
+        SYNC_STARTED.set()
+        # bounded: on failure the async side never started, because the loop is held
+        assert ASYNC_STARTED.wait(timeout=20), "event loop was blocked"
+        return super().run(job, rerun=rerun)
+
+
+class AsyncSide(debug.Worker):
+    """Finishes only once the synchronous side has started."""
+
+    _plugin_name = "debug"
+
+    async def run(self, job, rerun=False):
+        ASYNC_STARTED.set()
+        await asyncio.wait_for(self._sync_started(), timeout=20)
+        return job.run(rerun=rerun)
+
+    async def _sync_started(self):
+        while not SYNC_STARTED.is_set():
+            await asyncio.sleep(0)
+
+
+@workflow.define(outputs=["a", "b"])
+def Siblings(x: int, y: int):
+    # different inputs, or the two nodes share a checksum and only one is dispatched
+    a = workflow.add(AddOne(x=x), name="a", resources=GPU)
+    b = workflow.add(AddOne(x=y), name="b")
+    return a.out, b.out
+
+
+def test_a_synchronous_worker_does_not_block_the_event_loop(tmp_path):
+    SYNC_STARTED.clear()
+    ASYNC_STARTED.clear()
+    with Submitter(
+        worker=AsyncSide(),
+        workers={"local": SyncSide()},
+        router=tag_router({"gpu": "local"}),
+        cache_root=tmp_path,
+    ) as sub:
+        outputs = sub(Siblings(x=1, y=5), raise_errors=True).outputs
+    assert (outputs.a, outputs.b) == (2, 6)
+
+
+def test_close_closes_every_worker_once_and_reports_the_first_failure(tmp_path):
+    closed = []
+
+    class Closing(debug.Worker):
+        _plugin_name = "debug"
+
+        def __init__(self, name, fail=False):
+            super().__init__()
+            self.name, self.fail = name, fail
+
+        def close(self):
+            closed.append(self.name)
+            if self.fail:
+                raise RuntimeError(self.name)
+
+    shared = Closing("shared", fail=True)
+    sub = Submitter(worker=shared, workers={"b": Closing("b")}, cache_root=tmp_path)
+    sub.workers["alias"] = shared
+    with pytest.raises(RuntimeError, match="shared"):
+        sub.close()
+    assert sorted(closed) == ["b", "shared"]
