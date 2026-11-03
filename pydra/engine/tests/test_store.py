@@ -38,9 +38,9 @@ class RecordingStore(PickleStore):
         self._record("acquire", checksum)
         return super().acquire(checksum)
 
-    def commit(self, lease, result):
-        self._record("commit", lease.checksum)
-        super().commit(lease, result)
+    def commit(self, lease, result, job=None):
+        self._record("commit", lease.checksum, "job" if job is not None else "nojob")
+        super().commit(lease, result, job)
 
 
 @workflow.define
@@ -144,8 +144,9 @@ def test_store_call_sites(worker, tmp_path):
     with Submitter(worker=worker, cache_root=tmp_path / "cache", store=store) as sub:
         assert sub(task).outputs.out == 5
     calls = log.read_text().splitlines()
-    assert calls.index(f"acquire {checksum}") < calls.index(f"commit {checksum}")
-    assert calls.count(f"commit {checksum}") == 1
+    assert calls.index(f"acquire {checksum}") < calls.index(f"commit {checksum} job")
+    assert calls.count(f"commit {checksum} job") == 1
+    assert not [c for c in calls if c.endswith("nojob")]
     assert (tmp_path / "cache" / checksum / "_result.pklz").exists()
     assert (tmp_path / "cache" / checksum / "_job.pklz").exists()
 
@@ -172,3 +173,35 @@ def test_store_call_sites_workflow(worker, tmp_path):
     with Submitter(worker=worker, cache_root=tmp_path / "cache", store=store) as sub:
         assert sub(AddTwoWf(a=3)).outputs.out == 5
     assert not [c for c in log.read_text().splitlines() if c.startswith("commit")]
+
+
+def test_commit_writes_result_and_job_in_one_call(tmp_path):
+    sub = Submitter(cache_root=tmp_path)
+    job = Job(task=FunAddTwo(a=1), submitter=sub, name="job")
+    with sub.store.acquire(job.checksum) as lease:
+        sub.store.commit(lease, Result(cache_dir=lease.cache_dir), job=job)
+    assert (lease.cache_dir / "_result.pklz").exists()
+    assert (lease.cache_dir / "_job.pklz").exists()
+
+
+class ElsewhereLockStore(PickleStore):
+    def lockfile(self, checksum):
+        return self.cache_root / "locks" / checksum
+
+
+def test_job_lockfile_comes_from_store(tmp_path):
+    store = ElsewhereLockStore(tmp_path)
+    sub = Submitter(store=store)
+    job = Job(task=FunAddTwo(a=1), submitter=sub, name="job")
+    assert job.lockfile == tmp_path / "locks" / job.checksum
+    assert store.acquire(job.checksum).lockfile == job.lockfile
+
+
+def test_store_and_cache_root_must_agree(tmp_path):
+    store = PickleStore(tmp_path / "a")
+    with pytest.raises(ValueError, match="cache_root"):
+        Submitter(store=store, cache_root=tmp_path / "b")
+    with pytest.raises(ValueError, match="readonly_caches"):
+        Submitter(store=store, readonly_caches=[tmp_path / "c"])
+    assert Submitter(store=store).cache_root == (tmp_path / "a").resolve()
+    assert Submitter(store=store, cache_root=tmp_path / "a").store is store

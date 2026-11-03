@@ -9,6 +9,9 @@ from filelock import SoftFileLock, Timeout
 from pydra.engine.result import Result, load_result, save
 from pydra.utils.general import ensure_list
 
+if ty.TYPE_CHECKING:
+    from pydra.engine.job import Job
+
 Context = ty.Mapping[str, ty.Any]
 """The execution context that produced a result, recorded beside it."""
 
@@ -64,11 +67,17 @@ class ResultStore(ty.Protocol):
     def lookup(self, checksum: str, context: Context | None = None) -> Result | None:
         """Return the stored result for ``checksum``, or None if there is none."""
 
+    def lockfile(self, checksum: str) -> Path:
+        """The lock file guarding the job identified by ``checksum``."""
+
     def acquire(self, checksum: str) -> Lease:
         """Return the lease guarding the job identified by ``checksum``."""
 
-    def commit(self, lease: Lease, result: Result) -> None:
-        """Store ``result`` as the result of the job held under ``lease``."""
+    def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
+        """Store ``result``, and ``job`` if given, as those of the job held under ``lease``.
+
+        Both are written together, so a reader never sees a result without its job.
+        """
 
 
 class PickleStore:
@@ -96,9 +105,11 @@ class PickleStore:
     def lookup(self, checksum: str, context: Context | None = None) -> Result | None:
         return load_result(checksum, [self.cache_root] + self.readonly_caches)
 
-    def acquire(self, checksum: str) -> Lease:
-        cache_dir = self.cache_dir(checksum)
-        return Lease(checksum, cache_dir, cache_dir.with_suffix(".lock"))
+    def lockfile(self, checksum: str) -> Path:
+        return self.cache_dir(checksum).with_suffix(".lock")
 
-    def commit(self, lease: Lease, result: Result) -> None:
-        save(lease.cache_dir, result=result)
+    def acquire(self, checksum: str) -> Lease:
+        return Lease(checksum, self.cache_dir(checksum), self.lockfile(checksum))
+
+    def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
+        save(lease.cache_dir, result=result, job=job)

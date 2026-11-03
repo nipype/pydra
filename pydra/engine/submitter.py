@@ -128,6 +128,23 @@ class Submitter:
             messenger_args=messenger_args,
             develop=develop,
         )
+        store_root = getattr(store, "cache_root", None)
+        if store is not None:
+            if readonly_caches is not None:
+                raise ValueError(
+                    "readonly_caches cannot be combined with store, "
+                    "give them to the store instead"
+                )
+            if cache_root is None:
+                cache_root = store_root
+            elif (
+                store_root is not None
+                and Path(cache_root).resolve() != Path(store_root).resolve()
+            ):
+                raise ValueError(
+                    f"cache_root {str(cache_root)!r} differs from the store's "
+                    f"cache_root {str(store_root)!r}"
+                )
         if cache_root is None:
             cache_root = default_run_cache_root
         cache_root = Path(cache_root).resolve()
