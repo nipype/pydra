@@ -13,6 +13,7 @@ from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
+from time import time_ns
 import logging
 from typing import (
     Dict,
@@ -31,6 +32,10 @@ from pydra.utils.general import in_stdlib, user_cache_root, add_exc_note
 logger = logging.getLogger("pydra")
 
 FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
+
+TIMESTAMP_RESOLUTION_NS = 2_000_000_000
+"""The coarsest file timestamp resolution allowed for (FAT's 2 s); the hash of a file
+modified or changed within this long of hashing it is not stored in the persistent cache."""
 
 # Module-level cache for function source bytes to avoid repeated disk I/O and
 # AST parsing. Key: (module, qualname, source file, first line, source-file mtime);
@@ -574,13 +579,18 @@ def bytes_repr_fileset(
     fileset: FileSet, cache: Cache
 ) -> Iterator[ty.Union[CacheKey, bytes]]:
     fspaths = sorted(fileset.fspaths)
-    # Yield the cache key for the fileset, which is a tuple of the file-system paths
-    # and their mtime. Is used to store persistent cache of the fileset hashes
-    # to avoid recomputation between calls
-    yield CacheKey(
-        tuple(repr(p) for p in fspaths)  # type: ignore[arg-type]
-        + tuple(p.lstat().st_mtime_ns for p in fspaths)
-    )
+    # The persistent cache key: each path with its mtime, size, inode and ctime. No key
+    # is yielded, so the hash is not stored, if any path changed within
+    # TIMESTAMP_RESOLUTION_NS of now.
+    stats = [p.stat() for p in fspaths]
+    settled = time_ns() - TIMESTAMP_RESOLUTION_NS
+    if all(max(st.st_mtime_ns, st.st_ctime_ns) < settled for st in stats):
+        yield CacheKey(
+            tuple(repr(p) for p in fspaths)  # type: ignore[arg-type]
+            + tuple(
+                (st.st_mtime_ns, st.st_size, st.st_ino, st.st_ctime_ns) for st in stats
+            )
+        )
     cls = type(fileset)
     yield f"{cls.__module__}.{cls.__name__}:".encode()
     # Hidden files and directories are set explicitly to be included, so that they are
