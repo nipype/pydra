@@ -7,6 +7,7 @@ from pathlib import Path
 import glob as glob
 from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
+from pydra.workers import cf
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -234,9 +235,7 @@ def test_rerun_errored_recovers(tmp_path, worker):
 
 def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
     """The submitter does not read the stored result of a job it has queued until the
-    job's run has finished: the run clears the previous attempt's files, which Windows
-    refuses to delete while another process has one open ([WinError 32]), failing the
-    rerun before its task runs"""
+    job's run has finished"""
     from pydra.engine import submitter as submitter_module
     from pydra.engine.store import PickleStore
     from pydra.workers import cf
@@ -266,7 +265,6 @@ def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
             reads_in_flight.append(checksum)
         return lookup(self, checksum, context, task)
 
-    # these patches apply only to this (the submitting) process, not to the workers
     monkeypatch.setattr(submitter_module.NodeExecution, "_release", recording_release)
     monkeypatch.setattr(cf.Worker, "run", recording_run)
     monkeypatch.setattr(PickleStore, "lookup", recording_lookup)
@@ -279,3 +277,83 @@ def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
     flag.touch()
     assert wf(worker="cf", cache_root=tmp_path / "cache").out == [2, 4, 6, 8, 10]
     assert reads_in_flight == []
+
+
+@python.define
+def Identity(x: int) -> int:
+    return x
+
+
+@python.define
+def Half(x: int) -> int:
+    return x // 2
+
+
+@workflow.define
+def SameChecksumElements(x: list[int]) -> list[int]:
+    first = workflow.add(Identity().split("x", x=x), name="first")
+    return first.out
+
+
+@workflow.define(outputs=["first", "again"])
+def SameChecksumLater(x: int) -> tuple[int, int]:
+    first = workflow.add(Identity(x=x), name="first")
+    relay = workflow.add(Double(y=x), name="relay")
+    half = workflow.add(Half(x=relay.out), name="half")
+    again = workflow.add(Identity(x=half.out), name="again")
+    return first.out, again.out
+
+
+class CountingWorker(cf.Worker):
+    """A cf worker recording the checksums of the ``Identity`` jobs it is asked to run"""
+
+    _plugin_name = "counting-cf"
+    ran: ty.ClassVar[list[str]] = []
+
+    async def run(self, job, rerun=False):
+        if job.name in ("first", "again"):
+            self.ran.append(job.checksum)
+        return await super().run(job, rerun=rerun)
+
+
+class FailingCountingWorker(CountingWorker):
+    """A counting worker that fails to run the ``Identity`` jobs"""
+
+    _plugin_name = "failing-counting-cf"
+
+    async def run(self, job, rerun=False):
+        if job.name in ("first", "again"):
+            self.ran.append(job.checksum)
+            raise RuntimeError("worker was unable to run the job")
+        return await super().run(job, rerun=rerun)
+
+
+def test_same_checksum_elements_run_once(tmp_path, monkeypatch):
+    """Elements with the same checksum are run once and all read its result"""
+    monkeypatch.setattr(CountingWorker, "ran", [])
+    with Submitter(worker=CountingWorker(n_procs=2), cache_root=tmp_path) as sub:
+        result = sub(SameChecksumElements(x=[1, 1, 2]))
+    assert not result.errored
+    assert result.outputs.out == [1, 1, 2]
+    assert len(CountingWorker.ran) == 2
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("workflow_task", ["elements", "later"])
+def test_same_checksum_worker_error_before_job_saved(
+    tmp_path, monkeypatch, workflow_task
+):
+    """If a worker fails to run a job before it saves a result, every job with the
+    same checksum, including one released afterwards, errors with it"""
+    monkeypatch.setattr(CountingWorker, "ran", [])
+    task = (
+        SameChecksumElements(x=[1, 1, 1])
+        if workflow_task == "elements"
+        else SameChecksumLater(x=1)
+    )
+    start = time.monotonic()
+    with Submitter(worker=FailingCountingWorker(n_procs=2), cache_root=tmp_path) as sub:
+        result = sub(task)
+    assert result.errored
+    assert len(CountingWorker.ran) == 1
+    assert time.monotonic() - start < 30

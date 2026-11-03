@@ -522,9 +522,11 @@ class Submitter:
         task_futures = set()
         futured: dict[str, Job[TaskType]] = {}
         # the jobs not run because a job with the same checksum is being run, by checksum
-        sharing: dict[str, dict[int, Job[TaskType]]] = defaultdict(dict)
+        sharing: dict[str, set[Job[TaskType]]] = defaultdict(set)
         # the checksums of the jobs whose runs have finished
         finished: set[str] = set()
+        # the checksums of the jobs whose runs raised
+        failed: set[str] = set()
         tasks = self.get_runnable_tasks(exec_graph)
         on_error = self._loop_on_error(is_async=True)
         errors = self.pop_resolution_errors(exec_graph)
@@ -612,9 +614,11 @@ class Submitter:
                 for job in tasks:
                     if job.checksum in finished:
                         job._awaiting_run = False
+                        if job.checksum in failed:
+                            job._errored = True
                     elif job.checksum in futured:
                         if job is not futured[job.checksum]:
-                            sharing[job.checksum][id(job)] = job
+                            sharing[job.checksum].add(job)
                     else:
                         job_rerun = rerun and self.propagate_rerun
                         if is_workflow(job.task):
@@ -631,7 +635,8 @@ class Submitter:
                 for task_future in completed:
                     job = futured[task_future.get_name()]
                     finished.add(job.checksum)
-                    for ran in [job, *sharing.pop(job.checksum, {}).values()]:
+                    jobs = [job, *sharing.pop(job.checksum, ())]
+                    for ran in jobs:
                         ran._awaiting_run = False
                     try:
                         task_future.result()
@@ -639,7 +644,9 @@ class Submitter:
                         # The job may have failed before it could save a result (e.g. if
                         # the worker was unable to run it), in which case it would
                         # otherwise remain queued indefinitely
-                        job._errored = True
+                        failed.add(job.checksum)
+                        for ran in jobs:
+                            ran._errored = True
                         errors.append(job_error(job))
                 if errors and on_error == "fail_fast":
                     break
