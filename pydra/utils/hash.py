@@ -4,12 +4,14 @@ import sys
 import os
 import re
 import ast
+import dis
+import functools
 import struct
 import inspect
 from datetime import datetime
 import typing as ty
 import types
-from pathlib import Path
+from pathlib import Path, PurePath
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
@@ -22,6 +24,7 @@ from typing import (
     Set,
 )
 from filelock import SoftFileLock
+import attr
 import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
@@ -64,6 +67,7 @@ __all__ = (
     "Cache",
     "bytes_repr_mapping_contents",
     "bytes_repr_sequence_contents",
+    "NonStaticReferenceError",
 )
 
 Hash = NewType("Hash", bytes)
@@ -475,11 +479,6 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
 
 
 @register_serializer
-def bytes_repr_logger(obj: logging.Logger, cache: Cache) -> Iterator[bytes]:
-    yield f"logging.Logger:{obj.name}".encode()
-
-
-@register_serializer
 def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
     yield b"module:("
     yield hash_single(FsObject(obj.__file__), cache=cache)
@@ -688,37 +687,86 @@ def _parse_function_source_bytes(src: str) -> bytes:
     return b"".join(parts)
 
 
-def _import_location(obj: object, home_module: str) -> str | None:
-    """The ``module.qualname`` that imports a function or class defined outside
-    ``home_module``, or None if it is not importable by that name"""
-    if not isinstance(obj, (types.FunctionType, types.BuiltinFunctionType, type)):
-        return None
-    module = getattr(obj, "__module__", None)
-    if module is None or module == home_module:
-        return None
-    found = sys.modules.get(module)
-    for part in obj.__qualname__.split("."):
-        found = getattr(found, part, None)
-    return f"{module}.{obj.__qualname__}" if found is obj else None
+class NonStaticReferenceError(TypeError):
+    """A function reads a global or closure value that is not static, so the function
+    cannot be hashed by its definition"""
 
 
-def _referenced_names(code: types.CodeType) -> set[str]:
-    """The global names read by a code object and the code objects nested in it"""
-    names: set[str] = set()
-    stack = [code]
-    while stack:
-        code = stack.pop()
-        names.update(code.co_names)
-        stack.extend(c for c in code.co_consts if isinstance(c, types.CodeType))
-    return names
+class _NotStatic(Exception):
+    pass
+
+
+_STATIC_SCALARS = (type(None), type(Ellipsis), bool, int, float, complex, str, bytes)
+_STATIC_IDENTITIES = (types.FunctionType, types.BuiltinFunctionType, type)
+
+
+@functools.lru_cache(maxsize=4096)
+def _read_globals(code: types.CodeType) -> frozenset[str]:
+    """The global names loaded by a code object and the code objects nested in it"""
+    names = set()
+    for instruction in dis.get_instructions(code):
+        if instruction.opname in (
+            "LOAD_GLOBAL",
+            "LOAD_NAME",
+            "LOAD_FROM_DICT_OR_GLOBALS",
+        ):
+            names.add(instruction.argval)
+    for const in code.co_consts:
+        if isinstance(const, types.CodeType):
+            names |= _read_globals(const)
+    return frozenset(names)
+
+
+def _is_frozen_attrs(value: object) -> bool:
+    tp = type(value)
+    if not attrs.has(tp):
+        return False
+    try:
+        return tp.__attrs_props__.is_frozen
+    except AttributeError:  # attrs < 25.4
+        return tp.__setattr__ is getattr(attr._make, "_frozen_setattrs", None)
+
+
+def _bytes_repr_static(value: object, cache: Cache) -> Iterator[bytes]:
+    """Serialize a static value: a module, function or class by its module and
+    qualname (plus its definition when that name is not unique, i.e. it is local or
+    generated), or an immutable value: a scalar, a path, a frozen attrs instance, or a
+    tuple or frozenset, of static values. Raises _NotStatic for any other value."""
+    if isinstance(value, types.ModuleType):
+        yield f"module:{value.__name__}".encode()
+    elif isinstance(value, _STATIC_IDENTITIES):
+        module = getattr(value, "__module__", None)
+        yield f"identity:{module}.{value.__qualname__}".encode()
+        if "<locals>" in value.__qualname__ or module in (None, "types"):
+            yield bytes(hash_single(value, cache))
+    elif isinstance(value, _STATIC_SCALARS):
+        yield from bytes_repr(value, cache)
+    elif isinstance(value, PurePath):
+        yield f"path:{value}".encode()
+    elif _is_frozen_attrs(value):
+        tp = type(value)
+        yield f"frozen:{tp.__module__}.{tp.__qualname__}:(".encode()
+        for field in attrs.fields(tp):
+            if field.eq:
+                yield f"{field.name}=".encode()
+                yield from _bytes_repr_static(getattr(value, field.name), cache)
+                yield b","
+        yield b")"
+    elif isinstance(value, (tuple, frozenset)):
+        items = [b"".join(_bytes_repr_static(v, cache)) for v in value]
+        yield f"{type(value).__name__}:(".encode()
+        yield from sorted(items) if isinstance(value, frozenset) else items
+        yield b")"
+    else:
+        raise _NotStatic()
 
 
 def bytes_repr_function_references(
     obj: types.FunctionType, cache: Cache
 ) -> Iterator[bytes]:
-    """Serialize the values a function closes over and the module-level globals (other
-    than modules) it reads. Functions and classes importable from another module are
-    identified by their ``module.qualname``, all other values by their hash."""
+    """Serialize the values a function closes over and the module-level globals it
+    reads, which must be static (see `_bytes_repr_static`); any other value raises
+    `NonStaticReferenceError`"""
     closure = {}
     for name, cell in zip(obj.__code__.co_freevars, obj.__closure__ or ()):
         try:
@@ -727,27 +775,26 @@ def bytes_repr_function_references(
             closure[name] = Ellipsis
     globals_ = {
         n: obj.__globals__[n]
-        for n in _referenced_names(obj.__code__)
-        if n in obj.__globals__ and not isinstance(obj.__globals__[n], types.ModuleType)
+        for n in _read_globals(obj.__code__)
+        if n in obj.__globals__
     }
-    for label, values in ((b"closure", closure), (b"globals", globals_)):
+    for label, values in (("closure", closure), ("global", globals_)):
         if not values:
             continue
-        yield b"," + label + b":("
+        yield f",{label}:(".encode()
         for name in sorted(values):
             yield from bytes_repr(name, cache)
             yield b"="
-            value = values[name]
-            if location := _import_location(value, obj.__module__):
-                yield b"import:" + location.encode()
-            else:
-                try:
-                    yield bytes(hash_single(value, cache))
-                except Exception as e:
-                    add_exc_note(
-                        e, f"in {name!r}, referenced by function {obj.__qualname__!r}"
-                    )
-                    raise
+            try:
+                yield b"".join(_bytes_repr_static(values[name], cache))
+            except _NotStatic:
+                tp = type(values[name])
+                raise NonStaticReferenceError(
+                    f"function {obj.__qualname__!r} reads the {label} {name!r} of type "
+                    f"`{tp.__module__}.{tp.__qualname__}`, which is not a function, "
+                    "class, module or immutable value, so its checksum would depend "
+                    "on runtime state; make it an explicit task input"
+                ) from None
             yield b","
         yield b")"
 

@@ -1,14 +1,14 @@
-import logging
 import re
 import os
 import subprocess
 import sys
 import types
 from hashlib import blake2b
-from pathlib import Path
+from pathlib import Path, PurePath
 from unittest import mock
 import attrs
 import cloudpickle
+import numpy
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json, Yaml
@@ -19,11 +19,13 @@ from pydra.utils.hash import (
     hash_object,
     register_serializer,
     PersistentCache,
+    NonStaticReferenceError,
 )
 import shutil
 import random
 from fileformats.generic import Directory, File
 from pydra.utils.hash import hash_function
+from pydra.compose import python
 from pydra.utils.tests.utils import Concatenate
 
 
@@ -619,6 +621,10 @@ def test_hash_function_closure():
     """Functions with the same source but different captured values hash differently"""
     assert hash_function(_adder(1)) == hash_function(_adder(1))
     assert hash_function(_adder(1)) != hash_function(_adder(2))
+    assert hash_function(_adder((1, frozenset("a")))) != hash_function(
+        _adder((1, frozenset("b")))
+    )
+    assert hash_function(_adder(Path)) != hash_function(_adder(PurePath))
 
 
 def test_hash_function_referenced_global():
@@ -629,15 +635,67 @@ def test_hash_function_referenced_global():
     assert hash_function(add_offset) != hash_function(other)
 
 
-def test_hash_function_unhashable_closure():
-    """A captured value that cannot be hashed fails the hash, naming the value"""
+path = "a"
 
-    class A:
-        def __bytes_repr__(self, cache):
-            raise TypeError("unhashable")
 
-    with pytest.raises(TypeError, match=r"unhashable\nin 'k', referenced by function"):
-        hash_object(_adder(A()))
+def reads_attribute(x):
+    return x.path
+
+
+def test_hash_function_attribute_is_not_a_global():
+    """An attribute name that matches a global does not pull the global in"""
+    other = types.FunctionType(reads_attribute.__code__, {"path": "b"})
+    assert hash_function(reads_attribute) == hash_function(other)
+
+
+_MEMO = {}
+
+
+def memoised(x: int) -> int:
+    if x not in _MEMO:
+        _MEMO[x] = x + 1
+    return _MEMO[x]
+
+
+def test_hash_function_mutable_global_is_rejected():
+    """A task reading a mutable global fails its checksum instead of changing it"""
+    task = python.define(memoised)(x=1)
+    with pytest.raises(
+        NonStaticReferenceError,
+        match=r"'memoised' reads the global '_MEMO' of type `builtins.dict`.*explicit task input",
+    ):
+        task._checksum
+
+
+rng = numpy.random.default_rng(0)
+
+
+def draw(n):
+    return rng.random(n)
+
+
+def test_hash_function_rng_global_is_rejected():
+    with pytest.raises(NonStaticReferenceError, match=r"'draw' reads the global 'rng'"):
+        hash_function(draw)
+
+
+@attrs.frozen
+class _Frozen:
+    value: ty.Any
+
+
+def test_hash_function_immutable_objects():
+    """Paths and frozen attrs instances of static values are static"""
+    assert hash_function(_adder(Path("/a"))) != hash_function(_adder(Path("/b")))
+    assert hash_function(_adder(_Frozen(1))) == hash_function(_adder(_Frozen(1)))
+    assert hash_function(_adder(_Frozen(1))) != hash_function(_adder(_Frozen(2)))
+    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k'"):
+        hash_function(_adder(_Frozen([1])))
+
+
+def test_hash_function_non_static_closure_is_rejected():
+    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k' of type"):
+        hash_function(_adder([1]))
 
 
 _HASH_IN_SUBPROCESS = (
@@ -645,17 +703,32 @@ _HASH_IN_SUBPROCESS = (
     "print(hash_function(cloudpickle.loads(sys.stdin.buffer.read())))"
 )
 
+_MODULE_A = """
+from modb import helper, SCALE
 
-@pytest.mark.parametrize("func", [_adder(3), add_offset])
-def test_hash_function_pickled_by_value(func):
-    """A function pickled by value, as the cf worker sends it, keeps its hash in
-    another process"""
-    module = sys.modules[func.__module__]
-    cloudpickle.register_pickle_by_value(module)
+
+def f(x):
+    return helper(x) * SCALE
+"""
+
+_MODULE_B = """
+SCALE = 2
+
+
+def helper(x):
+    return x + 1
+"""
+
+
+def _hash_in_subprocess(func, modules):
+    """The hash of ``func`` pickled by value with ``modules``, in a fresh process"""
+    for module in modules:
+        cloudpickle.register_pickle_by_value(module)
     try:
         payload = cloudpickle.dumps(func)
     finally:
-        cloudpickle.unregister_pickle_by_value(module)
+        for module in modules:
+            cloudpickle.unregister_pickle_by_value(module)
     result = subprocess.run(
         [sys.executable, "-c", _HASH_IN_SUBPROCESS],
         input=payload,
@@ -663,13 +736,28 @@ def test_hash_function_pickled_by_value(func):
         check=True,
         env={**os.environ, "PYTHONHASHSEED": "random"},
     )
-    assert result.stdout.decode().strip() == hash_function(func)
+    return result.stdout.decode().strip()
 
 
-def test_hash_logger_by_name():
-    """A logger, often read as a global, is identified by its name, not its state"""
-    logger = logging.getLogger("pydra.test_hash")
-    before = hash_function(logger)
-    logger.setLevel(logging.DEBUG)
-    assert hash_function(logger) == before
-    assert hash_function(logging.getLogger("pydra.test_hash.other")) != before
+@pytest.mark.parametrize("func", [_adder(3), add_offset])
+def test_hash_function_pickled_by_value(func):
+    """A function pickled by value, as the cf worker sends it, keeps its hash in
+    another process"""
+    module = sys.modules[func.__module__]
+    assert _hash_in_subprocess(func, [module]) == hash_function(func)
+
+
+def test_hash_function_pickled_by_value_across_modules(tmp_path, monkeypatch):
+    """A function in one module reading a function and a value of another, both
+    pickled by value and not importable in the other process, keeps its hash"""
+    (tmp_path / "moda.py").write_text(_MODULE_A)
+    (tmp_path / "modb.py").write_text(_MODULE_B)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        import moda
+        import modb
+
+        assert _hash_in_subprocess(moda.f, [moda, modb]) == hash_function(moda.f)
+    finally:
+        sys.modules.pop("moda", None)
+        sys.modules.pop("modb", None)
