@@ -149,7 +149,9 @@ def LeaseUser(me: str, root: str, sync: str) -> int:
             wait_for("tried_b")
             end = time.monotonic() + 0.5
             while time.monotonic() < end:
-                assert not (sync / "entered_b").exists(), "b entered while a held the lease"
+                assert not (
+                    sync / "entered_b"
+                ).exists(), "b entered while a held the lease"
                 time.sleep(0.01)
             (sync / "released_a").touch()
         else:
