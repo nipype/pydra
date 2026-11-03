@@ -494,6 +494,8 @@ class Submitter:
                     # The job may have failed before it could save a result
                     job._errored = True
                     errors.append(job_error(job))
+                finally:
+                    job._awaiting_run = False
             tasks = self.get_runnable_tasks(exec_graph)
             errors.extend(self.pop_resolution_errors(exec_graph))
             if errors and on_error == "fail_fast":
@@ -519,6 +521,10 @@ class Submitter:
         # keep track of pending futures
         task_futures = set()
         futured: dict[str, Job[TaskType]] = {}
+        # the jobs not run because a job with the same checksum is being run, by checksum
+        sharing: dict[str, dict[int, Job[TaskType]]] = defaultdict(dict)
+        # the checksums of the jobs whose runs have finished
+        finished: set[str] = set()
         tasks = self.get_runnable_tasks(exec_graph)
         on_error = self._loop_on_error(is_async=True)
         errors = self.pop_resolution_errors(exec_graph)
@@ -604,7 +610,12 @@ class Submitter:
                                 )
                             raise RuntimeError(msg)
                 for job in tasks:
-                    if job.checksum not in futured:
+                    if job.checksum in finished:
+                        job._awaiting_run = False
+                    elif job.checksum in futured:
+                        if job is not futured[job.checksum]:
+                            sharing[job.checksum][id(job)] = job
+                    else:
                         job_rerun = rerun and self.propagate_rerun
                         if is_workflow(job.task):
                             # expanded in this loop, not placed by the router
@@ -618,10 +629,13 @@ class Submitter:
                         futured[job.checksum] = job
                 task_futures, completed = await self.fetch_finished(task_futures)
                 for task_future in completed:
+                    job = futured[task_future.get_name()]
+                    finished.add(job.checksum)
+                    for ran in [job, *sharing.pop(job.checksum, {}).values()]:
+                        ran._awaiting_run = False
                     try:
                         task_future.result()
                     except Exception:
-                        job = futured[task_future.get_name()]
                         # The job may have failed before it could save a result (e.g. if
                         # the worker was unable to run it), in which case it would
                         # otherwise remain queued indefinitely
@@ -974,7 +988,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 self.successful[job.state_index] = self.queued.pop(index)
             elif job.errored or errored:
                 self.errored[job.state_index] = self.queued.pop(index)
-            elif job.run_start_time:
+            elif not job._awaiting_run and job.run_start_time:
                 self.running[job.state_index] = (
                     self.queued.pop(index),
                     job.run_start_time,
@@ -1136,7 +1150,8 @@ class NodeExecution(ty.Generic[TaskType]):
         """Queue the job of an element whose upstream elements have all succeeded, or
         record the element as errored if its inputs cannot be resolved from them"""
         try:
-            self.queued[index] = self.job(index)
+            job = self.queued[index] = self.job(index)
+            job._awaiting_run = True
         except Exception as exc:
             name = self.name if index is None else f"{self.name}({index})"
             self.errored[index] = exc

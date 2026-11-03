@@ -195,3 +195,87 @@ def test_node_update_status_errored_running_job():
     node_exec.update_status()
     assert node_exec.errored == {0: job}
     assert node_exec.running == {}
+
+
+@python.define
+def FailEvenUnlessFlagged(x: int, flag: str) -> int:
+    """Raise on even ``x`` until the file ``flag`` exists"""
+    from pathlib import Path
+
+    if x % 2 == 0 and not Path(flag).exists():
+        raise ValueError("even error")
+    return x
+
+
+@python.define
+def Double(y: int) -> int:
+    return 2 * y
+
+
+@workflow.define
+def RecoverableWorkflow(x: list[int], flag: str) -> list[int]:
+    failing = workflow.add(FailEvenUnlessFlagged(flag=flag).split("x", x=x))
+    doubled = workflow.add(Double(y=failing.out))
+    return doubled.out
+
+
+def test_rerun_errored_recovers(tmp_path, worker):
+    """Elements that errored in a previous run and succeed when rerun are reported by
+    that rerun, and their downstream elements run, rather than the previous run's
+    errors being reported again"""
+    flag = tmp_path / "flag"
+    wf = RecoverableWorkflow(x=[1, 2, 3, 4, 5], flag=str(flag))
+    with pytest.raises(Exception, match="even error"):
+        wf(worker=worker, cache_root=tmp_path / "cache")
+    flag.touch()
+    outputs = wf(worker=worker, cache_root=tmp_path / "cache")
+    assert outputs.out == [2, 4, 6, 8, 10]
+
+
+def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
+    """The submitter does not read the stored result of a job it has queued until the
+    job's run has finished: the run clears the previous attempt's files, which Windows
+    refuses to delete while another process has one open ([WinError 32]), failing the
+    rerun before its task runs"""
+    from pydra.engine import submitter as submitter_module
+    from pydra.engine.store import PickleStore
+    from pydra.workers import cf
+
+    in_flight: set[str] = set()
+    reads_in_flight: list[str] = []
+
+    release = submitter_module.NodeExecution._release
+
+    def recording_release(self, index):
+        release(self, index)
+        if index in self.queued:
+            in_flight.add(self.queued[index].checksum)
+
+    run = cf.Worker.run
+
+    async def recording_run(self, job, rerun=False):
+        try:
+            return await run(self, job, rerun=rerun)
+        finally:
+            in_flight.discard(job.checksum)
+
+    lookup = PickleStore.lookup
+
+    def recording_lookup(self, checksum, context, task):
+        if checksum in in_flight:
+            reads_in_flight.append(checksum)
+        return lookup(self, checksum, context, task)
+
+    # these patches apply only to this (the submitting) process, not to the workers
+    monkeypatch.setattr(submitter_module.NodeExecution, "_release", recording_release)
+    monkeypatch.setattr(cf.Worker, "run", recording_run)
+    monkeypatch.setattr(PickleStore, "lookup", recording_lookup)
+
+    flag = tmp_path / "flag"
+    wf = RecoverableWorkflow(x=[1, 2, 3, 4, 5], flag=str(flag))
+    with pytest.raises(RuntimeError, match="even error"):
+        wf(worker="cf", cache_root=tmp_path / "cache")
+    reads_in_flight.clear()
+    flag.touch()
+    assert wf(worker="cf", cache_root=tmp_path / "cache").out == [2, 4, 6, 8, 10]
+    assert reads_in_flight == []
