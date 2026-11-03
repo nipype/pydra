@@ -3,6 +3,7 @@ import hashlib
 import importlib.resources
 import io
 import json
+import socket
 import pyld
 import pytest
 from pydra.utils.messenger import (
@@ -113,3 +114,30 @@ def test_collect_messages_offline(tmp_path, no_network, context):
     collect_messages(tmp_path, messages)
     collected = json.loads((tmp_path / "messages.jsonld").read_text())
     assert collected["@context"] == message["@context"]
+
+
+def test_no_network_refuses_only_external_hosts(no_network):
+    for connect in (
+        lambda: socket.getaddrinfo("example.org", 80),
+        lambda: socket.create_connection(("example.org", 80)),
+        lambda: socket.socket().connect(("192.0.2.1", 80)),
+        lambda: socket.socket().connect_ex(("192.0.2.1", 80)),
+    ):
+        with pytest.raises(OSError, match="network access to .* is disabled"):
+            connect()
+    # the loopback socketpair Windows (and asyncio's Proactor loop) builds
+    pair = getattr(socket, "_fallback_socketpair", None)
+    if pair is None:
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        client = socket.socket()
+        client.connect(listener.getsockname())
+        server, _ = listener.accept()
+        listener.close()
+    else:
+        server, client = pair()
+    with server, client:
+        client.sendall(b"x")
+        assert server.recv(1) == b"x"
+    assert socket.getaddrinfo("localhost", 80)
