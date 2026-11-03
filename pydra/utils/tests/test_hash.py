@@ -1,19 +1,13 @@
-import functools
-import logging
 import re
 import os
 import subprocess
 import sys
-import types
 from hashlib import blake2b
-from pathlib import Path, PurePath
+from pathlib import Path
 from unittest import mock
 import attrs
 import cloudpickle
 import numpy
-import numpy as np
-from numpy import exp
-from random import random as uniform
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json, Yaml
@@ -24,14 +18,16 @@ from pydra.utils.hash import (
     hash_object,
     register_serializer,
     PersistentCache,
-    NonStaticReferenceError,
 )
 import shutil
 import random
 from fileformats.generic import Directory, File
 from pydra.utils.hash import hash_function
-from pydra.compose import python
-from pydra.utils.tests.utils import Concatenate
+from pydra.utils.tests.utils import (
+    Concatenate,
+    OtherSpecificFuncTask,
+    SpecificFuncTask,
+)
 
 
 def test_hash_file(tmpdir):
@@ -615,222 +611,36 @@ def _adder(k):
     return add
 
 
-OFFSET = 1
-
-
-def add_offset(x):
-    return x + OFFSET
-
-
 def test_hash_function_closure():
     """Functions with the same source but different captured values hash differently"""
     assert hash_function(_adder(1)) == hash_function(_adder(1))
     assert hash_function(_adder(1)) != hash_function(_adder(2))
-    assert hash_function(_adder((1, frozenset("a")))) != hash_function(
-        _adder((1, frozenset("b")))
-    )
-    assert hash_function(_adder(Path)) != hash_function(_adder(PurePath))
-
-
-def test_hash_function_referenced_global():
-    """Functions with the same source but different global values hash differently"""
-    other = types.FunctionType(add_offset.__code__, {"OFFSET": 2})
-    same = types.FunctionType(add_offset.__code__, {"OFFSET": 1})
-    assert hash_function(add_offset) == hash_function(same)
-    assert hash_function(add_offset) != hash_function(other)
-
-
-path = "a"
-
-
-def reads_attribute(x):
-    return x.path
-
-
-def test_hash_function_attribute_is_not_a_global():
-    """An attribute name that matches a global does not pull the global in"""
-    other = types.FunctionType(reads_attribute.__code__, {"path": "b"})
-    assert hash_function(reads_attribute) == hash_function(other)
-
-
-_MEMO = {}
-
-
-def memoised(x: int) -> int:
-    if x not in _MEMO:
-        _MEMO[x] = x + 1
-    return _MEMO[x]
-
-
-def test_hash_function_mutable_global_is_rejected():
-    """A task reading a mutable global fails its checksum instead of changing it"""
-    task = python.define(memoised)(x=1)
-    with pytest.raises(
-        NonStaticReferenceError,
-        match=r"'memoised' reads the global '_MEMO' of type `builtins.dict`.*explicit task input",
-    ):
-        task._checksum
-
-
-rng = numpy.random.default_rng(0)
-
-
-def draw(n):
-    return rng.random(n)
-
-
-def test_hash_function_rng_global_is_rejected():
-    with pytest.raises(NonStaticReferenceError, match=r"'draw' reads the global 'rng'"):
-        hash_function(draw)
-
-
-@attrs.frozen
-class _Frozen:
-    value: ty.Any
-
-
-def test_hash_function_immutable_objects():
-    """Paths and frozen attrs instances of static values are static"""
-    assert hash_function(_adder(Path("/a"))) != hash_function(_adder(Path("/b")))
-    assert hash_function(_adder(_Frozen(1))) == hash_function(_adder(_Frozen(1)))
-    assert hash_function(_adder(_Frozen(1))) != hash_function(_adder(_Frozen(2)))
-    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k'"):
-        hash_function(_adder(_Frozen([1])))
-
-
-logger = logging.getLogger("pydra.test_hash")
-
-
-def logs(x: int) -> int:
-    logger.debug("x=%s", x)
-    return x
-
-
-def test_hash_function_logger_global_is_its_name():
-    """A task reading a module logger hashes it by name, whatever its state"""
-    task = python.define(logs)(x=1)
-    before = task._checksum
-    logger.setLevel(logging.DEBUG)
-    assert python.define(logs)(x=1)._checksum == before
-    other = types.FunctionType(
-        logs.__code__, {"logger": logging.getLogger("pydra.test_hash.other")}
-    )
-    assert hash_function(other) != hash_function(logs)
-
-
-def exponential(x: float) -> float:
-    return exp(x)
-
-
-def test_hash_function_ufunc_is_its_name():
-    """A numpy ufunc is identified by its module and name"""
-    assert python.define(exponential)(x=1.0)._checksum
-    assert hash_function(_adder(numpy.exp)) == hash_function(_adder(numpy.exp))
-    assert hash_function(_adder(numpy.exp)) != hash_function(_adder(numpy.log))
-
-
-def draws() -> float:
-    return uniform()
-
-
-def uses_np(x: float) -> float:
-    return np.exp(x)
-
-
-def test_hash_function_imported_global_is_its_import_target():
-    """A global bound by an import statement is identified by its import target, read
-    from the module's source, whatever its value (here a bound method of a hidden
-    random generator, as `from scipy.stats import norm` binds an instance)"""
-    assert python.define(draws)()._checksum
-    swapped = types.FunctionType(draws.__code__, {**draws.__globals__, "uniform": len})
-    assert hash_function(swapped) == hash_function(draws)
-    assert python.define(uses_np)(x=1.0)._checksum
-    assert hash_function(uses_np) != hash_function(exponential)
-
-
-class _Counter:
-    def __init__(self):
-        self.n = 0
-
-    def bump(self):
-        self.n += 1
-        return self.n
-
-
-class _CallableInstance:
-    def __call__(self, x):
-        return x
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
-        _Counter().bump,
-        functools.update_wrapper(_CallableInstance(), len),
-        numpy.vectorize(lambda x: x + 1),
-        [].append,
-    ],
-    ids=["bound-method", "wrapped-instance", "vectorize", "bound-builtin"],
-)
-def test_hash_function_stateful_callable_is_rejected(value):
-    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k'"):
-        hash_function(_adder(value))
-
-
-def test_hash_function_static_bound_callables():
-    """A bound method or builtin is static when what it is bound to is"""
-    assert hash_function(_adder("-".join)) != hash_function(_adder("+".join))
-    assert hash_function(_adder(_Frozen(1).__repr__)) != hash_function(
-        _adder(_Frozen(2).__repr__)
+    assert hash_function(_adder(SpecificFuncTask)) != hash_function(
+        _adder(OtherSpecificFuncTask)
     )
 
 
-@attrs.frozen
-class _FrozenScratch:
-    k: int
-    scratch: dict = attrs.field(eq=False, factory=dict)
-
-
-def test_hash_function_frozen_attrs_with_mutable_field_is_rejected():
-    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k'"):
-        hash_function(_adder(_FrozenScratch(1)))
-
-
-def _helper(x):
-    return x + 1
-
-
-def uses_helper(x):
-    return _helper(x)
-
-
-def _ping(n):
-    return n if n <= 0 else _pong(n - 1)
-
-
-def _pong(n):
-    return n if n <= 0 else _ping(n - 1)
-
-
-def test_hash_function_same_module_helper_is_hashed_by_definition():
-    """Editing a helper in the task's module changes the task's checksum, while one
-    from another module is identified by name"""
-
-    def edited(x):
-        return x + 2
-
-    edited.__module__, edited.__qualname__ = _helper.__module__, _helper.__qualname__
-    other = types.FunctionType(
-        uses_helper.__code__, {**uses_helper.__globals__, "_helper": edited}
+def test_hash_function_closure_values_hash_by_value():
+    """A captured dict or array is hashed by its value, like any input"""
+    assert hash_function(_adder({"a": 1})) == hash_function(_adder({"a": 1}))
+    assert hash_function(_adder({"a": 1})) != hash_function(_adder({"a": 2}))
+    assert hash_function(_adder(numpy.arange(3))) == hash_function(
+        _adder(numpy.arange(3))
     )
-    assert hash_function(other) != hash_function(uses_helper)
-    assert hash_function(_ping) == hash_function(_ping)  # mutual recursion ends
-    assert hash_function(_ping) != hash_function(_pong)
+    assert hash_function(_adder(numpy.arange(3))) != hash_function(
+        _adder(numpy.arange(4))
+    )
 
 
-def test_hash_function_non_static_closure_is_rejected():
-    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k' of type"):
-        hash_function(_adder([1]))
+def test_hash_function_unhashable_closure():
+    """A captured value that cannot be hashed fails the hash, naming the value"""
+
+    class A:
+        def __bytes_repr__(self, cache):
+            raise TypeError("unhashable")
+
+    with pytest.raises(TypeError, match=r"unhashable\nin 'k', captured by function"):
+        hash_object(_adder(A()))
 
 
 _HASH_IN_SUBPROCESS = (
@@ -838,32 +648,17 @@ _HASH_IN_SUBPROCESS = (
     "print(hash_function(cloudpickle.loads(sys.stdin.buffer.read())))"
 )
 
-_MODULE_A = """
-from modb import helper, SCALE
 
-
-def f(x):
-    return helper(x) * SCALE
-"""
-
-_MODULE_B = """
-SCALE = 2
-
-
-def helper(x):
-    return x + 1
-"""
-
-
-def _hash_in_subprocess(func, modules):
-    """The hash of ``func`` pickled by value with ``modules``, in a fresh process"""
-    for module in modules:
-        cloudpickle.register_pickle_by_value(module)
+def test_hash_function_pickled_by_value():
+    """A function pickled by value, as the cf worker sends it, keeps its hash in
+    another process"""
+    func = _adder(3)
+    module = sys.modules[func.__module__]
+    cloudpickle.register_pickle_by_value(module)
     try:
         payload = cloudpickle.dumps(func)
     finally:
-        for module in modules:
-            cloudpickle.unregister_pickle_by_value(module)
+        cloudpickle.unregister_pickle_by_value(module)
     result = subprocess.run(
         [sys.executable, "-c", _HASH_IN_SUBPROCESS],
         input=payload,
@@ -871,123 +666,4 @@ def _hash_in_subprocess(func, modules):
         check=True,
         env={**os.environ, "PYTHONHASHSEED": "random"},
     )
-    return result.stdout.decode().strip()
-
-
-@pytest.mark.parametrize("func", [_adder(3), add_offset])
-def test_hash_function_pickled_by_value(func):
-    """A function pickled by value, as the cf worker sends it, keeps its hash in
-    another process"""
-    module = sys.modules[func.__module__]
-    assert _hash_in_subprocess(func, [module]) == hash_function(func)
-
-
-def test_hash_function_pickled_by_value_across_modules(tmp_path, monkeypatch):
-    """A function in one module reading a function and a value of another, both
-    pickled by value and not importable in the other process, keeps its hash"""
-    (tmp_path / "moda.py").write_text(_MODULE_A)
-    (tmp_path / "modb.py").write_text(_MODULE_B)
-    monkeypatch.syspath_prepend(str(tmp_path))
-    try:
-        import moda
-        import modb
-
-        assert _hash_in_subprocess(moda.f, [moda, modb]) == hash_function(moda.f)
-    finally:
-        sys.modules.pop("moda", None)
-        sys.modules.pop("modb", None)
-
-
-def _import_from(tmp_path, monkeypatch, name, source):
-    """Import ``source`` as module ``name``, replacing any earlier version"""
-    import importlib
-
-    path = tmp_path / f"{name}.py"
-    if path.exists():
-        mtime = path.stat().st_mtime_ns + 10**9
-    else:
-        mtime = None
-    path.write_text(source)
-    if mtime is not None:
-        os.utime(path, ns=(mtime, mtime))
-    monkeypatch.syspath_prepend(str(tmp_path))
-    sys.modules.pop(name, None)
-    importlib.invalidate_caches()
-    return importlib.import_module(name)
-
-
-def test_hash_function_deep_same_module_chain(tmp_path, monkeypatch):
-    """A long chain of same-module calls is walked without recursion"""
-    depth = 500
-    source = (
-        "".join(f"def f{i}(x):\n    return f{i + 1}(x) + 1\n\n" for i in range(depth))
-        + f"def f{depth}(x):\n    return x\n"
-    )
-    try:
-        chain = _import_from(tmp_path, monkeypatch, "deepchain", source)
-        before = hash_function(chain.f0)
-        assert hash_function(chain.f0) == before
-        edited = _import_from(
-            tmp_path,
-            monkeypatch,
-            "deepchain",
-            source.replace("return x\n", "return 0\n"),
-        )
-        assert hash_function(edited.f0) != before
-    finally:
-        sys.modules.pop("deepchain", None)
-
-
-_CLASS_MODULE = """
-class Helper:
-    def go(self):
-        return {value}
-
-
-def task(x):
-    return Helper().go() + x
-"""
-
-
-def test_hash_function_same_module_class_is_hashed_by_definition(tmp_path, monkeypatch):
-    """Changing a method body of a same-module helper class changes the checksum"""
-    try:
-        first = _import_from(
-            tmp_path, monkeypatch, "helperclass", _CLASS_MODULE.format(value=1)
-        )
-        before = hash_function(first.task)
-        second = _import_from(
-            tmp_path, monkeypatch, "helperclass", _CLASS_MODULE.format(value=2)
-        )
-        assert hash_function(second.task) != before
-    finally:
-        sys.modules.pop("helperclass", None)
-
-
-_CELLS = [
-    "from random import random as uniform\n",
-    "def sample():\n    return uniform()\n",
-]
-
-
-def _define_in_session(tmp_path):
-    """Run the cells as a notebook does: one ``__main__`` namespace, one file per cell"""
-    namespace = {"__name__": "__main__"}
-    for i, cell in enumerate(_CELLS):
-        path = tmp_path / f"cell{i}.py"
-        path.write_text(cell)
-        exec(compile(cell, str(path), "exec"), namespace)
-    return namespace["sample"]
-
-
-def test_hash_function_interactive_imports_reach_the_worker(tmp_path, monkeypatch):
-    """In a notebook, a global imported in another cell is identified by its import
-    target, in the session and in a worker that receives the function by value"""
-    import pydra.utils.hash
-
-    with pytest.raises(NonStaticReferenceError, match=r"reads the global 'uniform'"):
-        hash_function(_define_in_session(tmp_path))
-    monkeypatch.setattr(pydra.utils.hash, "_interactive_sources", lambda: _CELLS)
-    sample = _define_in_session(tmp_path)
-    parent = hash_function(sample)  # as the job's checksum is, before it is sent
-    assert _hash_in_subprocess(sample, []) == parent
+    assert result.stdout.decode().strip() == hash_function(func)
