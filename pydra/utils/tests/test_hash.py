@@ -1,3 +1,4 @@
+import logging
 import re
 import os
 import subprocess
@@ -9,6 +10,7 @@ from unittest import mock
 import attrs
 import cloudpickle
 import numpy
+from numpy import exp
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json, Yaml
@@ -691,6 +693,40 @@ def test_hash_function_immutable_objects():
     assert hash_function(_adder(_Frozen(1))) != hash_function(_adder(_Frozen(2)))
     with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k'"):
         hash_function(_adder(_Frozen([1])))
+
+
+logger = logging.getLogger("pydra.test_hash")
+
+
+def logs(x: int) -> int:
+    logger.debug("x=%s", x)
+    return x
+
+
+def test_hash_function_logger_global_is_its_name():
+    """A task reading a module logger hashes it by name, whatever its state"""
+    task = python.define(logs)(x=1)
+    before = task._checksum
+    logger.setLevel(logging.DEBUG)
+    assert python.define(logs)(x=1)._checksum == before
+    other = types.FunctionType(
+        logs.__code__, {"logger": logging.getLogger("pydra.test_hash.other")}
+    )
+    assert hash_function(other) != hash_function(logs)
+
+
+def exponential(x: float) -> float:
+    return exp(x)
+
+
+def test_hash_function_ufunc_global_is_its_name():
+    """A task calling a numpy ufunc imported by name hashes it by module and name"""
+    assert python.define(exponential)(x=1.0)._checksum
+    other = types.FunctionType(exponential.__code__, {"exp": numpy.log})
+    assert hash_function(other) != hash_function(exponential)
+    assert hash_function(exponential) == hash_function(
+        types.FunctionType(exponential.__code__, {"exp": numpy.exp})
+    )
 
 
 def test_hash_function_non_static_closure_is_rejected():

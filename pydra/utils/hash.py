@@ -730,8 +730,10 @@ def _is_frozen_attrs(value: object) -> bool:
 def _bytes_repr_static(value: object, cache: Cache) -> Iterator[bytes]:
     """Serialize a static value: a module, function or class by its module and
     qualname (plus its definition when that name is not unique, i.e. it is local or
-    generated), or an immutable value: a scalar, a path, a frozen attrs instance, or a
-    tuple or frozenset, of static values. Raises _NotStatic for any other value."""
+    generated), any other callable with a module and name (e.g. a builtin or numpy ufunc)
+    by its module and name, a logger by its name, or an immutable value: a scalar, a
+    path, a frozen attrs instance, or a tuple or frozenset, of static values. Raises
+    _NotStatic for any other value."""
     if isinstance(value, types.ModuleType):
         yield f"module:{value.__name__}".encode()
     elif isinstance(value, _STATIC_IDENTITIES):
@@ -757,6 +759,13 @@ def _bytes_repr_static(value: object, cache: Cache) -> Iterator[bytes]:
         yield f"{type(value).__name__}:(".encode()
         yield from sorted(items) if isinstance(value, frozenset) else items
         yield b")"
+    elif isinstance(value, logging.Logger):
+        yield f"logger:{value.name}".encode()
+    elif callable(value) and isinstance(getattr(value, "__module__", None), str):
+        name = getattr(value, "__qualname__", None) or getattr(value, "__name__", None)
+        if not isinstance(name, str):
+            raise _NotStatic()
+        yield f"identity:{value.__module__}.{name}".encode()
     else:
         raise _NotStatic()
 
