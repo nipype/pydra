@@ -57,8 +57,26 @@ and ``-mypkg`` to treat one (for instance an editable install) as library code. 
 tier per task with ``python.define(code_hash=...)`` or ``workflow.define(code_hash=...)``,
 or for all tasks with the ``PYDRA_CODE_HASH`` environment variable.
 
-Globals are read when the job is submitted, so rebinding a name in a notebook changes the
-hash. A global that cannot be hashed raises the ordinary hashing error, naming it; pass
+A library function or class is identified by name only when its module holds it at that
+name; one that it does not (a closure made by a library factory, a generated function)
+is hashed by its definition and the values it captures, as user code is.
+
+The boundary has three consequences to be aware of:
+
+* pydra is library code, including ``pydra.tasks.*`` packages, so authors of such a
+  package set ``PYDRA_USER_PACKAGES=pydra.tasks.<theirs>`` for its code to be hashed
+  while they develop it;
+* code that is not installed in ``site-packages`` (vendored on ``PYTHONPATH``, installed
+  with ``pip --target``, or run from a zipapp) counts as user code, so it is walked and
+  hashed, which costs time; name it with ``-pkg`` to treat it as library code;
+* state owned by a library (``os.environ``, a library's module-level registries) is
+  identified by its name, not its value, so changing it does not change the hash;
+  pass such values as inputs.
+
+The walk of a function is memoised per process: it is reused while the source files it
+reached are unchanged and every name it reads still refers to the same object, and the
+values it reads are hashed again each time. Globals are read when the job is submitted,
+so rebinding a name in a notebook changes the hash. A global that cannot be hashed raises the ordinary hashing error, naming it; pass
 it as an input instead. The hash is only computed in the submitting process and carried
 with the job, so workers never recompute it.
 
