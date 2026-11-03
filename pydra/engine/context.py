@@ -17,7 +17,8 @@ import types
 import typing as ty
 import uuid
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 import attrs
 from packaging.requirements import InvalidRequirement, Requirement
 from pydra.utils.general import STDLIB_MODULES, get_fields
@@ -59,6 +60,23 @@ def _digest(parts: ty.Iterable[bytes]) -> str:
     for part in parts:
         hsh.update(len(part).to_bytes(8, "little") + part)
     return hsh.hexdigest()
+
+
+def _norm(path: str | os.PathLike) -> str:
+    """`path` made absolute and, on case-insensitive platforms, lower-cased, so paths
+    of one file compare equal"""
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _file_url_path(url: str) -> str | None:
+    """The local path of a ``file:`` URL (``file:///C:/x`` is ``C:\\x`` on Windows)"""
+    parsed = urlparse(url)
+    if parsed.scheme != "file":
+        return None
+    path = url2pathname(parsed.path)
+    if parsed.netloc and parsed.netloc != "localhost":
+        path = f"{os.sep}{os.sep}{parsed.netloc}{path}"  # a UNC share
+    return path
 
 
 def _file_bytes(path: Path) -> bytes:
@@ -172,9 +190,7 @@ class _Installed:
 
     @functools.cached_property
     def files(self) -> frozenset[str]:
-        return frozenset(
-            os.path.abspath(self.dist.locate_file(f)) for f in self.dist.files or ()
-        )
+        return frozenset(_norm(self.dist.locate_file(f)) for f in self.dist.files or ())
 
     @functools.cached_property
     def editable_root(self) -> str | None:
@@ -183,22 +199,29 @@ class _Installed:
             return None
         if not self.direct.get("dir_info", {}).get("editable"):
             return None
-        url = urlparse(self.direct.get("url", ""))
-        directory = unquote(url.path)
-        if url.scheme != "file" or not os.path.isdir(directory):
+        directory = _file_url_path(self.direct.get("url", ""))
+        if directory is None or not os.path.isdir(directory):
             return None
         return os.path.join(os.path.abspath(directory), "")
 
+    def holds(self, path: str) -> bool:
+        """Whether `path` is under the source directory of an editable install"""
+        root = self.editable_root
+        return root is not None and _norm(path).startswith(
+            os.path.join(_norm(root), "")
+        )
+
     def import_paths(self, root: str) -> list[Path]:
         """The packages and modules under `root` that the distribution provides: the
-        names of its ``top_level.txt``, those importlib maps to it, and those of the
-        loaded modules whose files are under `root`"""
+        names of its ``top_level.txt`` and those importlib maps to it, or only if
+        there are none, those of the loaded modules whose files are under `root`"""
         names = set((self.dist.read_text("top_level.txt") or "").split())
         names.update(t for t, d in _package_distributions().items() if self.name in d)
-        for name, module in list(sys.modules.items()):
-            file = getattr(module, "__file__", None)
-            if file and os.path.abspath(file).startswith(root):
-                names.add(name.partition(".")[0])
+        if not names:
+            for name, module in list(sys.modules.items()):
+                file = getattr(module, "__file__", None)
+                if file and self.holds(file):
+                    names.add(name.partition(".")[0])
         paths = set()
         for name in names:
             for base in (root, os.path.join(root, "src")):
@@ -410,14 +433,14 @@ def _owners(module: str) -> list[str] | None:
     file = getattr(sys.modules.get(module), "__file__", None)
     if not file:
         return [c for c in candidates if c in distributions] or None
-    path = os.path.abspath(file)
+    path = _norm(file)
     for name in candidates:
         if name in distributions and path in distributions[name].files:
             return [name]
     roots = [
         (len(d.editable_root), d.name)
         for d in distributions.values()
-        if d.editable_root and path.startswith(d.editable_root)
+        if d.editable_root and d.holds(path)
     ]
     return [max(roots)[1]] if roots else None
 

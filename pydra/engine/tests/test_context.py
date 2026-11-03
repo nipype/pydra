@@ -20,6 +20,7 @@ from pydra.engine.store import CONTEXT_FILE, PickleStore, context_key
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
 import pydra.compose.python
+from pydra.utils.general import STDLIB_MODULES
 from pydra.utils.hash import USER_PACKAGES_ENV_VAR, library_modules, type_module
 
 cloudpickle.register_pickle_by_value(sys.modules[__name__])
@@ -457,7 +458,8 @@ def test_extension_type_reporting_builtins(installed):
 
     fakelib.Ext = type("Ext", (), {"__module__": "builtins"})
     assert type_module(fakelib.Ext) == "fakelib"
-    assert type_module(type(None)) == "types"
+    # an interpreter type is attributed to a standard library module, whichever
+    assert type_module(type(None)).partition(".")[0] in STDLIB_MODULES
     assert type_module(int) == "builtins"
 
 
@@ -486,3 +488,31 @@ def test_mismatched_slot_is_not_loaded(tmp_path):
             (slot / CONTEXT_FILE).write_text(json.dumps(ctx))
     assert store.lookup("abc", current, None) is None
     assert not (tmp_path / "abc" / context_key(current)).exists()
+
+
+def test_file_urls_of_windows_paths(monkeypatch):
+    import nturl2path
+
+    monkeypatch.setattr(context, "url2pathname", nturl2path.url2pathname)
+    assert context._file_url_path("file:///C:/src/my%20lib") == "C:\\src\\my lib"
+    assert context._file_url_path("https://x/y") is None
+
+
+def test_editable_identity_ignores_loaded_modules(installed, tmp_path, monkeypatch):
+    """The packages an editable install provides come from its metadata, so its
+    identity is the same whichever of its modules a process has imported"""
+    source = tmp_path / "src"
+    (source / "fakelib").mkdir(parents=True)
+    (source / "fakelib" / "__init__.py").write_text("def scale(a):\n    return 2 * a\n")
+    (source / "scratch.py").write_text("x = 1\n")
+    fakelib = _editable(installed, monkeypatch, source)
+    installed(fakelib=fakelib)
+    before = context.package_versions({"fakelib"})["fakelib"]
+    monkeypatch.delitem(sys.modules, "scratch", raising=False)
+    import scratch  # noqa: F401
+
+    installed(fakelib=fakelib)
+    assert context.package_versions({"fakelib"})["fakelib"] == before
+    (source / "scratch.py").write_text("x = 2\n")
+    installed(fakelib=fakelib)
+    assert context.package_versions({"fakelib"})["fakelib"] == before
