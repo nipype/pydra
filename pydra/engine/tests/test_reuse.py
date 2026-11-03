@@ -397,7 +397,7 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
 
 
 # Checksums of tasks whose function's code is hashed, as computed at 277bee99, which
-# differ between Python versions because the AST dump does (3.15 measured on 3.15.0a7)
+# differ between Python versions because the AST dump does (3.15 measured on 3.15.0a7, checked only on a final release)
 _CODE_GOLDEN = {
     (3, 11): (
         "python-ef82da8e64f4a764ad4b043d886f82da",
@@ -427,6 +427,10 @@ def test_code_hashed_tasks_keep_checksums():
     if version not in _CODE_GOLDEN:
         pytest.skip(
             f"no golden checksums measured for Python {version[0]}.{version[1]}"
+        )
+    if version == (3, 15) and sys.version_info.releaselevel != "final":
+        pytest.skip(
+            f"the 3.15 goldens are for 3.15 final, not {sys.version.split()[0]}"
         )
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == _CODE_GOLDEN[version]
 
@@ -538,3 +542,25 @@ def test_split_hook_sees_only_elements(worker, tmp_path):
         result = sub(IntKeyed().split(a=[1, 2]))
     assert result.outputs.out == [2, 3]
     assert {"k-001", "k-002"} <= {p.name for p in tmp_path.iterdir()}
+
+
+@python.define(checksum=lambda task, inputs: f"k-{inputs['a']}-{inputs['b']}")
+def PairKeyed(a: int, b: int) -> int:
+    return a + b
+
+
+@pytest.mark.parametrize(
+    "split",
+    [
+        lambda t: t.split(a=[1, 2], b=[3, 4]),
+        lambda t: t.split(("a", "b"), a=[1, 2], b=[3, 4]),
+        lambda t: t.split(a=[1, 2], b=[3, 4]).combine("a"),
+        lambda t: t.split(["a", "b"], a=[1, 2], b=[3, 4]).combine("b"),
+    ],
+)
+def test_element_checksums_match_the_jobs_run(worker, tmp_path, split):
+    task = split(PairKeyed())
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+        sub(task)
+    run = sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("k-"))
+    assert sorted(task._element_checksums()) == run
