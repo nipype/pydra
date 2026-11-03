@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import inspect
+import os
 import sys
 import typing as ty
 from collections.abc import Mapping, Collection
@@ -33,15 +34,30 @@ PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 TaskType = ty.TypeVar("TaskType", bound="Task")
 
 
-user_cache_root = Path(
-    platformdirs.user_cache_dir(
-        appname="pydra",
-        appauthor="nipype",
-        version=__version__,
-    )
-)
+CACHE_ROOT_ENV_VAR = "PYDRA_CACHE_ROOT"
 
-default_run_cache_root = user_cache_root / "run-cache"
+
+def user_cache_root() -> Path:
+    """The root of pydra's user-level caches, the default run cache and persistent hash
+    cache, read on each call: the ``PYDRA_CACHE_ROOT`` environment variable if set,
+    otherwise the user cache directory of this pydra version (see
+    `platformdirs.user_cache_dir`)"""
+    try:
+        return Path(os.environ[CACHE_ROOT_ENV_VAR])
+    except KeyError:
+        return Path(
+            platformdirs.user_cache_dir(
+                appname="pydra",
+                appauthor="nipype",
+                version=__version__,
+            )
+        )
+
+
+def default_run_cache_root() -> Path:
+    """The run cache used when no ``cache_root`` is given, ``run-cache`` within
+    `user_cache_root`"""
+    return user_cache_root() / "run-cache"
 
 
 def add_exc_note(e: Exception, note: str) -> Exception:

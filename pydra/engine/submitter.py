@@ -217,7 +217,7 @@ class Submitter:
                     f"cache_root {str(store_root)!r}"
                 )
         if cache_root is None:
-            cache_root = default_run_cache_root
+            cache_root = default_run_cache_root()
         cache_root = Path(cache_root).resolve()
         cache_root.mkdir(parents=True, exist_ok=True)
 

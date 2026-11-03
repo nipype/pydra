@@ -15,6 +15,19 @@ def pytest_addoption(parser):
     )
 
 
+@pytest.fixture(autouse=True)
+def isolated_user_cache(tmp_path_factory, monkeypatch):
+    """Give each test its own user-level cache root (the default run cache and the
+    persistent hash cache), so no test reads or writes another's results"""
+    from pydra.utils.general import CACHE_ROOT_ENV_VAR
+    from pydra.utils.hash import PersistentCache
+
+    root = tmp_path_factory.mktemp("user-cache")
+    monkeypatch.setenv(CACHE_ROOT_ENV_VAR, str(root))
+    monkeypatch.delenv(PersistentCache.LOCATION_ENV_VAR, raising=False)
+    return root
+
+
 @pytest.fixture(scope="session", params=["debug", "cf"])
 def worker(request):
     return request.param

@@ -122,7 +122,7 @@ class PersistentCache:
         try:
             location = os.environ[cls.LOCATION_ENV_VAR]
         except KeyError:
-            location = user_cache_root / "hashes"
+            location = user_cache_root() / "hashes"
         return location
 
     # the default needs to be an instance method
