@@ -2,7 +2,6 @@
 
 import sys
 import os
-import re
 import ast
 import struct
 import inspect
@@ -36,10 +35,12 @@ FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 TIMESTAMP_RESOLUTION_NS = 2_000_000_000
 """Files changed within this many nanoseconds of hashing are not keyed in the persistent cache."""
 
-# Module-level cache for function source bytes to avoid repeated disk I/O and
-# AST parsing. Key: (module, qualname, source file, first line, source-file mtime);
-# value: bytes of the function's inner content (between "function:(" and ")").
+# Encoded code of functions, keyed by (source file, source-file mtime, code object)
 _function_bytes_cache: dict[tuple, bytes] = {}
+# Function and lambda nodes of parsed sources by first line, keyed by (file, source digest)
+_source_nodes_cache: dict[tuple, dict[int, list[ast.AST]]] = {}
+
+AST_ENCODING = "ast@1"
 
 try:
     from typing import Protocol
@@ -692,43 +693,129 @@ def bytes_repr_code(obj: types.CodeType, cache: Cache) -> Iterator[bytes]:
     yield b")"
 
 
-def _parse_function_source_bytes(src: str) -> bytes:
-    """Parse function source code into a stable bytes representation.
+_AST_EXCLUDED_FIELDS = frozenset({"ctx", "type_comment", "kind"})
+_FUNCTION_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
-    Strips type annotations (which may reference objects that are not stable
-    across runs) and returns AST-dump bytes, falling back to raw source bytes
-    on a SyntaxError.
+
+def _is_docstring(stmt: ast.stmt) -> bool:
+    return (
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Constant)
+        and isinstance(stmt.value.value, str)
+    )
+
+
+def encode_ast(root: ast.AST) -> str:
+    """Encode a function or lambda node in the version-neutral `ast@1` form
+
+    A node is its type name followed by its fields, sorted by name, as ``name=value;``
+    in parentheses. A list is its items followed by ``,`` in brackets. Any other value
+    (a constant's value, an identifier, a flag) is its type name and repr, as
+    ``int:1``. Excluded from the encoding are:
+
+    * line and column positions, ``ctx``, ``type_comment`` and a string's ``kind``;
+    * fields whose value is None, empty, 0 or False, so that fields added in a later
+      Python version with such a default leave the encoding unchanged (a constant's
+      value is always encoded);
+    * the leading string expression (docstring) of every function and class body;
+    * every signature annotation (of arguments and return values);
+    * the name and decorators of `root` itself.
     """
+    parts: list[str] = []
 
-    def dump_ast(node: ast.AST) -> bytes:
-        return ast.dump(node, annotate_fields=False, include_attributes=False).encode()
+    def encode(value: ty.Any) -> None:
+        if isinstance(value, list):
+            parts.append("[")
+            for item in value:
+                encode(item)
+                parts.append(",")
+            parts.append("]")
+            return
+        if not isinstance(value, ast.AST):
+            parts.append(f"{type(value).__name__}:{value!r}")
+            return
+        parts.append(type(value).__name__ + "(")
+        for name in sorted(value._fields):
+            field = getattr(value, name, None)
+            if name == "value" and isinstance(
+                value, (ast.Constant, ast.MatchSingleton)
+            ):
+                pass
+            elif (
+                name in _AST_EXCLUDED_FIELDS
+                or (name == "annotation" and isinstance(value, ast.arg))
+                or (name == "returns" and isinstance(value, _FUNCTION_DEFS))
+                or (name in ("name", "decorator_list") and value is root)
+                or (not field and not isinstance(field, ast.AST))
+            ):
+                continue
+            elif (
+                name == "body"
+                and isinstance(value, (*_FUNCTION_DEFS, ast.ClassDef))
+                and _is_docstring(field[0])
+            ):
+                field = field[1:]
+            parts.append(name + "=")
+            encode(field)
+            parts.append(";")
+        parts.append(")")
 
-    def strip_annotations(node: ast.AST) -> None:
-        if hasattr(node, "args"):
-            for arg in node.args.args:
-                arg.annotation = None
-            for arg in node.args.kwonlyargs:
-                arg.annotation = None
-            if node.args.vararg:
-                node.args.vararg.annotation = None
-            if node.args.kwarg:
-                node.args.kwarg.annotation = None
+    encode(root)
+    return "".join(parts)
 
-    indent = re.match(r"(\s*)", src).group(1)
-    if indent:
-        src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
-    parts: list[bytes] = []
+
+def _function_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AST]]:
+    """The function and lambda nodes of a source, by the first line of their code"""
+    text = "".join(lines)
+    key = (source_file, blake2b(text.encode(), digest_size=16).digest())
     try:
-        func_ast = ast.parse(src).body[0]
-        strip_annotations(func_ast)
-        if hasattr(func_ast, "args"):
-            parts.append(dump_ast(func_ast.args))
-        if hasattr(func_ast, "body"):
-            for stmt in func_ast.body:
-                parts.append(dump_ast(stmt))
-    except SyntaxError:
-        parts.append(src.encode())
-    return b"".join(parts)
+        return _source_nodes_cache[key]
+    except KeyError:
+        pass
+    nodes: dict[int, list[ast.AST]] = {}
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        pass
+    else:
+        for node in ast.walk(tree):
+            if isinstance(node, _FUNCTION_DEFS):
+                first = node.decorator_list[0] if node.decorator_list else node
+                nodes.setdefault(first.lineno, []).append(node)
+            elif isinstance(node, ast.Lambda):
+                nodes.setdefault(node.lineno, []).append(node)
+    _source_nodes_cache[key] = nodes
+    return nodes
+
+
+def _encode_function_code(obj: types.FunctionType) -> str | None:
+    """Encode the AST node that `obj` was compiled from, or None if it cannot be
+    singled out in the function's source. The node is matched by the code's name and
+    first line, and by the source positions of its instructions, so that lambdas
+    sharing a line are told apart."""
+    code = obj.__code__
+    try:
+        lines, _ = inspect.findsource(obj)
+    except (OSError, TypeError):
+        return None
+    positions = [
+        (line, col, end_line, end_col)
+        for line, end_line, col, end_col in code.co_positions()
+        if None not in (line, end_line, col, end_col)
+        and (line, col) != (end_line, end_col)
+    ]
+
+    def matches(node: ast.AST) -> bool:
+        name = node.name if isinstance(node, _FUNCTION_DEFS) else "<lambda>"
+        start = (node.lineno, node.col_offset)
+        end = (node.end_lineno, node.end_col_offset)
+        return name == code.co_name and all(
+            start <= p[:2] and p[2:] <= end for p in positions
+        )
+
+    nodes = _function_nodes(code.co_filename, lines).get(code.co_firstlineno, [])
+    encodings = {encode_ast(n) for n in nodes if matches(n)}
+    return encodings.pop() if len(encodings) == 1 else None
 
 
 def bytes_repr_function_closure(
@@ -760,42 +847,31 @@ def bytes_repr_function_closure(
 
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
-    """Serialize a function, attempting to use the AST of the source code if available
-    otherwise falling back to the byte-code of the function, together with the values
-    it closes over (see `bytes_repr_function_closure`)."""
+    """Serialize a function by the `ast@1` encoding of its source (see `encode_ast`),
+    falling back to its byte-code, tagged with the Python version, when the source is
+    not available, together with the values it closes over (see
+    `bytes_repr_function_closure`)."""
     yield b"function:("
     if in_stdlib(obj):
         yield f"{obj.__module__}.{obj.__name__}".encode()
     else:
-        # Build a cache key from (module, qualname, source position and mtime).
-        # os.stat() is a single cheap syscall; if successful we can avoid
-        # both inspect.getsource() and ast.parse() on repeated calls.
-        cache_key: tuple[str, str, str, int, int] | None = None
+        source_file = obj.__code__.co_filename
         try:
-            source_file = inspect.getfile(obj)
             mtime_ns = os.stat(source_file).st_mtime_ns
-            cache_key = (
-                obj.__module__,
-                obj.__qualname__,
-                source_file,
-                obj.__code__.co_firstlineno,
-                mtime_ns,
-            )
-        except (OSError, TypeError):
-            pass
-
-        if cache_key is not None and cache_key in _function_bytes_cache:
+        except OSError:
+            mtime_ns = None
+        cache_key = (source_file, mtime_ns, obj.__code__)
+        if cache_key in _function_bytes_cache:
             yield _function_bytes_cache[cache_key]
         else:
-            try:
-                src = inspect.getsource(obj)
-            except OSError:
-                # Fallback to using the bytes representation of the code object.
-                # This path is not cached because it depends on the cache arg.
+            encoded = _encode_function_code(obj)
+            if encoded is None:
+                # not cached, because the code object's bytes depend on the cache arg
+                yield f"bytecode@{sys.version_info[0]}.{sys.version_info[1]}:".encode()
                 yield from bytes_repr(obj.__code__, cache)
             else:
-                result = _parse_function_source_bytes(src)
-                if cache_key is not None:
+                result = f"{AST_ENCODING}:{encoded}".encode()
+                if mtime_ns is not None:
                     _function_bytes_cache[cache_key] = result
                 yield result
         yield from bytes_repr_function_closure(obj, cache)

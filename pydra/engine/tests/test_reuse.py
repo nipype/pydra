@@ -403,43 +403,13 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
         assert task._checksum == checksum
 
 
-# Checksums of tasks whose function's code is hashed, as computed at 277bee99, which
-# differ between Python versions because the AST dump does (3.15 measured on 3.15.0a7, checked only on a final release)
-_CODE_GOLDEN = {
-    (3, 11): (
-        "python-ef82da8e64f4a764ad4b043d886f82da",
-        "workflow-b91a6d6d3e845ada2ab6f14954bc9956",
-    ),
-    (3, 12): (
-        "python-ef82da8e64f4a764ad4b043d886f82da",
-        "workflow-b91a6d6d3e845ada2ab6f14954bc9956",
-    ),
-    (3, 13): (
-        "python-d2a20bb9597dd80a2ce9f6389798883f",
-        "workflow-77702c06de506544103fed56c06413d6",
-    ),
-    (3, 14): (
-        "python-d2a20bb9597dd80a2ce9f6389798883f",
-        "workflow-77702c06de506544103fed56c06413d6",
-    ),
-    (3, 15): (
-        "python-4389a4d4ab1299de47b66fd28aa712e2",
-        "workflow-2dd4cdaf40d357b1a96c2b9e75844f10",
-    ),
-}
-
-
 def test_code_hashed_tasks_keep_checksums():
-    version = sys.version_info[:2]
-    if version not in _CODE_GOLDEN:
-        pytest.skip(
-            f"no golden checksums measured for Python {version[0]}.{version[1]}"
-        )
-    if version == (3, 15) and sys.version_info.releaselevel != "final":
-        pytest.skip(
-            f"the 3.15 goldens are for 3.15 final, not {sys.version.split()[0]}"
-        )
-    assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == _CODE_GOLDEN[version]
+    """Checksums of tasks whose function's code is hashed, the same on every Python
+    version (measured on 3.11 to 3.15)"""
+    assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == (
+        "python-463063b196ab62ce6c8c1a59e2bdd535",
+        "workflow-699b3cc655c8fb48e7dd8a66863c28e8",
+    )
 
 
 def _add_k(k):
