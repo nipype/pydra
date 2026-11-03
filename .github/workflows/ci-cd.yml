@@ -23,8 +23,6 @@ on:
     branches:
       - main
   pull_request:
-    branches:
-      - main
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   merge_group:
   workflow_dispatch:
@@ -399,6 +397,7 @@ jobs:
           FULL: ${{ needs.plan.outputs.full }}
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          BASE: ${{ github.event.pull_request.base.ref }}
           ALWAYS: ${{ needs.plan.result }} ${{ needs.build.result }} ${{ needs.test.result }}
           FULL_ONLY: ${{ needs.test-singularity.result }} ${{ needs.test-lmod.result }} ${{ needs.test-slurm.result }} ${{ needs.build-docs.result }}
         run: |
@@ -410,8 +409,8 @@ jobs:
               [ "$r" = success ] || { echo "a full-tier job finished with: $r"; exit 1; }
             fi
           done
-          if [ "$EVENT" = pull_request ] && [ "$FULL" != true ] && [ "$DRAFT" != true ]; then
-            echo "Only the fast tier ran for this commit. To fix: add the `full-ci` label (or run the CI/CD workflow manually on this branch)."
+          if [ "$EVENT" = pull_request ] && [ "$BASE" = main ] && [ "$FULL" != true ] && [ "$DRAFT" != true ]; then
+            echo "Only the fast tier ran for this PR into main. To fix: add the `full-ci` label (or run the CI/CD workflow manually on this branch)."
             exit 1
           fi
 
