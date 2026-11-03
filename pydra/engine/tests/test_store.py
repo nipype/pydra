@@ -455,19 +455,38 @@ def _silly_rename(slot):
     return slot / ".nfs000000000001"
 
 
-def _delete_pending(slot, monkeypatch):
-    pending = slot / "pending.txt"
+def _stat_failing(monkeypatch, entry, winerror):
     stat = os.stat
 
-    def pending_stat(path, *args, **kwargs):
-        if os.fspath(path) == str(pending):
-            error = PermissionError(errno.EACCES, "Access is denied", str(pending))
-            error.winerror = 303
+    def failing_stat(path, *args, **kwargs):
+        if os.fspath(path) == str(entry):
+            error = PermissionError(errno.EACCES, "Access is denied", str(entry))
+            error.winerror = winerror
             raise error
         return stat(path, *args, **kwargs)
 
-    monkeypatch.setattr(os, "stat", pending_stat)
+    monkeypatch.setattr(os, "stat", failing_stat)
+
+
+def _delete_pending(slot, monkeypatch):
+    pending = slot / "pending.txt"
+    _stat_failing(monkeypatch, pending, 303)  # ERROR_DELETE_PENDING
     return pending
+
+
+def test_remove_from_cache_raises_access_denied_on_a_leftover(tmp_path, monkeypatch):
+    slot = _slot_with_result(tmp_path)
+    denied = slot / "denied.txt"
+    _stat_failing(monkeypatch, denied, 5)  # ERROR_ACCESS_DENIED
+    refused, unlinked = _rmdir_refusing(
+        monkeypatch, slot, store_module.REMOVE_ATTEMPTS, lambda n: denied.touch()
+    )
+    with pytest.raises(PermissionError) as excinfo:
+        remove_from_cache(slot)
+    assert not isinstance(excinfo.value, (CacheBusyError, CacheWriterError))
+    assert excinfo.value.filename == str(denied)
+    assert len(refused) == 1
+    assert os.path.lexists(denied)
 
 
 @pytest.mark.parametrize("kind", ["nfs", "windows"])

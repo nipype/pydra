@@ -32,7 +32,7 @@ _BUSY_ERRNOS = frozenset({errno.EBUSY})
 _BUSY_WINERRORS = frozenset({32, 33})  # ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
 _NOT_EMPTY_ERRNOS = frozenset({errno.ENOTEMPTY})
 _NOT_EMPTY_WINERRORS = frozenset({145})  # ERROR_DIR_NOT_EMPTY
-_PENDING_WINERRORS = frozenset({5, 303})  # ERROR_ACCESS_DENIED, ERROR_DELETE_PENDING
+_PENDING_WINERRORS = frozenset({303})  # ERROR_DELETE_PENDING
 _SILLY_RENAME_PREFIX = ".nfs"
 
 
@@ -78,13 +78,18 @@ def _is_not_empty(error: OSError) -> bool:
 
 
 def _is_pending(entry: Path) -> bool:
-    """Whether ``entry`` is an NFS silly-rename or a file Windows has marked for deletion."""
+    """Whether ``entry`` is an NFS silly-rename, a file Windows has marked for deletion,
+    or already gone; any other error reading it is raised."""
     if entry.name.startswith(_SILLY_RENAME_PREFIX):
         return True
     try:
         os.stat(entry)
+    except FileNotFoundError:
+        return True
     except OSError as error:
-        return getattr(error, "winerror", None) in _PENDING_WINERRORS
+        if getattr(error, "winerror", None) in _PENDING_WINERRORS:
+            return True
+        raise
     return False
 
 
