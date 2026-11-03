@@ -410,13 +410,14 @@ def GoldenWf(a: int) -> int:
 
 
 def test_tasks_without_hook_keep_checksums(monkeypatch):
-    """Checksums of tasks without the hook, as computed at 277bee99"""
+    """Checksums of tasks without the hook, as computed at 277bee99 (the versioned
+    task's since its code part was tagged ``version:``)"""
     # the module name depends on pytest's import mode, and is part of a declared version
     monkeypatch.setattr(inc_one, "__module__", "pydra.engine.tests.test_reuse")
     for task, checksum in [
         (
             python.define(inc_one, version="1")(a=1),
-            "python-e87e7040c1d7894a31506139707e9425",
+            "python-6ca65772cc28b9f1e7fd898de2855234",
         ),
         (
             shell.define("echo <text:str>")(text="hi"),

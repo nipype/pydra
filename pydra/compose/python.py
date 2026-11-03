@@ -124,11 +124,16 @@ def define(
         fields need to be set.
     version: str, optional
         Declared version of the task. When given, the checksum uses the function's
-        module, name and this version instead of hashing the function's code, so the
-        version must be changed whenever a change to the code changes its results.
-        Neither the function's defaults nor the variables it closes over are hashed
-        then. Functions defined in ``__main__`` or inside another function are
-        identified only by name and version, so a warning is issued for them.
+        module, name and this version in place of the code it reaches (see
+        ``code_hash``), so the version must be changed whenever a change to the code
+        changes its results. The values the code reads (closure cells, globals and
+        the defaults of the functions it calls) are still hashed. The digest of the
+        code (`pydra.utils.hash.code_digest`) is recorded beside each result, and a
+        `pydra.engine.store.DeclaredVersionWarning` is issued when a stored result of
+        the same version was computed from other code; ``reuse="exact"`` then
+        recomputes it, other policies reuse it. Functions defined in ``__main__`` or
+        inside another function are identified only by name, version and the values
+        they read, so a warning is issued for them.
     resources: ComputeResources, optional
         What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
     code_hash: str, optional
@@ -218,8 +223,9 @@ def define(
         ):
             warnings.warn(
                 f"version={version!r} identifies {function.__module__}."
-                f"{function.__qualname__}, which another function of the same name "
-                "and version would share, so their results would be reused as one",
+                f"{function.__qualname__}, which another function of the same name, "
+                "version and values read would share, so their results would be "
+                "reused as one",
                 UserWarning,
                 stacklevel=2,
             )
