@@ -1,3 +1,4 @@
+from pathlib import PurePosixPath
 import attrs
 import pytest
 from pydra.engine.submitter import Submitter
@@ -115,9 +116,12 @@ def test_docker_st_1(run_function, worker, tmp_path):
     outputs = run_function(
         docky, tmp_path, worker, environment=docker.Environment(image="busybox")
     )
+    # the working directory in the container is the job's slot, below its checksum
     assert (
-        outputs.stdout[0]
-        == f"/mnt/pydra{tmp_path}/{attrs.evolve(docky, executable=cmd[0])._checksum}\n"
+        PurePosixPath(outputs.stdout[0].strip()).parent
+        == PurePosixPath(
+            f"/mnt/pydra{tmp_path}/{attrs.evolve(docky, executable=cmd[0])._checksum}"
+        )
     )
     assert outputs.stdout[1] == "root\n"
     assert outputs.return_code[0] == outputs.return_code[1] == 0
@@ -419,7 +423,7 @@ def test_docker_cmd_inputspec_copyfile_1(worker, tmp_path):
     out_file = outputs.out_file.fspath
     assert out_file.exists()
     # the file is copied, and then it is changed in place
-    assert out_file.parent.parent == tmp_path
+    assert out_file.parent.parent.parent == tmp_path
     with open(out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
@@ -628,3 +632,18 @@ def test_docker_wf_ndst_inputspec_1(worker, tmp_path):
 
     outputs = wf(cache_root=tmp_path)
     assert outputs.out == ["hello from pydra", "have a nice one"]
+
+
+def test_execute_creates_the_slot_directory(tmp_path, monkeypatch):
+    """Executing a job directly, without running it, creates the slot's parents"""
+    from pydra.environments import base
+
+    monkeypatch.setattr(base, "execute", lambda *args, **kwargs: (0, "", ""))
+    job = Job(
+        task=shell.define("whoami")(),
+        name="job",
+        submitter=Submitter(cache_root=tmp_path),
+    )
+    assert not job.cache_dir.parent.exists()
+    docker.Environment(image="busybox").execute(job)
+    assert job.cache_dir.is_dir()
