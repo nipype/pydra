@@ -13,17 +13,21 @@ class Docker(base.Container):
     """Docker environment."""
 
     def _resolve_digest(self) -> str | None:
-        """The local image ID (``docker image inspect``), pulling the image first if it
-        is not present. It is not a registry ``RepoDigest``, so it differs between
-        architectures for the same tag."""
-        image = f"{self.image}:{self.tag}"
-        inspect = ["docker", "image", "inspect", "--format", "{{.Id}}", image]
+        """The local image ID (``docker image inspect``), or ``None`` if Docker or the
+        image is not available. It never pulls an image. It is not a registry
+        ``RepoDigest``, so it differs between architectures for the same tag."""
         try:
-            rc, out, _ = base.execute(inspect, strip=True)
-            if rc != 0:
-                if base.execute(["docker", "pull", "--quiet", image])[0] != 0:
-                    return None
-                rc, out, _ = base.execute(inspect, strip=True)
+            rc, out, _ = base.execute(
+                [
+                    "docker",
+                    "image",
+                    "inspect",
+                    "--format",
+                    "{{.Id}}",
+                    f"{self.image}:{self.tag}",
+                ],
+                strip=True,
+            )
         except OSError:
             return None
         return out if rc == 0 and out else None

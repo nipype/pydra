@@ -1,6 +1,11 @@
+import sys
 import attrs
+import cloudpickle
 import pytest
 from pydra.environments import native, docker, singularity, lmod
+
+# Worker processes cannot import the test modules, so they receive their classes by value
+cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
 
 def test_checksum_is_stable_hex():
@@ -95,20 +100,25 @@ def test_unresolved_digest_is_not_cached(monkeypatch):
     assert env.checksum() != env.checksum()
 
 
-def test_docker_digest_pulls_a_missing_image(monkeypatch):
+def test_docker_digest_never_pulls_and_tolerates_no_docker(monkeypatch):
     from pydra.environments import base
 
-    pulled = []
+    commands = []
 
-    def execute(cmd, strip=False):
-        if cmd[1] == "pull":
-            pulled.append(cmd)
-            return 0, "", ""
-        return (0, "sha256:a", "") if pulled else (1, "", "no such image")
+    def missing(cmd, strip=False):
+        commands.append(cmd)
+        return 1, "", "no such image"
 
-    monkeypatch.setattr(base, "execute", execute)
-    assert docker.Docker(image="busybox")._resolve_digest() == "sha256:a"
-    assert len(pulled) == 1
+    monkeypatch.setattr(base, "execute", missing)
+    assert docker.Docker(image="busybox")._resolve_digest() is None
+    assert [c[1] for c in commands] == ["image"]
+
+    def no_docker(cmd, strip=False):
+        raise FileNotFoundError("docker")
+
+    monkeypatch.setattr(base, "execute", no_docker)
+    env = docker.Docker(image="busybox")
+    assert env.checksum() == env.checksum()
 
 
 def test_environment_checksum_recorded_under_each_worker(worker, tmp_path):
