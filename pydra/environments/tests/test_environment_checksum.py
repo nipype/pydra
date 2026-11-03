@@ -109,3 +109,15 @@ def test_docker_digest_pulls_a_missing_image(monkeypatch):
     monkeypatch.setattr(base, "execute", execute)
     assert docker.Docker(image="busybox")._resolve_digest() == "sha256:a"
     assert len(pulled) == 1
+
+
+def test_environment_checksum_recorded_under_each_worker(worker, tmp_path):
+    """The environment identity is recorded whichever process runs the job"""
+    from pydra.compose import shell
+    from pydra.engine.submitter import Submitter
+
+    with Submitter(
+        worker=worker, environment=Tagged(tag="a"), cache_root=tmp_path
+    ) as sub:
+        result = sub(shell.define("whoami")())
+    assert result.environment_checksum == Tagged(tag="a").checksum()
