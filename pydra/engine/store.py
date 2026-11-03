@@ -23,20 +23,43 @@ Context = ty.Mapping[str, ty.Any]
 """The execution context that produced a result, recorded beside it."""
 
 REMOVE_ATTEMPTS = 5
-"""How many times ``remove_from_cache`` tries to remove a path held open by another process."""
+"""How many times ``remove_from_cache`` tries a removal blocked by held or pending files."""
 
 REMOVE_BACKOFF = 0.1
-"""Seconds ``remove_from_cache`` waits after its first failed attempt, doubled after each further one."""
+"""Seconds ``remove_from_cache`` waits after its first blocked attempt, doubled after each."""
 
-_BUSY_ERRNOS = frozenset({errno.EBUSY, errno.ENOTEMPTY})
+_BUSY_ERRNOS = frozenset({errno.EBUSY})
 _BUSY_WINERRORS = frozenset({32, 33})  # ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
+_NOT_EMPTY_ERRNOS = frozenset({errno.ENOTEMPTY})
+_NOT_EMPTY_WINERRORS = frozenset({145})  # ERROR_DIR_NOT_EMPTY
+_PENDING_WINERRORS = frozenset({5, 303})  # ERROR_ACCESS_DENIED, ERROR_DELETE_PENDING
+_SILLY_RENAME_PREFIX = ".nfs"
 
 
 class CacheBusyError(OSError):
-    """A path in a cache could not be removed because another process holds a file in it open.
+    """A path in a cache could not be removed because files in it stayed held open or
+    pending deletion.
 
-    ``filename`` is the path being removed and ``filename2`` the file that was held open.
+    ``filename`` is the path being removed, ``filename2`` the first such file and
+    ``held`` all of them.
     """
+
+
+class CacheWriterError(OSError):
+    """Entries appeared in a cache directory while it was being removed.
+
+    ``filename`` is the directory being removed, ``filename2`` the first such entry and
+    ``leftovers`` all of them.
+    """
+
+
+def _cache_error(cls, error, message, path, files, attribute):
+    winerror = getattr(error, "winerror", None)
+    raised = cls(error.errno, message, str(path), winerror, str(files[0]))
+    if winerror is not None and getattr(raised, "winerror", None) is None:
+        raised.winerror = winerror
+    setattr(raised, attribute, [str(f) for f in files])
+    return raised
 
 
 def is_busy(error: OSError) -> bool:
@@ -47,12 +70,54 @@ def is_busy(error: OSError) -> bool:
     )
 
 
-def remove_from_cache(path: Path) -> None:
-    """Remove the file or directory tree at ``path``.
+def _is_not_empty(error: OSError) -> bool:
+    return (
+        getattr(error, "winerror", None) in _NOT_EMPTY_WINERRORS
+        or error.errno in _NOT_EMPTY_ERRNOS
+    )
 
-    A removal that fails because another process holds a file open is tried
-    ``REMOVE_ATTEMPTS`` times with exponential backoff, then raises ``CacheBusyError``.
-    Any other error is raised as it is.
+
+def _is_pending(entry: Path) -> bool:
+    """Whether ``entry`` is an NFS silly-rename or a file Windows has marked for deletion."""
+    if entry.name.startswith(_SILLY_RENAME_PREFIX):
+        return True
+    try:
+        os.stat(entry)
+    except OSError as error:
+        return getattr(error, "winerror", None) in _PENDING_WINERRORS
+    return False
+
+
+def _leftovers(directory: Path) -> list[Path]:
+    """The entries other than directories beneath ``directory``."""
+    found = []
+    for root, dirs, files in os.walk(directory):
+        found.extend(
+            Path(root, d) for d in dirs if os.path.islink(os.path.join(root, d))
+        )
+        found.extend(Path(root, f) for f in files)
+    return sorted(found)
+
+
+def _remove_directories(path: Path) -> None:
+    """Remove the empty directory tree at ``path``, deepest first."""
+    for root, dirs, _ in os.walk(path, topdown=False):
+        for d in dirs:
+            if not os.path.islink(os.path.join(root, d)):
+                os.rmdir(os.path.join(root, d))
+    os.rmdir(path)
+
+
+def remove_from_cache(path: Path) -> None:
+    """Remove the file or directory tree at ``path``; a path that is already gone counts
+    as removed.
+
+    A removal blocked by files held open (sharing violation, ``EBUSY``) or pending
+    deletion (NFS ``.nfs*`` silly-renames, Windows delete-pending files) is tried
+    ``REMOVE_ATTEMPTS`` times with exponential backoff from ``REMOVE_BACKOFF``, then
+    raises ``CacheBusyError``. Once only pending files are left, later attempts remove
+    only directories. A directory that is not empty for any other reason raises
+    ``CacheWriterError`` at once. Any other error is raised as it is.
     """
     path = Path(path)
     failed: list[str] = []
@@ -65,29 +130,55 @@ def remove_from_cache(path: Path) -> None:
         handler = {"onexc": record}
     else:
         handler = {"onerror": lambda f, p, exc_info: record(f, p, exc_info[1])}
+    directories_only = False
     delay = REMOVE_BACKOFF
     for attempt in range(1, REMOVE_ATTEMPTS + 1):
         failed.clear()
         try:
-            if path.is_dir() and not path.is_symlink():
+            if directories_only:
+                _remove_directories(path)
+            elif path.is_dir() and not path.is_symlink():
                 shutil.rmtree(path, **handler)
             else:
                 path.unlink()
             return
-        except OSError as error:
-            if not is_busy(error):
-                raise
+        except FileNotFoundError:
+            if not os.path.lexists(path):
+                return
             if attempt == REMOVE_ATTEMPTS:
-                held = failed[0] if failed else path
-                raise CacheBusyError(
-                    error.errno,
-                    f"could not remove {path} after {REMOVE_ATTEMPTS} attempts because "
-                    f"{held} is held open by another process (on Windows typically a "
-                    "virus scanner, a search indexer or a process whose working directory "
-                    "is inside it; on NFS a process on any client)",
-                    str(path),
-                    None,
-                    str(held),
+                raise
+            continue
+        except OSError as error:
+            blocked = Path(failed[0] if failed else error.filename or path)
+            if _is_not_empty(error):
+                held = _leftovers(blocked if blocked.is_dir() else path)
+                written = [entry for entry in held if not _is_pending(entry)]
+                if written:
+                    raise _cache_error(
+                        CacheWriterError,
+                        error,
+                        f"entries appeared in {path} while it was being removed: "
+                        + ", ".join(map(str, written)),
+                        path,
+                        written,
+                        "leftovers",
+                    ) from error
+                held = held or [blocked]
+            elif is_busy(error):
+                held = [blocked]
+            else:
+                raise
+            directories_only = all(_is_pending(entry) for entry in held)
+            if attempt == REMOVE_ATTEMPTS:
+                raise _cache_error(
+                    CacheBusyError,
+                    error,
+                    f"could not remove {path} after {REMOVE_ATTEMPTS} attempts: "
+                    + ", ".join(map(str, held))
+                    + " held open or pending deletion",
+                    path,
+                    held,
+                    "held",
                 ) from error
         time.sleep(delay)
         delay *= 2
