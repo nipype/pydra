@@ -189,6 +189,55 @@ def test_on_error_fail_fast(tmp_path):
         sub.close()
 
 
+@pytest.mark.timeout(120)
+def test_on_error_raise_at_end_with_job_in_flight_cf(tmp_path):
+    """With ``on_error="raise_at_end"`` under two cf processes, an element errors while
+    a sibling is still running: the sibling only returns once the failure has been
+    recorded, so the two overlap, and it still completes before the error is raised"""
+
+    @python.define
+    def Overlap(x: int, sync: str) -> int:
+        import time
+        from pathlib import Path
+
+        sync = Path(sync)
+        (sync / f"started_{x}").touch()
+
+        def wait_for(name):
+            deadline = time.monotonic() + 60
+            while not (sync / name).exists():
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{name} never appeared")
+                time.sleep(0.05)
+
+        if x == 1:
+            wait_for("started_0")
+            (sync / "failing").touch()
+            raise Exception("x is 1, so i'm raising an exception!")
+        wait_for("failing")
+        (sync / "finished_0").touch()
+        return x
+
+    @workflow.define
+    def InFlight(xs, sync):
+        a = workflow.add(Overlap(sync=sync).split(x=xs), name="A")
+        b = workflow.add(Identity(x=a.out), name="B")
+        return b.out
+
+    from pydra.engine import WorkflowError
+
+    sync = tmp_path / "sync"
+    sync.mkdir()
+    with Submitter(
+        worker="cf", n_procs=2, on_error="raise_at_end", cache_root=tmp_path / "cache"
+    ) as sub:
+        with pytest.raises(WorkflowError, match="failed with errors") as excinfo:
+            sub(InFlight(xs=[0, 1], sync=str(sync)), raise_errors=True)
+    assert len(excinfo.value.errors) == 1
+    assert "i'm raising an exception!" in excinfo.value.errors[0]
+    assert (sync / "finished_0").exists()
+
+
 @pytest.mark.parametrize(
     "plugin,on_error",
     [("debug", "fail_fast"), ("cf", "raise_at_end"), (SyncWorker, "fail_fast")],
@@ -278,13 +327,14 @@ def test_on_error_unresolvable_input_raise_at_end(worker, tmp_path):
     assert sorted(p.name for p in marks.iterdir()) == ["0", "2", "3"]
 
 
-def test_on_error_unresolvable_input_fail_fast(tmp_path):
+@pytest.mark.timeout(120)
+def test_on_error_unresolvable_input_fail_fast(worker, tmp_path):
     from pydra.engine import WorkflowError
 
     marks = tmp_path / "marks"
     marks.mkdir()
     task = BadInput(xs=[0, 1, 2], marks=str(marks))
-    with Submitter(worker="debug", on_error="fail_fast", cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, on_error="fail_fast", cache_root=tmp_path) as sub:
         with pytest.raises(WorkflowError, match=r"B\(1\)"):
             sub(task, raise_errors=True)
 
