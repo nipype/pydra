@@ -209,7 +209,6 @@ class Submitter:
         task._check_rules()
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
-
             state = State(
                 name="outer_split",
                 splitter=deepcopy(task._splitter),
@@ -327,6 +326,11 @@ class Submitter:
             for job in tasks:
                 self.worker.run(job, rerun=rerun and self.propagate_rerun)
             tasks = self.get_runnable_tasks(exec_graph)
+            if errors := self.pop_resolution_errors(exec_graph):
+                raise RuntimeError(
+                    f"Workflow job {wf_job} failed with errors:\n\n"
+                    + "\n\n".join(errors)
+                )
 
     async def expand_workflow_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
@@ -466,18 +470,26 @@ class Submitter:
                             f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
                         )
                 tasks = self.get_runnable_tasks(exec_graph)
+                errors.extend(self.pop_resolution_errors(exec_graph))
         finally:
             # Cancel any outstanding jobs if exiting early (e.g. due to an exception)
             # so they aren't left running unattended on the event loop, which may be
             # shared with other code (e.g. in Jupyter notebooks)
             for task_future in task_futures:
                 task_future.cancel()
+            errors.extend(self.pop_resolution_errors(exec_graph))
             if errors:
                 all_errors = "\n\n".join(errors)
                 raise RuntimeError(
                     f"Workflow job {workflow_task} failed with errors"
                     f":\n\n{all_errors}\n\nSee output directory for details: {workflow_task.cache_dir}"
                 )
+
+    @staticmethod
+    def pop_resolution_errors(exec_graph: DiGraph["NodeExecution"]) -> list[str]:
+        """The errors of elements whose inputs could not be resolved, which have not
+        been collected before"""
+        return [e for n in exec_graph.nodes for e in n.pop_resolution_errors()]
 
     async def fetch_finished(
         self, futures
@@ -600,7 +612,8 @@ class NodeExecution(ty.Generic[TaskType]):
     # List of tasks that were completed successfully
     successful: dict[int, list["Job[TaskType]"]]
     # List of tasks that failed
-    errored: dict[int, "Job[TaskType]"]
+    # (an element whose inputs could not be resolved is mapped to the exception)
+    errored: dict[int, "Job[TaskType] | Exception"]
     # List of tasks that couldn't be run due to upstream errors
     unrunnable: dict[int, list["Job[TaskType]"]]
     # List of tasks that are queued
@@ -609,7 +622,10 @@ class NodeExecution(ty.Generic[TaskType]):
     running: dict[int, tuple["Job[TaskType]", datetime]]
     # Elements that are waiting on upstream elements, mapped to the upstream nodes and
     # the indices of their elements that they read
-    blocked: dict[int | None, list[tuple["NodeExecution", list[int | None]]]] | None
+    # (a range of all of an upstream node's indices stands for reading all of its elements)
+    blocked: (
+        dict[int | None, list[tuple["NodeExecution", range | list[int | None]]]] | None
+    )
 
     # Jobs of the elements, created when they are released or first read
     _tasks: dict[int | None, "Job[TaskType] | None"] | None
@@ -617,6 +633,11 @@ class NodeExecution(ty.Generic[TaskType]):
     workflow: "Workflow"
 
     graph: DiGraph["NodeExecution"] | None
+
+    # Descriptions of input-resolution errors not yet collected by ``Submitter``
+    _resolution_errors: list[str]
+    # The progress of the predecessors when the blocked elements were last checked
+    _progress: tuple | None
 
     def __init__(
         self,
@@ -637,6 +658,8 @@ class NodeExecution(ty.Generic[TaskType]):
         self.unrunnable = defaultdict(list)
         self.workflow = workflow
         self.graph = None
+        self._resolution_errors = []
+        self._progress = None
 
     @property
     def state(self):
@@ -711,7 +734,11 @@ class NodeExecution(ty.Generic[TaskType]):
         for index in indices:
             upstream = self._upstream(index)
             for node, inds in upstream:
-                if missing := [i for i in inds if i not in node._tasks]:
+                if isinstance(inds, range):
+                    missing = [] if len(inds) == len(node._tasks) else list(inds)
+                else:
+                    missing = [i for i in inds if i not in node._tasks]
+                if missing:
                     raise RuntimeError(
                         f"Element {index} of node {self.name!r} reads elements {missing} "
                         f"of node {node.name!r}, which has elements {list(node._tasks)}"
@@ -840,19 +867,20 @@ class NodeExecution(ty.Generic[TaskType]):
                 upstream.append((node, node._read_indices(state_index)))
         return upstream
 
-    def _read_indices(self, state_index: int | None) -> list[int | None]:
+    def _read_indices(self, state_index: int | None) -> range | list[int | None]:
         """The indices of the elements of this node that a downstream lazy field reads
         at the given state index (see ``LazyOutField._get_value``)
 
         Parameters
         ----------
         state_index : int or None
-            The state index the lazy field is read at, None to read all elements
+            The state index the lazy field is read at, None to read all elements, which
+            are returned as a range so that readers need not store every index
         """
         if not self.state:
             return [None]
         if state_index is None or (self.state.combiner and not self.state.ind_l_final):
-            return list(range(len(self.state.states_ind)))
+            return range(len(self.state.states_ind))
         return list(self.state.final_combined_ind_mapping[state_index])
 
     @property
@@ -890,11 +918,38 @@ class NodeExecution(ty.Generic[TaskType]):
                 for p in predecessors
             ):
                 self.start()
-            for index, upstream in list((self.blocked or {}).items()):
-                if all(i in p.successful for p, inds in upstream for i in inds):
-                    del self.blocked[index]
-                    self.queued[index] = self.job(index)
+            progress = tuple(len(p.successful) for p in predecessors)
+            if self.blocked and progress != self._progress:
+                self._progress = progress
+                for index, upstream in list(self.blocked.items()):
+                    if all(_has_succeeded(p, inds) for p, inds in upstream):
+                        del self.blocked[index]
+                        self._release(index)
         return list(self.queued.values())
+
+    def _release(self, index: int | None) -> None:
+        """Queue the job of an element whose upstream elements have all succeeded, or
+        record the element as errored if its inputs cannot be resolved from them"""
+        try:
+            self.queued[index] = self.job(index)
+        except Exception as exc:
+            name = self.name if index is None else f"{self.name}({index})"
+            self.errored[index] = exc
+            self._resolution_errors.append(
+                f"Job {name!r}, inputs could not be resolved, errored:\n{format_exc()}"
+            )
+
+    def pop_resolution_errors(self) -> list[str]:
+        """The input-resolution errors recorded since the last call"""
+        errors, self._resolution_errors = self._resolution_errors, []
+        return errors
+
+
+def _has_succeeded(node: NodeExecution, indices: range | list[int | None]) -> bool:
+    """Whether the elements of a node at the given indices have all succeeded"""
+    if len(indices) == len(node._tasks):
+        return len(node.successful) == len(node._tasks)
+    return all(i in node.successful for i in indices)
 
 
 async def prepare_runnable(runnable):
