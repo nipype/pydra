@@ -1,10 +1,14 @@
+import logging
 import re
 import os
+import subprocess
 import sys
+import types
 from hashlib import blake2b
 from pathlib import Path
 from unittest import mock
 import attrs
+import cloudpickle
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json, Yaml
@@ -595,3 +599,77 @@ def test_bytes_repr_annotated_type():
         ty.List[ty.Union[Json, Yaml]]
     )
     assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])
+
+
+def _adder(k):
+    def add(x):
+        return x + k
+
+    return add
+
+
+OFFSET = 1
+
+
+def add_offset(x):
+    return x + OFFSET
+
+
+def test_hash_function_closure():
+    """Functions with the same source but different captured values hash differently"""
+    assert hash_function(_adder(1)) == hash_function(_adder(1))
+    assert hash_function(_adder(1)) != hash_function(_adder(2))
+
+
+def test_hash_function_referenced_global():
+    """Functions with the same source but different global values hash differently"""
+    other = types.FunctionType(add_offset.__code__, {"OFFSET": 2})
+    same = types.FunctionType(add_offset.__code__, {"OFFSET": 1})
+    assert hash_function(add_offset) == hash_function(same)
+    assert hash_function(add_offset) != hash_function(other)
+
+
+def test_hash_function_unhashable_closure():
+    """A captured value that cannot be hashed fails the hash, naming the value"""
+
+    class A:
+        def __bytes_repr__(self, cache):
+            raise TypeError("unhashable")
+
+    with pytest.raises(TypeError, match=r"unhashable\nin 'k', referenced by function"):
+        hash_object(_adder(A()))
+
+
+_HASH_IN_SUBPROCESS = (
+    "import sys, cloudpickle; from pydra.utils.hash import hash_function; "
+    "print(hash_function(cloudpickle.loads(sys.stdin.buffer.read())))"
+)
+
+
+@pytest.mark.parametrize("func", [_adder(3), add_offset])
+def test_hash_function_pickled_by_value(func):
+    """A function pickled by value, as the cf worker sends it, keeps its hash in
+    another process"""
+    module = sys.modules[func.__module__]
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        payload = cloudpickle.dumps(func)
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    result = subprocess.run(
+        [sys.executable, "-c", _HASH_IN_SUBPROCESS],
+        input=payload,
+        capture_output=True,
+        check=True,
+        env={**os.environ, "PYTHONHASHSEED": "random"},
+    )
+    assert result.stdout.decode().strip() == hash_function(func)
+
+
+def test_hash_logger_by_name():
+    """A logger, often read as a global, is identified by its name, not its state"""
+    logger = logging.getLogger("pydra.test_hash")
+    before = hash_function(logger)
+    logger.setLevel(logging.DEBUG)
+    assert hash_function(logger) == before
+    assert hash_function(logging.getLogger("pydra.test_hash.other")) != before

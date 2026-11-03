@@ -403,28 +403,30 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
         assert task._checksum == checksum
 
 
-# Checksums of tasks whose function's code is hashed, as computed at 277bee99, which
-# differ between Python versions because the AST dump does (3.15 measured on 3.15.0a7, checked only on a final release)
+# Checksums of tasks whose function's code is hashed, as computed at 277bee99 (the
+# workflow's since its function hashes the globals it reads), which differ between
+# Python versions because the AST dump does (3.15 measured on 3.15.0a7, checked only on
+# a final release)
 _CODE_GOLDEN = {
     (3, 11): (
         "python-ef82da8e64f4a764ad4b043d886f82da",
-        "workflow-b91a6d6d3e845ada2ab6f14954bc9956",
+        "workflow-a5eb2f934ec9823afc3d3d849cb8c02e",
     ),
     (3, 12): (
         "python-ef82da8e64f4a764ad4b043d886f82da",
-        "workflow-b91a6d6d3e845ada2ab6f14954bc9956",
+        "workflow-a5eb2f934ec9823afc3d3d849cb8c02e",
     ),
     (3, 13): (
         "python-d2a20bb9597dd80a2ce9f6389798883f",
-        "workflow-77702c06de506544103fed56c06413d6",
+        "workflow-f802782eaef381ec1797233937462ba1",
     ),
     (3, 14): (
         "python-d2a20bb9597dd80a2ce9f6389798883f",
-        "workflow-77702c06de506544103fed56c06413d6",
+        "workflow-f802782eaef381ec1797233937462ba1",
     ),
     (3, 15): (
         "python-4389a4d4ab1299de47b66fd28aa712e2",
-        "workflow-2dd4cdaf40d357b1a96c2b9e75844f10",
+        "workflow-84caa4b5d85c2ff9b2c2b36b4d1f5b1e",
     ),
 }
 
@@ -440,6 +442,21 @@ def test_code_hashed_tasks_keep_checksums():
             f"the 3.15 goldens are for 3.15 final, not {sys.version.split()[0]}"
         )
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == _CODE_GOLDEN[version]
+
+
+def _add_k(k):
+    def add_k(a: int) -> int:
+        return a + k
+
+    return python.define(add_k)
+
+
+def test_closure_variants_keep_their_own_results(worker, tmp_path):
+    """Tasks made by one factory with different captured values do not share a result"""
+    for k in (1, 2):
+        with Submitter(worker=worker, cache_root=tmp_path) as sub:
+            result = sub(_add_k(k)(a=1))
+        assert result.outputs.out == 1 + k
 
 
 @attrs.define

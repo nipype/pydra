@@ -475,6 +475,11 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
 
 
 @register_serializer
+def bytes_repr_logger(obj: logging.Logger, cache: Cache) -> Iterator[bytes]:
+    yield f"logging.Logger:{obj.name}".encode()
+
+
+@register_serializer
 def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
     yield b"module:("
     yield hash_single(FsObject(obj.__file__), cache=cache)
@@ -683,10 +688,75 @@ def _parse_function_source_bytes(src: str) -> bytes:
     return b"".join(parts)
 
 
+def _import_location(obj: object, home_module: str) -> str | None:
+    """The ``module.qualname`` that imports a function or class defined outside
+    ``home_module``, or None if it is not importable by that name"""
+    if not isinstance(obj, (types.FunctionType, types.BuiltinFunctionType, type)):
+        return None
+    module = getattr(obj, "__module__", None)
+    if module is None or module == home_module:
+        return None
+    found = sys.modules.get(module)
+    for part in obj.__qualname__.split("."):
+        found = getattr(found, part, None)
+    return f"{module}.{obj.__qualname__}" if found is obj else None
+
+
+def _referenced_names(code: types.CodeType) -> set[str]:
+    """The global names read by a code object and the code objects nested in it"""
+    names: set[str] = set()
+    stack = [code]
+    while stack:
+        code = stack.pop()
+        names.update(code.co_names)
+        stack.extend(c for c in code.co_consts if isinstance(c, types.CodeType))
+    return names
+
+
+def bytes_repr_function_references(
+    obj: types.FunctionType, cache: Cache
+) -> Iterator[bytes]:
+    """Serialize the values a function closes over and the module-level globals (other
+    than modules) it reads. Functions and classes importable from another module are
+    identified by their ``module.qualname``, all other values by their hash."""
+    closure = {}
+    for name, cell in zip(obj.__code__.co_freevars, obj.__closure__ or ()):
+        try:
+            closure[name] = cell.cell_contents
+        except ValueError:  # empty cell
+            closure[name] = Ellipsis
+    globals_ = {
+        n: obj.__globals__[n]
+        for n in _referenced_names(obj.__code__)
+        if n in obj.__globals__ and not isinstance(obj.__globals__[n], types.ModuleType)
+    }
+    for label, values in ((b"closure", closure), (b"globals", globals_)):
+        if not values:
+            continue
+        yield b"," + label + b":("
+        for name in sorted(values):
+            yield from bytes_repr(name, cache)
+            yield b"="
+            value = values[name]
+            if location := _import_location(value, obj.__module__):
+                yield b"import:" + location.encode()
+            else:
+                try:
+                    yield bytes(hash_single(value, cache))
+                except Exception as e:
+                    add_exc_note(
+                        e, f"in {name!r}, referenced by function {obj.__qualname__!r}"
+                    )
+                    raise
+            yield b","
+        yield b")"
+
+
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
     """Serialize a function, attempting to use the AST of the source code if available
-    otherwise falling back to the byte-code of the function."""
+    otherwise falling back to the byte-code of the function, together with the values
+    it closes over and the globals it reads (see `bytes_repr_function_references`)."""
     yield b"function:("
     if in_stdlib(obj):
         yield f"{obj.__module__}.{obj.__name__}".encode()
@@ -716,6 +786,7 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
                 if cache_key is not None:
                     _function_bytes_cache[cache_key] = result
                 yield result
+        yield from bytes_repr_function_references(obj, cache)
     yield b")"
 
 
