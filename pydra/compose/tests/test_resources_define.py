@@ -1,3 +1,6 @@
+import sys
+
+import cloudpickle
 import pytest
 from pydra.compose import python, shell, workflow
 from pydra.engine.hooks import TaskHooks
@@ -6,6 +9,8 @@ from pydra.utils.resources import ComputeResources
 
 SMALL = ComputeResources(cpus=1, mem="100M")
 BIG = ComputeResources(cpus=8, mem="16G", time=600)
+
+cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
 
 def add_one(x: int) -> int:

@@ -1,6 +1,7 @@
 import logging
 import inspect
 import typing as ty
+import weakref
 from copy import copy, deepcopy
 from collections import defaultdict
 from typing import Self
@@ -60,9 +61,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     ) -> None:
         """Clear the cache of constructed workflows"""
         if task is None:
-            cls._constructed_cache = defaultdict(lambda: defaultdict(dict))
+            cls._constructed_cache = weakref.WeakKeyDictionary()
         else:
-            cls._constructed_cache[hash_function(task)] = defaultdict(dict)
+            cls._constructed_cache.pop(
+                task if isinstance(task, type) else type(task), None
+            )
 
     @classmethod
     def construct(
@@ -96,13 +99,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         non_lazy_keys = frozenset(non_lazy_vals)
         hash_cache = Cache()  # share the hash cache to avoid recalculations
         non_lazy_hash = hash_function(non_lazy_vals, cache=hash_cache)
-        task_hash = hash_function(type(task), cache=hash_cache)
         # Check for same non-lazy inputs
-        try:
-            cached_tasks = cls._constructed_cache[task_hash]
-        except KeyError:
-            pass
-        else:
+        cached_tasks = cls._constructed_cache.get(type(task))
+        if cached_tasks is not None:
             if (
                 non_lazy_keys in cached_tasks
                 and non_lazy_hash in cached_tasks[non_lazy_keys]
@@ -200,7 +199,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     f"constructor of {workflow!r}"
                 )
         if not dont_cache:
-            cls._constructed_cache[task_hash][non_lazy_keys][non_lazy_hash] = workflow
+            cls._constructed_cache.setdefault(type(task), defaultdict(dict))[
+                non_lazy_keys
+            ][non_lazy_hash] = workflow
 
         return workflow
 
@@ -289,10 +290,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     def node_names(self) -> list[str]:
         return list(self._nodes)
 
-    # Used to cache the constructed workflows by their hashed input values
-    _constructed_cache: dict[
-        str, dict[frozenset[str], dict[str, "Workflow[ty.Any]"]]
-    ] = defaultdict(lambda: defaultdict(dict))
+    # Used to cache the constructed workflows by their task class and hashed input
+    # values
+    _constructed_cache: weakref.WeakKeyDictionary[
+        type, dict[frozenset[str], dict[str, "Workflow[ty.Any]"]]
+    ] = weakref.WeakKeyDictionary()
 
     def execution_graph(self, submitter: "Submitter") -> DiGraph:
         from pydra.engine.submitter import NodeExecution
