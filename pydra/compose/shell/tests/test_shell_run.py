@@ -3267,11 +3267,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
     cache_root = tmp_path / "cache"
     outputs = shelly(cache_root=cache_root)
     # the first output file is created
-    assert (
-        outputs.out_1.fspath
-        == next(cache_root.glob("shell-*/*"))
-        / "test_1.nii"
-    )
+    assert outputs.out_1.fspath == next(cache_root.glob("shell-*/*")) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
     assert outputs.out_2 is None
@@ -3308,11 +3304,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
     cache_root = tmp_path / "cache"
     outputs = shelly(cache_root=cache_root)
     # the first output file is created
-    assert (
-        outputs.out_1.fspath
-        == next(cache_root.glob("shell-*/*"))
-        / "test_1.nii"
-    )
+    assert outputs.out_1.fspath == next(cache_root.glob("shell-*/*")) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
     assert outputs.out_2 is None
@@ -3350,10 +3342,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
     ):
         shelly(cache_root=cache_root)
     # checking if the first output was created
-    assert (
-        next(cache_root.glob("shell-*/*"))
-        / "test_1.nii"
-    ).exists()
+    assert (next(cache_root.glob("shell-*/*")) / "test_1.nii").exists()
 
 
 def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
