@@ -75,3 +75,39 @@ def test_default_environment_records_native_checksum(tmp_path):
     assert (
         _run(tmp_path, None).result().environment_checksum == native.Native().checksum()
     )
+
+
+def test_digest_resolved_once_per_process(monkeypatch):
+    calls = []
+
+    def resolve(self):
+        calls.append(1)
+        return "sha256:a"
+
+    monkeypatch.setattr(docker.Docker, "_resolve_digest", resolve)
+    env = docker.Docker(image="busybox")
+    assert env.checksum() == env.checksum()
+    assert len(calls) == 1
+
+
+def test_unresolved_digest_is_not_cached(monkeypatch):
+    digests = [None, "sha256:a"]
+    monkeypatch.setattr(docker.Docker, "_resolve_digest", lambda self: digests.pop(0))
+    env = docker.Docker(image="busybox")
+    assert env.checksum() != env.checksum()
+
+
+def test_docker_digest_pulls_a_missing_image(monkeypatch):
+    from pydra.environments import base
+
+    pulled = []
+
+    def execute(cmd, strip=False):
+        if cmd[1] == "pull":
+            pulled.append(cmd)
+            return 0, "", ""
+        return (0, "sha256:a", "") if pulled else (1, "", "no such image")
+
+    monkeypatch.setattr(base, "execute", execute)
+    assert docker.Docker(image="busybox")._resolve_digest() == "sha256:a"
+    assert len(pulled) == 1
