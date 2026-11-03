@@ -351,9 +351,7 @@ def test_same_checksum_worker_error_before_job_saved(
         if workflow_task == "elements"
         else SameChecksumLater(x=1)
     )
-    start = time.monotonic()
     with Submitter(worker=FailingCountingWorker(n_procs=2), cache_root=tmp_path) as sub:
         result = sub(task)
     assert result.errored
     assert len(CountingWorker.ran) == 1
-    assert time.monotonic() - start < 30

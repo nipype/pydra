@@ -635,8 +635,7 @@ class Submitter:
                 for task_future in completed:
                     job = futured[task_future.get_name()]
                     finished.add(job.checksum)
-                    jobs = [job, *sharing.pop(job.checksum, ())]
-                    for ran in jobs:
+                    for ran in [job, *sharing.pop(job.checksum, ())]:
                         ran._awaiting_run = False
                     try:
                         task_future.result()
@@ -645,8 +644,7 @@ class Submitter:
                         # the worker was unable to run it), in which case it would
                         # otherwise remain queued indefinitely
                         failed.add(job.checksum)
-                        for ran in jobs:
-                            ran._errored = True
+                        job._errored = True
                         errors.append(job_error(job))
                 if errors and on_error == "fail_fast":
                     break
