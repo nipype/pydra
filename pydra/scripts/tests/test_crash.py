@@ -11,10 +11,11 @@ def test_crash_cli(cli_runner, tmp_path):
     with pytest.raises(ZeroDivisionError):
         divide(cache_root=tmp_path)
 
+    (error_file,) = tmp_path.glob(f"{divide._checksum}/*/_error.pklz")
     result = cli_runner(
         crash,
         [
-            f"{tmp_path}/{divide._checksum}/_error.pklz",
+            str(error_file),
             "--rerun",
             "--debugger",
             "pdb",
