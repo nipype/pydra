@@ -481,6 +481,18 @@ class Task(ty.Generic[OutputsType]):
 
     @property
     def _checksum(self):
+        """The job checksum: the value returned by the class's
+        ``__checksum__(self, inputs) -> str`` if it defines one (or is given one by
+        ``define(checksum=...)``), when no input is hashed, otherwise the task type and
+        the hash of the inputs"""
+        if hasattr(self, "__checksum__"):
+            checksum = self.__checksum__(self._checksum_inputs(hashed=False))
+            if not isinstance(checksum, str):
+                raise TypeError(
+                    f"__checksum__ of {type(self).__name__} must return a str, "
+                    f"not {checksum!r}"
+                )
+            return checksum
         return f"{self._task_type()}-{self._hash}"
 
     def _hashed_value(self, name: str) -> ty.Any:
@@ -497,9 +509,9 @@ class Task(ty.Generic[OutputsType]):
         _, new_hashes = self._compute_hashes()
         return [k for k, v in new_hashes.items() if v != self._hashes[k]]
 
-    def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
-        """Compute a basic hash for any given set of fields."""
-        inp_dict = {}
+    def _checksum_inputs(self, hashed: bool = True) -> dict[str, ty.Any]:
+        """The inputs that enter the checksum, as they are hashed or as they are set."""
+        inputs = {}
         for field in get_fields(self):
             if isinstance(field, Out):
                 continue  # Skip output fields
@@ -508,7 +520,14 @@ class Task(ty.Generic[OutputsType]):
                 continue
             if getattr(field, "container_path", False):
                 continue
-            inp_dict[field.name] = self._hashed_value(field.name)
+            inputs[field.name] = (
+                self._hashed_value(field.name) if hashed else getattr(self, field.name)
+            )
+        return inputs
+
+    def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
+        """Compute a basic hash for any given set of fields."""
+        inp_dict = self._checksum_inputs()
         # Include the outputs class, just in case any names or types have changed
         inp_dict["Outputs"] = self.Outputs
         hash_cache = Cache()

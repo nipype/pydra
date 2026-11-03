@@ -59,6 +59,7 @@ def define(
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
     resources: "ComputeResources | None" = None,
+    checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
     """Create a task for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task or as a function that takes a
@@ -111,6 +112,10 @@ def define(
         fields need to be set.
     resources: ComputeResources, optional
         What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
+    checksum: callable, optional
+        A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
+        as the task's ``__checksum__``: its return value is the job checksum and
+        neither the command nor the input values are hashed
 
     Returns
     -------
@@ -241,6 +246,7 @@ def define(
             outputs_bases=outputs_bases,
             xor=xor,
             resources=resources,
+            checksum=checksum,
         )
         return defn
 

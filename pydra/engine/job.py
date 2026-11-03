@@ -476,7 +476,9 @@ class Job(ty.Generic[TaskType]):
         for gr, ind_l in self.state.final_combined_ind_mapping.items():
             combined_results_gr = []
             for ind in ind_l:
-                result = self.store.lookup(self.checksum_states(ind), self.context)
+                result = self.store.lookup(
+                    self.checksum_states(ind), self.context, task=self.task
+                )
                 if result is None:
                     return None
                 if return_inputs is True or return_inputs == "val":
@@ -522,7 +524,7 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        result = self.store.lookup(self.checksum, self.context)
+        result = self.store.lookup(self.checksum, self.context, task=self.task)
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":
@@ -540,6 +542,8 @@ class Job(ty.Generic[TaskType]):
     def _check_for_hash_changes(self):
         from pydra.utils.typing import TypeParser
 
+        if hasattr(self.task, "__checksum__"):
+            return  # the checksum was supplied, no input was hashed
         # For tasks whose input fields contain no FileSet types and no values
         # with custom __bytes_repr__ methods, hashes cannot change during
         # execution (scalar/pure-Python values are immutable from Pydra's

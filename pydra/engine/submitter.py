@@ -23,7 +23,7 @@ from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
-from pydra.engine.store import PickleStore, ResultStore
+from pydra.engine.store import PickleStore, ResultStore, ReusePolicy
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_root
 from pydra.compose import workflow
@@ -111,11 +111,12 @@ class Submitter:
         Where jobs run and their results are kept, by default a
         :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
         ``readonly_caches``
-    reuse : str, optional
+    reuse : str | ReusePolicy, optional
         Which stored results the default store reuses: ``"exact"`` (default) only
         those produced in the same execution context (environment checksum, platform,
-        Python version), ``"any"`` those produced in any context. Set the policy on
-        the store itself when passing ``store``
+        Python version), ``"any"`` those produced in any context, a
+        :class:`~pydra.engine.store.ReusePolicy` those whose context it accepts. Set
+        the policy on the store itself when passing ``store``
     on_error : str, optional
         What to do when a job errors: "fail_fast" stops at the first error and raises
         it, "raise_at_end" keeps running every element that does not read an errored
@@ -169,7 +170,7 @@ class Submitter:
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
         store: ResultStore | None = None,
-        reuse: str | None = None,
+        reuse: str | ReusePolicy | None = None,
         on_error: OnError | None = None,
         **kwargs,
     ):

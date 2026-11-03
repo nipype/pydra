@@ -114,6 +114,7 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
@@ -135,6 +136,10 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    checksum: callable, optional
+        A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
+        as the task's ``__checksum__``: its return value is the job checksum and
+        neither the constructor nor the input values are hashed
 
     Returns
     -------
@@ -205,6 +210,7 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
+            checksum=checksum,
         )
 
         defn.__doc__ = constructor.__doc__
