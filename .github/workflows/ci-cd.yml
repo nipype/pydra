@@ -4,27 +4,35 @@
 name: CI/CD
 
 # Tiers
-#   fast  every PR: unit tests on the in-process debug worker (no real workers, no
-#         wall-clock tests, no slurm/docker/singularity/lmod, no docs), reduced OS/Python matrix
-#   full  PRs labelled `release`, pushes to main, tags, releases and manual runs: the
-#         whole OS/Python matrix with every test, plus singularity, lmod, slurm and docs
+#   fast  every PR push: debug-worker tests plus a reduced set of real-worker (cf) tests on
+#         one Linux and one macOS job; no wall-clock tests, no slurm/docker/singularity/lmod,
+#         no docs; reduced OS/Python matrix
+#   full  PRs that are marked ready for review or carry the `release` label, merge queue
+#         runs (merge_group), pushes to main, releases and manual runs: the whole OS/Python
+#         matrix with every test, plus singularity, lmod, slurm and docs
+# The `CI gate` job is the one check branch protection should require: it fails unless the
+# full tier passed on a non-draft PR, so nothing reaches main without the full suite.
 on:
   release:
     types: [published]
   push:
     branches:
       - main
-    tags:
-      - "*"
   pull_request:
     branches:
       - main
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  merge_group:
   workflow_dispatch:
 
+# Only PR runs cancel each other. Releases, pushes to main, merge-queue and manual runs each
+# have their own group and are never cancelled, so nothing can cancel the deploy. A label
+# event other than `release` gets a unique group so it cannot cancel the run in progress.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
+    (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'release' && github.run_id || 'ci' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -39,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      run: ${{ steps.tier.outputs.run }}
       full: ${{ steps.tier.outputs.full }}
       matrix: ${{ steps.tier.outputs.matrix }}
     steps:
@@ -46,22 +55,39 @@ jobs:
         id: tier
         env:
           EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
+          run=true
           full=true
           if [ "$EVENT" = pull_request ]; then
-            jq -e 'index("release")' <<<"$LABELS" >/dev/null && full=true || full=false
+            full=false
+            if jq -e 'index("release")' <<<"$LABELS" >/dev/null || [ "$ACTION" = ready_for_review ]; then
+              full=true
+            fi
+            # a label other than `release` changes nothing: skip the whole run
+            case "$ACTION" in labeled|unlabeled) [ "$LABEL" = release ] || run=false ;; esac
           fi
           if [ "$full" = true ]; then
             matrix='{"os":["ubuntu-latest","macos-latest","windows-latest"],"python-version":["3.11","3.12","3.13","3.14"],"dependencies":["latest","pre"],"include":[{"os":"ubuntu-latest","python-version":"3.11","dependencies":"min"}]}'
           else
-            matrix='{"include":[{"os":"ubuntu-latest","python-version":"3.12","dependencies":"latest"},{"os":"ubuntu-latest","python-version":"3.14","dependencies":"latest"},{"os":"ubuntu-latest","python-version":"3.11","dependencies":"min"},{"os":"macos-latest","python-version":"3.12","dependencies":"latest"},{"os":"windows-latest","python-version":"3.12","dependencies":"latest"}]}'
+            fast='not slow and not slurm and not docker and not singularity and not lmod'
+            matrix=$(jq -nc --arg f "$fast" --arg r "$fast and not real_worker" '{include:[
+              {os:"ubuntu-latest","python-version":"3.12",dependencies:"latest",markers:$f,real:true},
+              {os:"ubuntu-latest","python-version":"3.14",dependencies:"latest",markers:$r},
+              {os:"ubuntu-latest","python-version":"3.11",dependencies:"min",markers:$r},
+              {os:"macos-latest","python-version":"3.12",dependencies:"latest",markers:$f,real:true},
+              {os:"windows-latest","python-version":"3.12",dependencies:"latest",markers:$r}]}')
           fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "full=$full" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build & verify package
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -72,12 +98,13 @@ jobs:
           fetch-depth: 0
       - uses: hynek/build-and-inspect-python-package@67230f7b8410ae0052b39c1efc89d89fff43ff10 # v3.0.2
         with:
-          attest-build-provenance-github: ${{ github.event_name != 'pull_request' }}
+          attest-build-provenance-github: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
 
   test:
     needs: plan
+    if: needs.plan.outputs.run == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ needs.plan.outputs.full == 'true' && 25 || 10 }}
+    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 25 || 10 }}
     strategy:
       # Full tier: every OS x Python x dependency set, plus minimum dependencies on the
       # oldest supported Python. Fast tier: a reduced subset (see the plan job).
@@ -86,8 +113,8 @@ jobs:
 
     env:
       DEPENDS: ${{ matrix.dependencies }}
-      # Fast tier excludes tests that need real workers, wall-clock time or external infrastructure
-      PYTEST_ADDOPTS: ${{ needs.plan.outputs.full != 'true' && '-m "not slow and not real_worker and not slurm and not docker and not singularity and not lmod"' || '' }}
+      # Fast tier: marker expression from the plan job (cf tests only on the `real` jobs)
+      PYTEST_ADDOPTS: ${{ matrix.markers && format('-m "{0}"', matrix.markers) || '' }}
       # Coverage is collected by a single job
       PYTEST_COV: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && matrix.dependencies == 'latest' && '--cov=pydra --cov-report=xml --cov-config=pyproject.toml' || '' }}
 
@@ -109,7 +136,7 @@ jobs:
       - name: Show tox config
         run: tox c
       - name: Run tox
-        run: tox -v --exit-and-dump-after ${{ needs.plan.outputs.full == 'true' && 900 || 300 }}
+        run: tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 900 || 300 }}
       - name: Upload coverage to Codecov
         if: env.PYTEST_COV != ''
         uses: codecov/codecov-action@v7
@@ -259,7 +286,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      DOCKER_IMAGE: adi611/docker-centos7-slurm:23.02.1
+      # Docker Hub repository adi611/docker-centos7-slurm, tag 23.02.1 (CentOS 7, Slurm 23.02.1 with
+      # accounting), pushed 2023-09-10. The workflow pulls it by manifest digest, so a moved or
+      # replaced tag cannot change what runs; the loaded image id is checked against the config
+      # digest from the same manifest. Nothing is downloaded except from the registry.
+      SLURM_IMAGE: adi611/docker-centos7-slurm
+      SLURM_IMAGE_DIGEST: sha256:9c84018e704e2f8fe375b1d27f40414761b4930ac33f5fb473382728f9a32752
+      SLURM_IMAGE_ID: sha256:0f82bed88212638b96c743af961174c393b40b228fe3b397e650c98070855f5d
       DOCKER_IMAGE_TAR: ${{ github.workspace }}/../slurm-image.tar
       UV_CACHE_HOST: ${{ github.workspace }}/../uv-cache-slurm
     steps:
@@ -269,30 +302,36 @@ jobs:
       with:
         fetch-depth: 0
     - name: Install uv (copied into the container)
-      uses: astral-sh/setup-uv@v10.3.0
+      uses: astral-sh/setup-uv@v10.3.3
       with:
         enable-cache: false
-    - name: Restore the docker image and the container's uv cache
-      id: cache
+    - name: Restore the slurm image tarball (cache key is the image digest)
+      id: image-cache
       uses: actions/cache@v4
       with:
-        path: |
-          ${{ env.DOCKER_IMAGE_TAR }}
-          ${{ env.UV_CACHE_HOST }}
-        key: slurm-${{ env.DOCKER_IMAGE }}-${{ hashFiles('pyproject.toml') }}
+        path: ${{ env.DOCKER_IMAGE_TAR }}
+        key: slurm-image-${{ env.SLURM_IMAGE_DIGEST }}
+    - name: Restore the container's uv cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.UV_CACHE_HOST }}
+        key: slurm-uv-${{ hashFiles('pyproject.toml') }}
         restore-keys: |
-          slurm-${{ env.DOCKER_IMAGE }}-
-    - name: Load or pull the docker image
+          slurm-uv-
+    - name: Pull the pinned image (cache miss) or load it from the tarball (cache hit)
       run: |
-        if [ -f "$DOCKER_IMAGE_TAR" ]; then
+        if [ "${{ steps.image-cache.outputs.cache-hit }}" = true ]; then
           docker load -i "$DOCKER_IMAGE_TAR"
         else
-          docker pull "$DOCKER_IMAGE"
-          docker save -o "$DOCKER_IMAGE_TAR" "$DOCKER_IMAGE"
+          docker pull "$SLURM_IMAGE@$SLURM_IMAGE_DIGEST"
+          docker save -o "$DOCKER_IMAGE_TAR" "$SLURM_IMAGE@$SLURM_IMAGE_DIGEST"
         fi
+        loaded=$(docker image inspect --format '{{.Id}}' "$SLURM_IMAGE_ID")
+        [ "$loaded" = "$SLURM_IMAGE_ID" ] || { echo "image id $loaded != $SLURM_IMAGE_ID"; exit 1; }
+        docker tag "$SLURM_IMAGE_ID" pydra-slurm:pinned
         mkdir -p "$UV_CACHE_HOST"
         # Have image running in the background
-        docker run -itd -h slurmctl --cap-add sys_admin -d --name slurm -v "$(pwd)":/pydra -v "$UV_CACHE_HOST":/root/.cache/uv -e NO_ET=$NO_ET $DOCKER_IMAGE
+        docker run -itd -h slurmctl --cap-add sys_admin -d --name slurm -v "$(pwd)":/pydra -v "$UV_CACHE_HOST":/root/.cache/uv -e NO_ET=$NO_ET pydra-slurm:pinned
     - name: Display previous jobs with sacct
       run: |
         echo "Waiting for the slurm daemons"
@@ -323,6 +362,37 @@ jobs:
       with:
         fail_ci_if_error: true
         token: ${{ secrets.CODECOV_TOKEN }}
+
+  # The single check branch protection should require (see the PR description). It fails when
+  # the tier that should have run did not pass, and, on a non-draft PR, when the full tier was
+  # not what ran for this commit.
+  gate:
+    name: CI gate
+    needs: [plan, build, test, test-singularity, test-lmod, test-slurm, build-docs]
+    if: always() && needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check results
+        env:
+          FULL: ${{ needs.plan.outputs.full }}
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          ALWAYS: ${{ needs.plan.result }} ${{ needs.build.result }} ${{ needs.test.result }}
+          FULL_ONLY: ${{ needs.test-singularity.result }} ${{ needs.test-lmod.result }} ${{ needs.test-slurm.result }} ${{ needs.build-docs.result }}
+        run: |
+          for r in $ALWAYS; do
+            [ "$r" = success ] || { echo "a required job finished with: $r"; exit 1; }
+          done
+          for r in $FULL_ONLY; do
+            if [ "$FULL" = true ]; then
+              [ "$r" = success ] || { echo "a full-tier job finished with: $r"; exit 1; }
+            fi
+          done
+          if [ "$EVENT" = pull_request ] && [ "$FULL" != true ] && [ "$DRAFT" != true ]; then
+            echo "Only the fast tier ran for this commit. Add the 'release' label to run the full tier."
+            exit 1
+          fi
 
   # test-sge:
   #   needs: ['build']
