@@ -147,7 +147,7 @@ def LeaseUser(me: str, root: str, sync: str) -> int:
     if me == "b":
         wait_for("held_a")
         (sync / "tried_b").touch()
-    with store.acquire("key"):
+    with store.acquire("key", {"environment_checksum": "e"}):
         if me == "a":
             (sync / "held_a").touch()
             wait_for("tried_b")
