@@ -13,7 +13,6 @@ from pydra.engine.submitter import Submitter
 from pydra.environments import native
 from pydra.utils.hash import hash_function
 
-
 # Worker processes cannot import the test modules, so they receive their classes by value
 cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
