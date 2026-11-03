@@ -12,12 +12,47 @@ from pydra.engine.result import Result, load_result, save
 from pydra.utils.general import ensure_list
 
 if ty.TYPE_CHECKING:
+    from pydra.compose.base import Task
     from pydra.engine.job import Job
 
 Context = ty.Mapping[str, ty.Any]
 """The execution context that produced a result, recorded beside it."""
 
-REUSE_POLICIES = ("exact", "any")
+
+@ty.runtime_checkable
+class ReusePolicy(ty.Protocol):
+    """Decides whether a result recorded in one execution context is reused in another."""
+
+    def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
+        """Whether the result of ``task`` recorded in ``stored`` is reused in ``current``."""
+
+
+class ExactReuse:
+    """Reuses only results recorded in an equal context."""
+
+    def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
+        return dict(stored) == dict(current)
+
+
+class AnyReuse:
+    """Reuses results recorded in any context."""
+
+    def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
+        return True
+
+
+REUSE_POLICIES = {"exact": ExactReuse, "any": AnyReuse}
+
+
+def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
+    """The policy named by ``reuse``, or ``reuse`` itself if it is a policy."""
+    if isinstance(reuse, ReusePolicy):
+        return reuse
+    if isinstance(reuse, str) and reuse in REUSE_POLICIES:
+        return REUSE_POLICIES[reuse]()
+    raise ValueError(
+        f"reuse must be one of {tuple(REUSE_POLICIES)} or a ReusePolicy, not {reuse!r}"
+    )
 
 
 @attrs.define
@@ -79,12 +114,15 @@ class ResultStore(ty.Protocol):
     def cache_dir(self, checksum: str, context: Context) -> Path:
         """The directory the job identified by ``checksum`` runs in under ``context``."""
 
-    def lookup(self, checksum: str, context: Context) -> Result | None:
+    def lookup(
+        self, checksum: str, context: Context, task: "Task | None"
+    ) -> Result | None:
         """Return the stored result for ``checksum``, or None if there is none.
 
-        The slot of ``context`` is searched in every location first. If the store's
-        reuse policy allows it, a result recorded in another context is returned
-        otherwise, marked with ``Result.cross_context``.
+        The slot of ``context`` is searched in every location first. Otherwise a
+        result recorded in another context is returned if the store's reuse policy
+        accepts its context for ``task``, marked with ``Result.cross_context`` and
+        carrying the context it was recorded in.
         """
 
     def lockfile(self, checksum: str, context: Context) -> Path:
@@ -109,44 +147,48 @@ class PickleStore:
         The directory jobs run in and results are written to.
     readonly_caches : list[os.PathLike], optional
         Further directories searched for results, in order, after ``cache_root``.
-    reuse : str, optional
+    reuse : str | ReusePolicy, optional
         Which stored results ``lookup`` returns given the current context: ``"exact"``
-        (default) only those recorded in an equal context, ``"any"`` all of them,
-        those from a different context marked with ``Result.cross_context``.
+        (default) only those recorded in an equal context, ``"any"`` all of them, a
+        ``ReusePolicy`` those whose context it accepts. Those from a different context
+        are marked with ``Result.cross_context``.
     """
 
     def __init__(
         self,
         cache_root: os.PathLike,
         readonly_caches: list[os.PathLike] | None = None,
-        reuse: str = "exact",
+        reuse: "str | ReusePolicy" = "exact",
     ):
-        if reuse not in REUSE_POLICIES:
-            raise ValueError(f"reuse must be one of {REUSE_POLICIES}, not {reuse!r}")
         self.cache_root = Path(cache_root)
         self.readonly_caches = [Path(p) for p in ensure_list(readonly_caches)]
-        self.reuse = reuse
+        self.reuse = reuse_policy(reuse)
 
     def cache_dir(self, checksum: str, context: Context) -> Path:
         return self.cache_root / checksum / context_key(context)
 
-    def lookup(self, checksum: str, context: Context) -> Result | None:
+    def lookup(
+        self, checksum: str, context: Context, task: "Task | None"
+    ) -> Result | None:
         locations = [self.cache_root] + self.readonly_caches
         slot = f"{checksum}/{context_key(context)}"
         for location in locations:
             result = load_result(slot, [location])
             if result is not None:
                 return result
-        if self.reuse == "any":
-            for location in locations:
-                directory = location / checksum
-                if not directory.is_dir():
-                    continue
-                for other in sorted(p.name for p in directory.iterdir() if p.is_dir()):
-                    result = load_result(f"{checksum}/{other}", [location])
-                    if result is not None:
-                        result.cross_context = True
-                        return result
+        if type(self.reuse) is ExactReuse:
+            return None
+        for location in locations:
+            directory = location / checksum
+            if not directory.is_dir():
+                continue
+            for other in sorted(p.name for p in directory.iterdir() if p.is_dir()):
+                result = load_result(f"{checksum}/{other}", [location])
+                if result is not None and self.reuse.accept(
+                    result.context, context, task
+                ):
+                    result.cross_context = True
+                    return result
         return None
 
     def slots(self, checksum: str | None = None) -> ty.Iterator[Path]:

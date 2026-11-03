@@ -99,6 +99,7 @@ def define(
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
     version: str | None = None,
     resources: "ComputeResources | None" = None,
+    checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
     """
     Create an interface for a function or a class.
@@ -128,6 +129,11 @@ def define(
         identified only by name and version, so a warning is issued for them.
     resources: ComputeResources, optional
         What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
+    checksum: callable, optional
+        A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
+        as the task's ``__checksum__``: its return value is the job checksum and
+        neither the function nor the input values are hashed. It must identify the task as
+        well as its inputs, as jobs with equal checksums share one result and run once
 
     Returns
     -------
@@ -193,6 +199,7 @@ def define(
             outputs_bases=outputs_bases,
             xor=xor,
             resources=resources,
+            checksum=checksum,
         )
 
         defn.__doc__ = function.__doc__

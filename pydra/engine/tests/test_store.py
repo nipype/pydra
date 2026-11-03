@@ -33,8 +33,8 @@ class RecordingStore(PickleStore):
         with open(self.log, "a") as f:
             f.write(" ".join(entry) + "\n")
 
-    def lookup(self, checksum, context):
-        result = super().lookup(checksum, context)
+    def lookup(self, checksum, context, task):
+        result = super().lookup(checksum, context, task)
         self._record("lookup", checksum, "miss" if result is None else "hit")
         return result
 
@@ -69,13 +69,13 @@ def test_picklestore_layout(tmp_path):
 
 def test_picklestore_commit_lookup(tmp_path):
     store = PickleStore(tmp_path)
-    assert store.lookup("abc", CTX) is None
+    assert store.lookup("abc", CTX, None) is None
     with store.acquire("abc", CTX) as lease:
         assert lease.lockfile.exists()
         store.commit(lease, Result(cache_dir=lease.cache_dir))
     assert not lease.lockfile.exists()
     assert (tmp_path / "abc" / KEY / "_result.pklz").exists()
-    result = store.lookup("abc", CTX)
+    result = store.lookup("abc", CTX, None)
     assert result.cache_dir == tmp_path / "abc" / KEY
     assert not result.errored
 
@@ -86,11 +86,11 @@ def test_picklestore_readonly_caches(tmp_path):
         with PickleStore(root).acquire("abc", CTX) as lease:
             PickleStore(root).commit(lease, Result(cache_dir=lease.cache_dir))
     store = PickleStore(primary, [ro1, ro2])
-    assert store.lookup("abc", CTX).cache_dir == ro1 / "abc" / KEY
+    assert store.lookup("abc", CTX, None).cache_dir == ro1 / "abc" / KEY
     with store.acquire("abc", CTX) as lease:
         store.commit(lease, Result(cache_dir=lease.cache_dir))
     assert lease.cache_dir == primary / "abc" / KEY
-    assert store.lookup("abc", CTX).cache_dir == primary / "abc" / KEY
+    assert store.lookup("abc", CTX, None).cache_dir == primary / "abc" / KEY
 
 
 @pytest.mark.timeout(30)
