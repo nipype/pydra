@@ -26,7 +26,11 @@ class FakeSlurm:
             exit_code = "0:15" if state.startswith("CANCELLED") else "0:0"
             return 0, f"42|{state}|{exit_code}\n", ""
         if cmd[0] == "scontrol":
-            return self.scontrol_rc, "", "requeue not permitted" * bool(self.scontrol_rc)
+            return (
+                self.scontrol_rc,
+                "",
+                "requeue not permitted" * bool(self.scontrol_rc),
+            )
         raise AssertionError(cmd)
 
     def requeues(self):
