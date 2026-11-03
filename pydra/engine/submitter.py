@@ -909,13 +909,17 @@ class NodeExecution(ty.Generic[TaskType]):
             List of jobs that are ready to run
         """
         predecessors: list[NodeExecution] = graph.predecessors[self.node.name]
+        # ``done`` refreshes a predecessor's status, so it is read for every predecessor
+        # before any ``errored``/``unrunnable`` check: one that has just failed is then
+        # seen as errored rather than as done-and-successful
+        preds_done = [p.done for p in predecessors]
         if unrunnable := [p for p in predecessors if p.errored or p.unrunnable]:
             self.unrunnable = {None: unrunnable}
             self.blocked = {}
         else:
             if not self.started and all(
-                p.done if self._splits_upstream_output else p.started
-                for p in predecessors
+                d if self._splits_upstream_output else p.started
+                for p, d in zip(predecessors, preds_done)
             ):
                 self.start()
             progress = tuple(len(p.successful) for p in predecessors)
