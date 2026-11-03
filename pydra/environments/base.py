@@ -135,11 +135,21 @@ class Container(Environment):
     root: str = "/mnt/pydra"
     xargs: list[str] = attrs.field(factory=list, converter=split_if_str)
     identity: str | None = None
+    _digests: dict[int, str] = attrs.field(
+        factory=dict, init=False, repr=False, eq=False
+    )
 
     def _identity(self) -> ty.Any:
         if self.identity is not None:
             return {"identity": self.identity}
-        return {"digest": self._resolve_digest(), "image": self.image, "tag": self.tag}
+        # Resolved at most once per process, and never cached while unresolved
+        pid = os.getpid()
+        if pid not in self._digests:
+            digest = self._resolve_digest()
+            if digest is None:
+                return {"digest": None, "image": self.image, "tag": self.tag}
+            self._digests[pid] = digest
+        return {"digest": self._digests[pid], "image": self.image, "tag": self.tag}
 
     def _resolve_digest(self) -> str | None:
         """Digest of the image if it can be resolved cheaply, otherwise ``None``."""
