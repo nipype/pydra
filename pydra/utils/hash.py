@@ -7,6 +7,7 @@ import ast
 import dis
 import functools
 import struct
+import warnings
 import inspect
 from datetime import datetime
 import typing as ty
@@ -733,13 +734,128 @@ def _is_frozen_attrs(value: object) -> bool:
         return tp.__setattr__ is getattr(attr._make, "_frozen_setattrs", None)
 
 
-def _bytes_repr_static(value: object, home: str, cache: Cache) -> Iterator[bytes]:
-    """Serialize a static value read by a function of module ``home``:
+@attrs.define
+class _Walk:
+    """The module of the function being hashed, and the functions and classes of that
+    module it reaches whose definitions are still to be hashed"""
+
+    home: str
+    pending: list = attrs.field(factory=list)
+
+
+def _parse_quietly(source: str | bytes) -> ast.Module | None:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+
+
+def _imports_in(trees: list[ast.Module], package: str) -> dict[str, str]:
+    """The module-level names of the given module source that are bound only by
+    import statements, mapped to their import targets (``module`` or
+    ``module.attribute``); relative imports are resolved against ``package``"""
+    imported: dict[str, set[str]] = {}
+    assigned: set[str] = set()
+    stack = [node for tree in trees for node in tree.body]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    imported.setdefault(alias.asname, set()).add(alias.name)
+                else:
+                    top = alias.name.split(".")[0]
+                    imported.setdefault(top, set()).add(top)
+        elif isinstance(node, ast.ImportFrom):
+            source = node.module or ""
+            if node.level:
+                base = package.rsplit(".", node.level - 1)[0] if package else ""
+                source = ".".join(p for p in (base, source) if p)
+            for alias in node.names:
+                if alias.name != "*":
+                    imported.setdefault(alias.asname or alias.name, set()).add(
+                        f"{source}.{alias.name}"
+                    )
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            assigned.add(node.name)
+        else:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.stmt):
+                    stack.append(child)
+                else:
+                    assigned.update(
+                        n.id
+                        for n in ast.walk(child)
+                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+                    )
+    return {
+        name: next(iter(targets))
+        for name, targets in imported.items()
+        if len(targets) == 1 and name not in assigned
+    }
+
+
+@functools.lru_cache(maxsize=256)
+def _module_imports(filename: str, mtime_ns: int, module: str) -> dict[str, str]:
+    """The import-bound globals of a module source file (see `_imports_in`)"""
+    try:
+        tree = _parse_quietly(Path(filename).read_bytes())
+    except OSError:
+        return {}
+    if tree is None:
+        return {}
+    package = (
+        module if Path(filename).name == "__init__.py" else module.rpartition(".")[0]
+    )
+    return _imports_in([tree], package)
+
+
+def _interactive_sources() -> list[str]:
+    """The cells run so far in an IPython session, or none outside one"""
+    ipython = sys.modules.get("IPython")
+    shell = ipython.get_ipython() if ipython is not None else None
+    if shell is None:
+        return []
+    return list(shell.history_manager.input_hist_parsed)
+
+
+_IMPORTS_ATTR = "__pydra_imports__"
+
+
+def _import_targets(obj: types.FunctionType) -> dict[str, str]:
+    """The import targets of the globals bound by import statements in the module
+    defining ``obj``, read from that module's source. For a function defined in an
+    interactive session, whose cells are not one file, they are read from the
+    session's cells and kept on the function, so a worker that receives the function
+    by value finds them."""
+    if (carried := obj.__dict__.get(_IMPORTS_ATTR)) is not None:
+        return carried
+    filename = obj.__code__.co_filename
+    if (
+        obj.__module__ == "__main__"
+        and getattr(sys.modules.get("__main__"), "__file__", None) != filename
+    ):
+        if sources := _interactive_sources():
+            trees = [t for t in map(_parse_quietly, sources) if t is not None]
+            targets = _imports_in(trees, "")
+            obj.__dict__[_IMPORTS_ATTR] = targets
+            return targets
+    try:
+        mtime_ns = os.stat(filename).st_mtime_ns
+    except OSError:
+        return {}
+    return _module_imports(filename, mtime_ns, obj.__module__ or "")
+
+
+def _bytes_repr_static(value: object, cache: Cache, walk: _Walk) -> Iterator[bytes]:
+    """Serialize a static value read by a function of module ``walk.home``:
 
     * a module by its name, and a logger by its name;
-    * a function or class by its module and qualname, plus its definition (hashed
-      recursively, cycles included) for a function of ``home`` and for a local or
-      generated function or class;
+    * a function or class by its module and qualname; the definition of a function or
+      class of ``walk.home`` is hashed too, after the function's own (see
+      `bytes_repr_function`), and that of a local or generated one inline;
     * a builtin function or numpy ufunc by its module and name, a bound method or
       bound builtin together with its (static) ``__self__``;
     * an immutable value: a scalar; a path, as its string and not the contents of the
@@ -754,25 +870,27 @@ def _bytes_repr_static(value: object, home: str, cache: Cache) -> Iterator[bytes
     elif isinstance(value, (types.FunctionType, type)):
         module = getattr(value, "__module__", None)
         yield f"identity:{module}.{value.__qualname__}".encode()
-        if (
-            "<locals>" in value.__qualname__
-            or module in (None, "types")
-            or (module == home and isinstance(value, types.FunctionType))
-        ):
+        if "<locals>" in value.__qualname__ or module in (None, "types"):
             yield bytes(hash_single(value, cache))
+        elif module == walk.home:
+            walk.pending.append(value)
     elif isinstance(value, types.MethodType):
         yield b"method:("
-        yield from _bytes_repr_static(value.__func__, home, cache)
+        yield from _bytes_repr_static(value.__func__, cache, walk)
         yield b","
-        yield from _bytes_repr_static(value.__self__, home, cache)
+        yield from _bytes_repr_static(value.__self__, cache, walk)
         yield b")"
     elif isinstance(value, _STATIC_CALLABLES):
         name = getattr(value, "__qualname__", None) or value.__name__
-        yield f"callable:{getattr(value, '__module__', None)}.{name}".encode()
+        default_module = (
+            "numpy" if HAVE_NUMPY and isinstance(value, numpy.ufunc) else None
+        )
+        module = getattr(value, "__module__", None) or default_module
+        yield f"callable:{module}.{name}".encode()
         bound = getattr(value, "__self__", None)
         if bound is not None and not isinstance(bound, types.ModuleType):
             yield b",self:("
-            yield from _bytes_repr_static(bound, home, cache)
+            yield from _bytes_repr_static(bound, cache, walk)
             yield b")"
     elif isinstance(value, _STATIC_SCALARS):
         yield from bytes_repr(value, cache)
@@ -783,11 +901,11 @@ def _bytes_repr_static(value: object, home: str, cache: Cache) -> Iterator[bytes
         yield f"frozen:{tp.__module__}.{tp.__qualname__}:(".encode()
         for field in attrs.fields(tp):
             yield f"{field.name}=".encode()
-            yield from _bytes_repr_static(getattr(value, field.name), home, cache)
+            yield from _bytes_repr_static(getattr(value, field.name), cache, walk)
             yield b","
         yield b")"
     elif isinstance(value, (tuple, frozenset)):
-        items = [b"".join(_bytes_repr_static(v, home, cache)) for v in value]
+        items = [b"".join(_bytes_repr_static(v, cache, walk)) for v in value]
         yield f"{type(value).__name__}:(".encode()
         yield from sorted(items) if isinstance(value, frozenset) else items
         yield b")"
@@ -795,23 +913,22 @@ def _bytes_repr_static(value: object, home: str, cache: Cache) -> Iterator[bytes
         raise _NotStatic()
 
 
-def bytes_repr_function_references(
-    obj: types.FunctionType, cache: Cache
+def _bytes_repr_references(
+    obj: types.FunctionType, cache: Cache, walk: _Walk
 ) -> Iterator[bytes]:
     """Serialize the values a function closes over and the module-level globals it
-    reads, which must be static (see `_bytes_repr_static`); any other value raises
-    `NonStaticReferenceError`"""
+    reads. A global bound by an import statement of its module is identified by its
+    import target; any other value must be static (see `_bytes_repr_static`), or
+    `NonStaticReferenceError` is raised"""
     closure = {}
     for name, cell in zip(obj.__code__.co_freevars, obj.__closure__ or ()):
         try:
             closure[name] = cell.cell_contents
         except ValueError:  # empty cell
             closure[name] = Ellipsis
-    globals_ = {
-        n: obj.__globals__[n]
-        for n in _read_globals(obj.__code__)
-        if n in obj.__globals__
-    }
+    names = [n for n in _read_globals(obj.__code__) if n in obj.__globals__]
+    imports = _import_targets(obj) if names else {}
+    globals_ = {n: obj.__globals__[n] for n in names}
     for label, values in (("closure", closure), ("global", globals_)):
         if not values:
             continue
@@ -819,63 +936,119 @@ def bytes_repr_function_references(
         for name in sorted(values):
             yield from bytes_repr(name, cache)
             yield b"="
+            if label == "global" and name in imports:
+                yield f"import:{imports[name]}".encode()
+                yield b","
+                continue
             try:
-                yield b"".join(_bytes_repr_static(values[name], obj.__module__, cache))
+                yield b"".join(_bytes_repr_static(values[name], cache, walk))
             except _NotStatic:
                 tp = type(values[name])
                 raise NonStaticReferenceError(
                     f"function {obj.__qualname__!r} reads the {label} {name!r} of type "
                     f"`{tp.__module__}.{tp.__qualname__}`, which is not a function, "
-                    "class, module, builtin or immutable value, so its checksum would "
-                    "depend on runtime state; make it an explicit task input (and a "
-                    "file the task reads an explicit File input, as a path is hashed "
-                    "by its string, not the file's contents)"
+                    "class, module, builtin, import or immutable value, so its "
+                    "checksum would depend on runtime state; make it an explicit task "
+                    "input (and a file the task reads an explicit File input, as a "
+                    "path is hashed by its string, not the file's contents)"
                 ) from None
             yield b","
         yield b")"
 
 
+def _source_bytes(obj: types.FunctionType | type, cache: Cache) -> bytes:
+    """The AST of the source of a function or class, or of a function's byte-code when
+    its source is not available"""
+    # Build a cache key from (module, qualname, source position and mtime).
+    # os.stat() is a single cheap syscall; if successful we can avoid
+    # both inspect.getsource() and ast.parse() on repeated calls.
+    cache_key: tuple[str, str, str, int, int] | None = None
+    code = getattr(obj, "__code__", None)
+    try:
+        source_file = inspect.getfile(obj)
+        mtime_ns = os.stat(source_file).st_mtime_ns
+        cache_key = (
+            obj.__module__,
+            obj.__qualname__,
+            source_file,
+            code.co_firstlineno if code else 0,
+            mtime_ns,
+        )
+    except (OSError, TypeError):
+        pass
+    if cache_key is not None and cache_key in _function_bytes_cache:
+        return _function_bytes_cache[cache_key]
+    try:
+        src = inspect.getsource(obj)
+    except (OSError, TypeError):
+        # Fallback to using the bytes representation of the code object.
+        # This path is not cached because it depends on the cache arg.
+        return b"".join(bytes_repr(code, cache)) if code else b"no-source"
+    result = _parse_function_source_bytes(src)
+    if cache_key is not None:
+        _function_bytes_cache[cache_key] = result
+    return result
+
+
+def _class_functions(klass: type) -> list[types.FunctionType]:
+    """The functions defined in a class body, its methods, static and class methods
+    and property accessors"""
+    functions = []
+    for _, attr_value in sorted(vars(klass).items()):
+        if isinstance(attr_value, (staticmethod, classmethod)):
+            attr_value = attr_value.__func__
+        candidates = (
+            [attr_value.fget, attr_value.fset, attr_value.fdel]
+            if isinstance(attr_value, property)
+            else [attr_value]
+        )
+        functions.extend(
+            f
+            for f in candidates
+            if isinstance(f, types.FunctionType)
+            and f.__qualname__.startswith(klass.__qualname__ + ".")
+        )
+    return functions
+
+
+def _bytes_repr_definitions(
+    obj: types.FunctionType, cache: Cache, walk: _Walk
+) -> Iterator[bytes]:
+    """Serialize the definitions of the functions and classes of the function's
+    module that it reaches, each once, with a worklist rather than recursion"""
+    seen = {id(obj)}
+    definitions = []
+    while walk.pending:
+        dep = walk.pending.pop()
+        if id(dep) in seen:
+            continue
+        seen.add(id(dep))
+        parts = [f"{dep.__qualname__}:".encode(), _source_bytes(dep, cache)]
+        for func in (
+            [dep] if isinstance(dep, types.FunctionType) else _class_functions(dep)
+        ):
+            parts.extend(_bytes_repr_references(func, cache, walk))
+        definitions.append(b"".join(parts))
+    if definitions:
+        yield b",definitions:("
+        yield from sorted(definitions)
+        yield b")"
+
+
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
-    """Serialize a function, attempting to use the AST of the source code if available
-    otherwise falling back to the byte-code of the function, together with the values
-    it closes over and the globals it reads (see `bytes_repr_function_references`)."""
+    """Serialize a function by the AST of its source code if available, otherwise by
+    its byte-code, together with the values it closes over and the globals it reads
+    (see `_bytes_repr_references`), and the definitions of the functions and classes
+    of its module that it reaches."""
     yield b"function:("
     if in_stdlib(obj):
         yield f"{obj.__module__}.{obj.__name__}".encode()
     else:
-        # Build a cache key from (module, qualname, source position and mtime).
-        # os.stat() is a single cheap syscall; if successful we can avoid
-        # both inspect.getsource() and ast.parse() on repeated calls.
-        cache_key: tuple[str, str, str, int, int] | None = None
-        try:
-            source_file = inspect.getfile(obj)
-            mtime_ns = os.stat(source_file).st_mtime_ns
-            cache_key = (
-                obj.__module__,
-                obj.__qualname__,
-                source_file,
-                obj.__code__.co_firstlineno,
-                mtime_ns,
-            )
-        except (OSError, TypeError):
-            pass
-
-        if cache_key is not None and cache_key in _function_bytes_cache:
-            yield _function_bytes_cache[cache_key]
-        else:
-            try:
-                src = inspect.getsource(obj)
-            except OSError:
-                # Fallback to using the bytes representation of the code object.
-                # This path is not cached because it depends on the cache arg.
-                yield from bytes_repr(obj.__code__, cache)
-            else:
-                result = _parse_function_source_bytes(src)
-                if cache_key is not None:
-                    _function_bytes_cache[cache_key] = result
-                yield result
-        yield from bytes_repr_function_references(obj, cache)
+        walk = _Walk(obj.__module__)
+        yield _source_bytes(obj, cache)
+        yield from _bytes_repr_references(obj, cache, walk)
+        yield from _bytes_repr_definitions(obj, cache, walk)
     yield b")"
 
 

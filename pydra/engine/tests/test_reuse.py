@@ -406,28 +406,28 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
 # Checksums of tasks whose function's code is hashed, which differ between Python
 # versions because the AST dump does. The python checksums are as computed at 277bee99;
 # the workflow checksums were remeasured when function hashes came to include the
-# globals a function reads (GoldenWf reads `workflow` and `AddOne`). 3.15 was measured
+# globals a function reads (GoldenWf reads `AddOne` and the import `workflow`). 3.15 was measured
 # on 3.15.0a7 and is checked only on a final release.
 _CODE_GOLDEN = {
     (3, 11): (
         "python-ef82da8e64f4a764ad4b043d886f82da",
-        "workflow-3563e9bd4c57214c8a0043507d240aeb",
+        "workflow-116f0bf810a77ed83f5c08f13bb4dd0f",
     ),
     (3, 12): (
         "python-ef82da8e64f4a764ad4b043d886f82da",
-        "workflow-3563e9bd4c57214c8a0043507d240aeb",
+        "workflow-116f0bf810a77ed83f5c08f13bb4dd0f",
     ),
     (3, 13): (
         "python-d2a20bb9597dd80a2ce9f6389798883f",
-        "workflow-3c950efc5db21e9df4de7c6a089f50a8",
+        "workflow-d50b4efe6a814af8766d94efce9edff3",
     ),
     (3, 14): (
         "python-d2a20bb9597dd80a2ce9f6389798883f",
-        "workflow-3c950efc5db21e9df4de7c6a089f50a8",
+        "workflow-d50b4efe6a814af8766d94efce9edff3",
     ),
     (3, 15): (
         "python-4389a4d4ab1299de47b66fd28aa712e2",
-        "workflow-2d62951d0ada54b7bb9f8efc3a641b93",
+        "workflow-a5ef6a0b2adedd4a1df25285411424b3",
     ),
 }
 

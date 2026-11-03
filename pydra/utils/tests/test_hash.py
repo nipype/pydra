@@ -11,7 +11,9 @@ from unittest import mock
 import attrs
 import cloudpickle
 import numpy
+import numpy as np
 from numpy import exp
+from random import random as uniform
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json, Yaml
@@ -720,14 +722,30 @@ def exponential(x: float) -> float:
     return exp(x)
 
 
-def test_hash_function_ufunc_global_is_its_name():
-    """A task calling a numpy ufunc imported by name hashes it by module and name"""
+def test_hash_function_ufunc_is_its_name():
+    """A numpy ufunc is identified by its module and name"""
     assert python.define(exponential)(x=1.0)._checksum
-    other = types.FunctionType(exponential.__code__, {"exp": numpy.log})
-    assert hash_function(other) != hash_function(exponential)
-    assert hash_function(exponential) == hash_function(
-        types.FunctionType(exponential.__code__, {"exp": numpy.exp})
-    )
+    assert hash_function(_adder(numpy.exp)) == hash_function(_adder(numpy.exp))
+    assert hash_function(_adder(numpy.exp)) != hash_function(_adder(numpy.log))
+
+
+def draws() -> float:
+    return uniform()
+
+
+def uses_np(x: float) -> float:
+    return np.exp(x)
+
+
+def test_hash_function_imported_global_is_its_import_target():
+    """A global bound by an import statement is identified by its import target, read
+    from the module's source, whatever its value (here a bound method of a hidden
+    random generator, as `from scipy.stats import norm` binds an instance)"""
+    assert python.define(draws)()._checksum
+    swapped = types.FunctionType(draws.__code__, {**draws.__globals__, "uniform": len})
+    assert hash_function(swapped) == hash_function(draws)
+    assert python.define(uses_np)(x=1.0)._checksum
+    assert hash_function(uses_np) != hash_function(exponential)
 
 
 class _Counter:
@@ -878,3 +896,98 @@ def test_hash_function_pickled_by_value_across_modules(tmp_path, monkeypatch):
     finally:
         sys.modules.pop("moda", None)
         sys.modules.pop("modb", None)
+
+
+def _import_from(tmp_path, monkeypatch, name, source):
+    """Import ``source`` as module ``name``, replacing any earlier version"""
+    import importlib
+
+    path = tmp_path / f"{name}.py"
+    if path.exists():
+        mtime = path.stat().st_mtime_ns + 10**9
+    else:
+        mtime = None
+    path.write_text(source)
+    if mtime is not None:
+        os.utime(path, ns=(mtime, mtime))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop(name, None)
+    importlib.invalidate_caches()
+    return importlib.import_module(name)
+
+
+def test_hash_function_deep_same_module_chain(tmp_path, monkeypatch):
+    """A long chain of same-module calls is walked without recursion"""
+    depth = 500
+    source = (
+        "".join(f"def f{i}(x):\n    return f{i + 1}(x) + 1\n\n" for i in range(depth))
+        + f"def f{depth}(x):\n    return x\n"
+    )
+    try:
+        chain = _import_from(tmp_path, monkeypatch, "deepchain", source)
+        before = hash_function(chain.f0)
+        assert hash_function(chain.f0) == before
+        edited = _import_from(
+            tmp_path,
+            monkeypatch,
+            "deepchain",
+            source.replace("return x\n", "return 0\n"),
+        )
+        assert hash_function(edited.f0) != before
+    finally:
+        sys.modules.pop("deepchain", None)
+
+
+_CLASS_MODULE = """
+class Helper:
+    def go(self):
+        return {value}
+
+
+def task(x):
+    return Helper().go() + x
+"""
+
+
+def test_hash_function_same_module_class_is_hashed_by_definition(tmp_path, monkeypatch):
+    """Changing a method body of a same-module helper class changes the checksum"""
+    try:
+        first = _import_from(
+            tmp_path, monkeypatch, "helperclass", _CLASS_MODULE.format(value=1)
+        )
+        before = hash_function(first.task)
+        second = _import_from(
+            tmp_path, monkeypatch, "helperclass", _CLASS_MODULE.format(value=2)
+        )
+        assert hash_function(second.task) != before
+    finally:
+        sys.modules.pop("helperclass", None)
+
+
+_CELLS = [
+    "from random import random as uniform\n",
+    "def sample():\n    return uniform()\n",
+]
+
+
+def _define_in_session(tmp_path):
+    """Run the cells as a notebook does: one ``__main__`` namespace, one file per cell"""
+    namespace = {"__name__": "__main__"}
+    for i, cell in enumerate(_CELLS):
+        path = tmp_path / f"cell{i}.py"
+        path.write_text(cell)
+        exec(compile(cell, str(path), "exec"), namespace)
+    return namespace["sample"]
+
+
+def test_hash_function_interactive_imports_reach_the_worker(tmp_path, monkeypatch):
+    """In a notebook, a global imported in another cell is identified by its import
+    target, in the session and in a worker that receives the function by value"""
+    import pydra.utils.hash
+
+    with pytest.raises(NonStaticReferenceError, match=r"reads the global 'uniform'"):
+        hash_function(_define_in_session(tmp_path))
+    monkeypatch.setattr(pydra.utils.hash, "_interactive_sources", lambda: _CELLS)
+    sample = _define_in_session(tmp_path)
+    parent = hash_function(sample)  # as the job's checksum is, before it is sent
+    assert _hash_in_subprocess(sample, []) == parent
