@@ -149,6 +149,20 @@ class PickleStore:
                         return result
         return None
 
+    def slots(self, checksum: str | None = None) -> ty.Iterator[Path]:
+        """The directories of the jobs run under ``cache_root``, of one job if its
+        ``checksum`` is given. Each holds the job's ``_result.pklz``, ``_error.pklz``
+        and outputs; its parent is named by the job's checksum."""
+        checksums = (
+            [checksum]
+            if checksum is not None
+            else sorted(p.name for p in self.cache_root.iterdir() if p.is_dir())
+        )
+        for name in checksums:
+            directory = self.cache_root / name
+            if directory.is_dir():
+                yield from sorted(p for p in directory.iterdir() if p.is_dir())
+
     def lockfile(self, checksum: str, context: Context) -> Path:
         return self.cache_root / f"{checksum}-{context_key(context)}.lock"
 

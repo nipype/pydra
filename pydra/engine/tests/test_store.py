@@ -270,3 +270,18 @@ def test_store_and_cache_root_must_agree(tmp_path):
         Submitter(store=store, readonly_caches=[tmp_path / "c"])
     assert Submitter(store=store).cache_root == (tmp_path / "a").resolve()
     assert Submitter(store=store, cache_root=tmp_path / "a").store is store
+
+
+def test_picklestore_slots(tmp_path):
+    store = PickleStore(tmp_path)
+    other = {**CTX, "platform": "q"}
+    for checksum, context in (("abc", CTX), ("abc", other), ("def", CTX)):
+        with store.acquire(checksum, context) as lease:
+            store.commit(lease, Result(cache_dir=lease.cache_dir))
+    assert set(store.slots("abc")) == {
+        store.cache_dir("abc", CTX),
+        store.cache_dir("abc", other),
+    }
+    assert list(store.slots("def")) == [store.cache_dir("def", CTX)]
+    assert len(list(store.slots())) == 3
+    assert list(store.slots("missing")) == []
