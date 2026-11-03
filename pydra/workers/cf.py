@@ -3,6 +3,7 @@ import attrs
 import typing as ty
 import cloudpickle as cp
 import concurrent.futures as cf
+import multiprocessing as mp
 import logging
 from pydra.engine.job import Job
 from pydra.workers import base
@@ -41,6 +42,13 @@ def get_available_cpus():
     return os.cpu_count()
 
 
+def _process_pool(n_procs: int) -> cf.ProcessPoolExecutor:
+    """A process pool whose workers are never forked from this, possibly threaded,
+    process"""
+    method = "forkserver" if "forkserver" in mp.get_all_start_methods() else "spawn"
+    return cf.ProcessPoolExecutor(n_procs, mp_context=mp.get_context(method))
+
+
 @attrs.define
 class ConcurrentFuturesWorker(base.Worker):
     """A worker to execute in parallel using Python's concurrent futures."""
@@ -52,7 +60,7 @@ class ConcurrentFuturesWorker(base.Worker):
 
     @pool.default
     def _pool_default(self) -> cf.ProcessPoolExecutor:
-        return cf.ProcessPoolExecutor(self.n_procs)
+        return _process_pool(self.n_procs)
 
     def __getstate__(self) -> dict[str, ty.Any]:
         """Return state for pickling."""
@@ -63,7 +71,7 @@ class ConcurrentFuturesWorker(base.Worker):
     def __setstate__(self, state: dict[str, ty.Any]) -> None:
         """Set state from pickling."""
         super().__setstate__(state)
-        self.pool = cf.ProcessPoolExecutor(self.n_procs)
+        self.pool = _process_pool(self.n_procs)
 
     async def run(
         self,
