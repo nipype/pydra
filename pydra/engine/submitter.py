@@ -50,8 +50,6 @@ if ty.TYPE_CHECKING:
 TaskType = ty.TypeVar("TaskType", bound="Task")
 OutputType = ty.TypeVar("OutputType", bound="Outputs")
 
-# Used to flag development mode of Audit
-develop = False
 
 WORKER_KWARG_FAIL_NOTE = "Attempting to instantiate worker submitter"
 
@@ -202,7 +200,6 @@ class Submitter:
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
-            develop=develop,
         )
         store_root = getattr(store, "cache_root", None)
         if store is not None:

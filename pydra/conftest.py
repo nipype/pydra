@@ -28,6 +28,26 @@ def isolated_user_cache(tmp_path_factory, monkeypatch):
     return root
 
 
+@pytest.fixture
+def no_network(monkeypatch):
+    """Make any attempt to reach the network from the test process fail"""
+    import socket
+
+    def refuse(*args, **kwargs):
+        raise OSError("network access is disabled in this test")
+
+    connect = socket.socket.connect
+
+    def connect_local(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6):
+            refuse()
+        return connect(sock, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    monkeypatch.setattr(socket.socket, "connect", connect_local)
+
+
 @pytest.fixture(scope="session", params=["debug", "cf"])
 def worker(request):
     return request.param

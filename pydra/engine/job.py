@@ -40,7 +40,6 @@ from pydra.utils.etelemetry import check_latest_version
 
 logger = logging.getLogger("pydra")
 
-develop = False
 
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import Submitter

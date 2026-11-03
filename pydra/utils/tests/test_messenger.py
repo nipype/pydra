@@ -1,12 +1,20 @@
 from contextlib import redirect_stdout
+import hashlib
+import importlib.resources
 import io
+import json
 import pytest
 from pydra.utils.messenger import (
     PrintMessenger,
     FileMessenger,
+    ProvenanceContextUnavailable,
     collect_messages,
+    document_loader,
     make_message,
+    pydra_context,
 )
+
+SCHEMA = importlib.resources.files("pydra") / "schema"
 
 
 def test_print_messenger():
@@ -40,7 +48,7 @@ def test_file_messenger(tmpdir):
     assert len(glob(str(tmpdir / "messages" / "*.jsonld"))) == 2
 
 
-def test_collect_messages(tmpdir):
+def test_collect_messages(tmpdir, no_network):
     tmpdir.chdir()
 
     msgr = FileMessenger()
@@ -53,7 +61,39 @@ def test_collect_messages(tmpdir):
     assert (tmpdir / "messages.jsonld").exists()
 
     msgr.send(make_message({"@context": "http://example.org", "key": "value"}))
-    import pyld
-
-    with pytest.raises(pyld.jsonld.JsonLdError):
+    with pytest.raises(ProvenanceContextUnavailable, match="http://example.org"):
         collect_messages(tmpdir, tmpdir / "messages")
+
+
+def test_messages_carry_the_packaged_context():
+    message = make_message({"key": "value"})
+    assert message["@context"] == pydra_context()["@context"]
+    assert message["key"] == "value"
+
+
+def test_packaged_contexts_match_their_record(no_network):
+    sources = json.loads((SCHEMA / "contexts.json").read_text())
+    for iri, entry in sources.items():
+        packaged = (SCHEMA / entry["file"]).read_bytes()
+        assert document_loader(iri)["document"] == json.loads(packaged)
+        if "sha256" in entry:
+            assert hashlib.sha256(packaged).hexdigest() == entry["sha256"]
+            assert entry["commit"] in iri
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        None,
+        "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld",
+    ],
+)
+def test_collect_messages_offline(tmp_path, no_network, context):
+    messages = tmp_path / "messages"
+    message = make_message({"@id": "uid:1", "@type": "activity"})
+    if context is not None:
+        message["@context"] = context
+    FileMessenger().send(message, message_dir=messages)
+    collect_messages(tmp_path, messages)
+    collected = json.loads((tmp_path / "messages.jsonld").read_text())
+    assert collected["@context"] == message["@context"]

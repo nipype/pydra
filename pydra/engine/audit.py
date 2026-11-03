@@ -2,16 +2,10 @@
 
 import os
 import typing as ty
-import json
 from pydra.utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from pydra.utils.general import attrs_values
 from fileformats.core import FileSet
 from pydra.utils.hash import hash_function
-
-try:
-    import importlib_resources
-except ImportError:
-    import importlib.resources as importlib_resources  # type: ignore
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
@@ -20,7 +14,7 @@ if ty.TYPE_CHECKING:
 class Audit:
     """Handle provenance tracking and resource utilization."""
 
-    def __init__(self, audit_flags, messengers, messenger_args, develop=None):
+    def __init__(self, audit_flags, messengers, messenger_args):
         """
         Initialize the auditing functionality.
 
@@ -34,8 +28,6 @@ class Audit:
             Could be `PrintMessenger`, `FileMessenger`, or `RemoteRESTMessenger`.
         messenger_args : :obj:`dict`, optional
             Optional arguments for the `Messenger.send` method.
-        develop : :obj:`bool`, optional
-            If True, the local context.jsonld file is used, otherwise the one from github is used.
 
         """
         from pydra.utils.general import ensure_list
@@ -43,7 +35,6 @@ class Audit:
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
-        self.develop = develop
 
     def start_audit(self, odir):
         """
@@ -145,26 +136,15 @@ class Audit:
             If True and self.audit_flag, the message is sent.
 
         """
-        if self.develop:
-            context_file = importlib_resources.files("pydra") / "schema/context.jsonld"
-            with context_file.open() as fp:
-                context = json.load(fp)
-        else:
-            context = {
-                "@context": "https://raw.githubusercontent.com/nipype/pydra"
-                "/master/pydra/schema/context.jsonld"
-            }
         if self.audit_flags & flags:
             if self.messenger_args:
                 send_message(
-                    make_message(message, context=context),
+                    make_message(message),
                     messengers=self.messengers,
                     **self.messenger_args,
                 )
             else:
-                send_message(
-                    make_message(message, context=context), messengers=self.messengers
-                )
+                send_message(make_message(message), messengers=self.messengers)
 
     def audit_check(self, flag):
         """
