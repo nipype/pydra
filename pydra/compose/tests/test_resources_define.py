@@ -51,34 +51,43 @@ def test_resources_are_not_a_field_and_never_in_the_checksum():
     assert plain._checksum == small._checksum == big._checksum
 
 
-def test_job_takes_the_definition_resources(tmp_path):
-    seen = []
+def _record_to(directory, name):
+    """A hook that writes the job's resources to a file, so it is visible from the
+    process the job runs in"""
+    return TaskHooks(
+        pre_run_task=lambda job, *a: (directory / name).write_text(repr(job.resources))
+    )
+
+
+def test_job_takes_the_definition_resources(worker, tmp_path):
     Task = python.define(add_one, resources=SMALL)
-    hooks = TaskHooks(pre_run_task=lambda job, *a: seen.append(job.resources))
-    assert Task(x=1)(cache_root=tmp_path, hooks=hooks).out == 2
-    assert seen == [SMALL]
+    hooks = _record_to(tmp_path, "seen")
+    assert Task(x=1)(cache_root=tmp_path / "cache", worker=worker, hooks=hooks).out == 2
+    assert (tmp_path / "seen").read_text() == repr(SMALL)
 
 
-def test_node_resources_override_the_definition(tmp_path):
-    seen = {}
-
-    def record(name):
-        return TaskHooks(
-            pre_run_task=lambda job, *a: seen.update({name: job.resources})
-        )
-
+def test_node_resources_override_the_definition(worker, tmp_path):
     # each node feeds the next, so no node is a cache hit on another's result
     Inner = python.define(add_one, resources=SMALL)
 
     @workflow.define(outputs=["a", "b", "c"])
     def Wf(x: int):
-        a = workflow.add(Inner(x=x), name="a", hooks=record("a"))
-        b = workflow.add(Inner(x=a.out), name="b", hooks=record("b"), resources=BIG)
+        a = workflow.add(Inner(x=x), name="a", hooks=_record_to(tmp_path, "a"))
+        b = workflow.add(
+            Inner(x=a.out), name="b", hooks=_record_to(tmp_path, "b"), resources=BIG
+        )
         c = workflow.add(
-            python.define(add_one)(x=b.out), name="c", hooks=record("c"), resources=BIG
+            python.define(add_one)(x=b.out),
+            name="c",
+            hooks=_record_to(tmp_path, "c"),
+            resources=BIG,
         )
         return a.out, b.out, c.out
 
-    outputs = Wf(x=1)(cache_root=tmp_path, worker="debug")
+    outputs = Wf(x=1)(cache_root=tmp_path / "cache", worker=worker)
     assert (outputs.a, outputs.b, outputs.c) == (2, 3, 4)
-    assert seen == {"a": SMALL, "b": BIG, "c": BIG}
+    assert {n: (tmp_path / n).read_text() for n in "abc"} == {
+        "a": repr(SMALL),
+        "b": repr(BIG),
+        "c": repr(BIG),
+    }
