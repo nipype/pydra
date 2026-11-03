@@ -48,7 +48,11 @@ def run_worker(tmp_path, monkeypatch, states, resources=None, scontrol_rc=0, **k
     )
     worker = slurm.SlurmWorker(poll_delay=0, **kwargs)
     job = types.SimpleNamespace(
-        name="t", uid="u", cache_root=tmp_path, resources=resources
+        name="t",
+        uid="u",
+        cache_root=tmp_path,
+        resources=resources,
+        lockfile=tmp_path / "abc-key.lock",
     )
     return fake, worker, job
 
@@ -57,6 +61,22 @@ def test_requeue_then_complete(tmp_path, monkeypatch):
     fake, worker, job = run_worker(tmp_path, monkeypatch, ["TIMEOUT", "COMPLETED"])
     assert asyncio.run(worker.run(job)) is True
     assert len(fake.requeues()) == 1
+
+
+def test_requeue_removes_the_lost_holders_lockfile(tmp_path, monkeypatch):
+    fake, worker, job = run_worker(tmp_path, monkeypatch, ["NODE_FAIL", "COMPLETED"])
+    job.lockfile.write_text("")
+    calls = fake.calls
+
+    def lockfile_at_requeue(*cmd, **kwargs):
+        if cmd[0] == "scontrol":
+            assert not job.lockfile.exists()
+        return FakeSlurm.__call__(fake, *cmd, **kwargs)
+
+    monkeypatch.setattr(slurm.base, "read_and_display_async", lockfile_at_requeue)
+    assert asyncio.run(worker.run(job)) is True
+    assert [c[0] for c in calls].count("scontrol") == 1
+    assert not job.lockfile.exists()
 
 
 def test_concurrent_jobs_are_requeued_independently(tmp_path, monkeypatch):
@@ -96,7 +116,11 @@ def test_concurrent_jobs_are_requeued_independently(tmp_path, monkeypatch):
     worker = slurm.SlurmWorker(poll_delay=0, requeue_budget=2)
     jobs = [
         types.SimpleNamespace(
-            name=f"t{i}", uid=f"u{i}", cache_root=tmp_path, resources=None
+            name=f"t{i}",
+            uid=f"u{i}",
+            cache_root=tmp_path,
+            resources=None,
+            lockfile=tmp_path / f"c{i}-key.lock",
         )
         for i in (1, 2, 3)
     ]

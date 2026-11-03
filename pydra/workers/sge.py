@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import json
 import re
 import attrs
 import typing as ty
@@ -10,6 +9,7 @@ from shutil import copyfile, which
 import random
 import logging
 from pydra.engine.job import Job, save, load_job
+from pydra.engine.store import remove_from_cache
 from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
@@ -434,13 +434,7 @@ class SgeWorker(base.Worker):
                 or load_job(job_pkl=application_job_pkl).result().errored
             ):
                 self.job_pkls_rerun[job_pkl] = None
-                info_file = cache_root / f"{sge_task.uid}_info.json"
-                if info_file.exists():
-                    checksum = json.loads(info_file.read_text())["checksum"]
-                    if (cache_root / f"{checksum}.lock").exists():
-                        # for pyt3.8 we could use missing_ok=True
-                        (cache_root / f"{checksum}.lock").unlink()
-                    # Maybe wait a little to check if _error.pklz exists - not getting found immediately
+                remove_from_cache(sge_task.lockfile)
 
         # If the previous job array failed, run the array's script again and get the new jobid
         jobid = await self.submit_array_job(sargs, tasks_to_run, error_file)

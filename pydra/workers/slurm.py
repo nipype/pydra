@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import json
 import re
 import typing as ty
 from tempfile import gettempdir
@@ -9,6 +8,7 @@ from shutil import copyfile
 import logging
 import attrs
 from pydra.engine.job import Job, save
+from pydra.engine.store import remove_from_cache
 from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
@@ -199,13 +199,7 @@ class SlurmWorker(base.Worker):
                             f"({self.requeue_budget}) is spent"
                         )
                     requeues += 1
-                    # loading info about job with a specific uid
-                    info_file = job.cache_root / f"{job.uid}_info.json"
-                    if info_file.exists():
-                        checksum = json.loads(info_file.read_text())["checksum"]
-                        if (job.cache_root / f"{checksum}.lock").exists():
-                            # for pyt3.8 we could you missing_ok=True
-                            (job.cache_root / f"{checksum}.lock").unlink()
+                    remove_from_cache(job.lockfile)
                     cmd_re = ("scontrol", "requeue", jobid)
                     rc, _, stderr = await base.read_and_display_async(
                         *cmd_re, hide_display=True
