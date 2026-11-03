@@ -3,6 +3,8 @@ it unrunnable, its siblings and their descendants complete, and the Submitter's
 ``on_error`` mode decides whether the run stops at the first error or raises them all
 at the end"""
 
+import pickle
+import typing as ty
 import pytest
 from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
@@ -187,6 +189,55 @@ def test_on_error_fail_fast(tmp_path):
         sub.close()
 
 
+@pytest.mark.timeout(120)
+def test_on_error_raise_at_end_with_job_in_flight_cf(tmp_path):
+    """With ``on_error="raise_at_end"`` under two cf processes, an element errors while
+    a sibling is still running: the sibling only returns once the failure has been
+    recorded, so the two overlap, and it still completes before the error is raised"""
+
+    @python.define
+    def Overlap(x: int, sync: str) -> int:
+        import time
+        from pathlib import Path
+
+        sync = Path(sync)
+        (sync / f"started_{x}").touch()
+
+        def wait_for(name):
+            deadline = time.monotonic() + 60
+            while not (sync / name).exists():
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{name} never appeared")
+                time.sleep(0.05)
+
+        if x == 1:
+            wait_for("started_0")
+            (sync / "failing").touch()
+            raise Exception("x is 1, so i'm raising an exception!")
+        wait_for("failing")
+        (sync / "finished_0").touch()
+        return x
+
+    @workflow.define
+    def InFlight(xs, sync):
+        a = workflow.add(Overlap(sync=sync).split(x=xs), name="A")
+        b = workflow.add(Identity(x=a.out), name="B")
+        return b.out
+
+    from pydra.engine import WorkflowError
+
+    sync = tmp_path / "sync"
+    sync.mkdir()
+    with Submitter(
+        worker="cf", n_procs=2, on_error="raise_at_end", cache_root=tmp_path / "cache"
+    ) as sub:
+        with pytest.raises(WorkflowError, match="failed with errors") as excinfo:
+            sub(InFlight(xs=[0, 1], sync=str(sync)), raise_errors=True)
+    assert len(excinfo.value.errors) == 1
+    assert "i'm raising an exception!" in excinfo.value.errors[0]
+    assert (sync / "finished_0").exists()
+
+
 @pytest.mark.parametrize(
     "plugin,on_error",
     [("debug", "fail_fast"), ("cf", "raise_at_end"), (SyncWorker, "fail_fast")],
@@ -221,25 +272,128 @@ class AsyncInProcess(DebugWorker):
 
 
 @pytest.mark.timeout(120)
-@pytest.mark.parametrize("routed", ["async", "default"])
-def test_on_error_default_follows_the_routed_loop(routed, tmp_path):
-    """Left unset, ``on_error`` is the mode of the loop the workflow is expanded in,
-    which the router picks: a workflow sent from a *debug* ``worker`` to an
-    asynchronous worker is expanded asynchronously and raises at the end"""
-    task, error, expected = CASES["chain"]
+def test_on_error_default_ignores_the_router(tmp_path):
+    """A workflow is expanded by ``worker`` whatever the router says (only leaf jobs
+    are routed), so the default follows ``worker``: here *debug*, hence fail_fast and
+    the errored element's own exception"""
+    task, error, _ = CASES["chain"]
     with Submitter(
         worker="debug",
         workers={"async": AsyncInProcess()},
-        router=lambda job: routed if job.name == "main" else None,
+        router=lambda job: "async" if job.name == "main" else None,
         cache_root=tmp_path,
     ) as sub:
         assert sub.on_error == "fail_fast"
-        if routed == "async":
-            result = sub(task, raise_errors=False)
-            assert result.errored
-            assert error in "".join(sub.errors)
-            assert outcome(result.job.return_values["exec_graph"]) == expected
-        else:
-            with pytest.raises(Exception, match=error) as excinfo:
-                sub(task)
-            assert "failed with errors" not in str(excinfo.value)
+        with pytest.raises(Exception, match=error) as excinfo:
+            sub(task)
+        assert "failed with errors" not in str(excinfo.value)
+
+
+@python.define
+def Stringify(x: int) -> ty.Any:
+    return "one" if x == 1 else x
+
+
+@python.define
+def Mark(a: int, marks: str) -> int:
+    from pathlib import Path
+
+    (Path(marks) / str(a)).touch()
+    return a
+
+
+@workflow.define
+def BadInput(xs, marks):
+    a = workflow.add(Stringify().split("x", x=xs), name="A")
+    b = workflow.add(Mark(marks=marks).split("a", a=a.out), name="B")
+    return b.out
+
+
+def test_workflow_error_is_typed():
+    from pydra.engine import WorkflowError
+
+    error = pickle.loads(pickle.dumps(WorkflowError("failed", ["one", "two"])))
+    assert isinstance(error, RuntimeError)
+    assert (str(error), error.errors) == ("failed", ["one", "two"])
+
+
+@pytest.mark.timeout(120)
+def test_on_error_raises_workflow_error_cf(tmp_path):
+    """Under several cf processes the workflow raises a WorkflowError holding one entry
+    per errored job, which the Submitter keeps for the last call only"""
+    from pydra.engine import WorkflowError
+
+    task = Propagate(x=[2, 1, 3, 1], y=[10, 20])
+    with Submitter(worker="cf", n_procs=4, cache_root=tmp_path) as sub:
+        with pytest.raises(WorkflowError) as excinfo:
+            sub(task, raise_errors=True)
+        assert len(excinfo.value.errors) == 1
+        assert sub.errors == excinfo.value.errors
+        assert all("i'm raising an exception!" in e for e in sub.errors)
+        sub(Identity(x=1), raise_errors=True)
+        assert sub.errors == []
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_on_error_unresolvable_input_raise_at_end(worker, tmp_path):
+    """An element whose inputs cannot be resolved is an error of the run, raised at the
+    end after its siblings have run"""
+    from pydra.engine import WorkflowError
+
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    task = BadInput(xs=[0, 1, 2, 3], marks=str(marks))
+    with Submitter(
+        worker=worker, on_error="raise_at_end", cache_root=tmp_path / "cache"
+    ) as sub:
+        with pytest.raises(WorkflowError) as excinfo:
+            sub(task, raise_errors=True)
+    assert len(excinfo.value.errors) == 1
+    assert "B(1)" in excinfo.value.errors[0]
+    assert sorted(p.name for p in marks.iterdir()) == ["0", "2", "3"]
+
+
+@pytest.mark.timeout(120)
+def test_on_error_unresolvable_input_fail_fast(worker, tmp_path):
+    from pydra.engine import WorkflowError
+
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    task = BadInput(xs=[0, 1, 2], marks=str(marks))
+    with Submitter(worker=worker, on_error="fail_fast", cache_root=tmp_path) as sub:
+        with pytest.raises(WorkflowError, match=r"B\(1\)"):
+            sub(task, raise_errors=True)
+
+
+def test_on_error_debug_loop_wraps_submit(tmp_path, monkeypatch):
+    """The debug loop catches errors from ``Submitter.submit``, where jobs are placed,
+    so that ``raise_at_end`` collects them wherever the job was routed"""
+    from pydra.engine import WorkflowError
+
+    submit = Submitter.submit
+
+    def failing(self, job, *args, **kwargs):
+        if job.name == "S":
+            raise ValueError("could not be placed")
+        return submit(self, job, *args, **kwargs)
+
+    monkeypatch.setattr(Submitter, "submit", failing)
+    task = Propagate(x=[2, 3], y=[10, 20])
+    with Submitter(worker="debug", on_error="raise_at_end", cache_root=tmp_path) as sub:
+        with pytest.raises(WorkflowError) as excinfo:
+            sub(task, raise_errors=True)
+    assert len(excinfo.value.errors) == 2
+    assert all("could not be placed" in e for e in excinfo.value.errors)
+
+
+@pytest.mark.parametrize("worker,is_async", [("debug", True), ("cf", False)])
+def test_on_error_default_follows_the_loop(worker, is_async, tmp_path):
+    """The default is that of the loop expanding the workflow, which is what a router
+    choosing a different worker per workflow needs, not the default worker's"""
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+        assert sub._loop_on_error(is_async) == (
+            "raise_at_end" if is_async else "fail_fast"
+        )
+    with Submitter(worker=worker, on_error="fail_fast", cache_root=tmp_path) as sub:
+        assert sub._loop_on_error(is_async) == "fail_fast"

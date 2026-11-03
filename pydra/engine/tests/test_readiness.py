@@ -2,6 +2,7 @@
 upstream elements its inputs read have completed, rather than once the whole upstream
 node is done"""
 
+import typing as ty
 import pytest
 from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
@@ -295,6 +296,47 @@ def test_readiness_async(tmp_path):
     assert outputs.out == [0, 1]
 
 
+@pytest.mark.timeout(120)
+def test_readiness_upstream_fails_while_sibling_released_cf(tmp_path):
+    """Under two cf processes, an upstream element fails while the downstream element of
+    its sibling is already running: the failing element only raises once that downstream
+    element has written a marker, so the two jobs overlap, and the released element still
+    runs although the run ends in the upstream error"""
+
+    @python.define
+    def FailAfter(x: int, marker: str) -> int:
+        import time
+        from pathlib import Path
+
+        if x:
+            deadline = time.monotonic() + 60
+            while not Path(marker).exists():
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{marker} was not written")
+                time.sleep(0.05)
+            raise ValueError("upstream element failed")
+        return x
+
+    @python.define
+    def Mark(x: int, marker: str) -> int:
+        from pathlib import Path
+
+        Path(marker).touch()
+        return x
+
+    @workflow.define
+    def Handshake(xs, marker):
+        a = workflow.add(FailAfter(marker=marker).split(x=xs), name="A")
+        b = workflow.add(Mark(x=a.out, marker=marker), name="B")
+        return b.out
+
+    marker = tmp_path / "marker"
+    task = Handshake(xs=[0, 1], marker=str(marker))
+    with pytest.raises(Exception, match="upstream element failed"):
+        task(worker="cf", n_procs=2, cache_root=tmp_path / "cache")
+    assert marker.exists()
+
+
 # Each case: the workflow, the upstream elements that succeed before the failure (which
 # release downstream element 0), the upstream element that fails (read by downstream
 # element 1), the output of downstream element 0, and the error the failing element
@@ -356,3 +398,132 @@ def test_readiness_upstream_fails_debug_parity(case, worker, tmp_path):
         task(worker="debug", cache_root=tmp_path / "debug")
     with pytest.raises(Exception, match=error):
         task(worker=worker, cache_root=tmp_path / "worker")
+
+
+class CountingDict(dict):
+    """A dict that counts membership lookups"""
+
+    lookups = 0
+
+    def __contains__(self, key):
+        self.lookups += 1
+        return super().__contains__(key)
+
+
+@workflow.define
+def ReadAll(x):
+    a = workflow.add(Identity().split("x", x=x).combine("x"), name="A")
+    b = workflow.add(Identity(x=a.out), name="B")
+    return b.out
+
+
+def test_readiness_reading_all_elements_is_not_a_scan(tmp_path):
+    """An element that reads every upstream element is released by comparing counts,
+    rather than by looking up each upstream index (which costs M x N over a split)"""
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        wf = Workflow.construct(ReadAll(x=list(range(8))))
+        graph = wf.execution_graph(submitter=sub)
+        upstream, downstream = graph["A"], graph["B"]
+        for job in upstream.get_runnable_tasks(graph):
+            job.run()
+        upstream.update_status()
+        upstream.successful = CountingDict(upstream.successful)
+        assert [j.state_index for j in downstream.get_runnable_tasks(graph)] == [None]
+        assert upstream.successful.lookups == 0
+        assert all(len(inds) == 8 for _, inds in downstream._upstream(None))
+
+
+def test_readiness_poll_without_progress_does_no_work(tmp_path):
+    """Polling a node whose upstream has not progressed since the last poll does not
+    look at its blocked elements again"""
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        wf = Workflow.construct(DownstreamSplit(x=[1, 2, 3], y=[10, 20]))
+        graph = wf.execution_graph(submitter=sub)
+        upstream, downstream = graph["A"], graph["B"]
+        jobs = upstream.get_runnable_tasks(graph)
+        jobs[0].run()
+        upstream.update_status()
+        assert len(downstream.get_runnable_tasks(graph)) == 2
+        assert len(downstream.blocked) == 4
+        upstream.successful = CountingDict(upstream.successful)
+        for _ in range(3):
+            assert len(downstream.get_runnable_tasks(graph)) == 2
+        assert upstream.successful.lookups == 0
+        jobs[1].run()
+        upstream.update_status()
+        assert len(downstream.get_runnable_tasks(graph)) == 4
+        assert upstream.successful.lookups > 0
+
+
+@python.define
+def Stringify(x: int) -> ty.Any:
+    return "one" if x == 1 else x
+
+
+@python.define
+def PlusOne(a: int) -> int:
+    return a + 1
+
+
+@workflow.define
+def BadInput(xs):
+    a = workflow.add(Stringify().split("x", x=xs), name="A")
+    b = workflow.add(PlusOne().split("a", a=a.out), name="B")
+    return b.out
+
+
+def test_readiness_unresolvable_input_errors_its_element(tmp_path):
+    """An element whose upstream value cannot be coerced to its input type is recorded
+    as errored, rather than raising out of the scheduler, and its siblings still run"""
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        wf = Workflow.construct(BadInput(xs=[0, 1, 2]))
+        graph = wf.execution_graph(submitter=sub)
+        upstream, downstream = graph["A"], graph["B"]
+        for job in upstream.get_runnable_tasks(graph):
+            job.run()
+        upstream.update_status()
+        released = downstream.get_runnable_tasks(graph)
+        assert [j.state_index for j in released] == [0, 2]
+        assert list(downstream.errored) == [1]
+        assert isinstance(downstream.errored[1], Exception)
+        (error,) = downstream.pop_resolution_errors()
+        assert "B(1)" in error and "could not be resolved" in error
+        assert downstream.pop_resolution_errors() == []
+        for job in released:
+            job.run()
+        downstream.update_status()
+        assert downstream.done
+
+
+@pytest.mark.timeout(120)
+def test_readiness_unresolvable_input_cf(tmp_path):
+    """Under several cf processes the workflow raises the element's error after its
+    siblings have run, naming the element, rather than the bare coercion error"""
+    with pytest.raises(
+        RuntimeError, match=r"Job 'B\(1\)', inputs could not be resolved"
+    ):
+        BadInput(xs=[0, 1, 2, 3])(worker="cf", n_procs=4, cache_root=tmp_path)
+
+
+@pytest.mark.timeout(120)
+def test_readiness_unresolvable_input_debug(tmp_path):
+    with pytest.raises(
+        RuntimeError, match=r"Job 'B\(1\)', inputs could not be resolved"
+    ):
+        BadInput(xs=[0, 1, 2])(worker="debug", cache_root=tmp_path)
+
+
+def test_readiness_upstream_just_failed_is_not_done_and_successful(tmp_path):
+    """An upstream element that has failed since the last status refresh is seen as
+    errored before the downstream node tries to start from its outputs"""
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        wf = Workflow.construct(Resplit(x=[1, 2], y=[10, 100]))
+        graph = wf.execution_graph(submitter=sub)
+        upstream, downstream = graph["A"], graph["B"]
+        jobs = upstream.get_runnable_tasks(graph)
+        jobs[0].run()
+        jobs[1]._errored = True  # as the scheduler records a job that failed to run
+        assert not upstream.errored  # status not yet refreshed
+        assert downstream.get_runnable_tasks(graph) == []
+        assert downstream.unrunnable == {None: [upstream]}
+        assert not downstream.started or not downstream.blocked

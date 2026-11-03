@@ -1,16 +1,21 @@
 import multiprocessing
 import os
+import threading
 import platform
 import sys
 import attrs
+import cloudpickle
 import pytest
 from pydra.compose import python
 from pydra.engine.job import Job
 from pydra.engine.result import Result, load_result
-from pydra.engine.store import PickleStore
+from pydra.engine.store import PickleStore, context_key
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
 from pydra.utils.hash import hash_function
+
+# Worker processes cannot import the test modules, so they receive their classes by value
+cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
 
 @attrs.define
@@ -91,7 +96,7 @@ def test_context_recorded(tmp_path):
         "python_version": ".".join(platform.python_version_tuple()[:2]),
     }
     assert result.context == job.context
-    assert load_result(job.checksum, [tmp_path]).context == job.context
+    assert job.store.lookup(job.checksum, job.context).context == job.context
 
 
 def test_exact_reuses_same_context_only(tmp_path):
@@ -109,7 +114,8 @@ def test_exact_reuses_same_context_only(tmp_path):
 
 
 def test_any_reuses_and_marks_other_context(tmp_path):
-    _job(tmp_path, Tagged(tag="a")).run()
+    first = _job(tmp_path, Tagged(tag="a"))
+    first.run()
     assert not _job(tmp_path, Tagged(tag="a"), reuse="any").result().cross_context
 
     other = _job(tmp_path, Tagged(tag="b"), reuse="any")
@@ -117,46 +123,40 @@ def test_any_reuses_and_marks_other_context(tmp_path):
     assert result.cross_context
     assert result.environment_checksum == Tagged(tag="a").checksum()
     assert result.outputs.out == 2
-    stored = load_result(other.checksum, [tmp_path])
+    stored = load_result(f"{first.checksum}/{context_key(first.context)}", [tmp_path])
     assert stored.environment_checksum == Tagged(tag="a").checksum()
     assert not stored.cross_context
 
 
-def test_lookup_entry_without_context(tmp_path):
-    with PickleStore(tmp_path).acquire("abc") as lease:
-        PickleStore(tmp_path).commit(lease, Result(cache_dir=lease.cache_dir))
-    context = {"environment_checksum": "e", "platform": "p", "python_version": "v"}
-    assert PickleStore(tmp_path).lookup("abc") is not None
-    assert PickleStore(tmp_path).lookup("abc", context) is None
-    assert PickleStore(tmp_path, reuse="any").lookup("abc", context).cross_context
+def _store_result(store, checksum, context):
+    with store.acquire(checksum, context) as lease:
+        store.commit(lease, Result(cache_dir=lease.cache_dir, **context))
 
 
-def test_lookup_skips_rejected_location(tmp_path):
+def test_contexts_keep_separate_slots(tmp_path):
+    store = PickleStore(tmp_path)
+    a = {"environment_checksum": "a", "platform": "p", "python_version": "v"}
+    b = {**a, "environment_checksum": "b"}
+    _store_result(store, "abc", a)
+    _store_result(store, "abc", b)
+    assert store.cache_dir("abc", a) != store.cache_dir("abc", b)
+    assert store.lookup("abc", a).context == a
+    assert store.lookup("abc", b).context == b
+    assert store.lookup("abc", {**a, "platform": "q"}) is None
+
+
+def test_any_prefers_exact_match_in_later_location(tmp_path):
     primary, ro = tmp_path / "primary", tmp_path / "ro"
-    context = {"environment_checksum": "e", "platform": "p", "python_version": "v"}
-    for root, recorded in (
-        (primary, {**context, "environment_checksum": "old"}),
-        (ro, context),
-    ):
-        with PickleStore(root).acquire("abc") as lease:
-            PickleStore(root).commit(
-                lease, Result(cache_dir=lease.cache_dir, **recorded)
-            )
-    store = PickleStore(primary, [ro])
-    assert store.lookup("abc", context).cache_dir == ro / "abc"
-    assert store.lookup("abc").cache_dir == primary / "abc"
-
-
-def test_lookup_accepts_own_result(tmp_path):
-    with PickleStore(tmp_path).acquire("abc") as lease:
-        PickleStore(tmp_path).commit(
-            lease, Result(cache_dir=lease.cache_dir, job_uid="u")
-        )
-    context = {"environment_checksum": "e", "platform": "p", "python_version": "v"}
-    result = PickleStore(tmp_path).lookup("abc", context, produced_by="u")
-    assert result.job_uid == "u"
-    assert not result.cross_context
-    assert PickleStore(tmp_path).lookup("abc", context, produced_by="v") is None
+    a = {"environment_checksum": "a", "platform": "p", "python_version": "v"}
+    b = {**a, "environment_checksum": "b"}
+    _store_result(PickleStore(primary), "abc", b)
+    _store_result(PickleStore(ro), "abc", a)
+    store = PickleStore(primary, [ro], reuse="any")
+    exact = store.lookup("abc", a)
+    assert exact.cache_dir == ro / "abc" / context_key(a)
+    assert not exact.cross_context
+    other = store.lookup("abc", {**a, "environment_checksum": "c"})
+    assert other.cross_context
 
 
 def test_reuse_argument(tmp_path):
@@ -178,41 +178,110 @@ def test_exact_reruns_in_other_context(worker, tmp_path):
         assert result.environment_checksum == Tagged(tag=tag).checksum()
 
 
-def test_own_result_accepted_across_contexts(tmp_path):
-    """The worker process records a different context from the one the submitting
-    process computes, yet the job's own result is accepted, and a later
-    submission still judges it by context"""
-    with Submitter(worker="cf", cache_root=tmp_path, environment=PerProcess()) as sub:
-        first = sub(AddOne(a=1))
-    assert first.outputs.out == 2
-    assert first.environment_checksum != PerProcess().checksum()
-    with Submitter(worker="cf", cache_root=tmp_path, environment=PerProcess()) as sub:
-        second = sub(AddOne(a=1))
-    assert second.outputs.out == 2
-    assert second.job_uid != first.job_uid
+@python.define
+def Logged(a: int, log: str) -> int:
+    with open(log, "a") as f:
+        f.write("run\n")
+    return a + 1
 
 
-def test_worker_judges_reuse_with_submitting_context(tmp_path):
-    """An entry written by a worker matches the next worker's context but not the
-    submitting process's, so the job reruns rather than never reading as done"""
-    results = []
+def _runs(log):
+    return len(log.read_text().splitlines())
+
+
+def test_worker_reuse_is_judged_by_the_recorded_context(tmp_path):
+    """A job run in a worker records the context it carried from the submitting
+    process, which the next submission is compared with, so it is reused"""
+    log = tmp_path / "log"
     for _ in range(2):
-        with Submitter(worker="cf", cache_root=tmp_path, environment=InWorker()) as sub:
-            results.append(sub(AddOne(a=1)))
-    first, second = results
-    assert first.environment_checksum != InWorker().checksum()
-    assert second.environment_checksum == first.environment_checksum
-    assert second.outputs.out == 2
-    assert second.job_uid != first.job_uid
+        with Submitter(
+            worker="cf", cache_root=tmp_path / "cache", environment=InWorker()
+        ) as sub:
+            result = sub(Logged(a=1, log=str(log)))
+        assert result.outputs.out == 2
+        assert result.environment_checksum == InWorker().checksum()
+    assert _runs(log) == 1
 
 
-def test_worker_reuses_entry_accepted_by_submitting_context(tmp_path):
-    """An entry matching the submitting process's context is reused in the worker,
-    although the worker's own context differs, and the parent accepts it"""
-    with Submitter(worker="debug", cache_root=tmp_path, environment=InWorker()) as sub:
-        first = sub(AddOne(a=1))
-    assert first.environment_checksum == InWorker().checksum()
-    with Submitter(worker="cf", cache_root=tmp_path, environment=InWorker()) as sub:
-        second = sub(AddOne(a=1))
-    assert second.outputs.out == 2
-    assert second.job_uid == first.job_uid
+def test_other_context_keeps_the_first_result(worker, tmp_path):
+    log = tmp_path / "log"
+    for tag in ("a", "b", "a", "b"):
+        with Submitter(
+            worker=worker, cache_root=tmp_path / "cache", environment=Tagged(tag=tag)
+        ) as sub:
+            result = sub(Logged(a=1, log=str(log)))
+        assert result.environment_checksum == Tagged(tag=tag).checksum()
+    assert _runs(log) == 2
+
+
+def test_any_reuses_the_other_context_under_each_worker(worker, tmp_path):
+    log = tmp_path / "log"
+    results = []
+    for tag in ("a", "b"):
+        with Submitter(
+            worker=worker,
+            cache_root=tmp_path / "cache",
+            environment=Tagged(tag=tag),
+            reuse="any",
+        ) as sub:
+            results.append(sub(Logged(a=1, log=str(log))))
+    assert [r.cross_context for r in results] == [False, True]
+    assert results[1].environment_checksum == Tagged(tag="a").checksum()
+    assert _runs(log) == 1
+
+
+@pytest.mark.timeout(120)
+def test_concurrent_submissions_run_a_job_once(tmp_path):
+    """Two submitters, each with its own cf process, start the same job at once on one
+    cache: the lock makes one of them compute it and the other reuse the result"""
+    log = tmp_path / "log"
+    start = threading.Barrier(2)
+    results, errors = [], []
+
+    def submit():
+        try:
+            with Submitter(
+                worker="cf", n_procs=1, cache_root=tmp_path / "cache"
+            ) as sub:
+                start.wait(30)
+                results.append(sub(Logged(a=1, log=str(log)), raise_errors=True))
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=submit) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(100)
+    assert not errors
+    assert [r.outputs.out for r in results] == [2, 2]
+    assert _runs(log) == 1
+
+
+def test_combined_lookup_carries_the_job_context(tmp_path):
+    seen = []
+
+    class Spy(PickleStore):
+        def lookup(self, checksum, context=None):
+            seen.append(context)
+            return super().lookup(checksum, context)
+
+    task = AddOne().split(a=[1, 2]).combine("a")
+    with Submitter(cache_root=tmp_path, store=Spy(tmp_path)) as sub:
+        assert sub(task).outputs.out == [2, 3]
+    with Submitter(cache_root=tmp_path, store=Spy(tmp_path)) as sub:
+        assert sub(task).outputs.out == [2, 3]
+    assert seen and None not in seen
+
+
+@pytest.mark.parametrize("local", [False, True])
+def test_version_of_ambiguous_function_warns(local):
+    def inner(a: int) -> int:
+        return a
+
+    inner.__module__ = "pydra.engine.tests.test_reuse"
+    if not local:
+        inner.__qualname__ = "inner"
+        inner.__module__ = "__main__"
+    with pytest.warns(UserWarning, match="version='1'"):
+        python.define(inner, version="1")

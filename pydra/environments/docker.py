@@ -13,6 +13,9 @@ class Docker(base.Container):
     """Docker environment."""
 
     def _resolve_digest(self) -> str | None:
+        """The local image ID (``docker image inspect``), or ``None`` if Docker or the
+        image is not available. It never pulls an image. It is not a registry
+        ``RepoDigest``, so it differs between architectures for the same tag."""
         try:
             rc, out, _ = base.execute(
                 [
@@ -44,7 +47,7 @@ class Docker(base.Container):
         docker_args.extend(["-w", f"{self.root}{job.cache_dir}"])
         keys = ["return_code", "stdout", "stderr"]
 
-        job.cache_dir.mkdir(exist_ok=True)
+        job.cache_dir.mkdir(parents=True, exist_ok=True)
         values = base.execute(
             docker_args + [docker_img] + job.task._command_args(values=arg_values),
         )

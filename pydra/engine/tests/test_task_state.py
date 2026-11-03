@@ -366,7 +366,7 @@ def test_task_error(tmp_path):
     func = FunDiv(a=1, b=0)
     with pytest.raises(ZeroDivisionError):
         func(cache_root=tmp_path)
-    assert (next(tmp_path.iterdir()) / "_error.pklz").exists()
+    assert len(list(tmp_path.glob("*/*/_error.pklz"))) == 1
 
 
 # Tests for tasks without state (i.e. no splitter)

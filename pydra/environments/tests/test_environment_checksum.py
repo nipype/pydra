@@ -1,6 +1,11 @@
+import sys
 import attrs
+import cloudpickle
 import pytest
 from pydra.environments import native, docker, singularity, lmod
+
+# Worker processes cannot import the test modules, so they receive their classes by value
+cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
 
 def test_checksum_is_stable_hex():
@@ -64,10 +69,8 @@ def test_environment_checksum_recorded_not_in_job_checksum(tmp_path):
 
 
 def test_environment_checksum_survives_reload(tmp_path):
-    from pydra.engine.result import load_result
-
     job = _run(tmp_path, Tagged(tag="a"))
-    stored = load_result(job.checksum, [tmp_path])
+    stored = job.store.lookup(job.checksum, job.context)
     assert stored.environment_checksum == Tagged(tag="a").checksum()
 
 
@@ -75,3 +78,56 @@ def test_default_environment_records_native_checksum(tmp_path):
     assert (
         _run(tmp_path, None).result().environment_checksum == native.Native().checksum()
     )
+
+
+def test_digest_resolved_once_per_process(monkeypatch):
+    calls = []
+
+    def resolve(self):
+        calls.append(1)
+        return "sha256:a"
+
+    monkeypatch.setattr(docker.Docker, "_resolve_digest", resolve)
+    env = docker.Docker(image="busybox")
+    assert env.checksum() == env.checksum()
+    assert len(calls) == 1
+
+
+def test_unresolved_digest_is_not_cached(monkeypatch):
+    digests = [None, "sha256:a"]
+    monkeypatch.setattr(docker.Docker, "_resolve_digest", lambda self: digests.pop(0))
+    env = docker.Docker(image="busybox")
+    assert env.checksum() != env.checksum()
+
+
+def test_docker_digest_never_pulls_and_tolerates_no_docker(monkeypatch):
+    from pydra.environments import base
+
+    commands = []
+
+    def missing(cmd, strip=False):
+        commands.append(cmd)
+        return 1, "", "no such image"
+
+    monkeypatch.setattr(base, "execute", missing)
+    assert docker.Docker(image="busybox")._resolve_digest() is None
+    assert [c[1] for c in commands] == ["image"]
+
+    def no_docker(cmd, strip=False):
+        raise FileNotFoundError("docker")
+
+    monkeypatch.setattr(base, "execute", no_docker)
+    env = docker.Docker(image="busybox")
+    assert env.checksum() == env.checksum()
+
+
+def test_environment_checksum_recorded_under_each_worker(worker, tmp_path):
+    """The environment identity is recorded whichever process runs the job"""
+    from pydra.compose import shell
+    from pydra.engine.submitter import Submitter
+
+    with Submitter(
+        worker=worker, environment=Tagged(tag="a"), cache_root=tmp_path
+    ) as sub:
+        result = sub(shell.define("whoami")())
+    assert result.environment_checksum == Tagged(tag="a").checksum()
