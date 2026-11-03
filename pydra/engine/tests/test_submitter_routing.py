@@ -251,7 +251,9 @@ def test_extra_workers_are_built_from_names_and_classes(tmp_path):
 
 def test_tag_router_matches_the_first_known_tag():
     route = tag_router({"gpu": "g", "big": "b"})
-    job = lambda *tags: SimpleNamespace(resources=ComputeResources(tags=tags))  # noqa: E731
+    job = lambda *tags: SimpleNamespace(
+        resources=ComputeResources(tags=tags)
+    )  # noqa: E731
     assert route(job("x", "big", "gpu")) == "b"
     assert route(job("gpu")) == "g"
     assert route(job("x")) is None
