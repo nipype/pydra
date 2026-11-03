@@ -1,7 +1,9 @@
+import pickle
 from pathlib import Path
 from fileformats.text import TextFile
 from pydra.compose import python
 from pydra.engine.result import Result, Runtime, copyfile_workflow
+from pydra.utils.general import get_fields
 
 
 @python.define(outputs=["d", "e", "f"])
@@ -45,3 +47,15 @@ def test_copyfile_workflow_conflicting_filenames(tmp_path: Path) -> None:
         "out (1)",
         "out (2)",
     ]
+
+
+def test_result_keeps_classes_pickled_by_value(tmp_path: Path):
+    """Loading a result does not replace the attributes of a task class this process
+    pickled by value, such as its function and the globals that function reads"""
+    namespace = {"__name__": "__main__"}
+    exec("SCALE = 2\n\ndef scale(a: int) -> int:\n    return a * SCALE\n", namespace)
+    Scale = python.define(namespace["scale"])
+    task = Scale(a=1)
+    loaded = pickle.loads(pickle.dumps(Result(cache_dir=tmp_path, task=task)))
+    assert type(loaded.task) is Scale
+    assert get_fields(Scale).function.default is namespace["scale"]

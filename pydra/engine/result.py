@@ -3,6 +3,7 @@
 from pathlib import Path
 import typing as ty
 import attrs
+import io
 import pickle
 import time
 import os
@@ -21,6 +22,43 @@ from pydra.compose import workflow, base
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+
+
+class _ClassKeepingUnpickler(pickle.Unpickler):
+    """Unpickles objects whose classes cloudpickle pickled by value without changing
+    those classes when this process already holds them (when it pickled them): such a
+    class is restored as it is, rather than its attributes, such as the function of a
+    task, being replaced by the pickled copies"""
+
+    def __init__(self, file: ty.BinaryIO):
+        super().__init__(file)
+        self._existing: set[int] = set()
+
+    def find_class(self, module: str, name: str) -> ty.Any:
+        if module == "cloudpickle.cloudpickle":
+            if name == "_make_skeleton_class":
+                return self._make_skeleton_class
+            if name == "_class_setstate":
+                return self._class_setstate
+        return super().find_class(module, name)
+
+    def _make_skeleton_class(self, *args: ty.Any) -> type:
+        tracker_id = args[4]
+        with cp.cloudpickle._DYNAMIC_CLASS_TRACKER_LOCK:
+            existing = tracker_id in cp.cloudpickle._DYNAMIC_CLASS_TRACKER_BY_ID
+        klass = cp.cloudpickle._make_skeleton_class(*args)
+        if existing:
+            self._existing.add(id(klass))
+        return klass
+
+    def _class_setstate(self, obj: type, state: ty.Any) -> type:
+        if id(obj) in self._existing:
+            return obj
+        return cp.cloudpickle._class_setstate(obj, state)
+
+
+def _loads(data: bytes) -> ty.Any:
+    return _ClassKeepingUnpickler(io.BytesIO(data)).load()
 
 
 TaskType = ty.TypeVar("TaskType", bound=base.Task)
@@ -72,7 +110,7 @@ class Result(ty.Generic[OutputsType]):
     def __setstate__(self, state):
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
-                state[attr] = cp.loads(state[attr])
+                state[attr] = _loads(state[attr])
         for name, val in state.items():
             setattr(self, name, val)
 
