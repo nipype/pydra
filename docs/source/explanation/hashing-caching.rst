@@ -88,19 +88,30 @@ Declared versions
 function's qualified name and that version. Only the code is replaced: the walk still
 runs at the task's tier, and the values it reads (closure cells, globals and the
 defaults of the functions it calls) are hashed as they are without a version, so two
-closures made by one factory with different values still have different checksums. A
-versioned task's checksum can never equal a code-hashed one's, because the code part is
-tagged ``version:`` instead of ``ast@1:``. ``checksum=`` (``__checksum__``) remains the
-way to replace the whole checksum.
+closures made by one factory with different values still have different checksums. So
+are the definitions the walk reaches and the library code it names, without their
+code: a refactor that calls another helper or another library function changes the
+checksum under the same version, a recompute rather than a reuse. A versioned task's
+checksum can never equal a code-hashed one's, because the code part is tagged
+``version:`` instead of ``ast@1:``. ``checksum=`` (``__checksum__``) remains the way to
+replace the whole checksum.
+
+Wherever a versioned task is hashed, it is hashed by its version: as a node class a
+workflow's constructor reaches, and as a task passed as an input (as a split task is to
+the workflow that runs its elements). Editing a versioned node therefore leaves the
+workflow's checksum unchanged, as it leaves the node's.
 
 The code the version stands for is not forgotten. Its digest,
 :func:`pydra.utils.hash.code_digest` (the encoded code of every definition the walk
-reaches, without the values), is recorded as ``code`` in the record beside each
-result. A lookup that finds a result of the same checksum, so of the same version and
-values, recorded with another ``code`` digest issues a
-:class:`~pydra.engine.store.DeclaredVersionWarning` naming the task, the version and
-both digests, with the remedy: bump ``version=`` or remove it. The result is in another
-slot, because the digest is part of the record, so:
+reaches, without the values), is recorded in the record beside each result, under
+``code``, by ``module.qualname==version``, for every versioned task the checksum
+reached: the task itself, a workflow's versioned nodes and versioned tasks passed as
+inputs. When a job's context is built, in the submitting process, a result stored under
+the same checksum, so of the same versions and values, recorded with another digest
+issues a :class:`~pydra.engine.store.DeclaredVersionWarning` naming the job, each
+versioned function whose code moved and both digests, with the remedy: bump
+``version=`` or remove it. The result is in another slot, because the digests are part
+of the record, so:
 
 =================  ===========================================================
 ``"exact"``        it is not reused, and the task runs again
@@ -110,11 +121,20 @@ slot, because the digest is part of the record, so:
 =================  ===========================================================
 
 A :class:`~pydra.engine.store.ReusePolicy` object sees ``code`` in both records and
-decides as it compares them; the warning is issued either way. The same digest serves
-a check in the defining project's tests, which compares
-``code_digest(Task)`` with a committed table of ``(task, version, digest)`` and fails
-when a digest moves while its version does not. A function without source is hashed by
-its byte-code, whose digest differs between Python minors.
+decides as it compares them; the warning is issued either way. Under ``"exact"`` a
+workflow, or a split, whose versioned node moved is rebuilt and the node recomputed.
+
+The same digests serve a check in the defining project's CI, against a committed JSON
+table of ``{"module.Task": {"version": ..., "digest": ...}}``:
+
+.. code-block:: bash
+
+    pydracli check-versions versions.json           # exits with 1 on a mismatch
+    pydracli check-versions versions.json --update  # record bumped versions
+
+A digest that moved while its version did not fails either way; a bumped version fails
+until ``--update`` records it. A function without source is hashed by its byte-code,
+whose digest differs between Python minors.
 
 
 Execution contexts and reuse
@@ -139,8 +159,8 @@ recorded in different contexts never overwrite each other:
   ``pydra.tasks.x``) records only its own distribution;
 * ``installed``: a digest of every installed distribution, those in ``packages`` by
   their identities and the others by their versions;
-* ``code``: for a task with a declared version only, the digest of its code (see
-  `Declared versions`_).
+* ``code``: when the checksum reached tasks with declared versions, the digest of the
+  code of each (see `Declared versions`_).
 
 A distribution is identified by its version and, when it was not installed from an
 index, by what it was installed from, which is read only for the distributions a task
