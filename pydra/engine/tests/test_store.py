@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import cloudpickle
 import pytest
-from pydra.compose import workflow
+from pydra.compose import python, workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result
 from pydra.engine.store import PickleStore, ResultStore, context_key
@@ -123,6 +123,65 @@ def test_lease_async_waits_for_holder(tmp_path):
         assert not lease.lockfile.exists()
 
     asyncio.run(contend())
+
+
+@python.define
+def LeaseUser(me: str, root: str, sync: str) -> int:
+    """Take the lease on one key. ``a`` holds it until ``b`` is about to ask for it and
+    has then seen ``b`` stay out for a while; ``b`` only asks once ``a`` holds it"""
+    import os
+    import time
+    from pathlib import Path
+    from pydra.engine.store import PickleStore
+
+    sync = Path(sync)
+
+    def wait_for(name):
+        deadline = time.monotonic() + 60  # bound only
+        while not (sync / name).exists():
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"{name} never appeared")
+            time.sleep(0.01)
+
+    store = PickleStore(Path(root))
+    if me == "b":
+        wait_for("held_a")
+        (sync / "tried_b").touch()
+    with store.acquire("key"):
+        if me == "a":
+            (sync / "held_a").touch()
+            wait_for("tried_b")
+            end = time.monotonic() + 0.5
+            while time.monotonic() < end:
+                assert not (sync / "entered_b").exists(), "b entered while a held the lease"
+                time.sleep(0.01)
+            (sync / "released_a").touch()
+        else:
+            assert (sync / "released_a").exists()
+            (sync / "entered_b").touch()
+    return os.getpid()
+
+
+@workflow.define(outputs=["a", "b"])
+def LeaseContention(root: str, sync: str):
+    a = workflow.add(LeaseUser(me="a", root=root, sync=sync), name="a")
+    b = workflow.add(LeaseUser(me="b", root=root, sync=sync), name="b")
+    return a.out, b.out
+
+
+@pytest.mark.timeout(120)
+def test_lease_excludes_across_processes(tmp_path):
+    """Two cf processes ask for the same lease at once: the second waits for the first
+    to release it"""
+    sync = tmp_path / "sync"
+    sync.mkdir()
+    with Submitter(worker="cf", n_procs=2, cache_root=tmp_path / "cache") as sub:
+        outputs = sub(
+            LeaseContention(root=str(tmp_path / "locks"), sync=str(sync)),
+            raise_errors=True,
+        ).outputs
+    assert outputs.a != outputs.b
+    assert (sync / "entered_b").exists()
 
 
 def test_submitter_default_store(tmp_path):
