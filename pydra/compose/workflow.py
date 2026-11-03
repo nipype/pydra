@@ -114,7 +114,6 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
-    resources: "ComputeResources | None" = None,
 ) -> "Task":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
@@ -136,8 +135,6 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
-    resources: ComputeResources, optional
-        What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
 
     Returns
     -------
@@ -208,7 +205,6 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
-            resources=resources,
         )
 
         defn.__doc__ = constructor.__doc__
@@ -301,7 +297,6 @@ def cast(field: ty.Any, new_type: type[U]) -> U:
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class WorkflowOutputs(base.Outputs):
-
     @classmethod
     def _from_job(cls, job: "Job[WorkflowTask]") -> ty.Self:
         """Collect the outputs of a workflow job from the outputs of the nodes in the
@@ -366,7 +361,6 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class WorkflowTask(base.Task[WorkflowOutputsType]):
-
     _executor_name = "constructor"
 
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("construct",)
