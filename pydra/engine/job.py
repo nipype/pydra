@@ -230,7 +230,7 @@ class Job(ty.Generic[TaskType]):
 
     @property
     def lockfile(self):
-        return self.cache_dir.with_suffix(".lock")
+        return self.store.lockfile(self.checksum)
 
     @property
     def uid(self):
@@ -368,8 +368,7 @@ class Job(ty.Generic[TaskType]):
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                self.store.commit(lease, result)
-                save(self.cache_dir, job=self)
+                self.store.commit(lease, result, job=self)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -429,8 +428,7 @@ class Job(ty.Generic[TaskType]):
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                self.store.commit(lease, result)
-                save(self.cache_dir, job=self)
+                self.store.commit(lease, result, job=self)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
