@@ -484,13 +484,25 @@ class Task(ty.Generic[OutputsType]):
         """The job checksum: the value returned by the class's
         ``__checksum__(self, inputs) -> str`` if it defines one (or is given one by
         ``define(checksum=...)``), when no input is hashed, otherwise the task type and
-        the hash of the inputs"""
+        the hash of the inputs. A supplied value must identify the task as well as its
+        inputs, as jobs with equal checksums share one result and run only once."""
         if hasattr(self, "__checksum__"):
             checksum = self.__checksum__(self._checksum_inputs(hashed=False))
             if not isinstance(checksum, str):
                 raise TypeError(
                     f"__checksum__ of {type(self).__name__} must return a str, "
                     f"not {checksum!r}"
+                )
+            if (
+                checksum in ("", ".", "..")
+                or "\0" in checksum
+                or any(
+                    sep and sep in checksum for sep in ("/", "\\", os.sep, os.altsep)
+                )
+            ):
+                raise ValueError(
+                    f"__checksum__ of {type(self).__name__} must return a single path "
+                    f"component, not {checksum!r}"
                 )
             return checksum
         return f"{self._task_type()}-{self._hash}"
@@ -658,10 +670,13 @@ class Task(ty.Generic[OutputsType]):
 @register_serializer
 def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
     yield f"task[{obj._task_type()}]:(".encode()
-    for field in get_fields(obj):
-        yield f"{field.name}=".encode()
-        yield hash_single(obj._hashed_value(field.name), cache)
-        yield b","
+    if hasattr(obj, "__checksum__"):
+        yield f"__checksum__={obj._checksum},".encode()
+    else:
+        for field in get_fields(obj):
+            yield f"{field.name}=".encode()
+            yield hash_single(obj._hashed_value(field.name), cache)
+            yield b","
     yield b"_splitter="
     yield hash_single(obj._splitter, cache)
     yield b",_combiner="

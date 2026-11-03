@@ -3,10 +3,11 @@ import os
 import threading
 import platform
 import sys
+import typing as ty
 import attrs
 import cloudpickle
 import pytest
-from pydra.compose import python
+from pydra.compose import python, shell, workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result, load_result
 from pydra.engine.store import AnyReuse, ExactReuse, PickleStore, context_key
@@ -96,7 +97,7 @@ def test_context_recorded(tmp_path):
         "python_version": ".".join(platform.python_version_tuple()[:2]),
     }
     assert result.context == job.context
-    assert job.store.lookup(job.checksum, job.context).context == job.context
+    assert job.store.lookup(job.checksum, job.context, job.task).context == job.context
 
 
 def test_exact_reuses_same_context_only(tmp_path):
@@ -140,9 +141,9 @@ def test_contexts_keep_separate_slots(tmp_path):
     _store_result(store, "abc", a)
     _store_result(store, "abc", b)
     assert store.cache_dir("abc", a) != store.cache_dir("abc", b)
-    assert store.lookup("abc", a).context == a
-    assert store.lookup("abc", b).context == b
-    assert store.lookup("abc", {**a, "platform": "q"}) is None
+    assert store.lookup("abc", a, None).context == a
+    assert store.lookup("abc", b, None).context == b
+    assert store.lookup("abc", {**a, "platform": "q"}, None) is None
 
 
 def test_any_prefers_exact_match_in_later_location(tmp_path):
@@ -152,10 +153,10 @@ def test_any_prefers_exact_match_in_later_location(tmp_path):
     _store_result(PickleStore(primary), "abc", b)
     _store_result(PickleStore(ro), "abc", a)
     store = PickleStore(primary, [ro], reuse="any")
-    exact = store.lookup("abc", a)
+    exact = store.lookup("abc", a, None)
     assert exact.cache_dir == ro / "abc" / context_key(a)
     assert not exact.cross_context
-    other = store.lookup("abc", {**a, "environment_checksum": "c"})
+    other = store.lookup("abc", {**a, "environment_checksum": "c"}, None)
     assert other.cross_context
 
 
@@ -265,9 +266,9 @@ def test_combined_lookup_carries_the_job_context(tmp_path):
     seen = []
 
     class Spy(PickleStore):
-        def lookup(self, checksum, context=None, task=None):
+        def lookup(self, checksum, context, task):
             seen.append(context)
-            return super().lookup(checksum, context, task=task)
+            return super().lookup(checksum, context, task)
 
     task = AddOne().split(a=[1, 2]).combine("a")
     with Submitter(cache_root=tmp_path, store=Spy(tmp_path)) as sub:
@@ -314,8 +315,13 @@ class HookedAddOne(python.Task["HookedAddOne.Outputs"]):
         out: int
 
 
+class Unhashable:
+    def __bytes_repr__(self, cache):
+        raise TypeError("Unhashable cannot be hashed")
+
+
 @python.define(checksum=_key)
-def KeyedLogged(a: int, log: str) -> int:
+def KeyedLogged(a: int, log: str, m: ty.Any = None) -> int:
     with open(log, "a") as f:
         f.write("run\n")
     return a + 1
@@ -358,7 +364,7 @@ def test_supplied_checksum_per_split_element(worker, tmp_path):
     log = tmp_path / "log"
     for _ in range(2):
         with Submitter(worker=worker, cache_root=tmp_path / "cache") as sub:
-            result = sub(KeyedLogged(log=str(log)).split(a=[1, 2]))
+            result = sub(KeyedLogged(log=str(log), m=Unhashable()).split(a=[1, 2]))
         assert result.outputs.out == [2, 3]
     assert {p.name for p in (tmp_path / "cache").iterdir() if p.is_dir()} >= {
         "key-1",
@@ -367,40 +373,34 @@ def test_supplied_checksum_per_split_element(worker, tmp_path):
     assert _runs(log) == 2
 
 
-def _reference_checksum(task):
-    """The checksum as computed before tasks could supply their own"""
-    from pydra.compose.base import Out
-    from pydra.utils.general import get_fields
-    from pydra.utils.hash import Cache
-
-    values = {
-        f.name: task._hashed_value(f.name)
-        for f in get_fields(task)
-        if not isinstance(f, Out)
-        and getattr(task, f.name) is not attrs.NOTHING
-        and not getattr(f, "container_path", False)
-    }
-    values["Outputs"] = task.Outputs
-    cache = Cache()
-    hashes = {k: hash_function(v, cache=cache) for k, v in values.items()}
-    return f"{task._task_type()}-{hash_function(sorted(hashes.items()))}"
+@workflow.define
+def GoldenWf(a: int) -> int:
+    return workflow.add(AddOne(a=a)).out
 
 
-def test_tasks_without_hook_keep_checksums():
-    from pydra.compose import shell, workflow
-
-    @workflow.define
-    def Wf(a: int) -> int:
-        return workflow.add(AddOne(a=a)).out
-
-    for task in (
-        AddOne(a=1),
-        python.define(inc_one, version="1")(a=1),
-        shell.define("echo <text:str>")(text="hi"),
-        Wf(a=1),
-    ):
+def test_tasks_without_hook_keep_checksums(monkeypatch):
+    """Checksums of tasks without the hook, as computed at 277bee99. Those of tasks
+    whose function's code is hashed were taken on Python 3.13 and checked only there"""
+    # the module name depends on pytest's import mode, and is part of a declared version
+    monkeypatch.setattr(inc_one, "__module__", "pydra.engine.tests.test_reuse")
+    golden = [
+        (
+            python.define(inc_one, version="1")(a=1),
+            "python-e87e7040c1d7894a31506139707e9425",
+        ),
+        (
+            shell.define("echo <text:str>")(text="hi"),
+            "shell-e04edfe0da3d1efc0d8eb9466535b1fe",
+        ),
+    ]
+    if sys.version_info[:2] == (3, 13):
+        golden += [
+            (AddOne(a=1), "python-d2a20bb9597dd80a2ce9f6389798883f"),
+            (GoldenWf(a=1), "workflow-77702c06de506544103fed56c06413d6"),
+        ]
+    for task, checksum in golden:
         assert not hasattr(task, "__checksum__")
-        assert task._checksum == _reference_checksum(task)
+        assert task._checksum == checksum
 
 
 @attrs.define
@@ -444,8 +444,57 @@ def test_reuse_policy_receives_contexts_and_task(tmp_path):
     policy = Equivalent([])
     store = PickleStore(tmp_path, reuse=policy)
     task = AddOne(a=1)
-    assert store.lookup("abc", b, task=task) is None
+    assert store.lookup("abc", b, task) is None
     assert policy.calls == [(a, b, task)]
     policy.classes.append({"a", "b"})
-    result = store.lookup("abc", b, task=task)
+    result = store.lookup("abc", b, task)
     assert result.cross_context and result.context == a
+
+
+@pytest.mark.parametrize("checksum", ["", ".", "..", "a/b", "/abs", "a\\b", "a\0b"])
+def test_supplied_checksum_must_be_one_path_component(checksum):
+    task = python.define(inc_one, checksum=lambda task, inputs: checksum)(a=1)
+    with pytest.raises(ValueError, match="inc_one.*single path component"):
+        task._checksum
+
+
+def test_supplied_checksum_may_name_a_directory(tmp_path):
+    task = python.define(inc_one, checksum=lambda task, inputs: "key_1.v-2")(a=1)
+    with Submitter(cache_root=tmp_path) as sub:
+        assert sub(task).cache_dir.parent == tmp_path / "key_1.v-2"
+
+
+def _file_key(task, inputs):
+    with open(inputs["path"]) as f:
+        return f"file-{len(f.read())}"
+
+
+@python.define(checksum=_file_key)
+def Appends(path: str) -> int:
+    with open(path, "a") as f:
+        f.write("x")
+    return 0
+
+
+def test_supplied_checksum_change_during_run_raises(tmp_path):
+    path = tmp_path / "data"
+    path.write_text("x")
+    job = Job(
+        task=Appends(path=str(path)),
+        name="j",
+        submitter=Submitter(cache_root=tmp_path / "cache"),
+    )
+    with pytest.raises(RuntimeError, match="changed during its execution"):
+        job.run()
+
+
+class Lenient(ExactReuse):
+    def accept(self, stored, current, task):
+        return True
+
+
+def test_policy_subclass_is_consulted(tmp_path):
+    a = {"environment_checksum": "a", "platform": "p", "python_version": "v"}
+    _store_result(PickleStore(tmp_path), "abc", a)
+    store = PickleStore(tmp_path, reuse=Lenient())
+    assert store.lookup("abc", {**a, "environment_checksum": "b"}, None).cross_context

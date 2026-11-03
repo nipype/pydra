@@ -139,7 +139,8 @@ def define(
     checksum: callable, optional
         A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
         as the task's ``__checksum__``: its return value is the job checksum and
-        neither the constructor nor the input values are hashed
+        neither the constructor nor the input values are hashed. It must identify the task as
+        well as its inputs, as jobs with equal checksums share one result and run once
 
     Returns
     -------

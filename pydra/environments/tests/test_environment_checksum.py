@@ -70,7 +70,7 @@ def test_environment_checksum_recorded_not_in_job_checksum(tmp_path):
 
 def test_environment_checksum_survives_reload(tmp_path):
     job = _run(tmp_path, Tagged(tag="a"))
-    stored = job.store.lookup(job.checksum, job.context)
+    stored = job.store.lookup(job.checksum, job.context, job.task)
     assert stored.environment_checksum == Tagged(tag="a").checksum()
 
 

@@ -471,28 +471,6 @@ class Job(ty.Generic[TaskType]):
         self._run_start_time = datetime.fromtimestamp(stat.st_ctime)
         return self._run_start_time
 
-    def _combined_output(self, return_inputs=False):
-        combined_results = []
-        for gr, ind_l in self.state.final_combined_ind_mapping.items():
-            combined_results_gr = []
-            for ind in ind_l:
-                result = self.store.lookup(
-                    self.checksum_states(ind), self.context, task=self.task
-                )
-                if result is None:
-                    return None
-                if return_inputs is True or return_inputs == "val":
-                    result = (self.state.states_val[ind], result)
-                elif return_inputs is True or return_inputs == "ind":
-                    result = (self.state.states_ind[ind], result)
-                combined_results_gr.append(result)
-            combined_results.append(combined_results_gr)
-        if len(combined_results) == 1 and self.state.splitter_rpn_final == []:
-            # in case it's full combiner, removing the nested structure
-            return combined_results[0]
-        else:
-            return combined_results
-
     def result(self, return_inputs=False):
         """
         Retrieve the outcomes of this particular job.
@@ -543,7 +521,12 @@ class Job(ty.Generic[TaskType]):
         from pydra.utils.typing import TypeParser
 
         if hasattr(self.task, "__checksum__"):
-            return  # the checksum was supplied, no input was hashed
+            if (checksum := self.task._checksum) != self.checksum:
+                raise RuntimeError(
+                    f"The checksum supplied by the '{self.name}' job of {type(self)} type "
+                    f"changed during its execution, from {self.checksum!r} to {checksum!r}"
+                )
+            return
         # For tasks whose input fields contain no FileSet types and no values
         # with custom __bytes_repr__ methods, hashes cannot change during
         # execution (scalar/pure-Python values are immutable from Pydra's

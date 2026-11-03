@@ -115,7 +115,7 @@ class ResultStore(ty.Protocol):
         """The directory the job identified by ``checksum`` runs in under ``context``."""
 
     def lookup(
-        self, checksum: str, context: Context, task: "Task | None" = None
+        self, checksum: str, context: Context, task: "Task | None"
     ) -> Result | None:
         """Return the stored result for ``checksum``, or None if there is none.
 
@@ -168,7 +168,7 @@ class PickleStore:
         return self.cache_root / checksum / context_key(context)
 
     def lookup(
-        self, checksum: str, context: Context, task: "Task | None" = None
+        self, checksum: str, context: Context, task: "Task | None"
     ) -> Result | None:
         locations = [self.cache_root] + self.readonly_caches
         slot = f"{checksum}/{context_key(context)}"
@@ -176,7 +176,7 @@ class PickleStore:
             result = load_result(slot, [location])
             if result is not None:
                 return result
-        if isinstance(self.reuse, ExactReuse):
+        if type(self.reuse) is ExactReuse:
             return None
         for location in locations:
             directory = location / checksum
