@@ -1,5 +1,6 @@
 """Generic object hashing dispatch"""
 
+import builtins
 import sys
 import os
 import ast
@@ -274,6 +275,8 @@ class Cache:
     # the `code_hash` tier of the functions hashed with this cache, `code_hash_default`
     # when None
     code_hash: ty.Optional[str] = attrs.field(default=None)
+    # the library modules reached by the functions hashed with this cache
+    modules: ty.Set[str] = attrs.field(factory=set)
 
     def __getitem__(self, object_id: int) -> Hash:
         return self._hashes[object_id]
@@ -1047,9 +1050,9 @@ def _owner_name(obj: object, holder: object = None) -> str | None:
     return f"{module}.{qualname}" if held else None
 
 
-def _library_instance_name(value: object, name: str) -> str | None:
-    """``module.name`` at which a library module of `value`'s ``__module__`` or type
-    holds `value`, otherwise None"""
+def _library_instance_name(value: object, name: str) -> tuple[str, str] | None:
+    """The module and name at which a library module of `value`'s ``__module__`` or
+    type holds `value`, otherwise None"""
     tp = type(value)
     if tp.__module__ == "builtins":
         return None
@@ -1059,12 +1062,33 @@ def _library_instance_name(value: object, name: str) -> str | None:
         if module is None or not is_library(module):
             continue
         if inspect.getattr_static(module, name, None) is value:
-            return f"{module_name}.{name}"
+            return module_name, name
         attrs_dict = vars(module)
         for key in sorted(attrs_dict):
             if attrs_dict[key] is value:
-                return f"{module_name}.{key}"
+                return module_name, key
     return None
+
+
+def type_module(tp: type) -> str:
+    """The module of a type: its ``__module__``, except for an extension type that
+    reports ``builtins`` without being a builtin, which is attributed to a module that
+    holds it (one of the standard library if any does)"""
+    module = tp.__module__
+    if module != "builtins" or getattr(builtins, tp.__name__, None) is tp:
+        return module
+    return _holder_module(tp) or module
+
+
+@functools.lru_cache(maxsize=256)
+def _holder_module(tp: type) -> str | None:
+    holders = []
+    for name, module in list(sys.modules.items()):
+        namespace = getattr(module, "__dict__", None)
+        if namespace and any(v is tp for v in list(namespace.values())):
+            holders.append(name)
+    stdlib = [h for h in holders if h.partition(".")[0] in STDLIB_MODULES]
+    return (stdlib or holders or [None])[0]
 
 
 _GLOBAL_OPS = frozenset({"LOAD_GLOBAL", "LOAD_NAME", "LOAD_FROM_DICT_OR_GLOBALS"})
@@ -1234,8 +1258,9 @@ class _CodeWalk:
     * any other value by the ordinary value rules, and the type of a user-class
       instance as a reference.
 
-    The top-level packages of the library code and library-typed values it reaches
-    are collected in `packages`, for the record kept beside a result.
+    The modules of the library code and of the library-typed values it reaches are
+    collected in `modules`, and added to the cache's, for the record kept beside a
+    result.
     """
 
     def __init__(self, root: types.FunctionType, cache: Cache, defaults: bool):
@@ -1247,11 +1272,11 @@ class _CodeWalk:
         self.numbers = {id(root): 0}
         # set when a reference is serialized from values, so cannot be memoised
         self.dynamic = False
-        self.packages: set[str] = set()
-        self.found: set[str] = set()  # the packages of the reference being serialized
+        self.modules: set[str] = set()
+        self.found: set[str] = set()  # the modules of the reference being serialized
 
     def library(self, module: str, ref: str) -> bytes:
-        self.found.add(module.partition(".")[0])
+        self.found.add(module)
         return ref.encode()
 
     def in_scope(self, obj: ty.Any) -> bool:
@@ -1322,7 +1347,7 @@ class _CodeWalk:
             return b"<empty>"
         if isinstance(value, types.ModuleType):
             if is_library(value):
-                self.found.add(value.__name__.partition(".")[0])
+                self.found.add(value.__name__)
             return f"module:{value.__name__}".encode()
         if isinstance(value, logging.Logger):
             return f"logger:{value.name}".encode()
@@ -1400,13 +1425,13 @@ class _CodeWalk:
                 )
                 + b"))"
             )
-        if (lib_name := _library_instance_name(value, name)) is not None:
-            return self.library(lib_name, f"lib:{lib_name}")
+        if (owner := _library_instance_name(value, name)) is not None:
+            return self.library(owner[0], f"lib:{owner[0]}.{owner[1]}")
         tp = type(value)
         wrapped = getattr(value, "__dict__", {}).get("__wrapped__")
         self.dynamic = True
         if is_library(tp):
-            self.found.add(tp.__module__.partition(".")[0])
+            self.found.add(type_module(tp))
         if wrapped is not None and callable(value) and is_library(tp):
             return (
                 f"wrapper:{_qualified_name(tp)}(".encode()
@@ -1445,6 +1470,7 @@ class _CodeWalk:
             entries, memo = self.walk(key)
             with _walk_memo_lock:
                 _walk_memo.setdefault(self.root, {})[key] = memo
+        self.cache.modules.update(self.modules)
         if len(entries) == 1 and not entries[0][1]:
             yield entries[0][0]
             return
@@ -1455,13 +1481,13 @@ class _CodeWalk:
 
     def walk(self, key: tuple) -> tuple[list[tuple[bytes, bytes]], "_WalkMemo"]:
         memo = _WalkMemo(self.root, key)
-        self.packages = set()
+        self.modules = set()
         entries = []
         n = 0
         while n < len(self.definitions):
             obj = self.definitions[n]
             if is_library(obj):
-                memo.packages.add(obj.__module__.partition(".")[0])
+                memo.modules.add(obj.__module__)
             if isinstance(obj, type):
                 code = _class_code(obj, self.cache)
                 try:
@@ -1482,7 +1508,7 @@ class _CodeWalk:
                 ref = self.reference(name, value, obj)
                 refs.append(name.encode() + b"=" + ref)
                 held = None if self.dynamic else memo.ref(value)
-                (self.packages if held is None else memo.packages).update(self.found)
+                (self.modules if held is None else memo.modules).update(self.found)
                 checked.append((name, held))
                 statics.append(None if held is None else ref)
             memo.checked.append(checked)
@@ -1493,7 +1519,7 @@ class _CodeWalk:
         memo.definitions = [memo.ref(d) for d in self.definitions]
         if None in memo.definitions:
             memo.definitions = []  # cannot be checked, so never replayed
-        self.packages.update(memo.packages)
+        self.modules.update(memo.modules)
         return entries, memo
 
     def replay(self, memo: "_WalkMemo") -> list[tuple[bytes, bytes]] | None:
@@ -1505,7 +1531,7 @@ class _CodeWalk:
             return None
         self.definitions = definitions
         self.numbers = {id(d): i for i, d in enumerate(definitions)}
-        self.packages = set(memo.packages)
+        self.modules = set(memo.modules)
         entries = []
         for obj, checked, code, statics in zip(
             definitions, memo.checked, memo.codes, memo.parts
@@ -1521,7 +1547,7 @@ class _CodeWalk:
                 if static is None:
                     self.found = set()
                     static = self.reference(name, value, obj)
-                    self.packages.update(self.found)
+                    self.modules.update(self.found)
                 parts.append(name.encode() + b"=" + static)
             entries.append((code, b",".join(parts)))
         if len(self.definitions) != len(definitions):
@@ -1549,7 +1575,7 @@ class _WalkMemo:
     the definitions it reached, to what each read and to their code, the code, the
     serialization of each reference that is not serialized from values (None for
     those that are, or that cannot be referenced weakly), the mtimes of the source
-    files reached, and the packages of the library code reached by the definitions
+    files reached, and the modules of the library code reached by the definitions
     and by the references it serialized. It is reused while those files keep their
     mtimes and every reference read is still the same object, and dropped when any of
     them dies."""
@@ -1560,7 +1586,7 @@ class _WalkMemo:
         self.codes: list[bytes] = []
         self.parts: list[list[bytes | None]] = []
         self.files: dict[str, int | None] = {}
-        self.packages: set[str] = set()
+        self.modules: set[str] = set()
         root_ref = weakref.ref(root)
         memo_ref = weakref.ref(self)
 
@@ -1607,17 +1633,17 @@ def _bytes_repr_code(
     yield b")"
 
 
-def library_packages(func: types.FunctionType) -> frozenset[str]:
-    """The top-level packages of the library code, and library-typed values, that
-    `func` reaches at the ``"user"`` tier, whatever its own tier, and of `func` itself
-    if it is library code (see `is_library`). The walk is the memoised one that
-    hashes the function, so it costs nothing more for a task at that tier."""
+def library_modules(func: types.FunctionType) -> frozenset[str]:
+    """The modules of the library code, and of the library-typed values, that `func`
+    reaches at the ``"user"`` tier, and `func`'s own if it is library code (see
+    `is_library`). It walks the function again, so it is for a task whose checksum
+    did not walk it at that tier."""
     if in_stdlib(func) or is_library(func):
-        return frozenset({func.__module__.partition(".")[0]})
-    walk = _CodeWalk(func, Cache(code_hash="user"), defaults=False)
-    for _ in walk:
+        return frozenset({func.__module__})
+    cache = Cache(code_hash="user")
+    for _ in _CodeWalk(func, cache, defaults=False):
         pass
-    return frozenset(walk.packages)
+    return frozenset(cache.modules)
 
 
 @register_serializer

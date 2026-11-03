@@ -227,6 +227,7 @@ class Job(ty.Generic[TaskType]):
         selects the job's slot in the store, is recorded on its result and is what a
         later job's context is compared with, so every process uses this one object."""
         if self._context is None:
+            self.checksum  # collects the library modules the task's code reaches
             self._context = job_context(self.task, self.environment)
         return self._context
 
