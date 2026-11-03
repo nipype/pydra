@@ -4,6 +4,8 @@ import threading
 import platform
 import sys
 import typing as ty
+import uuid
+from pathlib import Path
 import attrs
 import cloudpickle
 import pytest
@@ -182,15 +184,21 @@ def test_exact_reruns_in_other_context(worker, tmp_path):
         assert result.environment_checksum == Tagged(tag=tag).checksum()
 
 
+def _record_run(log):
+    """One file per run, since appends from concurrent processes to one file can be
+    lost on Windows"""
+    Path(log).mkdir(exist_ok=True)
+    (Path(log) / uuid.uuid4().hex).touch()
+
+
 @python.define
 def Logged(a: int, log: str) -> int:
-    with open(log, "a") as f:
-        f.write("run\n")
+    _record_run(log)
     return a + 1
 
 
 def _runs(log):
-    return len(log.read_text().splitlines())
+    return len(list(Path(log).iterdir()))
 
 
 def test_worker_reuse_is_judged_by_the_recorded_context(tmp_path):
@@ -322,8 +330,7 @@ class Unhashable:
 
 @python.define(checksum=_key)
 def KeyedLogged(a: int, log: str, m: ty.Any = None) -> int:
-    with open(log, "a") as f:
-        f.write("run\n")
+    _record_run(log)
     return a + 1
 
 
