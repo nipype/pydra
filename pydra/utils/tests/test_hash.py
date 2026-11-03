@@ -1,3 +1,4 @@
+import functools
 import logging
 import re
 import os
@@ -727,6 +728,86 @@ def test_hash_function_ufunc_global_is_its_name():
     assert hash_function(exponential) == hash_function(
         types.FunctionType(exponential.__code__, {"exp": numpy.exp})
     )
+
+
+class _Counter:
+    def __init__(self):
+        self.n = 0
+
+    def bump(self):
+        self.n += 1
+        return self.n
+
+
+class _CallableInstance:
+    def __call__(self, x):
+        return x
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        _Counter().bump,
+        functools.update_wrapper(_CallableInstance(), len),
+        numpy.vectorize(lambda x: x + 1),
+        [].append,
+    ],
+    ids=["bound-method", "wrapped-instance", "vectorize", "bound-builtin"],
+)
+def test_hash_function_stateful_callable_is_rejected(value):
+    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k'"):
+        hash_function(_adder(value))
+
+
+def test_hash_function_static_bound_callables():
+    """A bound method or builtin is static when what it is bound to is"""
+    assert hash_function(_adder("-".join)) != hash_function(_adder("+".join))
+    assert hash_function(_adder(_Frozen(1).__repr__)) != hash_function(
+        _adder(_Frozen(2).__repr__)
+    )
+
+
+@attrs.frozen
+class _FrozenScratch:
+    k: int
+    scratch: dict = attrs.field(eq=False, factory=dict)
+
+
+def test_hash_function_frozen_attrs_with_mutable_field_is_rejected():
+    with pytest.raises(NonStaticReferenceError, match=r"reads the closure 'k'"):
+        hash_function(_adder(_FrozenScratch(1)))
+
+
+def _helper(x):
+    return x + 1
+
+
+def uses_helper(x):
+    return _helper(x)
+
+
+def _ping(n):
+    return n if n <= 0 else _pong(n - 1)
+
+
+def _pong(n):
+    return n if n <= 0 else _ping(n - 1)
+
+
+def test_hash_function_same_module_helper_is_hashed_by_definition():
+    """Editing a helper in the task's module changes the task's checksum, while one
+    from another module is identified by name"""
+
+    def edited(x):
+        return x + 2
+
+    edited.__module__, edited.__qualname__ = _helper.__module__, _helper.__qualname__
+    other = types.FunctionType(
+        uses_helper.__code__, {**uses_helper.__globals__, "_helper": edited}
+    )
+    assert hash_function(other) != hash_function(uses_helper)
+    assert hash_function(_ping) == hash_function(_ping)  # mutual recursion ends
+    assert hash_function(_ping) != hash_function(_pong)
 
 
 def test_hash_function_non_static_closure_is_rejected():

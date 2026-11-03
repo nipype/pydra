@@ -36,8 +36,8 @@ logger = logging.getLogger("pydra")
 FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 
 # Module-level cache for function source bytes to avoid repeated disk I/O and
-# AST parsing. Key: (module, qualname, source_file_mtime_ns); value: bytes of
-# the function's inner content (between "function:(" and ")").
+# AST parsing. Key: (module, qualname, source file, first line, source-file mtime);
+# value: bytes of the function's inner content (between "function:(" and ")").
 _function_bytes_cache: dict[tuple, bytes] = {}
 
 try:
@@ -689,7 +689,11 @@ def _parse_function_source_bytes(src: str) -> bytes:
 
 class NonStaticReferenceError(TypeError):
     """A function reads a global or closure value that is not static, so the function
-    cannot be hashed by its definition"""
+    cannot be hashed by its definition. Pass such a value as an explicit task input.
+
+    A path is static, but it is hashed as its string, not as the contents of the file
+    it names: a file whose contents a task reads must be an explicit (``File``) input.
+    """
 
 
 class _NotStatic(Exception):
@@ -697,7 +701,9 @@ class _NotStatic(Exception):
 
 
 _STATIC_SCALARS = (type(None), type(Ellipsis), bool, int, float, complex, str, bytes)
-_STATIC_IDENTITIES = (types.FunctionType, types.BuiltinFunctionType, type)
+_STATIC_CALLABLES: tuple[type, ...] = (types.BuiltinFunctionType,)
+if HAVE_NUMPY:
+    _STATIC_CALLABLES += (numpy.ufunc,)
 
 
 @functools.lru_cache(maxsize=4096)
@@ -727,20 +733,47 @@ def _is_frozen_attrs(value: object) -> bool:
         return tp.__setattr__ is getattr(attr._make, "_frozen_setattrs", None)
 
 
-def _bytes_repr_static(value: object, cache: Cache) -> Iterator[bytes]:
-    """Serialize a static value: a module, function or class by its module and
-    qualname (plus its definition when that name is not unique, i.e. it is local or
-    generated), any other callable with a module and name (e.g. a builtin or numpy ufunc)
-    by its module and name, a logger by its name, or an immutable value: a scalar, a
-    path, a frozen attrs instance, or a tuple or frozenset, of static values. Raises
-    _NotStatic for any other value."""
+def _bytes_repr_static(value: object, home: str, cache: Cache) -> Iterator[bytes]:
+    """Serialize a static value read by a function of module ``home``:
+
+    * a module by its name, and a logger by its name;
+    * a function or class by its module and qualname, plus its definition (hashed
+      recursively, cycles included) for a function of ``home`` and for a local or
+      generated function or class;
+    * a builtin function or numpy ufunc by its module and name, a bound method or
+      bound builtin together with its (static) ``__self__``;
+    * an immutable value: a scalar; a path, as its string and not the contents of the
+      file it names; a frozen attrs instance, all of whose fields are static; or a tuple
+      or frozenset of static values.
+
+    Raises _NotStatic for any other value, including other callable objects."""
     if isinstance(value, types.ModuleType):
         yield f"module:{value.__name__}".encode()
-    elif isinstance(value, _STATIC_IDENTITIES):
+    elif isinstance(value, logging.Logger):
+        yield f"logger:{value.name}".encode()
+    elif isinstance(value, (types.FunctionType, type)):
         module = getattr(value, "__module__", None)
         yield f"identity:{module}.{value.__qualname__}".encode()
-        if "<locals>" in value.__qualname__ or module in (None, "types"):
+        if (
+            "<locals>" in value.__qualname__
+            or module in (None, "types")
+            or (module == home and isinstance(value, types.FunctionType))
+        ):
             yield bytes(hash_single(value, cache))
+    elif isinstance(value, types.MethodType):
+        yield b"method:("
+        yield from _bytes_repr_static(value.__func__, home, cache)
+        yield b","
+        yield from _bytes_repr_static(value.__self__, home, cache)
+        yield b")"
+    elif isinstance(value, _STATIC_CALLABLES):
+        name = getattr(value, "__qualname__", None) or value.__name__
+        yield f"callable:{getattr(value, '__module__', None)}.{name}".encode()
+        bound = getattr(value, "__self__", None)
+        if bound is not None and not isinstance(bound, types.ModuleType):
+            yield b",self:("
+            yield from _bytes_repr_static(bound, home, cache)
+            yield b")"
     elif isinstance(value, _STATIC_SCALARS):
         yield from bytes_repr(value, cache)
     elif isinstance(value, PurePath):
@@ -749,23 +782,15 @@ def _bytes_repr_static(value: object, cache: Cache) -> Iterator[bytes]:
         tp = type(value)
         yield f"frozen:{tp.__module__}.{tp.__qualname__}:(".encode()
         for field in attrs.fields(tp):
-            if field.eq:
-                yield f"{field.name}=".encode()
-                yield from _bytes_repr_static(getattr(value, field.name), cache)
-                yield b","
+            yield f"{field.name}=".encode()
+            yield from _bytes_repr_static(getattr(value, field.name), home, cache)
+            yield b","
         yield b")"
     elif isinstance(value, (tuple, frozenset)):
-        items = [b"".join(_bytes_repr_static(v, cache)) for v in value]
+        items = [b"".join(_bytes_repr_static(v, home, cache)) for v in value]
         yield f"{type(value).__name__}:(".encode()
         yield from sorted(items) if isinstance(value, frozenset) else items
         yield b")"
-    elif isinstance(value, logging.Logger):
-        yield f"logger:{value.name}".encode()
-    elif callable(value) and isinstance(getattr(value, "__module__", None), str):
-        name = getattr(value, "__qualname__", None) or getattr(value, "__name__", None)
-        if not isinstance(name, str):
-            raise _NotStatic()
-        yield f"identity:{value.__module__}.{name}".encode()
     else:
         raise _NotStatic()
 
@@ -795,14 +820,16 @@ def bytes_repr_function_references(
             yield from bytes_repr(name, cache)
             yield b"="
             try:
-                yield b"".join(_bytes_repr_static(values[name], cache))
+                yield b"".join(_bytes_repr_static(values[name], obj.__module__, cache))
             except _NotStatic:
                 tp = type(values[name])
                 raise NonStaticReferenceError(
                     f"function {obj.__qualname__!r} reads the {label} {name!r} of type "
                     f"`{tp.__module__}.{tp.__qualname__}`, which is not a function, "
-                    "class, module or immutable value, so its checksum would depend "
-                    "on runtime state; make it an explicit task input"
+                    "class, module, builtin or immutable value, so its checksum would "
+                    "depend on runtime state; make it an explicit task input (and a "
+                    "file the task reads an explicit File input, as a path is hashed "
+                    "by its string, not the file's contents)"
                 ) from None
             yield b","
         yield b")"
@@ -817,14 +844,20 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
     if in_stdlib(obj):
         yield f"{obj.__module__}.{obj.__name__}".encode()
     else:
-        # Build a cache key from (module, qualname, source-file mtime).
+        # Build a cache key from (module, qualname, source position and mtime).
         # os.stat() is a single cheap syscall; if successful we can avoid
         # both inspect.getsource() and ast.parse() on repeated calls.
-        cache_key: tuple[str, str, int] | None = None
+        cache_key: tuple[str, str, str, int, int] | None = None
         try:
             source_file = inspect.getfile(obj)
             mtime_ns = os.stat(source_file).st_mtime_ns
-            cache_key = (obj.__module__, obj.__qualname__, mtime_ns)
+            cache_key = (
+                obj.__module__,
+                obj.__qualname__,
+                source_file,
+                obj.__code__.co_firstlineno,
+                mtime_ns,
+            )
         except (OSError, TypeError):
             pass
 
