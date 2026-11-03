@@ -296,6 +296,47 @@ def test_readiness_async(tmp_path):
     assert outputs.out == [0, 1]
 
 
+@pytest.mark.timeout(120)
+def test_readiness_upstream_fails_while_sibling_released_cf(tmp_path):
+    """Under two cf processes, an upstream element fails while the downstream element of
+    its sibling is already running: the failing element only raises once that downstream
+    element has written a marker, so the two jobs overlap, and the released element still
+    runs although the run ends in the upstream error"""
+
+    @python.define
+    def FailAfter(x: int, marker: str) -> int:
+        import time
+        from pathlib import Path
+
+        if x:
+            deadline = time.monotonic() + 60
+            while not Path(marker).exists():
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{marker} was not written")
+                time.sleep(0.05)
+            raise ValueError("upstream element failed")
+        return x
+
+    @python.define
+    def Mark(x: int, marker: str) -> int:
+        from pathlib import Path
+
+        Path(marker).touch()
+        return x
+
+    @workflow.define
+    def Handshake(xs, marker):
+        a = workflow.add(FailAfter(marker=marker).split(x=xs), name="A")
+        b = workflow.add(Mark(x=a.out, marker=marker), name="B")
+        return b.out
+
+    marker = tmp_path / "marker"
+    task = Handshake(xs=[0, 1], marker=str(marker))
+    with pytest.raises(Exception, match="upstream element failed"):
+        task(worker="cf", n_procs=2, cache_root=tmp_path / "cache")
+    assert marker.exists()
+
+
 # Each case: the workflow, the upstream elements that succeed before the failure (which
 # release downstream element 0), the upstream element that fails (read by downstream
 # element 1), the output of downstream element 0, and the error the failing element
