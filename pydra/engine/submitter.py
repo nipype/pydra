@@ -23,7 +23,12 @@ from pydra.utils.hash import PersistentCache
 from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
-from pydra.engine.store import PickleStore, ResultStore, ReusePolicy
+from pydra.engine.store import (
+    PickleStore,
+    ResultStore,
+    ReusePolicy,
+    remove_from_cache,
+)
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_root
 from pydra.compose import workflow
@@ -749,7 +754,7 @@ class Submitter:
             for job in tasks:
                 start_time = job.run_start_time
                 if start_time and start_time < self.run_start_time:
-                    job.lockfile.unlink()
+                    remove_from_cache(job.lockfile)
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """Parse a graph and return all runnable tasks.

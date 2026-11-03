@@ -1,4 +1,6 @@
 import asyncio
+import errno
+import os
 import sys
 from pathlib import Path
 import cloudpickle
@@ -6,7 +8,14 @@ import pytest
 from pydra.compose import python, workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result
-from pydra.engine.store import PickleStore, ResultStore, context_key
+from pydra.engine import store as store_module
+from pydra.engine.store import (
+    CacheBusyError,
+    PickleStore,
+    ResultStore,
+    context_key,
+    remove_from_cache,
+)
 from pydra.engine.submitter import Submitter
 from pydra.engine.tests import utils as test_utils
 from pydra.engine.tests.utils import FunAddTwo
@@ -285,3 +294,108 @@ def test_picklestore_slots(tmp_path):
     assert list(store.slots("def")) == [store.cache_dir("def", CTX)]
     assert len(list(store.slots())) == 3
     assert list(store.slots("missing")) == []
+
+
+def _ebusy(name):
+    return OSError(errno.EBUSY, "Device or resource busy", name)
+
+
+def _sharing_violation(name):
+    error = PermissionError(
+        errno.EACCES,
+        "The process cannot access the file because it is being used by another process",
+        name,
+        32,
+    )
+    if getattr(error, "winerror", None) is None:
+        error.winerror = 32
+    return error
+
+
+@pytest.fixture
+def held_open(monkeypatch):
+    """Makes ``os.unlink`` of files with a given name fail as if another process held
+    them open, a given number of times; records every refused attempt"""
+    monkeypatch.setattr(store_module, "REMOVE_BACKOFF", 0)
+    refused = []
+
+    def hold(name, times, error=_ebusy):
+        unlink = os.unlink
+
+        def held_unlink(path, *args, **kwargs):
+            if os.path.basename(path) == name and len(refused) < times:
+                refused.append(path)
+                raise error(os.fspath(path))
+            return unlink(path, *args, **kwargs)
+
+        monkeypatch.setattr(os, "unlink", held_unlink)
+        return refused
+
+    return hold
+
+
+def _slot_with_result(tmp_path):
+    slot = tmp_path / "abc" / KEY
+    slot.mkdir(parents=True)
+    (slot / "_result.pklz").write_bytes(b"result")
+    return slot
+
+
+@pytest.mark.parametrize("error", [_ebusy, _sharing_violation])
+def test_remove_from_cache_retries_a_held_file(tmp_path, held_open, error):
+    slot = _slot_with_result(tmp_path)
+    refused = held_open("_result.pklz", 2, error)
+    remove_from_cache(slot)
+    assert not slot.exists()
+    assert len(refused) == 2
+
+
+@pytest.mark.parametrize("error", [_ebusy, _sharing_violation])
+def test_remove_from_cache_raises_cache_busy_when_held(tmp_path, held_open, error):
+    slot = _slot_with_result(tmp_path)
+    refused = held_open("_result.pklz", store_module.REMOVE_ATTEMPTS + 1, error)
+    with pytest.raises(CacheBusyError) as excinfo:
+        remove_from_cache(slot)
+    assert len(refused) == store_module.REMOVE_ATTEMPTS
+    assert excinfo.value.filename == str(slot)
+    assert Path(excinfo.value.filename2).name == "_result.pklz"
+    assert "held open by another process" in str(excinfo.value)
+    assert (slot / "_result.pklz").exists()
+    assert isinstance(
+        cloudpickle.loads(cloudpickle.dumps(excinfo.value)), CacheBusyError
+    )
+
+
+def test_remove_from_cache_raises_other_errors_at_once(tmp_path, held_open):
+    slot = _slot_with_result(tmp_path)
+    refused = held_open(
+        "_result.pklz", 2, lambda n: PermissionError(errno.EACCES, "denied", n)
+    )
+    with pytest.raises(PermissionError) as excinfo:
+        remove_from_cache(slot)
+    assert not isinstance(excinfo.value, CacheBusyError)
+    assert len(refused) == 1
+
+
+def test_remove_from_cache_removes_a_held_lockfile(tmp_path, held_open):
+    lockfile = tmp_path / "abc.lock"
+    lockfile.write_text("")
+    refused = held_open("abc.lock", 1)
+    remove_from_cache(lockfile)
+    assert not lockfile.exists()
+    assert len(refused) == 1
+
+
+@pytest.mark.parametrize("times", [2, store_module.REMOVE_ATTEMPTS])
+def test_rerun_clears_a_held_slot(tmp_path, held_open, times):
+    task = FunAddTwo(a=1)
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        assert sub(task).outputs.out == 3
+    refused = held_open("_result.pklz", times)
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        if times < store_module.REMOVE_ATTEMPTS:
+            assert sub(task, rerun=True).outputs.out == 3
+        else:
+            with pytest.raises(CacheBusyError, match="_result.pklz"):
+                sub(task, rerun=True)
+    assert len(refused) == times

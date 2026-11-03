@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 import typing as ty
 from uuid import uuid4
-import shutil
 from traceback import format_exception
 import attr
 import cloudpickle as cp
@@ -18,6 +17,7 @@ from pydra.utils.hash import hash_function
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
+from pydra.engine.store import remove_from_cache
 from pydra.engine.result import (
     RuntimeSpec,
     Result,
@@ -317,7 +317,7 @@ class Job(ty.Generic[TaskType]):
         with open(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
         if not self.can_resume and self.cache_dir.exists():
-            shutil.rmtree(self.cache_dir)
+            remove_from_cache(self.cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=self.can_resume)
         # Save job pkl into the output directory for future reference
         save(self.cache_dir, job=self)
@@ -377,7 +377,7 @@ class Job(ty.Generic[TaskType]):
                 self.store.commit(lease, result, job=self)
                 self._awaiting_run = False
                 # removing the additional file with the checksum
-                (self.cache_root / f"{self.uid}_info.json").unlink()
+                remove_from_cache(self.cache_root / f"{self.uid}_info.json")
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
@@ -439,7 +439,7 @@ class Job(ty.Generic[TaskType]):
                 self.store.commit(lease, result, job=self)
                 self._awaiting_run = False
                 # removing the additional file with the checksum
-                (self.cache_root / f"{self.uid}_info.json").unlink()
+                remove_from_cache(self.cache_root / f"{self.uid}_info.json")
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution

@@ -1,9 +1,13 @@
 """Result stores: where jobs run and where their results are kept."""
 
 import asyncio
+import errno
 import hashlib
 import json
 import os
+import shutil
+import sys
+import time
 import typing as ty
 from pathlib import Path
 import attrs
@@ -17,6 +21,76 @@ if ty.TYPE_CHECKING:
 
 Context = ty.Mapping[str, ty.Any]
 """The execution context that produced a result, recorded beside it."""
+
+REMOVE_ATTEMPTS = 5
+"""How many times ``remove_from_cache`` tries to remove a path held open by another process."""
+
+REMOVE_BACKOFF = 0.1
+"""Seconds ``remove_from_cache`` waits after its first failed attempt, doubled after each further one."""
+
+_BUSY_ERRNOS = frozenset({errno.EBUSY, errno.ENOTEMPTY})
+_BUSY_WINERRORS = frozenset({32, 33})  # ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
+
+
+class CacheBusyError(OSError):
+    """A path in a cache could not be removed because another process holds a file in it open.
+
+    ``filename`` is the path being removed and ``filename2`` the file that was held open.
+    """
+
+
+def is_busy(error: OSError) -> bool:
+    """Whether ``error`` reports a file held open by another process."""
+    return (
+        getattr(error, "winerror", None) in _BUSY_WINERRORS
+        or error.errno in _BUSY_ERRNOS
+    )
+
+
+def remove_from_cache(path: Path) -> None:
+    """Remove the file or directory tree at ``path``.
+
+    A removal that fails because another process holds a file open is tried
+    ``REMOVE_ATTEMPTS`` times with exponential backoff, then raises ``CacheBusyError``.
+    Any other error is raised as it is.
+    """
+    path = Path(path)
+    failed: list[str] = []
+
+    def record(func, failed_path, error):
+        failed.append(failed_path)
+        raise error
+
+    if sys.version_info >= (3, 12):
+        handler = {"onexc": record}
+    else:
+        handler = {"onerror": lambda f, p, exc_info: record(f, p, exc_info[1])}
+    delay = REMOVE_BACKOFF
+    for attempt in range(1, REMOVE_ATTEMPTS + 1):
+        failed.clear()
+        try:
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path, **handler)
+            else:
+                path.unlink()
+            return
+        except OSError as error:
+            if not is_busy(error):
+                raise
+            if attempt == REMOVE_ATTEMPTS:
+                held = failed[0] if failed else path
+                raise CacheBusyError(
+                    error.errno,
+                    f"could not remove {path} after {REMOVE_ATTEMPTS} attempts because "
+                    f"{held} is held open by another process (on Windows typically a "
+                    "virus scanner, a search indexer or a process whose working directory "
+                    "is inside it; on NFS a process on any client)",
+                    str(path),
+                    None,
+                    str(held),
+                ) from error
+        time.sleep(delay)
+        delay *= 2
 
 
 @ty.runtime_checkable
