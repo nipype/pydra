@@ -7,7 +7,7 @@ name: CI/CD
 #   fast  every PR push: debug-worker tests plus a reduced set of real-worker (cf) tests on
 #         one Linux and one macOS job; no wall-clock tests, no slurm/docker/singularity/lmod,
 #         no docs; Python 3.13 only, on Linux, macOS and Windows
-#   full  PRs that are marked ready for review or carry the `release` label, merge queue
+#   full  PRs that carry the `full-ci` or `release` label (every push while present), merge queue
 #         runs (merge_group), pushes to main, releases, manual runs and the weekly schedule:
 #         the whole OS x Python 3.11-3.15 matrix with every test, plus singularity, lmod,
 #         slurm and docs
@@ -15,7 +15,7 @@ name: CI/CD
 # image caches are refreshed before GitHub evicts them after 7 days, and publishes the
 # Slurm image to ghcr.io when its tag is missing (see `slurm-image`).
 # The `CI gate` job is the one check branch protection should require: it fails unless the
-# full tier passed on a non-draft PR, so nothing reaches main without the full suite.
+# full tier passed on a non-draft PR (add the `full-ci` label to run it), so nothing reaches main without the full suite.
 on:
   release:
     types: [published]
@@ -31,13 +31,14 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Mondays 06:00 UTC, default branch only
 
-# Only PR runs cancel each other. Releases, pushes to main, merge-queue, scheduled and manual runs
-# each have their own group and are never cancelled, so nothing can cancel the deploy. A label
-# event other than `release` gets a unique group so it cannot cancel the run in progress.
+# Only PR runs cancel each other (a `full-ci`/`release` label run cancels older runs of the same
+# PR). Releases, pushes to main, merge-queue, scheduled and manual runs each have their own group
+# and are never cancelled, so nothing can cancel the deploy. A label event other than
+# `full-ci`/`release` gets a unique group so it cannot cancel the run in progress.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
-    (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'release' && github.run_id || 'ci' }}
+    (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'release' && github.event.label.name != 'full-ci' && github.run_id || 'ci' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -69,11 +70,11 @@ jobs:
           full=true
           if [ "$EVENT" = pull_request ]; then
             full=false
-            if jq -e 'index("release")' <<<"$LABELS" >/dev/null || [ "$ACTION" = ready_for_review ]; then
+            if jq -e 'index("release") or index("full-ci")' <<<"$LABELS" >/dev/null; then
               full=true
             fi
-            # a label other than `release` changes nothing: skip the whole run
-            case "$ACTION" in labeled|unlabeled) [ "$LABEL" = release ] || run=false ;; esac
+            # a label other than `release` or `full-ci` changes nothing: skip the whole run
+            case "$ACTION" in labeled|unlabeled) [ "$LABEL" = release ] || [ "$LABEL" = full-ci ] || run=false ;; esac
           fi
           if [ "$full" = true ]; then
             # latest dependencies on every OS x Python; pre-release dependencies on the default
@@ -410,7 +411,7 @@ jobs:
             fi
           done
           if [ "$EVENT" = pull_request ] && [ "$FULL" != true ] && [ "$DRAFT" != true ]; then
-            echo "Only the fast tier ran for this commit. Add the 'release' label to run the full tier."
+            echo "Only the fast tier ran for this commit. To fix: add the `full-ci` label (or run the CI/CD workflow manually on this branch)."
             exit 1
           fi
 
