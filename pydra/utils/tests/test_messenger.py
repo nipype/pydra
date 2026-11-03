@@ -3,6 +3,7 @@ import hashlib
 import importlib.resources
 import io
 import json
+import pyld
 import pytest
 from pydra.utils.messenger import (
     PrintMessenger,
@@ -74,11 +75,26 @@ def test_messages_carry_the_packaged_context():
 def test_packaged_contexts_match_their_record(no_network):
     sources = json.loads((SCHEMA / "contexts.json").read_text())
     for iri, entry in sources.items():
-        packaged = (SCHEMA / entry["file"]).read_bytes()
-        assert document_loader(iri)["document"] == json.loads(packaged)
-        if "sha256" in entry:
-            assert hashlib.sha256(packaged).hexdigest() == entry["sha256"]
+        packaged = json.loads((SCHEMA / entry["file"]).read_text())
+        assert document_loader(iri)["document"] == packaged
+        if "content_sha256" in entry:
+            canonical = json.dumps(packaged, sort_keys=True, separators=(",", ":"))
+            assert (
+                hashlib.sha256(canonical.encode()).hexdigest()
+                == entry["content_sha256"]
+            )
             assert entry["commit"] in iri
+            assert not set(entry["removed"]) & set(packaged["@context"])
+
+
+def test_packaged_context_expands_prefixed_terms(no_network):
+    message = make_message(
+        {"@id": "uid:1", "@type": "prov:Generation", "prov:wasGeneratedBy": "uid:2"}
+    )
+    (expanded,) = pyld.jsonld.expand(message, {"documentLoader": document_loader})
+    prov = "http://www.w3.org/ns/prov#"
+    assert expanded["@type"] == [prov + "Generation"]
+    assert expanded[prov + "wasGeneratedBy"] == [{"@id": "http://s.pydra.org/id/2"}]
 
 
 @pytest.mark.parametrize(

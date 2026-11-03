@@ -3,7 +3,18 @@
     "file": "prov-jsonld-context.json",
     "source": "https://github.com/openprov/prov-jsonld/blob/69964ed16818f78dc5f71bdf97add026288291d4/context.json",
     "commit": "69964ed16818f78dc5f71bdf97add026288291d4",
-    "sha256": "0f048ba926e73ad0fefb0f50141ff20f756734986276a4dca006b8bc9a555927"
+    "source_sha256": "0f048ba926e73ad0fefb0f50141ff20f756734986276a4dca006b8bc9a555927",
+    "derivation": "the source's term definitions placed under @context, without the terms in 'removed', each a term in the form of an IRI that expands to a different IRI, which JSON-LD 1.1 rejects",
+    "removed": [
+      "prov:role",
+      "prov:type",
+      "prov:label",
+      "prov:location",
+      "prov:Specialization",
+      "prov:Membership",
+      "prov:Alternate"
+    ],
+    "content_sha256": "81d4450be40d470d14373e1b1091fac76eaf23059fe7ffd8f8c6b45ff5a11b10"
   },
   "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld": {
     "file": "context.jsonld",
