@@ -213,24 +213,21 @@ class Job(ty.Generic[TaskType]):
 
     @property
     def context(self) -> dict[str, str]:
-        """The execution context of the process that submitted the job, compared with
-        the context recorded on a result from an earlier job to decide whether to reuse
-        it. It travels with the job, so the decision is the same in every process."""
+        """The execution context of the job, built once and carried with it to the
+        worker. It selects the job's slot in the store, is recorded on its result and
+        is what a later job's context is compared with, so every process uses this one
+        object."""
         if self._context is None:
-            self._context = self._current_context()
+            self._context = {
+                "environment_checksum": self.environment.checksum(),
+                "platform": f"{sys.platform}-{platform.machine()}",
+                "python_version": ".".join(platform.python_version_tuple()[:2]),
+            }
         return self._context
-
-    def _current_context(self) -> dict[str, str]:
-        """The execution context of this process, recorded beside the job's result."""
-        return {
-            "environment_checksum": self.environment.checksum(),
-            "platform": f"{sys.platform}-{platform.machine()}",
-            "python_version": ".".join(platform.python_version_tuple()[:2]),
-        }
 
     @property
     def lockfile(self):
-        return self.store.lockfile(self.checksum)
+        return self.store.lockfile(self.checksum, self.context)
 
     @property
     def uid(self):
@@ -253,7 +250,7 @@ class Job(ty.Generic[TaskType]):
     @property
     def cache_dir(self):
         """Get the filesystem path where outputs will be written."""
-        return self.store.cache_dir(self.checksum)
+        return self.store.cache_dir(self.checksum, self.context)
 
     @property
     def inputs(self) -> dict[str, ty.Any]:
@@ -313,7 +310,7 @@ class Job(ty.Generic[TaskType]):
             json.dump({"checksum": self.checksum}, jsonfile)
         if not self.can_resume and self.cache_dir.exists():
             shutil.rmtree(self.cache_dir)
-        self.cache_dir.mkdir(parents=False, exist_ok=self.can_resume)
+        self.cache_dir.mkdir(parents=True, exist_ok=self.can_resume)
         # Save job pkl into the output directory for future reference
         save(self.cache_dir, job=self)
 
@@ -332,7 +329,7 @@ class Job(ty.Generic[TaskType]):
 
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        lease = self.store.acquire(self.checksum)
+        lease = self.store.acquire(self.checksum, self.context)
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         with lease:
             if not (rerun):
@@ -348,8 +345,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
-                job_uid=self.uid,
-                **self._current_context(),
+                **self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -394,7 +390,7 @@ class Job(ty.Generic[TaskType]):
         """
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        lease = self.store.acquire(self.checksum)
+        lease = self.store.acquire(self.checksum, self.context)
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         async with lease:
             if not rerun:
@@ -409,8 +405,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
-                job_uid=self.uid,
-                **self._current_context(),
+                **self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -478,7 +473,7 @@ class Job(ty.Generic[TaskType]):
         for gr, ind_l in self.state.final_combined_ind_mapping.items():
             combined_results_gr = []
             for ind in ind_l:
-                result = self.store.lookup(self.checksum_states(ind))
+                result = self.store.lookup(self.checksum_states(ind), self.context)
                 if result is None:
                     return None
                 if return_inputs is True or return_inputs == "val":
@@ -524,7 +519,7 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        result = self.store.lookup(self.checksum, self.context, produced_by=self.uid)
+        result = self.store.lookup(self.checksum, self.context)
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":

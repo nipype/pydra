@@ -6,7 +6,7 @@ import pytest
 from pydra.compose import workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result
-from pydra.engine.store import PickleStore, ResultStore
+from pydra.engine.store import PickleStore, ResultStore, context_key
 from pydra.engine.submitter import Submitter
 from pydra.engine.tests import utils as test_utils
 from pydra.engine.tests.utils import FunAddTwo
@@ -15,6 +15,10 @@ from pydra.engine.tests.utils import FunAddTwo
 # these modules and must receive their classes by value
 cloudpickle.register_pickle_by_value(sys.modules[__name__])
 cloudpickle.register_pickle_by_value(test_utils)
+
+
+CTX = {"environment_checksum": "e", "platform": "p", "python_version": "v"}
+KEY = context_key(CTX)
 
 
 class RecordingStore(PickleStore):
@@ -29,14 +33,14 @@ class RecordingStore(PickleStore):
         with open(self.log, "a") as f:
             f.write(" ".join(entry) + "\n")
 
-    def lookup(self, checksum, context=None, produced_by=None):
-        result = super().lookup(checksum, context, produced_by)
+    def lookup(self, checksum, context):
+        result = super().lookup(checksum, context)
         self._record("lookup", checksum, "miss" if result is None else "hit")
         return result
 
-    def acquire(self, checksum):
+    def acquire(self, checksum, context):
         self._record("acquire", checksum)
-        return super().acquire(checksum)
+        return super().acquire(checksum, context)
 
     def commit(self, lease, result, job=None):
         self._record("commit", lease.checksum, "job" if job is not None else "nojob")
@@ -55,44 +59,44 @@ def test_picklestore_is_resultstore(tmp_path):
 
 def test_picklestore_layout(tmp_path):
     store = PickleStore(tmp_path)
-    assert store.cache_dir("abc") == tmp_path / "abc"
-    lease = store.acquire("abc")
+    assert store.cache_dir("abc", CTX) == tmp_path / "abc" / KEY
+    lease = store.acquire("abc", CTX)
     assert lease.checksum == "abc"
-    assert lease.cache_dir == tmp_path / "abc"
-    assert lease.lockfile == tmp_path / "abc.lock"
+    assert lease.cache_dir == tmp_path / "abc" / KEY
+    assert lease.lockfile == tmp_path / f"abc-{KEY}.lock"
     assert not lease.lockfile.exists()
 
 
 def test_picklestore_commit_lookup(tmp_path):
     store = PickleStore(tmp_path)
-    assert store.lookup("abc") is None
-    with store.acquire("abc") as lease:
+    assert store.lookup("abc", CTX) is None
+    with store.acquire("abc", CTX) as lease:
         assert lease.lockfile.exists()
         store.commit(lease, Result(cache_dir=lease.cache_dir))
     assert not lease.lockfile.exists()
-    assert (tmp_path / "abc" / "_result.pklz").exists()
-    result = store.lookup("abc")
-    assert result.cache_dir == tmp_path / "abc"
+    assert (tmp_path / "abc" / KEY / "_result.pklz").exists()
+    result = store.lookup("abc", CTX)
+    assert result.cache_dir == tmp_path / "abc" / KEY
     assert not result.errored
 
 
 def test_picklestore_readonly_caches(tmp_path):
     primary, ro1, ro2 = (tmp_path / n for n in ("primary", "ro1", "ro2"))
     for root in (ro1, ro2):
-        with PickleStore(root).acquire("abc") as lease:
+        with PickleStore(root).acquire("abc", CTX) as lease:
             PickleStore(root).commit(lease, Result(cache_dir=lease.cache_dir))
     store = PickleStore(primary, [ro1, ro2])
-    assert store.lookup("abc").cache_dir == ro1 / "abc"
-    with store.acquire("abc") as lease:
+    assert store.lookup("abc", CTX).cache_dir == ro1 / "abc" / KEY
+    with store.acquire("abc", CTX) as lease:
         store.commit(lease, Result(cache_dir=lease.cache_dir))
-    assert lease.cache_dir == primary / "abc"
-    assert store.lookup("abc").cache_dir == primary / "abc"
+    assert lease.cache_dir == primary / "abc" / KEY
+    assert store.lookup("abc", CTX).cache_dir == primary / "abc" / KEY
 
 
 @pytest.mark.timeout(30)
 def test_lease_creates_missing_lock_dir(tmp_path):
     root = tmp_path / "missing" / "cache"
-    with PickleStore(root).acquire("abc") as lease:
+    with PickleStore(root).acquire("abc", CTX) as lease:
         assert lease.lockfile.exists()
 
 
@@ -100,7 +104,7 @@ def test_lease_creates_missing_lock_dir(tmp_path):
 def test_lease_raises_if_lock_dir_cannot_exist(tmp_path):
     (tmp_path / "file").write_text("")
     with pytest.raises(OSError):
-        with PickleStore(tmp_path / "file" / "cache").acquire("abc"):
+        with PickleStore(tmp_path / "file" / "cache").acquire("abc", CTX):
             pass
 
 
@@ -108,8 +112,8 @@ def test_lease_async_waits_for_holder(tmp_path):
     store = PickleStore(tmp_path)
 
     async def contend():
-        held = store.acquire("abc").__enter__()
-        waiter = asyncio.ensure_future(store.acquire("abc").__aenter__())
+        held = store.acquire("abc", CTX).__enter__()
+        waiter = asyncio.ensure_future(store.acquire("abc", CTX).__aenter__())
         await asyncio.sleep(0.3)
         assert not waiter.done()
         held.__exit__(None, None, None)
@@ -129,8 +133,8 @@ def test_submitter_default_store(tmp_path):
     assert sub.store.readonly_caches == [ro]
     job = Job(task=FunAddTwo(a=1), submitter=sub, name="job")
     assert job.store is sub.store
-    assert job.cache_dir == sub.cache_root / job.checksum
-    assert job.lockfile == sub.store.acquire(job.checksum).lockfile
+    assert job.cache_dir == sub.cache_root / job.checksum / context_key(job.context)
+    assert job.lockfile == sub.store.acquire(job.checksum, job.context).lockfile
 
 
 def test_store_call_sites(worker, tmp_path):
@@ -147,8 +151,8 @@ def test_store_call_sites(worker, tmp_path):
     assert calls.index(f"acquire {checksum}") < calls.index(f"commit {checksum} job")
     assert calls.count(f"commit {checksum} job") == 1
     assert not [c for c in calls if c.endswith("nojob")]
-    assert (tmp_path / "cache" / checksum / "_result.pklz").exists()
-    assert (tmp_path / "cache" / checksum / "_job.pklz").exists()
+    assert len(list((tmp_path / "cache" / checksum).glob("*/_result.pklz"))) == 1
+    assert len(list((tmp_path / "cache" / checksum).glob("*/_job.pklz"))) == 1
 
     log.unlink()
     with Submitter(worker=worker, cache_root=tmp_path / "cache", store=store) as sub:
@@ -178,14 +182,14 @@ def test_store_call_sites_workflow(worker, tmp_path):
 def test_commit_writes_result_and_job_in_one_call(tmp_path):
     sub = Submitter(cache_root=tmp_path)
     job = Job(task=FunAddTwo(a=1), submitter=sub, name="job")
-    with sub.store.acquire(job.checksum) as lease:
+    with sub.store.acquire(job.checksum, job.context) as lease:
         sub.store.commit(lease, Result(cache_dir=lease.cache_dir), job=job)
     assert (lease.cache_dir / "_result.pklz").exists()
     assert (lease.cache_dir / "_job.pklz").exists()
 
 
 class ElsewhereLockStore(PickleStore):
-    def lockfile(self, checksum):
+    def lockfile(self, checksum, context):
         return self.cache_root / "locks" / checksum
 
 
@@ -194,7 +198,7 @@ def test_job_lockfile_comes_from_store(tmp_path):
     sub = Submitter(store=store)
     job = Job(task=FunAddTwo(a=1), submitter=sub, name="job")
     assert job.lockfile == tmp_path / "locks" / job.checksum
-    assert store.acquire(job.checksum).lockfile == job.lockfile
+    assert store.acquire(job.checksum, job.context).lockfile == job.lockfile
 
 
 def test_store_and_cache_root_must_agree(tmp_path):

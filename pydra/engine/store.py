@@ -1,6 +1,8 @@
 """Result stores: where jobs run and where their results are kept."""
 
 import asyncio
+import hashlib
+import json
 import os
 import typing as ty
 from pathlib import Path
@@ -59,31 +61,37 @@ class Lease:
         self._lock.release()
 
 
+def context_key(context: Context) -> str:
+    """The name of the slot holding results recorded in ``context``."""
+    return hashlib.sha256(
+        json.dumps(dict(context), sort_keys=True).encode()
+    ).hexdigest()[:16]
+
+
 @ty.runtime_checkable
 class ResultStore(ty.Protocol):
-    """Interface between jobs and the storage of their results."""
+    """Interface between jobs and the storage of their results.
 
-    def cache_dir(self, checksum: str) -> Path:
-        """The directory the job identified by ``checksum`` runs in."""
+    A job is identified by its checksum and the context it runs in. Each pair has
+    its own slot, so results recorded in different contexts never overwrite each other.
+    """
 
-    def lookup(
-        self,
-        checksum: str,
-        context: Context | None = None,
-        produced_by: str | None = None,
-    ) -> Result | None:
+    def cache_dir(self, checksum: str, context: Context) -> Path:
+        """The directory the job identified by ``checksum`` runs in under ``context``."""
+
+    def lookup(self, checksum: str, context: Context) -> Result | None:
         """Return the stored result for ``checksum``, or None if there is none.
 
-        A result produced by the job with uid ``produced_by`` is always returned.
-        Otherwise, when ``context`` is given, the store's reuse policy decides
-        whether a result recorded in a different context is returned.
+        The slot of ``context`` is searched in every location first. If the store's
+        reuse policy allows it, a result recorded in another context is returned
+        otherwise, marked with ``Result.cross_context``.
         """
 
-    def lockfile(self, checksum: str) -> Path:
-        """The lock file guarding the job identified by ``checksum``."""
+    def lockfile(self, checksum: str, context: Context) -> Path:
+        """The lock file guarding the job identified by ``checksum`` under ``context``."""
 
-    def acquire(self, checksum: str) -> Lease:
-        """Return the lease guarding the job identified by ``checksum``."""
+    def acquire(self, checksum: str, context: Context) -> Lease:
+        """Return the lease guarding the job identified by ``checksum`` under ``context``."""
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
         """Store ``result``, and ``job`` if given, as those of the job held under ``lease``.
@@ -93,7 +101,7 @@ class ResultStore(ty.Protocol):
 
 
 class PickleStore:
-    """Results pickled into ``<cache_root>/<checksum>/_result.pklz``.
+    """Results pickled into ``<cache_root>/<checksum>/<context key>/_result.pklz``.
 
     Parameters
     ----------
@@ -119,35 +127,37 @@ class PickleStore:
         self.readonly_caches = [Path(p) for p in ensure_list(readonly_caches)]
         self.reuse = reuse
 
-    def cache_dir(self, checksum: str) -> Path:
-        return self.cache_root / checksum
+    def cache_dir(self, checksum: str, context: Context) -> Path:
+        return self.cache_root / checksum / context_key(context)
 
-    def lookup(
-        self,
-        checksum: str,
-        context: Context | None = None,
-        produced_by: str | None = None,
-    ) -> Result | None:
-        for location in [self.cache_root] + self.readonly_caches:
-            result = load_result(checksum, [location])
-            if result is None:
-                continue
-            if (
-                context is None
-                or (produced_by is not None and result.job_uid == produced_by)
-                or result.context == dict(context)
-            ):
+    def lookup(self, checksum: str, context: Context) -> Result | None:
+        locations = [self.cache_root] + self.readonly_caches
+        slot = f"{checksum}/{context_key(context)}"
+        for location in locations:
+            result = load_result(slot, [location])
+            if result is not None:
                 return result
-            if self.reuse == "any":
-                result.cross_context = True
-                return result
+        if self.reuse == "any":
+            for location in locations:
+                directory = location / checksum
+                if not directory.is_dir():
+                    continue
+                for other in sorted(p.name for p in directory.iterdir() if p.is_dir()):
+                    result = load_result(f"{checksum}/{other}", [location])
+                    if result is not None:
+                        result.cross_context = True
+                        return result
         return None
 
-    def lockfile(self, checksum: str) -> Path:
-        return self.cache_dir(checksum).with_suffix(".lock")
+    def lockfile(self, checksum: str, context: Context) -> Path:
+        return self.cache_root / f"{checksum}-{context_key(context)}.lock"
 
-    def acquire(self, checksum: str) -> Lease:
-        return Lease(checksum, self.cache_dir(checksum), self.lockfile(checksum))
+    def acquire(self, checksum: str, context: Context) -> Lease:
+        return Lease(
+            checksum,
+            self.cache_dir(checksum, context),
+            self.lockfile(checksum, context),
+        )
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
         save(lease.cache_dir, result=result, job=job)
