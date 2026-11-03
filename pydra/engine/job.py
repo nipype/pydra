@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 import typing as ty
 from uuid import uuid4
-import shutil
 from traceback import format_exception
 import attr
 import cloudpickle as cp
@@ -18,6 +17,7 @@ from pydra.utils.hash import hash_function
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
+from pydra.engine.store import remove_from_cache
 from pydra.engine.result import (
     RuntimeSpec,
     Result,
@@ -40,7 +40,6 @@ from pydra.utils.etelemetry import check_latest_version
 
 logger = logging.getLogger("pydra")
 
-develop = False
 
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import Submitter
@@ -317,7 +316,7 @@ class Job(ty.Generic[TaskType]):
         with open(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
         if not self.can_resume and self.cache_dir.exists():
-            shutil.rmtree(self.cache_dir)
+            remove_from_cache(self.cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=self.can_resume)
         # Save job pkl into the output directory for future reference
         save(self.cache_dir, job=self)
@@ -372,13 +371,14 @@ class Job(ty.Generic[TaskType]):
                 result.errored = True
                 raise
             finally:
-                self.hooks.post_run_task(self, result)
-                self.audit.finalize_audit(result=result)
-                self.store.commit(lease, result, job=self)
-                self._awaiting_run = False
-                # removing the additional file with the checksum
-                (self.cache_root / f"{self.uid}_info.json").unlink()
-                os.chdir(cwd)
+                try:
+                    self.hooks.post_run_task(self, result)
+                    self.audit.finalize_audit(result=result)
+                    self.store.commit(lease, result, job=self)
+                    self._awaiting_run = False
+                    self._remove_info_file()
+                finally:
+                    os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
@@ -434,18 +434,28 @@ class Job(ty.Generic[TaskType]):
                 self._errored = True
                 raise
             finally:
-                self.hooks.post_run_task(self, result)
-                self.audit.finalize_audit(result=result)
-                self.store.commit(lease, result, job=self)
-                self._awaiting_run = False
-                # removing the additional file with the checksum
-                (self.cache_root / f"{self.uid}_info.json").unlink()
-                os.chdir(cwd)
+                try:
+                    self.hooks.post_run_task(self, result)
+                    self.audit.finalize_audit(result=result)
+                    self.store.commit(lease, result, job=self)
+                    self._awaiting_run = False
+                    self._remove_info_file()
+                finally:
+                    os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
         self._check_for_hash_changes()
         return result
+
+    def _remove_info_file(self):
+        """Remove the job's ``<uid>_info.json``; one that cannot be removed is logged
+        and left in place."""
+        info_file = self.cache_root / f"{self.uid}_info.json"
+        try:
+            remove_from_cache(info_file)
+        except OSError as e:
+            logger.warning("Could not remove %s: %s", info_file, e)
 
     def pickle_task(self):
         """Pickling the tasks with full inputs"""

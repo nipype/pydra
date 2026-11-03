@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import glob as glob
+import pytest
 from pydra.compose import python, shell, workflow
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from pydra.engine.audit import AuditFlag
@@ -8,6 +9,8 @@ from pydra.engine.submitter import Submitter
 from pydra.engine.job import Job
 from fileformats.generic import File
 from pydra.utils.hash import hash_function
+
+pytestmark = pytest.mark.usefixtures("no_network")
 
 
 def _slot(cache_root, task):

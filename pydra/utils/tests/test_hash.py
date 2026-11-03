@@ -2,6 +2,7 @@ import re
 import os
 import subprocess
 import sys
+import time
 from hashlib import blake2b
 from pathlib import Path
 from unittest import mock
@@ -12,7 +13,9 @@ import pytest
 import typing as ty
 from fileformats.application import Zip, Json, Yaml
 from fileformats.text import TextFile
+from pydra.utils import hash as hash_module
 from pydra.utils.hash import (
+    TIMESTAMP_RESOLUTION_NS,
     Cache,
     bytes_repr,
     hash_object,
@@ -485,7 +488,119 @@ def text_file(tmp_path):
     return TextFile(text_file_path)
 
 
-def test_persistent_hash_cache(cache_path, text_file):
+@pytest.fixture
+def settled(monkeypatch):
+    """Hashes as if every file written so far was last changed long enough ago to be cached"""
+    monkeypatch.setattr(
+        hash_module, "time_ns", lambda: time.time_ns() + TIMESTAMP_RESOLUTION_NS + 1
+    )
+
+
+def _hash_when_changed(monkeypatch, fileset, cache_path):
+    """Hashes ``fileset`` at the instant its file was last changed"""
+    st = fileset.fspath.stat()
+    monkeypatch.setattr(
+        hash_module, "time_ns", lambda: max(st.st_mtime_ns, st.st_ctime_ns)
+    )
+    return hash_object(fileset, persistent_cache=cache_path)
+
+
+def _rewrite(path, text, mtime_ns):
+    path.write_text(text)
+    os.utime(path, ns=(mtime_ns, mtime_ns))
+
+
+def test_persistent_hash_cache_skips_recently_changed_files(
+    monkeypatch, cache_path, text_file
+):
+    hsh = _hash_when_changed(monkeypatch, text_file, cache_path)
+    assert list(cache_path.iterdir()) == []
+    assert hsh == hash_object(text_file, persistent_cache=cache_path)
+
+
+def test_persistent_hash_cache_rewrite_within_timestamp_resolution(
+    monkeypatch, cache_path, text_file
+):
+    mtime_ns = text_file.fspath.stat().st_mtime_ns - 10 * TIMESTAMP_RESOLUTION_NS
+    _rewrite(text_file.fspath, "hello", mtime_ns)
+    first = _hash_when_changed(monkeypatch, text_file, cache_path)
+    _rewrite(text_file.fspath, "world", mtime_ns)
+    assert text_file.fspath.stat().st_mtime_ns == mtime_ns
+    assert _hash_when_changed(monkeypatch, text_file, cache_path) != first
+
+
+class _Stat:
+    """A stat result with some fields replaced"""
+
+    def __init__(self, st, **fields):
+        self._st = st
+        self._fields = fields
+
+    def __getattr__(self, name):
+        return self._fields.get(name, getattr(self._st, name))
+
+
+def _poison_cached_hash(cache_path, fileset):
+    """Replace the one cached hash, so a cache hit returns b"poisoned" """
+    hash_object(fileset, persistent_cache=cache_path)
+    (entry,) = cache_path.iterdir()
+    entry.write_bytes(b"poisoned")
+    assert hash_object(fileset, persistent_cache=cache_path) == b"poisoned"
+
+
+@pytest.mark.parametrize("field", ["st_size", "st_ino", "st_mtime_ns", "st_ctime_ns"])
+def test_persistent_hash_cache_key_has_each_stat_field(
+    monkeypatch, settled, cache_path, text_file, field
+):
+    _poison_cached_hash(cache_path, text_file)
+    target = os.stat(text_file.fspath)
+    fstat = os.fstat
+
+    def altered_fstat(fd):
+        st = fstat(fd)
+        if (st.st_dev, st.st_ino) != (target.st_dev, target.st_ino):
+            return st
+        return _Stat(st, **{field: getattr(st, field) - 1})
+
+    monkeypatch.setattr(os, "fstat", altered_fstat)
+    assert hash_object(text_file, persistent_cache=cache_path) != b"poisoned"
+    assert len(list(cache_path.iterdir())) == 2
+
+
+def test_persistent_hash_cache_ignores_stale_stat(
+    monkeypatch, settled, cache_path, text_file
+):
+    path = text_file.fspath
+    stale = os.stat(path)
+    _poison_cached_hash(cache_path, text_file)
+    _rewrite(path, "rewritten elsewhere", stale.st_mtime_ns)
+    stat = os.stat
+    monkeypatch.setattr(
+        os,
+        "stat",
+        lambda p, *a, **kw: stale if os.fspath(p) == str(path) else stat(p, *a, **kw),
+    )
+    assert path.stat() is stale
+    assert hash_object(text_file, persistent_cache=cache_path) != b"poisoned"
+
+
+def test_persistent_hash_cache_directory_keyed_on_contents(
+    settled, cache_path, tmp_path
+):
+    root = tmp_path / "dir"
+    (root / "sub").mkdir(parents=True)
+    nested = root / "sub" / "nested.txt"
+    nested.write_text("foo")
+    directory = Directory(root)
+    root_stat = root.stat()
+    _poison_cached_hash(cache_path, directory)
+    _rewrite(nested, "longer", nested.stat().st_mtime_ns)
+    assert root.stat().st_mtime_ns == root_stat.st_mtime_ns
+    assert hash_object(directory, persistent_cache=cache_path) != b"poisoned"
+    assert len(list(cache_path.iterdir())) == 2
+
+
+def test_persistent_hash_cache(settled, cache_path, text_file):
     """
     Test the persistent hash cache with a text file
 
@@ -507,13 +622,13 @@ def test_persistent_hash_cache(cache_path, text_file):
     # Test that changes to the text file result in new hash
     text_file.fspath.write_text("bar")
     os.utime(
-        text_file.fspath, (0, text_file.fspath.stat().st_mtime + 10)
+        text_file.fspath, (0, text_file.fspath.stat().st_mtime - 10)
     )  # distinct mtime
     assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
     assert len(list(cache_path.iterdir())) == 2
 
 
-def test_persistent_hash_cache_cleanup1(cache_path, text_file):
+def test_persistent_hash_cache_cleanup1(settled, cache_path, text_file):
     """
     Test the persistent hash is cleaned up after use if the periods between cleanups
     is greater than the environment variable PYDRA_HASH_CACHE_CLEANUP_PERIOD
@@ -532,7 +647,7 @@ def test_persistent_hash_cache_cleanup1(cache_path, text_file):
     assert len(list(cache_path.iterdir())) == 0
 
 
-def test_persistent_hash_cache_cleanup2(cache_path, text_file):
+def test_persistent_hash_cache_cleanup2(settled, cache_path, text_file):
     """
     Test the persistent hash is cleaned up after use if the periods between cleanups
     is greater than the explicitly provided cleanup_period
