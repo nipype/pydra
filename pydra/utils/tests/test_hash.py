@@ -1385,3 +1385,19 @@ def test_code_hash_same_on_every_python(load_modules):
         "e5ad835c221d7657c1ebf53e177ea243",
         "d0bc4c1bc86bb5cb68d01d8b8280e059",
     ]
+
+
+@pytest.mark.parametrize("code_hash,changed", [("function", False), ("user", True)])
+def test_code_hash_set_by_define(load_modules, code_hash, changed):
+    """``define(code_hash=...)`` sets the tier of a task's checksum"""
+    from pydra.compose import python, workflow
+
+    checksums = []
+    for u in (3, 5):
+        f = _main_f(load_modules, u=u)
+        checksums.append(python.define(f, code_hash=code_hash)(x=1)._checksum)
+    assert (checksums[0] != checksums[1]) is changed
+    with pytest.raises(ValueError, match="code_hash must be one of"):
+        python.define(f, code_hash="all")
+    with pytest.raises(ValueError, match="code_hash must be one of"):
+        workflow.define(f, code_hash="all")
