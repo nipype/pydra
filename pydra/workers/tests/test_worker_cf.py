@@ -35,3 +35,14 @@ def test_get_available_cpus():
 
     if platform.system().lower() == "darwin":
         assert get_available_cpus() == os.cpu_count()
+
+
+def test_cf_pool_never_forks_the_submitting_process():
+    import pickle
+    from pydra.workers.cf import ConcurrentFuturesWorker
+
+    worker = ConcurrentFuturesWorker(n_procs=1)
+    restored = pickle.loads(pickle.dumps(worker))
+    for pool in (worker.pool, restored.pool):
+        assert pool._mp_context.get_start_method() != "fork"
+        pool.shutdown()
