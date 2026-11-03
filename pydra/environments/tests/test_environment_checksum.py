@@ -63,20 +63,21 @@ def test_environment_checksum_recorded_not_in_job_checksum(tmp_path):
     a = _run(tmp_path / "a", Tagged(tag="a"))
     b = _run(tmp_path / "b", Tagged(tag="b"))
     assert a.checksum == b.checksum
-    assert a.result().environment_checksum == Tagged(tag="a").checksum()
-    assert b.result().environment_checksum == Tagged(tag="b").checksum()
-    assert a.result().environment_checksum != b.result().environment_checksum
+    assert a.result().context["environment"] == Tagged(tag="a").checksum()
+    assert b.result().context["environment"] == Tagged(tag="b").checksum()
+    assert a.result().context["environment"] != b.result().context["environment"]
 
 
 def test_environment_checksum_survives_reload(tmp_path):
     job = _run(tmp_path, Tagged(tag="a"))
     stored = job.store.lookup(job.checksum, job.context, job.task)
-    assert stored.environment_checksum == Tagged(tag="a").checksum()
+    assert stored.context["environment"] == Tagged(tag="a").checksum()
 
 
 def test_default_environment_records_native_checksum(tmp_path):
     assert (
-        _run(tmp_path, None).result().environment_checksum == native.Native().checksum()
+        _run(tmp_path, None).result().context["environment"]
+        == native.Native().checksum()
     )
 
 
@@ -130,4 +131,4 @@ def test_environment_checksum_recorded_under_each_worker(worker, tmp_path):
         worker=worker, environment=Tagged(tag="a"), cache_root=tmp_path
     ) as sub:
         result = sub(shell.define("whoami")())
-    assert result.environment_checksum == Tagged(tag="a").checksum()
+    assert result.context["environment"] == Tagged(tag="a").checksum()

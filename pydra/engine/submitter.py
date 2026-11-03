@@ -115,11 +115,16 @@ class Submitter:
         :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
         ``readonly_caches``
     reuse : str | ReusePolicy, optional
-        Which stored results the default store reuses: ``"exact"`` (default) only
-        those produced in the same execution context (environment checksum, platform,
-        Python version), ``"any"`` those produced in any context, a
-        :class:`~pydra.engine.store.ReusePolicy` those whose context it accepts. Set
-        the policy on the store itself when passing ``store``
+        Which stored results the default store reuses, given the execution context
+        recorded beside each (see :func:`~pydra.engine.context.job_context`):
+        ``"consistent"`` (default) those produced under the same Python major.minor,
+        platform, environment and versions of the distributions the task reaches,
+        ``"exact"`` only those produced in an equal context (including the full Python
+        version and every installed distribution), ``"any"`` those produced in any
+        context, a :class:`~pydra.engine.store.ReusePolicy` those whose context it
+        accepts. A context with an unknown version is never reused under
+        ``"consistent"`` or ``"exact"`` unless it is equal to the current one. Set the
+        policy on the store itself when passing ``store``
     on_error : str, optional
         What to do when a job errors: "fail_fast" stops at the first error and raises
         it, "raise_at_end" keeps running every element that does not read an errored
@@ -226,7 +231,9 @@ class Submitter:
         self.cache_root = cache_root
         self.readonly_caches = readonly_caches
         if store is None:
-            store = PickleStore(cache_root, readonly_caches, reuse=reuse or "exact")
+            store = PickleStore(
+                cache_root, readonly_caches, reuse=reuse or "consistent"
+            )
         elif reuse is not None:
             raise ValueError(
                 "'reuse' applies to the default store, set it on the store passed as "

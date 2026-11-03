@@ -12,6 +12,7 @@ import typing as ty
 from pathlib import Path
 import attrs
 from filelock import SoftFileLock, Timeout
+from pydra.engine.context import RECORD
 from pydra.engine.result import Result, load_result, save
 from pydra.utils.general import ensure_list
 
@@ -20,7 +21,12 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 Context = ty.Mapping[str, ty.Any]
-"""The execution context that produced a result, recorded beside it."""
+"""The execution context that produced a result, recorded beside it (see
+`pydra.engine.context.job_context`)."""
+
+CONTEXT_FILE = "_context.json"
+"""The file in a slot holding the context its result was recorded in, read by
+``PickleStore.lookup`` before the result is loaded."""
 
 REMOVE_ATTEMPTS = 5
 """How many times ``remove_from_cache`` tries a removal blocked by held or pending files."""
@@ -197,11 +203,47 @@ class ReusePolicy(ty.Protocol):
         """Whether the result of ``task`` recorded in ``stored`` is reused in ``current``."""
 
 
+def _known(context: Context) -> bool:
+    """Whether every part of a context is known: its layout is this pydra's and the
+    versions of the packages its task reaches are recorded"""
+    packages = context.get("packages")
+    return (
+        context.get("record") == RECORD
+        and isinstance(packages, ty.Mapping)
+        and None not in packages.values()
+        and all(context.get(k) is not None for k in ConsistentReuse.EQUAL)
+        and isinstance(context.get("python"), str)
+    )
+
+
+def _minor(version: str) -> list[str]:
+    return version.split(".")[:2]
+
+
 class ExactReuse:
-    """Reuses only results recorded in an equal context."""
+    """Reuses only results recorded in an equal context, every part of which is known.
+    A result recorded in an equal context shares the current one's slot, so it is
+    found without consulting the policy."""
 
     def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
-        return dict(stored) == dict(current)
+        return _known(stored) and dict(stored) == dict(current)
+
+
+class ConsistentReuse:
+    """Reuses results recorded under the same Python major.minor and implementation,
+    the same platform and environment, and the same versions of the distributions the
+    task reaches (``packages``), all of them known. The full Python version and the
+    other installed distributions (``installed``) may differ."""
+
+    EQUAL = ("record", "implementation", "platform", "environment", "packages")
+
+    def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
+        return (
+            _known(stored)
+            and _known(current)
+            and all(stored[k] == current[k] for k in self.EQUAL)
+            and _minor(stored["python"]) == _minor(current["python"])
+        )
 
 
 class AnyReuse:
@@ -211,7 +253,11 @@ class AnyReuse:
         return True
 
 
-REUSE_POLICIES = {"exact": ExactReuse, "any": AnyReuse}
+REUSE_POLICIES = {
+    "exact": ExactReuse,
+    "consistent": ConsistentReuse,
+    "any": AnyReuse,
+}
 
 
 def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
@@ -292,7 +338,8 @@ class ResultStore(ty.Protocol):
         The slot of ``context`` is searched in every location first. Otherwise a
         result recorded in another context is returned if the store's reuse policy
         accepts its context for ``task``, marked with ``Result.cross_context`` and
-        carrying the context it was recorded in.
+        carrying the context it was recorded in and, as ``Result.reused_in``,
+        ``context``.
         """
 
     def lockfile(self, checksum: str, context: Context) -> Path:
@@ -318,17 +365,20 @@ class PickleStore:
     readonly_caches : list[os.PathLike], optional
         Further directories searched for results, in order, after ``cache_root``.
     reuse : str | ReusePolicy, optional
-        Which stored results ``lookup`` returns given the current context: ``"exact"``
-        (default) only those recorded in an equal context, ``"any"`` all of them, a
-        ``ReusePolicy`` those whose context it accepts. Those from a different context
-        are marked with ``Result.cross_context``.
+        Which stored results ``lookup`` returns given the current context (see
+        `REUSE_POLICIES`): ``"consistent"`` (default) those recorded under the same
+        Python minor version, platform, environment and versions of the distributions
+        the task reaches, ``"exact"`` only those recorded in an equal context,
+        ``"any"`` all of them, a ``ReusePolicy`` those whose context it accepts. Those
+        from a different context are marked with ``Result.cross_context`` and record
+        the current one as ``Result.reused_in``.
     """
 
     def __init__(
         self,
         cache_root: os.PathLike,
         readonly_caches: list[os.PathLike] | None = None,
-        reuse: "str | ReusePolicy" = "exact",
+        reuse: "str | ReusePolicy" = "consistent",
     ):
         self.cache_root = Path(cache_root)
         self.readonly_caches = [Path(p) for p in ensure_list(readonly_caches)]
@@ -352,12 +402,17 @@ class PickleStore:
             directory = location / checksum
             if not directory.is_dir():
                 continue
-            for other in sorted(p.name for p in directory.iterdir() if p.is_dir()):
-                result = load_result(f"{checksum}/{other}", [location])
-                if result is not None and self.reuse.accept(
-                    result.context, context, task
-                ):
+            for other in sorted(p for p in directory.iterdir() if p.is_dir()):
+                try:
+                    stored = json.loads((other / CONTEXT_FILE).read_text())
+                except (OSError, ValueError):
+                    continue  # still being written, or not written by this pydra
+                if not self.reuse.accept(stored, context, task):
+                    continue
+                result = load_result(f"{checksum}/{other.name}", [location])
+                if result is not None:
                     result.cross_context = True
+                    result.reused_in = dict(context)
                     return result
         return None
 
@@ -386,4 +441,8 @@ class PickleStore:
         )
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
+        lease.cache_dir.mkdir(parents=True, exist_ok=True)
+        (lease.cache_dir / CONTEXT_FILE).write_text(
+            json.dumps(result.context, sort_keys=True)
+        )
         save(lease.cache_dir, result=result, job=job)

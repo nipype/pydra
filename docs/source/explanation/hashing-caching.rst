@@ -81,6 +81,48 @@ it as an input instead. The hash is only computed in the submitting process and 
 with the job, so workers never recompute it.
 
 
+Execution contexts and reuse
+----------------------------
+
+The interpreter, the platform, the environment and the versions of installed packages
+are not part of the checksum. They are recorded beside each result, as
+``Result.context``, and select its slot within the checksum's directory, so results
+recorded in different contexts never overwrite each other:
+
+* ``python``: the full interpreter version, and ``implementation``, its name;
+* ``platform``: the OS and machine, and the C library and its version where known;
+* ``environment``: the checksum of the environment the job ran in;
+* ``packages``: the version of each distribution providing the library code the task
+  reaches: the modules of its class, of the library code its function reaches (followed
+  through user code whatever the task's ``code_hash`` tier) and of the types of its
+  input values. A distribution installed from a commit or an archive records that
+  commit or hash too; one installed from a local directory (editable or not), and a
+  package no installed distribution provides, have an unknown version;
+* ``installed``: a digest of the names and versions of every installed distribution.
+
+The record is built once in the submitting process and carried with the job, so a
+worker records the same context. Whether a result recorded in another context is
+reused is set by the reuse policy, ``Submitter(reuse=...)``:
+
+=================  ===========================================================
+``"consistent"``   (default) the same Python major.minor and implementation,
+                   platform, environment, and versions of the distributions the
+                   task reaches; other installed distributions and the Python
+                   patch version may differ
+``"exact"``        an equal record, including the full Python version and the
+                   digest of every installed distribution
+``"any"``          any record
+=================  ===========================================================
+
+A result recorded in an equal context is always reused. Otherwise a record with an
+unknown version is never reused under ``"consistent"`` or ``"exact"``, and a mismatch
+is a recompute, never an error. A reused result recorded in another context has
+``cross_context`` set, keeps the context it was recorded in as ``context`` and the
+context it was reused in as ``reused_in``. A
+:class:`~pydra.engine.store.ReusePolicy` object can be passed instead, to compare the
+records in another way.
+
+
 File hash caching by mtime
 --------------------------
 

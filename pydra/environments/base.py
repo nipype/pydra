@@ -53,7 +53,7 @@ class Environment:
     def checksum(self) -> str:
         """Identity of the environment, as a hex digest.
 
-        The job records it in ``Result.environment_checksum``. It is never part of
+        The job records it in ``Result.context["environment"]``. It is never part of
         the job checksum, so rebuilding an environment does not change checksums.
         """
         return hashlib.sha256(
