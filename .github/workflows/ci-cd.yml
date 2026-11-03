@@ -115,8 +115,6 @@ jobs:
       DEPENDS: ${{ matrix.dependencies }}
       # Fast tier: marker expression from the plan job (cf tests only on the `real` jobs)
       PYTEST_ADDOPTS: ${{ matrix.markers && format('-m "{0}"', matrix.markers) || '' }}
-      # Coverage is collected by a single job
-      PYTEST_COV: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && matrix.dependencies == 'latest' && '--cov=pydra --cov-report=xml --cov-config=pyproject.toml' || '' }}
 
     steps:
       - name: Fetch repository
@@ -137,12 +135,6 @@ jobs:
         run: tox c
       - name: Run tox
         run: tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 900 || 300 }}
-      - name: Upload coverage to Codecov
-        if: env.PYTEST_COV != ''
-        uses: codecov/codecov-action@v7
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-singularity:
     needs: plan
@@ -157,7 +149,6 @@ jobs:
 
     env:
       DEPENDS: ${{ matrix.dependencies }}
-      PYTEST_COV: --cov=pydra --cov-report=xml --cov-config=pyproject.toml
       SINGULARITY_PREFIX: ${{ github.workspace }}/../singularity-install
 
     steps:
@@ -220,11 +211,6 @@ jobs:
         run: |
           tox -v --exit-and-dump-after 900 -- -n auto \
             pydra/environments/tests/test_singularity.py pydra/environments/tests/test_environments.py
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-lmod:
     needs: plan
@@ -239,7 +225,6 @@ jobs:
 
     env:
       DEPENDS: ${{ matrix.dependencies }}
-      PYTEST_COV: --cov=pydra --cov-report=xml --cov-config=pyproject.toml
 
     steps:
       - name: Install Lmod
@@ -269,11 +254,6 @@ jobs:
           export
           tox -v --exit-and-dump-after 900 -- -n auto \
             pydra/environments/tests/test_lmod.py
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
 
   test-slurm:
@@ -353,15 +333,10 @@ jobs:
         docker exec slurm bash -c "uv pip install --python /opt/venv/bin/python 'numpy<2' 'pillow<12.3' -e /pydra[test,psij] && /opt/venv/bin/python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes --cov=pydra --cov-report=xml --cov-config=pyproject.toml"
+        docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
     - name: Return ownership of the uv cache to the runner
       if: always()
       run: docker exec slurm bash -c "chown -R $(id -u):$(id -g) /root/.cache/uv"
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v7
-      with:
-        fail_ci_if_error: true
-        token: ${{ secrets.CODECOV_TOKEN }}
 
   # The single check branch protection should require (see the PR description). It fails when
   # the tier that should have run did not pass, and, on a non-draft PR, when the full tier was
@@ -467,12 +442,6 @@ jobs:
   #   - name: Run pytest
   #     run: |
   #       pytest pydra/workers/tests/test_worker.py --import-mode=importlib --rootdir . --only-worker=sge --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
-  #   - name: Upload coverage to Codecov
-  #     uses: codecov/codecov-action@v7
-  #     with:
-  #       fail_ci_if_error: true
-  #       token: ${{ secrets.CODECOV_TOKEN }}
-  #       files: ./cov.xml
 
   build-docs:
     needs: plan
