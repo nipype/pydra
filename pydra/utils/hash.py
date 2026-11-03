@@ -4,6 +4,7 @@ import sys
 import os
 import ast
 import struct
+import threading
 import inspect
 from datetime import datetime
 import typing as ty
@@ -36,12 +37,43 @@ FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 TIMESTAMP_RESOLUTION_NS = 2_000_000_000
 """Files changed within this many nanoseconds of hashing are not keyed in the persistent cache."""
 
-# Encoded code of functions, keyed by (source file, source-file mtime, code object)
-_function_bytes_cache: dict[tuple, bytes] = {}
-# Function and lambda nodes of parsed sources by first line, keyed by (file, source
-# digest), holding the most recently used SOURCE_NODES_CACHE_SIZE sources
-_source_nodes_cache: "OrderedDict[tuple, dict[int, list[ast.AST]]]" = OrderedDict()
+
+class _LRUCache:
+    """A thread-safe mapping holding the `size` most recently used items"""
+
+    def __init__(self, size: int):
+        self.size = size
+        self._items: OrderedDict = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: ty.Hashable) -> ty.Any:
+        """The value of `key`, or None if it is not held"""
+        with self._lock:
+            try:
+                self._items.move_to_end(key)
+            except KeyError:
+                return None
+            return self._items[key]
+
+    def put(self, key: ty.Hashable, value: ty.Any) -> None:
+        with self._lock:
+            self._items[key] = value
+            self._items.move_to_end(key)
+            while len(self._items) > self.size:
+                self._items.popitem(last=False)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._items)
+
+
+FUNCTION_BYTES_CACHE_SIZE = 4096
 SOURCE_NODES_CACHE_SIZE = 128
+# Encoded code of functions, keyed by (source file, source-file mtime, code object)
+_function_bytes_cache = _LRUCache(FUNCTION_BYTES_CACHE_SIZE)
+# Function and lambda nodes of parsed sources by first line, keyed by (file, source
+# digest)
+_source_nodes_cache = _LRUCache(SOURCE_NODES_CACHE_SIZE)
 
 AST_ENCODING = "ast@1"
 
@@ -808,9 +840,9 @@ def _function_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AS
     """The function and lambda nodes of a source, by the first line of their code"""
     text = "".join(lines)
     key = (source_file, blake2b(text.encode(), digest_size=16).digest())
-    if key in _source_nodes_cache:
-        _source_nodes_cache.move_to_end(key)
-        return _source_nodes_cache[key]
+    cached = _source_nodes_cache.get(key)
+    if cached is not None:
+        return cached
     nodes: dict[int, list[ast.AST]] = {}
     try:
         tree = ast.parse(text)
@@ -823,9 +855,7 @@ def _function_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AS
                 nodes.setdefault(first.lineno, []).append(node)
             elif isinstance(node, ast.Lambda):
                 nodes.setdefault(node.lineno, []).append(node)
-    _source_nodes_cache[key] = nodes
-    if len(_source_nodes_cache) > SOURCE_NODES_CACHE_SIZE:
-        _source_nodes_cache.popitem(last=False)
+    _source_nodes_cache.put(key, nodes)
     return nodes
 
 
@@ -902,8 +932,9 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
         except OSError:
             mtime_ns = None
         cache_key = (source_file, mtime_ns, obj.__code__)
-        if cache_key in _function_bytes_cache:
-            yield _function_bytes_cache[cache_key]
+        cached = _function_bytes_cache.get(cache_key)
+        if cached is not None:
+            yield cached
         else:
             encoded = _encode_function_code(obj)
             if encoded is None:
@@ -913,7 +944,7 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
             else:
                 result = f"{AST_ENCODING}:{encoded}".encode()
                 if mtime_ns is not None:
-                    _function_bytes_cache[cache_key] = result
+                    _function_bytes_cache.put(cache_key, result)
                 yield result
         yield from bytes_repr_function_closure(obj, cache)
     yield b")"

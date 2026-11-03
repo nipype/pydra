@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
 from pathlib import Path
 from unittest import mock
@@ -958,3 +959,27 @@ def test_hash_function_same_on_every_python():
     assert blake2b(encoding.encode(), digest_size=16).hexdigest() == (
         "c3c9ce3c2e2549d95a4f97f92d16e554"
     )
+
+
+def test_lru_cache_holds_most_recently_used():
+    cache = hash_module._LRUCache(2)
+    cache.put("a", 1)
+    cache.put("b", 2)
+    assert cache.get("a") == 1
+    cache.put("c", 3)
+    assert len(cache) == 2
+    assert (cache.get("a"), cache.get("b"), cache.get("c")) == (1, None, 3)
+
+
+def test_hash_function_concurrently(tmp_path, monkeypatch):
+    """Functions hashed from several threads while the source caches evict get the
+    hashes they get serially"""
+    funcs = [
+        _define(tmp_path, _BASE_SOURCE.replace("x * 2", f"x * {i}")) for i in range(8)
+    ]
+    expected = [hash_function(f) for f in funcs]
+    monkeypatch.setattr(hash_module, "_source_nodes_cache", hash_module._LRUCache(2))
+    monkeypatch.setattr(hash_module, "_function_bytes_cache", hash_module._LRUCache(2))
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(hash_function, funcs * 50))
+    assert results == expected * 50
