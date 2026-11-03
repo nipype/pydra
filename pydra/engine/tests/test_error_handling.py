@@ -107,7 +107,6 @@ def test_traceback_wf(tmp_path: Path):
     assert "in FunError" in str(exinfo.value)
 
 
-@pytest.mark.flaky(reruns=3)
 def test_rerun_errored(tmp_path):
     """Test rerunning a task containing errors.
     Only the errored tasks should be rerun"""
@@ -133,17 +132,17 @@ def test_rerun_errored(tmp_path):
 
     pass_odds = PassOdds(marker_dir=str(markers)).split("x", x=[1, 2, 3, 4, 5])
 
-    with pytest.raises(Exception):
-        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
-    with pytest.raises(Exception):
-        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
-
-    tasks_run = len(list(markers.glob("run-*")))
-    errors_found = len(list(markers.glob("error-*")))
+    def ran(kind="run"):
+        return sorted(int(p.name.split("-")[1]) for p in markers.glob(f"{kind}-*"))
 
     # All 5 jobs run the first time, and only the 2 that errored are rerun the second
-    assert tasks_run == 7
-    assert errors_found == 4
+    with pytest.raises(RuntimeError, match="even error"):
+        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
+    assert ran() == [1, 2, 3, 4, 5]
+    with pytest.raises(RuntimeError, match="even error"):
+        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
+    assert ran() == [1, 2, 2, 3, 4, 4, 5]
+    assert ran("error") == [2, 2, 4, 4]
 
 
 @pytest.mark.timeout(90)
