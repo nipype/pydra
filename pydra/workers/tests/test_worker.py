@@ -69,7 +69,9 @@ def OrderedAddOne(x: int, sync_dir: str) -> int:
         deadline = time.monotonic() + 60  # bound only
         while not (sync / name).exists():
             if time.monotonic() > deadline:
-                raise TimeoutError(f"{name} never appeared: tasks did not run concurrently")
+                raise TimeoutError(
+                    f"{name} never appeared: tasks did not run concurrently"
+                )
             time.sleep(0.01)
 
     wait_for("started_1" if x == 0 else "started_0")
