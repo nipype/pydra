@@ -31,12 +31,11 @@ def test_shell_define_sets_resources():
     assert Echo(text="hi")._resources == SMALL
 
 
-def test_workflow_define_sets_resources():
-    @workflow.define(outputs=["out"], resources=BIG)
-    def Wf(x: int):
-        return workflow.add(python.define(add_one)(x=x)).out
-
-    assert Wf(x=1)._resources == BIG
+def test_workflow_define_does_not_accept_resources():
+    # a workflow's resources would never reach a scheduler: its nodes are submitted
+    # individually, each with its own resources
+    with pytest.raises(TypeError):
+        workflow.define(outputs=["out"], resources=BIG)
 
 
 def test_default_is_no_resources():

@@ -10,7 +10,8 @@ from pydra.workers import slurm
 class FakeSlurm:
     """Fake the Slurm commands at the subprocess boundary."""
 
-    def __init__(self, states):
+    def __init__(self, states, scontrol_rc=0):
+        self.scontrol_rc = scontrol_rc
         self.states = list(states)  # sacct State field per submission, in order
         self.calls = []
 
@@ -26,15 +27,19 @@ class FakeSlurm:
             exit_code = "0:15" if state.startswith("CANCELLED") else "0:0"
             return 0, f"42|{state}|{exit_code}\n", ""
         if cmd[0] == "scontrol":
-            return 0, "", ""
+            return (
+                self.scontrol_rc,
+                "",
+                "requeue not permitted" * bool(self.scontrol_rc),
+            )
         raise AssertionError(cmd)
 
     def requeues(self):
         return [c for c in self.calls if c[0] == "scontrol"]
 
 
-def run_worker(tmp_path, monkeypatch, states, resources=None, **kwargs):
-    fake = FakeSlurm(states)
+def run_worker(tmp_path, monkeypatch, states, resources=None, scontrol_rc=0, **kwargs):
+    fake = FakeSlurm(states, scontrol_rc)
     monkeypatch.setattr(slurm.base, "read_and_display_async", fake)
     monkeypatch.setattr(
         slurm.SlurmWorker,
@@ -68,6 +73,32 @@ def test_zero_budget_never_requeues(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="requeue budget"):
         asyncio.run(worker.run(job))
     assert fake.requeues() == []
+
+
+@pytest.mark.parametrize("state", ["NODE_FAIL", "BOOT_FAIL"])
+def test_node_failure_is_requeued(tmp_path, monkeypatch, state):
+    fake, worker, job = run_worker(tmp_path, monkeypatch, [state, "COMPLETED"])
+    assert asyncio.run(worker.run(job)) is True
+    assert len(fake.requeues()) == 1
+
+
+def test_failed_with_empty_error_file_raises_cleanly(tmp_path, monkeypatch):
+    fake, worker, job = run_worker(tmp_path, monkeypatch, ["FAILED"])
+    err = tmp_path / "slurm_scripts" / "u" / "slurm-42.err"
+    err.parent.mkdir(parents=True)
+    err.write_text("")
+    with pytest.raises(Exception, match="unknown reason") as exc:
+        asyncio.run(worker.run(job))
+    assert not isinstance(exc.value, IndexError)
+
+
+def test_refused_requeue_is_reported_as_such(tmp_path, monkeypatch):
+    fake, worker, job = run_worker(
+        tmp_path, monkeypatch, ["TIMEOUT"] * 5, scontrol_rc=1
+    )
+    with pytest.raises(RuntimeError, match="scontrol requeue.*not permitted"):
+        asyncio.run(worker.run(job))
+    assert len(fake.requeues()) == 1
 
 
 @pytest.mark.parametrize("state", ["CANCELLED by 1234", "CANCELLED by 0", "CANCELLED"])
@@ -114,7 +145,51 @@ def test_node_resources_follow_worker_wide_args(tmp_path, monkeypatch):
     asyncio.run(worker.run(job))
     args = sbatch_args(fake)
     assert "--partition=x" in args
-    assert args.index("--cpus-per-task=8") > args.index("--cpus-per-task=1")
+    assert "--cpus-per-task=1" not in args
+    assert args.count("--cpus-per-task=8") == 1
+
+
+@pytest.mark.parametrize(
+    "worker_args, gone",
+    [
+        ("--mem-per-cpu=2G", "--mem-per-cpu=2G"),
+        ("--mem-per-gpu=2G", "--mem-per-gpu=2G"),
+        ("--mem 4G", "4G"),
+        ("--gres=gpu:4", "--gres=gpu:4"),
+        ("--gpus=2", "--gpus=2"),
+        ("--gpus-per-task=1", "--gpus-per-task=1"),
+        ("-G 2", "-G"),
+    ],
+)
+def test_conflicting_option_families_are_replaced(
+    tmp_path, monkeypatch, worker_args, gone
+):
+    res = ComputeResources(mem="1G", gpus=1)
+    fake, worker, job = run_worker(
+        tmp_path,
+        monkeypatch,
+        ["COMPLETED"],
+        resources=res,
+        sbatch_args=f"--partition=x {worker_args}",
+    )
+    asyncio.run(worker.run(job))
+    args = sbatch_args(fake)
+    assert gone not in args and "--partition=x" in args
+    assert "--mem=1G" in args and "--gres=gpu:1" in args
+
+
+def test_non_gpu_gres_survives(tmp_path, monkeypatch):
+    fake, worker, job = run_worker(
+        tmp_path,
+        monkeypatch,
+        ["COMPLETED"],
+        resources=ComputeResources(gpus=1),
+        sbatch_args="--gres=gpu:2,shard:1",
+    )
+    asyncio.run(worker.run(job))
+    args = sbatch_args(fake)
+    assert "--gres=shard:1" in args and "--gres=gpu:1" in args
+    assert "--gres=gpu:2,shard:1" not in args
 
 
 def test_no_resources_adds_no_resource_args(tmp_path, monkeypatch):
