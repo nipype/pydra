@@ -150,6 +150,9 @@ class Job(ty.Generic[TaskType]):
         # has not finished
         self._awaiting_run = False
         self._context = None
+        # The stored contexts of the checksum read by `check_declared_code`, for the
+        # job's first lookup
+        self._stored_contexts = None
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
@@ -195,6 +198,7 @@ class Job(ty.Generic[TaskType]):
             self._cached_result = None
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("_stored_contexts", None)
 
     @classmethod
     def check_etelemetry(cls) -> None:
@@ -231,7 +235,9 @@ class Job(ty.Generic[TaskType]):
         if self._context is None:
             self.checksum  # collects the library modules the task's code reaches
             self._context = job_context(self.task, self.environment)
-            check_declared_code(self.store, self.checksum, self._context, self.task)
+            self._stored_contexts = check_declared_code(
+                self.store, self.checksum, self._context, self.task
+            )
         return self._context
 
     @property
@@ -345,6 +351,7 @@ class Job(ty.Generic[TaskType]):
                 result = self.result()
                 if result is not None and not result.errored:
                     self._awaiting_run = False
+                    self._cached_result = result
                     return result
             self._errored = False
             cwd = os.getcwd()
@@ -410,6 +417,7 @@ class Job(ty.Generic[TaskType]):
                 result = self.result()
                 if result is not None and not result.errored:
                     self._awaiting_run = False
+                    self._cached_result = result
                     return result
             self._errored = False
             cwd = os.getcwd()
@@ -527,7 +535,14 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        result = self.store.lookup(self.checksum, self.context, task=self.task)
+        context, stored = self.context, self._stored_contexts
+        if stored is None:
+            result = self.store.lookup(self.checksum, context, task=self.task)
+        else:
+            self._stored_contexts = None
+            result = self.store.lookup(
+                self.checksum, context, task=self.task, stored=stored
+            )
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":

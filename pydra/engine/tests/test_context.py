@@ -12,7 +12,8 @@ import cloudpickle
 import numpy as np
 import pytest
 from fileformats.generic import File
-from pydra.compose import python
+from pydra.compose import python, workflow
+from pydra.compose.base import Task
 from pydra.engine import context
 from pydra.engine.job import Job
 from pydra.engine.result import Result
@@ -476,7 +477,7 @@ def test_extension_type_reporting_builtins(installed):
 
 
 def test_unhashable_walk_leaves_packages_unknown(installed, monkeypatch, caplog):
-    task = python.define(_calls_helper, version="1")(a=1)
+    task = python.define(_calls_helper, code_hash="function")(a=1)
 
     def fail(func):
         raise TypeError("unhashable")
@@ -599,7 +600,8 @@ def test_version_records_the_code_digest(installed):
     task = python.define(_versioned, version="1")(a=1, log="x")
     task._checksum
     record = context.job_context(task, native.Native())
-    assert record["code"] == task._code_digest == code_digest(type(task))
+    identity = f"{_versioned.__module__}._versioned==1"
+    assert record["code"] == task._declared_code == {identity: code_digest(type(task))}
     assert "code" not in context.job_context(
         python.define(_versioned)(a=1, log="x"), native.Native()
     )
@@ -646,3 +648,100 @@ def test_version_guard_is_quiet(installed, tmp_path, edited, worker, reuse, recw
     assert (n, [r.outputs.out for r in results]) == (3, [2, 2, 2, 3])
     assert not results[2].cross_context
     assert not [w for w in recwarn if issubclass(w.category, DeclaredVersionWarning)]
+
+
+VersionedNode = python.define(_versioned, version="1")
+
+
+@workflow.define
+def UsesVersioned(a: int, log: str) -> int:
+    return workflow.add(VersionedNode(a=a, log=log)).out
+
+
+@workflow.define
+def AddsNode(node: Task) -> int:
+    return workflow.add(node).out
+
+
+def test_workflow_hashes_versioned_nodes_by_version(edited, monkeypatch):
+    """A workflow reaching a versioned task class hashes it by its version, as the
+    node's own checksum does, and records the node's code digest"""
+    before = UsesVersioned(a=1, log="x")
+    checksum = before._checksum
+    monkeypatch.setitem(
+        UsesVersioned().constructor.__globals__,
+        "VersionedNode",
+        python.define(edited, version="1"),
+    )
+    after = UsesVersioned(a=1, log="x")
+    assert after._checksum == checksum
+    assert list(before._declared_code.values()) != list(after._declared_code.values())
+    monkeypatch.setitem(
+        UsesVersioned().constructor.__globals__,
+        "VersionedNode",
+        python.define(edited, version="2"),
+    )
+    assert UsesVersioned(a=1, log="x")._checksum != checksum
+
+
+def _nested(kind, defn, log):
+    if kind == "split":
+        return defn(log=log).split(a=[1, 2])
+    if kind == "input":
+        return AddsNode(node=defn(a=1, log=log))
+    return UsesVersioned(a=1, log=log)
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+@pytest.mark.parametrize("kind", ["split", "workflow", "input"])
+@pytest.mark.parametrize("reuse", ["consistent", "exact"])
+def test_version_guard_reaches_nested_tasks(
+    installed, tmp_path, edited, monkeypatch, worker, kind, reuse
+):
+    """An edit of a versioned task run in a split, a workflow node or a workflow input
+    warns, and is recomputed under exact"""
+    log = str(tmp_path / "log")
+    outs = []
+    with pytest.warns(DeclaredVersionWarning) as record:
+        for defn in (_versioned, edited):
+            versioned = python.define(defn, version="1", name="Versioned")
+            monkeypatch.setitem(
+                UsesVersioned().constructor.__globals__, "VersionedNode", versioned
+            )
+            with Submitter(
+                worker=worker, cache_root=tmp_path / "cache", reuse=reuse
+            ) as sub:
+                result = sub(_nested(kind, versioned, log))
+            assert not result.errored
+            outs.append(result.outputs.out)
+    edited_outs = [3, 4] if kind == "split" else 3
+    assert outs[1] == (edited_outs if reuse == "exact" else outs[0])
+    runs = 2 if kind == "split" else 1
+    assert _runs(log) == (2 * runs if reuse == "exact" else runs)
+    messages = [
+        str(w.message) for w in record if issubclass(w.category, DeclaredVersionWarning)
+    ]
+    assert any(
+        "_versioned declares version='1'" in m
+        and ("is not reused" if reuse == "exact" else "is reused") in m
+        for m in messages
+    )
+
+
+def test_versioned_job_reads_stored_contexts_once(installed, tmp_path, edited):
+    """The guard's read of the stored contexts is the one its lookup searches"""
+    calls = []
+
+    class Counting(PickleStore):
+        def stored_contexts(self, checksum):
+            calls.append(checksum)
+            return super().stored_contexts(checksum)
+
+    log = str(tmp_path / "log")
+    with pytest.warns(DeclaredVersionWarning):
+        for defn in (_versioned, edited):
+            store = Counting(tmp_path / "cache")
+            with Submitter(cache_root=tmp_path / "cache", store=store) as sub:
+                assert sub(python.define(defn, version="1")(a=1, log=log)).outputs
+    assert len(calls) == 2 and len(set(calls)) == 1
+    assert _runs(log) == 1

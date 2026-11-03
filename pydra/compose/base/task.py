@@ -189,8 +189,10 @@ class Task(ty.Generic[OutputsType]):
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
     # the library modules reached when the checksum was last computed
     _code_modules = attrs.field(default=None, init=False, eq=False, repr=False)
-    # the `code_digest` of the executor when the checksum was last computed
-    _code_digest = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the `code_digest`s of the functions with declared versions the checksum reached
+    # (its own, its nodes', its inputs'), by ``module.qualname==version``, when it was
+    # last computed
+    _declared_code = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
     BASE_ATTRS = ()
@@ -587,8 +589,9 @@ class Task(ty.Generic[OutputsType]):
         }
         if exclude is None:
             self._code_modules = frozenset(hash_cache.modules)
-            executor = getattr(inp_dict.get(self._executor_name), "function", None)
-            self._code_digest = executor and hash_cache.digests.get(id(executor))
+            self._declared_code = {
+                k: ",".join(sorted(v)) for k, v in sorted(hash_cache.declared.items())
+            }
         return hash_function(sorted(field_hashes.items())), field_hashes
 
     def _rule_violations(self) -> list[str]:

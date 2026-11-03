@@ -25,7 +25,6 @@ from pydra.utils.general import STDLIB_MODULES, get_fields
 from pydra.utils.hash import (
     _module_is_library,
     check_code_hash,
-    code_digest,
     code_hash_default,
     library_modules,
     type_module,
@@ -499,11 +498,15 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
       None if the modules cannot be determined;
     * ``installed``: a digest of all installed distributions, those in ``packages`` by
       their identities and the others by their versions;
-    * ``code``: present for a task with a declared version, the `code_digest` of its
-      function, which the declared version stands for (see `pydra.engine.store`);
+    * ``code``: present when the checksum reached functions with declared versions
+      (the task's own, those of a workflow's nodes, those of tasks passed as inputs),
+      the `code_digest` of each by ``module.qualname==version``, which the version
+      stands for (see `pydra.engine.store.check_declared_code`);
     * ``unknown``: present when any of ``packages`` is unknown, set to a value unique
       to this process, so the result is reused by no other process.
     """
+    if task._declared_code is None and not hasattr(task, "__checksum__"):
+        task._hash  # collects the modules and the code of declared versions reached
     modules = reached_modules(task)
     packages = None if modules is None else package_versions(modules)
     context = {
@@ -512,15 +515,8 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
         "packages": packages,
         "installed": _installed_digest(frozenset(packages or ())),
     }
-    executor = getattr(task, task._executor_name or "", None)
-    if (
-        task._version is not None
-        and not hasattr(task, "__checksum__")
-        and isinstance(executor, types.FunctionType)
-    ):
-        digest = task._code_digest or code_digest(executor, task._code_hash)
-        if digest is not None:
-            context["code"] = digest
+    if task._declared_code:
+        context["code"] = dict(task._declared_code)
     if packages is None or None in packages.values():
         context["unknown"] = _nonce()
     return context

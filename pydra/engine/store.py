@@ -268,45 +268,62 @@ class DeclaredVersionWarning(UserWarning):
     than the task's under the same version (see `check_declared_code`)."""
 
 
+def _moved(stored: Context, code: ty.Mapping[str, str]) -> dict[str, str]:
+    """The declared versions whose code digest in ``stored`` differs from ``code``'s,
+    with the stored digest"""
+    recorded = stored.get("code")
+    if not isinstance(recorded, ty.Mapping):
+        return {}
+    return {k: v for k, v in recorded.items() if k in code and code[k] != v}
+
+
 def check_declared_code(
     store: "ResultStore", checksum: str, context: Context, task: "Task | None"
-) -> None:
+) -> list[tuple[Path, Context]] | None:
     """Warn if a result stored for ``checksum`` was computed from other code than
-    ``context`` records under the same declared version (their ``code`` digests, see
-    `pydra.engine.context.job_context`, differ), saying whether ``lookup`` would reuse
-    it. Nothing is checked once a result is stored in ``context`` itself."""
+    ``context`` records for a declared version it reaches (a ``code`` digest, see
+    `pydra.engine.context.job_context`, differs), saying whether ``lookup`` would
+    reuse it. Nothing is checked once a result is stored in ``context`` itself.
+
+    Returns the stored contexts it read, to be passed to ``lookup`` as ``stored``, or
+    None if it read none."""
     code = context.get("code")
-    if code is None:
-        return
-    stored = [s for _, s in store.stored_contexts(checksum)]
-    if any(s == dict(context) for s in stored):
-        return
-    other = [s for s in stored if s.get("code") not in (None, code)]
-    if not other:
-        return
+    if not code or (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+        return None
+    stored = list(store.stored_contexts(checksum))
+    moved: dict[str, set[str]] = {}
+    for _, other in stored:
+        for identity, digest in _moved(other, code).items():
+            moved.setdefault(identity, set()).add(digest)
+    if not moved:
+        return stored
     reuse = getattr(store, "reuse", None)
     first = next(
         (
-            s
-            for s in stored
+            other
+            for _, other in stored
             if reuse is not None
             and type(reuse) is not ExactReuse
-            and reuse.accept(s, context, task)
+            and reuse.accept(other, context, task)
         ),
         None,
     )
-    reused = first is not None and first.get("code") != code
-    name = type(task).__name__ if task is not None else "a task"
-    version = f"version={task._version!r}" if task is not None else "a version"
-    digests = ", ".join(sorted({s["code"] for s in other}))
+    reused = first is not None and bool(_moved(first, code))
+    name = type(task).__name__ if task is not None else "A task"
+    changes = "; ".join(
+        f"{qualname} declares version={version!r}, but its code has changed (code "
+        f"digest {', '.join(sorted(moved[identity]))} there, {code[identity]} now)"
+        for identity in sorted(moved)
+        for qualname, _, version in [identity.partition("==")]
+    )
     warnings.warn(
-        f"{name} declares {version}, but its code has changed since a result stored "
-        f"under that version was computed (code digest {digests} there, {code} now), "
-        f"and that result is {'reused' if reused else 'not reused'}: bump version= or "
-        "remove it",
+        f"{name} has a stored result computed from other code under the same "
+        f"declared versions: {changes}. That result is "
+        f"{'reused' if reused else 'not reused'}: bump version= or remove it",
         DeclaredVersionWarning,
         stacklevel=2,
     )
+    return stored
 
 
 def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
@@ -380,7 +397,11 @@ class ResultStore(ty.Protocol):
         """The directory the job identified by ``checksum`` runs in under ``context``."""
 
     def lookup(
-        self, checksum: str, context: Context, task: "Task | None"
+        self,
+        checksum: str,
+        context: Context,
+        task: "Task | None",
+        stored: "list[tuple[Path, Context]] | None" = None,
     ) -> Result | None:
         """Return the stored result for ``checksum``, or None if there is none.
 
@@ -388,7 +409,8 @@ class ResultStore(ty.Protocol):
         result recorded in another context is returned if the store's reuse policy
         accepts its context for ``task``, marked with ``Result.cross_context`` and
         carrying the context it was recorded in and, as ``Result.reused_in``,
-        ``context``.
+        ``context``. ``stored``, the `stored_contexts` of ``checksum`` already read
+        (by `check_declared_code`), is searched instead of reading them again.
         """
 
     def stored_contexts(self, checksum: str) -> ty.Iterator[tuple[Path, Context]]:
@@ -441,7 +463,11 @@ class PickleStore:
         return self.cache_root / checksum / context_key(context)
 
     def lookup(
-        self, checksum: str, context: Context, task: "Task | None"
+        self,
+        checksum: str,
+        context: Context,
+        task: "Task | None",
+        stored: "list[tuple[Path, Context]] | None" = None,
     ) -> Result | None:
         locations = [self.cache_root] + self.readonly_caches
         slot = f"{checksum}/{context_key(context)}"
@@ -451,8 +477,10 @@ class PickleStore:
                 return result
         if type(self.reuse) is ExactReuse:
             return None
-        for slot, stored in self.stored_contexts(checksum):
-            if not self.reuse.accept(stored, context, task):
+        for slot, other in (
+            self.stored_contexts(checksum) if stored is None else stored
+        ):
+            if not self.reuse.accept(other, context, task):
                 continue
             result = load_result(f"{checksum}/{slot.name}", [slot.parent.parent])
             if result is not None:

@@ -280,6 +280,9 @@ class Cache:
     modules: ty.Set[str] = attrs.field(factory=set)
     # the `code_digest` of each function hashed with this cache, by its id
     digests: ty.Dict[int, str] = attrs.field(factory=dict)
+    # the `code_digest`s of the functions hashed with a declared version, by their
+    # ``module.qualname==version``
+    declared: ty.Dict[str, ty.Set[str]] = attrs.field(factory=dict)
 
     def __getitem__(self, object_id: int) -> Hash:
         return self._hashes[object_id]
@@ -596,9 +599,9 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
                 yield b"mime-like:(" + klass.mime_like.encode() + b")"
             except fileformats.core.exceptions.FormatDefinitionError:
                 yield type_location(klass)
-        elif fields := get_fields(klass):
+        elif get_fields(klass):
             yield b"fields:("
-            yield from bytes_repr_sequence_contents(fields, cache)
+            yield from bytes_repr_sequence_contents(_versioned_fields(klass), cache)
             yield b")"
             if hasattr(klass, "Outputs"):
                 yield b",outputs:("
@@ -1486,11 +1489,13 @@ class _CodeWalk:
             with _walk_memo_lock:
                 _walk_memo.setdefault(self.root, {})[key] = memo
         self.cache.modules.update(self.modules)
-        self.cache.digests[id(self.root)] = sha256(
+        digest = self.cache.digests[id(self.root)] = sha256(
             b"".join(len(code).to_bytes(8, "big") + code for code, _ in entries)
         ).hexdigest()
         if self.version is not None:
-            declared = f"version:{_qualified_name(self.root)}=={self.version}"
+            identity = f"{_qualified_name(self.root)}=={self.version}"
+            self.cache.declared.setdefault(identity, set()).add(digest)
+            declared = f"version:{identity}"
             entries = [(declared.encode(), entries[0][1])] + [
                 (b"", refs) for _, refs in entries[1:]
             ]
@@ -1645,6 +1650,44 @@ class TaskFunction:
 
     function: types.FunctionType
     version: str | None = None
+
+
+@attrs.frozen
+class _VersionedExecutor:
+    """The executor field of a task class with a declared version, hashed as the field
+    is with its default function replaced by its `TaskFunction`"""
+
+    field: ty.Any
+    version: str
+
+
+@register_serializer
+def bytes_repr_versioned_executor(
+    obj: _VersionedExecutor, cache: Cache
+) -> Iterator[bytes]:
+    cls = type(obj.field)
+    yield f"{cls.__module__}.{cls.__name__}:{{".encode()
+    dct = attrs.asdict(obj.field, recurse=False, filter=lambda a, _: bool(a.eq))
+    dct["default"] = TaskFunction(dct["default"], version=obj.version)
+    yield from bytes_repr_mapping_contents(dct, cache)
+    yield b"}"
+
+
+def _versioned_fields(klass: type) -> list[ty.Any]:
+    """The fields of a task class as they are hashed: the executor of a class with a
+    declared version by its version (see `_VersionedExecutor`)"""
+    version = getattr(klass, "_version", None)
+    executor = getattr(klass, "_executor_name", None)
+    return [
+        (
+            _VersionedExecutor(field, version)
+            if version is not None
+            and field.name == executor
+            and isinstance(field.default, types.FunctionType)
+            else field
+        )
+        for field in get_fields(klass)
+    ]
 
 
 def _bytes_repr_code(

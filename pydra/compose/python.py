@@ -130,8 +130,10 @@ def define(
         the defaults of the functions it calls) are still hashed. The digest of the
         code (`pydra.utils.hash.code_digest`) is recorded beside each result, and a
         `pydra.engine.store.DeclaredVersionWarning` is issued when a stored result of
-        the same version was computed from other code; ``reuse="exact"`` then
-        recomputes it, other policies reuse it. Functions defined in ``__main__`` or
+        the same version was computed from other code, also for workflows and splits
+        reaching the task, which hash it by its version too; ``reuse="exact"`` then
+        recomputes it, other policies reuse it. ``pydracli check-versions`` checks
+        versions against a committed table of digests. Functions defined in ``__main__`` or
         inside another function are identified only by name, version and the values
         they read, so a warning is issued for them.
     resources: ComputeResources, optional
