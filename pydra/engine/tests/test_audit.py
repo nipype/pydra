@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import glob as glob
 from pydra.compose import python, shell, workflow
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
@@ -7,6 +8,12 @@ from pydra.engine.submitter import Submitter
 from pydra.engine.job import Job
 from fileformats.generic import File
 from pydra.utils.hash import hash_function
+
+
+def _slot(cache_root, task):
+    """The one context slot holding the task's results"""
+    (slot,) = (Path(cache_root) / task._checksum).iterdir()
+    return slot
 
 
 def test_audit_prov(
@@ -24,11 +31,11 @@ def test_audit_prov(
     funky = TestFunc(a=2)
     funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     # this should be the default loctaion
-    message_path = tmpdir / funky._checksum / "messages"
-    assert (tmpdir / funky._checksum / "messages").exists()
+    message_path = _slot(tmpdir, funky) / "messages"
+    assert (_slot(tmpdir, funky) / "messages").exists()
 
-    collect_messages(tmpdir / funky._checksum, message_path, ld_op="compact")
-    assert (tmpdir / funky._checksum / "messages.jsonld").exists()
+    collect_messages(_slot(tmpdir, funky), message_path, ld_op="compact")
+    assert (_slot(tmpdir, funky) / "messages.jsonld").exists()
 
 
 def test_audit_task(tmpdir):
@@ -44,7 +51,7 @@ def test_audit_task(tmpdir):
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-    message_path = tmpdir / funky._checksum / "messages"
+    message_path = _slot(tmpdir, funky) / "messages"
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file) as f:
@@ -74,7 +81,7 @@ def test_audit_shellcommandtask(tmpdir):
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-    message_path = tmpdir / shelly._checksum / "messages"
+    message_path = _slot(tmpdir, shelly) / "messages"
     # go through each jsonld file in message_path and check if the label field exists
 
     command_content = []
@@ -180,7 +187,7 @@ def test_audit_shellcommandtask_version(tmpdir):
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-    message_path = tmpdir / shelly._checksum / "messages"
+    message_path = _slot(tmpdir, shelly) / "messages"
     # go through each jsonld file in message_path and check if the label field exists
     version_content = []
     for file in glob.glob(str(message_path) + "/*.jsonld"):
@@ -209,7 +216,6 @@ def test_audit_prov_messdir_1(
     # saving the audit message into the file
     funky = TestFunc(a=2)
     # user defined path
-    message_path = tmpdir / funky._checksum / "my_messages"
     # providing messenger_dir for audit
     funky_task = Job(
         task=funky,
@@ -218,12 +224,13 @@ def test_audit_prov_messdir_1(
         ),
         name="funky",
     )
+    message_path = funky_task.cache_dir / "my_messages"
     funky_task.audit.messenger_args = dict(message_dir=message_path)
     funky_task.run()
-    assert (tmpdir / funky._checksum / "my_messages").exists()
+    assert (_slot(tmpdir, funky) / "my_messages").exists()
 
-    collect_messages(tmpdir / funky._checksum, message_path, ld_op="compact")
-    assert (tmpdir / funky._checksum / "messages.jsonld").exists()
+    collect_messages(_slot(tmpdir, funky), message_path, ld_op="compact")
+    assert (_slot(tmpdir, funky) / "messages.jsonld").exists()
 
 
 def test_audit_prov_messdir_2(
@@ -278,11 +285,11 @@ def test_audit_prov_wf(
         messengers=FileMessenger(),
     )
     # default path
-    message_path = tmpdir / wf._checksum / "messages"
+    message_path = _slot(tmpdir, wf) / "messages"
     assert message_path.exists()
 
-    collect_messages(tmpdir / wf._checksum, message_path, ld_op="compact")
-    assert (tmpdir / wf._checksum / "messages.jsonld").exists()
+    collect_messages(_slot(tmpdir, wf), message_path, ld_op="compact")
+    assert (_slot(tmpdir, wf) / "messages.jsonld").exists()
 
 
 def test_audit_all(
@@ -293,7 +300,7 @@ def test_audit_all(
         return a + b
 
     funky = TestFunc(a=2)
-    message_path = tmpdir / funky._checksum / "messages"
+    message_path = Path(tmpdir) / "messages"
 
     funky(
         cache_root=tmpdir,
@@ -303,9 +310,9 @@ def test_audit_all(
     )
     from glob import glob
 
-    assert len(glob(str(tmpdir / funky._checksum / "proc*.log"))) == 1
+    assert len(glob(str(_slot(tmpdir, funky) / "proc*.log"))) == 1
     assert len(glob(str(message_path / "*.jsonld"))) == 7
 
     # commented out to speed up testing
-    collect_messages(tmpdir / funky._checksum, message_path, ld_op="compact")
-    assert (tmpdir / funky._checksum / "messages.jsonld").exists()
+    collect_messages(_slot(tmpdir, funky), message_path, ld_op="compact")
+    assert (_slot(tmpdir, funky) / "messages.jsonld").exists()

@@ -64,10 +64,8 @@ def test_environment_checksum_recorded_not_in_job_checksum(tmp_path):
 
 
 def test_environment_checksum_survives_reload(tmp_path):
-    from pydra.engine.result import load_result
-
     job = _run(tmp_path, Tagged(tag="a"))
-    stored = load_result(job.checksum, [tmp_path])
+    stored = job.store.lookup(job.checksum, job.context)
     assert stored.environment_checksum == Tagged(tag="a").checksum()
 
 

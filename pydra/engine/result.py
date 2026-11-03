@@ -51,8 +51,6 @@ class Result(ty.Generic[OutputsType]):
     environment_checksum: str | None = None
     platform: str | None = None
     python_version: str | None = None
-    job_uid: str | None = None
-    """Uid of the job that produced the result."""
     cross_context: bool = False
     """Whether the result was reused from an entry recorded in another context."""
 
@@ -72,10 +70,6 @@ class Result(ty.Generic[OutputsType]):
         return state
 
     def __setstate__(self, state):
-        # Results pickled before a field was added take its default
-        for field in attrs.fields(type(self)):
-            if field.name not in state and field.default is not attrs.NOTHING:
-                setattr(self, field.name, field.default)
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
                 state[attr] = cp.loads(state[attr])

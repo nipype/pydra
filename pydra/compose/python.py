@@ -1,4 +1,5 @@
 import typing as ty
+import warnings
 import inspect
 from typing import dataclass_transform
 import attrs
@@ -122,6 +123,9 @@ def define(
         Declared version of the task. When given, the checksum uses the function's
         module, name and this version instead of hashing the function's code, so the
         version must be changed whenever a change to the code changes its results.
+        Neither the function's defaults nor the variables it closes over are hashed
+        then. Functions defined in ``__main__`` or inside another function are
+        identified only by name and version, so a warning is issued for them.
     resources: ComputeResources, optional
         What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
 
@@ -192,6 +196,16 @@ def define(
         )
 
         defn.__doc__ = function.__doc__
+        if version is not None and (
+            function.__module__ == "__main__" or "<locals>" in function.__qualname__
+        ):
+            warnings.warn(
+                f"version={version!r} identifies {function.__module__}."
+                f"{function.__qualname__}, which another function of the same name "
+                "and version would share, so their results would be reused as one",
+                UserWarning,
+                stacklevel=2,
+            )
         defn._version = version
         return defn
 
@@ -204,7 +218,6 @@ def define(
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonOutputs(base.Outputs):
-
     @classmethod
     def _from_job(cls, job: "Job[PythonTask]") -> ty.Self:
         """Collect the outputs of a job from a combination of the provided inputs,
@@ -233,7 +246,6 @@ PythonOutputsType = ty.TypeVar("PythonOutputsType", bound=PythonOutputs)
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonTask(base.Task[PythonOutputsType]):
-
     _executor_name = "function"
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
