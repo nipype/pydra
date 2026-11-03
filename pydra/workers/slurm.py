@@ -89,6 +89,60 @@ class SlurmWorker(base.Worker):
             fp.writelines(bcmd)
         return script_dir, batchscript
 
+    @staticmethod
+    def _apply_resources(sargs, resources):
+        """Replace the worker-wide options of every family the node's resources set.
+
+        Options of one family conflict (``--mem`` with ``--mem-per-cpu``, ``--gres=gpu``
+        with ``--gpus``), so the node's resources replace the whole family.
+        """
+        families = []
+        if resources.cpus is not None:
+            families.append(("--cpus-per-task", "-c"))
+        if resources.mem is not None:
+            families.append(("--mem", "--mem-per-cpu", "--mem-per-gpu"))
+        if resources.time is not None:
+            families.append(("--time", "-t"))
+        if resources.gpus is not None:
+            families.append(
+                (
+                    "--gpus",
+                    "-G",
+                    "--gpus-per-node",
+                    "--gpus-per-task",
+                    "--gpus-per-socket",
+                    "--cpus-per-gpu",
+                    "--mem-per-gpu",
+                )
+            )
+        names = {name for family in families for name in family}
+        kept = []
+        i = 0
+        while i < len(sargs):
+            token = sargs[i]
+            if token.startswith("--"):
+                name, has_value, value = token.partition("=")
+            elif token.startswith("-") and len(token) > 1:
+                name, value = token[:2], token[2:]
+                has_value = bool(value)
+            else:
+                name, has_value, value = None, True, ""
+            if name is not None and not has_value and i + 1 < len(sargs):
+                value = sargs[i + 1]
+            consumed = 1 if has_value else 2
+            if name in names:
+                i += consumed
+            elif name == "--gres" and resources.gpus is not None:
+                items = value.split(",")
+                rest = [x for x in items if not x.startswith("gpu")]
+                if rest:
+                    kept.append(f"--gres={','.join(rest)}")
+                i += consumed
+            else:
+                kept.append(token)
+                i += 1
+        return kept + resources.slurm_args()
+
     async def run(self, job: "Job[base.TaskType]", rerun: bool = False) -> "Result":
         """Worker submission API."""
         script_dir, batch_script = self._prepare_runscripts(job, rerun=rerun)
@@ -97,8 +151,7 @@ class SlurmWorker(base.Worker):
         script_dir = job.cache_root / f"{self.plugin_name()}_scripts" / job.uid
         sargs = self.sbatch_args.split()
         if job.resources is not None:
-            # after the worker-wide arguments, so the node's resources win
-            sargs += job.resources.slurm_args()
+            sargs = self._apply_resources(sargs, job.resources)
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
             jobname = ".".join((job.name, job.uid))

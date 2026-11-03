@@ -90,3 +90,28 @@ def test_jobs_with_different_resources_do_not_share_an_array(make_job):
     qsub_args(worker, make_job(ComputeResources(cpus=2)))
     qsub_args(worker, make_job(ComputeResources(cpus=4)))
     assert set(worker.tasks_to_run_by_threads_requested) == {"-pe smp 2", "-pe smp 4"}
+
+
+@pytest.mark.parametrize(
+    "cmd, gigabytes",
+    [
+        ("mem_free=8G", 8),
+        ("mem_free=512M", 0.5),
+        ("mem_free=2T", 2048),
+        ("h_vmem=1024M", 1),
+    ],
+)
+def test_memory_is_normalised_to_gigabytes(cmd, gigabytes):
+    assert sge.SgeWorker._gigabytes(cmd) == gigabytes
+
+
+def test_array_length_counts_megabytes_as_megabytes(make_job):
+    import asyncio
+
+    worker = sge.SgeWorker(max_mem_free=4, max_job_array_length=100)
+    args = qsub_args(worker, make_job(ComputeResources(mem=512)))
+    _, _, cmd = worker._requested(args)
+    queued = worker.tasks_to_run_by_threads_requested[args]
+    queued.extend([("p", i, False) for i in range(20)])
+    # 4 GB across 512 MB jobs is 8 per array, not 4 / 512 -> 1
+    assert len(asyncio.run(worker.get_tasks_to_run(args, cmd))) == 8

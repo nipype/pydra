@@ -61,7 +61,7 @@ class SgeWorker(base.Worker):
 
     _cmd = "qsub"
     _sacct_re = re.compile(
-        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
+        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +(?P<exit_code>\\d+):\\d+"
     )
 
     poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)
@@ -79,7 +79,7 @@ class SgeWorker(base.Worker):
     mem_resource: str = "mem_free"
     gpu_resource: str = "gpu"
     gpu_type_resource: str | None = "gpu_type"
-    max_mem_free: int | None = None
+    max_mem_free: int | None = None  # gigabytes across one job array
     error: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
     tasks_to_run_by_threads_requested: dict[str, ty.Any] = attrs.field(
         factory=dict, init=False
@@ -221,11 +221,22 @@ class SgeWorker(base.Worker):
                 break
         return threads, mem_free, mem_free_cmd
 
-    async def get_tasks_to_run(self, task_qsub_args, mem_free):
+    @staticmethod
+    def _gigabytes(mem_free_cmd):
+        """The memory in a ``name=<digits><K|M|G|T>`` argument, in gigabytes.
+
+        A bare number is bytes, as SGE reads it.
+        """
+        match = re.search(r"=(\d+)([KMGT]?)", mem_free_cmd.upper())
+        scale = {"": 1 / 1024**3, "K": 1 / 1024**2, "M": 1 / 1024, "G": 1, "T": 1024}
+        return int(match.group(1)) * scale[match.group(2)]
+
+    async def get_tasks_to_run(self, task_qsub_args, mem_free_cmd):
         # Extract the first N tasks to run
-        if mem_free is not None and self.max_mem_free is not None:
+        if mem_free_cmd is not None and self.max_mem_free is not None:
             max_job_array_length = min(
-                self.max_job_array_length, int(self.max_mem_free / mem_free)
+                self.max_job_array_length,
+                max(1, int(self.max_mem_free / self._gigabytes(mem_free_cmd))),
             )
         else:
             max_job_array_length = self.max_job_array_length
@@ -265,7 +276,7 @@ class SgeWorker(base.Worker):
             <= self.max_job_array_length
         ):
             await asyncio.sleep(self.collect_jobs_delay)
-        tasks_to_run = await self.get_tasks_to_run(task_qsub_args, mem_free)
+        tasks_to_run = await self.get_tasks_to_run(task_qsub_args, mem_free_cmd)
 
         if mem_free is not None:
             summed_mem_free_cmd = re.sub(
