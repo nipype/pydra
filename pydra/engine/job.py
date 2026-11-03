@@ -174,6 +174,8 @@ class Job(ty.Generic[TaskType]):
         return self.name
 
     def __getstate__(self):
+        # Carry the checksum, so a worker never rehashes the task's code
+        self.checksum
         state = self.__dict__.copy()
         state["task"] = cp.dumps(state["task"])
         # Never serialise the in-memory result cache: subprocess workers must

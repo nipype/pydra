@@ -1,10 +1,15 @@
 import ast
+import importlib
 import importlib.util
+import linecache
 import re
 import os
 import subprocess
 import sys
+import textwrap
 import time
+import types
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
 from pathlib import Path
@@ -896,11 +901,14 @@ def test_hash_function_lambdas_on_one_line(tmp_path):
 
 def test_hash_function_encoding_tagged(tmp_path):
     """The code part is tagged by its encoding, the byte-code fallback by the Python
-    version"""
+    version, and by the tier when the function reads references"""
     namespace: dict = {}
     exec("def f(a):\n    return a + 1\n", namespace)
     assert b"function:(ast@1:" in b"".join(
-        bytes_repr(_define(tmp_path, _BASE_SOURCE), Cache())
+        bytes_repr(_define(tmp_path, "def f(a):\n    return a + 1\n"), Cache())
+    )
+    assert b"function:(module/ast@1:" in b"".join(
+        bytes_repr(_define(tmp_path, _BASE_SOURCE), Cache(code_hash="module"))
     )
     version = f"bytecode@{sys.version_info[0]}.{sys.version_info[1]}:"
     assert f"function:({version}".encode() in b"".join(
@@ -983,3 +991,397 @@ def test_hash_function_concurrently(tmp_path, monkeypatch):
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(hash_function, funcs * 50))
     assert results == expected * 50
+
+
+@pytest.fixture
+def load_modules(tmp_path, monkeypatch):
+    """Write modules to a new directory and import them by name, replacing those of
+    the same names loaded before"""
+    loaded = set()
+    count = 0
+
+    def load(sources: dict[str, str], directory: str = "") -> list[types.ModuleType]:
+        nonlocal count
+        count += 1
+        root = tmp_path / f"v{count}"
+        for name, source in sources.items():
+            path = root / directory / Path(*name.split(".")).with_suffix(".py")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(textwrap.dedent(source))
+            for package in path.parents[: name.count(".")]:
+                (package / "__init__.py").touch()
+        for name in loaded:
+            sys.modules.pop(name, None)
+        monkeypatch.syspath_prepend(str(root / directory))
+        importlib.invalidate_caches()
+        loaded.update(n.split(".")[0] for n in sources)
+        loaded.update(sources)
+        return [importlib.import_module(n) for n in sources]
+
+    yield load
+    for name in loaded:
+        sys.modules.pop(name, None)
+
+
+def _code_hash(func, code_hash: str) -> str:
+    return hash_function(func, cache=Cache(code_hash=code_hash))
+
+
+_TIERS = ("function", "module", "user")
+
+_MAIN = """
+import helper
+from helper import g
+
+K = {k}
+
+
+def h(x):
+    return x * {h}
+
+
+def f(x):
+    return h(x) + helper.u(x) + g(x) + K
+"""
+
+_HELPER = """
+def u(x):
+    return x - {u}
+
+
+def g(x):
+    return x + 1
+"""
+
+
+def _main_f(load_modules, k=1, h=2, u=3):
+    main, _ = load_modules(
+        {"main": _MAIN.format(k=k, h=h), "helper": _HELPER.format(u=u)}
+    )
+    return main.f
+
+
+@pytest.mark.parametrize(
+    "change,changed_at",
+    [
+        pytest.param({"k": 5}, _TIERS, id="global-value"),
+        pytest.param({"h": 5}, ("module", "user"), id="same-module-helper"),
+        pytest.param({"u": 5}, ("user",), id="other-module-helper"),
+    ],
+)
+def test_code_hash_tiers(load_modules, change, changed_at):
+    """A global value is hashed at every tier, a helper in the function's module from
+    the "module" tier, and one in another user module at the "user" tier"""
+    base = {t: _code_hash(_main_f(load_modules), t) for t in _TIERS}
+    variant = {t: _code_hash(_main_f(load_modules, **change), t) for t in _TIERS}
+    assert {t for t in _TIERS if base[t] != variant[t]} == set(changed_at)
+
+
+def test_code_hash_tier_tagged(load_modules):
+    """Hashes of one function at different tiers differ"""
+    f = _main_f(load_modules)
+    assert len({_code_hash(f, t) for t in _TIERS}) == 3
+    assert b"function:(user/ast@1:" in b"".join(bytes_repr(f, Cache()))
+
+
+def test_code_hash_default_from_env(load_modules, monkeypatch):
+    f = _main_f(load_modules)
+    monkeypatch.setenv(hash_module.CODE_HASH_ENV_VAR, "function")
+    assert hash_function(f) == _code_hash(f, "function")
+    monkeypatch.setenv(hash_module.CODE_HASH_ENV_VAR, "everything")
+    with pytest.raises(ValueError, match="code_hash must be one of"):
+        hash_function(f)
+
+
+_LIB = """
+def h(x):
+    return x * {h}
+"""
+
+_USES_LIB = """
+from libpkg.core import {name} as h
+
+
+def f(x):
+    return h(x)
+"""
+
+
+def _lib_f(load_modules, h=2, name="h"):
+    _, main = load_modules(
+        {"libpkg.core": _LIB.format(h=h), "uses_lib": _USES_LIB.format(name=name)},
+        directory="site-packages",
+    )
+    return main.f
+
+
+@pytest.mark.parametrize("code_hash", _TIERS)
+def test_code_hash_library_by_name(load_modules, code_hash):
+    """Code installed in site-packages is identified by its qualified name, never its
+    code"""
+    base = _code_hash(_lib_f(load_modules), code_hash)
+    assert _code_hash(_lib_f(load_modules, h=5), code_hash) == base
+    renamed = _LIB.replace("def h", "def k")
+    _, main = load_modules(
+        {"libpkg.core": renamed.format(h=2), "uses_lib": _USES_LIB.format(name="k")},
+        directory="site-packages",
+    )
+    assert _code_hash(main.f, code_hash) != base
+
+
+def test_code_hash_library_objects_by_name():
+    """Library modules are referenced by their names, whatever is read from them"""
+
+    def f(x):
+        return numpy.add(numpy.mean(x), os.environ)
+
+    encoded = b"".join(bytes_repr(f, Cache()))
+    assert b"global:numpy=module:numpy" in encoded
+    assert b"global:os=module:os" in encoded
+
+
+def test_code_hash_library_instances_by_name(load_modules):
+    _, main = load_modules(
+        {
+            "libpkg.state": "class Config:\n    pass\n\nCONFIG = Config()\n",
+            "uses_state": (
+                "from libpkg.state import CONFIG\nfrom os import environ\n"
+                "from numpy import add\n\n\ndef f(x):\n    return add(x, CONFIG, environ)\n"
+            ),
+        },
+        directory="site-packages",
+    )
+    encoded = b"".join(bytes_repr(main.f, Cache()))
+    assert b"global:CONFIG=lib:libpkg.state.CONFIG" in encoded
+    assert b"global:environ=lib:os.environ" in encoded
+    assert b"global:add=lib:numpy.add" in encoded
+
+
+@pytest.mark.parametrize(
+    "setting,changed", [("", True), ("-helper", False), ("main", True)]
+)
+def test_code_hash_user_packages_exclude(load_modules, monkeypatch, setting, changed):
+    """``PYDRA_USER_PACKAGES`` names a package ``-name`` to make it library code"""
+    monkeypatch.setenv(hash_module.USER_PACKAGES_ENV_VAR, setting)
+    base = _code_hash(_main_f(load_modules), "user")
+    assert (_code_hash(_main_f(load_modules, u=5), "user") != base) is changed
+
+
+@pytest.mark.parametrize("setting,changed", [("", False), ("libpkg", True)])
+def test_code_hash_user_packages_include(load_modules, monkeypatch, setting, changed):
+    """``PYDRA_USER_PACKAGES`` names an installed package to make it user code"""
+    monkeypatch.setenv(hash_module.USER_PACKAGES_ENV_VAR, setting)
+    base = _code_hash(_lib_f(load_modules), "user")
+    assert (_code_hash(_lib_f(load_modules, h=5), "user") != base) is changed
+
+
+def test_code_hash_pydra_is_library(monkeypatch):
+    """pydra is library code unless named in ``PYDRA_USER_PACKAGES``"""
+    from pydra.utils.general import get_fields
+
+    assert hash_module.is_library(hash_module.hash_function)
+    assert hash_module.is_library(get_fields)
+    monkeypatch.setenv(hash_module.USER_PACKAGES_ENV_VAR, "pydra.utils.general")
+    assert hash_module.is_library(hash_module.hash_function)
+    assert not hash_module.is_library(get_fields)
+
+
+def test_code_hash_mutable_global_by_value(load_modules):
+    """A dict read as a global is hashed by the value it holds when hashed"""
+    (main,) = load_modules(
+        {"main": "CFG = {'k': 1}\n\ndef f(x):\n    return CFG['k']\n"}
+    )
+    before = hash_function(main.f)
+    main.CFG["k"] = 2
+    assert hash_function(main.f) != before
+    main.CFG["k"] = 1
+    assert hash_function(main.f) == before
+
+
+def _notebook():
+    """A namespace that runs cells as IPython does, registering their source"""
+    namespace = {"__name__": "__main__"}
+
+    def run(source: str):
+        filename = f"<cell-{uuid.uuid4().hex}>"
+        source = textwrap.dedent(source)
+        linecache.cache[filename] = (
+            len(source),
+            None,
+            source.splitlines(True),
+            filename,
+        )
+        exec(compile(source, filename, "exec"), namespace)
+
+    return namespace, run
+
+
+def test_code_hash_notebook_rebinding():
+    """A name a notebook cell rebinds, by assignment, ``global`` or an import fallback,
+    is hashed as what it holds when hashed"""
+    namespace, run = _notebook()
+    run("from json import dumps as enc")
+    run("def f(x):\n    return enc(x)\n")
+    hashes = [hash_function(namespace["f"])]
+    assert b"global:enc=lib:json.dumps" in b"".join(bytes_repr(namespace["f"], Cache()))
+    run("enc = {'state': 1}")
+    hashes.append(hash_function(namespace["f"]))
+    run("def setup():\n    global enc\n    enc = {'state': 2}\n\nsetup()\n")
+    hashes.append(hash_function(namespace["f"]))
+    run(
+        "try:\n    from json import nonexistent as enc\n"
+        "except ImportError:\n    from pickle import dumps as enc\n"
+    )
+    hashes.append(hash_function(namespace["f"]))
+    assert len(set(hashes)) == 4
+
+
+def test_code_hash_notebook_helper():
+    """A helper defined in an earlier cell is hashed by its definition"""
+    hashes = []
+    for body in ("x * 2", "x * 3"):
+        namespace, run = _notebook()
+        run(f"def h(x):\n    return {body}\n")
+        run("def f(x):\n    return h(x)\n")
+        hashes.append(hash_function(namespace["f"]))
+    assert hashes[0] != hashes[1]
+
+
+_CLASSES = """
+class Base:
+    def f(self, x):
+        return x * {base}
+
+
+class Child(Base):
+    scale = 1
+
+    def g(self, x):
+        return self.f(x)
+
+
+def use(x):
+    return Child().g(x)
+"""
+
+
+@pytest.mark.parametrize("code_hash,changed", [("function", False), ("module", True)])
+def test_code_hash_base_classes(load_modules, code_hash, changed):
+    """The bases of a class reached are walked"""
+    (a,) = load_modules({"classes": _CLASSES.format(base=2)})
+    base = _code_hash(a.use, code_hash)
+    (b,) = load_modules({"classes": _CLASSES.format(base=3)})
+    assert (_code_hash(b.use, code_hash) != base) is changed
+
+
+def test_code_hash_cycles(load_modules):
+    """Mutually recursive functions and self-referencing classes terminate"""
+    source = """
+    def f(n):
+        return g(n - 1) if n else A
+
+    def g(n):
+        return f(n - 1) if n else {body}
+
+    class A:
+        def me(self):
+            return A
+    """
+    (a,) = load_modules({"cyc": source.format(body="0")})
+    (b,) = load_modules({"cyc": source.format(body="1")})
+    assert hash_function(a.f) != hash_function(b.f)
+
+
+def test_code_hash_deep_chain(load_modules):
+    """A long chain of calls is walked without recursion"""
+    depth = 2000
+    source = (
+        "".join(f"def f{i}(x):\n    return f{i + 1}(x)\n\n" for i in range(depth))
+        + f"def f{depth}(x):\n    return x * {{last}}\n"
+    )
+    (a,) = load_modules({"chain": source.format(last=2)})
+    (b,) = load_modules({"chain": source.format(last=3)})
+    assert hash_function(a.f0) != hash_function(b.f0)
+
+
+def test_code_hash_unhashable_global(load_modules):
+    """A global that cannot be hashed fails the hash, naming it"""
+    (main,) = load_modules(
+        {
+            "unhashable": (
+                "class A:\n    def __bytes_repr__(self, cache):\n"
+                "        raise TypeError('unhashable')\n\n"
+                "OBJ = A()\n\ndef f(x):\n    return OBJ\n"
+            )
+        }
+    )
+    with pytest.raises(TypeError, match=r"unhashable\nin 'OBJ', read by function 'f'"):
+        hash_object(main.f)
+
+
+def test_code_hash_helper_defaults(load_modules):
+    """The defaults of a helper are hashed"""
+    source = (
+        "K = {k}\n\ndef h(x, k=K):\n    return x * k\n\ndef f(x):\n    return h(x)\n"
+    )
+    (a,) = load_modules({"defs": source.format(k=1)})
+    base = hash_function(a.f)
+    (b,) = load_modules({"defs": source.format(k=2)})
+    b.K = 1  # the global no longer differs, only the default
+    assert hash_function(b.f) != base
+
+
+_WALK_HELPER = """
+import json
+
+
+def u(x):
+    return x - 3
+
+
+class Base:
+    def f(self, x):
+        return x * 2
+"""
+
+_WALK_MAIN = """
+import os.path
+import fh2helper
+from fh2helper import Base
+
+K = {"a": [1, 2]}
+
+
+def h(x, k=3):
+    return x * k
+
+
+class Child(Base):
+    def g(self, x):
+        return super().f(x)
+
+
+def f(x):
+    y = [h(i) for i in range(x) if i not in K]
+    z = (fh2helper.u(i) for i in y)
+
+    class Local:
+        v = len(y)
+
+    lam = lambda q: q + K["a"][0]
+    return os.path.join(
+        str(sum(z)), str(Child().g(lam(x))), fh2helper.json.dumps(Local.v)
+    )
+"""
+
+
+def test_code_hash_same_on_every_python(load_modules):
+    """The hash of a function reading globals, attributes of modules, helpers, classes
+    and their bases is the same on every supported Python version (measured on 3.11 to
+    3.15)"""
+    _, main = load_modules({"fh2helper": _WALK_HELPER, "fh2main": _WALK_MAIN})
+    assert [_code_hash(main.f, t) for t in _TIERS] == [
+        "fee118d338ef26b41b814deac6fe8b3a",
+        "e5ad835c221d7657c1ebf53e177ea243",
+        "d0bc4c1bc86bb5cb68d01d8b8280e059",
+    ]

@@ -3,6 +3,10 @@
 import sys
 import os
 import ast
+import dis
+import functools
+import site
+import sysconfig
 import struct
 import threading
 import inspect
@@ -28,7 +32,13 @@ import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
 import fileformats.core.exceptions
-from pydra.utils.general import in_stdlib, user_cache_root, add_exc_note
+from pydra.utils.general import (
+    STDLIB_MODULES,
+    add_exc_note,
+    get_fields,
+    in_stdlib,
+    user_cache_root,
+)
 
 logger = logging.getLogger("pydra")
 
@@ -76,6 +86,13 @@ _function_bytes_cache = _LRUCache(FUNCTION_BYTES_CACHE_SIZE)
 _source_nodes_cache = _LRUCache(SOURCE_NODES_CACHE_SIZE)
 
 AST_ENCODING = "ast@1"
+
+CODE_HASH_TIERS = ("function", "module", "user")
+CODE_HASH_ENV_VAR = "PYDRA_CODE_HASH"
+USER_PACKAGES_ENV_VAR = "PYDRA_USER_PACKAGES"
+# Packages that are library code wherever they are installed, unless named in
+# ``PYDRA_USER_PACKAGES``
+LIBRARY_PACKAGES = ("pydra",)
 
 try:
     from typing import Protocol
@@ -251,6 +268,9 @@ class Cache:
         converter=PersistentCache.from_path,  # type: ignore[misc]
     )
     _hashes: ty.Dict[int, Hash] = attrs.field(factory=dict)
+    # the `code_hash` tier of the functions hashed with this cache, `code_hash_default`
+    # when None
+    code_hash: ty.Optional[str] = attrs.field(default=None)
 
     def __getitem__(self, object_id: int) -> Hash:
         return self._hashes[object_id]
@@ -730,6 +750,7 @@ def bytes_repr_code(obj: types.CodeType, cache: Cache) -> Iterator[bytes]:
 
 _AST_EXCLUDED_FIELDS = frozenset({"ctx", "type_comment", "kind"})
 _FUNCTION_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
+_DOCUMENTED_DEFS = (*_FUNCTION_DEFS, ast.ClassDef)
 
 
 def _is_docstring(stmt: ast.stmt) -> bool:
@@ -767,8 +788,9 @@ def encode_ast(root: ast.AST) -> str:
       Python version with such a default leave the encoding unchanged (a constant's
       value is always encoded);
     * the name, decorators, signature annotations (of arguments and the return value)
-      and docstring (the leading string expression of the body) of `root` itself;
-      those of the functions and classes it defines are encoded.
+      and docstring (the leading string expression of the body) of a function `root`
+      itself, and the name and docstring of a class `root`; those of the functions
+      and classes it defines are encoded.
 
     The parts of an f-string are encoded with empty strings dropped and adjacent
     strings merged. A decorator of `root` that does not wrap it but sets state its
@@ -812,14 +834,19 @@ def encode_ast(root: ast.AST) -> str:
             elif (
                 name in _AST_EXCLUDED_FIELDS
                 or (name == "annotation" and id(value) in root_args)
-                or (name in ("name", "decorator_list", "returns") and value is root)
+                or (name == "name" and value is root)
+                or (
+                    name in ("decorator_list", "returns")
+                    and value is root
+                    and isinstance(root, _FUNCTION_DEFS)
+                )
                 or (not field and not isinstance(field, ast.AST))
             ):
                 continue
             elif (
                 name == "body"
                 and value is root
-                and isinstance(root, _FUNCTION_DEFS)
+                and isinstance(root, _DOCUMENTED_DEFS)
                 and _is_docstring(field[0])
             ):
                 field = field[1:]
@@ -836,8 +863,9 @@ def encode_ast(root: ast.AST) -> str:
     return "".join(parts)
 
 
-def _function_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AST]]:
-    """The function and lambda nodes of a source, by the first line of their code"""
+def _definition_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AST]]:
+    """The function, lambda and class nodes of a source, by the first line of their
+    definition"""
     text = "".join(lines)
     key = (source_file, blake2b(text.encode(), digest_size=16).digest())
     cached = _source_nodes_cache.get(key)
@@ -850,7 +878,7 @@ def _function_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AS
         pass
     else:
         for node in ast.walk(tree):
-            if isinstance(node, _FUNCTION_DEFS):
+            if isinstance(node, _DOCUMENTED_DEFS):
                 first = node.decorator_list[0] if node.decorator_list else node
                 nodes.setdefault(first.lineno, []).append(node)
             elif isinstance(node, ast.Lambda):
@@ -877,6 +905,8 @@ def _encode_function_code(obj: types.FunctionType) -> str | None:
     ]
 
     def matches(node: ast.AST) -> bool:
+        if isinstance(node, ast.ClassDef):
+            return False
         name = node.name if isinstance(node, _FUNCTION_DEFS) else "<lambda>"
         start = (node.lineno, node.col_offset)
         end = (node.end_lineno, node.end_col_offset)
@@ -884,35 +914,505 @@ def _encode_function_code(obj: types.FunctionType) -> str | None:
             start <= p[:2] and p[2:] <= end for p in positions
         )
 
-    nodes = _function_nodes(code.co_filename, lines).get(code.co_firstlineno, [])
+    nodes = _definition_nodes(code.co_filename, lines).get(code.co_firstlineno, [])
     encodings = {encode_ast(n) for n in nodes if matches(n)}
     return encodings.pop() if len(encodings) == 1 else None
 
 
-def bytes_repr_function_closure(
-    obj: types.FunctionType, cache: Cache
-) -> Iterator[bytes]:
-    """Serialize the values a function closes over, hashed like any other value, so
-    functions with the same source but different captured values hash differently"""
-    if not obj.__closure__:
-        return
-    yield b",closure:("
-    for name, cell in zip(obj.__code__.co_freevars, obj.__closure__):
-        yield from bytes_repr(name, cache)
-        yield b"="
+def check_code_hash(code_hash: str) -> str:
+    """Return `code_hash` if it names a tier of `CODE_HASH_TIERS`, otherwise raise"""
+    if code_hash not in CODE_HASH_TIERS:
+        raise ValueError(
+            f"code_hash must be one of {', '.join(map(repr, CODE_HASH_TIERS))}, "
+            f"not {code_hash!r}"
+        )
+    return code_hash
+
+
+def code_hash_default() -> str:
+    """The `code_hash` tier of tasks that do not set one, read on each call: the
+    ``PYDRA_CODE_HASH`` environment variable if set, otherwise ``"user"``"""
+    return check_code_hash(os.environ.get(CODE_HASH_ENV_VAR, "user"))
+
+
+@functools.cache
+def _library_roots() -> tuple[str, ...]:
+    """The directories of the standard library and installed distributions"""
+    paths = {sysconfig.get_paths().get(k) for k in ("stdlib", "platstdlib")}
+    paths.update(sysconfig.get_paths().get(k) for k in ("purelib", "platlib"))
+    paths.update(getattr(site, "getsitepackages", list)())
+    if site.ENABLE_USER_SITE:
+        paths.add(site.getusersitepackages())
+    return tuple(sorted(os.path.join(os.path.realpath(p), "") for p in paths if p))
+
+
+@functools.lru_cache(maxsize=4096)
+def _path_is_library(path: str) -> bool | None:
+    """Whether a source file is library code, or None for a pseudo-file (``<...>``)
+    other than a frozen module"""
+    if path.startswith("<"):
+        return True if path.startswith("<frozen") else None
+    real = os.path.realpath(path)
+    parts = Path(real).parts
+    return (
+        "site-packages" in parts
+        or "dist-packages" in parts
+        or real.startswith(_library_roots())
+    )
+
+
+@functools.lru_cache(maxsize=8)
+def _package_overrides(setting: str) -> tuple[tuple[str, bool], ...]:
+    """The packages whose classification is set, and whether each is library code,
+    most specific first: `LIBRARY_PACKAGES`, then the comma-separated entries of
+    `setting`, ``name`` for user code and ``-name`` for library code"""
+    packages = dict.fromkeys(LIBRARY_PACKAGES, True)
+    for entry in setting.split(","):
+        entry = entry.strip()
+        if entry.startswith("-"):
+            packages[entry[1:].strip()] = True
+        elif entry:
+            packages[entry] = False
+    return tuple(sorted(packages.items(), key=lambda p: -len(p[0])))
+
+
+def _package_override(module: str) -> bool | None:
+    for package, is_library in _package_overrides(
+        os.environ.get(USER_PACKAGES_ENV_VAR, "")
+    ):
+        if module == package or module.startswith(package + "."):
+            return is_library
+    return None
+
+
+def _module_is_library(module: str, file: str | None = None) -> bool:
+    """Whether the module named `module` is library code: a package of
+    ``PYDRA_USER_PACKAGES`` is user code and one prefixed by ``-`` (or pydra) library
+    code, otherwise the standard library and modules installed in site-packages are"""
+    override = _package_override(module)
+    if override is not None:
+        return override
+    if module.partition(".")[0] in STDLIB_MODULES:
+        return True
+    if file is None:
+        file = getattr(sys.modules.get(module), "__file__", None)
+    return bool(file and _path_is_library(file))
+
+
+def is_library(obj: object) -> bool:
+    """Whether `obj` is library code (see `_module_is_library`), which is identified
+    by its qualified name: a function by the file of its code, a module by its own
+    file, and anything else by its ``__module__``"""
+    if isinstance(obj, types.ModuleType):
+        return _module_is_library(obj.__name__, getattr(obj, "__file__", None))
+    if isinstance(obj, type):
+        module = obj.__module__
+    else:
+        module = inspect.getattr_static(obj, "__module__", None)
+    if isinstance(obj, types.FunctionType):
+        module = obj.__module__ or ""
+        override = _package_override(module)
+        if override is None:
+            override = _path_is_library(obj.__code__.co_filename)
+        if override is not None:
+            return override
+    return isinstance(module, str) and _module_is_library(module)
+
+
+def _qualified_name(obj: object) -> str:
+    name = getattr(obj, "__qualname__", None) or getattr(obj, "__name__", "")
+    return f"{getattr(obj, '__module__', None)}.{name}"
+
+
+def _owner_name(obj: object) -> str | None:
+    """``module.qualname`` of a function or class if its live module holds `obj` at
+    that name, otherwise None"""
+    module, qualname = obj.__module__, obj.__qualname__
+    target = sys.modules.get(module) if isinstance(module, str) else None
+    for part in qualname.split("."):
+        target = getattr(target, part, None)
+    return f"{module}.{qualname}" if target is obj else None
+
+
+def _library_instance_name(value: object, name: str) -> str | None:
+    """``module.name`` at which a library module of `value`'s ``__module__`` or type
+    holds `value`, otherwise None"""
+    tp = type(value)
+    if tp.__module__ == "builtins":
+        return None
+    modules = (inspect.getattr_static(value, "__module__", None), tp.__module__)
+    for module_name in dict.fromkeys(m for m in modules if isinstance(m, str)):
+        module = sys.modules.get(module_name)
+        if module is None or not is_library(module):
+            continue
+        if inspect.getattr_static(module, name, None) is value:
+            return f"{module_name}.{name}"
+        attrs_dict = vars(module)
+        for key in sorted(attrs_dict):
+            if attrs_dict[key] is value:
+                return f"{module_name}.{key}"
+    return None
+
+
+_GLOBAL_OPS = frozenset({"LOAD_GLOBAL", "LOAD_NAME", "LOAD_FROM_DICT_OR_GLOBALS"})
+_ATTR_OPS = frozenset({"LOAD_ATTR", "LOAD_METHOD"})
+_global_chains_cache = _LRUCache(FUNCTION_BYTES_CACHE_SIZE)
+
+
+def _global_chains(code: types.CodeType) -> tuple[tuple[str, ...], ...]:
+    """The global names read by `code` and the code it defines, each with the
+    attributes read from it in turn (``("utils", "helper")`` for ``utils.helper``)"""
+    cached = _global_chains_cache.get(code)
+    if cached is not None:
+        return cached
+    chains = set()
+    stack = [code]
+    while stack:
+        co = stack.pop()
+        chain: tuple[str, ...] = ()
+        for instr in dis.get_instructions(co):
+            if instr.opname in _GLOBAL_OPS:
+                if chain:
+                    chains.add(chain)
+                chain = (instr.argval,)
+            elif chain and instr.opname in _ATTR_OPS:
+                chain += (instr.argval,)
+            elif instr.opname != "EXTENDED_ARG" and chain:
+                chains.add(chain)
+                chain = ()
+        if chain:
+            chains.add(chain)
+        stack.extend(c for c in co.co_consts if isinstance(c, types.CodeType))
+    result = tuple(sorted(chains))
+    _global_chains_cache.put(code, result)
+    return result
+
+
+def _function_code(obj: types.FunctionType, cache: Cache) -> bytes:
+    """The encoded code of a function: its `ast@1` encoding, or its byte-code tagged
+    with the Python version when its source is not available"""
+    source_file = obj.__code__.co_filename
+    try:
+        mtime_ns = os.stat(source_file).st_mtime_ns
+    except OSError:
+        mtime_ns = None
+    cache_key = (source_file, mtime_ns, obj.__code__)
+    cached = _function_bytes_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    encoded = _encode_function_code(obj)
+    if encoded is None:
+        # not cached, because the code object's bytes depend on the cache arg
+        version = f"bytecode@{sys.version_info[0]}.{sys.version_info[1]}:"
+        return version.encode() + b"".join(bytes_repr(obj.__code__, cache))
+    result = f"{AST_ENCODING}:{encoded}".encode()
+    if mtime_ns is not None:
+        _function_bytes_cache.put(cache_key, result)
+    return result
+
+
+def _member_functions(member: object) -> list[types.FunctionType]:
+    """The functions of a class attribute: a method, the function of a static or class
+    method, or the accessors of a property"""
+    if isinstance(member, (staticmethod, classmethod)):
+        member = member.__func__
+    if isinstance(member, property):
+        return [f for f in (member.fget, member.fset, member.fdel) if f is not None]
+    return [member] if isinstance(member, types.FunctionType) else []
+
+
+def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:
+    """The functions defined in the body of `klass`, by attribute name, leaving out
+    those generated by decorators such as `attrs.define` or `dataclasses.dataclass`"""
+    try:
+        source_file = inspect.getsourcefile(klass)
+    except TypeError:
+        source_file = None
+    return [
+        (name, func)
+        for name, member in sorted(vars(klass).items())
+        for func in _member_functions(member)
+        if (
+            func.__code__.co_filename == source_file
+            if source_file
+            else not func.__code__.co_filename.startswith("<")
+        )
+    ]
+
+
+def _class_code(klass: type, cache: Cache) -> bytes:
+    """The encoded code of a class: the `ast@1` encoding of its definition, or the
+    encoded code of its functions when its source is not available"""
+    try:
+        lines, _ = inspect.findsource(klass)
+        source_file = inspect.getsourcefile(klass) or ""
+    except (OSError, TypeError):
+        lines = None
+    if lines is not None:
         try:
-            value = cell.cell_contents
-        except ValueError:  # empty cell
-            yield b"<empty>"
-        else:
+            mtime_ns = os.stat(source_file).st_mtime_ns
+        except OSError:
+            mtime_ns = None
+        cache_key = (source_file, mtime_ns, klass)
+        cached = _function_bytes_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        first = getattr(klass, "__firstlineno__", None)
+        encodings = {
+            encode_ast(node)
+            for line, nodes in _definition_nodes(source_file, lines).items()
+            if first is None or line == first
+            for node in nodes
+            if isinstance(node, ast.ClassDef) and node.name == klass.__name__
+        }
+        if len(encodings) == 1:
+            result = f"class:{AST_ENCODING}:{encodings.pop()}".encode()
+            if mtime_ns is not None:
+                _function_bytes_cache.put(cache_key, result)
+            return result
+    return (
+        b"class-members:("
+        + b",".join(
+            name.encode() + b"=" + _function_code(func, cache)
+            for name, func in _class_members(klass)
+        )
+        + b")"
+    )
+
+
+class _Empty:
+    """The value of an empty closure cell"""
+
+
+_EMPTY_CELL = _Empty()
+
+
+class _CodeWalk:
+    """The code a function reaches at a `code_hash` tier and the values it reads.
+
+    Each definition reached is numbered in the order it is found, starting with the
+    function at 0, and is encoded once, as its code and the references it reads, so
+    cycles and long call chains are walked without recursion. A reference is a
+    closure cell, a global (followed through the attributes read from it while it is
+    a user module), or a default of a function other than a task's own. It is
+    serialized as:
+
+    * library code (see `is_library`) by its qualified name, never its code;
+    * a function or class of user code within the tier by its definition number, and
+      one outside the tier by its qualified name when its live module holds it there,
+      otherwise by its definition;
+    * a task class by its hash, or by the qualified name of its function if that is
+      library code;
+    * any other value by the ordinary value rules, and the type of a user-class
+      instance as a reference.
+    """
+
+    def __init__(self, root: types.FunctionType, cache: Cache, defaults: bool):
+        self.cache = cache
+        self.code_hash = check_code_hash(cache.code_hash or code_hash_default())
+        self.root = root
+        self.defaults = defaults
+        self.definitions: list[ty.Any] = [root]
+        self.numbers = {id(root): 0}
+
+    def in_scope(self, obj: ty.Any) -> bool:
+        if self.code_hash == "user":
+            return True
+        return self.code_hash == "module" and obj.__module__ == self.root.__module__
+
+    def number(self, obj: ty.Any) -> int:
+        if id(obj) not in self.numbers:
+            self.numbers[id(obj)] = len(self.definitions)
+            self.definitions.append(obj)
+        return self.numbers[id(obj)]
+
+    def function_references(
+        self, func: types.FunctionType, prefix: str = ""
+    ) -> Iterator[tuple[str, ty.Any]]:
+        for name, cell in zip(func.__code__.co_freevars, func.__closure__ or ()):
             try:
-                yield bytes(hash_single(value, cache))
-            except Exception as e:
-                add_exc_note(
-                    e, f"in {name!r}, captured by function {obj.__qualname__!r}"
+                value = cell.cell_contents
+            except ValueError:
+                value = _EMPTY_CELL
+            yield f"{prefix}closure:{name}", value
+        namespace = func.__globals__
+        found = {}
+        for chain in _global_chains(func.__code__):
+            if chain[0] not in namespace:
+                continue  # a builtin, or not defined
+            value, path = namespace[chain[0]], chain[0]
+            for attr in chain[1:]:
+                if not isinstance(value, types.ModuleType) or is_library(value):
+                    break
+                try:
+                    value = getattr(value, attr)
+                except AttributeError:
+                    break
+                path += "." + attr
+            found[path] = value
+        for path in sorted(found):
+            yield f"{prefix}global:{path}", found[path]
+        if func is not self.root or self.defaults:
+            for i, value in enumerate(func.__defaults__ or ()):
+                yield f"{prefix}default:{i}", value
+            for name, value in sorted((func.__kwdefaults__ or {}).items()):
+                yield f"{prefix}kwdefault:{name}", value
+
+    def class_references(self, klass: type) -> Iterator[tuple[str, ty.Any]]:
+        for i, base in enumerate(klass.__bases__):
+            yield f"base:{i}", base
+        for name, func in _class_members(klass):
+            yield from self.function_references(func, prefix=f"{name}.")
+
+    def reference(self, name: str, value: ty.Any, reader: ty.Any) -> bytes:
+        try:
+            return self.serialize(value, name.rpartition(":")[2].split(".")[-1])
+        except Exception as e:
+            kind, _, var = name.rpartition(":")
+            verb = "captured" if kind.endswith("closure") else "read"
+            what = "class" if isinstance(reader, type) else "function"
+            add_exc_note(
+                e,
+                f"in {var!r}, {verb} by {what} {reader.__qualname__!r}; pass it as an "
+                "input, or give the task a checksum=",
+            )
+            raise
+
+    def serialize(self, value: ty.Any, name: str) -> bytes:
+        if value is _EMPTY_CELL:
+            return b"<empty>"
+        if isinstance(value, types.ModuleType):
+            return f"module:{value.__name__}".encode()
+        if isinstance(value, logging.Logger):
+            return f"logger:{value.name}".encode()
+        if isinstance(value, logging.LoggerAdapter):
+            return f"logger:{value.logger.name}".encode()
+        if isinstance(value, type) and (fields := get_fields(value)):
+            field = fields.get(getattr(value, "_executor_name", None) or "")
+            executor = getattr(field, "default", None)
+            if isinstance(executor, types.FunctionType) and is_library(executor):
+                return f"lib-task:{_qualified_name(executor)}".encode()
+            return b"task:" + bytes(hash_single(value, self.cache))
+        if isinstance(value, (types.FunctionType, type)):
+            if is_library(value):
+                ref = f"lib:{_qualified_name(value)}".encode()
+                wrapped = vars(value).get("__wrapped__")
+                if isinstance(value, types.FunctionType) and wrapped is not None:
+                    ref += b"(wraps:" + self.serialize(wrapped, name) + b")"
+                return ref
+            if not self.in_scope(value) and (owner := _owner_name(value)):
+                return f"name:{owner}".encode()
+            return f"#{self.number(value)}".encode()
+        if isinstance(value, types.MethodType):
+            return (
+                b"method:("
+                + self.serialize(value.__func__, name)
+                + b","
+                + self.serialize(value.__self__, name)
+                + b")"
+            )
+        if isinstance(value, (types.BuiltinFunctionType, types.MethodWrapperType)):
+            owner = value.__self__
+            if owner is None or isinstance(owner, types.ModuleType):
+                module = getattr(value, "__module__", None) or owner.__name__
+                return f"lib:{module}.{value.__qualname__}".encode()
+            return (
+                f"method:({value.__name__},".encode()
+                + self.serialize(owner, name)
+                + b")"
+            )
+        if isinstance(
+            value,
+            (
+                types.MethodDescriptorType,
+                types.WrapperDescriptorType,
+                types.ClassMethodDescriptorType,
+                types.GetSetDescriptorType,
+                types.MemberDescriptorType,
+            ),
+        ):
+            return (
+                f"lib:{_qualified_name(value.__objclass__)}.{value.__name__}".encode()
+            )
+        if isinstance(value, functools.partial):
+            return (
+                b"partial:("
+                + self.serialize(value.func, name)
+                + b",args:("
+                + b",".join(self.serialize(a, name) for a in value.args)
+                + b"),keywords:("
+                + b",".join(
+                    k.encode() + b"=" + self.serialize(v, name)
+                    for k, v in sorted(value.keywords.items())
                 )
-                raise
-        yield b","
+                + b"))"
+            )
+        if (lib_name := _library_instance_name(value, name)) is not None:
+            return f"lib:{lib_name}".encode()
+        tp = type(value)
+        wrapped = getattr(value, "__dict__", {}).get("__wrapped__")
+        if wrapped is not None and callable(value) and is_library(tp):
+            return (
+                f"wrapper:{_qualified_name(tp)}(".encode()
+                + self.serialize(wrapped, name)
+                + b")"
+            )
+        if isinstance(value, (dict, list, set, bytearray)):
+            logger.debug("%r is mutable and is hashed by the value it holds now", name)
+        ref = b"value:" + bytes(hash_single(value, self.cache))
+        if not is_library(tp):
+            ref += b",type:" + self.serialize(tp, name)
+        return ref
+
+    def __iter__(self) -> Iterator[bytes]:
+        """The serialized code: the function's code alone if it reads no references
+        (so equal at every tier), otherwise tagged by the tier and followed by its
+        references and the definitions they reach"""
+        root_code = _function_code(self.root, self.cache)
+        entries = []
+        n = 0
+        while n < len(self.definitions):
+            obj = self.definitions[n]
+            if isinstance(obj, type):
+                code, refs = _class_code(obj, self.cache), self.class_references(obj)
+            else:
+                code = root_code if n == 0 else _function_code(obj, self.cache)
+                refs = self.function_references(obj)
+            entries.append(
+                (
+                    code,
+                    b",".join(
+                        name.encode() + b"=" + self.reference(name, value, obj)
+                        for name, value in refs
+                    ),
+                )
+            )
+            n += 1
+        if len(entries) == 1 and not entries[0][1]:
+            yield root_code
+            return
+        yield f"{self.code_hash}/".encode() + root_code
+        yield b",refs:(" + entries[0][1] + b")"
+        for n, (code, refs) in enumerate(entries[1:], start=1):
+            yield f",#{n}=(".encode() + code + b",refs:(" + refs + b"))"
+
+
+@attrs.frozen
+class TaskFunction:
+    """The function of a task as it enters the checksum. It is hashed as the function
+    is, except for its defaults, which are hashed as the task's inputs."""
+
+    function: types.FunctionType
+
+
+def _bytes_repr_code(
+    obj: types.FunctionType, cache: Cache, defaults: bool
+) -> Iterator[bytes]:
+    yield b"function:("
+    if in_stdlib(obj):
+        yield f"{obj.__module__}.{obj.__name__}".encode()
+    else:
+        yield from _CodeWalk(obj, cache, defaults)
     yield b")"
 
 
@@ -920,34 +1420,14 @@ def bytes_repr_function_closure(
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
     """Serialize a function by the `ast@1` encoding of its source (see `encode_ast`),
     falling back to its byte-code, tagged with the Python version, when the source is
-    not available, together with the values it closes over (see
-    `bytes_repr_function_closure`)."""
-    yield b"function:("
-    if in_stdlib(obj):
-        yield f"{obj.__module__}.{obj.__name__}".encode()
-    else:
-        source_file = obj.__code__.co_filename
-        try:
-            mtime_ns = os.stat(source_file).st_mtime_ns
-        except OSError:
-            mtime_ns = None
-        cache_key = (source_file, mtime_ns, obj.__code__)
-        cached = _function_bytes_cache.get(cache_key)
-        if cached is not None:
-            yield cached
-        else:
-            encoded = _encode_function_code(obj)
-            if encoded is None:
-                # not cached, because the code object's bytes depend on the cache arg
-                yield f"bytecode@{sys.version_info[0]}.{sys.version_info[1]}:".encode()
-                yield from bytes_repr(obj.__code__, cache)
-            else:
-                result = f"{AST_ENCODING}:{encoded}".encode()
-                if mtime_ns is not None:
-                    _function_bytes_cache.put(cache_key, result)
-                yield result
-        yield from bytes_repr_function_closure(obj, cache)
-    yield b")"
+    not available, together with the code it reaches at the cache's `code_hash` tier
+    and the values it reads (see `_CodeWalk`)"""
+    yield from _bytes_repr_code(obj, cache, defaults=True)
+
+
+@register_serializer
+def bytes_repr_task_function(obj: TaskFunction, cache: Cache) -> Iterator[bytes]:
+    yield from _bytes_repr_code(obj.function, cache, defaults=False)
 
 
 def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[bytes]:

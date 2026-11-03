@@ -1,3 +1,4 @@
+import linecache
 import multiprocessing
 import os
 import threading
@@ -9,12 +10,14 @@ from pathlib import Path
 import attrs
 import cloudpickle
 import pytest
+from fileformats.generic import File
 from pydra.compose import python, shell, workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result, load_result
 from pydra.engine.store import AnyReuse, ExactReuse, PickleStore, context_key
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
+from pydra.utils.general import get_fields
 from pydra.utils.hash import hash_function
 
 # Worker processes cannot import the test modules, so they receive their classes by value
@@ -403,12 +406,15 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
         assert task._checksum == checksum
 
 
-def test_code_hashed_tasks_keep_checksums():
+def test_code_hashed_tasks_keep_checksums(monkeypatch):
     """Checksums of tasks whose function's code is hashed, the same on every Python
     version (measured on 3.11 to 3.15)"""
+    # the workflow references AddOne, library code, by its function's qualified name
+    function = get_fields(AddOne).function.default
+    monkeypatch.setattr(function, "__module__", "pydra.engine.tests.test_reuse")
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == (
         "python-463063b196ab62ce6c8c1a59e2bdd535",
-        "workflow-699b3cc655c8fb48e7dd8a66863c28e8",
+        "workflow-a815524df9154efcde7afe5ecfb6d0a6",
     )
 
 
@@ -425,6 +431,42 @@ def test_closure_variants_keep_their_own_results(worker, tmp_path):
         with Submitter(worker=worker, cache_root=tmp_path) as sub:
             result = sub(_add_k(k)(a=1))
         assert result.outputs.out == 1 + k
+
+
+_CALLS = {"n": 0}
+
+
+@python.define
+def CountCalls(in_file: File) -> int:
+    _CALLS["n"] += 1
+    return _CALLS["n"]
+
+
+def test_worker_does_not_rehash_function(worker, tmp_path):
+    """The function of a job is hashed only by the submitter, so a global it changes
+    as it runs is not reported as a change of its inputs"""
+    in_file = tmp_path / "in.txt"
+    in_file.write_text("x")
+    with Submitter(worker=worker, cache_root=tmp_path / "cache") as sub:
+        result = sub(CountCalls(in_file=in_file))
+    assert result.outputs.out >= 1
+
+
+def test_notebook_rebinding_reruns(worker, tmp_path):
+    """A global rebound between submissions, as in a notebook, is hashed as what it
+    holds when submitted"""
+    namespace = {"__name__": "__main__"}
+    for cell in ("SCALE = 2", "def scale(a: int) -> int:\n    return a * SCALE\n"):
+        filename = f"<cell-{uuid.uuid4().hex}>"
+        linecache.cache[filename] = (len(cell), None, cell.splitlines(True), filename)
+        exec(compile(cell, filename, "exec"), namespace)
+    Scale = python.define(namespace["scale"])
+    outputs = []
+    for value in (2, 3, 2):
+        namespace["SCALE"] = value
+        with Submitter(worker=worker, cache_root=tmp_path) as sub:
+            outputs.append(sub(Scale(a=1)).outputs.out)
+    assert outputs == [2, 3, 2]
 
 
 @attrs.define

@@ -32,6 +32,37 @@ The byte representation of each object is hashed using the BlakeB cryptographic 
 and these hashes are then combined to create a hash of the entire inputs object.
 
 
+Hashing the code of a task
+--------------------------
+
+The function of a Python task, and the constructor of a workflow, are hashed by a
+version-neutral encoding of their syntax tree, so comments, formatting, docstrings and
+signature annotations do not change the hash. Their ``code_hash`` tier sets how far the
+hash follows the code they reach:
+
+* ``"function"``: the function's own code, and the values it reads that are not
+  inputs, the variables it closes over and the globals it reads, hashed by value as
+  inputs are;
+* ``"module"``: as ``"function"``, plus the functions and classes it reaches in its own
+  module (their code, defaults and bases, and the values they read);
+* ``"user"`` (the default): as ``"module"``, plus all reachable code that is not
+  library code.
+
+A function or class outside the tier is identified by its qualified name. Library code,
+the standard library, packages installed in ``site-packages`` and pydra itself, is
+always identified by its qualified name, never its code: its version is not part of the
+hash. The ``PYDRA_USER_PACKAGES`` environment variable overrides that boundary with a
+comma-separated list of packages, ``mypkg`` to hash an installed package as user code
+and ``-mypkg`` to treat one (for instance an editable install) as library code. Set the
+tier per task with ``python.define(code_hash=...)`` or ``workflow.define(code_hash=...)``,
+or for all tasks with the ``PYDRA_CODE_HASH`` environment variable.
+
+Globals are read when the job is submitted, so rebinding a name in a notebook changes the
+hash. A global that cannot be hashed raises the ordinary hashing error, naming it; pass
+it as an input instead. The hash is only computed in the submitting process and carried
+with the job, so workers never recompute it.
+
+
 File hash caching by mtime
 --------------------------
 
