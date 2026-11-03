@@ -3,6 +3,15 @@
 
 name: CI/CD
 
+# Tiers
+#   fast  every PR push: debug-worker tests plus a reduced set of real-worker (cf) tests on
+#         one Linux and one macOS job; no wall-clock tests, no slurm/docker/singularity/lmod,
+#         no docs; Python 3.13 only, on Linux, macOS and Windows
+#   full  PRs that are marked ready for review or carry the `release` label, merge queue
+#         runs (merge_group), pushes to main, releases and manual runs: the whole OS x
+#         Python 3.11-3.15 matrix with every test, plus singularity, lmod, slurm and docs
+# The `CI gate` job is the one check branch protection should require: it fails unless the
+# full tier passed on a non-draft PR, so nothing reaches main without the full suite.
 on:
   release:
     types: [published]
@@ -12,10 +21,18 @@ on:
   pull_request:
     branches:
       - main
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  merge_group:
+  workflow_dispatch:
 
+# Only PR runs cancel each other. Releases, pushes to main, merge-queue and manual runs each
+# have their own group and are never cancelled, so nothing can cancel the deploy. A label
+# event other than `release` gets a unique group so it cannot cancel the run in progress.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
+    (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'release' && github.run_id || 'ci' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -25,8 +42,56 @@ env:
   FORCE_COLOR: true
 
 jobs:
+  plan:
+    name: Select test tier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.tier.outputs.run }}
+      full: ${{ steps.tier.outputs.full }}
+      matrix: ${{ steps.tier.outputs.matrix }}
+    steps:
+      - name: Select tier and test matrix
+        id: tier
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          run=true
+          full=true
+          if [ "$EVENT" = pull_request ]; then
+            full=false
+            if jq -e 'index("release")' <<<"$LABELS" >/dev/null || [ "$ACTION" = ready_for_review ]; then
+              full=true
+            fi
+            # a label other than `release` changes nothing: skip the whole run
+            case "$ACTION" in labeled|unlabeled) [ "$LABEL" = release ] || run=false ;; esac
+          fi
+          if [ "$full" = true ]; then
+            # latest dependencies on every OS x Python; pre-release dependencies on the default
+            # (3.13) and newest (3.15) Python on Linux; minimum dependencies on the oldest Python
+            matrix=$(jq -nc '{include:(
+              [("ubuntu-latest","macos-latest","windows-latest") as $os | ("3.11","3.12","3.13","3.14","3.15") as $py
+                | {os:$os,"python-version":$py,dependencies:"latest"}]
+              + [("3.13","3.15") as $py | {os:"ubuntu-latest","python-version":$py,dependencies:"pre"}]
+              + [{os:"ubuntu-latest","python-version":"3.11",dependencies:"min"}])}')
+          else
+            fast='not slow and not slurm and not docker and not singularity and not lmod'
+            matrix=$(jq -nc --arg f "$fast" --arg r "$fast and not real_worker" '{include:[
+              {os:"ubuntu-latest","python-version":"3.13",dependencies:"latest",markers:$f,real:true},
+              {os:"macos-latest","python-version":"3.13",dependencies:"latest",markers:$f,real:true},
+              {os:"windows-latest","python-version":"3.13",dependencies:"latest",markers:$r}]}')
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build & verify package
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -35,26 +100,25 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: hynek/build-and-inspect-python-package@2abe76da66d0a6a4a227101f9348ee855797cfa5 # v3.0.1
+      - uses: hynek/build-and-inspect-python-package@67230f7b8410ae0052b39c1efc89d89fff43ff10 # v3.0.2
         with:
-          attest-build-provenance-github: ${{ github.event_name != 'pull_request' }}
+          attest-build-provenance-github: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
 
   test:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 25 || 10 }}
     strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.11', '3.12', '3.13', '3.14']
-        dependencies: [latest, pre]
-        include:
-          # Test minimum dependencies on oldest supported Python
-          - os: ubuntu-latest
-            python-version: "3.11"
-            dependencies: min
+      # Full tier: every OS x Python 3.11-3.15, plus pre-release and minimum dependency
+      # variants. Fast tier: Python 3.13 only (see the plan job).
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
       fail-fast: false
 
     env:
       DEPENDS: ${{ matrix.dependencies }}
+      # Fast tier: marker expression from the plan job (cf tests only on the `real` jobs)
+      PYTEST_ADDOPTS: ${{ matrix.markers && format('-m "{0}"', matrix.markers) || '' }}
 
     steps:
       - name: Fetch repository
@@ -62,45 +126,55 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v10.3.0
+        uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+          cache-suffix: ${{ matrix.dependencies }}
       - name: Install tox
         run: |
           uv tool install tox --with=tox-uv --with=tox-gh-actions
       - name: Show tox config
         run: tox c
       - name: Run tox
-        run: tox -v --exit-and-dump-after 1200
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 900 || 300 }}
 
   test-singularity:
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-22.04
+    timeout-minutes: 25
     strategy:
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
         dependencies: [latest]
       fail-fast: False
 
     env:
       DEPENDS: ${{ matrix.dependencies }}
+      SINGULARITY_PREFIX: ${{ github.workspace }}/../singularity-install
 
     steps:
       - name: Set env
         run: |
           echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
+      - name: Restore built Singularity
+        id: singularity-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SINGULARITY_PREFIX }}
+          key: singularity-v3.7.1-ubuntu-22.04
       - name: Setup Singularity
+        if: steps.singularity-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v7
         with:
           repository: hpcng/singularity
           ref: 'v3.7.1'
           path: 'singularity'
       - name: Setup GO
+        if: steps.singularity-cache.outputs.cache-hit != 'true'
         uses: actions/setup-go@v7
         with:
           go-version: '^1.13'
@@ -110,23 +184,27 @@ jobs:
           sudo apt-get install flawfinder squashfs-tools uuid-dev libuuid1 libffi-dev libssl-dev libssl1.1 \
           libarchive-dev libgpgme11-dev libseccomp-dev wget gcc make pkg-config -y
       - name: Build
+        if: steps.singularity-cache.outputs.cache-hit != 'true'
         run: |
           cd singularity
-          ./mconfig --without-suid -p /usr/local/
+          ./mconfig --without-suid -p "$SINGULARITY_PREFIX"
           make -C ./builddir
-          sudo make -C ./builddir install
+          make -C ./builddir install
           cd ..
       - name: Echo singularity version
         run: |
+          echo "$SINGULARITY_PREFIX/bin" >> "$GITHUB_PATH"
           echo ${{ github.ref }}
-          singularity --version
+          "$SINGULARITY_PREFIX/bin/singularity" --version
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v10.3.0
+        uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
       - name: Install tox
         run: |
           uv tool install tox --with=tox-uv --with=tox-gh-actions
@@ -135,19 +213,17 @@ jobs:
       - name: Run tox
         # Run test files with singularity tests; re-add the overridable "-n auto"
         run: |
-          tox -v --exit-and-dump-after 1200 -- -n auto \
+          tox -v --exit-and-dump-after 900 -- -n auto \
             pydra/environments/tests/test_singularity.py pydra/environments/tests/test_environments.py
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-lmod:
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     strategy:
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
         dependencies: [latest]
       fail-fast: False
 
@@ -165,9 +241,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@v10.3.0
+        uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
       - name: Install tox
         run: |
           uv tool install tox --with=tox-uv --with=tox-gh-actions
@@ -178,59 +256,105 @@ jobs:
         run: |
           source /etc/profile.d/lmod.sh
           export
-          tox -v --exit-and-dump-after 1200 -- -n auto \
+          tox -v --exit-and-dump-after 900 -- -n auto \
             pydra/environments/tests/test_lmod.py
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
 
   test-slurm:
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     strategy:
+      # Full tier only (the fast tier excludes the slurm marker): the same Python range as `test`
       matrix:
-        python-version: [3.11.5]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
       fail-fast: false
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
-      DOCKER_IMAGE: adi611/docker-centos7-slurm:23.02.1
+      UV_CACHE_HOST: ${{ github.workspace }}/../uv-cache-slurm
     steps:
     - name: Disable etelemetry
       run: echo "NO_ET=TRUE" >> $GITHUB_ENV
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
-    - name: Pull docker image
+    - name: Install uv (copied into the container)
+      uses: astral-sh/setup-uv@v10.3.3
+      with:
+        enable-cache: false
+    - uses: docker/setup-buildx-action@v3
+    - name: Build the Slurm image (layer cache keyed on the Dockerfile, which pins the base by digest)
+      uses: docker/build-push-action@v6
+      with:
+        context: .github/slurm
+        load: true
+        tags: pydra-slurm:ci
+        cache-from: type=gha,scope=slurm-${{ hashFiles('.github/slurm/**') }}
+        cache-to: type=gha,mode=max,scope=slurm-${{ hashFiles('.github/slurm/**') }}
+    - name: Restore the container's uv cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.UV_CACHE_HOST }}
+        key: slurm-uv-${{ hashFiles('pyproject.toml') }}
+        restore-keys: |
+          slurm-uv-
+    - name: Start the container and wait for the daemons
       run: |
-        docker pull $DOCKER_IMAGE
-        # Have image running in the background
-        docker run `bash <(curl -s https://codecov.io/env)` -itd -h slurmctl --cap-add sys_admin -d --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
-    - name: Display previous jobs with sacct
-      run: |
-        echo "Allowing ports/daemons time to start" && sleep 10
-        docker exec slurm bash -c "sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
-        docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
-        if [ $? -ne 0 ]; then
-            echo "Slurm docker image error"
-            exit 1
-        fi
+        mkdir -p "$UV_CACHE_HOST"
+        docker run -d -h slurmctl --name slurm -v "$(pwd)":/pydra -v "$UV_CACHE_HOST":/root/.cache/uv -e NO_ET=$NO_ET pydra-slurm:ci
+        for i in $(seq 1 120); do
+          if docker exec slurm bash -c "sinfo -h | grep -qE 'idle|mix' && sacctmgr -n show cluster | grep -q linux" > /dev/null 2>&1; then
+            docker exec slurm bash -c "sinfo && sbatch --version && sacct -X"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "Slurm daemons did not become ready"
+        docker logs slurm
+        exit 1
     - name: Setup Python
       run: |
-        docker exec slurm bash -c "echo $NO_ET"
-        docker exec slurm bash -c "ls -la && echo list top level dir"
-        docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
-        docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v ${{ matrix.python-version }}"
-        docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
-        docker exec slurm bash -c "pip install --upgrade pip && pip install 'numpy<2' 'pillow<12.3' -e /pydra[test,psij] && python -c 'import pydra.engine; print(pydra.utils.__version__)'"
+        # uv installs a prebuilt CPython in about a second
+        docker cp "$(command -v uv)" slurm:/usr/local/bin/uv
+        docker exec slurm bash -c "uv venv --python ${{ matrix.python-version }} /opt/venv"
+        docker exec slurm bash -c "uv pip install --python /opt/venv/bin/python -e /pydra[test,psij] && /opt/venv/bin/python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "cd /pydra; pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v7
-      with:
-        fail_ci_if_error: true
-        token: ${{ secrets.CODECOV_TOKEN }}
+        docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
+    - name: Return ownership of the uv cache to the runner
+      if: always()
+      run: docker exec slurm bash -c "chown -R $(id -u):$(id -g) /root/.cache/uv"
+
+  # The single check branch protection should require (see the PR description). It fails when
+  # the tier that should have run did not pass, and, on a non-draft PR, when the full tier was
+  # not what ran for this commit.
+  gate:
+    name: CI gate
+    needs: [plan, build, test, test-singularity, test-lmod, test-slurm, build-docs]
+    if: always() && needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check results
+        env:
+          FULL: ${{ needs.plan.outputs.full }}
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          ALWAYS: ${{ needs.plan.result }} ${{ needs.build.result }} ${{ needs.test.result }}
+          FULL_ONLY: ${{ needs.test-singularity.result }} ${{ needs.test-lmod.result }} ${{ needs.test-slurm.result }} ${{ needs.build-docs.result }}
+        run: |
+          for r in $ALWAYS; do
+            [ "$r" = success ] || { echo "a required job finished with: $r"; exit 1; }
+          done
+          for r in $FULL_ONLY; do
+            if [ "$FULL" = true ]; then
+              [ "$r" = success ] || { echo "a full-tier job finished with: $r"; exit 1; }
+            fi
+          done
+          if [ "$EVENT" = pull_request ] && [ "$FULL" != true ] && [ "$DRAFT" != true ]; then
+            echo "Only the fast tier ran for this commit. Add the 'release' label to run the full tier."
+            exit 1
+          fi
 
   # test-sge:
   #   needs: ['build']
@@ -305,16 +429,12 @@ jobs:
   #   - name: Run pytest
   #     run: |
   #       pytest pydra/workers/tests/test_worker.py --import-mode=importlib --rootdir . --only-worker=sge --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
-  #   - name: Upload coverage to Codecov
-  #     uses: codecov/codecov-action@v7
-  #     with:
-  #       fail_ci_if_error: true
-  #       token: ${{ secrets.CODECOV_TOKEN }}
-  #       files: ./cov.xml
 
   build-docs:
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     # Set up the environment so that it finds conda
     defaults:
       run:
@@ -354,7 +474,9 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v7
       with:
-        python-version: '3.14'
+        python-version: '3.13'
+        cache: pip
+        cache-dependency-path: pyproject.toml
     - name: Install package
       run: pip install .[doc]
     - name: Install Python3 kernel
