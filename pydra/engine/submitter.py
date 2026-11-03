@@ -121,9 +121,9 @@ class Submitter:
         it, "raise_at_end" keeps running every element that does not read an errored
         or unrunnable upstream element, and raises the errors together at the end. By
         default (None), the mode of the loop that expands the workflow: "fail_fast"
-        where the router sends the workflow to a synchronous worker such as *debug*,
-        otherwise "raise_at_end". The ``on_error`` attribute then holds the mode for
-        a workflow sent to ``worker``. Under "fail_fast" jobs that are already running
+        for a synchronous ``worker`` such as *debug*, otherwise "raise_at_end" (workflows
+        are always expanded by ``worker``, never routed, so the ``on_error`` attribute
+        holds the mode used). Under "fail_fast" jobs that are already running
         on an asynchronous worker are not stopped (cancelling their futures does not
         stop the executor's processes), so they finish after the call returns, and
         their lock files remain until they do or until the pool is torn down with
@@ -315,13 +315,6 @@ class Submitter:
                 f"The router sent job {job.name!r} to {name!r}, which is not one of "
                 f"the submitter's workers: {sorted(self.workers)}"
             ) from None
-
-    def _loop_on_error(self, is_async: bool) -> OnError:
-        """The on_error mode of an expansion loop: the one passed to the submitter, or
-        the default of the synchronous or asynchronous loop."""
-        if self._on_error_arg is not None:
-            return self._on_error_arg
-        return "raise_at_end" if is_async else "fail_fast"
 
     def __call__(
         self,

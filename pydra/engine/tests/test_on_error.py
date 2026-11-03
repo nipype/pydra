@@ -223,28 +223,21 @@ class AsyncInProcess(DebugWorker):
 
 
 @pytest.mark.timeout(120)
-@pytest.mark.parametrize("routed", ["async", "default"])
-def test_on_error_default_follows_the_routed_loop(routed, tmp_path):
-    """Left unset, ``on_error`` is the mode of the loop the workflow is expanded in,
-    which the router picks: a workflow sent from a *debug* ``worker`` to an
-    asynchronous worker is expanded asynchronously and raises at the end"""
-    task, error, expected = CASES["chain"]
+def test_on_error_default_ignores_the_router(tmp_path):
+    """A workflow is expanded by ``worker`` whatever the router says (only leaf jobs
+    are routed), so the default follows ``worker``: here *debug*, hence fail_fast and
+    the errored element's own exception"""
+    task, error, _ = CASES["chain"]
     with Submitter(
         worker="debug",
         workers={"async": AsyncInProcess()},
-        router=lambda job: routed if job.name == "main" else None,
+        router=lambda job: "async" if job.name == "main" else None,
         cache_root=tmp_path,
     ) as sub:
         assert sub.on_error == "fail_fast"
-        if routed == "async":
-            result = sub(task, raise_errors=False)
-            assert result.errored
-            assert error in "".join(sub.errors)
-            assert outcome(result.job.return_values["exec_graph"]) == expected
-        else:
-            with pytest.raises(Exception, match=error) as excinfo:
-                sub(task)
-            assert "failed with errors" not in str(excinfo.value)
+        with pytest.raises(Exception, match=error) as excinfo:
+            sub(task)
+        assert "failed with errors" not in str(excinfo.value)
 
 
 @python.define
