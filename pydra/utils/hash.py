@@ -33,8 +33,8 @@ logger = logging.getLogger("pydra")
 FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 
 # Module-level cache for function source bytes to avoid repeated disk I/O and
-# AST parsing. Key: (module, qualname, source_file_mtime_ns); value: bytes of
-# the function's inner content (between "function:(" and ")").
+# AST parsing. Key: (module, qualname, source file, first line, source-file mtime);
+# value: bytes of the function's inner content (between "function:(" and ")").
 _function_bytes_cache: dict[tuple, bytes] = {}
 
 try:
@@ -122,7 +122,7 @@ class PersistentCache:
         try:
             location = os.environ[cls.LOCATION_ENV_VAR]
         except KeyError:
-            location = user_cache_root / "hashes"
+            location = user_cache_root() / "hashes"
         return location
 
     # the default needs to be an instance method
@@ -683,22 +683,56 @@ def _parse_function_source_bytes(src: str) -> bytes:
     return b"".join(parts)
 
 
+def bytes_repr_function_closure(
+    obj: types.FunctionType, cache: Cache
+) -> Iterator[bytes]:
+    """Serialize the values a function closes over, hashed like any other value, so
+    functions with the same source but different captured values hash differently"""
+    if not obj.__closure__:
+        return
+    yield b",closure:("
+    for name, cell in zip(obj.__code__.co_freevars, obj.__closure__):
+        yield from bytes_repr(name, cache)
+        yield b"="
+        try:
+            value = cell.cell_contents
+        except ValueError:  # empty cell
+            yield b"<empty>"
+        else:
+            try:
+                yield bytes(hash_single(value, cache))
+            except Exception as e:
+                add_exc_note(
+                    e, f"in {name!r}, captured by function {obj.__qualname__!r}"
+                )
+                raise
+        yield b","
+    yield b")"
+
+
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
     """Serialize a function, attempting to use the AST of the source code if available
-    otherwise falling back to the byte-code of the function."""
+    otherwise falling back to the byte-code of the function, together with the values
+    it closes over (see `bytes_repr_function_closure`)."""
     yield b"function:("
     if in_stdlib(obj):
         yield f"{obj.__module__}.{obj.__name__}".encode()
     else:
-        # Build a cache key from (module, qualname, source-file mtime).
+        # Build a cache key from (module, qualname, source position and mtime).
         # os.stat() is a single cheap syscall; if successful we can avoid
         # both inspect.getsource() and ast.parse() on repeated calls.
-        cache_key: tuple[str, str, int] | None = None
+        cache_key: tuple[str, str, str, int, int] | None = None
         try:
             source_file = inspect.getfile(obj)
             mtime_ns = os.stat(source_file).st_mtime_ns
-            cache_key = (obj.__module__, obj.__qualname__, mtime_ns)
+            cache_key = (
+                obj.__module__,
+                obj.__qualname__,
+                source_file,
+                obj.__code__.co_firstlineno,
+                mtime_ns,
+            )
         except (OSError, TypeError):
             pass
 
@@ -716,6 +750,7 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
                 if cache_key is not None:
                     _function_bytes_cache[cache_key] = result
                 yield result
+        yield from bytes_repr_function_closure(obj, cache)
     yield b")"
 
 

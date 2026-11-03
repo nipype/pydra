@@ -241,7 +241,6 @@ def test_wf_in_wf(any_worker, tmpdir):
     assert outputs.out == 7
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf2(any_worker, tmpdir):
     """workflow as a node
     workflow-node with one task and no splitter
@@ -265,7 +264,6 @@ def test_wf2(any_worker, tmpdir):
     assert res.outputs.out == 3
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_with_state(any_worker, tmpdir):
     @workflow.define
     def Workflow(x):
@@ -342,7 +340,6 @@ def test_slurm_wf_state(tmpdir):
 
 
 @need_slurm
-@pytest.mark.flaky(reruns=3)
 def test_slurm_max_jobs(tmp_path):
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x, y):
@@ -478,7 +475,6 @@ def Cancel(job_name_part):
 
 
 @pytest.mark.skip(reason="this test is hanging, need to work out why")
-@pytest.mark.flaky(reruns=1)
 @need_slurm
 def test_slurm_cancel_rerun_1(tmpdir):
     """testing that tasks run with slurm is re-queue
@@ -508,7 +504,6 @@ def test_slurm_cancel_rerun_1(tmpdir):
     assert script_dir.exists()
 
 
-@pytest.mark.flaky(reruns=1)
 @need_slurm
 def test_slurm_cancel_rerun_2(tmpdir):
     """testing that tasks run with slurm that has --no-requeue

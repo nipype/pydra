@@ -54,7 +54,7 @@ def test_python_output():
     assert outputs.output == 1.1
 
     assert list(
-        (default_run_cache_root / f"python-{funky._hash}").glob("*/_result.pklz")
+        (default_run_cache_root() / f"python-{funky._hash}").glob("*/_result.pklz")
     )
     funky()  # should not recompute
     funky.a = 2
@@ -121,7 +121,7 @@ def test_python_output_multreturn():
 
     outputs = funky()
     assert list(
-        (default_run_cache_root / f"python-{funky._hash}").glob("*/_result.pklz")
+        (default_run_cache_root() / f"python-{funky._hash}").glob("*/_result.pklz")
     )
     assert hasattr(outputs, "fractional")
     assert outputs.fractional == 0.5

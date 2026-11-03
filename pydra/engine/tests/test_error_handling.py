@@ -7,6 +7,7 @@ from pathlib import Path
 import glob as glob
 from pydra.compose import python, workflow
 from pydra.engine.submitter import Submitter
+from pydra.workers import cf
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -107,7 +108,6 @@ def test_traceback_wf(tmp_path: Path):
     assert "in FunError" in str(exinfo.value)
 
 
-@pytest.mark.flaky(reruns=3)
 def test_rerun_errored(tmp_path):
     """Test rerunning a task containing errors.
     Only the errored tasks should be rerun"""
@@ -133,17 +133,17 @@ def test_rerun_errored(tmp_path):
 
     pass_odds = PassOdds(marker_dir=str(markers)).split("x", x=[1, 2, 3, 4, 5])
 
-    with pytest.raises(Exception):
-        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
-    with pytest.raises(Exception):
-        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
-
-    tasks_run = len(list(markers.glob("run-*")))
-    errors_found = len(list(markers.glob("error-*")))
+    def ran(kind="run"):
+        return sorted(int(p.name.split("-")[1]) for p in markers.glob(f"{kind}-*"))
 
     # All 5 jobs run the first time, and only the 2 that errored are rerun the second
-    assert tasks_run == 7
-    assert errors_found == 4
+    with pytest.raises(RuntimeError, match="even error"):
+        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
+    assert ran() == [1, 2, 3, 4, 5]
+    with pytest.raises(RuntimeError, match="even error"):
+        pass_odds(cache_root=tmp_path / "cache", worker="cf", n_procs=3)
+    assert ran() == [1, 2, 2, 3, 4, 4, 5]
+    assert ran("error") == [2, 2, 4, 4]
 
 
 @pytest.mark.timeout(90)
@@ -196,3 +196,162 @@ def test_node_update_status_errored_running_job():
     node_exec.update_status()
     assert node_exec.errored == {0: job}
     assert node_exec.running == {}
+
+
+@python.define
+def FailEvenUnlessFlagged(x: int, flag: str) -> int:
+    """Raise on even ``x`` until the file ``flag`` exists"""
+    from pathlib import Path
+
+    if x % 2 == 0 and not Path(flag).exists():
+        raise ValueError("even error")
+    return x
+
+
+@python.define
+def Double(y: int) -> int:
+    return 2 * y
+
+
+@workflow.define
+def RecoverableWorkflow(x: list[int], flag: str) -> list[int]:
+    failing = workflow.add(FailEvenUnlessFlagged(flag=flag).split("x", x=x))
+    doubled = workflow.add(Double(y=failing.out))
+    return doubled.out
+
+
+def test_rerun_errored_recovers(tmp_path, worker):
+    """Elements that errored in a previous run and succeed when rerun are reported by
+    that rerun, and their downstream elements run, rather than the previous run's
+    errors being reported again"""
+    flag = tmp_path / "flag"
+    wf = RecoverableWorkflow(x=[1, 2, 3, 4, 5], flag=str(flag))
+    with pytest.raises(Exception, match="even error"):
+        wf(worker=worker, cache_root=tmp_path / "cache")
+    flag.touch()
+    outputs = wf(worker=worker, cache_root=tmp_path / "cache")
+    assert outputs.out == [2, 4, 6, 8, 10]
+
+
+def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
+    """The submitter does not read the stored result of a job it has queued until the
+    job's run has finished"""
+    from pydra.engine import submitter as submitter_module
+    from pydra.engine.store import PickleStore
+    from pydra.workers import cf
+
+    in_flight: set[str] = set()
+    reads_in_flight: list[str] = []
+
+    release = submitter_module.NodeExecution._release
+
+    def recording_release(self, index):
+        release(self, index)
+        if index in self.queued:
+            in_flight.add(self.queued[index].checksum)
+
+    run = cf.Worker.run
+
+    async def recording_run(self, job, rerun=False):
+        try:
+            return await run(self, job, rerun=rerun)
+        finally:
+            in_flight.discard(job.checksum)
+
+    lookup = PickleStore.lookup
+
+    def recording_lookup(self, checksum, context, task):
+        if checksum in in_flight:
+            reads_in_flight.append(checksum)
+        return lookup(self, checksum, context, task)
+
+    monkeypatch.setattr(submitter_module.NodeExecution, "_release", recording_release)
+    monkeypatch.setattr(cf.Worker, "run", recording_run)
+    monkeypatch.setattr(PickleStore, "lookup", recording_lookup)
+
+    flag = tmp_path / "flag"
+    wf = RecoverableWorkflow(x=[1, 2, 3, 4, 5], flag=str(flag))
+    with pytest.raises(RuntimeError, match="even error"):
+        wf(worker="cf", cache_root=tmp_path / "cache")
+    reads_in_flight.clear()
+    flag.touch()
+    assert wf(worker="cf", cache_root=tmp_path / "cache").out == [2, 4, 6, 8, 10]
+    assert reads_in_flight == []
+
+
+@python.define
+def Identity(x: int) -> int:
+    return x
+
+
+@python.define
+def Half(x: int) -> int:
+    return x // 2
+
+
+@workflow.define
+def SameChecksumElements(x: list[int]) -> list[int]:
+    first = workflow.add(Identity().split("x", x=x), name="first")
+    return first.out
+
+
+@workflow.define(outputs=["first", "again"])
+def SameChecksumLater(x: int) -> tuple[int, int]:
+    first = workflow.add(Identity(x=x), name="first")
+    relay = workflow.add(Double(y=x), name="relay")
+    half = workflow.add(Half(x=relay.out), name="half")
+    again = workflow.add(Identity(x=half.out), name="again")
+    return first.out, again.out
+
+
+class CountingWorker(cf.Worker):
+    """A cf worker recording the checksums of the ``Identity`` jobs it is asked to run"""
+
+    _plugin_name = "counting-cf"
+    ran: ty.ClassVar[list[str]] = []
+
+    async def run(self, job, rerun=False):
+        if job.name in ("first", "again"):
+            self.ran.append(job.checksum)
+        return await super().run(job, rerun=rerun)
+
+
+class FailingCountingWorker(CountingWorker):
+    """A counting worker that fails to run the ``Identity`` jobs"""
+
+    _plugin_name = "failing-counting-cf"
+
+    async def run(self, job, rerun=False):
+        if job.name in ("first", "again"):
+            self.ran.append(job.checksum)
+            raise RuntimeError("worker was unable to run the job")
+        return await super().run(job, rerun=rerun)
+
+
+def test_same_checksum_elements_run_once(tmp_path, monkeypatch):
+    """Elements with the same checksum are run once and all read its result"""
+    monkeypatch.setattr(CountingWorker, "ran", [])
+    with Submitter(worker=CountingWorker(n_procs=2), cache_root=tmp_path) as sub:
+        result = sub(SameChecksumElements(x=[1, 1, 2]))
+    assert not result.errored
+    assert result.outputs.out == [1, 1, 2]
+    assert len(CountingWorker.ran) == 2
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("workflow_task", ["elements", "later"])
+def test_same_checksum_worker_error_before_job_saved(
+    tmp_path, monkeypatch, workflow_task
+):
+    """If a worker fails to run a job before it saves a result, every job with the
+    same checksum, including one released afterwards, errors with it"""
+    monkeypatch.setattr(CountingWorker, "ran", [])
+    task = (
+        SameChecksumElements(x=[1, 1, 1])
+        if workflow_task == "elements"
+        else SameChecksumLater(x=1)
+    )
+    with Submitter(worker=FailingCountingWorker(n_procs=2), cache_root=tmp_path) as sub:
+        result = sub(task)
+    assert result.errored
+    assert len(CountingWorker.ran) == 1

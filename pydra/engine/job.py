@@ -147,6 +147,9 @@ class Job(ty.Generic[TaskType]):
         # was just written by run(). Not included in __getstate__ so it is
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
+        # Set while the job is queued to run in this process's submitter and its run
+        # has not finished
+        self._awaiting_run = False
         self._context = None
 
         # Save the submitter attributes needed to run the job later
@@ -177,6 +180,7 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
+        state.pop("_awaiting_run", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
         return state
@@ -188,6 +192,7 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
+        self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("_context", None)
 
     @classmethod
@@ -338,7 +343,9 @@ class Job(ty.Generic[TaskType]):
             if not (rerun):
                 result = self.result()
                 if result is not None and not result.errored:
+                    self._awaiting_run = False
                     return result
+            self._errored = False
             cwd = os.getcwd()
             self._populate_filesystem()
             os.chdir(self.cache_dir)
@@ -368,6 +375,7 @@ class Job(ty.Generic[TaskType]):
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 self.store.commit(lease, result, job=self)
+                self._awaiting_run = False
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -399,7 +407,9 @@ class Job(ty.Generic[TaskType]):
             if not rerun:
                 result = self.result()
                 if result is not None and not result.errored:
+                    self._awaiting_run = False
                     return result
+            self._errored = False
             cwd = os.getcwd()
             self._populate_filesystem()
             result = Result(
@@ -427,6 +437,7 @@ class Job(ty.Generic[TaskType]):
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 self.store.commit(lease, result, job=self)
+                self._awaiting_run = False
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -449,6 +460,8 @@ class Job(ty.Generic[TaskType]):
         """Check whether the tasks has been finalized and all outputs are stored."""
         # if any of the field is lazy, there is no need to check results
         if has_lazy(self.task):
+            return False
+        if self._awaiting_run:
             return False
         _result = self.result()
         if _result:

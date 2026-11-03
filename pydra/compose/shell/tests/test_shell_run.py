@@ -29,7 +29,6 @@ if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_1(worker, results_function, tmp_path):
     """simple command, no arguments"""
@@ -110,7 +109,6 @@ def test_shell_cmd_2b(worker, results_function, tmp_path):
 # tests with State
 
 
-@pytest.mark.flaky(reruns=2)
 def test_shell_cmd_3(worker, tmp_path):
     """commands without arguments
     splitter = executable
@@ -1593,7 +1591,6 @@ def test_shell_cmd_inputspec_copyfile_state_1(worker, results_function, tmp_path
 # customised input_spec in Workflow
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_shell_cmd_2(worker, tmp_path):
     """a workflow with input with defined path_template (str)
     that requires wf.lzin

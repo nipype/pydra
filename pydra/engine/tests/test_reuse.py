@@ -442,6 +442,21 @@ def test_code_hashed_tasks_keep_checksums():
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == _CODE_GOLDEN[version]
 
 
+def _add_k(k):
+    def add_k(a: int) -> int:
+        return a + k
+
+    return python.define(add_k)
+
+
+def test_closure_variants_keep_their_own_results(worker, tmp_path):
+    """Tasks made by one factory with different captured values do not share a result"""
+    for k in (1, 2):
+        with Submitter(worker=worker, cache_root=tmp_path) as sub:
+            result = sub(_add_k(k)(a=1))
+        assert result.outputs.out == 1 + k
+
+
 @attrs.define
 class Equivalent:
     """Accepts results whose environment is in the same class as the current one"""

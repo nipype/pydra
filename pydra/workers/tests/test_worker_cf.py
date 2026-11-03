@@ -46,3 +46,21 @@ def test_cf_pool_never_forks_the_submitting_process():
     for pool in (worker.pool, restored.pool):
         assert pool._mp_context.get_start_method() != "fork"
         pool.shutdown()
+
+
+def test_cf_workers_follow_the_cache_environment(tmp_path, monkeypatch):
+    """Each pool's workers see the cache root set when the pool was created, not the
+    one the forkserver started with"""
+    from pydra.utils.hash import PersistentCache
+    from pydra.workers.cf import ConcurrentFuturesWorker
+
+    # the submitted callable is pydra's, as the test module is not importable in
+    # the workers when pydra is installed without its tests
+    for name in ("a", "b"):
+        monkeypatch.setenv("PYDRA_CACHE_ROOT", str(tmp_path / name))
+        worker = ConcurrentFuturesWorker(n_procs=1)
+        try:
+            location = worker.pool.submit(PersistentCache.location_default).result()
+        finally:
+            worker.pool.shutdown()
+        assert str(location) == str(tmp_path / name / "hashes")

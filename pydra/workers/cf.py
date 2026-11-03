@@ -6,6 +6,8 @@ import concurrent.futures as cf
 import multiprocessing as mp
 import logging
 from pydra.engine.job import Job
+from pydra.utils.general import CACHE_ROOT_ENV_VAR
+from pydra.utils.hash import PersistentCache
 from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
@@ -42,11 +44,33 @@ def get_available_cpus():
     return os.cpu_count()
 
 
+_CACHE_ENV_VARS = (
+    CACHE_ROOT_ENV_VAR,
+    PersistentCache.LOCATION_ENV_VAR,
+    PersistentCache.CLEANUP_ENV_VAR,
+)
+
+
+def _set_cache_environment(env: dict[str, str | None]) -> None:
+    """Set (or unset, for None) the cache environment variables in a pool worker"""
+    for name, value in env.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
 def _process_pool(n_procs: int) -> cf.ProcessPoolExecutor:
     """A process pool whose workers are never forked from this, possibly threaded,
-    process"""
+    process, and see the cache environment variables this process has when the pool
+    is created (a forkserver's children would otherwise see the forkserver's)"""
     method = "forkserver" if "forkserver" in mp.get_all_start_methods() else "spawn"
-    return cf.ProcessPoolExecutor(n_procs, mp_context=mp.get_context(method))
+    return cf.ProcessPoolExecutor(
+        n_procs,
+        mp_context=mp.get_context(method),
+        initializer=_set_cache_environment,
+        initargs=({name: os.environ.get(name) for name in _CACHE_ENV_VARS},),
+    )
 
 
 @attrs.define

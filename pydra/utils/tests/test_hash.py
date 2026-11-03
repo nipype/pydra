@@ -1,10 +1,13 @@
 import re
 import os
+import subprocess
 import sys
 from hashlib import blake2b
 from pathlib import Path
 from unittest import mock
 import attrs
+import cloudpickle
+import numpy
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json, Yaml
@@ -20,7 +23,11 @@ import shutil
 import random
 from fileformats.generic import Directory, File
 from pydra.utils.hash import hash_function
-from pydra.utils.tests.utils import Concatenate
+from pydra.utils.tests.utils import (
+    Concatenate,
+    OtherSpecificFuncTask,
+    SpecificFuncTask,
+)
 
 
 def test_hash_file(tmpdir):
@@ -595,3 +602,68 @@ def test_bytes_repr_annotated_type():
         ty.List[ty.Union[Json, Yaml]]
     )
     assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])
+
+
+def _adder(k):
+    def add(x):
+        return x + k
+
+    return add
+
+
+def test_hash_function_closure():
+    """Functions with the same source but different captured values hash differently"""
+    assert hash_function(_adder(1)) == hash_function(_adder(1))
+    assert hash_function(_adder(1)) != hash_function(_adder(2))
+    assert hash_function(_adder(SpecificFuncTask)) != hash_function(
+        _adder(OtherSpecificFuncTask)
+    )
+
+
+def test_hash_function_closure_values_hash_by_value():
+    """A captured dict or array is hashed by its value, like any input"""
+    assert hash_function(_adder({"a": 1})) == hash_function(_adder({"a": 1}))
+    assert hash_function(_adder({"a": 1})) != hash_function(_adder({"a": 2}))
+    assert hash_function(_adder(numpy.arange(3))) == hash_function(
+        _adder(numpy.arange(3))
+    )
+    assert hash_function(_adder(numpy.arange(3))) != hash_function(
+        _adder(numpy.arange(4))
+    )
+
+
+def test_hash_function_unhashable_closure():
+    """A captured value that cannot be hashed fails the hash, naming the value"""
+
+    class A:
+        def __bytes_repr__(self, cache):
+            raise TypeError("unhashable")
+
+    with pytest.raises(TypeError, match=r"unhashable\nin 'k', captured by function"):
+        hash_object(_adder(A()))
+
+
+_HASH_IN_SUBPROCESS = (
+    "import sys, cloudpickle; from pydra.utils.hash import hash_function; "
+    "print(hash_function(cloudpickle.loads(sys.stdin.buffer.read())))"
+)
+
+
+def test_hash_function_pickled_by_value():
+    """A function pickled by value, as the cf worker sends it, keeps its hash in
+    another process"""
+    func = _adder(3)
+    module = sys.modules[func.__module__]
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        payload = cloudpickle.dumps(func)
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    result = subprocess.run(
+        [sys.executable, "-c", _HASH_IN_SUBPROCESS],
+        input=payload,
+        capture_output=True,
+        check=True,
+        env={**os.environ, "PYTHONHASHSEED": "random"},
+    )
+    assert result.stdout.decode().strip() == hash_function(func)

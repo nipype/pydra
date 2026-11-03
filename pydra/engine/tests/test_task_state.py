@@ -60,7 +60,6 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_cachedir(worker, tmp_path):
     """task with a state and provided cache_root using pytest tmp_path"""
     cache_root = tmp_path / "test_task_nostate"
@@ -372,7 +371,6 @@ def test_task_error(tmp_path):
 # Tests for tasks without state (i.e. no splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1(worker, tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
@@ -405,7 +403,6 @@ def test_task_nostate_1_call(tmp_path):
     assert results.cache_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_subm(worker, tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
@@ -425,7 +422,6 @@ def test_task_nostate_1_call_subm(worker, tmp_path):
     assert results.cache_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_plug(worker, tmp_path):
     """task without splitter"""
     nn = FunAddTwo(a=3)
@@ -548,7 +544,6 @@ def test_task_nostate_7():
 # Testing caching for tasks without states
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachedir(worker, tmp_path):
     """task with provided cache_root using pytest tmp_path"""
     cache_root = tmp_path / "test_task_nostate"
@@ -567,7 +562,6 @@ def test_task_nostate_cachedir(worker, tmp_path):
     assert results.outputs.out == 5
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachedir_relativepath(tmp_path, worker):
     """task with provided cache_root as relative path"""
     os.chdir(tmp_path)
@@ -590,7 +584,6 @@ def test_task_nostate_cachedir_relativepath(tmp_path, worker):
     shutil.rmtree(cache_root)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachelocations(worker, tmp_path):
     """
     Two identical tasks with provided cache_root;
@@ -748,7 +741,6 @@ def test_task_nostate_cachelocations_updated(worker, tmp_path):
 # Tests for tasks with states (i.e. with splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("input_type", ["list", "array"])
 def test_task_state_1(worker, input_type, tmp_path):
     """task with the simplest splitter"""
@@ -1027,7 +1019,6 @@ def test_task_state_6a(worker, tmp_path):
     assert results.outputs.out == [3.0, 2.0, 33.0, 12.0]
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_comb_1(worker, tmp_path):
     """task with the simplest splitter and combiner"""
     nn = FunAddTwo().split(a=[3, 5]).combine(combiner="a")
