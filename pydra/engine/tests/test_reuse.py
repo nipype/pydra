@@ -15,7 +15,7 @@ from fileformats.generic import File
 from pydra.compose import python, shell, workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result, load_result
-from pydra.engine.context import package_versions, process_context
+from pydra.engine.context import package_versions, process_context, reached_modules
 from pydra.engine.store import (
     AnyReuse,
     ConsistentReuse,
@@ -104,11 +104,13 @@ def test_adding_version_changes_checksum():
 def test_context_recorded(tmp_path):
     job = _job(tmp_path, Tagged(tag="a"))
     result = job.run()
-    assert job.context == {
+    packages = package_versions(reached_modules(job.task))
+    assert {k: v for k, v in job.context.items() if k != "unknown"} == {
         **process_context(),
         "environment": Tagged(tag="a").checksum(),
-        "packages": package_versions({"pydra"}),
+        "packages": packages,
     }
+    assert ("unknown" in job.context) == (None in packages.values())
     assert job.context["python"] == platform.python_version()
     assert job.context["platform"].startswith(f"{sys.platform}-{platform.machine()}")
     assert result.context == job.context

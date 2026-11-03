@@ -122,9 +122,9 @@ class Submitter:
         ``"exact"`` only those produced in an equal context (including the full Python
         version and every installed distribution), ``"any"`` those produced in any
         context, a :class:`~pydra.engine.store.ReusePolicy` those whose context it
-        accepts. A context with an unknown version is never reused under
-        ``"consistent"`` or ``"exact"`` unless it is equal to the current one. Set the
-        policy on the store itself when passing ``store``
+        accepts. A result whose context holds an unknown version is reused by no
+        other process under ``"consistent"`` or ``"exact"``. Set the policy on the
+        store itself when passing ``store``
     on_error : str, optional
         What to do when a job errors: "fail_fast" stops at the first error and raises
         it, "raise_at_end" keeps running every element that does not read an errored
