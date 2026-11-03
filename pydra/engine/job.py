@@ -148,7 +148,7 @@ class Job(ty.Generic[TaskType]):
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
         # Set while the job is queued to run in this process's submitter and its run
-        # has not finished: a result stored before then is a previous attempt's
+        # has not finished
         self._awaiting_run = False
         self._context = None
 
@@ -345,7 +345,6 @@ class Job(ty.Generic[TaskType]):
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     return result
-            # a previous attempt's error, read by the check above, is not this run's
             self._errored = False
             cwd = os.getcwd()
             self._populate_filesystem()
@@ -410,7 +409,6 @@ class Job(ty.Generic[TaskType]):
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     return result
-            # a previous attempt's error, read by the check above, is not this run's
             self._errored = False
             cwd = os.getcwd()
             self._populate_filesystem()
