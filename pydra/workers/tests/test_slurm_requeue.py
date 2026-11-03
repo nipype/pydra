@@ -52,6 +52,59 @@ def test_requeue_then_complete(tmp_path, monkeypatch):
     assert len(fake.requeues()) == 1
 
 
+def test_concurrent_jobs_are_requeued_independently(tmp_path, monkeypatch):
+    """Jobs in flight together through one worker each keep their own requeue budget:
+    no job's state is read until all three are queued, and each ends in its own state"""
+    plans = {
+        "1": ["TIMEOUT", "COMPLETED"],
+        "2": ["NODE_FAIL", "NODE_FAIL", "COMPLETED"],
+        "3": ["COMPLETED"],
+    }
+    calls = []
+    queued = asyncio.Event()
+
+    async def fake(*cmd, hide_display=False, strip=False):
+        calls.append(cmd)
+        if cmd[0] == "sbatch":
+            jobid = str(sum(c[0] == "sbatch" for c in calls))
+            if jobid == "3":
+                queued.set()
+            return 0, f"Submitted batch job {jobid}\n", ""
+        if cmd[0] == "squeue":
+            return 0, "", ""
+        if cmd[0] == "sacct":
+            await queued.wait()
+            jobid = cmd[cmd.index("-j") + 1]
+            return 0, f"{jobid}|{plans[jobid].pop(0)}|0:0\n", ""
+        if cmd[0] == "scontrol":
+            return 0, "", ""
+        raise AssertionError(cmd)
+
+    monkeypatch.setattr(slurm.base, "read_and_display_async", fake)
+    monkeypatch.setattr(
+        slurm.SlurmWorker,
+        "_prepare_runscripts",
+        lambda self, job, rerun=False: (tmp_path, tmp_path / "batch.sh"),
+    )
+    worker = slurm.SlurmWorker(poll_delay=0, requeue_budget=2)
+    jobs = [
+        types.SimpleNamespace(
+            name=f"t{i}", uid=f"u{i}", cache_root=tmp_path, resources=None
+        )
+        for i in (1, 2, 3)
+    ]
+
+    async def run_all():
+        return await asyncio.wait_for(
+            asyncio.gather(*(worker.run(job) for job in jobs)), 30
+        )
+
+    assert asyncio.run(run_all()) == [True, True, True]
+    requeued = [c[2] for c in calls if c[0] == "scontrol"]
+    assert sorted(requeued) == ["1", "2", "2"]
+    assert not any(plans.values())
+
+
 def test_requeue_budget_is_spent(tmp_path, monkeypatch):
     fake, worker, job = run_worker(
         tmp_path, monkeypatch, ["PREEMPTED"] * 10, requeue_budget=2
