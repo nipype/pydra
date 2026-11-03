@@ -81,6 +81,42 @@ it as an input instead. The hash is only computed in the submitting process and 
 with the job, so workers never recompute it.
 
 
+Declared versions
+-----------------
+
+``python.define(version="2")`` replaces the code part of the checksum with the
+function's qualified name and that version. Only the code is replaced: the walk still
+runs at the task's tier, and the values it reads (closure cells, globals and the
+defaults of the functions it calls) are hashed as they are without a version, so two
+closures made by one factory with different values still have different checksums. A
+versioned task's checksum can never equal a code-hashed one's, because the code part is
+tagged ``version:`` instead of ``ast@1:``. ``checksum=`` (``__checksum__``) remains the
+way to replace the whole checksum.
+
+The code the version stands for is not forgotten. Its digest,
+:func:`pydra.utils.hash.code_digest` (the encoded code of every definition the walk
+reaches, without the values), is recorded as ``code`` in the record beside each
+result. A lookup that finds a result of the same checksum, so of the same version and
+values, recorded with another ``code`` digest issues a
+:class:`~pydra.engine.store.DeclaredVersionWarning` naming the task, the version and
+both digests, with the remedy: bump ``version=`` or remove it. The result is in another
+slot, because the digest is part of the record, so:
+
+=================  ===========================================================
+``"exact"``        it is not reused, and the task runs again
+``"consistent"``   it is reused, as the version declares, and marked
+                   ``cross_context``
+``"any"``          it is reused, and marked ``cross_context``
+=================  ===========================================================
+
+A :class:`~pydra.engine.store.ReusePolicy` object sees ``code`` in both records and
+decides as it compares them; the warning is issued either way. The same digest serves
+a check in the defining project's tests, which compares
+``code_digest(Task)`` with a committed table of ``(task, version, digest)`` and fails
+when a digest moves while its version does not. A function without source is hashed by
+its byte-code, whose digest differs between Python minors.
+
+
 Execution contexts and reuse
 ----------------------------
 
@@ -102,7 +138,9 @@ recorded in different contexts never overwrite each other:
   installed its file, so one module of a namespace package (``google.protobuf``,
   ``pydra.tasks.x``) records only its own distribution;
 * ``installed``: a digest of every installed distribution, those in ``packages`` by
-  their identities and the others by their versions.
+  their identities and the others by their versions;
+* ``code``: for a task with a declared version only, the digest of its code (see
+  `Declared versions`_).
 
 A distribution is identified by its version and, when it was not installed from an
 index, by what it was installed from, which is read only for the distributions a task

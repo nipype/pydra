@@ -202,9 +202,14 @@ Anything new is opt-in until maintainers decide otherwise.
   differently across platforms or Python versions. A hash can show exactness but cannot measure
   distance.
 - **Declared identity.** A task may declare a `version` (`@python.define(version="2")`). The
-  checksum then uses that version instead of the function's code. CI in the defining project
-  guards it: changing the source without bumping the version fails. Types can register their own
-  byte representation, extending `__bytes_repr__`, so domain objects hash portably.
+  checksum then uses that version instead of the function's code, tagged so it never equals a
+  code-hashed checksum. The values the code reads (closure cells, globals, the defaults of called
+  functions) are still hashed. The digest of the code is recorded beside each result, and a lookup
+  that finds a result of the same version computed from other code warns, naming both digests
+  ("bump version= or remove it"); `reuse="exact"` recomputes it, the other policies reuse it.
+  CI in the defining project can guard it with the same digest (`pydra.utils.hash.code_digest`):
+  changing the source without bumping the version fails. Types can register their own byte
+  representation, extending `__bytes_repr__`, so domain objects hash portably.
 - **Execution context.** Each cache entry records the context that produced it (environment
   checksum from 3.5, platform, Python version) beside the result, outside the checksum. The
   context is recorded, not keyed.
