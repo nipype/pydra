@@ -529,19 +529,75 @@ def test_persistent_hash_cache_rewrite_within_timestamp_resolution(
     assert _hash_when_changed(monkeypatch, text_file, cache_path) != first
 
 
-def test_persistent_hash_cache_key_has_size_and_inode(settled, cache_path, text_file):
+class _Stat:
+    """A stat result with some fields replaced"""
+
+    def __init__(self, st, **fields):
+        self._st = st
+        self._fields = fields
+
+    def __getattr__(self, name):
+        return self._fields.get(name, getattr(self._st, name))
+
+
+def _poison_cached_hash(cache_path, fileset):
+    """Replace the one cached hash, so a cache hit returns b"poisoned" """
+    hash_object(fileset, persistent_cache=cache_path)
+    (entry,) = cache_path.iterdir()
+    entry.write_bytes(b"poisoned")
+    assert hash_object(fileset, persistent_cache=cache_path) == b"poisoned"
+
+
+@pytest.mark.parametrize("field", ["st_size", "st_ino", "st_mtime_ns", "st_ctime_ns"])
+def test_persistent_hash_cache_key_has_each_stat_field(
+    monkeypatch, settled, cache_path, text_file, field
+):
+    _poison_cached_hash(cache_path, text_file)
+    target = os.stat(text_file.fspath)
+    fstat = os.fstat
+
+    def altered_fstat(fd):
+        st = fstat(fd)
+        if (st.st_dev, st.st_ino) != (target.st_dev, target.st_ino):
+            return st
+        return _Stat(st, **{field: getattr(st, field) - 1})
+
+    monkeypatch.setattr(os, "fstat", altered_fstat)
+    assert hash_object(text_file, persistent_cache=cache_path) != b"poisoned"
+    assert len(list(cache_path.iterdir())) == 2
+
+
+def test_persistent_hash_cache_ignores_stale_stat(
+    monkeypatch, settled, cache_path, text_file
+):
     path = text_file.fspath
-    mtime_ns = path.stat().st_mtime_ns
-    first = hash_object(text_file, persistent_cache=cache_path)
-    _rewrite(path, "longer", mtime_ns)
-    resized = hash_object(text_file, persistent_cache=cache_path)
-    assert resized != first
-    replacement = path.with_name("replacement.txt")
-    _rewrite(replacement, "bigger", mtime_ns)
-    os.replace(replacement, path)
-    assert path.stat().st_size == len("longer")
-    assert hash_object(text_file, persistent_cache=cache_path) != resized
-    assert len(list(cache_path.iterdir())) == 3
+    stale = os.stat(path)
+    _poison_cached_hash(cache_path, text_file)
+    _rewrite(path, "rewritten elsewhere", stale.st_mtime_ns)
+    stat = os.stat
+    monkeypatch.setattr(
+        os,
+        "stat",
+        lambda p, *a, **kw: stale if os.fspath(p) == str(path) else stat(p, *a, **kw),
+    )
+    assert path.stat() is stale
+    assert hash_object(text_file, persistent_cache=cache_path) != b"poisoned"
+
+
+def test_persistent_hash_cache_directory_keyed_on_contents(
+    settled, cache_path, tmp_path
+):
+    root = tmp_path / "dir"
+    (root / "sub").mkdir(parents=True)
+    nested = root / "sub" / "nested.txt"
+    nested.write_text("foo")
+    directory = Directory(root)
+    root_stat = root.stat()
+    _poison_cached_hash(cache_path, directory)
+    _rewrite(nested, "longer", nested.stat().st_mtime_ns)
+    assert root.stat().st_mtime_ns == root_stat.st_mtime_ns
+    assert hash_object(directory, persistent_cache=cache_path) != b"poisoned"
+    assert len(list(cache_path.iterdir())) == 2
 
 
 def test_persistent_hash_cache(settled, cache_path, text_file):

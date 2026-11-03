@@ -34,8 +34,7 @@ logger = logging.getLogger("pydra")
 FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 
 TIMESTAMP_RESOLUTION_NS = 2_000_000_000
-"""The coarsest file timestamp resolution allowed for (FAT's 2 s); the hash of a file
-modified or changed within this long of hashing it is not stored in the persistent cache."""
+"""Files changed within this many nanoseconds of hashing are not keyed in the persistent cache."""
 
 # Module-level cache for function source bytes to avoid repeated disk I/O and
 # AST parsing. Key: (module, qualname, source file, first line, source-file mtime);
@@ -574,23 +573,62 @@ if sys.version_info >= (3, 10):
     register_serializer(types.UnionType)(bytes_repr_type)
 
 
+def _file_entry(path: str, name: str) -> tuple | None:
+    """``(name, mtime, size, inode, ctime)`` of the file at ``path``, from ``fstat`` on a
+    descriptor opened on it; None if it cannot be opened."""
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+    finally:
+        os.close(fd)
+    return (name, st.st_mtime_ns, st.st_size, st.st_ino, st.st_ctime_ns)
+
+
+def fileset_cache_key(fspaths: ty.Sequence[Path]) -> CacheKey | None:
+    """The persistent hash cache key of the files and directories at ``fspaths``.
+
+    The key holds ``(path, mtime, size, inode, ctime)`` of each file, and of every file
+    beneath each directory by its relative path, along with the relative path of every
+    subdirectory. Each file's times are read with ``fstat`` on a descriptor opened on it.
+    On Windows ``ctime`` is the creation time and the inode can be 0 on network shares;
+    the key then rests on mtime and size.
+
+    Returns None, so that the hash is not stored, if a file cannot be opened or any
+    file's mtime or ctime is within ``TIMESTAMP_RESOLUTION_NS`` of now.
+    """
+    entries: list[tuple] = []
+    for fspath in fspaths:
+        if not fspath.is_dir():
+            entries.append(_file_entry(str(fspath), repr(fspath)))
+            continue
+        entries.append((repr(fspath),))
+        for root, dirs, files in os.walk(fspath):
+            dirs.sort()
+            rel_root = os.path.relpath(root, fspath)
+            entries.extend((os.path.join(rel_root, d),) for d in dirs)
+            entries.extend(
+                _file_entry(os.path.join(root, f), os.path.join(rel_root, f))
+                for f in sorted(files)
+            )
+    if any(entry is None for entry in entries):
+        return None
+    settled = time_ns() - TIMESTAMP_RESOLUTION_NS
+    if any(max(entry[1], entry[4]) >= settled for entry in entries if len(entry) > 1):
+        return None
+    return CacheKey(tuple(entries))
+
+
 @register_serializer(FileSet)
 def bytes_repr_fileset(
     fileset: FileSet, cache: Cache
 ) -> Iterator[ty.Union[CacheKey, bytes]]:
     fspaths = sorted(fileset.fspaths)
-    # The persistent cache key: each path with its mtime, size, inode and ctime. No key
-    # is yielded, so the hash is not stored, if any path changed within
-    # TIMESTAMP_RESOLUTION_NS of now.
-    stats = [p.stat() for p in fspaths]
-    settled = time_ns() - TIMESTAMP_RESOLUTION_NS
-    if all(max(st.st_mtime_ns, st.st_ctime_ns) < settled for st in stats):
-        yield CacheKey(
-            tuple(repr(p) for p in fspaths)  # type: ignore[arg-type]
-            + tuple(
-                (st.st_mtime_ns, st.st_size, st.st_ino, st.st_ctime_ns) for st in stats
-            )
-        )
+    key = fileset_cache_key(fspaths)
+    if key is not None:
+        yield key
     cls = type(fileset)
     yield f"{cls.__module__}.{cls.__name__}:".encode()
     # Hidden files and directories are set explicitly to be included, so that they are
