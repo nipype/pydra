@@ -863,14 +863,22 @@ def test_hash_function_unchanged(tmp_path, variant):
         pytest.param(_BASE_SOURCE.replace("    @deco\n", ""), id="decorator"),
         pytest.param(_BASE_SOURCE.replace("b: int = 1", "b: int = 2"), id="default"),
         pytest.param(
+            _BASE_SOURCE.replace("def g(x):", "def g(x) -> int:"),
+            id="nested-annotation",
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace("def g(x):\n", 'def g(x):\n        """Doc"""\n'),
+            id="nested-docstring",
+        ),
+        pytest.param(
             _BASE_SOURCE.replace("c = a", "d = a").replace("g(c)", "g(d)"),
             id="local-name",
         ),
     ],
 )
 def test_hash_function_changed(tmp_path, variant):
-    """The body, the decorators of the code it defines, default values and local names
-    change a function's hash"""
+    """The body, default values, local names and the decorators, annotations and
+    docstrings of the code a function defines change its hash"""
     assert hash_function(_define(tmp_path, variant)) != hash_function(
         _define(tmp_path, _BASE_SOURCE)
     )
@@ -910,7 +918,7 @@ async def f(a, /, b, *args, c=None, d: int = 0, **kwargs) -> dict:
     z = {*x} | {1.5, 2j, b"raw", ..., True}
     w = (n async for n in b)
     if (m := len(x)) > 1 and not c or d is None:
-        x[1:m:2] = f"{a!r:>{d}}" + f"{b=}"
+        x[1:m:2] = f"{a!r:>{d}}" + f"{b=}" f"{x:{d}}" f"{x:>{d}.{d}}" f"" f"{{}}{a:}"
     try:
         await b
     except* ValueError as e:
@@ -948,5 +956,5 @@ def test_hash_function_same_on_every_python():
     gives the same hash on every supported Python version"""
     encoding = hash_module.encode_ast(ast.parse(_CORPUS_SOURCE).body[0])
     assert blake2b(encoding.encode(), digest_size=16).hexdigest() == (
-        "bd6408cc4c8f4a31508ce5e7f3730019"
+        "c3c9ce3c2e2549d95a4f97f92d16e554"
     )

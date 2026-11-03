@@ -9,6 +9,7 @@ from datetime import datetime
 import typing as ty
 import types
 from pathlib import Path
+from collections import OrderedDict
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
@@ -37,8 +38,10 @@ TIMESTAMP_RESOLUTION_NS = 2_000_000_000
 
 # Encoded code of functions, keyed by (source file, source-file mtime, code object)
 _function_bytes_cache: dict[tuple, bytes] = {}
-# Function and lambda nodes of parsed sources by first line, keyed by (file, source digest)
-_source_nodes_cache: dict[tuple, dict[int, list[ast.AST]]] = {}
+# Function and lambda nodes of parsed sources by first line, keyed by (file, source
+# digest), holding the most recently used SOURCE_NODES_CACHE_SIZE sources
+_source_nodes_cache: "OrderedDict[tuple, dict[int, list[ast.AST]]]" = OrderedDict()
+SOURCE_NODES_CACHE_SIZE = 128
 
 AST_ENCODING = "ast@1"
 
@@ -705,6 +708,20 @@ def _is_docstring(stmt: ast.stmt) -> bool:
     )
 
 
+def _joined_str_values(values: list[ast.expr]) -> list[ast.expr]:
+    """The parts of an f-string with empty strings dropped and adjacent strings merged,
+    as Python versions and patch releases split them differently"""
+    merged: list[ast.expr] = []
+    for part in values:
+        if isinstance(part, ast.Constant) and isinstance(part.value, str):
+            if not part.value:
+                continue
+            if merged and isinstance(merged[-1], ast.Constant):
+                part = ast.Constant(value=merged.pop().value + part.value)
+        merged.append(part)
+    return merged
+
+
 def encode_ast(root: ast.AST) -> str:
     """Encode a function or lambda node in the version-neutral `ast@1` form
 
@@ -717,11 +734,30 @@ def encode_ast(root: ast.AST) -> str:
     * fields whose value is None, empty, 0 or False, so that fields added in a later
       Python version with such a default leave the encoding unchanged (a constant's
       value is always encoded);
-    * the leading string expression (docstring) of every function and class body;
-    * every signature annotation (of arguments and return values);
-    * the name and decorators of `root` itself.
+    * the name, decorators, signature annotations (of arguments and the return value)
+      and docstring (the leading string expression of the body) of `root` itself;
+      those of the functions and classes it defines are encoded.
+
+    The parts of an f-string are encoded with empty strings dropped and adjacent
+    strings merged. A decorator of `root` that does not wrap it but sets state its
+    body reads (such as an attribute of the function) is therefore not part of the
+    encoding, and is ambient state outside the contract of the checksum.
     """
     parts: list[str] = []
+    root_args = set()
+    if isinstance(root, _FUNCTION_DEFS):
+        arguments = root.args
+        root_args = {
+            id(a)
+            for a in (
+                *arguments.posonlyargs,
+                *arguments.args,
+                *arguments.kwonlyargs,
+                arguments.vararg,
+                arguments.kwarg,
+            )
+            if a is not None
+        }
 
     def encode(value: ty.Any) -> None:
         if isinstance(value, list):
@@ -743,18 +779,22 @@ def encode_ast(root: ast.AST) -> str:
                 pass
             elif (
                 name in _AST_EXCLUDED_FIELDS
-                or (name == "annotation" and isinstance(value, ast.arg))
-                or (name == "returns" and isinstance(value, _FUNCTION_DEFS))
-                or (name in ("name", "decorator_list") and value is root)
+                or (name == "annotation" and id(value) in root_args)
+                or (name in ("name", "decorator_list", "returns") and value is root)
                 or (not field and not isinstance(field, ast.AST))
             ):
                 continue
             elif (
                 name == "body"
-                and isinstance(value, (*_FUNCTION_DEFS, ast.ClassDef))
+                and value is root
+                and isinstance(root, _FUNCTION_DEFS)
                 and _is_docstring(field[0])
             ):
                 field = field[1:]
+            elif name == "values" and isinstance(value, ast.JoinedStr):
+                field = _joined_str_values(field)
+                if not field:
+                    continue
             parts.append(name + "=")
             encode(field)
             parts.append(";")
@@ -768,10 +808,9 @@ def _function_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AS
     """The function and lambda nodes of a source, by the first line of their code"""
     text = "".join(lines)
     key = (source_file, blake2b(text.encode(), digest_size=16).digest())
-    try:
+    if key in _source_nodes_cache:
+        _source_nodes_cache.move_to_end(key)
         return _source_nodes_cache[key]
-    except KeyError:
-        pass
     nodes: dict[int, list[ast.AST]] = {}
     try:
         tree = ast.parse(text)
@@ -785,6 +824,8 @@ def _function_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AS
             elif isinstance(node, ast.Lambda):
                 nodes.setdefault(node.lineno, []).append(node)
     _source_nodes_cache[key] = nodes
+    if len(_source_nodes_cache) > SOURCE_NODES_CACHE_SIZE:
+        _source_nodes_cache.popitem(last=False)
     return nodes
 
 
