@@ -47,7 +47,7 @@ class Docker(base.Container):
         docker_args.extend(["-w", f"{self.root}{job.cache_dir}"])
         keys = ["return_code", "stdout", "stderr"]
 
-        job.cache_dir.mkdir(exist_ok=True)
+        job.cache_dir.mkdir(parents=True, exist_ok=True)
         values = base.execute(
             docker_args + [docker_img] + job.task._command_args(values=arg_values),
         )
