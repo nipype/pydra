@@ -26,6 +26,8 @@ class SlurmWorker(base.Worker):
     """A worker to execute tasks on SLURM systems."""
 
     _cmd = "sbatch"
+    _requeue_states = ("TIMEOUT", "PREEMPTED", "NODE_FAIL", "BOOT_FAIL")
+
     _sacct_re = re.compile(
         r"(?P<jobid>[^|\s]*)\|(?P<status>\w*)(?: by \d+)?\+?\|"
         r"(?P<exit_code>\d+):\d+"
@@ -135,7 +137,7 @@ class SlurmWorker(base.Worker):
             done = await self._poll_job(jobid)
             if done:
                 if (
-                    done in ["TIMEOUT", "PREEMPTED"]
+                    done in self._requeue_states
                     and "--no-requeue" not in self.sbatch_args
                 ):
                     if requeues >= self.requeue_budget:
@@ -152,7 +154,14 @@ class SlurmWorker(base.Worker):
                             # for pyt3.8 we could you missing_ok=True
                             (job.cache_root / f"{checksum}.lock").unlink()
                     cmd_re = ("scontrol", "requeue", jobid)
-                    await base.read_and_display_async(*cmd_re, hide_display=True)
+                    rc, _, stderr = await base.read_and_display_async(
+                        *cmd_re, hide_display=True
+                    )
+                    if rc:
+                        raise RuntimeError(
+                            f"Slurm job {jobid} ended {done} but `scontrol requeue` "
+                            f"failed: {stderr.strip()}"
+                        )
                 else:
                     return True
             await asyncio.sleep(self.poll_delay)
@@ -181,13 +190,18 @@ class SlurmWorker(base.Worker):
                 f"Slurm job {jobid} was cancelled and is not requeued"
             )
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
-            if m.group("status") in ["TIMEOUT", "PREEMPTED"]:
+            if m.group("status") in self._requeue_states:
                 return m.group("status")
             elif m.group("status") in ["RUNNING", "PENDING"]:
                 return False
             # TODO: potential for requeuing
             # parsing the error message
-            error_line = Path(error_file).read_text().split("\n")[-2]
+            try:
+                error_text = Path(error_file).read_text()
+            except OSError:
+                error_text = ""
+            error_lines = [line for line in error_text.splitlines() if line]
+            error_line = error_lines[-1] if error_lines else ""
             if "Exception" in error_line:
                 error_message = error_line.replace("Exception: ", "")
             elif "Error" in error_line:
