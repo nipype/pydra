@@ -59,3 +59,20 @@ def test_result_keeps_classes_pickled_by_value(tmp_path: Path):
     loaded = pickle.loads(pickle.dumps(Result(cache_dir=tmp_path, task=task)))
     assert type(loaded.task) is Scale
     assert get_fields(Scale).function.default is namespace["scale"]
+
+
+def test_result_keeps_enums_pickled_by_value(tmp_path: Path):
+    """Loading a result does not replace the members or methods of an enum this
+    process pickled by value"""
+    namespace = {"__name__": "__main__"}
+    exec(
+        "import enum\n\nclass Mode(enum.Enum):\n    A = 1\n\n"
+        "    def scale(self):\n        return 2\n",
+        namespace,
+    )
+    Mode = namespace["Mode"]
+    member, scale = Mode.A, vars(Mode)["scale"]
+    result = Result(cache_dir=tmp_path, task=MockTask(), outputs=member)
+    loaded = pickle.loads(pickle.dumps(result))
+    assert loaded.outputs is member
+    assert vars(Mode)["scale"] is scale

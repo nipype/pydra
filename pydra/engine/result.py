@@ -3,6 +3,8 @@
 from pathlib import Path
 import typing as ty
 import attrs
+import functools
+import inspect
 import io
 import pickle
 import time
@@ -24,11 +26,28 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
+_SKELETONS = ("_make_skeleton_class", "_make_skeleton_enum")
+_SETSTATE = "_class_setstate"
+for _name in (*_SKELETONS, _SETSTATE, "_DYNAMIC_CLASS_TRACKER_BY_ID"):
+    if not hasattr(cp.cloudpickle, _name):
+        raise ImportError(
+            f"cloudpickle {cp.__version__} has no {_name!r}, which pydra intercepts to "
+            "load results without changing the classes of the loading process"
+        )
+# The position of the tracker id in the arguments of each skeleton function
+_TRACKER_ARG = {
+    name: list(inspect.signature(getattr(cp.cloudpickle, name)).parameters).index(
+        "class_tracker_id"
+    )
+    for name in _SKELETONS
+}
+
+
 class _ClassKeepingUnpickler(pickle.Unpickler):
-    """Unpickles objects whose classes cloudpickle pickled by value without changing
-    those classes when this process already holds them (when it pickled them): such a
-    class is restored as it is, rather than its attributes, such as the function of a
-    task, being replaced by the pickled copies"""
+    """Unpickles objects whose classes (or enums) cloudpickle pickled by value without
+    changing those classes when this process already holds them (when it pickled
+    them): such a class is restored as it is, rather than its attributes, such as the
+    function of a task, being replaced by the pickled copies"""
 
     def __init__(self, file: ty.BinaryIO):
         super().__init__(file)
@@ -36,17 +55,17 @@ class _ClassKeepingUnpickler(pickle.Unpickler):
 
     def find_class(self, module: str, name: str) -> ty.Any:
         if module == "cloudpickle.cloudpickle":
-            if name == "_make_skeleton_class":
-                return self._make_skeleton_class
-            if name == "_class_setstate":
+            if name in _SKELETONS:
+                return functools.partial(self._make_skeleton, name)
+            if name == _SETSTATE:
                 return self._class_setstate
         return super().find_class(module, name)
 
-    def _make_skeleton_class(self, *args: ty.Any) -> type:
-        tracker_id = args[4]
+    def _make_skeleton(self, name: str, *args: ty.Any) -> type:
+        tracker_id = args[_TRACKER_ARG[name]]
         with cp.cloudpickle._DYNAMIC_CLASS_TRACKER_LOCK:
             existing = tracker_id in cp.cloudpickle._DYNAMIC_CLASS_TRACKER_BY_ID
-        klass = cp.cloudpickle._make_skeleton_class(*args)
+        klass = getattr(cp.cloudpickle, name)(*args)
         if existing:
             self._existing.add(id(klass))
         return klass
@@ -54,7 +73,7 @@ class _ClassKeepingUnpickler(pickle.Unpickler):
     def _class_setstate(self, obj: type, state: ty.Any) -> type:
         if id(obj) in self._existing:
             return obj
-        return cp.cloudpickle._class_setstate(obj, state)
+        return getattr(cp.cloudpickle, _SETSTATE)(obj, state)
 
 
 def _loads(data: bytes) -> ty.Any:
