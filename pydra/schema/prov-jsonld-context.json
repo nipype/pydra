@@ -9,12 +9,12 @@
 		"@id": "prov:entity",
 		"@type": "@id"
 	},
-    
+
 	"activity": {
 		"@id": "prov:activity",
 		"@type": "@id"
 	},
-    
+
 	"agent": {
 		"@id": "prov:agent",
 		"@type": "@id"
@@ -24,16 +24,16 @@
 		"@id": "prov:hadRole",
 		"@type": "@id"
 	},
-    
+
 	"prov:type": {
 		"@id": "rdf:type",
 		"@type": "@id"
 	},
-    
+
 	"prov:label": {
 		"@id": "rdfs:label"
 	},
-    
+
 	"prov:location": {
 		"@id": "prov:atLocation",
 		"@type": "@id"
@@ -284,4 +284,3 @@
 		}
 	}
 }
-
