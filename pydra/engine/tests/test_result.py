@@ -1,4 +1,6 @@
 import pickle
+import subprocess
+import sys
 from pathlib import Path
 from fileformats.text import TextFile
 from pydra.compose import python
@@ -76,3 +78,30 @@ def test_result_keeps_enums_pickled_by_value(tmp_path: Path):
     loaded = pickle.loads(pickle.dumps(result))
     assert loaded.outputs is member
     assert vars(Mode)["scale"] is scale
+
+
+_MISSING_HELPER = """
+import pickle, sys, tempfile
+import cloudpickle.cloudpickle
+del cloudpickle.cloudpickle._make_skeleton_enum
+import pydra
+from pydra.engine.result import Result, UnsupportedCloudpickleError
+data = pickle.dumps(Result(cache_dir=tempfile.gettempdir(), outputs=1))
+try:
+    pickle.loads(data)
+except UnsupportedCloudpickleError as e:
+    print("raised", e)
+"""
+
+
+def test_result_load_needs_cloudpickle_helpers():
+    """pydra imports with a cloudpickle that lacks an intercepted helper, and loading a
+    result then fails with an error naming the cloudpickle version"""
+    out = subprocess.run(
+        [sys.executable, "-c", _MISSING_HELPER],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert out.startswith("raised cloudpickle ")
+    assert "_make_skeleton_enum" in out

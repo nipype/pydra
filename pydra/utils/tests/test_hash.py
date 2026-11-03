@@ -1,4 +1,5 @@
 import ast
+import gc
 import importlib
 import importlib.util
 import linecache
@@ -10,6 +11,7 @@ import textwrap
 import time
 import types
 import uuid
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
 from pathlib import Path
@@ -1489,3 +1491,33 @@ def test_code_hash_walk_memoised(load_modules, monkeypatch):
     path.write_text(path.read_text().replace("x - 3", "x - 4"))
     os.utime(path, ns=(time.time_ns() + 10**9,) * 2)
     assert hash_function(f) != first
+
+
+def test_code_hash_memo_holds_nothing_alive():
+    """The memoised walk of a notebook function keeps none of what it read alive"""
+    namespace, run = _notebook()
+    run(
+        "import numpy\n\nBIG = numpy.zeros(10**6)\n\n\nclass Helper:\n"
+        "    def f(self, x):\n        return x\n\n\ndef h(x):\n    return BIG\n\n\n"
+        "def f(x):\n    return h(x) + Helper().f(x)\n"
+    )
+    assert hash_function(namespace["f"]) == hash_function(namespace["f"])
+    names = ("BIG", "Helper", "h", "f")
+    refs = [weakref.ref(namespace[n]) for n in names]
+    refs += [weakref.ref(namespace[n].__code__) for n in ("h", "f")]
+    del namespace, run
+    gc.collect()
+    assert [r() for r in refs] == [None] * len(refs)
+
+
+def test_code_hash_notebook_class(monkeypatch):
+    """A class defined in a notebook cell, whose ``__main__`` has no file as in a
+    kernel, is hashed by its methods"""
+    monkeypatch.setitem(sys.modules, "__main__", types.ModuleType("__main__"))
+    hashes = []
+    for body in ("x", "x * 2"):
+        namespace, run = _notebook()
+        run(f"class Helper:\n    def f(self, x):\n        return {body}\n")
+        run("def f(x):\n    return Helper().f(x)\n")
+        hashes.append(hash_function(namespace["f"]))
+    assert hashes[0] != hashes[1]
