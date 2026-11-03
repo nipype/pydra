@@ -27,7 +27,7 @@ cloudpickle.register_pickle_by_value(sys.modules[__name__])
 cloudpickle.register_pickle_by_value(test_utils)
 
 
-CTX = {"environment_checksum": "e", "platform": "p", "python_version": "v"}
+CTX = {"environment": "e", "platform": "p", "python": "v"}
 KEY = context_key(CTX)
 
 
@@ -157,7 +157,7 @@ def LeaseUser(me: str, root: str, sync: str) -> int:
     if me == "b":
         wait_for("held_a")
         (sync / "tried_b").touch()
-    with store.acquire("key", {"environment_checksum": "e"}):
+    with store.acquire("key", {"environment": "e"}):
         if me == "a":
             (sync / "held_a").touch()
             wait_for("tried_b")

@@ -14,6 +14,7 @@ dependencies = [
     "etelemetry >=0.3.1",
     "filelock >=3.0.0",
     "fileformats >=0.22.2",
+    "packaging >=22",
     "platformdirs >=2",
 ]
 license = { file = "LICENSE" }

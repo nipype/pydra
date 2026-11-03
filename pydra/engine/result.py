@@ -125,19 +125,15 @@ class Result(ty.Generic[OutputsType]):
     runtime: Runtime | None = None
     errored: bool = False
     task: base.Task[OutputsType] | None = None
-    environment_checksum: str | None = None
-    platform: str | None = None
-    python_version: str | None = None
+    context: dict[str, ty.Any] = attrs.field(factory=dict)
+    """The execution context that produced the result, recorded beside it (see
+    `pydra.engine.context.job_context`)."""
     cross_context: bool = False
     """Whether the result was reused from an entry recorded in another context."""
+    reused_in: dict[str, ty.Any] | None = None
+    """The context it was reused in, when `cross_context`."""
 
     CLOUD_PICKLE_ATTRS = ("outputs", "task")
-    CONTEXT_ATTRS = ("environment_checksum", "platform", "python_version")
-
-    @property
-    def context(self) -> dict[str, str | None]:
-        """The execution context that produced the result, recorded beside it."""
-        return {name: getattr(self, name) for name in self.CONTEXT_ATTRS}
 
     def __getstate__(self):
         state = attrs_values(self)

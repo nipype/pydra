@@ -81,6 +81,63 @@ it as an input instead. The hash is only computed in the submitting process and 
 with the job, so workers never recompute it.
 
 
+Execution contexts and reuse
+----------------------------
+
+The interpreter, the platform, the environment and the identities of installed
+packages are not part of the checksum. They are recorded beside each result, as
+``Result.context``, and select its slot within the checksum's directory, so results
+recorded in different contexts never overwrite each other:
+
+* ``python``: the full interpreter version, and ``implementation``, its name;
+* ``platform``: the OS and machine, and the C library and its version where known, so
+  updating glibc on a cluster ends ``"consistent"`` reuse of its earlier results;
+* ``environment``: the checksum of the environment the job ran in;
+* ``packages``: the identity of each distribution that installed a library module the
+  task reaches, and of every distribution those require (their ``Requires-Dist``,
+  under the markers of the running interpreter). The modules are those of its class,
+  of the library code its function reaches (collected by the walk that computes its
+  checksum, followed through user code) and of the types of its input values, through
+  containers, attrs and dataclass instances. A module belongs to the distribution that
+  installed its file, so one module of a namespace package (``google.protobuf``,
+  ``pydra.tasks.x``) records only its own distribution;
+* ``installed``: a digest of every installed distribution, those in ``packages`` by
+  their identities and the others by their versions.
+
+A distribution is identified by its version and, when it was not installed from an
+index, by what it was installed from, which is read only for the distributions a task
+reaches: the commit or archive hash it records; for an editable install, the commit
+of its git checkout and a digest of the files modified or untracked there, or outside
+git a digest of all its files, in both cases only those of its own packages and up to
+``IDENTITY_MAX_FILES`` files and ``IDENTITY_MAX_BYTES`` bytes; for another install
+from a local directory, a digest of the files it installed (its ``RECORD``). What
+still cannot be identified (a module no distribution installed, an editable install
+whose source is gone or that is over those limits) is unknown, and is logged with the
+reason. A result
+whose record holds an unknown is found within the process that computed it (and its
+workers) but reused by no other process under ``"consistent"`` or ``"exact"``.
+
+The record is built once in the submitting process and carried with the job, so a
+worker records the same context. Whether a result recorded in another context is
+reused is set by the reuse policy, ``Submitter(reuse=...)``:
+
+=================  ===========================================================
+``"consistent"``   (default) the same Python major.minor and implementation,
+                   platform, environment, and identities of the distributions
+                   the task reaches; other installed distributions and the Python
+                   patch version may differ
+``"exact"``        an equal record, including the full Python version and the
+                   digest of every installed distribution
+``"any"``          any record
+=================  ===========================================================
+
+A mismatch is a recompute, never an error: each slot's context is kept in
+``_context.json``, written atomically, and compared before its result is loaded. A
+reused result recorded in another context has ``cross_context`` set, keeps the context
+it was recorded in as ``context`` and the context it was reused in as ``reused_in``.
+A :class:`~pydra.engine.store.ReusePolicy` object can be passed instead, to compare
+the records in another way.
+
 File hash caching by mtime
 --------------------------
 

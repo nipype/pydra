@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import inspect
-import platform
 import sys
 from pathlib import Path
 import typing as ty
@@ -17,6 +16,7 @@ from pydra.utils.hash import hash_function
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
+from pydra.engine.context import job_context
 from pydra.engine.store import remove_from_cache
 from pydra.engine.result import (
     RuntimeSpec,
@@ -221,17 +221,14 @@ class Job(ty.Generic[TaskType]):
         return self._checksum
 
     @property
-    def context(self) -> dict[str, str]:
-        """The execution context of the job, built once and carried with it to the
-        worker. It selects the job's slot in the store, is recorded on its result and
-        is what a later job's context is compared with, so every process uses this one
-        object."""
+    def context(self) -> dict[str, ty.Any]:
+        """The execution context of the job (see `pydra.engine.context.job_context`),
+        built once in the submitting process and carried with the job to the worker. It
+        selects the job's slot in the store, is recorded on its result and is what a
+        later job's context is compared with, so every process uses this one object."""
         if self._context is None:
-            self._context = {
-                "environment_checksum": self.environment.checksum(),
-                "platform": f"{sys.platform}-{platform.machine()}",
-                "python_version": ".".join(platform.python_version_tuple()[:2]),
-            }
+            self.checksum  # collects the library modules the task's code reaches
+            self._context = job_context(self.task, self.environment)
         return self._context
 
     @property
@@ -356,7 +353,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
-                **self.context,
+                context=self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -420,7 +417,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
-                **self.context,
+                context=self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)

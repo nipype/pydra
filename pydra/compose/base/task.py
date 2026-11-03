@@ -187,6 +187,8 @@ class Task(ty.Generic[OutputsType]):
     _combiner = attrs.field(default=None, init=False, repr=False)
     _container_ndim = attrs.field(default=None, init=False, repr=False)
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the library modules reached when the checksum was last computed
+    _code_modules = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
     BASE_ATTRS = ()
@@ -578,6 +580,8 @@ class Task(ty.Generic[OutputsType]):
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
         }
+        if exclude is None:
+            self._code_modules = frozenset(hash_cache.modules)
         return hash_function(sorted(field_hashes.items())), field_hashes
 
     def _rule_violations(self) -> list[str]:

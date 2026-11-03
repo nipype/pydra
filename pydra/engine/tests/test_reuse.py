@@ -15,7 +15,19 @@ from fileformats.generic import File
 from pydra.compose import python, shell, workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result, load_result
-from pydra.engine.store import AnyReuse, ExactReuse, PickleStore, context_key
+from pydra.engine.context import (
+    _installed_digest,
+    package_versions,
+    process_context,
+    reached_modules,
+)
+from pydra.engine.store import (
+    AnyReuse,
+    ConsistentReuse,
+    ExactReuse,
+    PickleStore,
+    context_key,
+)
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
 from pydra.utils.general import get_fields
@@ -97,26 +109,31 @@ def test_adding_version_changes_checksum():
 def test_context_recorded(tmp_path):
     job = _job(tmp_path, Tagged(tag="a"))
     result = job.run()
-    assert job.context == {
-        "environment_checksum": Tagged(tag="a").checksum(),
-        "platform": f"{sys.platform}-{platform.machine()}",
-        "python_version": ".".join(platform.python_version_tuple()[:2]),
+    packages = package_versions(reached_modules(job.task))
+    assert {k: v for k, v in job.context.items() if k != "unknown"} == {
+        **process_context(),
+        "environment": Tagged(tag="a").checksum(),
+        "packages": packages,
+        "installed": _installed_digest(frozenset(packages)),
     }
+    assert ("unknown" in job.context) == (None in packages.values())
+    assert job.context["python"] == platform.python_version()
+    assert job.context["platform"].startswith(f"{sys.platform}-{platform.machine()}")
     assert result.context == job.context
     assert job.store.lookup(job.checksum, job.context, job.task).context == job.context
 
 
-def test_exact_reuses_same_context_only(tmp_path):
+def test_consistent_reuses_same_environment_only(tmp_path):
     _job(tmp_path, Tagged(tag="a")).run()
     same = _job(tmp_path, Tagged(tag="a")).result()
-    assert same.environment_checksum == Tagged(tag="a").checksum()
+    assert same.context["environment"] == Tagged(tag="a").checksum()
     assert not same.cross_context
 
     other = _job(tmp_path, Tagged(tag="b"))
     assert other.checksum == _job(tmp_path, Tagged(tag="a")).checksum
     assert other.result() is None
     result = other.run()
-    assert result.environment_checksum == Tagged(tag="b").checksum()
+    assert result.context["environment"] == Tagged(tag="b").checksum()
     assert not result.cross_context
 
 
@@ -128,22 +145,22 @@ def test_any_reuses_and_marks_other_context(tmp_path):
     other = _job(tmp_path, Tagged(tag="b"), reuse="any")
     result = other.run()
     assert result.cross_context
-    assert result.environment_checksum == Tagged(tag="a").checksum()
+    assert result.context["environment"] == Tagged(tag="a").checksum()
     assert result.outputs.out == 2
     stored = load_result(f"{first.checksum}/{context_key(first.context)}", [tmp_path])
-    assert stored.environment_checksum == Tagged(tag="a").checksum()
+    assert stored.context["environment"] == Tagged(tag="a").checksum()
     assert not stored.cross_context
 
 
 def _store_result(store, checksum, context):
     with store.acquire(checksum, context) as lease:
-        store.commit(lease, Result(cache_dir=lease.cache_dir, **context))
+        store.commit(lease, Result(cache_dir=lease.cache_dir, context=context))
 
 
 def test_contexts_keep_separate_slots(tmp_path):
     store = PickleStore(tmp_path)
-    a = {"environment_checksum": "a", "platform": "p", "python_version": "v"}
-    b = {**a, "environment_checksum": "b"}
+    a = {"environment": "a", "platform": "p", "python": "v"}
+    b = {**a, "environment": "b"}
     _store_result(store, "abc", a)
     _store_result(store, "abc", b)
     assert store.cache_dir("abc", a) != store.cache_dir("abc", b)
@@ -154,20 +171,23 @@ def test_contexts_keep_separate_slots(tmp_path):
 
 def test_any_prefers_exact_match_in_later_location(tmp_path):
     primary, ro = tmp_path / "primary", tmp_path / "ro"
-    a = {"environment_checksum": "a", "platform": "p", "python_version": "v"}
-    b = {**a, "environment_checksum": "b"}
+    a = {"environment": "a", "platform": "p", "python": "v"}
+    b = {**a, "environment": "b"}
     _store_result(PickleStore(primary), "abc", b)
     _store_result(PickleStore(ro), "abc", a)
     store = PickleStore(primary, [ro], reuse="any")
     exact = store.lookup("abc", a, None)
     assert exact.cache_dir == ro / "abc" / context_key(a)
     assert not exact.cross_context
-    other = store.lookup("abc", {**a, "environment_checksum": "c"}, None)
+    other = store.lookup("abc", {**a, "environment": "c"}, None)
     assert other.cross_context
 
 
 def test_reuse_argument(tmp_path):
-    assert isinstance(Submitter(cache_root=tmp_path).store.reuse, ExactReuse)
+    assert isinstance(Submitter(cache_root=tmp_path).store.reuse, ConsistentReuse)
+    assert isinstance(
+        Submitter(cache_root=tmp_path, reuse="exact").store.reuse, ExactReuse
+    )
     assert isinstance(Submitter(cache_root=tmp_path, reuse="any").store.reuse, AnyReuse)
     policy = Equivalent([])
     assert Submitter(cache_root=tmp_path, reuse=policy).store.reuse is policy
@@ -178,14 +198,14 @@ def test_reuse_argument(tmp_path):
         Submitter(cache_root=tmp_path, store=PickleStore(tmp_path), reuse="any")
 
 
-def test_exact_reruns_in_other_context(worker, tmp_path):
+def test_consistent_reruns_in_other_environment(worker, tmp_path):
     for tag in ("a", "b"):
         with Submitter(
             worker=worker, cache_root=tmp_path, environment=Tagged(tag=tag)
         ) as sub:
             result = sub(AddOne(a=1))
         assert result.outputs.out == 2
-        assert result.environment_checksum == Tagged(tag=tag).checksum()
+        assert result.context["environment"] == Tagged(tag=tag).checksum()
 
 
 def _record_run(log):
@@ -215,7 +235,7 @@ def test_worker_reuse_is_judged_by_the_recorded_context(tmp_path):
         ) as sub:
             result = sub(Logged(a=1, log=str(log)))
         assert result.outputs.out == 2
-        assert result.environment_checksum == InWorker().checksum()
+        assert result.context["environment"] == InWorker().checksum()
     assert _runs(log) == 1
 
 
@@ -226,7 +246,7 @@ def test_other_context_keeps_the_first_result(worker, tmp_path):
             worker=worker, cache_root=tmp_path / "cache", environment=Tagged(tag=tag)
         ) as sub:
             result = sub(Logged(a=1, log=str(log)))
-        assert result.environment_checksum == Tagged(tag=tag).checksum()
+        assert result.context["environment"] == Tagged(tag=tag).checksum()
     assert _runs(log) == 2
 
 
@@ -242,7 +262,7 @@ def test_any_reuses_the_other_context_under_each_worker(worker, tmp_path):
         ) as sub:
             results.append(sub(Logged(a=1, log=str(log))))
     assert [r.cross_context for r in results] == [False, True]
-    assert results[1].environment_checksum == Tagged(tag="a").checksum()
+    assert results[1].context["environment"] == Tagged(tag="a").checksum()
     assert _runs(log) == 1
 
 
@@ -484,8 +504,7 @@ class Equivalent:
     def accept(self, stored, current, task):
         self.calls.append((dict(stored), dict(current), task))
         return any(
-            {stored["environment_checksum"], current["environment_checksum"]} <= c
-            for c in self.classes
+            {stored["environment"], current["environment"]} <= c for c in self.classes
         )
 
 
@@ -504,13 +523,13 @@ def test_reuse_hook_marks_stored_context(worker, tmp_path):
             results.append(sub(Logged(a=1, log=str(log))))
     assert [r.cross_context for r in results] == [False, True, False]
     assert results[1].context == results[0].context
-    assert [r.environment_checksum for r in results] == [a, a, c]
+    assert [r.context["environment"] for r in results] == [a, a, c]
     assert _runs(log) == 2
 
 
 def test_reuse_policy_receives_contexts_and_task(tmp_path):
-    a = {"environment_checksum": "a", "platform": "p", "python_version": "v"}
-    b = {**a, "environment_checksum": "b"}
+    a = {"environment": "a", "platform": "p", "python": "v"}
+    b = {**a, "environment": "b"}
     _store_result(PickleStore(tmp_path), "abc", a)
     policy = Equivalent([])
     store = PickleStore(tmp_path, reuse=policy)
@@ -565,10 +584,10 @@ class Lenient(ExactReuse):
 
 
 def test_policy_subclass_is_consulted(tmp_path):
-    a = {"environment_checksum": "a", "platform": "p", "python_version": "v"}
+    a = {"environment": "a", "platform": "p", "python": "v"}
     _store_result(PickleStore(tmp_path), "abc", a)
     store = PickleStore(tmp_path, reuse=Lenient())
-    assert store.lookup("abc", {**a, "environment_checksum": "b"}, None).cross_context
+    assert store.lookup("abc", {**a, "environment": "b"}, None).cross_context
 
 
 @python.define(checksum=lambda task, inputs: f"k-{inputs['a']:03d}")
