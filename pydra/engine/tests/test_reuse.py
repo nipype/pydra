@@ -379,11 +379,10 @@ def GoldenWf(a: int) -> int:
 
 
 def test_tasks_without_hook_keep_checksums(monkeypatch):
-    """Checksums of tasks without the hook, as computed at 277bee99. Those of tasks
-    whose function's code is hashed were taken on Python 3.13 and checked only there"""
+    """Checksums of tasks without the hook, as computed at 277bee99"""
     # the module name depends on pytest's import mode, and is part of a declared version
     monkeypatch.setattr(inc_one, "__module__", "pydra.engine.tests.test_reuse")
-    golden = [
+    for task, checksum in [
         (
             python.define(inc_one, version="1")(a=1),
             "python-e87e7040c1d7894a31506139707e9425",
@@ -392,15 +391,44 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
             shell.define("echo <text:str>")(text="hi"),
             "shell-e04edfe0da3d1efc0d8eb9466535b1fe",
         ),
-    ]
-    if sys.version_info[:2] == (3, 13):
-        golden += [
-            (AddOne(a=1), "python-d2a20bb9597dd80a2ce9f6389798883f"),
-            (GoldenWf(a=1), "workflow-77702c06de506544103fed56c06413d6"),
-        ]
-    for task, checksum in golden:
+    ]:
         assert not hasattr(task, "__checksum__")
         assert task._checksum == checksum
+
+
+# Checksums of tasks whose function's code is hashed, as computed at 277bee99, which
+# differ between Python versions because the AST dump does (3.15 measured on 3.15.0a7)
+_CODE_GOLDEN = {
+    (3, 11): (
+        "python-ef82da8e64f4a764ad4b043d886f82da",
+        "workflow-b91a6d6d3e845ada2ab6f14954bc9956",
+    ),
+    (3, 12): (
+        "python-ef82da8e64f4a764ad4b043d886f82da",
+        "workflow-b91a6d6d3e845ada2ab6f14954bc9956",
+    ),
+    (3, 13): (
+        "python-d2a20bb9597dd80a2ce9f6389798883f",
+        "workflow-77702c06de506544103fed56c06413d6",
+    ),
+    (3, 14): (
+        "python-d2a20bb9597dd80a2ce9f6389798883f",
+        "workflow-77702c06de506544103fed56c06413d6",
+    ),
+    (3, 15): (
+        "python-4389a4d4ab1299de47b66fd28aa712e2",
+        "workflow-2dd4cdaf40d357b1a96c2b9e75844f10",
+    ),
+}
+
+
+def test_code_hashed_tasks_keep_checksums():
+    version = sys.version_info[:2]
+    if version not in _CODE_GOLDEN:
+        pytest.skip(
+            f"no golden checksums measured for Python {version[0]}.{version[1]}"
+        )
+    assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == _CODE_GOLDEN[version]
 
 
 @attrs.define
@@ -498,3 +526,15 @@ def test_policy_subclass_is_consulted(tmp_path):
     _store_result(PickleStore(tmp_path), "abc", a)
     store = PickleStore(tmp_path, reuse=Lenient())
     assert store.lookup("abc", {**a, "environment_checksum": "b"}, None).cross_context
+
+
+@python.define(checksum=lambda task, inputs: f"k-{inputs['a']:03d}")
+def IntKeyed(a: int) -> int:
+    return a + 1
+
+
+def test_split_hook_sees_only_elements(worker, tmp_path):
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+        result = sub(IntKeyed().split(a=[1, 2]))
+    assert result.outputs.out == [2, 3]
+    assert {"k-001", "k-002"} <= {p.name for p in tmp_path.iterdir()}

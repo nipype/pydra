@@ -1,7 +1,7 @@
 import typing as ty
 import re
 from pathlib import Path
-from copy import copy
+from copy import copy, deepcopy
 from typing import Self
 import attrs.validators
 from pydra.utils.typing import is_optional, is_fileset_or_union, is_truthy_falsy
@@ -521,6 +521,27 @@ class Task(ty.Generic[OutputsType]):
         _, new_hashes = self._compute_hashes()
         return [k for k, v in new_hashes.items() if v != self._hashes[k]]
 
+    def _element_checksums(self) -> list[str]:
+        """The supplied checksums of the elements of a split task, in state order"""
+        from pydra.engine.state import State, add_name_splitter
+
+        name = "element"
+        state = State(
+            name,
+            splitter=add_name_splitter(deepcopy(self._splitter), name),
+            container_ndim={
+                f"{name}.{k}": v for k, v in (self._container_ndim or {}).items()
+            },
+        )
+        split = {f"{name}.{f.name}": f.name for f in get_fields(self)}
+        state.prepare_states(
+            {n: getattr(self, split[n]) for n in state.splitter_rpn if n in split}
+        )
+        return [
+            attrs.evolve(self, **{split[k]: v for k, v in vals.items()})._checksum
+            for vals in state.states_val
+        ]
+
     def _checksum_inputs(self, hashed: bool = True) -> dict[str, ty.Any]:
         """The inputs that enter the checksum, as they are hashed or as they are set."""
         inputs = {}
@@ -671,7 +692,8 @@ class Task(ty.Generic[OutputsType]):
 def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
     yield f"task[{obj._task_type()}]:(".encode()
     if hasattr(obj, "__checksum__"):
-        yield f"__checksum__={obj._checksum},".encode()
+        keys = obj._element_checksums() if obj._splitter else [obj._checksum]
+        yield f"__checksum__={keys},".encode()
     else:
         for field in get_fields(obj):
             yield f"{field.name}=".encode()
