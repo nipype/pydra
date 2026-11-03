@@ -511,3 +511,19 @@ def test_readiness_unresolvable_input_debug(tmp_path):
         RuntimeError, match=r"Job 'B\(1\)', inputs could not be resolved"
     ):
         BadInput(xs=[0, 1, 2])(worker="debug", cache_root=tmp_path)
+
+
+def test_readiness_upstream_just_failed_is_not_done_and_successful(tmp_path):
+    """An upstream element that has failed since the last status refresh is seen as
+    errored before the downstream node tries to start from its outputs"""
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        wf = Workflow.construct(Resplit(x=[1, 2], y=[10, 100]))
+        graph = wf.execution_graph(submitter=sub)
+        upstream, downstream = graph["A"], graph["B"]
+        jobs = upstream.get_runnable_tasks(graph)
+        jobs[0].run()
+        jobs[1]._errored = True  # as the scheduler records a job that failed to run
+        assert not upstream.errored  # status not yet refreshed
+        assert downstream.get_runnable_tasks(graph) == []
+        assert downstream.unrunnable == {None: [upstream]}
+        assert not downstream.started or not downstream.blocked
