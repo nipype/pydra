@@ -15,7 +15,12 @@ from fileformats.generic import File
 from pydra.compose import python, shell, workflow
 from pydra.engine.job import Job
 from pydra.engine.result import Result, load_result
-from pydra.engine.context import package_versions, process_context, reached_modules
+from pydra.engine.context import (
+    _installed_digest,
+    package_versions,
+    process_context,
+    reached_modules,
+)
 from pydra.engine.store import (
     AnyReuse,
     ConsistentReuse,
@@ -109,6 +114,7 @@ def test_context_recorded(tmp_path):
         **process_context(),
         "environment": Tagged(tag="a").checksum(),
         "packages": packages,
+        "installed": _installed_digest(frozenset(packages)),
     }
     assert ("unknown" in job.context) == (None in packages.values())
     assert job.context["python"] == platform.python_version()

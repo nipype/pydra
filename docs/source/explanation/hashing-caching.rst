@@ -101,15 +101,19 @@ recorded in different contexts never overwrite each other:
   containers, attrs and dataclass instances. A module belongs to the distribution that
   installed its file, so one module of a namespace package (``google.protobuf``,
   ``pydra.tasks.x``) records only its own distribution;
-* ``installed``: a digest of the identities of every installed distribution.
+* ``installed``: a digest of every installed distribution, those in ``packages`` by
+  their identities and the others by their versions.
 
-A distribution is identified by its version, and when it was not installed from an
-index by what it was installed from: the commit or archive hash it records; for an
-editable install, the commit of its git checkout and a digest of the files that are
-modified or untracked there, or else a digest of its directory; for another install
+A distribution is identified by its version and, when it was not installed from an
+index, by what it was installed from, which is read only for the distributions a task
+reaches: the commit or archive hash it records; for an editable install, the commit
+of its git checkout and a digest of the files modified or untracked there, or outside
+git a digest of all its files, in both cases only those of its own packages and up to
+``IDENTITY_MAX_FILES`` files and ``IDENTITY_MAX_BYTES`` bytes; for another install
 from a local directory, a digest of the files it installed (its ``RECORD``). What
-still cannot be identified, such as a module no distribution installed or an editable
-install whose source is gone, is unknown, and is logged with the reason. A result
+still cannot be identified (a module no distribution installed, an editable install
+whose source is gone or that is over those limits) is unknown, and is logged with the
+reason. A result
 whose record holds an unknown is found within the process that computed it (and its
 workers) but reused by no other process under ``"consistent"`` or ``"exact"``.
 

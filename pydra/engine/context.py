@@ -81,57 +81,93 @@ def _git(directory: Path, *args: str) -> str | None:
     return done.stdout.decode(errors="surrogateescape") if not done.returncode else None
 
 
-def _git_identity(directory: Path) -> str | None:
-    """``git:<commit>``, followed by a digest of the modified and untracked files under
-    `directory` that are not ignored, if it is in a git checkout"""
-    commit = _git(directory, "rev-parse", "HEAD")
-    top = _git(directory, "rev-parse", "--show-toplevel")
+IDENTITY_MAX_FILES = 10_000
+"""Most files a local install's identity reads; above it the identity is unknown."""
+
+IDENTITY_MAX_BYTES = 256 * 2**20
+"""Most bytes a local install's identity reads; above it the identity is unknown."""
+
+
+class _TooLarge(Exception):
+    pass
+
+
+def _capped_digest(root: Path, files: list[Path]) -> str:
+    """A digest of the paths (relative to `root`) and contents of `files`, raising
+    `_TooLarge` above `IDENTITY_MAX_FILES` or `IDENTITY_MAX_BYTES`"""
+    if len(files) > IDENTITY_MAX_FILES:
+        raise _TooLarge(f"it has more than {IDENTITY_MAX_FILES} files")
+    size = 0
+    for f in files:
+        try:
+            size += f.stat().st_size
+        except OSError:
+            pass
+        if size > IDENTITY_MAX_BYTES:
+            raise _TooLarge(f"its files hold more than {IDENTITY_MAX_BYTES} bytes")
+    return _digest(
+        os.path.relpath(f, root).encode() + b"\0" + _file_bytes(f) for f in files
+    )
+
+
+def _git_identity(root: Path, paths: list[Path]) -> str | None:
+    """``git:<commit>``, followed by a digest of the modified and untracked files in
+    `paths` that are not ignored, if `root` is in a git checkout"""
+    commit = _git(root, "rev-parse", "HEAD")
+    top = _git(root, "rev-parse", "--show-toplevel")
     status = _git(
-        directory, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."
+        root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        *(str(p) for p in paths),
     )
     if not commit or not top or status is None:
         return None
     top_dir = Path(top.strip())
     entries = status.split("\0")
-    changed = []
-    for i, entry in enumerate(entries):
-        if len(entry) > 3 and not (i and entries[i - 1][:1] == "R"):
-            changed.append(entry[3:])
+    changed = [
+        top_dir / entry[3:]
+        for i, entry in enumerate(entries)
+        if len(entry) > 3 and not (i and entries[i - 1][:1] == "R")
+    ]
     identity = f"git:{commit.strip()}"
     if changed:
-        identity += "+" + _digest(
-            p.encode() + b"\0" + _file_bytes(top_dir / p) for p in sorted(changed)
-        )
+        identity += "+" + _capped_digest(top_dir, sorted(changed))
     return identity
 
 
-def _directory_digest(directory: Path) -> str:
-    """A digest of the paths and contents of the files under `directory`, leaving out
-    hidden directories, ``__pycache__`` and compiled byte-code"""
+def _package_files(paths: list[Path]) -> list[Path]:
+    """The files of the packages and modules at `paths`, leaving out hidden
+    directories, ``__pycache__`` and compiled byte-code"""
     files = []
-    for root, dirs, names in os.walk(directory):
-        dirs[:] = sorted(
-            d for d in dirs if not d.startswith(".") and d != "__pycache__"
-        )
-        files.extend(
-            Path(root, n) for n in sorted(names) if not n.endswith((".pyc", ".pyo"))
-        )
-    return "dir:" + _digest(
-        str(f.relative_to(directory)).encode() + b"\0" + _file_bytes(f) for f in files
-    )
+    for path in paths:
+        if path.is_file():
+            files.append(path)
+            continue
+        for root, dirs, names in os.walk(path):
+            dirs[:] = sorted(
+                d for d in dirs if not d.startswith(".") and d != "__pycache__"
+            )
+            files.extend(
+                Path(root, n) for n in sorted(names) if not n.endswith((".pyc", ".pyo"))
+            )
+            if len(files) > IDENTITY_MAX_FILES:
+                return files
+    return files
 
 
 @attrs.define
 class _Installed:
-    """An installed distribution, identified by its version and, if it was not
-    installed from an index, by what it was installed from (see `_identify`)"""
+    """An installed distribution. Its identity (see `_identify`) is only read when a
+    record reaches it."""
 
     name: str
     version: str | None
-    identity: str | None
-    reason: str | None  # why the identity is unknown
     requires: list[str]
-    editable_root: str | None
+    direct: ty.Any  # its direct_url.json, False if it cannot be read
     dist: importlib.metadata.Distribution = attrs.field(repr=False)
 
     @functools.cached_property
@@ -140,46 +176,100 @@ class _Installed:
             os.path.abspath(self.dist.locate_file(f)) for f in self.dist.files or ()
         )
 
+    @functools.cached_property
+    def editable_root(self) -> str | None:
+        """The source directory of an editable install"""
+        if not isinstance(self.direct, dict):
+            return None
+        if not self.direct.get("dir_info", {}).get("editable"):
+            return None
+        url = urlparse(self.direct.get("url", ""))
+        directory = unquote(url.path)
+        if url.scheme != "file" or not os.path.isdir(directory):
+            return None
+        return os.path.join(os.path.abspath(directory), "")
 
-def _identify(dist) -> tuple[str | None, str | None, str | None]:
-    """The identity of an installed distribution, why it is unknown, and the directory
-    of an editable install. The identity is its version, followed by the commit or
-    archive hash it was installed from, or for an install from a local directory by
-    ``git:<commit>[+<digest of changed files>]`` for an editable install in a git
-    checkout, a digest of the directory's files for another editable install, and a
-    digest of the files it installed (its ``RECORD``) otherwise."""
-    version = dist.version
+    def import_paths(self, root: str) -> list[Path]:
+        """The packages and modules under `root` that the distribution provides: the
+        names of its ``top_level.txt``, those importlib maps to it, and those of the
+        loaded modules whose files are under `root`"""
+        names = set((self.dist.read_text("top_level.txt") or "").split())
+        names.update(t for t, d in _package_distributions().items() if self.name in d)
+        for name, module in list(sys.modules.items()):
+            file = getattr(module, "__file__", None)
+            if file and os.path.abspath(file).startswith(root):
+                names.add(name.partition(".")[0])
+        paths = set()
+        for name in names:
+            for base in (root, os.path.join(root, "src")):
+                for candidate in (Path(base, name), Path(base, name + ".py")):
+                    if candidate.exists():
+                        paths.add(candidate)
+        return sorted(paths)
+
+    @functools.cached_property
+    def identified(self) -> tuple[str | None, str | None]:
+        return _identify(self)
+
+    @property
+    def identity(self) -> str | None:
+        return self.identified[0]
+
+    @property
+    def reason(self) -> str | None:
+        return self.identified[1]
+
+
+def _identify(installed: _Installed) -> tuple[str | None, str | None]:
+    """The identity of an installed distribution, or why it is unknown. The identity
+    is its version, followed by the commit or archive hash it was installed from, or
+    for an install from a local directory by ``git:<commit>[+<digest of changed
+    files>]`` for an editable install in a git checkout, a digest of its packages'
+    files for another editable install, and a digest of the files it installed (its
+    ``RECORD``) otherwise. An editable install's packages are read up to
+    `IDENTITY_MAX_FILES` and `IDENTITY_MAX_BYTES`."""
+    version, direct = installed.version, installed.direct
     if not version:
-        return None, "it has no version", None
-    try:
-        direct = json.loads(dist.read_text("direct_url.json") or "null")
-    except ValueError:
-        return None, "its direct_url.json cannot be read", None
+        return None, "it has no version"
+    if direct is False:
+        return None, "its direct_url.json cannot be read"
     if not direct:
-        return version, None, None
+        return version, None
     if commit := direct.get("vcs_info", {}).get("commit_id"):
-        return f"{version}@{commit}", None, None
+        return f"{version}@{commit}", None
     archive = direct.get("archive_info", {})
     if hashes := archive.get("hashes"):
         return (
             f"{version}@" + ",".join(f"{k}={v}" for k, v in sorted(hashes.items())),
             None,
-            None,
         )
     if digest := archive.get("hash"):
-        return f"{version}@{digest}", None, None
+        return f"{version}@{digest}", None
     if direct.get("dir_info", {}).get("editable"):
-        url = urlparse(direct.get("url", ""))
-        directory = Path(unquote(url.path))
-        if url.scheme != "file" or not directory.is_dir():
-            return None, f"its editable source {direct.get('url')!r} is missing", None
-        root = os.path.join(os.path.abspath(directory), "")
-        identity = _git_identity(directory) or _directory_digest(directory)
-        return f"{version}@{identity}", None, root
-    record = dist.read_text("RECORD")
+        root = installed.editable_root
+        if root is None:
+            return None, f"its editable source {direct.get('url')!r} is missing"
+        paths = installed.import_paths(root)
+        if not paths:
+            return None, f"no package of it was found under {root!r}"
+        try:
+            identity = _git_identity(Path(root), paths) or (
+                "dir:" + _capped_digest(Path(root), _package_files(paths))
+            )
+        except _TooLarge as e:
+            return None, str(e)
+        return f"{version}@{identity}", None
+    record = installed.dist.read_text("RECORD")
     if not record:
-        return None, "it was installed from a local source without a RECORD", None
-    return f"{version}@record:{_digest([record.encode()])}", None, None
+        return None, "it was installed from a local source without a RECORD"
+    return f"{version}@record:{_digest([record.encode()])}", None
+
+
+def _direct_url(dist) -> ty.Any:
+    try:
+        return json.loads(dist.read_text("direct_url.json") or "null")
+    except ValueError:
+        return False
 
 
 @functools.cache
@@ -191,14 +281,11 @@ def _distributions() -> dict[str, _Installed]:
         name = dist.metadata["Name"]
         if not name or _normalise(name) in found:
             continue
-        identity, reason, root = _identify(dist)
         found[_normalise(name)] = _Installed(
             name=_normalise(name),
             version=dist.version,
-            identity=identity,
-            reason=reason,
             requires=list(dist.requires or ()),
-            editable_root=root,
+            direct=_direct_url(dist),
             dist=dist,
         )
     return found
@@ -234,16 +321,23 @@ def _unknown(what: str, reason: str) -> None:
 @functools.cache
 def process_context() -> dict[str, ty.Any]:
     """The part of the record that is the same for every job of this process"""
-    installed = sorted(
-        f"{d.name}=={d.identity or d.version}" for d in _distributions().values()
-    )
     return {
         "record": RECORD,
         "python": platform.python_version(),
         "implementation": sys.implementation.name,
         "platform": _platform(),
-        "installed": _digest(i.encode() for i in installed),
     }
+
+
+@functools.lru_cache(maxsize=256)
+def _installed_digest(reached: frozenset[str]) -> str:
+    """A digest of every installed distribution, by its identity if it is `reached`
+    and known, otherwise by its version"""
+    entries = sorted(
+        f"{d.name}=={(d.name in reached and d.identity) or d.version}"
+        for d in _distributions().values()
+    )
+    return _digest(e.encode() for e in entries)
 
 
 def _value_modules(value: ty.Any, modules: set[str]) -> None:
@@ -380,7 +474,8 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
     * ``packages``: the identities of the distributions that installed the library
       modules the task reaches (see `reached_modules`), and of those they require,
       None if the modules cannot be determined;
-    * ``installed``: a digest of the identities of all installed distributions;
+    * ``installed``: a digest of all installed distributions, those in ``packages`` by
+      their identities and the others by their versions;
     * ``unknown``: present when any of ``packages`` is unknown, set to a value unique
       to this process, so the result is reused by no other process.
     """
@@ -390,6 +485,7 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
         **process_context(),
         "environment": environment.checksum(),
         "packages": packages,
+        "installed": _installed_digest(frozenset(packages or ())),
     }
     if packages is None or None in packages.values():
         context["unknown"] = _nonce()
@@ -404,6 +500,7 @@ def clear_caches() -> None:
         _distributions,
         _package_distributions,
         _requirements,
+        _installed_digest,
         _nonce,
         process_context,
     ):

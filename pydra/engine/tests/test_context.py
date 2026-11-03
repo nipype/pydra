@@ -1,6 +1,7 @@
 import dataclasses
 import importlib.metadata
 import json
+import os
 import shutil
 import subprocess
 import platform
@@ -14,6 +15,7 @@ from fileformats.generic import File
 from pydra.compose import python
 from pydra.engine import context
 from pydra.engine.job import Job
+from pydra.engine.result import Result
 from pydra.engine.store import CONTEXT_FILE, PickleStore, context_key
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
@@ -278,12 +280,71 @@ def test_identity_of_direct_installs(installed):
     assert context.package_versions({"fakelib"})["fakelib"] != first
 
 
-def test_installed_digest_uses_identities(installed):
-    vcs = ("1.0", {"url": "git+x", "vcs_info": {"commit_id": "abc"}})
-    installed(other=vcs)
-    first = context.process_context()["installed"]
-    installed(other=("1.0", {"url": "git+x", "vcs_info": {"commit_id": "def"}}))
-    assert context.process_context()["installed"] != first
+def test_installed_digest_uses_reached_identities_only(installed):
+    def digest(**versions):
+        installed(**versions)
+        task = _scaled_task()(a=1, log="x")
+        return context.job_context(task, native.Native())["installed"]
+
+    def vcs(commit):
+        return {"url": "git+x", "vcs_info": {"commit_id": commit}}
+
+    reached = digest(fakelib=_fakelib("1.0", vcs("abc")))
+    assert digest(fakelib=_fakelib("1.0", vcs("def"))) != reached
+    unreached = digest(other=("1.0", vcs("abc")))
+    assert digest(other=("1.0", vcs("def"))) == unreached
+
+
+def _large_editable(tmp_path, name, files):
+    source = tmp_path / name
+    (source / name).mkdir(parents=True)
+    for i in range(files):
+        (source / name / f"m{i}.py").write_text(f"x = {i}\n")
+    return ("1.0", {"url": source.as_uri(), "dir_info": {"editable": True}})
+
+
+def test_unreached_editable_is_never_read(installed, tmp_path, monkeypatch):
+    read = []
+    monkeypatch.setattr(
+        context, "_identify", lambda d: read.append(d.name) or ("1.0", None)
+    )
+    installed(bigdist=_large_editable(tmp_path, "bigdist", 3))
+    task = _scaled_task()(a=1, log="x")
+    record = context.job_context(task, native.Native())
+    assert "bigdist" not in record["packages"]
+    assert sorted(read) == ["base", "fakelib", "pydra"]
+
+
+def test_reached_editable_over_the_cap_is_unknown(
+    installed, tmp_path, monkeypatch, caplog
+):
+    monkeypatch.setattr(context, "IDENTITY_MAX_FILES", 2)
+    source = tmp_path / "src"
+    _large_editable(tmp_path, "src", 0)
+    (source / "fakelib").mkdir()
+    for i in range(3):
+        (source / "fakelib" / f"m{i}.py").write_text("")
+    (source / "fakelib" / "__init__.py").write_text("def scale(a):\n    return 2 * a\n")
+    installed(fakelib=_editable(installed, monkeypatch, source))
+    record = context.job_context(_scaled_task()(a=1, log="x"), native.Native())
+    assert record["packages"]["fakelib"] is None and "unknown" in record
+    assert "it has more than 2 files" in caplog.text
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_context_file_gets_the_umask_mode(tmp_path):
+    store = PickleStore(tmp_path)
+    old = os.umask(0o027)
+    try:
+        with store.acquire("abc", {"a": 1}) as lease:
+            store.commit(lease, Result(cache_dir=lease.cache_dir, context={"a": 1}))
+    finally:
+        os.umask(old)
+    slot = store.cache_dir("abc", {"a": 1})
+    assert (slot / CONTEXT_FILE).stat().st_mode & 0o777 == 0o640
+    assert [p.name for p in slot.iterdir() if p.name.startswith(CONTEXT_FILE)] == [
+        CONTEXT_FILE
+    ]
 
 
 def test_namespace_package_records_its_owner_only(installed, monkeypatch):

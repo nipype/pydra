@@ -7,9 +7,9 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 import time
 import typing as ty
+import uuid
 from pathlib import Path
 import attrs
 from filelock import SoftFileLock, Timeout
@@ -444,9 +444,14 @@ class PickleStore:
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
         lease.cache_dir.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            "w", dir=lease.cache_dir, prefix=CONTEXT_FILE, delete=False
-        ) as f:
-            json.dump(result.context, f, sort_keys=True)
-        os.replace(f.name, lease.cache_dir / CONTEXT_FILE)
+        # created with the mode the umask gives the store's other files
+        temporary = lease.cache_dir / f"{CONTEXT_FILE}.{uuid.uuid4().hex}"
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(result.context, f, sort_keys=True)
+            os.replace(temporary, lease.cache_dir / CONTEXT_FILE)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
         save(lease.cache_dir, result=result, job=job)
