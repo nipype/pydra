@@ -4,6 +4,7 @@ import os
 import threading
 import platform
 import sys
+import types
 import typing as ty
 import uuid
 from pathlib import Path
@@ -409,9 +410,13 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
 def test_code_hashed_tasks_keep_checksums(monkeypatch):
     """Checksums of tasks whose function's code is hashed, the same on every Python
     version (measured on 3.11 to 3.15)"""
-    # the workflow references AddOne, library code, by its function's qualified name
+    # the workflow references AddOne, library code, by its function's qualified name,
+    # which depends on pytest's import mode
     function = get_fields(AddOne).function.default
     monkeypatch.setattr(function, "__module__", "pydra.engine.tests.test_reuse")
+    module = types.ModuleType("pydra.engine.tests.test_reuse")
+    module.AddOne = AddOne
+    monkeypatch.setitem(sys.modules, module.__name__, module)
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == (
         "python-463063b196ab62ce6c8c1a59e2bdd535",
         "workflow-a815524df9154efcde7afe5ecfb6d0a6",

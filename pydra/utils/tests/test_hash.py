@@ -371,8 +371,8 @@ def test_bytes_special_form3():
 def test_bytes_special_form3a():
     obj_repr = join_bytes_repr(Path | None)
     assert re.match(
-        b"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(pathlib.Path\)"
-        b"type:\(builtins.NoneType\)\)\)",
+        rb"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(pathlib.Path\)"
+        rb"type:\(builtins.NoneType\)\)\)",
         obj_repr,
     )
 
@@ -1012,6 +1012,8 @@ def load_modules(tmp_path, monkeypatch):
                 (package / "__init__.py").touch()
         for name in loaded:
             sys.modules.pop(name, None)
+        for name in sources:
+            monkeypatch.delitem(sys.modules, name, raising=False)
         monkeypatch.syspath_prepend(str(root / directory))
         importlib.invalidate_caches()
         loaded.update(n.split(".")[0] for n in sources)
@@ -1401,3 +1403,89 @@ def test_code_hash_set_by_define(load_modules, code_hash, changed):
         python.define(f, code_hash="all")
     with pytest.raises(ValueError, match="code_hash must be one of"):
         workflow.define(f, code_hash="all")
+
+
+_FACTORY = """
+def make(k):
+    def scaled(x):
+        return x * k
+
+    return scaled
+"""
+
+
+@pytest.mark.parametrize("code_hash", _TIERS)
+def test_code_hash_library_closures_by_definition(load_modules, code_hash):
+    """A library function its module does not hold at its name, such as a closure made
+    by a library factory, is hashed by its definition and the values it captures"""
+    hashes = []
+    for k in (2, 3):
+        _, main = load_modules(
+            {
+                "libfac": _FACTORY,
+                "uses_fac": f"from libfac import make\n\nS = make({k})\n\n\n"
+                "def f(x):\n    return S(x)\n",
+            },
+            directory="site-packages",
+        )
+        hashes.append(_code_hash(main.f, code_hash))
+    assert hashes[0] != hashes[1]
+
+
+def test_code_hash_notebook_under_library_main(monkeypatch):
+    """Notebook cells are user code even when ``__main__`` is a module installed in
+    site-packages (``python -m pytest``, a console script)"""
+    main = types.ModuleType("__main__")
+    main.__file__ = "/env/lib/python3/site-packages/runner/__main__.py"
+    monkeypatch.setitem(sys.modules, "__main__", main)
+    hashes = []
+    for body in ("x * 2", "x * 3"):
+        namespace, run = _notebook()
+        run(f"def h(x):\n    return {body}\n")
+        run("def f(x):\n    return h(x)\n")
+        assert not hash_module.is_library(namespace["h"])
+        hashes.append(_code_hash(namespace["f"], "function"))
+    assert hashes[0] != hashes[1]
+
+
+def test_code_hash_user_module_with_stdlib_name(load_modules):
+    """A user module named like a standard library module is user code"""
+    source = "class Helper:\n    def f(self, x):\n        return x * {k}\n"
+    use = "import calendar\n\n\ndef f(x):\n    return calendar.Helper().f(x)\n"
+    hashes = []
+    for k in (2, 3):
+        calendar, main = load_modules(
+            {"calendar": source.format(k=k), "uses_calendar": use}
+        )
+        assert not hash_module.is_library(calendar)
+        assert not hash_module.is_library(calendar.Helper)
+        hashes.append(_code_hash(main.f, "user"))
+    assert hashes[0] != hashes[1]
+
+
+def test_code_hash_walk_memoised(load_modules, monkeypatch):
+    """A function is walked once per process while what it reads is unchanged; a
+    rebound helper, a changed value or an edited source file is still hashed"""
+    f = _main_f(load_modules)
+    main = sys.modules["main"]
+    first = hash_function(f)
+
+    def no_walk(self):
+        raise AssertionError("walked again")
+
+    with monkeypatch.context() as m:
+        m.setattr(hash_module._CodeWalk, "walk", no_walk)
+        assert hash_function(f) == first
+    main.K = 7
+    assert hash_function(f) != first
+    main.K = 1
+    assert hash_function(f) == first
+    original = main.h
+    main.h = lambda x: x * 9
+    assert hash_function(f) != first
+    main.h = original
+    assert hash_function(f) == first
+    path = Path(sys.modules["helper"].__file__)
+    path.write_text(path.read_text().replace("x - 3", "x - 4"))
+    os.utime(path, ns=(time.time_ns() + 10**9,) * 2)
+    assert hash_function(f) != first

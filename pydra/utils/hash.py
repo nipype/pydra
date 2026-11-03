@@ -988,21 +988,27 @@ def _package_override(module: str) -> bool | None:
 def _module_is_library(module: str, file: str | None = None) -> bool:
     """Whether the module named `module` is library code: a package of
     ``PYDRA_USER_PACKAGES`` is user code and one prefixed by ``-`` (or pydra) library
-    code, otherwise the standard library and modules installed in site-packages are"""
+    code; otherwise a module is library code if its file is in the standard library or
+    site-packages, or, when it has no file, if its name is a standard library module's
+    """
     override = _package_override(module)
     if override is not None:
         return override
-    if module.partition(".")[0] in STDLIB_MODULES:
-        return True
     if file is None:
         file = getattr(sys.modules.get(module), "__file__", None)
-    return bool(file and _path_is_library(file))
+    if file:
+        in_library = _path_is_library(file)
+        if in_library is not None:
+            return in_library
+    return module.partition(".")[0] in STDLIB_MODULES
 
 
 def is_library(obj: object) -> bool:
     """Whether `obj` is library code (see `_module_is_library`), which is identified
     by its qualified name: a function by the file of its code, a module by its own
-    file, and anything else by its ``__module__``"""
+    file, and anything else by its ``__module__``. A function whose globals are not
+    those of its module (defined by ``exec`` or in a notebook namespace) is user code
+    unless its file is library code."""
     if isinstance(obj, types.ModuleType):
         return _module_is_library(obj.__name__, getattr(obj, "__file__", None))
     if isinstance(obj, type):
@@ -1016,6 +1022,8 @@ def is_library(obj: object) -> bool:
             override = _path_is_library(obj.__code__.co_filename)
         if override is not None:
             return override
+        if getattr(sys.modules.get(module), "__dict__", None) is not obj.__globals__:
+            return False
     return isinstance(module, str) and _module_is_library(module)
 
 
@@ -1024,14 +1032,16 @@ def _qualified_name(obj: object) -> str:
     return f"{getattr(obj, '__module__', None)}.{name}"
 
 
-def _owner_name(obj: object) -> str | None:
-    """``module.qualname`` of a function or class if its live module holds `obj` at
-    that name, otherwise None"""
+def _owner_name(obj: object, holder: object = None) -> str | None:
+    """``module.qualname`` of a function or class if its live module holds `obj` (or
+    `holder`, such as the task class made from a function) at that name, otherwise
+    None"""
     module, qualname = obj.__module__, obj.__qualname__
     target = sys.modules.get(module) if isinstance(module, str) else None
     for part in qualname.split("."):
         target = getattr(target, part, None)
-    return f"{module}.{qualname}" if target is obj else None
+    held = target is obj or (holder is not None and target is holder)
+    return f"{module}.{qualname}" if held else None
 
 
 def _library_instance_name(value: object, name: str) -> str | None:
@@ -1197,7 +1207,9 @@ class _CodeWalk:
     a user module), or a default of a function other than a task's own. It is
     serialized as:
 
-    * library code (see `is_library`) by its qualified name, never its code;
+    * library code (see `is_library`) by its qualified name, never its code, when its
+      live module holds it at that name, otherwise (a closure made by a library
+      factory, a generated function) by its definition, as user code is;
     * a function or class of user code within the tier by its definition number, and
       one outside the tier by its qualified name when its live module holds it there,
       otherwise by its definition;
@@ -1214,6 +1226,8 @@ class _CodeWalk:
         self.defaults = defaults
         self.definitions: list[ty.Any] = [root]
         self.numbers = {id(root): 0}
+        # set when a reference is serialized from values, so cannot be memoised
+        self.dynamic = False
 
     def in_scope(self, obj: ty.Any) -> bool:
         if self.code_hash == "user":
@@ -1290,20 +1304,29 @@ class _CodeWalk:
         if isinstance(value, type) and (fields := get_fields(value)):
             field = fields.get(getattr(value, "_executor_name", None) or "")
             executor = getattr(field, "default", None)
-            if isinstance(executor, types.FunctionType) and is_library(executor):
-                return f"lib-task:{_qualified_name(executor)}".encode()
+            if (
+                isinstance(executor, types.FunctionType)
+                and is_library(executor)
+                and (owner := _owner_name(executor, holder=value))
+            ):
+                return f"lib-task:{owner}".encode()
+            self.dynamic = True
             return b"task:" + bytes(hash_single(value, self.cache))
         if isinstance(value, (types.FunctionType, type)):
-            if is_library(value):
-                ref = f"lib:{_qualified_name(value)}".encode()
+            library = is_library(value)
+            if library and (owner := _owner_name(value)):
+                ref = f"lib:{owner}".encode()
                 wrapped = vars(value).get("__wrapped__")
                 if isinstance(value, types.FunctionType) and wrapped is not None:
+                    self.dynamic = True
                     ref += b"(wraps:" + self.serialize(wrapped, name) + b")"
                 return ref
-            if not self.in_scope(value) and (owner := _owner_name(value)):
-                return f"name:{owner}".encode()
+            if not library and not self.in_scope(value):
+                if owner := _owner_name(value):
+                    return f"name:{owner}".encode()
             return f"#{self.number(value)}".encode()
         if isinstance(value, types.MethodType):
+            self.dynamic = True
             return (
                 b"method:("
                 + self.serialize(value.__func__, name)
@@ -1316,6 +1339,7 @@ class _CodeWalk:
             if owner is None or isinstance(owner, types.ModuleType):
                 module = getattr(value, "__module__", None) or owner.__name__
                 return f"lib:{module}.{value.__qualname__}".encode()
+            self.dynamic = True
             return (
                 f"method:({value.__name__},".encode()
                 + self.serialize(owner, name)
@@ -1335,6 +1359,7 @@ class _CodeWalk:
                 f"lib:{_qualified_name(value.__objclass__)}.{value.__name__}".encode()
             )
         if isinstance(value, functools.partial):
+            self.dynamic = True
             return (
                 b"partial:("
                 + self.serialize(value.func, name)
@@ -1351,6 +1376,7 @@ class _CodeWalk:
             return f"lib:{lib_name}".encode()
         tp = type(value)
         wrapped = getattr(value, "__dict__", {}).get("__wrapped__")
+        self.dynamic = True
         if wrapped is not None and callable(value) and is_library(tp):
             return (
                 f"wrapper:{_qualified_name(tp)}(".encode()
@@ -1364,37 +1390,132 @@ class _CodeWalk:
             ref += b",type:" + self.serialize(tp, name)
         return ref
 
+    def checked(self, obj: ty.Any) -> list[tuple[str, ty.Any]]:
+        """What a memoised walk must find unchanged in `obj`: its references and its
+        code (a function's code object, a class's member functions)"""
+        if isinstance(obj, type):
+            refs = list(self.class_references(obj))
+            return refs + [(f"member:{n}", f) for n, f in _class_members(obj)]
+        return list(self.function_references(obj)) + [("code", obj.__code__)]
+
     def __iter__(self) -> Iterator[bytes]:
         """The serialized code: the function's code alone if it reads no references
         (so equal at every tier), otherwise tagged by the tier and followed by its
-        references and the definitions they reach"""
-        root_code = _function_code(self.root, self.cache)
+        references and the definitions they reach.
+
+        The walk is memoised per process by function, tier and ``PYDRA_USER_PACKAGES``.
+        A memoised walk is reused while the source files it reached keep their mtimes
+        and every reference it read is still the same object; the references hashed by
+        value (or holding values) are serialized again each time."""
+        key = (
+            self.root,
+            self.code_hash,
+            self.defaults,
+            os.environ.get(USER_PACKAGES_ENV_VAR, ""),
+        )
+        memo = _walk_memo.get(key)
+        entries = self.replay(memo) if memo is not None else None
+        if entries is None:
+            self.definitions = [self.root]
+            self.numbers = {id(self.root): 0}
+            entries, memo = self.walk()
+            _walk_memo.put(key, memo)
+        if len(entries) == 1 and not entries[0][1]:
+            yield entries[0][0]
+            return
+        yield f"{self.code_hash}/".encode() + entries[0][0]
+        yield b",refs:(" + entries[0][1] + b")"
+        for n, (code, refs) in enumerate(entries[1:], start=1):
+            yield f",#{n}=(".encode() + code + b",refs:(" + refs + b"))"
+
+    def walk(self) -> tuple[list[tuple[bytes, bytes]], "_WalkMemo"]:
+        memo = _WalkMemo()
         entries = []
         n = 0
         while n < len(self.definitions):
             obj = self.definitions[n]
             if isinstance(obj, type):
-                code, refs = _class_code(obj, self.cache), self.class_references(obj)
+                code = _class_code(obj, self.cache)
+                try:
+                    source_file = inspect.getsourcefile(obj)
+                except TypeError:
+                    source_file = None
             else:
-                code = root_code if n == 0 else _function_code(obj, self.cache)
-                refs = self.function_references(obj)
-            entries.append(
-                (
-                    code,
-                    b",".join(
-                        name.encode() + b"=" + self.reference(name, value, obj)
-                        for name, value in refs
-                    ),
-                )
-            )
+                code = _function_code(obj, self.cache)
+                source_file = obj.__code__.co_filename
+            if source_file and source_file not in memo.files:
+                memo.files[source_file] = _mtime(source_file)
+            checked = self.checked(obj)
+            refs, statics = [], []
+            for name, value in _references(checked):
+                self.dynamic = False
+                ref = self.reference(name, value, obj)
+                refs.append(name.encode() + b"=" + ref)
+                statics.append(None if self.dynamic else ref)
+            memo.checked.append(checked)
+            memo.codes.append(code)
+            memo.parts.append(statics)
+            entries.append((code, b",".join(refs)))
             n += 1
-        if len(entries) == 1 and not entries[0][1]:
-            yield root_code
-            return
-        yield f"{self.code_hash}/".encode() + root_code
-        yield b",refs:(" + entries[0][1] + b")"
-        for n, (code, refs) in enumerate(entries[1:], start=1):
-            yield f",#{n}=(".encode() + code + b",refs:(" + refs + b"))"
+        memo.definitions = list(self.definitions)
+        return entries, memo
+
+    def replay(self, memo: "_WalkMemo") -> list[tuple[bytes, bytes]] | None:
+        """The entries of a memoised walk if it still holds, otherwise None"""
+        if any(_mtime(f) != mtime for f, mtime in memo.files.items()):
+            return None
+        self.definitions = list(memo.definitions)
+        self.numbers = {id(d): i for i, d in enumerate(self.definitions)}
+        entries = []
+        for obj, checked, code, statics in zip(
+            memo.definitions, memo.checked, memo.codes, memo.parts
+        ):
+            current = self.checked(obj)
+            if len(current) != len(checked) or any(
+                a[0] != b[0] or a[1] is not b[1] for a, b in zip(current, checked)
+            ):
+                return None
+            parts = []
+            for (name, value), static in zip(_references(current), statics):
+                if static is None:
+                    static = self.reference(name, value, obj)
+                parts.append(name.encode() + b"=" + static)
+            entries.append((code, b",".join(parts)))
+        if len(self.definitions) != len(memo.definitions):
+            return None  # a reference hashed again reached another definition
+        return entries
+
+
+def _references(checked: list[tuple[str, ty.Any]]) -> list[tuple[str, ty.Any]]:
+    return [
+        (name, value)
+        for name, value in checked
+        if name != "code" and not name.startswith("member:")
+    ]
+
+
+def _mtime(path: str) -> int | None:
+    try:
+        return os.stat(path).st_mtime_ns
+    except OSError:
+        return None
+
+
+@attrs.define
+class _WalkMemo:
+    """A memoised `_CodeWalk`: the definitions it reached, what each read, its code,
+    and the serialization of each reference that is not hashed by value (None for
+    those that are), with the mtimes of the source files reached"""
+
+    definitions: list = attrs.field(factory=list)
+    checked: list = attrs.field(factory=list)
+    codes: list = attrs.field(factory=list)
+    parts: list = attrs.field(factory=list)
+    files: dict = attrs.field(factory=dict)
+
+
+WALK_MEMO_SIZE = 256
+_walk_memo = _LRUCache(WALK_MEMO_SIZE)
 
 
 @attrs.frozen
