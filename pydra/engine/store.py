@@ -10,6 +10,7 @@ import sys
 import time
 import typing as ty
 import uuid
+import warnings
 from pathlib import Path
 import attrs
 from filelock import SoftFileLock, Timeout
@@ -262,6 +263,69 @@ REUSE_POLICIES = {
 }
 
 
+class DeclaredVersionWarning(UserWarning):
+    """A stored result of a task with a declared version was computed from other code
+    than the task's under the same version (see `check_declared_code`)."""
+
+
+def _moved(stored: Context, code: ty.Mapping[str, str]) -> dict[str, str]:
+    """The declared versions whose code digest in ``stored`` differs from ``code``'s,
+    with the stored digest"""
+    recorded = stored.get("code")
+    if not isinstance(recorded, ty.Mapping):
+        return {}
+    return {k: v for k, v in recorded.items() if k in code and code[k] != v}
+
+
+def check_declared_code(
+    store: "ResultStore", checksum: str, context: Context, task: "Task | None"
+) -> list[tuple[Path, Context]] | None:
+    """Warn if a result stored for ``checksum`` was computed from other code than
+    ``context`` records for a declared version it reaches (a ``code`` digest, see
+    `pydra.engine.context.job_context`, differs), saying whether ``lookup`` would
+    reuse it. Nothing is checked once a result is stored in ``context`` itself.
+
+    Returns the stored contexts it read, to be passed to ``lookup`` as ``stored``, or
+    None if it read none."""
+    code = context.get("code")
+    if not code or (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+        return None
+    stored = list(store.stored_contexts(checksum))
+    moved: dict[str, set[str]] = {}
+    for _, other in stored:
+        for identity, digest in _moved(other, code).items():
+            moved.setdefault(identity, set()).add(digest)
+    if not moved:
+        return stored
+    reuse = getattr(store, "reuse", None)
+    first = next(
+        (
+            other
+            for _, other in stored
+            if reuse is not None
+            and type(reuse) is not ExactReuse
+            and reuse.accept(other, context, task)
+        ),
+        None,
+    )
+    reused = first is not None and bool(_moved(first, code))
+    name = type(task).__name__ if task is not None else "A task"
+    changes = "; ".join(
+        f"{qualname} declares version={version!r}, but its code has changed (code "
+        f"digest {', '.join(sorted(moved[identity]))} there, {code[identity]} now)"
+        for identity in sorted(moved)
+        for qualname, _, version in [identity.partition("==")]
+    )
+    warnings.warn(
+        f"{name} has a stored result computed from other code under the same "
+        f"declared versions: {changes}. That result is "
+        f"{'reused' if reused else 'not reused'}: bump version= or remove it",
+        DeclaredVersionWarning,
+        stacklevel=2,
+    )
+    return stored
+
+
 def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
     """The policy named by ``reuse``, or ``reuse`` itself if it is a policy."""
     if isinstance(reuse, ReusePolicy):
@@ -333,7 +397,11 @@ class ResultStore(ty.Protocol):
         """The directory the job identified by ``checksum`` runs in under ``context``."""
 
     def lookup(
-        self, checksum: str, context: Context, task: "Task | None"
+        self,
+        checksum: str,
+        context: Context,
+        task: "Task | None",
+        stored: "list[tuple[Path, Context]] | None" = None,
     ) -> Result | None:
         """Return the stored result for ``checksum``, or None if there is none.
 
@@ -341,8 +409,13 @@ class ResultStore(ty.Protocol):
         result recorded in another context is returned if the store's reuse policy
         accepts its context for ``task``, marked with ``Result.cross_context`` and
         carrying the context it was recorded in and, as ``Result.reused_in``,
-        ``context``.
+        ``context``. ``stored``, the `stored_contexts` of ``checksum`` already read
+        (by `check_declared_code`), is searched instead of reading them again.
         """
+
+    def stored_contexts(self, checksum: str) -> ty.Iterator[tuple[Path, Context]]:
+        """The slot and recorded context of each result stored for ``checksum``, in
+        every location, in the order ``lookup`` considers them."""
 
     def lockfile(self, checksum: str, context: Context) -> Path:
         """The lock file guarding the job identified by ``checksum`` under ``context``."""
@@ -390,7 +463,11 @@ class PickleStore:
         return self.cache_root / checksum / context_key(context)
 
     def lookup(
-        self, checksum: str, context: Context, task: "Task | None"
+        self,
+        checksum: str,
+        context: Context,
+        task: "Task | None",
+        stored: "list[tuple[Path, Context]] | None" = None,
     ) -> Result | None:
         locations = [self.cache_root] + self.readonly_caches
         slot = f"{checksum}/{context_key(context)}"
@@ -400,23 +477,29 @@ class PickleStore:
                 return result
         if type(self.reuse) is ExactReuse:
             return None
+        for slot, other in (
+            self.stored_contexts(checksum) if stored is None else stored
+        ):
+            if not self.reuse.accept(other, context, task):
+                continue
+            result = load_result(f"{checksum}/{slot.name}", [slot.parent.parent])
+            if result is not None:
+                result.cross_context = True
+                result.reused_in = dict(context)
+                return result
+        return None
+
+    def stored_contexts(self, checksum: str) -> ty.Iterator[tuple[Path, Context]]:
+        locations = [self.cache_root] + self.readonly_caches
         for location in locations:
             directory = location / checksum
             if not directory.is_dir():
                 continue
-            for other in sorted(p for p in directory.iterdir() if p.is_dir()):
+            for slot in sorted(p for p in directory.iterdir() if p.is_dir()):
                 try:
-                    stored = json.loads((other / CONTEXT_FILE).read_text())
+                    yield slot, json.loads((slot / CONTEXT_FILE).read_text())
                 except (OSError, ValueError):
                     continue  # still being written, or not written by this pydra
-                if not self.reuse.accept(stored, context, task):
-                    continue
-                result = load_result(f"{checksum}/{other.name}", [location])
-                if result is not None:
-                    result.cross_context = True
-                    result.reused_in = dict(context)
-                    return result
-        return None
 
     def slots(self, checksum: str | None = None) -> ty.Iterator[Path]:
         """The directories of the jobs run under ``cache_root``, of one job if its

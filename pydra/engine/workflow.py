@@ -33,6 +33,11 @@ OutputsType = ty.TypeVar("OutputType", bound=Outputs)
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=workflow.Outputs)
 
 
+def _declared(cache: Cache) -> str:
+    """The code digests of the declared versions ``cache`` has hashed"""
+    return repr(sorted((k, sorted(v)) for k, v in cache.declared.items()))
+
+
 @attrs.define(auto_attribs=False)
 class Workflow(ty.Generic[WorkflowOutputsType]):
     """A workflow, constructed from a workflow task
@@ -98,7 +103,10 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         }
         non_lazy_keys = frozenset(non_lazy_vals)
         hash_cache = Cache()  # share the hash cache to avoid recalculations
-        non_lazy_hash = hash_function(non_lazy_vals, cache=hash_cache)
+        # versioned nodes hash by their versions, so the code they declare is added
+        non_lazy_hash = hash_function(non_lazy_vals, cache=hash_cache) + _declared(
+            hash_cache
+        )
         # Check for same non-lazy inputs
         cached_tasks = cls._constructed_cache.get(type(task))
         if cached_tasks is not None:
@@ -113,7 +121,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     subset_vals = {
                         k: v for k, v in non_lazy_vals.items() if k in key_set
                     }
-                    subset_hash = hash_function(subset_vals, cache=hash_cache)
+                    subset_hash = hash_function(
+                        subset_vals, cache=hash_cache
+                    ) + _declared(hash_cache)
                     if subset_hash in key_set_cache:
                         wf = deepcopy(key_set_cache[subset_hash])
                         for key in non_lazy_keys - key_set:

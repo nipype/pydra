@@ -36,7 +36,7 @@ if ty.TYPE_CHECKING:
 
 logger = logging.getLogger("pydra")
 
-RECORD = 2
+RECORD = 3
 """The version of the record's layout, stored under ``"record"``. Records of other
 versions are never reused under ``"consistent"`` or ``"exact"``."""
 
@@ -400,7 +400,6 @@ def reached_modules(task: "Task") -> set[str] | None:
     if isinstance(executor, types.FunctionType):
         walked = (
             task._code_modules is not None
-            and task._version is None
             and not hasattr(task, "__checksum__")
             and check_code_hash(task._code_hash or code_hash_default()) == "user"
         )
@@ -499,9 +498,15 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
       None if the modules cannot be determined;
     * ``installed``: a digest of all installed distributions, those in ``packages`` by
       their identities and the others by their versions;
+    * ``code``: present when the checksum reached functions with declared versions
+      (the task's own, those of a workflow's nodes, those of tasks passed as inputs),
+      the `code_digest` of each by ``module.qualname==version``, which the version
+      stands for (see `pydra.engine.store.check_declared_code`);
     * ``unknown``: present when any of ``packages`` is unknown, set to a value unique
       to this process, so the result is reused by no other process.
     """
+    if task._declared_code is None and not hasattr(task, "__checksum__"):
+        task._hash  # collects the modules and the code of declared versions reached
     modules = reached_modules(task)
     packages = None if modules is None else package_versions(modules)
     context = {
@@ -510,6 +515,8 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
         "packages": packages,
         "installed": _installed_digest(frozenset(packages or ())),
     }
+    if task._declared_code:
+        context["code"] = dict(task._declared_code)
     if packages is None or None in packages.values():
         context["unknown"] = _nonce()
     return context

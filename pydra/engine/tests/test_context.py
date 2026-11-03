@@ -12,16 +12,29 @@ import cloudpickle
 import numpy as np
 import pytest
 from fileformats.generic import File
-from pydra.compose import python
+from pydra.compose import python, workflow
+from pydra.compose.base import Task
 from pydra.engine import context
 from pydra.engine.job import Job
 from pydra.engine.result import Result
-from pydra.engine.store import CONTEXT_FILE, PickleStore, context_key
+from pydra.engine.store import (
+    CONTEXT_FILE,
+    DeclaredVersionWarning,
+    PickleStore,
+    context_key,
+)
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
 import pydra.compose.python
 from pydra.utils.general import STDLIB_MODULES
-from pydra.utils.hash import USER_PACKAGES_ENV_VAR, library_modules, type_module
+from pydra.utils.hash import (
+    CODE_HASH_TIERS,
+    USER_PACKAGES_ENV_VAR,
+    code_digest,
+    hash_function,
+    library_modules,
+    type_module,
+)
 
 cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
@@ -464,7 +477,7 @@ def test_extension_type_reporting_builtins(installed):
 
 
 def test_unhashable_walk_leaves_packages_unknown(installed, monkeypatch, caplog):
-    task = python.define(_calls_helper, version="1")(a=1)
+    task = python.define(_calls_helper, code_hash="function")(a=1)
 
     def fail(func):
         raise TypeError("unhashable")
@@ -516,3 +529,219 @@ def test_editable_identity_ignores_loaded_modules(installed, tmp_path, monkeypat
     (source / "scratch.py").write_text("x = 2\n")
     installed(fakelib=fakelib)
     assert context.package_versions({"fakelib"})["fakelib"] == before
+
+
+def _versioned(a: int, log: str) -> int:
+    _record_run(log)
+    return a + 1
+
+
+def _versioned_edit(a: int, log: str) -> int:
+    _record_run(log)
+    return a + 2
+
+
+def _make_versioned(k):
+    def added(a: int, log: str) -> int:
+        _record_run(log)
+        return a + k
+
+    return added
+
+
+@pytest.fixture
+def edited(monkeypatch):
+    """`_versioned_edit` standing for an edit of `_versioned`: same module and name"""
+    monkeypatch.setattr(_versioned_edit, "__qualname__", _versioned.__qualname__)
+    monkeypatch.setattr(_versioned_edit, "__name__", _versioned.__name__)
+    return _versioned_edit
+
+
+def _run_each(tmp_path, tasks, reuse="consistent", worker="debug"):
+    """Run each task in turn on the same cache; return the number of runs and results"""
+    log = tmp_path / "log"
+    results = []
+    for task in tasks:
+        with Submitter(
+            worker=worker, cache_root=tmp_path / "cache", reuse=reuse
+        ) as sub:
+            results.append(sub(task(a=1, log=str(log))))
+    return _runs(log), results
+
+
+@pytest.mark.parametrize("code_hash", CODE_HASH_TIERS)
+def test_version_keeps_the_values_read(code_hash):
+    with pytest.warns(UserWarning, match="version='1'"):
+        two = python.define(_make_versioned(2), version="1", code_hash=code_hash)
+        three = python.define(_make_versioned(3), version="1", code_hash=code_hash)
+        again = python.define(_make_versioned(2), version="1", code_hash=code_hash)
+    assert two(a=1, log="x")._checksum != three(a=1, log="x")._checksum
+    assert two(a=1, log="x")._checksum == again(a=1, log="x")._checksum
+    # the code is the same, only the values differ
+    assert code_digest(two) == code_digest(three)
+
+
+@pytest.mark.parametrize("code_hash", CODE_HASH_TIERS)
+def test_version_replaces_the_code(code_hash, edited):
+    first = python.define(_versioned, version="1", code_hash=code_hash)
+    edit = python.define(edited, version="1", code_hash=code_hash)
+    bumped = python.define(edited, version="2", code_hash=code_hash)
+    plain = python.define(_versioned, code_hash=code_hash)
+    checksums = [t(a=1, log="x")._checksum for t in (first, edit, bumped, plain)]
+    assert checksums[0] == checksums[1]
+    assert len(set(checksums[1:])) == 3
+    assert code_digest(first) != code_digest(edit)
+    assert code_digest(edit) == code_digest(bumped) == code_digest(edited, code_hash)
+    # the code part is tagged, so a versioned task never shares a code-hashed one's key
+    assert hash_function(first(a=1, log="x")) != hash_function(plain(a=1, log="x"))
+
+
+def test_version_records_the_code_digest(installed):
+    task = python.define(_versioned, version="1")(a=1, log="x")
+    task._checksum
+    record = context.job_context(task, native.Native())
+    identity = f"{_versioned.__module__}._versioned==1"
+    assert record["code"] == task._declared_code == {identity: code_digest(type(task))}
+    assert "code" not in context.job_context(
+        python.define(_versioned)(a=1, log="x"), native.Native()
+    )
+    # computed again if the checksum was not
+    fresh = python.define(_versioned, version="1")(a=1, log="x")
+    assert context.job_context(fresh, native.Native())["code"] == record["code"]
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+@pytest.mark.parametrize(
+    "reuse,runs,outs",
+    [("consistent", 1, [2, 2]), ("any", 1, [2, 2]), ("exact", 2, [2, 3])],
+)
+def test_version_guard(installed, tmp_path, edited, worker, reuse, runs, outs):
+    """The same version over other code warns under every policy; exact recomputes"""
+    first = python.define(_versioned, version="1")
+    edit = python.define(edited, version="1")
+    with pytest.warns(DeclaredVersionWarning) as record:
+        n, results = _run_each(tmp_path, [first, edit], reuse, worker)
+    assert (n, [r.outputs.out for r in results]) == (runs, outs)
+    assert results[1].cross_context == (runs == 1)
+    (message,) = {
+        str(w.message) for w in record if issubclass(w.category, DeclaredVersionWarning)
+    }
+    assert "_versioned declares version='1'" in message
+    assert code_digest(first) in message and code_digest(edit) in message
+    assert ("is reused" if runs == 1 else "is not reused") in message
+    assert message.endswith("bump version= or remove it")
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+@pytest.mark.parametrize("reuse", ["consistent", "any", "exact"])
+def test_version_guard_is_quiet(installed, tmp_path, edited, worker, reuse, recwarn):
+    """Bumping the version, keeping the code, or versioning a code-hashed task
+    neither reuses another's result nor warns"""
+    first = python.define(_versioned, version="1")
+    tasks = [
+        python.define(_versioned),
+        first,
+        first,
+        python.define(edited, version="2"),
+    ]
+    n, results = _run_each(tmp_path, tasks, reuse, worker)
+    assert (n, [r.outputs.out for r in results]) == (3, [2, 2, 2, 3])
+    assert not results[2].cross_context
+    assert not [w for w in recwarn if issubclass(w.category, DeclaredVersionWarning)]
+
+
+VersionedNode = python.define(_versioned, version="1")
+
+
+@workflow.define
+def UsesVersioned(a: int, log: str) -> int:
+    return workflow.add(VersionedNode(a=a, log=log)).out
+
+
+@workflow.define
+def AddsNode(node: Task) -> int:
+    return workflow.add(node).out
+
+
+def test_workflow_hashes_versioned_nodes_by_version(edited, monkeypatch):
+    """A workflow reaching a versioned task class hashes it by its version, as the
+    node's own checksum does, and records the node's code digest"""
+    before = UsesVersioned(a=1, log="x")
+    checksum = before._checksum
+    monkeypatch.setitem(
+        UsesVersioned().constructor.__globals__,
+        "VersionedNode",
+        python.define(edited, version="1"),
+    )
+    after = UsesVersioned(a=1, log="x")
+    assert after._checksum == checksum
+    assert list(before._declared_code.values()) != list(after._declared_code.values())
+    monkeypatch.setitem(
+        UsesVersioned().constructor.__globals__,
+        "VersionedNode",
+        python.define(edited, version="2"),
+    )
+    assert UsesVersioned(a=1, log="x")._checksum != checksum
+
+
+def _nested(kind, defn, log):
+    if kind == "split":
+        return defn(log=log).split(a=[1, 2])
+    if kind == "input":
+        return AddsNode(node=defn(a=1, log=log))
+    return UsesVersioned(a=1, log=log)
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+@pytest.mark.parametrize("kind", ["split", "workflow", "input"])
+@pytest.mark.parametrize("reuse", ["consistent", "exact"])
+def test_version_guard_reaches_nested_tasks(
+    installed, tmp_path, edited, monkeypatch, worker, kind, reuse
+):
+    """An edit of a versioned task run in a split, a workflow node or a workflow input
+    warns, and is recomputed under exact"""
+    log = str(tmp_path / "log")
+    outs = []
+    with pytest.warns(DeclaredVersionWarning) as record:
+        for defn in (_versioned, edited):
+            versioned = python.define(defn, version="1", name="Versioned")
+            monkeypatch.setitem(
+                UsesVersioned().constructor.__globals__, "VersionedNode", versioned
+            )
+            with Submitter(
+                worker=worker, cache_root=tmp_path / "cache", reuse=reuse
+            ) as sub:
+                result = sub(_nested(kind, versioned, log))
+            assert not result.errored
+            outs.append(result.outputs.out)
+    edited_outs = [3, 4] if kind == "split" else 3
+    assert outs[1] == (edited_outs if reuse == "exact" else outs[0])
+    runs = 2 if kind == "split" else 1
+    assert _runs(log) == (2 * runs if reuse == "exact" else runs)
+    messages = [
+        str(w.message) for w in record if issubclass(w.category, DeclaredVersionWarning)
+    ]
+    assert any(
+        "_versioned declares version='1'" in m
+        and ("is not reused" if reuse == "exact" else "is reused") in m
+        for m in messages
+    )
+
+
+def test_versioned_job_reads_stored_contexts_once(installed, tmp_path, edited):
+    """The guard's read of the stored contexts is the one its lookup searches"""
+    calls = []
+
+    class Counting(PickleStore):
+        def stored_contexts(self, checksum):
+            calls.append(checksum)
+            return super().stored_contexts(checksum)
+
+    log = str(tmp_path / "log")
+    with pytest.warns(DeclaredVersionWarning):
+        for defn in (_versioned, edited):
+            store = Counting(tmp_path / "cache")
+            with Submitter(cache_root=tmp_path / "cache", store=store) as sub:
+                assert sub(python.define(defn, version="1")(a=1, log=log)).outputs
+    assert len(calls) == 2 and len(set(calls)) == 1
+    assert _runs(log) == 1

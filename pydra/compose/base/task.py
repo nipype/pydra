@@ -165,8 +165,8 @@ class Task(ty.Generic[OutputsType]):
 
     # The attribute containing the function/executable used to run the task
     _executor_name = None
-    # Declared version of the task, which stands in for the code of the executor in the
-    # checksum when set (see ``python.define(version=...)``)
+    # Declared version of the task, which stands in for the code of the executor, but
+    # not the values it reads, in the checksum when set (see ``python.define``)
     _version: ty.ClassVar[str | None] = None
     # How far the hash of the executor follows the code it reaches (see
     # ``python.define(code_hash=...)``), `pydra.utils.hash.code_hash_default` when None
@@ -189,6 +189,10 @@ class Task(ty.Generic[OutputsType]):
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
     # the library modules reached when the checksum was last computed
     _code_modules = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the `code_digest`s of the functions with declared versions the checksum reached
+    # (its own, its nodes', its inputs'), by ``module.qualname==version``, when it was
+    # last computed
+    _declared_code = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
     BASE_ATTRS = ()
@@ -514,14 +518,17 @@ class Task(ty.Generic[OutputsType]):
         return f"{self._task_type()}-{self._hash}"
 
     def _hashed_value(self, name: str) -> ty.Any:
-        """The value of field ``name`` as it enters the hash: the executor of a task
-        with a declared version is replaced by its module, name and version."""
+        """The value of field ``name`` as it enters the hash: the code of the executor
+        of a task with a declared version is replaced by its module, name and version.
+        """
         value = getattr(self, name)
         if name == self._executor_name:
-            if self._version is not None:
-                return f"{value.__module__}.{value.__qualname__}=={self._version}"
             if isinstance(value, types.FunctionType):
-                return TaskFunction(value)
+                return TaskFunction(value, version=self._version)
+            if self._version is not None:
+                return (
+                    f"version:{value.__module__}.{value.__qualname__}=={self._version}"
+                )
         return value
 
     def _hash_changes(self):
@@ -582,6 +589,9 @@ class Task(ty.Generic[OutputsType]):
         }
         if exclude is None:
             self._code_modules = frozenset(hash_cache.modules)
+            self._declared_code = {
+                k: ",".join(sorted(v)) for k, v in sorted(hash_cache.declared.items())
+            }
         return hash_function(sorted(field_hashes.items())), field_hashes
 
     def _rule_violations(self) -> list[str]:

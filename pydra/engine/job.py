@@ -17,7 +17,7 @@ from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
 from pydra.engine.context import job_context
-from pydra.engine.store import remove_from_cache
+from pydra.engine.store import check_declared_code, remove_from_cache
 from pydra.engine.result import (
     RuntimeSpec,
     Result,
@@ -150,6 +150,9 @@ class Job(ty.Generic[TaskType]):
         # has not finished
         self._awaiting_run = False
         self._context = None
+        # The stored contexts of the checksum read by `check_declared_code`, for the
+        # job's first lookup
+        self._stored_contexts = None
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
@@ -195,6 +198,7 @@ class Job(ty.Generic[TaskType]):
             self._cached_result = None
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("_stored_contexts", None)
 
     @classmethod
     def check_etelemetry(cls) -> None:
@@ -225,10 +229,15 @@ class Job(ty.Generic[TaskType]):
         """The execution context of the job (see `pydra.engine.context.job_context`),
         built once in the submitting process and carried with the job to the worker. It
         selects the job's slot in the store, is recorded on its result and is what a
-        later job's context is compared with, so every process uses this one object."""
+        later job's context is compared with, so every process uses this one object.
+        Building it reports a declared version whose stored results were computed from
+        other code (see `pydra.engine.store.check_declared_code`)."""
         if self._context is None:
             self.checksum  # collects the library modules the task's code reaches
             self._context = job_context(self.task, self.environment)
+            self._stored_contexts = check_declared_code(
+                self.store, self.checksum, self._context, self.task
+            )
         return self._context
 
     @property
@@ -342,6 +351,7 @@ class Job(ty.Generic[TaskType]):
                 result = self.result()
                 if result is not None and not result.errored:
                     self._awaiting_run = False
+                    self._cached_result = result
                     return result
             self._errored = False
             cwd = os.getcwd()
@@ -407,6 +417,7 @@ class Job(ty.Generic[TaskType]):
                 result = self.result()
                 if result is not None and not result.errored:
                     self._awaiting_run = False
+                    self._cached_result = result
                     return result
             self._errored = False
             cwd = os.getcwd()
@@ -524,7 +535,14 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        result = self.store.lookup(self.checksum, self.context, task=self.task)
+        context, stored = self.context, self._stored_contexts
+        if stored is None:
+            result = self.store.lookup(self.checksum, context, task=self.task)
+        else:
+            self._stored_contexts = None
+            result = self.store.lookup(
+                self.checksum, context, task=self.task, stored=stored
+            )
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":

@@ -20,7 +20,7 @@ from pathlib import Path
 from collections import OrderedDict
 from collections.abc import Mapping
 from functools import singledispatch
-from hashlib import blake2b
+from hashlib import blake2b, sha256
 from time import time_ns
 import logging
 from typing import (
@@ -120,6 +120,7 @@ __all__ = (
     "hash_function",
     "hash_object",
     "hash_single",
+    "code_digest",
     "register_serializer",
     "Hash",
     "Cache",
@@ -277,6 +278,11 @@ class Cache:
     code_hash: ty.Optional[str] = attrs.field(default=None)
     # the library modules reached by the functions hashed with this cache
     modules: ty.Set[str] = attrs.field(factory=set)
+    # the `code_digest` of each function hashed with this cache, by its id
+    digests: ty.Dict[int, str] = attrs.field(factory=dict)
+    # the `code_digest`s of the functions hashed with a declared version, by their
+    # ``module.qualname==version``
+    declared: ty.Dict[str, ty.Set[str]] = attrs.field(factory=dict)
 
     def __getitem__(self, object_id: int) -> Hash:
         return self._hashes[object_id]
@@ -593,9 +599,9 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
                 yield b"mime-like:(" + klass.mime_like.encode() + b")"
             except fileformats.core.exceptions.FormatDefinitionError:
                 yield type_location(klass)
-        elif fields := get_fields(klass):
+        elif get_fields(klass):
             yield b"fields:("
-            yield from bytes_repr_sequence_contents(fields, cache)
+            yield from bytes_repr_sequence_contents(_versioned_fields(klass), cache)
             yield b")"
             if hasattr(klass, "Outputs"):
                 yield b",outputs:("
@@ -1258,16 +1264,28 @@ class _CodeWalk:
     * any other value by the ordinary value rules, and the type of a user-class
       instance as a reference.
 
+    With a declared `version`, the code of every definition is left out and the
+    function's is replaced by its qualified name and the version; the references are
+    serialized as they are without it.
+
     The modules of the library code and of the library-typed values it reaches are
     collected in `modules`, and added to the cache's, for the record kept beside a
-    result.
+    result. The digest of the code of the definitions (see `code_digest`) is added to
+    the cache's `digests`.
     """
 
-    def __init__(self, root: types.FunctionType, cache: Cache, defaults: bool):
+    def __init__(
+        self,
+        root: types.FunctionType,
+        cache: Cache,
+        defaults: bool,
+        version: str | None = None,
+    ):
         self.cache = cache
         self.code_hash = check_code_hash(cache.code_hash or code_hash_default())
         self.root = root
         self.defaults = defaults
+        self.version = version
         self.definitions: list[ty.Any] = [root]
         self.numbers = {id(root): 0}
         # set when a reference is serialized from values, so cannot be memoised
@@ -1454,9 +1472,9 @@ class _CodeWalk:
         return list(self.function_references(obj)) + [("code", obj.__code__)]
 
     def __iter__(self) -> Iterator[bytes]:
-        """The serialized code: the function's code alone if it reads no references
-        (so equal at every tier), otherwise tagged by the tier and followed by its
-        references and the definitions they reach.
+        """The serialized code: the function's code (or declared version) alone if it
+        reads no references (so equal at every tier), otherwise tagged by the tier and
+        followed by its references and the definitions they reach.
 
         The walk is memoised per process by function, tier and ``PYDRA_USER_PACKAGES``
         (see `_WalkMemo`)."""
@@ -1471,6 +1489,16 @@ class _CodeWalk:
             with _walk_memo_lock:
                 _walk_memo.setdefault(self.root, {})[key] = memo
         self.cache.modules.update(self.modules)
+        digest = self.cache.digests[id(self.root)] = sha256(
+            b"".join(len(code).to_bytes(8, "big") + code for code, _ in entries)
+        ).hexdigest()
+        if self.version is not None:
+            identity = f"{_qualified_name(self.root)}=={self.version}"
+            self.cache.declared.setdefault(identity, set()).add(digest)
+            declared = f"version:{identity}"
+            entries = [(declared.encode(), entries[0][1])] + [
+                (b"", refs) for _, refs in entries[1:]
+            ]
         if len(entries) == 1 and not entries[0][1]:
             yield entries[0][0]
             return
@@ -1617,20 +1645,80 @@ _walk_memo_lock = threading.RLock()
 @attrs.frozen
 class TaskFunction:
     """The function of a task as it enters the checksum. It is hashed as the function
-    is, except for its defaults, which are hashed as the task's inputs."""
+    is, except for its defaults, which are hashed as the task's inputs, and for its
+    code, which a declared `version` replaces (see `_CodeWalk`)."""
 
     function: types.FunctionType
+    version: str | None = None
+
+
+@attrs.frozen
+class _VersionedExecutor:
+    """The executor field of a task class with a declared version, hashed as the field
+    is with its default function replaced by its `TaskFunction`"""
+
+    field: ty.Any
+    version: str
+
+
+@register_serializer
+def bytes_repr_versioned_executor(
+    obj: _VersionedExecutor, cache: Cache
+) -> Iterator[bytes]:
+    cls = type(obj.field)
+    yield f"{cls.__module__}.{cls.__name__}:{{".encode()
+    dct = attrs.asdict(obj.field, recurse=False, filter=lambda a, _: bool(a.eq))
+    dct["default"] = TaskFunction(dct["default"], version=obj.version)
+    yield from bytes_repr_mapping_contents(dct, cache)
+    yield b"}"
+
+
+def _versioned_fields(klass: type) -> list[ty.Any]:
+    """The fields of a task class as they are hashed: the executor of a class with a
+    declared version by its version (see `_VersionedExecutor`)"""
+    version = getattr(klass, "_version", None)
+    executor = getattr(klass, "_executor_name", None)
+    return [
+        (
+            _VersionedExecutor(field, version)
+            if version is not None
+            and field.name == executor
+            and isinstance(field.default, types.FunctionType)
+            else field
+        )
+        for field in get_fields(klass)
+    ]
 
 
 def _bytes_repr_code(
-    obj: types.FunctionType, cache: Cache, defaults: bool
+    obj: types.FunctionType, cache: Cache, defaults: bool, version: str | None = None
 ) -> Iterator[bytes]:
     yield b"function:("
     if in_stdlib(obj):
-        yield f"{obj.__module__}.{obj.__name__}".encode()
+        name = f"{obj.__module__}.{obj.__name__}"
+        yield (name if version is None else f"version:{name}=={version}").encode()
     else:
-        yield from _CodeWalk(obj, cache, defaults)
+        yield from _CodeWalk(obj, cache, defaults, version)
     yield b")"
+
+
+def code_digest(obj: ty.Any, code_hash: str | None = None) -> str | None:
+    """The digest of the code a function, or a Python task class's function, reaches
+    at the `code_hash` tier (the task's, or `code_hash_default`): the `ast@1`
+    encoding, or tagged byte-code, of each definition reached, without the values it
+    reads. It is what a declared ``version`` stands for, so it is recorded beside the
+    results of a versioned task, and a project can check its versions against a
+    committed table of digests. None for a standard-library function."""
+    if isinstance(obj, type):
+        field = get_fields(obj).get(getattr(obj, "_executor_name", None) or "")
+        code_hash = code_hash or getattr(obj, "_code_hash", None)
+        obj = getattr(field, "default", None)
+    if not isinstance(obj, types.FunctionType):
+        raise TypeError(f"{obj!r} is not a function or a Python task class")
+    cache = Cache(code_hash=code_hash)
+    for _ in _bytes_repr_code(obj, cache, defaults=False):
+        pass
+    return cache.digests.get(id(obj))
 
 
 def library_modules(func: types.FunctionType) -> frozenset[str]:
@@ -1657,7 +1745,9 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
 
 @register_serializer
 def bytes_repr_task_function(obj: TaskFunction, cache: Cache) -> Iterator[bytes]:
-    yield from _bytes_repr_code(obj.function, cache, defaults=False)
+    yield from _bytes_repr_code(
+        obj.function, cache, defaults=False, version=obj.version
+    )
 
 
 def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[bytes]:

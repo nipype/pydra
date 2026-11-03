@@ -202,17 +202,26 @@ Anything new is opt-in until maintainers decide otherwise.
   differently across platforms or Python versions. A hash can show exactness but cannot measure
   distance.
 - **Declared identity.** A task may declare a `version` (`@python.define(version="2")`). The
-  checksum then uses that version instead of the function's code. CI in the defining project
-  guards it: changing the source without bumping the version fails. Types can register their own
-  byte representation, extending `__bytes_repr__`, so domain objects hash portably.
+  checksum then uses that version instead of the function's code, tagged so it never equals a
+  code-hashed checksum. The values the code reads (closure cells, globals, the defaults of called
+  functions) are still hashed. The digest of the code is recorded beside each result, and a lookup
+  that finds a result of the same version computed from other code warns, naming both digests
+  ("bump version= or remove it"); `reuse="exact"` recomputes it, the other policies reuse it.
+  Workflows and splits record the digests of the versioned tasks they reach, so the same holds
+  inside them. CI in the defining project guards it with the same digests
+  (`pydracli check-versions <table>`): changing the source without bumping the version fails.
+  Types can register their own byte representation, extending `__bytes_repr__`, so domain
+  objects hash portably.
 - **Execution context.** Each cache entry records the context that produced it (environment
   checksum from 3.5, platform, Python version) beside the result, outside the checksum. The
   context is recorded, not keyed.
-- **Reuse policy.** `Submitter(reuse="exact" | "any")`, with `exact` as the default and today's
-  behaviour. `"exact"` reuses only entries from the same context; `"any"` reuses across contexts
-  and marks the result as such. Richer policies plug in through the hook in K2. The environment
-  checksum affects reuse only through the policy, never through the checksum.
-- **Risk:** low to medium. It is opt-in, and the default keeps today's checksums.
+- **Reuse policy.** `Submitter(reuse="consistent" | "exact" | "any")`, with `consistent` as the
+  default: the same Python major.minor, platform, environment and versions of the distributions
+  the task reaches. `"exact"` reuses only entries from an equal context; `"any"` reuses across
+  contexts and marks the result as such. Richer policies plug in through the hook in K2. The
+  environment checksum affects reuse only through the policy, never through the checksum.
+- **Risk:** low to medium. Declared identity is opt-in; the `consistent` default is stricter than
+  the earlier `exact` for upgraded dependencies the task reaches.
 
 ### 3.12 Node-supplied checksum and the reuse hook (K2)
 - **Problem.** K1 lets a task declare a `version`, but pydra still computes the checksum itself,
