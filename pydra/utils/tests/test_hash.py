@@ -1,8 +1,11 @@
+import ast
+import importlib.util
 import re
 import os
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
 from pathlib import Path
 from unittest import mock
@@ -782,3 +785,201 @@ def test_hash_function_pickled_by_value():
         env={**os.environ, "PYTHONHASHSEED": "random"},
     )
     assert result.stdout.decode().strip() == hash_function(func)
+
+
+def _define(tmp_path: Path, source: str, name: str = "f"):
+    """Load `name` from `source`, written to a new module file under `tmp_path`"""
+    module_name = f"_fh_{len(list(tmp_path.iterdir()))}"
+    path = tmp_path / f"{module_name}.py"
+    path.write_text(source)
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, name)
+
+
+_BASE_SOURCE = """
+def deco(func):
+    return func
+
+@deco
+def f(a: int, b: int = 1) -> int:
+    @deco
+    def g(x):
+        return x * 2
+    c = a + b
+    return g(c)
+"""
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        pytest.param(
+            _BASE_SOURCE.replace(
+                "    c = a + b", "    # comment\n    c = a + b  # sum"
+            ),
+            id="comments",
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace("b: int = 1", "b: int=1").replace(
+                "c = a + b", "c = (a +\n         b)"
+            ),
+            id="formatting",
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace("-> int:\n", '-> int:\n    """Doc"""\n'),
+            id="docstring",
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace(
+                "(a: int, b: int = 1) -> int", '(a: float, b: "str" = 1) -> "float"'
+            ),
+            id="annotations",
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace("def f(", "def h(") + "f = h\n",
+            id="name",
+        ),
+        pytest.param(
+            "import os\n\n\nclass A:\n    pass\n" + _BASE_SOURCE, id="location"
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace("@deco\ndef f", "def f"), id="own-decorators"
+        ),
+    ],
+)
+def test_hash_function_unchanged(tmp_path, variant):
+    """Comments, formatting, docstrings, signature annotations and the function's own
+    name, location and decorators do not change its hash"""
+    assert hash_function(_define(tmp_path, variant)) == hash_function(
+        _define(tmp_path, _BASE_SOURCE)
+    )
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        pytest.param(_BASE_SOURCE.replace("x * 2", "x * 3"), id="body"),
+        pytest.param(_BASE_SOURCE.replace("    @deco\n", ""), id="decorator"),
+        pytest.param(_BASE_SOURCE.replace("b: int = 1", "b: int = 2"), id="default"),
+        pytest.param(
+            _BASE_SOURCE.replace("def g(x):", "def g(x) -> int:"),
+            id="nested-annotation",
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace("def g(x):\n", 'def g(x):\n        """Doc"""\n'),
+            id="nested-docstring",
+        ),
+        pytest.param(
+            _BASE_SOURCE.replace("c = a", "d = a").replace("g(c)", "g(d)"),
+            id="local-name",
+        ),
+    ],
+)
+def test_hash_function_changed(tmp_path, variant):
+    """The body, default values, local names and the decorators, annotations and
+    docstrings of the code a function defines change its hash"""
+    assert hash_function(_define(tmp_path, variant)) != hash_function(
+        _define(tmp_path, _BASE_SOURCE)
+    )
+
+
+def test_hash_function_lambdas_on_one_line(tmp_path):
+    """Lambdas that share a source line are hashed by their own code"""
+    source = "f, g, h = (lambda x: x + 1), (lambda x: x + 2), (lambda x: x + 1)\n"
+    f, g, h = (_define(tmp_path, source, name) for name in "fgh")
+    assert b"ast@1:" in b"".join(bytes_repr(g, Cache()))
+    assert hash_function(f) != hash_function(g)
+    assert hash_function(f) == hash_function(h)
+
+
+def test_hash_function_encoding_tagged(tmp_path):
+    """The code part is tagged by its encoding, the byte-code fallback by the Python
+    version"""
+    namespace: dict = {}
+    exec("def f(a):\n    return a + 1\n", namespace)
+    assert b"function:(ast@1:" in b"".join(
+        bytes_repr(_define(tmp_path, _BASE_SOURCE), Cache())
+    )
+    version = f"bytecode@{sys.version_info[0]}.{sys.version_info[1]}:"
+    assert f"function:({version}".encode() in b"".join(
+        bytes_repr(namespace["f"], Cache())
+    )
+
+
+_CORPUS_SOURCE = '''
+async def f(a, /, b, *args, c=None, d: int = 0, **kwargs) -> dict:
+    """Docstring"""
+    import os.path as osp
+    from .. import os
+    global_name = os.sep
+    x: list[int] = [i * 2 for i in args if i]
+    y = {k: v for k, v in kwargs.items()}
+    z = {*x} | {1.5, 2j, b"raw", ..., True}
+    w = (n async for n in b)
+    if (m := len(x)) > 1 and not c or d is None:
+        x[1:m:2] = f"{a!r:>{d}}" + f"{b=}" f"{x:{d}}" f"{x:>{d}.{d}}" f"" f"{{}}{a:}"
+    try:
+        await b
+    except* ValueError as e:
+        raise RuntimeError() from e
+    else:
+        pass
+    finally:
+        del y
+    match a:
+        case [1, *rest] if rest:
+            pass
+        case {"k": 1, **others}:
+            pass
+        case int(real=0) | None:
+            pass
+        case _:
+            pass
+    async with c as (p, q), d:
+        async for i in b:
+            continue
+    while False:
+        break
+    class K(int, metaclass=type):
+        """Class docstring"""
+        attr = lambda self, *, u=1: u ** -self
+    def g(*, e):
+        nonlocal x
+        yield from e
+    return {"x": x, "y": y, "z": z, "w": w, "k": K, "g": g, "v": global_name}
+'''
+
+
+def test_hash_function_same_on_every_python():
+    """The `ast@1` encoding of a function using most of the syntax of Python 3.11
+    gives the same hash on every supported Python version"""
+    encoding = hash_module.encode_ast(ast.parse(_CORPUS_SOURCE).body[0])
+    assert blake2b(encoding.encode(), digest_size=16).hexdigest() == (
+        "c3c9ce3c2e2549d95a4f97f92d16e554"
+    )
+
+
+def test_lru_cache_holds_most_recently_used():
+    cache = hash_module._LRUCache(2)
+    cache.put("a", 1)
+    cache.put("b", 2)
+    assert cache.get("a") == 1
+    cache.put("c", 3)
+    assert len(cache) == 2
+    assert (cache.get("a"), cache.get("b"), cache.get("c")) == (1, None, 3)
+
+
+def test_hash_function_concurrently(tmp_path, monkeypatch):
+    """Functions hashed from several threads while the source caches evict get the
+    hashes they get serially"""
+    funcs = [
+        _define(tmp_path, _BASE_SOURCE.replace("x * 2", f"x * {i}")) for i in range(8)
+    ]
+    expected = [hash_function(f) for f in funcs]
+    monkeypatch.setattr(hash_module, "_source_nodes_cache", hash_module._LRUCache(2))
+    monkeypatch.setattr(hash_module, "_function_bytes_cache", hash_module._LRUCache(2))
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(hash_function, funcs * 50))
+    assert results == expected * 50
