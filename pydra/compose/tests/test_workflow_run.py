@@ -1225,8 +1225,7 @@ def test_wf_3nd_ndst_7(worker: str, tmp_path: Path):
 # workflows with structures A -> B -> C with multiple connections
 
 
-@pytest.mark.real_worker
-def test_wf_3nd_8(tmp_path: Path):
+def test_wf_3nd_8(worker: str, tmp_path: Path):
     """workflow with three tasks A->B->C vs two tasks A->C with multiple connections"""
 
     @workflow.define(outputs=["out1", "out2", "out1a", "out2a"])
@@ -1253,7 +1252,7 @@ def test_wf_3nd_8(tmp_path: Path):
 
     worky = Worky(zip=[["test1", "test3", "test5"], ["test2", "test4", "test6"]])
 
-    with Submitter(worker="cf") as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         res = sub(worky)
 
     assert (
