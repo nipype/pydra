@@ -8,8 +8,12 @@ name: CI/CD
 #         one Linux and one macOS job; no wall-clock tests, no slurm/docker/singularity/lmod,
 #         no docs; Python 3.13 only, on Linux, macOS and Windows
 #   full  PRs that are marked ready for review or carry the `release` label, merge queue
-#         runs (merge_group), pushes to main, releases and manual runs: the whole OS x
-#         Python 3.11-3.15 matrix with every test, plus singularity, lmod, slurm and docs
+#         runs (merge_group), pushes to main, releases, manual runs and the weekly schedule:
+#         the whole OS x Python 3.11-3.15 matrix with every test, plus singularity, lmod,
+#         slurm and docs
+# The weekly schedule (main only) re-runs the full tier so the uv, Singularity and Slurm
+# image caches are refreshed before GitHub evicts them after 7 days, and publishes the
+# Slurm image to ghcr.io when its tag is missing (see `slurm-image`).
 # The `CI gate` job is the one check branch protection should require: it fails unless the
 # full tier passed on a non-draft PR, so nothing reaches main without the full suite.
 on:
@@ -24,9 +28,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   merge_group:
   workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Mondays 06:00 UTC, default branch only
 
-# Only PR runs cancel each other. Releases, pushes to main, merge-queue and manual runs each
-# have their own group and are never cancelled, so nothing can cancel the deploy. A label
+# Only PR runs cancel each other. Releases, pushes to main, merge-queue, scheduled and manual runs
+# each have their own group and are never cancelled, so nothing can cancel the deploy. A label
 # event other than `release` gets a unique group so it cannot cancel the run in progress.
 concurrency:
   group: >-
@@ -102,7 +108,7 @@ jobs:
           fetch-depth: 0
       - uses: hynek/build-and-inspect-python-package@67230f7b8410ae0052b39c1efc89d89fff43ff10 # v3.0.2
         with:
-          attest-build-provenance-github: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+          attest-build-provenance-github: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' && github.event_name != 'schedule' }}
 
   test:
     needs: plan
@@ -260,9 +266,52 @@ jobs:
             pydra/environments/tests/test_lmod.py
 
 
-  test-slurm:
+  # Publishes the Slurm image as ghcr.io/nipype/pydra-slurm:<hash of .github/slurm/**> so every
+  # PR can pull it (Actions caches are not shared between PRs). Trusted events on main only;
+  # this is the only job with `packages: write`, and PRs (forks included) never reach it.
+  slurm-image:
     needs: plan
-    if: needs.plan.outputs.full == 'true'
+    if: >-
+      needs.plan.outputs.full == 'true' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/nipype/pydra-slurm
+    steps:
+    - uses: actions/checkout@v7
+    - name: Check whether the tag exists
+      id: exists
+      run: |
+        tag="${{ hashFiles('.github/slurm/**') }}"
+        if docker manifest inspect "$IMAGE:$tag" > /dev/null 2>&1; then
+          echo "present=true" >> "$GITHUB_OUTPUT"
+        fi
+    - uses: docker/setup-buildx-action@v3
+      if: steps.exists.outputs.present != 'true'
+    - uses: docker/login-action@v3
+      if: steps.exists.outputs.present != 'true'
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build and push the Slurm image
+      if: steps.exists.outputs.present != 'true'
+      uses: docker/build-push-action@v6
+      with:
+        context: .github/slurm
+        push: true
+        tags: ${{ env.IMAGE }}:${{ hashFiles('.github/slurm/**') }}
+        cache-from: type=gha,scope=slurm-${{ hashFiles('.github/slurm/**') }}
+        cache-to: type=gha,mode=max,scope=slurm-${{ hashFiles('.github/slurm/**') }}
+
+  test-slurm:
+    needs: [plan, slurm-image]
+    # slurm-image is skipped on PRs; its failure only means the job builds the image itself
+    if: ${{ !cancelled() && needs.plan.outputs.full == 'true' }}
     strategy:
       # Full tier only (the fast tier excludes the slurm marker): the same Python range as `test`
       matrix:
@@ -282,8 +331,17 @@ jobs:
       uses: astral-sh/setup-uv@v10.3.3
       with:
         enable-cache: false
+    - name: Pull the published Slurm image (anonymous, read-only)
+      id: pull
+      run: |
+        if docker pull "ghcr.io/nipype/pydra-slurm:${{ hashFiles('.github/slurm/**') }}"; then
+          docker tag "ghcr.io/nipype/pydra-slurm:${{ hashFiles('.github/slurm/**') }}" pydra-slurm:ci
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+        fi
     - uses: docker/setup-buildx-action@v3
+      if: steps.pull.outputs.hit != 'true'
     - name: Build the Slurm image (layer cache keyed on the Dockerfile, which pins the base by digest)
+      if: steps.pull.outputs.hit != 'true'
       uses: docker/build-push-action@v6
       with:
         context: .github/slurm
