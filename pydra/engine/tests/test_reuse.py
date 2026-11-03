@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import threading
 import platform
 import sys
 import attrs
@@ -12,7 +13,6 @@ from pydra.engine.store import PickleStore, context_key
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
 from pydra.utils.hash import hash_function
-
 
 # Worker processes cannot import the test modules, so they receive their classes by value
 cloudpickle.register_pickle_by_value(sys.modules[__name__])
@@ -203,15 +203,59 @@ def test_worker_reuse_is_judged_by_the_recorded_context(tmp_path):
     assert _runs(log) == 1
 
 
-def test_other_context_keeps_the_first_result(tmp_path):
+def test_other_context_keeps_the_first_result(worker, tmp_path):
     log = tmp_path / "log"
     for tag in ("a", "b", "a", "b"):
         with Submitter(
-            cache_root=tmp_path / "cache", environment=Tagged(tag=tag)
+            worker=worker, cache_root=tmp_path / "cache", environment=Tagged(tag=tag)
         ) as sub:
             result = sub(Logged(a=1, log=str(log)))
         assert result.environment_checksum == Tagged(tag=tag).checksum()
     assert _runs(log) == 2
+
+
+def test_any_reuses_the_other_context_under_each_worker(worker, tmp_path):
+    log = tmp_path / "log"
+    results = []
+    for tag in ("a", "b"):
+        with Submitter(
+            worker=worker,
+            cache_root=tmp_path / "cache",
+            environment=Tagged(tag=tag),
+            reuse="any",
+        ) as sub:
+            results.append(sub(Logged(a=1, log=str(log))))
+    assert [r.cross_context for r in results] == [False, True]
+    assert results[1].environment_checksum == Tagged(tag="a").checksum()
+    assert _runs(log) == 1
+
+
+@pytest.mark.timeout(120)
+def test_concurrent_submissions_run_a_job_once(tmp_path):
+    """Two submitters, each with its own cf process, start the same job at once on one
+    cache: the lock makes one of them compute it and the other reuse the result"""
+    log = tmp_path / "log"
+    start = threading.Barrier(2)
+    results, errors = [], []
+
+    def submit():
+        try:
+            with Submitter(
+                worker="cf", n_procs=1, cache_root=tmp_path / "cache"
+            ) as sub:
+                start.wait(30)
+                results.append(sub(Logged(a=1, log=str(log)), raise_errors=True))
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=submit) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(100)
+    assert not errors
+    assert [r.outputs.out for r in results] == [2, 2]
+    assert _runs(log) == 1
 
 
 def test_combined_lookup_carries_the_job_context(tmp_path):
