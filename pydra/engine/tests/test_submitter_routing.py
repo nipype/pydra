@@ -166,18 +166,61 @@ def PidPipeline(x: int):
     return prep.out, train.out, post.out
 
 
-def test_mixed_run_on_a_process_pool_and_in_process(tmp_path):
+def test_mixed_run_on_a_process_pool_and_in_process(worker, tmp_path):
     with Submitter(
-        worker="cf",
+        worker=worker,
         workers={"local": "debug"},
         router=tag_router({"gpu": "local"}),
         cache_root=tmp_path,
     ) as sub:
         outputs = sub(PidPipeline(x=0), raise_errors=True).outputs
-    # the tagged node ran in this process, the others in pool processes
+    # the tagged node ran in this process, the others where the default worker runs them
     assert outputs.train == os.getpid()
-    assert outputs.prep != os.getpid()
-    assert outputs.post != os.getpid()
+    for pid in (outputs.prep, outputs.post):
+        assert (pid == os.getpid()) == (worker == "debug")
+
+
+@python.define
+def Rendezvous(x: int, me: str, peer: str, sync: str) -> int:
+    """Return the pid once the peer job is also running, so the two provably overlap"""
+    import time
+    from pathlib import Path
+
+    sync = Path(sync)
+    (sync / me).write_text(str(os.getpid()))
+    deadline = time.monotonic() + 60  # bound only
+    while not (sync / peer).exists():
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"{peer} never started: jobs did not run concurrently")
+        time.sleep(0.01)
+    return os.getpid()
+
+
+@workflow.define(outputs=["a", "b"])
+def RoutedSiblings(sync: str):
+    a = workflow.add(Rendezvous(x=1, me="a", peer="b", sync=sync), name="a")
+    b = workflow.add(
+        Rendezvous(x=2, me="b", peer="a", sync=sync), name="b", resources=GPU
+    )
+    return a.out, b.out
+
+
+@pytest.mark.timeout(120)
+def test_routed_jobs_run_concurrently_on_separate_process_pools(tmp_path):
+    """The default pool and a routed pool each run one of two sibling jobs at once, in
+    two processes other than this one"""
+    sync = tmp_path / "sync"
+    sync.mkdir()
+    with Submitter(
+        worker="cf",
+        workers={"pool": "cf"},
+        router=tag_router({"gpu": "pool"}),
+        n_procs=2,
+        cache_root=tmp_path / "cache",
+    ) as sub:
+        outputs = sub(RoutedSiblings(sync=str(sync)), raise_errors=True).outputs
+    assert len({outputs.a, outputs.b}) == 2
+    assert os.getpid() not in (outputs.a, outputs.b)
 
 
 @workflow.define(outputs=["out"])
