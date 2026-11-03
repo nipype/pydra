@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import time
 import typing as ty
 from pathlib import Path
@@ -205,10 +206,11 @@ class ReusePolicy(ty.Protocol):
 
 def _known(context: Context) -> bool:
     """Whether every part of a context is known: its layout is this pydra's and the
-    versions of the packages its task reaches are recorded"""
+    identities of the packages its task reaches are recorded"""
     packages = context.get("packages")
     return (
-        context.get("record") == RECORD
+        "unknown" not in context
+        and context.get("record") == RECORD
         and isinstance(packages, ty.Mapping)
         and None not in packages.values()
         and all(context.get(k) is not None for k in ConsistentReuse.EQUAL)
@@ -442,7 +444,9 @@ class PickleStore:
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
         lease.cache_dir.mkdir(parents=True, exist_ok=True)
-        (lease.cache_dir / CONTEXT_FILE).write_text(
-            json.dumps(result.context, sort_keys=True)
-        )
+        with tempfile.NamedTemporaryFile(
+            "w", dir=lease.cache_dir, prefix=CONTEXT_FILE, delete=False
+        ) as f:
+            json.dump(result.context, f, sort_keys=True)
+        os.replace(f.name, lease.cache_dir / CONTEXT_FILE)
         save(lease.cache_dir, result=result, job=job)
