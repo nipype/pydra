@@ -4,6 +4,7 @@ import inspect
 from typing import dataclass_transform
 import attrs
 from pydra.utils.general import get_fields, asdict
+from pydra.utils.hash import check_code_hash
 from pydra.compose import base
 from pydra.compose.base import (
     ensure_field_objects,
@@ -99,6 +100,7 @@ def define(
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
     version: str | None = None,
     resources: "ComputeResources | None" = None,
+    code_hash: str | None = None,
     checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
     """
@@ -129,6 +131,14 @@ def define(
         identified only by name and version, so a warning is issued for them.
     resources: ComputeResources, optional
         What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
+    code_hash: str, optional
+        How far the checksum follows the code the function reaches. ``"function"``
+        hashes its own code and the values it reads (closure cells and globals);
+        ``"module"`` adds the functions and classes it reaches in its own module;
+        ``"user"`` adds all reachable code that is not library code (the standard
+        library, installed distributions and pydra; see ``PYDRA_USER_PACKAGES`` in
+        `pydra.utils.hash`). Library code is identified by its qualified name. By
+        default the ``PYDRA_CODE_HASH`` environment variable, otherwise ``"user"``.
     checksum: callable, optional
         A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
         as the task's ``__checksum__``: its return value is the job checksum and
@@ -214,6 +224,7 @@ def define(
                 stacklevel=2,
             )
         defn._version = version
+        defn._code_hash = None if code_hash is None else check_code_hash(code_hash)
         return defn
 
     if wrapped is not None:

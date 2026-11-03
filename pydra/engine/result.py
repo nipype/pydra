@@ -3,6 +3,9 @@
 from pathlib import Path
 import typing as ty
 import attrs
+import functools
+import inspect
+import io
 import pickle
 import time
 import os
@@ -21,6 +24,80 @@ from pydra.compose import workflow, base
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+
+
+_SKELETONS = ("_make_skeleton_class", "_make_skeleton_enum")
+_SETSTATE = "_class_setstate"
+_TRACKER = ("_DYNAMIC_CLASS_TRACKER_BY_ID", "_DYNAMIC_CLASS_TRACKER_LOCK")
+
+
+class UnsupportedCloudpickleError(RuntimeError):
+    """The installed cloudpickle lacks the helpers pydra intercepts to load results
+    without changing the classes of the loading process"""
+
+
+@functools.cache
+def _tracker_args() -> dict[str, int]:
+    """The position of the class tracker id in the arguments of each cloudpickle
+    skeleton function, checking that every helper pydra intercepts exists"""
+    missing = [
+        n for n in (*_SKELETONS, _SETSTATE, *_TRACKER) if not hasattr(cp.cloudpickle, n)
+    ]
+    positions = {}
+    for name in _SKELETONS:
+        if name in missing:
+            continue
+        parameters = list(inspect.signature(getattr(cp.cloudpickle, name)).parameters)
+        if "class_tracker_id" in parameters:
+            positions[name] = parameters.index("class_tracker_id")
+        else:
+            missing.append(f"{name}(class_tracker_id=...)")
+    if missing:
+        raise UnsupportedCloudpickleError(
+            f"cloudpickle {cp.__version__} has no {', '.join(missing)}, which pydra "
+            "uses to load results without replacing the task classes of this process. "
+            "Install a cloudpickle release that provides them (pydra is tested with "
+            "cloudpickle 3.x), and report the incompatibility to pydra"
+        )
+    return positions
+
+
+class _ClassKeepingUnpickler(pickle.Unpickler):
+    """Unpickles objects whose classes (or enums) cloudpickle pickled by value without
+    changing those classes when this process already holds them (when it pickled
+    them): such a class is restored as it is, rather than its attributes, such as the
+    function of a task, being replaced by the pickled copies"""
+
+    def __init__(self, file: ty.BinaryIO):
+        super().__init__(file)
+        self._existing: set[int] = set()
+
+    def find_class(self, module: str, name: str) -> ty.Any:
+        if module == "cloudpickle.cloudpickle":
+            if name in _SKELETONS:
+                return functools.partial(self._make_skeleton, name)
+            if name == _SETSTATE:
+                return self._class_setstate
+        return super().find_class(module, name)
+
+    def _make_skeleton(self, name: str, *args: ty.Any) -> type:
+        tracker_id = args[_tracker_args()[name]]
+        with cp.cloudpickle._DYNAMIC_CLASS_TRACKER_LOCK:
+            existing = tracker_id in cp.cloudpickle._DYNAMIC_CLASS_TRACKER_BY_ID
+        klass = getattr(cp.cloudpickle, name)(*args)
+        if existing:
+            self._existing.add(id(klass))
+        return klass
+
+    def _class_setstate(self, obj: type, state: ty.Any) -> type:
+        if id(obj) in self._existing:
+            return obj
+        return getattr(cp.cloudpickle, _SETSTATE)(obj, state)
+
+
+def _loads(data: bytes) -> ty.Any:
+    _tracker_args()
+    return _ClassKeepingUnpickler(io.BytesIO(data)).load()
 
 
 TaskType = ty.TypeVar("TaskType", bound=base.Task)
@@ -72,7 +149,7 @@ class Result(ty.Generic[OutputsType]):
     def __setstate__(self, state):
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
-                state[attr] = cp.loads(state[attr])
+                state[attr] = _loads(state[attr])
         for name, val in state.items():
             setattr(self, name, val)
 

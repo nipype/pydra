@@ -32,6 +32,55 @@ The byte representation of each object is hashed using the BlakeB cryptographic 
 and these hashes are then combined to create a hash of the entire inputs object.
 
 
+Hashing the code of a task
+--------------------------
+
+The function of a Python task, and the constructor of a workflow, are hashed by a
+version-neutral encoding of their syntax tree, so comments, formatting, docstrings and
+signature annotations do not change the hash. Their ``code_hash`` tier sets how far the
+hash follows the code they reach:
+
+* ``"function"``: the function's own code, and the values it reads that are not
+  inputs, the variables it closes over and the globals it reads, hashed by value as
+  inputs are;
+* ``"module"``: as ``"function"``, plus the functions and classes it reaches in its own
+  module (their code, defaults and bases, and the values they read);
+* ``"user"`` (the default): as ``"module"``, plus all reachable code that is not
+  library code.
+
+A function or class outside the tier is identified by its qualified name. Library code,
+the standard library, packages installed in ``site-packages`` and pydra itself, is
+always identified by its qualified name, never its code: its version is not part of the
+hash. The ``PYDRA_USER_PACKAGES`` environment variable overrides that boundary with a
+comma-separated list of packages, ``mypkg`` to hash an installed package as user code
+and ``-mypkg`` to treat one (for instance an editable install) as library code. Set the
+tier per task with ``python.define(code_hash=...)`` or ``workflow.define(code_hash=...)``,
+or for all tasks with the ``PYDRA_CODE_HASH`` environment variable.
+
+A library function or class is identified by name only when its module holds it at that
+name; one that it does not (a closure made by a library factory, a generated function)
+is hashed by its definition and the values it captures, as user code is.
+
+The boundary has three consequences to be aware of:
+
+* pydra is library code, including ``pydra.tasks.*`` packages, so authors of such a
+  package set ``PYDRA_USER_PACKAGES=pydra.tasks.<theirs>`` for its code to be hashed
+  while they develop it;
+* code that is not installed in ``site-packages`` (vendored on ``PYTHONPATH``, installed
+  with ``pip --target``, or run from a zipapp) counts as user code, so it is walked and
+  hashed, which costs time; name it with ``-pkg`` to treat it as library code;
+* state owned by a library (``os.environ``, a library's module-level registries) is
+  identified by its name, not its value, so changing it does not change the hash;
+  pass such values as inputs.
+
+The walk of a function is memoised per process: it is reused while the source files it
+reached are unchanged and every name it reads still refers to the same object, and the
+values it reads are hashed again each time. Globals are read when the job is submitted,
+so rebinding a name in a notebook changes the hash. A global that cannot be hashed raises the ordinary hashing error, naming it; pass
+it as an input instead. The hash is only computed in the submitting process and carried
+with the job, so workers never recompute it.
+
+
 File hash caching by mtime
 --------------------------
 

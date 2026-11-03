@@ -9,6 +9,7 @@ from pydra.utils.general import get_fields
 from pydra.utils.typing import StateArray, is_lazy
 from pydra.utils.hash import hash_function
 import os
+import types
 import itertools
 from collections import Counter
 import attrs
@@ -18,7 +19,7 @@ from pydra.utils.general import (
     attrs_fields,
     attrs_values,
 )
-from pydra.utils.hash import Cache, hash_single, register_serializer
+from pydra.utils.hash import Cache, TaskFunction, hash_single, register_serializer
 from .field import Field, Arg, Out
 
 if ty.TYPE_CHECKING:
@@ -167,6 +168,9 @@ class Task(ty.Generic[OutputsType]):
     # Declared version of the task, which stands in for the code of the executor in the
     # checksum when set (see ``python.define(version=...)``)
     _version: ty.ClassVar[str | None] = None
+    # How far the hash of the executor follows the code it reaches (see
+    # ``python.define(code_hash=...)``), `pydra.utils.hash.code_hash_default` when None
+    _code_hash: ty.ClassVar[str | None] = None
 
     # A ComputeResources or None: what the task asks of a scheduler worker. Set by
     # `define`, never hashed. Unannotated because `get_type_hints` runs on task classes.
@@ -511,14 +515,18 @@ class Task(ty.Generic[OutputsType]):
         """The value of field ``name`` as it enters the hash: the executor of a task
         with a declared version is replaced by its module, name and version."""
         value = getattr(self, name)
-        if self._version is not None and name == self._executor_name:
-            return f"{value.__module__}.{value.__qualname__}=={self._version}"
+        if name == self._executor_name:
+            if self._version is not None:
+                return f"{value.__module__}.{value.__qualname__}=={self._version}"
+            if isinstance(value, types.FunctionType):
+                return TaskFunction(value)
         return value
 
     def _hash_changes(self):
         """Detects any changes in the hashed values between the current inputs and the
-        previously calculated values"""
-        _, new_hashes = self._compute_hashes()
+        previously calculated values. The executor is not rehashed: its hash is only
+        computed by the process that submits the job."""
+        _, new_hashes = self._compute_hashes(exclude=self._executor_name)
         return [k for k, v in new_hashes.items() if v != self._hashes[k]]
 
     def _element_checksums(self) -> list[str]:
@@ -558,12 +566,15 @@ class Task(ty.Generic[OutputsType]):
             )
         return inputs
 
-    def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
-        """Compute a basic hash for any given set of fields."""
+    def _compute_hashes(
+        self, exclude: str | None = None
+    ) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
+        """Compute a basic hash for any given set of fields, leaving out `exclude`"""
         inp_dict = self._checksum_inputs()
+        inp_dict.pop(exclude, None)
         # Include the outputs class, just in case any names or types have changed
         inp_dict["Outputs"] = self.Outputs
-        hash_cache = Cache()
+        hash_cache = Cache(code_hash=self._code_hash)
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
         }
