@@ -264,20 +264,13 @@ jobs:
     needs: plan
     if: needs.plan.outputs.full == 'true'
     strategy:
+      # Full tier only (the fast tier excludes the slurm marker): the same Python range as `test`
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
       fail-fast: false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      # Docker Hub repository adi611/docker-centos7-slurm, tag 23.02.1 (CentOS 7, Slurm 23.02.1 with
-      # accounting), pushed 2023-09-10. The workflow pulls it by manifest digest, so a moved or
-      # replaced tag cannot change what runs; the loaded image id is checked against the config
-      # digest from the same manifest. Nothing is downloaded except from the registry.
-      SLURM_IMAGE: adi611/docker-centos7-slurm
-      SLURM_IMAGE_DIGEST: sha256:9c84018e704e2f8fe375b1d27f40414761b4930ac33f5fb473382728f9a32752
-      SLURM_IMAGE_ID: sha256:0f82bed88212638b96c743af961174c393b40b228fe3b397e650c98070855f5d
-      DOCKER_IMAGE_TAR: ${{ github.workspace }}/../slurm-image.tar
       UV_CACHE_HOST: ${{ github.workspace }}/../uv-cache-slurm
     steps:
     - name: Disable etelemetry
@@ -289,12 +282,15 @@ jobs:
       uses: astral-sh/setup-uv@v10.3.3
       with:
         enable-cache: false
-    - name: Restore the slurm image tarball (cache key is the image digest)
-      id: image-cache
-      uses: actions/cache@v4
+    - uses: docker/setup-buildx-action@v3
+    - name: Build the Slurm image (layer cache keyed on the Dockerfile, which pins the base by digest)
+      uses: docker/build-push-action@v6
       with:
-        path: ${{ env.DOCKER_IMAGE_TAR }}
-        key: slurm-image-${{ env.SLURM_IMAGE_DIGEST }}
+        context: .github/slurm
+        load: true
+        tags: pydra-slurm:ci
+        cache-from: type=gha,scope=slurm-${{ hashFiles('.github/slurm/**') }}
+        cache-to: type=gha,mode=max,scope=slurm-${{ hashFiles('.github/slurm/**') }}
     - name: Restore the container's uv cache
       uses: actions/cache@v4
       with:
@@ -302,39 +298,26 @@ jobs:
         key: slurm-uv-${{ hashFiles('pyproject.toml') }}
         restore-keys: |
           slurm-uv-
-    - name: Pull the pinned image (cache miss) or load it from the tarball (cache hit)
+    - name: Start the container and wait for the daemons
       run: |
-        if [ "${{ steps.image-cache.outputs.cache-hit }}" = true ]; then
-          docker load -i "$DOCKER_IMAGE_TAR"
-        else
-          docker pull "$SLURM_IMAGE@$SLURM_IMAGE_DIGEST"
-          docker save -o "$DOCKER_IMAGE_TAR" "$SLURM_IMAGE@$SLURM_IMAGE_DIGEST"
-        fi
-        loaded=$(docker image inspect --format '{{.Id}}' "$SLURM_IMAGE_ID")
-        [ "$loaded" = "$SLURM_IMAGE_ID" ] || { echo "image id $loaded != $SLURM_IMAGE_ID"; exit 1; }
-        docker tag "$SLURM_IMAGE_ID" pydra-slurm:pinned
         mkdir -p "$UV_CACHE_HOST"
-        # Have image running in the background
-        docker run -itd -h slurmctl --cap-add sys_admin -d --name slurm -v "$(pwd)":/pydra -v "$UV_CACHE_HOST":/root/.cache/uv -e NO_ET=$NO_ET pydra-slurm:pinned
-    - name: Display previous jobs with sacct
-      run: |
-        echo "Waiting for the slurm daemons"
-        for i in $(seq 1 60); do
-          docker exec slurm bash -c "sacctmgr -n show cluster" > /dev/null 2>&1 && break
+        docker run -d -h slurmctl --name slurm -v "$(pwd)":/pydra -v "$UV_CACHE_HOST":/root/.cache/uv -e NO_ET=$NO_ET pydra-slurm:ci
+        for i in $(seq 1 120); do
+          if docker exec slurm bash -c "sinfo -h | grep -qE 'idle|mix' && sacctmgr -n show cluster | grep -q linux" > /dev/null 2>&1; then
+            docker exec slurm bash -c "sinfo && sbatch --version && sacct -X"
+            exit 0
+          fi
           sleep 1
         done
-        docker exec slurm bash -c "sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
-        docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
-        if [ $? -ne 0 ]; then
-            echo "Slurm docker image error"
-            exit 1
-        fi
+        echo "Slurm daemons did not become ready"
+        docker logs slurm
+        exit 1
     - name: Setup Python
       run: |
-        # uv installs a prebuilt CPython in about a second; the previous pyenv build compiled it from source
+        # uv installs a prebuilt CPython in about a second
         docker cp "$(command -v uv)" slurm:/usr/local/bin/uv
         docker exec slurm bash -c "uv venv --python ${{ matrix.python-version }} /opt/venv"
-        docker exec slurm bash -c "uv pip install --python /opt/venv/bin/python 'numpy<2' 'pillow<12.3' -e /pydra[test,psij] && /opt/venv/bin/python -c 'import pydra.engine; print(pydra.utils.__version__)'"
+        docker exec slurm bash -c "uv pip install --python /opt/venv/bin/python -e /pydra[test,psij] && /opt/venv/bin/python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
         docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
