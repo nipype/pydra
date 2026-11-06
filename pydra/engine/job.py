@@ -24,6 +24,7 @@ from pydra.engine.result import (
     record_error,
 )
 from pydra.utils.general import (
+    atomic_write,
     attrs_values,
     attrs_fields,
     get_fields,
@@ -321,7 +322,7 @@ class Job(ty.Generic[TaskType]):
         """
         # adding info file with the checksum in case the job was cancelled
         # and the lockfile has to be removed
-        with open(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
+        with atomic_write(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
         if not self.can_resume and self.cache_dir.exists():
             remove_from_cache(self.cache_dir)

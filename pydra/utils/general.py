@@ -1,8 +1,10 @@
 """Administrative support for the engine framework."""
 
 from pathlib import Path
+import contextlib
 import inspect
 import os
+import uuid
 import sys
 import typing as ty
 from collections.abc import Mapping, Collection
@@ -58,6 +60,42 @@ def default_run_cache_root() -> Path:
     """The run cache used when no ``cache_root`` is given, ``run-cache`` within
     `user_cache_root`"""
     return user_cache_root() / "run-cache"
+
+
+CACHE_FILE_MODE = 0o644
+"""Mode requested for cache files; the process umask is applied on top, so the
+result is ``0o644 & ~umask``"""
+
+
+@contextlib.contextmanager
+def atomic_write(path: os.PathLike, mode: str = "wb") -> ty.Iterator[ty.IO]:
+    """Open a temporary file beside ``path`` and move it over ``path`` on success.
+
+    The destination is replaced with ``os.replace`` only after the file has been
+    written, flushed and closed, so ``path`` holds either the previous content or the
+    complete new content, never a partial file. On any error the temporary file is
+    removed and ``path`` is untouched. The file is created with
+    ``CACHE_FILE_MODE & ~umask``.
+
+    Parameters
+    ----------
+    path : os.PathLike
+        the final name of the file
+    mode : str, optional
+        ``"wb"`` (default) or ``"w"``
+    """
+    path = Path(path)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, CACHE_FILE_MODE)
+    try:
+        with os.fdopen(fd, mode) as fp:
+            yield fp
+            fp.flush()
+            os.fsync(fp.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def add_exc_note(e: Exception, note: str) -> Exception:
@@ -128,7 +166,6 @@ def get_undefined_symbols(
 
     # Define a visitor class to traverse the AST
     class SymbolVisitor(ast.NodeVisitor):
-
         def __init__(self):
             # Initialize sets to track defined and used symbols
             self.defined_symbols = set()
