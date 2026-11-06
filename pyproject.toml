@@ -142,7 +142,7 @@ allow-direct-references = true
 exclude = "pydra/utils/_version.py"
 
 [tool.codespell]
-ignore-words-list = "nd,afile,inpt,fpr"
+ignore-words-list = "nd,afile,inpt,fpr,statics"
 
 [tool.pytest.ini_options]
 minversion = "6"
