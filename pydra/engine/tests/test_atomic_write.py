@@ -1,5 +1,6 @@
 import os
 import stat
+import sys
 from pathlib import Path
 import pytest
 from pydra.engine.result import record_error, save, Result
@@ -8,6 +9,11 @@ from pydra.utils.general import atomic_write
 
 def mode(path: Path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
+
+
+posix_only = pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX permission bits are not applied on Windows"
+)
 
 
 @pytest.fixture
@@ -86,6 +92,7 @@ def test_final_name_absent_until_replace(tmp_path: Path, monkeypatch):
     assert seen == {"target_exists_before": False, "src_content": b"abc"}
 
 
+@posix_only
 @pytest.mark.parametrize(
     "mask, expected", [(0o077, 0o600), (0o022, 0o644), (0o002, 0o644), (0o000, 0o644)]
 )
@@ -97,6 +104,7 @@ def test_mode_follows_umask(tmp_path: Path, umask, mask, expected):
     assert mode(target) == expected
 
 
+@posix_only
 @pytest.mark.parametrize("mask, expected", [(0o077, 0o600), (0o000, 0o644)])
 def test_cache_pickles_have_stated_mode(tmp_path: Path, umask, mask, expected):
     umask(mask)

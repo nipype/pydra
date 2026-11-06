@@ -9,7 +9,6 @@ import shutil
 import sys
 import time
 import typing as ty
-import uuid
 import warnings
 from pathlib import Path
 import attrs
