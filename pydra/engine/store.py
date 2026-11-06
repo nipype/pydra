@@ -9,14 +9,13 @@ import shutil
 import sys
 import time
 import typing as ty
-import uuid
 import warnings
 from pathlib import Path
 import attrs
 from filelock import SoftFileLock, Timeout
 from pydra.engine.context import RECORD
 from pydra.engine.result import Result, load_result, save
-from pydra.utils.general import ensure_list
+from pydra.utils.general import ensure_list, atomic_write
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
@@ -433,6 +432,11 @@ class ResultStore(ty.Protocol):
 class PickleStore:
     """Results pickled into ``<cache_root>/<checksum>/<context key>/_result.pklz``.
 
+    Looking up a result unpickles its files, so ``cache_root`` and every entry of
+    ``readonly_caches`` trust everyone who can write to them with code execution as the
+    reading user. Only point the store at caches whose writers you trust. Files are
+    written atomically with mode ``0o644`` adjusted by the umask.
+
     Parameters
     ----------
     cache_root : os.PathLike
@@ -477,9 +481,7 @@ class PickleStore:
                 return result
         if type(self.reuse) is ExactReuse:
             return None
-        for slot, other in (
-            self.stored_contexts(checksum) if stored is None else stored
-        ):
+        for slot, other in self.stored_contexts(checksum) if stored is None else stored:
             if not self.reuse.accept(other, context, task):
                 continue
             result = load_result(f"{checksum}/{slot.name}", [slot.parent.parent])
@@ -527,14 +529,6 @@ class PickleStore:
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
         lease.cache_dir.mkdir(parents=True, exist_ok=True)
-        # created with the mode the umask gives the store's other files
-        temporary = lease.cache_dir / f"{CONTEXT_FILE}.{uuid.uuid4().hex}"
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
-        try:
-            with os.fdopen(fd, "w") as f:
-                json.dump(result.context, f, sort_keys=True)
-            os.replace(temporary, lease.cache_dir / CONTEXT_FILE)
-        except BaseException:
-            temporary.unlink(missing_ok=True)
-            raise
+        with atomic_write(lease.cache_dir / CONTEXT_FILE, "w") as f:
+            json.dump(result.context, f, sort_keys=True)
         save(lease.cache_dir, result=result, job=job)

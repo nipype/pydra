@@ -18,6 +18,7 @@ from pydra.utils.general import (
     attrs_values,
     attrs_fields,
     is_workflow,
+    atomic_write,
 )
 from pydra.utils.typing import copy_nested_files
 from pydra.compose import workflow, base
@@ -302,13 +303,13 @@ def save(
                 result.outputs = copyfile_workflow(
                     wf_path=task_path, outputs=result.outputs
                 )
-            with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
+            with atomic_write(task_path / f"{name_prefix}_result.pklz") as fp:
                 cp.dump(result, fp)
         if job:
-            with (task_path / f"{name_prefix}_job.pklz").open("wb") as fp:
+            with atomic_write(task_path / f"{name_prefix}_job.pklz") as fp:
                 cp.dump(job, fp)
         if return_values:
-            with (task_path / f"{name_prefix}_return_values.pklz").open("wb") as fp:
+            with atomic_write(task_path / f"{name_prefix}_return_values.pklz") as fp:
                 cp.dump(job, fp)
 
 
@@ -411,7 +412,7 @@ def record_error(error_path, error):
         "error message": error,
     }
 
-    with (error_path / "_error.pklz").open("wb") as fp:
+    with atomic_write(error_path / "_error.pklz") as fp:
         cp.dump(full_error, fp)
 
     return error_path / "_error.pklz"

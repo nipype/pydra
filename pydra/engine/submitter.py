@@ -80,7 +80,9 @@ class Submitter:
     ----------
     cache_root : os.PathLike, optional
         Cache directory where the working directory/results for the job will be
-        stored, by default None
+        stored, by default None. Loading from a cache unpickles its files, so
+        pointing Pydra at a cache trusts everyone who can write to it with code
+        execution as the reading user: only use caches whose writers you trust
     worker : str or Worker, optional
         The worker to use, by default "cf". It runs every job the router does not send
         elsewhere, and is available to the router under the name ``"default"``
@@ -94,7 +96,10 @@ class Submitter:
     environment: Environment, optional
         The execution environment to use, by default None
     readonly_caches : list[os.PathLike], optional
-        Alternate cache locations to check for pre-computed results, by default None
+        Alternate cache locations to check for pre-computed results, by default None.
+        These are unpickled like ``cache_root``, so they trust everyone who can write
+        to them with code execution as the reading user: only list caches whose
+        writers you trust
     max_concurrent: int | float, optional
         Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
     audit_flags : AuditFlag, optional
