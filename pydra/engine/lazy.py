@@ -191,7 +191,13 @@ class LazyOutField(LazyField[T]):
                 raise RuntimeError(
                     f"Could not find results of '{job.name}' node in a sub-directory "
                     f"named '{{{job.checksum}}}' in any of the cache locations.\n"
-                    + "\n".join(str(p) for p in set(job.readonly_caches))
+                    + "\n".join(
+                        str(p)
+                        for p in [
+                            job.cache_root,
+                            *getattr(job.store, "readonly_caches", []),
+                        ]
+                    )
                     + f"\n\nThis is likely due to hash changes in '{job.name}' node inputs. "
                     f"Current values and hashes: {job.inputs}, "
                     f"{job.task._hash}\n\n"
@@ -216,7 +222,7 @@ class LazyOutField(LazyField[T]):
         if not upstream_node._tasks:  # No jobs, return empty state array
             return StateArray()
         if not upstream_node.state:  # Return the singular job
-            value = retrieve_from_job(upstream_node._tasks[None])
+            value = retrieve_from_job(upstream_node.job(None))
             if state_index is not None:
                 return value[state_index]
             return value
@@ -228,13 +234,11 @@ class LazyOutField(LazyField[T]):
 
             # Group the values of the tasks into list before returning
             def group_values(index: int) -> list:
-                # Get a slice of the tasks that match the given index of the state array of the
-                # combined values
-                final_index = set(upstream_node.state.states_ind_final[index].items())
+                # Get the values of the tasks that are combined into the given index of
+                # the state array of the combined values
                 return [
-                    retrieve_from_job(upstream_node._tasks[i])
-                    for i, ind in enumerate(upstream_node.state.states_ind)
-                    if set(ind.items()).issuperset(final_index)
+                    retrieve_from_job(upstream_node.job(i))
+                    for i in upstream_node._read_indices(index)
                 ]
 
             if state_index is None:  # return all groups if no index is given
@@ -245,7 +249,7 @@ class LazyOutField(LazyField[T]):
         if state_index is None:  # return all jobs in a state array
             return StateArray(retrieve_from_job(j) for j in upstream_node.tasks)
         # Select the job that matches the index
-        return retrieve_from_job(upstream_node._tasks[state_index])
+        return retrieve_from_job(upstream_node.job(state_index))
 
     @property
     def _source(self):

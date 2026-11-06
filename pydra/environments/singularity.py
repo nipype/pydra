@@ -30,7 +30,7 @@ class Singularity(base.Container):
         )
         keys = ["return_code", "stdout", "stderr"]
 
-        job.cache_dir.mkdir(exist_ok=True)
+        job.cache_dir.mkdir(parents=True, exist_ok=True)
         values = base.execute(
             singularity_args
             + [singularity_img]

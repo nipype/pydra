@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import json
 import re
 import typing as ty
 from tempfile import gettempdir
@@ -9,6 +8,7 @@ from shutil import copyfile
 import logging
 import attrs
 from pydra.engine.job import Job, save
+from pydra.engine.store import remove_from_cache
 from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
@@ -17,17 +17,25 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
 
 
+class SlurmJobCancelled(RuntimeError):
+    """A job that was cancelled; it is never requeued."""
+
+
 @attrs.define
 class SlurmWorker(base.Worker):
     """A worker to execute tasks on SLURM systems."""
 
     _cmd = "sbatch"
+    _requeue_states = ("TIMEOUT", "PREEMPTED", "NODE_FAIL", "BOOT_FAIL")
+
     _sacct_re = re.compile(
-        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
+        r"(?P<jobid>[^|\s]*)\|(?P<status>\w*)(?: by \d+)?\+?\|"
+        r"(?P<exit_code>\d+):\d+"
     )
 
     poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)
     sbatch_args: str = ""
+    requeue_budget: int = attrs.field(default=3, validator=attrs.validators.ge(0))
     error: dict[str, ty.Any] = attrs.field(factory=dict)
 
     def __getstate__(self) -> dict[str, ty.Any]:
@@ -81,6 +89,60 @@ class SlurmWorker(base.Worker):
             fp.writelines(bcmd)
         return script_dir, batchscript
 
+    @staticmethod
+    def _apply_resources(sargs, resources):
+        """Replace the worker-wide options of every family the node's resources set.
+
+        Options of one family conflict (``--mem`` with ``--mem-per-cpu``, ``--gres=gpu``
+        with ``--gpus``), so the node's resources replace the whole family.
+        """
+        families = []
+        if resources.cpus is not None:
+            families.append(("--cpus-per-task", "-c"))
+        if resources.mem is not None:
+            families.append(("--mem", "--mem-per-cpu", "--mem-per-gpu"))
+        if resources.time is not None:
+            families.append(("--time", "-t"))
+        if resources.gpus is not None:
+            families.append(
+                (
+                    "--gpus",
+                    "-G",
+                    "--gpus-per-node",
+                    "--gpus-per-task",
+                    "--gpus-per-socket",
+                    "--cpus-per-gpu",
+                    "--mem-per-gpu",
+                )
+            )
+        names = {name for family in families for name in family}
+        kept = []
+        i = 0
+        while i < len(sargs):
+            token = sargs[i]
+            if token.startswith("--"):
+                name, has_value, value = token.partition("=")
+            elif token.startswith("-") and len(token) > 1:
+                name, value = token[:2], token[2:]
+                has_value = bool(value)
+            else:
+                name, has_value, value = None, True, ""
+            if name is not None and not has_value and i + 1 < len(sargs):
+                value = sargs[i + 1]
+            consumed = 1 if has_value else 2
+            if name in names:
+                i += consumed
+            elif name == "--gres" and resources.gpus is not None:
+                items = value.split(",")
+                rest = [x for x in items if not x.startswith("gpu")]
+                if rest:
+                    kept.append(f"--gres={','.join(rest)}")
+                i += consumed
+            else:
+                kept.append(token)
+                i += 1
+        return kept + resources.slurm_args()
+
     async def run(self, job: "Job[base.TaskType]", rerun: bool = False) -> "Result":
         """Worker submission API."""
         script_dir, batch_script = self._prepare_runscripts(job, rerun=rerun)
@@ -88,6 +150,8 @@ class SlurmWorker(base.Worker):
             logger.warning("Temporary directories may not be shared across computers")
         script_dir = job.cache_root / f"{self.plugin_name()}_scripts" / job.uid
         sargs = self.sbatch_args.split()
+        if job.resources is not None:
+            sargs = self._apply_resources(sargs, job.resources)
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
             jobname = ".".join((job.name, job.uid))
@@ -116,6 +180,7 @@ class SlurmWorker(base.Worker):
         if error_file:
             error_file = error_file.replace("%j", jobid)
         self.error[jobid] = error_file.replace("%j", jobid)
+        requeues = 0
         # intermittent polling
         while True:
             # 3 possibilities
@@ -125,18 +190,25 @@ class SlurmWorker(base.Worker):
             done = await self._poll_job(jobid)
             if done:
                 if (
-                    done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
+                    done in self._requeue_states
                     and "--no-requeue" not in self.sbatch_args
                 ):
-                    # loading info about job with a specific uid
-                    info_file = job.cache_root / f"{job.uid}_info.json"
-                    if info_file.exists():
-                        checksum = json.loads(info_file.read_text())["checksum"]
-                        if (job.cache_root / f"{checksum}.lock").exists():
-                            # for pyt3.8 we could you missing_ok=True
-                            (job.cache_root / f"{checksum}.lock").unlink()
+                    if requeues >= self.requeue_budget:
+                        raise RuntimeError(
+                            f"Slurm job {jobid} ended {done} and the requeue budget "
+                            f"({self.requeue_budget}) is spent"
+                        )
+                    requeues += 1
+                    remove_from_cache(job.lockfile)
                     cmd_re = ("scontrol", "requeue", jobid)
-                    await base.read_and_display_async(*cmd_re, hide_display=True)
+                    rc, _, stderr = await base.read_and_display_async(
+                        *cmd_re, hide_display=True
+                    )
+                    if rc:
+                        raise RuntimeError(
+                            f"Slurm job {jobid} ended {done} but `scontrol requeue` "
+                            f"failed: {stderr.strip()}"
+                        )
                 else:
                     return True
             await asyncio.sleep(self.poll_delay)
@@ -152,20 +224,31 @@ class SlurmWorker(base.Worker):
         return False
 
     async def _verify_exit_code(self, jobid):
-        cmd = ("sacct", "-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
+        cmd = ("sacct", "-n", "-X", "-P", "-j", jobid, "-o", "JobID,State,ExitCode")
         _, stdout, _ = await base.read_and_display_async(*cmd, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self._sacct_re.search(stdout)
+        if m is None:
+            raise RuntimeError(f"Could not parse sacct output: {stdout!r}")
         error_file = self.error[jobid]
+        if m.group("status") == "CANCELLED":
+            raise SlurmJobCancelled(
+                f"Slurm job {jobid} was cancelled and is not requeued"
+            )
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
-            if m.group("status") in ["CANCELLED", "TIMEOUT", "PREEMPTED"]:
+            if m.group("status") in self._requeue_states:
                 return m.group("status")
             elif m.group("status") in ["RUNNING", "PENDING"]:
                 return False
             # TODO: potential for requeuing
             # parsing the error message
-            error_line = Path(error_file).read_text().split("\n")[-2]
+            try:
+                error_text = Path(error_file).read_text()
+            except OSError:
+                error_text = ""
+            error_lines = [line for line in error_text.splitlines() if line]
+            error_line = error_lines[-1] if error_lines else ""
             if "Exception" in error_line:
                 error_message = error_line.replace("Exception: ", "")
             elif "Error" in error_line:

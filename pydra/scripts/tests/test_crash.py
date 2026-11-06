@@ -1,4 +1,5 @@
 import pytest
+from pydra.engine.store import PickleStore
 from pydra.scripts.cli import crash
 from pydra.tasks.testing import Divide
 from traceback import format_exception
@@ -11,10 +12,12 @@ def test_crash_cli(cli_runner, tmp_path):
     with pytest.raises(ZeroDivisionError):
         divide(cache_root=tmp_path)
 
+    (slot,) = PickleStore(tmp_path).slots(divide._checksum)
+    error_file = slot / "_error.pklz"
     result = cli_runner(
         crash,
         [
-            f"{tmp_path}/{divide._checksum}/_error.pklz",
+            str(error_file),
             "--rerun",
             "--debugger",
             "pdb",

@@ -1,5 +1,4 @@
 import typing as ty
-import os
 import pytest
 from pathlib import Path
 import glob as glob
@@ -54,8 +53,8 @@ def test_python_output():
     assert hasattr(outputs, "output")
     assert outputs.output == 1.1
 
-    assert os.path.exists(
-        default_run_cache_root / f"python-{funky._hash}" / "_result.pklz"
+    assert list(
+        (default_run_cache_root() / f"python-{funky._hash}").glob("*/_result.pklz")
     )
     funky()  # should not recompute
     funky.a = 2
@@ -121,8 +120,8 @@ def test_python_output_multreturn():
     assert set(f.name for f in get_fields(funky.Outputs)) == {"fractional", "integer"}
 
     outputs = funky()
-    assert os.path.exists(
-        default_run_cache_root / f"python-{funky._hash}" / "_result.pklz"
+    assert list(
+        (default_run_cache_root() / f"python-{funky._hash}").glob("*/_result.pklz")
     )
     assert hasattr(outputs, "fractional")
     assert outputs.fractional == 0.5
@@ -430,7 +429,7 @@ def test_halfpython_output(tmp_path):
     assert hasattr(outputs, "out")
     assert outputs.out == 30
 
-    assert Path(cache_root / f"python-{funky._hash}" / "_result.pklz").exists()
+    assert list((cache_root / f"python-{funky._hash}").glob("*/_result.pklz"))
 
     funky(cache_root=cache_root)  # should not recompute
     funky.a = 11
@@ -477,11 +476,11 @@ def test_halfpython_output_multreturn(tmp_path):
     assert hasattr(outputs, "out1")
     assert outputs.out1 == 11
 
-    assert Path(cache_root / f"python-{funky._hash}" / "_result.pklz").exists()
+    assert list((cache_root / f"python-{funky._hash}").glob("*/_result.pklz"))
 
     funky(cache_root=cache_root)  # should not recompute
     funky.a = 11
-    assert not Path(cache_root / f"python-{funky._hash}" / "_result.pklz").exists()
+    assert not list((cache_root / f"python-{funky._hash}").glob("*/_result.pklz"))
     outputs = funky(cache_root=cache_root)
     assert outputs.out1 == 12
     help = task_help(funky)
@@ -819,6 +818,7 @@ def test_output_spec_func_4():
     assert outputs.out_list == 3.5
 
 
+@pytest.mark.real_worker
 def test_functask_callable(tmpdir):
     # no submitter or worker
     foo = FunAddTwo(a=1)

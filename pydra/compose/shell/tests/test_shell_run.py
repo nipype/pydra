@@ -29,7 +29,6 @@ if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
 def test_shell_cmd_1(worker, results_function, tmp_path):
     """simple command, no arguments"""
@@ -38,7 +37,7 @@ def test_shell_cmd_1(worker, results_function, tmp_path):
     assert shelly.cmdline == " ".join(cmd)
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
-    assert Path(outputs.stdout.rstrip()).parent == tmp_path
+    assert Path(outputs.stdout.rstrip()).parent.parent == tmp_path
     assert outputs.return_code == 0
     assert outputs.stderr == ""
 
@@ -54,7 +53,7 @@ def test_shell_cmd_1_strip(worker, results_function, tmp_path):
     assert shelly.cmdline == " ".join(cmd)
 
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
-    assert Path(outputs.stdout).parent == tmp_path
+    assert Path(outputs.stdout).parent.parent == tmp_path
     assert outputs.return_code == 0
     assert outputs.stderr == ""
 
@@ -110,7 +109,6 @@ def test_shell_cmd_2b(worker, results_function, tmp_path):
 # tests with State
 
 
-@pytest.mark.flaky(reruns=2)
 def test_shell_cmd_3(worker, tmp_path):
     """commands without arguments
     splitter = executable
@@ -122,7 +120,7 @@ def test_shell_cmd_3(worker, tmp_path):
 
     # assert shelly.cmdline == ["pwd", "whoami"]
     outputs = shelly(worker=worker, cache_root=tmp_path)
-    assert Path(outputs.stdout[0].rstrip()).parent == tmp_path
+    assert Path(outputs.stdout[0].rstrip()).parent.parent == tmp_path
 
     if "USER" in os.environ:
         assert outputs.stdout[1] == f"{os.environ['USER']}\n"
@@ -753,7 +751,7 @@ def test_shell_cmd_inputspec_7(worker, results_function, tmp_path):
     out1 = outputs.out1.fspath
     assert out1.exists()
     # checking if the file is created in a good place
-    assert out1.parent.parent == cache_root
+    assert out1.parent.parent.parent == cache_root
     assert out1.name == "newfile_tmp.txt"
 
 
@@ -813,7 +811,7 @@ def test_shell_cmd_inputspec_7c(worker, results_function, tmp_path):
     outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
     assert outputs.stdout == ""
     # checking if the file is created in a good place
-    assert outputs.out1.fspath.parent.parent == tmp_path
+    assert outputs.out1.fspath.parent.parent.parent == tmp_path
     assert outputs.out1.fspath.name == "newfile_tmp.txt"
 
 
@@ -933,7 +931,7 @@ def test_shell_cmd_inputspec_9(tmp_path, worker, results_function):
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "file_copy.txt"
     # checking if it's created in a good place
-    assert outputs.file_copy.fspath.parent.parent == tmp_path
+    assert outputs.file_copy.fspath.parent.parent.parent == tmp_path
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter])
@@ -971,7 +969,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, worker, results_function):
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "file_copy.txt"
     # checking if it's created in a good place
-    assert outputs.file_copy.fspath.parent.parent == tmp_path
+    assert outputs.file_copy.fspath.parent.parent.parent == tmp_path
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1046,7 +1044,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, worker, results_function):
     assert outputs.stdout == ""
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "file"
-    assert outputs.file_copy.fspath.parent.parent == tmp_path
+    assert outputs.file_copy.fspath.parent.parent.parent == tmp_path
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1088,7 +1086,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, worker, results_function):
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "my_file_copy.txt"
     # checking if it's created in a good place
-    assert outputs.file_copy.fspath.parent.parent == tmp_path
+    assert outputs.file_copy.fspath.parent.parent.parent == tmp_path
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1250,7 +1248,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, worker, results_function):
     assert fspath.exists()
     assert fspath.name == "file_even.txt"
     # checking if it's created in a good place
-    assert fspath.parent.parent == tmp_path
+    assert fspath.parent.parent.parent == tmp_path
 
 
 def test_shell_cmd_inputspec_with_iterable():
@@ -1318,7 +1316,7 @@ def test_shell_cmd_inputspec_copyfile_1(worker, results_function, tmp_path):
     assert outputs.stdout == ""
     assert outputs.out_file.fspath.exists()
     # the file is  copied, and than it is changed in place
-    assert outputs.out_file.fspath.parent.parent == tmp_path
+    assert outputs.out_file.fspath.parent.parent.parent == tmp_path
     with open(outputs.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
@@ -1360,7 +1358,7 @@ def test_shell_cmd_inputspec_copyfile_1a(worker, results_function, tmp_path):
     assert outputs.stdout == ""
     assert outputs.out_file.fspath.exists()
     # the file is uses a soft link, but it creates and an extra copy before modifying
-    assert outputs.out_file.fspath.parent.parent == tmp_path
+    assert outputs.out_file.fspath.parent.parent.parent == tmp_path
 
     assert outputs.out_file.fspath.parent.joinpath(
         outputs.out_file.fspath.name + "s"
@@ -1504,7 +1502,7 @@ def test_shell_cmd_inputspec_state_2(worker, results_function, tmp_path):
     for i in range(len(args)):
         assert outputs.stdout[i] == ""
         assert outputs.out1[i].fspath.exists()
-        assert outputs.out1[i].fspath.parent.parent == tmp_path
+        assert outputs.out1[i].fspath.parent.parent.parent == tmp_path
 
 
 @pytest.mark.parametrize("results_function", [run_no_submitter, run_submitter])
@@ -1582,7 +1580,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(worker, results_function, tmp_path
         assert outputs.stdout[i] == ""
         assert outputs.out_file[i].fspath.exists()
         # the file is  copied, and than it is changed in place
-        assert outputs.out_file[i].fspath.parent.parent == tmp_path
+        assert outputs.out_file[i].fspath.parent.parent.parent == tmp_path
         with open(outputs.out_file[i]) as f:
             assert f"hi {txt_l[i]}\n" == f.read()
         # the original file is unchanged
@@ -1593,7 +1591,6 @@ def test_shell_cmd_inputspec_copyfile_state_1(worker, results_function, tmp_path
 # customised input_spec in Workflow
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_shell_cmd_2(worker, tmp_path):
     """a workflow with input with defined path_template (str)
     that requires wf.lzin
@@ -1630,7 +1627,7 @@ def test_wf_shell_cmd_2(worker, tmp_path):
 
     assert res.outputs.stdout == ""
     assert res.outputs.out_f.fspath.exists()
-    assert res.outputs.out_f.fspath.parent.parent == tmp_path
+    assert res.outputs.out_f.fspath.parent.parent.parent == tmp_path
 
 
 def test_wf_shell_cmd_2a(worker, tmp_path):
@@ -1733,10 +1730,10 @@ def test_wf_shell_cmd_3(worker, tmp_path):
 
     assert res.outputs.out1 == ""
     assert res.outputs.touch_file.fspath.exists()
-    assert res.outputs.touch_file.fspath.parent.parent == tmp_path
+    assert res.outputs.touch_file.fspath.parent.parent.parent == tmp_path
     assert res.outputs.out2 == ""
     assert res.outputs.cp_file.fspath.exists()
-    assert res.outputs.cp_file.fspath.parent.parent == tmp_path
+    assert res.outputs.cp_file.fspath.parent.parent.parent == tmp_path
 
 
 def test_wf_shell_cmd_3a(worker, tmp_path):
@@ -1864,10 +1861,10 @@ def test_wf_shell_cmd_state_1(worker, tmp_path):
     for i in range(2):
         assert res.outputs.out1[i] == ""
         assert res.outputs.touch_file[i].fspath.exists()
-        assert res.outputs.touch_file[i].fspath.parent.parent == tmp_path
+        assert res.outputs.touch_file[i].fspath.parent.parent.parent == tmp_path
         assert res.outputs.out2[i] == ""
         assert res.outputs.cp_file[i].fspath.exists()
-        assert res.outputs.cp_file[i].fspath.parent.parent == tmp_path
+        assert res.outputs.cp_file[i].fspath.parent.parent.parent == tmp_path
 
 
 def test_wf_shell_cmd_ndst_1(worker, tmp_path):
@@ -2484,7 +2481,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, worker, results_function):
     assert get_output_names(shelly) == ["resultsDir", "return_code", "stderr", "stdout"]
     cache_root = tmp_path / "cache"
     outputs = results_function(shelly, worker=worker, cache_root=cache_root)
-    cache_dir = next(p for p in cache_root.iterdir() if p.name.startswith("shell-"))
+    cache_dir = next(cache_root.glob("shell-*/*"))
     assert (cache_dir / Path("test")).exists()
     assert get_lowest_directory(outputs.resultsDir) == get_lowest_directory(
         cache_dir / Path("test")
@@ -2554,7 +2551,7 @@ def test_shell_cmd_outputspec_wf_1(worker, tmp_path):
     assert res.outputs.stdout == ""
     assert res.outputs.newfile.fspath.exists()
     # checking if the file was copied to the wf dir
-    assert res.outputs.newfile.fspath.parent.parent == tmp_path
+    assert res.outputs.newfile.fspath.parent.parent.parent == tmp_path
 
 
 def test_shell_cmd_inputspec_outputspec_1(tmp_path):
@@ -3267,11 +3264,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
     cache_root = tmp_path / "cache"
     outputs = shelly(cache_root=cache_root)
     # the first output file is created
-    assert (
-        outputs.out_1.fspath
-        == next(p for p in cache_root.iterdir() if p.name.startswith("shell-"))
-        / "test_1.nii"
-    )
+    assert outputs.out_1.fspath == next(cache_root.glob("shell-*/*")) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
     assert outputs.out_2 is None
@@ -3308,11 +3301,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
     cache_root = tmp_path / "cache"
     outputs = shelly(cache_root=cache_root)
     # the first output file is created
-    assert (
-        outputs.out_1.fspath
-        == next(p for p in cache_root.iterdir() if p.name.startswith("shell-"))
-        / "test_1.nii"
-    )
+    assert outputs.out_1.fspath == next(cache_root.glob("shell-*/*")) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
     # the second output file is not created
     assert outputs.out_2 is None
@@ -3350,10 +3339,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
     ):
         shelly(cache_root=cache_root)
     # checking if the first output was created
-    assert (
-        next(p for p in cache_root.iterdir() if p.name.startswith("shell-"))
-        / "test_1.nii"
-    ).exists()
+    assert (next(cache_root.glob("shell-*/*")) / "test_1.nii").exists()
 
 
 def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):

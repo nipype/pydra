@@ -413,7 +413,8 @@ def test_shell_fileout(tmp_path):
     call_cache = newcache("native_call")
 
     outputs = shelly(environment=native.Environment(), cache_root=call_cache)
-    assert Path(outputs.file_copy) == call_cache / shelly._checksum / "file_copy.txt"
+    assert Path(outputs.file_copy).parent.parent == call_cache / shelly._checksum
+    assert Path(outputs.file_copy).name == "file_copy.txt"
 
 
 def test_shell_fileout_st(tmp_path):

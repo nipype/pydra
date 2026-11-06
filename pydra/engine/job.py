@@ -5,43 +5,42 @@ import logging
 import os
 import inspect
 import sys
-import asyncio
 from pathlib import Path
 import typing as ty
 from uuid import uuid4
-import shutil
 from traceback import format_exception
 import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
 from pydra.utils.hash import hash_function
-from filelock import SoftFileLock, Timeout
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
+from pydra.engine.context import job_context
+from pydra.engine.store import check_declared_code, remove_from_cache
 from pydra.engine.result import (
     RuntimeSpec,
     Result,
     record_error,
 )
 from pydra.utils.general import (
+    atomic_write,
     attrs_values,
     attrs_fields,
     get_fields,
-    ensure_list,
     is_workflow,
 )
 from pydra.utils.typing import is_lazy
-from pydra.engine.result import load_result, save
+from pydra.engine.result import save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
 from pydra.environments.base import Environment
+from pydra.utils.resources import ComputeResources
 from pydra.utils.etelemetry import check_latest_version
 
 logger = logging.getLogger("pydra")
 
-develop = False
 
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import Submitter
@@ -96,6 +95,7 @@ class Job(ty.Generic[TaskType]):
         environment: "Environment | None" = None,
         state_index: int | None = None,
         hooks: TaskHooks | None = None,
+        resources: ComputeResources | None = None,
     ):
         """
         Initialize a job.
@@ -128,6 +128,7 @@ class Job(ty.Generic[TaskType]):
         )
         self.name = name
         self.state_index = state_index
+        self.resources = resources if resources is not None else task._resources
 
         self.return_values = {}
         self._result = {}
@@ -146,11 +147,18 @@ class Job(ty.Generic[TaskType]):
         # was just written by run(). Not included in __getstate__ so it is
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
+        # Set while the job is queued to run in this process's submitter and its run
+        # has not finished
+        self._awaiting_run = False
+        self._context = None
+        # The stored contexts of the checksum read by `check_declared_code`, for the
+        # job's first lookup
+        self._stored_contexts = None
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
         self.cache_root = submitter.cache_root
-        self.all_caches = submitter.readonly_caches
+        self.store = submitter.store
         self._run_start_time = None
 
     @property
@@ -160,33 +168,26 @@ class Job(ty.Generic[TaskType]):
     @property
     def is_async(self) -> bool:
         """Check to see if the job should be run asynchronously."""
-        return self.submitter.worker.is_async and is_workflow(self.task)
+        return is_workflow(self.task) and self.submitter.worker_for(self).is_async
 
     @cache_root.setter
     def cache_root(self, path: os.PathLike):
         self._cache_root = Path(path)
 
-    @property
-    def all_caches(self):
-        """Get the list of cache sources."""
-        return ensure_list(self.cache_root) + self._readonly_caches
-
-    @all_caches.setter
-    def all_caches(self, locations):
-        if locations is not None:
-            self._readonly_caches = [Path(loc) for loc in ensure_list(locations)]
-        else:
-            self._readonly_caches = []
-
     def __str__(self):
         return self.name
 
     def __getstate__(self):
+        # Carry the checksum, so a worker never rehashes the task's code
+        self.checksum
         state = self.__dict__.copy()
         state["task"] = cp.dumps(state["task"])
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
+        state.pop("_awaiting_run", None)
+        # Carry the submitting process's context, so a worker judges reuse as it would
+        state["_context"] = self.context
         return state
 
     def __setstate__(self, state):
@@ -196,6 +197,9 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
+        self.__dict__.setdefault("_awaiting_run", False)
+        self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("_stored_contexts", None)
 
     @classmethod
     def check_etelemetry(cls) -> None:
@@ -222,8 +226,24 @@ class Job(ty.Generic[TaskType]):
         return self._checksum
 
     @property
+    def context(self) -> dict[str, ty.Any]:
+        """The execution context of the job (see `pydra.engine.context.job_context`),
+        built once in the submitting process and carried with the job to the worker. It
+        selects the job's slot in the store, is recorded on its result and is what a
+        later job's context is compared with, so every process uses this one object.
+        Building it reports a declared version whose stored results were computed from
+        other code (see `pydra.engine.store.check_declared_code`)."""
+        if self._context is None:
+            self.checksum  # collects the library modules the task's code reaches
+            self._context = job_context(self.task, self.environment)
+            self._stored_contexts = check_declared_code(
+                self.store, self.checksum, self._context, self.task
+            )
+        return self._context
+
+    @property
     def lockfile(self):
-        return self.cache_dir.with_suffix(".lock")
+        return self.store.lockfile(self.checksum, self.context)
 
     @property
     def uid(self):
@@ -246,7 +266,7 @@ class Job(ty.Generic[TaskType]):
     @property
     def cache_dir(self):
         """Get the filesystem path where outputs will be written."""
-        return self.cache_root / self.checksum
+        return self.store.cache_dir(self.checksum, self.context)
 
     @property
     def inputs(self) -> dict[str, ty.Any]:
@@ -302,11 +322,11 @@ class Job(ty.Generic[TaskType]):
         """
         # adding info file with the checksum in case the job was cancelled
         # and the lockfile has to be removed
-        with open(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
+        with atomic_write(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
         if not self.can_resume and self.cache_dir.exists():
-            shutil.rmtree(self.cache_dir)
-        self.cache_dir.mkdir(parents=False, exist_ok=self.can_resume)
+            remove_from_cache(self.cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=self.can_resume)
         # Save job pkl into the output directory for future reference
         save(self.cache_dir, job=self)
 
@@ -325,14 +345,16 @@ class Job(ty.Generic[TaskType]):
 
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        logger.debug(
-            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
-        )
-        with SoftFileLock(self.lockfile):
+        lease = self.store.acquire(self.checksum, self.context)
+        logger.debug("'%s' is attempting to acquire %s", self.name, lease)
+        with lease:
             if not (rerun):
                 result = self.result()
                 if result is not None and not result.errored:
+                    self._awaiting_run = False
+                    self._cached_result = result
                     return result
+            self._errored = False
             cwd = os.getcwd()
             self._populate_filesystem()
             os.chdir(self.cache_dir)
@@ -342,6 +364,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
+                context=self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -358,12 +381,14 @@ class Job(ty.Generic[TaskType]):
                 result.errored = True
                 raise
             finally:
-                self.hooks.post_run_task(self, result)
-                self.audit.finalize_audit(result=result)
-                save(self.cache_dir, result=result, job=self)
-                # removing the additional file with the checksum
-                (self.cache_root / f"{self.uid}_info.json").unlink()
-                os.chdir(cwd)
+                try:
+                    self.hooks.post_run_task(self, result)
+                    self.audit.finalize_audit(result=result)
+                    self.store.commit(lease, result, job=self)
+                    self._awaiting_run = False
+                    self._remove_info_file()
+                finally:
+                    os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
@@ -386,14 +411,16 @@ class Job(ty.Generic[TaskType]):
         """
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        logger.debug(
-            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
-        )
-        async with PydraFileLock(self.lockfile):
+        lease = self.store.acquire(self.checksum, self.context)
+        logger.debug("'%s' is attempting to acquire %s", self.name, lease)
+        async with lease:
             if not rerun:
                 result = self.result()
                 if result is not None and not result.errored:
+                    self._awaiting_run = False
+                    self._cached_result = result
                     return result
+            self._errored = False
             cwd = os.getcwd()
             self._populate_filesystem()
             result = Result(
@@ -402,6 +429,7 @@ class Job(ty.Generic[TaskType]):
                 errored=False,
                 cache_dir=self.cache_dir,
                 task=self.task,
+                context=self.context,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir)
@@ -417,17 +445,28 @@ class Job(ty.Generic[TaskType]):
                 self._errored = True
                 raise
             finally:
-                self.hooks.post_run_task(self, result)
-                self.audit.finalize_audit(result=result)
-                save(self.cache_dir, result=result, job=self)
-                # removing the additional file with the checksum
-                (self.cache_root / f"{self.uid}_info.json").unlink()
-                os.chdir(cwd)
+                try:
+                    self.hooks.post_run_task(self, result)
+                    self.audit.finalize_audit(result=result)
+                    self.store.commit(lease, result, job=self)
+                    self._awaiting_run = False
+                    self._remove_info_file()
+                finally:
+                    os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
         self._check_for_hash_changes()
         return result
+
+    def _remove_info_file(self):
+        """Remove the job's ``<uid>_info.json``; one that cannot be removed is logged
+        and left in place."""
+        info_file = self.cache_root / f"{self.uid}_info.json"
+        try:
+            remove_from_cache(info_file)
+        except OSError as e:
+            logger.warning("Could not remove %s: %s", info_file, e)
 
     def pickle_task(self):
         """Pickling the tasks with full inputs"""
@@ -442,6 +481,8 @@ class Job(ty.Generic[TaskType]):
         """Check whether the tasks has been finalized and all outputs are stored."""
         # if any of the field is lazy, there is no need to check results
         if has_lazy(self.task):
+            return False
+        if self._awaiting_run:
             return False
         _result = self.result()
         if _result:
@@ -463,26 +504,6 @@ class Job(ty.Generic[TaskType]):
             return None
         self._run_start_time = datetime.fromtimestamp(stat.st_ctime)
         return self._run_start_time
-
-    def _combined_output(self, return_inputs=False):
-        combined_results = []
-        for gr, ind_l in self.state.final_combined_ind_mapping.items():
-            combined_results_gr = []
-            for ind in ind_l:
-                result = load_result(self.checksum_states(ind), self.all_caches)
-                if result is None:
-                    return None
-                if return_inputs is True or return_inputs == "val":
-                    result = (self.state.states_val[ind], result)
-                elif return_inputs is True or return_inputs == "ind":
-                    result = (self.state.states_ind[ind], result)
-                combined_results_gr.append(result)
-            combined_results.append(combined_results_gr)
-        if len(combined_results) == 1 and self.state.splitter_rpn_final == []:
-            # in case it's full combiner, removing the nested structure
-            return combined_results[0]
-        else:
-            return combined_results
 
     def result(self, return_inputs=False):
         """
@@ -515,8 +536,14 @@ class Job(ty.Generic[TaskType]):
         if self._cached_result is not None and not return_inputs:
             return self._cached_result
 
-        checksum = self.checksum
-        result = load_result(checksum, self.all_caches)
+        context, stored = self.context, self._stored_contexts
+        if stored is None:
+            result = self.store.lookup(self.checksum, context, task=self.task)
+        else:
+            self._stored_contexts = None
+            result = self.store.lookup(
+                self.checksum, context, task=self.task, stored=stored
+            )
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":
@@ -534,6 +561,13 @@ class Job(ty.Generic[TaskType]):
     def _check_for_hash_changes(self):
         from pydra.utils.typing import TypeParser
 
+        if hasattr(self.task, "__checksum__"):
+            if (checksum := self.task._checksum) != self.checksum:
+                raise RuntimeError(
+                    f"The checksum supplied by the '{self.name}' job of {type(self)} type "
+                    f"changed during its execution, from {self.checksum!r} to {checksum!r}"
+                )
+            return
         # For tasks whose input fields contain no FileSet types and no values
         # with custom __bytes_repr__ methods, hashes cannot change during
         # execution (scalar/pure-Python values are immutable from Pydra's
@@ -606,32 +640,6 @@ def has_lazy(obj):
         if is_lazy(getattr(obj, f.name)):
             return True
     return False
-
-
-class PydraFileLock:
-    """Wrapper for filelock's SoftFileLock that makes it work with asyncio."""
-
-    def __init__(self, lockfile):
-        self.lockfile = lockfile
-        self.timeout = 0.1
-
-    async def __aenter__(self):
-        lock = SoftFileLock(self.lockfile)
-        acquired_lock = False
-        while not acquired_lock:
-            try:
-                lock.acquire(timeout=0)
-                acquired_lock = True
-            except Timeout:
-                await asyncio.sleep(self.timeout)
-                if self.timeout <= 2:
-                    self.timeout = self.timeout * 2
-        self.lock = lock
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        self.lock.release()
-        return None
 
 
 def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:

@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import json
 import re
 import attrs
 import typing as ty
@@ -10,6 +9,7 @@ from shutil import copyfile, which
 import random
 import logging
 from pydra.engine.job import Job, save, load_job
+from pydra.engine.store import remove_from_cache
 from pydra.workers import base
 
 logger = logging.getLogger("pydra.worker")
@@ -48,11 +48,20 @@ class SgeWorker(base.Worker):
         Number of poll_delays before running qacct to check if a job has been evicted by SGE
     collect_jobs_delay : int
         Number of seconds to wait for the list of jobs for a job array to fill
+    pe_name : str
+        Parallel environment that ``ComputeResources.cpus`` is requested from
+    mem_resource : str
+        Resource that ``ComputeResources.mem`` is requested as
+    gpu_resource : str
+        Resource that ``ComputeResources.gpus`` is requested as
+    gpu_type_resource : str, optional
+        Resource that ``ComputeResources.gpu_type`` is requested as; ``None`` leaves
+        it unmapped
     """
 
     _cmd = "qsub"
     _sacct_re = re.compile(
-        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
+        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +(?P<exit_code>\\d+):\\d+"
     )
 
     poll_delay: int = attrs.field(default=1, converter=base.ensure_non_negative)
@@ -66,7 +75,11 @@ class SgeWorker(base.Worker):
     polls_before_checking_evicted: int = 60
     collect_jobs_delay: int = 30
     default_qsub_args: str = ""
-    max_mem_free: int | None = None
+    pe_name: str = "smp"
+    mem_resource: str = "mem_free"
+    gpu_resource: str = "gpu"
+    gpu_type_resource: str | None = "gpu_type"
+    max_mem_free: int | None = None  # gigabytes across one job array
     error: dict[str, ty.Any] = attrs.field(factory=dict, init=False)
     tasks_to_run_by_threads_requested: dict[str, ty.Any] = attrs.field(
         factory=dict, init=False
@@ -107,6 +120,7 @@ class SgeWorker(base.Worker):
             cache_root = job.cache_root
             ind = None
             uid = job.uid
+            resources = job.resources
             try:
                 task_qsub_args = job.qsub_args
             except Exception:
@@ -115,10 +129,13 @@ class SgeWorker(base.Worker):
             ind = job[0]
             cache_root = job[-1].cache_root
             uid = f"{job[-1].uid}_{ind}"
+            resources = job[-1].resources
             try:
                 task_qsub_args = job[-1].qsub_args
             except Exception:
                 task_qsub_args = self.default_qsub_args
+        if resources is not None:
+            task_qsub_args = self._apply_resources(task_qsub_args, resources)
 
         script_dir = cache_root / f"{self.plugin_name()}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
@@ -149,11 +166,77 @@ class SgeWorker(base.Worker):
             task_qsub_args,
         )
 
-    async def get_tasks_to_run(self, task_qsub_args, mem_free):
+    def _apply_resources(self, qsub_args, resources):
+        """Replace the arguments the node's resources set, so the node wins."""
+        overridden = set()
+        if resources.mem is not None:
+            overridden.add(self.mem_resource)
+        if resources.time is not None:
+            overridden.add("h_rt")
+        if resources.gpus is not None:
+            overridden.add(self.gpu_resource)
+        if resources.gpu_type is not None and self.gpu_type_resource is not None:
+            overridden.add(self.gpu_type_resource)
+        tokens = qsub_args.split()
+        kept = []
+        i = 0
+        while i < len(tokens):
+            if tokens[i] == "-pe" and resources.cpus is not None:
+                i += 3
+            elif tokens[i] == "-l" and i + 1 < len(tokens):
+                items = [
+                    item
+                    for item in tokens[i + 1].split(",")
+                    if item.split("=")[0] not in overridden
+                ]
+                if items:
+                    kept += ["-l", ",".join(items)]
+                i += 2
+            else:
+                kept.append(tokens[i])
+                i += 1
+        new = resources.sge_args(
+            pe=self.pe_name,
+            mem=self.mem_resource,
+            gpu=self.gpu_resource,
+            gpu_type=self.gpu_type_resource,
+        )
+        return " ".join(kept + new)
+
+    def _requested(self, qsub_args):
+        """The threads and memory (``mem_free_cmd``) a job's qsub arguments ask for."""
+        tokens = qsub_args.split()
+        threads = self.default_threads_per_task
+        if "-pe" in tokens:
+            i = tokens.index("-pe")
+            if i + 2 < len(tokens) and tokens[i + 2].isdigit():
+                threads = int(tokens[i + 2])
+        mem_free = mem_free_cmd = None
+        for word in tokens:
+            if word.startswith(self.mem_resource):
+                mem_free_cmd = word
+                digits = re.findall(r"\d+", word)
+                if digits:
+                    mem_free = int(digits[0])
+                break
+        return threads, mem_free, mem_free_cmd
+
+    @staticmethod
+    def _gigabytes(mem_free_cmd):
+        """The memory in a ``name=<digits><K|M|G|T>`` argument, in gigabytes.
+
+        A bare number is bytes, as SGE reads it.
+        """
+        match = re.search(r"=(\d+)([KMGT]?)", mem_free_cmd.upper())
+        scale = {"": 1 / 1024**3, "K": 1 / 1024**2, "M": 1 / 1024, "G": 1, "T": 1024}
+        return int(match.group(1)) * scale[match.group(2)]
+
+    async def get_tasks_to_run(self, task_qsub_args, mem_free_cmd):
         # Extract the first N tasks to run
-        if mem_free is not None and self.max_mem_free is not None:
+        if mem_free_cmd is not None and self.max_mem_free is not None:
             max_job_array_length = min(
-                self.max_job_array_length, int(self.max_mem_free / mem_free)
+                self.max_job_array_length,
+                max(1, int(self.max_mem_free / self._gigabytes(mem_free_cmd))),
             )
         else:
             max_job_array_length = self.max_job_array_length
@@ -186,29 +269,14 @@ class SgeWorker(base.Worker):
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
         interpreter = "/bin/sh"
-        threads_requested = self.default_threads_per_task
-        if "smp" in task_qsub_args:
-            smp_index = task_qsub_args.split().index("smp")
-            if (
-                smp_index + 1 < len(task_qsub_args.split())
-                and task_qsub_args.split()[smp_index + 1].isdigit()
-            ):
-                threads_requested = int(task_qsub_args.split()[smp_index + 1])
-        # Get the amount of mem_free requested for the job
-        mem_free = None
-        if "mem_free" in task_qsub_args:
-            mem_free_cmd = [
-                word for word in task_qsub_args.split() if word.startswith("mem_free")
-            ][0]
-            if len(re.findall(r"\d+", mem_free_cmd)) > 0:
-                mem_free = int(re.findall(r"\d+", mem_free_cmd)[0])
+        threads_requested, mem_free, mem_free_cmd = self._requested(task_qsub_args)
 
         if (
             len(self.tasks_to_run_by_threads_requested.get(task_qsub_args))
             <= self.max_job_array_length
         ):
             await asyncio.sleep(self.collect_jobs_delay)
-        tasks_to_run = await self.get_tasks_to_run(task_qsub_args, mem_free)
+        tasks_to_run = await self.get_tasks_to_run(task_qsub_args, mem_free_cmd)
 
         if mem_free is not None:
             summed_mem_free_cmd = re.sub(
@@ -366,13 +434,7 @@ class SgeWorker(base.Worker):
                 or load_job(job_pkl=application_job_pkl).result().errored
             ):
                 self.job_pkls_rerun[job_pkl] = None
-                info_file = cache_root / f"{sge_task.uid}_info.json"
-                if info_file.exists():
-                    checksum = json.loads(info_file.read_text())["checksum"]
-                    if (cache_root / f"{checksum}.lock").exists():
-                        # for pyt3.8 we could use missing_ok=True
-                        (cache_root / f"{checksum}.lock").unlink()
-                    # Maybe wait a little to check if _error.pklz exists - not getting found immediately
+                remove_from_cache(sge_task.lockfile)
 
         # If the previous job array failed, run the array's script again and get the new jobid
         jobid = await self.submit_array_job(sargs, tasks_to_run, error_file)

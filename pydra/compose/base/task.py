@@ -1,7 +1,7 @@
 import typing as ty
 import re
 from pathlib import Path
-from copy import copy
+from copy import copy, deepcopy
 from typing import Self
 import attrs.validators
 from pydra.utils.typing import is_optional, is_fileset_or_union, is_truthy_falsy
@@ -9,6 +9,7 @@ from pydra.utils.general import get_fields
 from pydra.utils.typing import StateArray, is_lazy
 from pydra.utils.hash import hash_function
 import os
+import types
 import itertools
 from collections import Counter
 import attrs
@@ -18,7 +19,7 @@ from pydra.utils.general import (
     attrs_fields,
     attrs_values,
 )
-from pydra.utils.hash import Cache, hash_single, register_serializer
+from pydra.utils.hash import Cache, TaskFunction, hash_single, register_serializer
 from .field import Field, Arg, Out
 
 if ty.TYPE_CHECKING:
@@ -164,6 +165,16 @@ class Task(ty.Generic[OutputsType]):
 
     # The attribute containing the function/executable used to run the task
     _executor_name = None
+    # Declared version of the task, which stands in for the code of the executor, but
+    # not the values it reads, in the checksum when set (see ``python.define``)
+    _version: ty.ClassVar[str | None] = None
+    # How far the hash of the executor follows the code it reaches (see
+    # ``python.define(code_hash=...)``), `pydra.utils.hash.code_hash_default` when None
+    _code_hash: ty.ClassVar[str | None] = None
+
+    # A ComputeResources or None: what the task asks of a scheduler worker. Set by
+    # `define`, never hashed. Unannotated because `get_type_hints` runs on task classes.
+    _resources = None
 
     # Class attributes
     TASK_CLASS_ATTRS = ("xor",)
@@ -176,6 +187,12 @@ class Task(ty.Generic[OutputsType]):
     _combiner = attrs.field(default=None, init=False, repr=False)
     _container_ndim = attrs.field(default=None, init=False, repr=False)
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the library modules reached when the checksum was last computed
+    _code_modules = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the `code_digest`s of the functions with declared versions the checksum reached
+    # (its own, its nodes', its inputs'), by ``module.qualname==version``, when it was
+    # last computed
+    _declared_code = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
     BASE_ATTRS = ()
@@ -474,17 +491,77 @@ class Task(ty.Generic[OutputsType]):
 
     @property
     def _checksum(self):
+        """The job checksum: the value returned by the class's
+        ``__checksum__(self, inputs) -> str`` if it defines one (or is given one by
+        ``define(checksum=...)``), when no input is hashed, otherwise the task type and
+        the hash of the inputs. A supplied value must identify the task as well as its
+        inputs, as jobs with equal checksums share one result and run only once."""
+        if hasattr(self, "__checksum__"):
+            checksum = self.__checksum__(self._checksum_inputs(hashed=False))
+            if not isinstance(checksum, str):
+                raise TypeError(
+                    f"__checksum__ of {type(self).__name__} must return a str, "
+                    f"not {checksum!r}"
+                )
+            if (
+                checksum in ("", ".", "..")
+                or "\0" in checksum
+                or any(
+                    sep and sep in checksum for sep in ("/", "\\", os.sep, os.altsep)
+                )
+            ):
+                raise ValueError(
+                    f"__checksum__ of {type(self).__name__} must return a single path "
+                    f"component, not {checksum!r}"
+                )
+            return checksum
         return f"{self._task_type()}-{self._hash}"
+
+    def _hashed_value(self, name: str) -> ty.Any:
+        """The value of field ``name`` as it enters the hash: the code of the executor
+        of a task with a declared version is replaced by its module, name and version.
+        """
+        value = getattr(self, name)
+        if name == self._executor_name:
+            if isinstance(value, types.FunctionType):
+                return TaskFunction(value, version=self._version)
+            if self._version is not None:
+                return (
+                    f"version:{value.__module__}.{value.__qualname__}=={self._version}"
+                )
+        return value
 
     def _hash_changes(self):
         """Detects any changes in the hashed values between the current inputs and the
-        previously calculated values"""
-        _, new_hashes = self._compute_hashes()
+        previously calculated values. The executor is not rehashed: its hash is only
+        computed by the process that submits the job."""
+        _, new_hashes = self._compute_hashes(exclude=self._executor_name)
         return [k for k, v in new_hashes.items() if v != self._hashes[k]]
 
-    def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
-        """Compute a basic hash for any given set of fields."""
-        inp_dict = {}
+    def _element_checksums(self) -> list[str]:
+        """The supplied checksums of the elements of a split task, in state order"""
+        from pydra.engine.state import State, add_name_splitter
+
+        name = "element"
+        state = State(
+            name,
+            splitter=add_name_splitter(deepcopy(self._splitter), name),
+            container_ndim={
+                f"{name}.{k}": v for k, v in (self._container_ndim or {}).items()
+            },
+        )
+        split = {f"{name}.{f.name}": f.name for f in get_fields(self)}
+        state.prepare_states(
+            {n: getattr(self, split[n]) for n in state.splitter_rpn if n in split}
+        )
+        return [
+            attrs.evolve(self, **{split[k]: v for k, v in vals.items()})._checksum
+            for vals in state.states_val
+        ]
+
+    def _checksum_inputs(self, hashed: bool = True) -> dict[str, ty.Any]:
+        """The inputs that enter the checksum, as they are hashed or as they are set."""
+        inputs = {}
         for field in get_fields(self):
             if isinstance(field, Out):
                 continue  # Skip output fields
@@ -493,13 +570,28 @@ class Task(ty.Generic[OutputsType]):
                 continue
             if getattr(field, "container_path", False):
                 continue
-            inp_dict[field.name] = getattr(self, field.name)
+            inputs[field.name] = (
+                self._hashed_value(field.name) if hashed else getattr(self, field.name)
+            )
+        return inputs
+
+    def _compute_hashes(
+        self, exclude: str | None = None
+    ) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
+        """Compute a basic hash for any given set of fields, leaving out `exclude`"""
+        inp_dict = self._checksum_inputs()
+        inp_dict.pop(exclude, None)
         # Include the outputs class, just in case any names or types have changed
         inp_dict["Outputs"] = self.Outputs
-        hash_cache = Cache()
+        hash_cache = Cache(code_hash=self._code_hash)
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
         }
+        if exclude is None:
+            self._code_modules = frozenset(hash_cache.modules)
+            self._declared_code = {
+                k: ",".join(sorted(v)) for k, v in sorted(hash_cache.declared.items())
+            }
         return hash_function(sorted(field_hashes.items())), field_hashes
 
     def _rule_violations(self) -> list[str]:
@@ -624,10 +716,14 @@ class Task(ty.Generic[OutputsType]):
 @register_serializer
 def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
     yield f"task[{obj._task_type()}]:(".encode()
-    for field in get_fields(obj):
-        yield f"{field.name}=".encode()
-        yield hash_single(getattr(obj, field.name), cache)
-        yield b","
+    if hasattr(obj, "__checksum__"):
+        keys = obj._element_checksums() if obj._splitter else [obj._checksum]
+        yield f"__checksum__={keys},".encode()
+    else:
+        for field in get_fields(obj):
+            yield f"{field.name}=".encode()
+            yield hash_single(obj._hashed_value(field.name), cache)
+            yield b","
     yield b"_splitter="
     yield hash_single(obj._splitter, cache)
     yield b",_combiner="
