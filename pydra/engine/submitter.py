@@ -10,6 +10,7 @@ from tempfile import mkdtemp
 from copy import copy, deepcopy
 from datetime import datetime
 from collections import defaultdict
+from urllib.parse import quote
 import attrs
 import logging
 from pydra.engine.graph import DiGraph
@@ -320,7 +321,7 @@ class Submitter:
         # Construct the workflow
         wf = wf_job.task.construct()
         # Generate the execution graph
-        exec_graph = wf.execution_graph(submitter=self)
+        exec_graph = wf.execution_graph(submitter=self, cache_dir=wf_job.cache_dir)
         wf_job.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
@@ -341,7 +342,9 @@ class Submitter:
         """
         wf = workflow_task.task.construct()
         # Generate the execution graph
-        exec_graph = wf.execution_graph(submitter=self)
+        exec_graph = wf.execution_graph(
+            submitter=self, cache_dir=workflow_task.cache_dir
+        )
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
         # keep track of pending futures
         task_futures = set()
@@ -613,6 +616,7 @@ class NodeExecution(ty.Generic[TaskType]):
     _tasks: dict[int | None, "Job[TaskType]"] | None
 
     workflow: "Workflow"
+    cache_dir: Path | None
 
     graph: DiGraph["NodeExecution"] | None
 
@@ -621,6 +625,7 @@ class NodeExecution(ty.Generic[TaskType]):
         node: "Node",
         submitter: Submitter,
         workflow: "Workflow",
+        cache_dir: Path | None = None,
     ):
         self.name = node.name
         self.node = node
@@ -634,6 +639,7 @@ class NodeExecution(ty.Generic[TaskType]):
         self.running = {}  # Not used in logic, but may be useful for progress tracking
         self.unrunnable = defaultdict(list)
         self.workflow = workflow
+        self.cache_dir = cache_dir
         self.graph = None
 
     @property
@@ -681,23 +687,36 @@ class NodeExecution(ty.Generic[TaskType]):
             self.state.prepare_inputs()
             # Generate the tasks
             for index, split_defn in enumerate(self._split_task()):
-                self._tasks[index] = Job(
+                job = Job(
                     task=split_defn,
                     submitter=self.submitter,
                     environment=self.node._environment,
                     name=self.node.name,
                     hooks=self.node._hooks,
                     state_index=index,
+                    cache_dir_ref=self._cache_dir_ref(index),
                 )
+                job.create_cache_dir_ref()
+                self._tasks[index] = job
         else:
-            self._tasks[None] = Job(
+            job = Job(
                 task=self._resolve_lazy_inputs(task=self.node._task),
                 submitter=self.submitter,
                 environment=self.node._environment,
                 hooks=self.node._hooks,
                 name=self.node.name,
+                cache_dir_ref=self._cache_dir_ref(None),
             )
+            job.create_cache_dir_ref()
+            self._tasks[None] = job
         self.blocked = copy(self._tasks)
+
+    def _cache_dir_ref(self, state_index: int | None) -> Path | None:
+        if self.cache_dir is None:
+            return None
+        state_name = "single" if state_index is None else str(state_index)
+        node_name = f"node-{quote(self.name, safe='')}"
+        return self.cache_dir / "_nodes" / node_name / state_name
 
     @property
     def started(self) -> bool:

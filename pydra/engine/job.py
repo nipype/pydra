@@ -32,7 +32,7 @@ from pydra.utils.general import (
     is_workflow,
 )
 from pydra.utils.typing import is_lazy
-from pydra.engine.result import load_result, save
+from pydra.engine.result import load_result, load_result_from_dir, save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
@@ -84,6 +84,7 @@ class Job(ty.Generic[TaskType]):
     environment: "Environment | None"
     state_index: int
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
+    cache_dir_ref: Path | None
 
     _inputs: dict[str, ty.Any] | None = None
     _run_start_time: datetime | None
@@ -96,6 +97,7 @@ class Job(ty.Generic[TaskType]):
         environment: "Environment | None" = None,
         state_index: int | None = None,
         hooks: TaskHooks | None = None,
+        cache_dir_ref: os.PathLike | None = None,
     ):
         """
         Initialize a job.
@@ -128,6 +130,7 @@ class Job(ty.Generic[TaskType]):
         )
         self.name = name
         self.state_index = state_index
+        self.cache_dir_ref = Path(cache_dir_ref) if cache_dir_ref is not None else None
 
         self.return_values = {}
         self._result = {}
@@ -248,6 +251,48 @@ class Job(ty.Generic[TaskType]):
         """Get the filesystem path where outputs will be written."""
         return self.cache_root / self.checksum
 
+    def create_cache_dir_ref(
+        self,
+        target: os.PathLike | None = None,
+        *,
+        update: bool = False,
+    ) -> None:
+        """Create a stable workflow-local reference to this job's cache directory."""
+        if self.cache_dir_ref is None:
+            return
+        reference = self.cache_dir_ref
+        target = Path(target) if target is not None else self.cache_dir
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        if reference.exists() and not reference.is_symlink():
+            logger.warning(
+                "Cannot create cache reference %s because a non-symlink path exists",
+                reference,
+            )
+            return
+        if reference.is_symlink() and not update:
+            return
+        relative_target = os.path.relpath(target, start=reference.parent)
+        try:
+            if update and reference.is_symlink():
+                temporary = reference.with_name(f".{reference.name}-{self.uid}.tmp")
+                temporary.unlink(missing_ok=True)
+                try:
+                    temporary.symlink_to(relative_target, target_is_directory=True)
+                    os.replace(temporary, reference)
+                finally:
+                    temporary.unlink(missing_ok=True)
+            else:
+                reference.symlink_to(relative_target, target_is_directory=True)
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            logger.warning(
+                "Could not create cache reference %s -> %s: %s",
+                reference,
+                target,
+                exc,
+            )
+
     @property
     def inputs(self) -> dict[str, ty.Any]:
         """Resolve any template inputs of the job ahead of its execution:
@@ -361,6 +406,7 @@ class Job(ty.Generic[TaskType]):
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(self.cache_dir, result=result, job=self)
+                self.create_cache_dir_ref(result.cache_dir, update=True)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -420,6 +466,7 @@ class Job(ty.Generic[TaskType]):
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(self.cache_dir, result=result, job=self)
+                self.create_cache_dir_ref(result.cache_dir, update=True)
                 # removing the additional file with the checksum
                 (self.cache_root / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -517,6 +564,12 @@ class Job(ty.Generic[TaskType]):
 
         checksum = self.checksum
         result = load_result(checksum, self.all_caches)
+        if result is None and self.cache_dir_ref is not None:
+            result = load_result_from_dir(self.cache_dir_ref)
+            if result is not None:
+                result.cache_dir = self.cache_dir_ref.resolve()
+        if result is not None:
+            self.create_cache_dir_ref(result.cache_dir, update=True)
         if result and result.errored:
             self._errored = True
         if return_inputs is True or return_inputs == "val":
