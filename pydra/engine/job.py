@@ -262,18 +262,12 @@ class Job(ty.Generic[TaskType]):
             return
         reference = self.cache_dir_ref
         target = Path(target) if target is not None else self.cache_dir
-        reference.parent.mkdir(parents=True, exist_ok=True)
-        if reference.exists() and not reference.is_symlink():
-            logger.warning(
-                "Cannot create cache reference %s because a non-symlink path exists",
-                reference,
-            )
-            return
-        if reference.is_symlink() and not update:
-            return
         relative_target = os.path.relpath(target, start=reference.parent)
         try:
-            if update and reference.is_symlink():
+            reference.parent.mkdir(parents=True, exist_ok=True)
+            if reference.is_symlink():
+                if not update:
+                    return
                 temporary = reference.with_name(f".{reference.name}-{self.uid}.tmp")
                 temporary.unlink(missing_ok=True)
                 try:
@@ -281,6 +275,12 @@ class Job(ty.Generic[TaskType]):
                     os.replace(temporary, reference)
                 finally:
                     temporary.unlink(missing_ok=True)
+            elif reference.exists():
+                logger.warning(
+                    "Cannot create cache reference %s because a non-symlink path exists",
+                    reference,
+                )
+                return
             else:
                 reference.symlink_to(relative_target, target_is_directory=True)
         except FileExistsError:
