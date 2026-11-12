@@ -2107,6 +2107,47 @@ def test_wfasnd_wfst_4(worker: str, tmp_path: Path):
 # Testing caching
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="symlinks not supported on Windows"
+)
+def test_workflow_cache_node_refs(worker: str, tmp_path: Path):
+    @workflow.define
+    def Worky(x, y):
+        mult = workflow.add(Multiply(x=x, y=y), name="mult")
+        add2 = workflow.add(Add2(x=mult.out), name="add2")
+        return add2.out
+
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+        result = sub(Worky(x=2, y=3))
+
+    mult_ref = result.cache_dir / "_nodes" / "node-mult" / "single"
+    add2_ref = result.cache_dir / "_nodes" / "node-add2" / "single"
+
+    assert mult_ref.is_symlink()
+    assert add2_ref.is_symlink()
+    assert (mult_ref / "_result.pklz").exists()
+    assert (add2_ref / "_result.pklz").exists()
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="symlinks not supported on Windows"
+)
+def test_workflow_split_cache_node_refs(worker: str, tmp_path: Path):
+    @workflow.define
+    def Worky(x):
+        add2 = workflow.add(Add2().split("x", x=x), name="add2")
+        return add2.out
+
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+        result = sub(Worky(x=[1, 2]))
+
+    node_refs = result.cache_dir / "_nodes" / "node-add2"
+
+    assert sorted(path.name for path in node_refs.iterdir()) == ["0", "1"]
+    assert all(path.is_symlink() for path in node_refs.iterdir())
+    assert all((path / "_result.pklz").exists() for path in node_refs.iterdir())
+
+
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachedir(worker: str, tmp_path: Path):
     """worky with provided cache_root using pytest tmp_path"""

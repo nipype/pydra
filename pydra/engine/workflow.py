@@ -3,6 +3,7 @@ import inspect
 import typing as ty
 from copy import copy, deepcopy
 from collections import defaultdict
+from pathlib import Path
 from typing import Self
 import attrs
 from pydra.compose import workflow
@@ -289,10 +290,17 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         str, dict[frozenset[str], dict[str, "Workflow[ty.Any]"]]
     ] = defaultdict(lambda: defaultdict(dict))
 
-    def execution_graph(self, submitter: "Submitter") -> DiGraph:
+    def execution_graph(
+        self,
+        submitter: "Submitter",
+        cache_dir: Path | None = None,
+    ) -> DiGraph:
         from pydra.engine.submitter import NodeExecution
 
-        exec_nodes = [NodeExecution(n, submitter, workflow=self) for n in self.nodes]
+        exec_nodes = [
+            NodeExecution(n, submitter, workflow=self, cache_dir=cache_dir)
+            for n in self.nodes
+        ]
         graph = self._create_graph(exec_nodes)
         # Set the graph attribute of the nodes so lazy fields can be resolved as tasks
         # are created
