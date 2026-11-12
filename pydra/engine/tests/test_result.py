@@ -64,7 +64,8 @@ def test_record_error_writes_crash_artifacts(tmp_path: Path) -> None:
 
     shell_launcher = tmp_path / "launch-crash.sh"
     assert shlex.quote(sys.executable) in shell_launcher.read_text()
-    assert shell_launcher.stat().st_mode & stat.S_IXUSR
+    if sys.platform != "win32":
+        assert shell_launcher.stat().st_mode & stat.S_IXUSR
 
     batch_launcher = (tmp_path / "launch-crash.bat").read_text()
     assert f'"{sys.executable}"' in batch_launcher
