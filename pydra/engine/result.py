@@ -1,23 +1,32 @@
 """Job I/O definitions."""
 
-from pathlib import Path
-import typing as ty
-import attrs
-import pickle
-import time
-import os
-import cloudpickle as cp
 import getpass
+import json
+import logging
+import os
+import pickle
+import shlex
+import stat
+import sys
+import time
+import typing as ty
+from pathlib import Path
 from time import strftime
-from filelock import SoftFileLock
+
+import attrs
+import cloudpickle as cp
 from fileformats.generic import FileSet
+from filelock import SoftFileLock
+
+from pydra.compose import base, workflow
 from pydra.utils.general import (
-    attrs_values,
     attrs_fields,
+    attrs_values,
     is_workflow,
 )
 from pydra.utils.typing import copy_nested_files
-from pydra.compose import workflow, base
+
+logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
@@ -330,4 +339,63 @@ def record_error(error_path, error):
     with (error_path / "_error.pklz").open("wb") as fp:
         cp.dump(full_error, fp)
 
+    try:
+        _write_crash_artifacts(error_path)
+    except Exception:
+        logger.warning(
+            "Could not create Jupyter crash artifacts in %s",
+            error_path,
+            exc_info=True,
+        )
+
     return error_path / "_error.pklz"
+
+
+def _write_crash_artifacts(error_path: Path) -> None:
+    notebook = {
+        "cells": [
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": (
+                    "from pathlib import Path\n"
+                    "import cloudpickle as cp\n\n"
+                    'with Path("_job.pklz").open("rb") as fp:\n'
+                    "    job = cp.load(fp)\n"
+                    "job.task"
+                ),
+            },
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": "job.run(rerun=True)",
+            },
+        ],
+        "metadata": {},
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+    (error_path / "crash.ipynb").write_text(
+        json.dumps(notebook, indent=1) + "\n", encoding="utf-8"
+    )
+
+    shell_launcher = error_path / "launch-crash.sh"
+    shell_launcher.write_text(
+        "#!/bin/sh\n"
+        'cd -- "$(dirname -- "$0")"\n'
+        f"exec {shlex.quote(sys.executable)} -m jupyter notebook crash.ipynb\n",
+        encoding="utf-8",
+    )
+    shell_launcher.chmod(shell_launcher.stat().st_mode | stat.S_IXUSR)
+
+    windows_python = sys.executable.replace("%", "%%").replace('"', '""')
+    (error_path / "launch-crash.bat").write_bytes(
+        (
+            '@echo off\r\ncd /d "%~dp0"\r\n'
+            f'"{windows_python}" -m jupyter notebook crash.ipynb\r\n'
+        ).encode()
+    )
