@@ -20,6 +20,7 @@ def ArrayOut(val):
     return np.array([val, val])
 
 
+@pytest.mark.real_worker
 def test_multiout(tmpdir):
     """testing a simple function that returns a numpy array"""
 
@@ -36,6 +37,7 @@ def test_multiout(tmpdir):
     assert np.array_equal(results.outputs.array, np.array([2, 2]))
 
 
+@pytest.mark.real_worker
 def test_multiout_st(tmpdir):
     """testing a simple function that returns a numpy array, adding splitter"""
 

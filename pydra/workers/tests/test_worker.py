@@ -32,6 +32,61 @@ logger = logging.getLogger("pydra.worker")
 
 
 @python.define
+def AddOne(x):
+    return x + 1
+
+
+@python.define
+def RendezvousAddOne(x, me: str, peer: str, sync_dir: str):
+    """Add one once the peer task is also running, so the two tasks provably overlap"""
+    import time
+    from pathlib import Path
+
+    import os
+
+    sync = Path(sync_dir)
+    (sync / me).write_text(str(os.getpid()))
+    deadline = time.monotonic() + 60  # bound only
+    while not (sync / peer).exists():
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"{peer} never started: tasks did not run concurrently")
+        time.sleep(0.01)
+    return x + 1
+
+
+@python.define
+def OrderedAddOne(x: int, sync_dir: str) -> int:
+    """Element 0 only returns after element 1 has returned, and element 1 only returns
+    once element 0 is running: the two overlap and complete out of order"""
+    import os
+    import time
+    from pathlib import Path
+
+    sync = Path(sync_dir)
+    (sync / f"started_{x}").write_text(str(os.getpid()))
+
+    def wait_for(name):
+        deadline = time.monotonic() + 60  # bound only
+        while not (sync / name).exists():
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"{name} never appeared: tasks did not run concurrently"
+                )
+            time.sleep(0.01)
+
+    wait_for("started_1" if x == 0 else "started_0")
+    if x == 0:
+        wait_for("done_1")
+    else:
+        (sync / "done_1").touch()
+    return x + 1
+
+
+def _pids(sync_dir, names):
+    return {int(Path(sync_dir, n).read_text()) for n in names}
+
+
+@python.define
 def SleepAddOne(x):
     time.sleep(1)
     return x + 1
@@ -72,18 +127,35 @@ def test_concurrent_wf(any_worker, tmpdir):
     # concurrent workflow
     # A --> C
     # B --> D
+    # On cf, A and B must overlap in separate processes (each waits for the other to start)
+    concurrent = any_worker == "cf"
+    sync_dir = tmpdir / "sync"
+    sync_dir.mkdir()
+
     @workflow.define(outputs=["out1", "out2"])
-    def Workflow(x, y):
-        taska = workflow.add(SleepAddOne(x=x), name="taska")
-        taskb = workflow.add(SleepAddOne(x=y), name="taskb")
-        taskc = workflow.add(SleepAddOne(x=taska.out), name="taskc")
-        taskd = workflow.add(SleepAddOne(x=taskb.out), name="taskd")
+    def Workflow(x, y, sync_dir):
+        if concurrent:
+            taska = workflow.add(
+                RendezvousAddOne(x=x, me="a", peer="b", sync_dir=sync_dir), name="taska"
+            )
+            taskb = workflow.add(
+                RendezvousAddOne(x=y, me="b", peer="a", sync_dir=sync_dir), name="taskb"
+            )
+        else:
+            taska = workflow.add(AddOne(x=x), name="taska")
+            taskb = workflow.add(AddOne(x=y), name="taskb")
+        taskc = workflow.add(AddOne(x=taska.out), name="taskc")
+        taskd = workflow.add(AddOne(x=taskb.out), name="taskd")
         return taskc.out, taskd.out
 
-    wf = Workflow(x=5, y=10)
+    wf = Workflow(x=5, y=10, sync_dir=str(sync_dir))
 
-    with Submitter(worker=any_worker, cache_root=tmpdir) as sub:
+    kwargs = {"n_procs": 2} if concurrent else {}
+    with Submitter(worker=any_worker, cache_root=tmpdir, **kwargs) as sub:
         results = sub(wf)
+    if concurrent:
+        assert len(_pids(sync_dir, "ab")) == 2
+        assert os.getpid() not in _pids(sync_dir, "ab")
 
     assert not results.errored, " ".join(results.errors["error message"])
     outputs = results.outputs
@@ -91,20 +163,28 @@ def test_concurrent_wf(any_worker, tmpdir):
     assert outputs.out2 == 12
 
 
+@pytest.mark.real_worker
 def test_concurrent_wf_nprocs(tmpdir):
     # concurrent workflow
-    # setting n_procs in Submitter that is passed to the worker
+    # setting n_procs in Submitter that is passed to the worker;
+    # A and B must overlap (each waits for the other to start)
     # A --> C
     # B --> D
     @workflow.define(outputs=["out1", "out2"])
-    def Workflow(x, y):
-        taska = workflow.add(SleepAddOne(x=x), name="taska")
-        taskb = workflow.add(SleepAddOne(x=y), name="taskb")
-        taskc = workflow.add(SleepAddOne(x=taska.out), name="taskc")
-        taskd = workflow.add(SleepAddOne(x=taskb.out), name="taskd")
+    def Workflow(x, y, sync_dir):
+        taska = workflow.add(
+            RendezvousAddOne(x=x, me="a", peer="b", sync_dir=sync_dir), name="taska"
+        )
+        taskb = workflow.add(
+            RendezvousAddOne(x=y, me="b", peer="a", sync_dir=sync_dir), name="taskb"
+        )
+        taskc = workflow.add(AddOne(x=taska.out), name="taskc")
+        taskd = workflow.add(AddOne(x=taskb.out), name="taskd")
         return taskc.out, taskd.out
 
-    wf = Workflow(x=5, y=10)
+    sync_dir = tmpdir / "sync"
+    sync_dir.mkdir()
+    wf = Workflow(x=5, y=10, sync_dir=str(sync_dir))
     with Submitter(worker="cf", n_procs=2, cache_root=tmpdir) as sub:
         res = sub(wf)
 
@@ -112,6 +192,25 @@ def test_concurrent_wf_nprocs(tmpdir):
     outputs = res.outputs
     assert outputs.out1 == 7
     assert outputs.out2 == 12
+    assert len(_pids(sync_dir, "ab")) == 2
+    assert os.getpid() not in _pids(sync_dir, "ab")
+
+
+@pytest.mark.real_worker
+def test_split_overlap_out_of_order(tmpdir):
+    """Two split elements run in two processes at once, and the later one finishes first;
+    outputs must still come back in input order"""
+    sync_dir = tmpdir / "sync"
+    sync_dir.mkdir()
+    wf = OrderedAddOne(sync_dir=str(sync_dir)).split(x=[0, 1])
+    with Submitter(worker="cf", n_procs=2, cache_root=tmpdir) as sub:
+        res = sub(wf)
+
+    assert not res.errored, " ".join(res.errors["error message"])
+    assert res.outputs.out == [1, 2]
+    pids = _pids(sync_dir, ["started_0", "started_1"])
+    assert len(pids) == 2
+    assert os.getpid() not in pids
 
 
 def test_wf_in_wf(any_worker, tmpdir):
@@ -120,15 +219,15 @@ def test_wf_in_wf(any_worker, tmpdir):
     # workflow task
     @workflow.define
     def SubWf(x):
-        sub_a = workflow.add(SleepAddOne(x=x), name="sub_a")
-        sub_b = workflow.add(SleepAddOne(x=sub_a.out), name="sub_b")
+        sub_a = workflow.add(AddOne(x=x), name="sub_a")
+        sub_b = workflow.add(AddOne(x=sub_a.out), name="sub_b")
         return sub_b.out
 
     @workflow.define
     def WfInWf(x):
-        a = workflow.add(SleepAddOne(x=x), name="a")
+        a = workflow.add(AddOne(x=x), name="a")
         subwf = workflow.add(SubWf(x=a.out), name="subwf")
-        b = workflow.add(SleepAddOne(x=subwf.out), name="b")
+        b = workflow.add(AddOne(x=subwf.out), name="b")
         return b.out
 
     wf = WfInWf(x=3)
@@ -149,7 +248,7 @@ def test_wf2(any_worker, tmpdir):
 
     @workflow.define
     def Wfnd(x):
-        add2 = workflow.add(SleepAddOne(x=x))
+        add2 = workflow.add(AddOne(x=x))
         return add2.out
 
     @workflow.define
@@ -169,8 +268,8 @@ def test_wf2(any_worker, tmpdir):
 def test_wf_with_state(any_worker, tmpdir):
     @workflow.define
     def Workflow(x):
-        taska = workflow.add(SleepAddOne(x=x), name="taska")
-        taskb = workflow.add(SleepAddOne(x=taska.out), name="taskb")
+        taska = workflow.add(AddOne(x=x), name="taska")
+        taskb = workflow.add(AddOne(x=taska.out), name="taskb")
         return taskb.out
 
     wf = Workflow().split(x=[1, 2, 3])
