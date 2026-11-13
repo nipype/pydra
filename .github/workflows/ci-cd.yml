@@ -16,6 +16,9 @@ name: CI/CD
 # Slurm image to ghcr.io when its tag is missing (see `slurm-image`).
 # The `CI gate` job is the one check branch protection should require: it fails unless the
 # full tier passed on a non-draft PR (add the `full-ci` label to run it), so nothing reaches main without the full suite.
+# A PR event that changes nothing to test (a label other than `full-ci`/`release`, or an edit
+# that keeps the base branch) runs no tests; its `CI gate` repeats the verdict of the commit's
+# previous run. Changing the base branch re-runs the tier for the new base.
 on:
   release:
     types: [published]
@@ -23,7 +26,7 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, edited]
   merge_group:
   workflow_dispatch:
   schedule:
@@ -32,11 +35,13 @@ on:
 # Only PR runs cancel each other (a `full-ci`/`release` label run cancels older runs of the same
 # PR). Releases, pushes to main, merge-queue, scheduled and manual runs each have their own group
 # and are never cancelled, so nothing can cancel the deploy. A label event other than
-# `full-ci`/`release` gets a unique group so it cannot cancel the run in progress.
+# `full-ci`/`release`, and an edit that keeps the base branch, get a unique group so they cannot
+# cancel the run in progress.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
-    (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'release' && github.event.label.name != 'full-ci' && github.run_id || 'ci' }}
+    (((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'release' && github.event.label.name != 'full-ci')
+    || (github.event.action == 'edited' && !github.event.changes.base)) && github.run_id || 'ci' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -63,6 +68,7 @@ jobs:
           ACTION: ${{ github.event.action }}
           LABEL: ${{ github.event.label.name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          BASE_CHANGED: ${{ github.event.changes.base && 'true' || 'false' }}
         run: |
           run=true
           full=true
@@ -71,8 +77,12 @@ jobs:
             if jq -e 'index("release") or index("full-ci")' <<<"$LABELS" >/dev/null; then
               full=true
             fi
-            # a label other than `release` or `full-ci` changes nothing: skip the whole run
-            case "$ACTION" in labeled|unlabeled) [ "$LABEL" = release ] || [ "$LABEL" = full-ci ] || run=false ;; esac
+            # a label other than `release` or `full-ci`, or an edit that keeps the base branch,
+            # changes nothing to test: run no tests, and the gate repeats the previous verdict
+            case "$ACTION" in
+              labeled|unlabeled) [ "$LABEL" = release ] || [ "$LABEL" = full-ci ] || run=false ;;
+              edited) [ "$BASE_CHANGED" = true ] || run=false ;;
+            esac
           fi
           if [ "$full" = true ]; then
             # latest dependencies on every OS x Python; pre-release dependencies on the default
@@ -382,17 +392,37 @@ jobs:
       if: always()
       run: docker exec slurm bash -c "chown -R $(id -u):$(id -g) /root/.cache/uv"
 
-  # The single check branch protection should require (see the PR description). It fails when
-  # the tier that should have run did not pass, and, on a non-draft PR, when the full tier was
-  # not what ran for this commit.
+  # The single check branch protection should require (see the PR description). It always runs.
+  # It fails when the tier that should have run did not pass, and, on a non-draft PR into main,
+  # when the full tier was not what ran for this commit. On an event that ran no tests it repeats
+  # the verdict of the commit's previous run, waiting for that run to finish.
   gate:
     name: CI gate
     needs: [plan, build, test, test-singularity, test-lmod, test-slurm, build-docs]
-    if: always() && needs.plan.outputs.run == 'true'
+    if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ needs.plan.outputs.run == 'false' && 90 || 5 }}
+    permissions:
+      actions: read
     steps:
+      - name: Repeat the verdict of this commit's previous run
+        if: needs.plan.outputs.run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          runs="repos/$REPO/actions/workflows/ci-cd.yml/runs?event=pull_request&head_sha=$SHA&per_page=100"
+          prev=$(gh api "$runs" --jq "[.workflow_runs[] | select(.run_number < $RUN_NUMBER)] | max_by(.run_number) | .id // empty")
+          [ -n "$prev" ] || { echo "no earlier CI/CD run for $SHA: push a commit or re-run the workflow"; exit 1; }
+          echo "repeating the verdict of run $prev"
+          until [ "$(gh api "repos/$REPO/actions/runs/$prev" --jq .status)" = completed ]; do sleep 30; done
+          verdict=$(gh api --paginate "repos/$REPO/actions/runs/$prev/jobs?per_page=100" --jq '.jobs[] | select(.name == "CI gate") | .conclusion')
+          echo "CI gate of run $prev: ${verdict:-missing}"
+          [ "$verdict" = success ]
       - name: Check results
+        if: needs.plan.outputs.run != 'false'
         env:
           FULL: ${{ needs.plan.outputs.full }}
           EVENT: ${{ github.event_name }}
@@ -410,7 +440,7 @@ jobs:
             fi
           done
           if [ "$EVENT" = pull_request ] && [ "$BASE" = main ] && [ "$FULL" != true ] && [ "$DRAFT" != true ]; then
-            echo "Only the fast tier ran for this PR into main. To fix: add the `full-ci` label (or run the CI/CD workflow manually on this branch)."
+            echo "Only the fast tier ran for this PR into main. To fix: add the 'full-ci' label (or run the CI/CD workflow manually on this branch)."
             exit 1
           fi
 
