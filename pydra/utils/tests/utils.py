@@ -81,7 +81,8 @@ def OtherSpecificFuncTask(in_file: MyOtherFormatX) -> MyOtherFormatX:
     return in_file
 
 
-class OtherSpecificShellTask(shell.Task):
+@shell.define
+class OtherSpecificShellTask(shell.Task["OtherSpecificShellTask.Outputs"]):
 
     in_file: MyOtherFormatX = shell.arg(
         help="the input file",
