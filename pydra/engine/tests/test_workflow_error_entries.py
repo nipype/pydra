@@ -35,9 +35,7 @@ def test_entries_name_the_failed_job(worker, on_error, tmp_path):
 
 def test_entries_survive_pickling():
     entry = JobErrorEntry("A", 3, "builtins.ValueError", "bad", "Traceback ...")
-    error = pickle.loads(
-        pickle.dumps(WorkflowError("failed", ["one"], [entry]))
-    )
+    error = pickle.loads(pickle.dumps(WorkflowError("failed", ["one"], [entry])))
     assert error.entries == [entry]
     assert (str(error), error.errors) == ("failed", ["one"])
 
