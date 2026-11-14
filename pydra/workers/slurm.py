@@ -165,7 +165,7 @@ class SlurmWorker(base.Worker):
             error_file = str(script_dir / "slurm-%j.err")
             sargs.append(f"--error={error_file}")
         else:
-            error_file = None
+            error_file = error.group()
         sargs.append(str(batch_script))
         # TO CONSIDER: add random sleep to avoid overloading calls
         rc, stdout, stderr = await base.read_and_display_async(
@@ -177,8 +177,6 @@ class SlurmWorker(base.Worker):
         elif not jobid:
             raise RuntimeError("Could not extract job ID")
         jobid = jobid.group()
-        if error_file:
-            error_file = error_file.replace("%j", jobid)
         self.error[jobid] = error_file.replace("%j", jobid)
         requeues = 0
         # intermittent polling

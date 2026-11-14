@@ -277,3 +277,66 @@ def test_no_resources_adds_no_resource_args(tmp_path, monkeypatch):
         for a in sbatch_args(fake)
         if a.startswith(("--cpus", "--mem", "--gres", "--time"))
     ]
+
+
+class FakeSlurmFailing(FakeSlurm):
+    """A fake whose job ends FAILED, recording the ``--error`` argument sbatch got."""
+
+    async def __call__(self, *cmd, hide_display=False, strip=False):
+        if cmd[0] == "sacct":
+            self.calls.append(cmd)
+            return 0, "42|FAILED|1:0\n", ""
+        return await super().__call__(*cmd, hide_display=hide_display, strip=strip)
+
+
+def _sbatch_error_args(fake):
+    (sbatch,) = [c for c in fake.calls if c[0] == "sbatch"]
+    return [a for a in sbatch if a.startswith("--error") or a in ("-e",)]
+
+
+def test_explicit_error_in_sbatch_args_is_honoured(tmp_path, monkeypatch):
+    fake, worker, job = run_worker(
+        tmp_path, monkeypatch, ["COMPLETED"], sbatch_args="--error=/x/my-%j.err"
+    )
+    assert asyncio.run(worker.run(job)) is True
+    # The user's --error is passed through once; no default is appended
+    assert _sbatch_error_args(fake) == ["--error=/x/my-%j.err"]
+    assert worker.error["42"] == "/x/my-42.err"
+
+
+def test_short_error_flag_in_sbatch_args_is_honoured(tmp_path, monkeypatch):
+    fake, worker, job = run_worker(
+        tmp_path, monkeypatch, ["COMPLETED"], sbatch_args="-e /x/short-%j.err"
+    )
+    assert asyncio.run(worker.run(job)) is True
+    assert worker.error["42"] == "/x/short-42.err"
+
+
+def test_default_error_file_is_set_and_passed(tmp_path, monkeypatch):
+    fake, worker, job = run_worker(tmp_path, monkeypatch, ["COMPLETED"])
+    assert asyncio.run(worker.run(job)) is True
+    expected = str(tmp_path / "slurm_scripts" / "u" / "slurm-%j.err")
+    assert _sbatch_error_args(fake) == [f"--error={expected}"]
+    assert worker.error["42"] == expected.replace("%j", "42")
+
+
+def test_failed_job_reports_last_line_of_explicit_error_file(tmp_path, monkeypatch):
+    err = tmp_path / "mine-42.err"
+    err.write_text("Traceback...\nValueError: Error: bad input\n")
+    fake, worker, job = run_worker(
+        tmp_path, monkeypatch, [], sbatch_args=f"--error={tmp_path}/mine-%j.err"
+    )
+    monkeypatch.setattr(slurm.base, "read_and_display_async", FakeSlurmFailing([]))
+    with pytest.raises(Exception, match="bad input"):
+        asyncio.run(worker.run(job))
+
+
+def test_failed_job_with_missing_explicit_error_file_does_not_crash(
+    tmp_path, monkeypatch
+):
+    fake, worker, job = run_worker(
+        tmp_path, monkeypatch, [], sbatch_args=f"--error={tmp_path}/none-%j.err"
+    )
+    monkeypatch.setattr(slurm.base, "read_and_display_async", FakeSlurmFailing([]))
+    with pytest.raises(Exception, match="unknown reason"):
+        asyncio.run(worker.run(job))
