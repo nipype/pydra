@@ -5,7 +5,7 @@ import contextlib
 import sys
 import cloudpickle as cp
 import pytest
-from pydra.compose import python
+from pydra.compose import python, workflow
 from pydra.engine.store import PickleStore
 from pydra.engine.submitter import Submitter
 from pydra.scripts.cli import crash
@@ -24,6 +24,13 @@ def Inc(x: int) -> int:
 @python.define
 def Boom(x: int) -> int:
     raise ValueError("boom")
+
+
+@workflow.define
+def IncTwice(x: int) -> int:
+    first = workflow.add(Inc(x=x), name="first")
+    second = workflow.add(Inc(x=first.out), name="second")
+    return second.out
 
 
 class RemoteLikeWorker(Worker):
@@ -114,3 +121,23 @@ def test_job_pickled_by_older_version_loads(tmp_path):
     older = type(job).__new__(type(job))
     older.__setstate__(state)
     assert older.persist_pickle is True
+
+
+def test_workflow_job_keeps_job_pickle(in_process_worker, tmp_path):
+    """A workflow job keeps its pickle whichever worker expands it, and the leaf jobs
+    of the workflow do not"""
+    task = IncTwice(x=1)
+    with Submitter(worker=in_process_worker, cache_root=tmp_path) as sub:
+        result = sub(task)
+    assert result.outputs.out == 3
+    (slot,) = slots(task, tmp_path)
+    assert (slot / "_job.pklz").exists()
+    assert result.job is not None
+    leaf_pickles = [p for p in tmp_path.glob("python-*/*/_job.pklz")]
+    assert leaf_pickles == []
+
+
+def test_result_job_is_none_for_in_process_leaf_success(in_process_worker, tmp_path):
+    with Submitter(worker=in_process_worker, cache_root=tmp_path) as sub:
+        result = sub(Inc(x=1))
+    assert result.job is None
