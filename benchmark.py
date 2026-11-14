@@ -123,6 +123,7 @@ def overhead(kind, n, worker, **worker_kwargs):
 
 def partial_failure():
     """Does one failing split element block downstream work for the other elements?"""
+    import cloudpickle
     from pydra.compose import python, workflow
     from pydra.engine.submitter import Submitter
 
@@ -150,11 +151,16 @@ def partial_failure():
             print("errored:", res.errored, "outputs:", getattr(res, "outputs", None))
         except Exception as e:
             print("raised:", type(e).__name__, str(e)[:300].replace("\n", " "))
-        done = sorted(
-            str(f.relative_to(root)).split("-")[0] for f in root.rglob("_result.pklz")
-        )
-        print("result files:", len(done))
-        print("by node:", {n: done.count(n) for n in sorted(set(done))})
+        counts = {}
+        for f in root.rglob("_result.pklz"):
+            with open(f, "rb") as fh:
+                result = cloudpickle.load(fh)
+            node = type(result.task).__name__
+            counts.setdefault(node, {"ok": 0, "errored": 0})[
+                "errored" if result.errored else "ok"
+            ] += 1
+        for node, c in sorted(counts.items()):
+            print(f"{node:10s} ok={c['ok']} errored={c['errored']}")
     finally:
         shutil.rmtree(root)
 
