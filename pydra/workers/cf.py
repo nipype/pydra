@@ -6,7 +6,7 @@ import concurrent.futures as cf
 import multiprocessing as mp
 import logging
 from pydra.engine.job import Job
-from pydra.utils.general import CACHE_ROOT_ENV_VAR
+from pydra.utils.general import CACHE_ROOT_ENV_VAR, is_workflow
 from pydra.utils.hash import PersistentCache
 from pydra.workers import base
 
@@ -104,6 +104,8 @@ class ConcurrentFuturesWorker(base.Worker):
     ) -> "Result":
         """Run a job."""
         assert self.loop, "No event loop available to submit tasks"
+        if not is_workflow(job.task):  # a workflow job keeps its pickle
+            job.persist_pickle = False
         job_pkl = cp.dumps(job)
         return await self.loop.run_in_executor(
             self.pool, self.uncloudpickle_and_run, job_pkl, rerun

@@ -1,6 +1,7 @@
 import typing as ty
 import logging
 from pydra.engine.job import Job
+from pydra.utils.general import is_workflow
 from pydra.workers import base
 
 if ty.TYPE_CHECKING:
@@ -19,6 +20,8 @@ class DebugWorker(base.Worker):
         rerun: bool = False,
     ) -> "Result":
         """Run a job."""
+        if not is_workflow(job.task):  # a workflow job keeps its pickle
+            job.persist_pickle = False
         return job.run(rerun=rerun)
 
     def close(self):

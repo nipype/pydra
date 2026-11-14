@@ -13,7 +13,6 @@ import types
 import itertools
 from collections import Counter
 import attrs
-import cloudpickle as cp
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import (
     attrs_fields,
@@ -26,7 +25,6 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.environments.base import Environment
     from pydra.workers.base import Worker
-    from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
 
 TaskType = ty.TypeVar("TaskType", bound="Task")
@@ -78,14 +76,6 @@ class Outputs:
         outputs = cls(**defaults)
         outputs._cache_dir = job.cache_dir
         return outputs
-
-    @property
-    def _results(self) -> "Result[Self]":
-        results_path = self._cache_dir / "_job.pklz"
-        if not results_path.exists():
-            raise FileNotFoundError(f"Job results file {results_path} not found")
-        with open(results_path, "rb") as f:
-            return cp.load(f)
 
     def __iter__(self) -> ty.Generator[str, None, None]:
         """The names of the fields in the output object"""

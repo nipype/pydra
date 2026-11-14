@@ -108,7 +108,7 @@ def test_singularity_st_1(worker, tmp_path):
     )
     assert outputs.stdout[0].strip() == "root"
     assert "/mnt/pydra" in outputs.stdout[1]
-    assert outputs.stdout[2].strip() == "_job.pklz"
+    assert outputs.stdout[2].strip() == ""
     assert outputs.return_code == [0, 0, 0]
 
 
