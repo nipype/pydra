@@ -19,6 +19,7 @@ class DebugWorker(base.Worker):
         rerun: bool = False,
     ) -> "Result":
         """Run a job."""
+        job.persist_pickle = False
         return job.run(rerun=rerun)
 
     def close(self):

@@ -219,11 +219,12 @@ def test_store_call_sites(worker, tmp_path):
     with Submitter(worker=worker, cache_root=tmp_path / "cache", store=store) as sub:
         assert sub(task).outputs.out == 5
     calls = log.read_text().splitlines()
-    assert calls.index(f"acquire {checksum}") < calls.index(f"commit {checksum} job")
-    assert calls.count(f"commit {checksum} job") == 1
-    assert not [c for c in calls if c.endswith("nojob")]
+    # a job that succeeds in process is committed without the job pickle
+    assert calls.index(f"acquire {checksum}") < calls.index(f"commit {checksum} nojob")
+    assert calls.count(f"commit {checksum} nojob") == 1
+    assert not [c for c in calls if c.endswith(" job")]
     assert len(list((tmp_path / "cache" / checksum).glob("*/_result.pklz"))) == 1
-    assert len(list((tmp_path / "cache" / checksum).glob("*/_job.pklz"))) == 1
+    assert not list((tmp_path / "cache" / checksum).glob("*/_job.pklz"))
 
     log.unlink()
     with Submitter(worker=worker, cache_root=tmp_path / "cache", store=store) as sub:
