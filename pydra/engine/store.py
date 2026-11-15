@@ -1,6 +1,5 @@
 """Result stores: where jobs run and where their results are kept."""
 
-import asyncio
 import errno
 import hashlib
 import json
@@ -11,9 +10,9 @@ import time
 import typing as ty
 import warnings
 from pathlib import Path
-import attrs
-from filelock import SoftFileLock, Timeout
 from pydra.engine.context import RECORD
+from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
+from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
 from pydra.engine.result import Result, load_result, save
 from pydra.utils.general import ensure_list, atomic_write
 
@@ -28,6 +27,9 @@ Context = ty.Mapping[str, ty.Any]
 CONTEXT_FILE = "_context.json"
 """The file in a slot holding the context its result was recorded in, read by
 ``PickleStore.lookup`` before the result is loaded."""
+
+LEASE_SUFFIX = ".lock"
+"""The suffix of a job's lease in ``PickleStore.cache_root``."""
 
 REMOVE_ATTEMPTS = 5
 """How many times ``remove_from_cache`` tries a removal blocked by held or pending files."""
@@ -336,45 +338,19 @@ def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
     )
 
 
-@attrs.define
-class Lease:
-    """The right to run the job identified by ``checksum`` in ``cache_dir``.
+def _is_store_internal(name: str) -> bool:
+    """Whether ``name`` in a cache root is a lease or a probe, not a job's directory."""
+    return name.endswith(LEASE_SUFFIX) or name.startswith((PROBE_PREFIX, CLOCK_PREFIX))
 
-    The lease is held while it is entered, either with ``with`` or ``async with``,
-    and released on exit.
-    """
 
-    checksum: str
-    cache_dir: Path
-    lockfile: Path
-    _lock: SoftFileLock | None = attrs.field(default=None, init=False, repr=False)
-
-    def __enter__(self) -> "Lease":
-        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = SoftFileLock(self.lockfile)
-        self._lock.acquire()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
-        self._lock.release()
-
-    async def __aenter__(self) -> "Lease":
-        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
-        lock = SoftFileLock(self.lockfile)
-        timeout = 0.1
-        while True:
-            try:
-                lock.acquire(timeout=0)
-                break
-            except Timeout:
-                await asyncio.sleep(timeout)
-                if timeout <= 2:
-                    timeout *= 2
-        self._lock = lock
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
-        self._lock.release()
+def lease_still_held(lease: Lease) -> bool:
+    """Whether ``lease`` has not been taken over: asked of the storage if the lease
+    can `~pydra.engine.lease.DirectoryLease.prove` it, otherwise read from its
+    ``lost`` attribute if it has one."""
+    prove = getattr(lease, "prove", None)
+    if callable(prove):
+        return bool(prove())
+    return not getattr(lease, "lost", None)
 
 
 def context_key(context: Context) -> str:
@@ -417,15 +393,20 @@ class ResultStore(ty.Protocol):
         every location, in the order ``lookup`` considers them."""
 
     def lockfile(self, checksum: str, context: Context) -> Path:
-        """The lock file guarding the job identified by ``checksum`` under ``context``."""
+        """The path of the lease guarding the job identified by ``checksum`` under
+        ``context``. It exists while the lease is held."""
 
     def acquire(self, checksum: str, context: Context) -> Lease:
-        """Return the lease guarding the job identified by ``checksum`` under ``context``."""
+        """Return the lease guarding the job identified by ``checksum`` under
+        ``context``, not yet entered. A store whose storage cannot carry its lease
+        raises `~pydra.utils.storage.StorageUnsupported` when the lease is entered."""
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
         """Store ``result``, and ``job`` if given, as those of the job held under ``lease``.
 
         Both are written together, so a reader never sees a result without its job.
+        A store raises `~pydra.engine.lease.LeaseLost`, writing nothing, if ``lease``
+        was taken over by another process while it was held.
         """
 
 
@@ -451,6 +432,11 @@ class PickleStore:
         ``"any"`` all of them, a ``ReusePolicy`` those whose context it accepts. Those
         from a different context are marked with ``Result.cross_context`` and record
         the current one as ``Result.reused_in``.
+    lease_settings : LeaseSettings, optional
+        How the `~pydra.engine.lease.DirectoryLease` guarding each job beats, ages and
+        waits: when a lease left by a dead process is taken over (``stale_after``) and
+        how long a wait for a live one lasts (``timeout``). The defaults suit a cache
+        on NFS; see `~pydra.engine.lease.LeaseSettings`.
     """
 
     def __init__(
@@ -458,10 +444,14 @@ class PickleStore:
         cache_root: os.PathLike,
         readonly_caches: list[os.PathLike] | None = None,
         reuse: "str | ReusePolicy" = "consistent",
+        lease_settings: LeaseSettings | None = None,
     ):
         self.cache_root = Path(cache_root)
         self.readonly_caches = [Path(p) for p in ensure_list(readonly_caches)]
         self.reuse = reuse_policy(reuse)
+        self.lease_settings = (
+            lease_settings if lease_settings is not None else LeaseSettings()
+        )
 
     def cache_dir(self, checksum: str, context: Context) -> Path:
         return self.cache_root / checksum / context_key(context)
@@ -510,7 +500,11 @@ class PickleStore:
         checksums = (
             [checksum]
             if checksum is not None
-            else sorted(p.name for p in self.cache_root.iterdir() if p.is_dir())
+            else sorted(
+                p.name
+                for p in self.cache_root.iterdir()
+                if p.is_dir() and not _is_store_internal(p.name)
+            )
         )
         for name in checksums:
             directory = self.cache_root / name
@@ -518,16 +512,25 @@ class PickleStore:
                 yield from sorted(p for p in directory.iterdir() if p.is_dir())
 
     def lockfile(self, checksum: str, context: Context) -> Path:
-        return self.cache_root / f"{checksum}-{context_key(context)}.lock"
+        return self.cache_root / f"{checksum}-{context_key(context)}{LEASE_SUFFIX}"
 
-    def acquire(self, checksum: str, context: Context) -> Lease:
-        return Lease(
+    def acquire(self, checksum: str, context: Context) -> DirectoryLease:
+        return DirectoryLease(
             checksum,
             self.cache_dir(checksum, context),
             self.lockfile(checksum, context),
+            settings=self.lease_settings,
         )
 
-    def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
+    def commit(
+        self, lease: DirectoryLease, result: Result, job: "Job | None" = None
+    ) -> None:
+        if not lease_still_held(lease):
+            raise LeaseLost(
+                f"The lease {lease.lockfile} was taken over by another process while "
+                f"held, so this process does not write its result to {lease.cache_dir}",
+                lease.lockfile,
+            )
         lease.cache_dir.mkdir(parents=True, exist_ok=True)
         with atomic_write(lease.cache_dir / CONTEXT_FILE, "w") as f:
             json.dump(result.context, f, sort_keys=True)

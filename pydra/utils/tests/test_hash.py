@@ -610,6 +610,20 @@ def test_persistent_hash_cache_directory_keyed_on_contents(
     assert len(list(cache_path.iterdir())) == 2
 
 
+@pytest.mark.timeout(30)
+def test_persistent_hash_cache_ignores_a_stray_lock(settled, cache_path, text_file):
+    """A lock file left beside a cache entry by another host (as the earlier
+    ``SoftFileLock`` wrote it) does not block hashing: entries are written atomically
+    and no lock is taken."""
+    hsh = hash_object(text_file, persistent_cache=cache_path)
+    (entry,) = cache_path.iterdir()
+    entry.unlink()
+    entry.with_suffix(".lock").write_text("999999\nsome-other-host.example.org\n")
+    assert hash_object(text_file, persistent_cache=cache_path) == hsh
+    assert entry.read_bytes() == hsh
+    assert not [p for p in cache_path.iterdir() if p.name.endswith(".tmp")]
+
+
 def test_persistent_hash_cache(settled, cache_path, text_file):
     """
     Test the persistent hash cache with a text file
