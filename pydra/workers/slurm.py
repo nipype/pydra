@@ -4,7 +4,7 @@ import re
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
-from shutil import copyfile
+import getpass
 import logging
 import attrs
 from pydra.engine.job import Job, save
@@ -23,7 +23,32 @@ class SlurmJobCancelled(RuntimeError):
 
 @attrs.define
 class SlurmWorker(base.Worker):
-    """A worker to execute tasks on SLURM systems."""
+    """A worker to execute tasks on SLURM systems.
+
+    Parameters
+    ----------
+    poll_delay
+        Seconds between poll cycles. Each cycle makes one ``squeue --user=<you>`` call
+        for every job awaiting a poll.
+    sbatch_args
+        Extra ``sbatch`` options for every job.
+    requeue_budget
+        How many times one job is requeued after ``TIMEOUT``, ``PREEMPTED``,
+        ``NODE_FAIL`` or ``BOOT_FAIL``.
+    max_array_size
+        The elements of a split node that become runnable together are submitted as
+        ``sbatch --array`` of at most this many tasks (task ids ``0`` to
+        ``max_array_size - 1``, so keep it below the site's ``MaxArraySize``). ``0``
+        turns arrays off, and each job is then its own ``sbatch``. Arrays are also not
+        used when ``sbatch_args`` set ``--output``, ``--error`` or ``--array``, and only
+        elements that reach the worker in the same scheduling pass are grouped.
+    squeue_failures
+        Consecutive failed ``squeue`` polls (non-zero exit, controller error or
+        timeout) tolerated before the waiting jobs are failed. A failed poll is
+        skipped, not read as an empty queue.
+    squeue_timeout
+        Seconds after which one ``squeue`` call counts as failed.
+    """
 
     _cmd = "sbatch"
     _requeue_states = ("TIMEOUT", "PREEMPTED", "NODE_FAIL", "BOOT_FAIL")
@@ -37,19 +62,30 @@ class SlurmWorker(base.Worker):
     sbatch_args: str = ""
     requeue_budget: int = attrs.field(default=3, validator=attrs.validators.ge(0))
     max_array_size: int = attrs.field(default=1000, validator=attrs.validators.ge(0))
+    squeue_failures: int = attrs.field(default=3, validator=attrs.validators.ge(1))
+    squeue_timeout: float = attrs.field(default=60.0, validator=attrs.validators.gt(0))
     error: dict[str, ty.Any] = attrs.field(factory=dict)
     _poller: ty.Any = attrs.field(default=None, init=False, repr=False)
     _poll_loop: ty.Any = attrs.field(default=None, init=False, repr=False)
     _waiters: list = attrs.field(factory=list, init=False, repr=False)
     _pending: dict = attrs.field(factory=dict, init=False, repr=False)
     _pending_loop: ty.Any = attrs.field(default=None, init=False, repr=False)
+    _flushes: set = attrs.field(factory=set, init=False, repr=False)
 
-    _runtime_state = ("error", "_poller", "_poll_loop", "_waiters", "_pending")
+    _runtime_state = (
+        "error",
+        "_poller",
+        "_poll_loop",
+        "_waiters",
+        "_pending",
+        "_pending_loop",
+        "_flushes",
+    )
 
     def __getstate__(self) -> dict[str, ty.Any]:
         """Return state for pickling."""
         state = super().__getstate__()
-        for name in (*self._runtime_state, "_pending_loop"):
+        for name in self._runtime_state:
             del state[name]
         return state
 
@@ -59,27 +95,16 @@ class SlurmWorker(base.Worker):
         state["_poller"] = state["_poll_loop"] = state["_pending_loop"] = None
         state["_waiters"] = []
         state["_pending"] = {}
+        state["_flushes"] = set()
         super().__setstate__(state)
 
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
-        if isinstance(job, Job):
-            cache_root = job.cache_root
-            ind = None
-            uid = job.uid
-        else:
-            assert isinstance(job, tuple), f"Expecting a job or a tuple, not {job!r}"
-            assert len(job) == 2, f"Expecting a tuple of length 2, not {job!r}"
-            ind = job[0]
-            cache_root = job[-1].cache_root
-            uid = f"{job[-1].uid}_{ind}"
-
+        cache_root = job.cache_root
+        uid = job.uid
         script_dir = cache_root / f"{self.plugin_name()}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
-        if ind is None:
-            if not (script_dir / "_job.pklz").exists():
-                save(script_dir, job=job)
-        else:
-            copyfile(job[1], script_dir / "_job.pklz")
+        if not (script_dir / "_job.pklz").exists():
+            save(script_dir, job=job)
 
         job_pkl = script_dir / "_job.pklz"
         if not job_pkl.exists() or not job_pkl.stat().st_size:
@@ -273,7 +298,9 @@ class SlurmWorker(base.Worker):
         future = loop.create_future()
         group.append((job, future))
         if len(group) == 1:
-            loop.create_task(self._flush_group(key, rerun))
+            task = loop.create_task(self._flush_group(key, rerun))
+            self._flushes.add(task)
+            task.add_done_callback(self._flushes.discard)
         return await future
 
     async def _flush_group(self, key, rerun):
@@ -364,34 +391,58 @@ class SlurmWorker(base.Worker):
         ``poll_delay`` seconds apart.
         """
         loop = asyncio.get_running_loop()
-        if self._poller is None or self._poller.done() or self._poll_loop is not loop:
+        if self._poll_loop is not loop:
             self._waiters, self._poll_loop = [], loop
+        if self._poller is None or self._poller.done():
             self._poller = loop.create_task(self._poll_cycles())
         future = loop.create_future()
         self._waiters.append(future)
         return await future
 
     async def _poll_cycles(self):
-        while self._waiters:
-            waiters, self._waiters = self._waiters, []
-            try:
-                queued = await self._squeue_all()
-            except Exception as exc:
-                for future in waiters:
-                    if not future.done():
-                        future.set_exception(exc)
-            else:
-                for future in waiters:
-                    if not future.done():
-                        future.set_result(queued)
-            await asyncio.sleep(self.poll_delay)
+        failures = 0
+        waiters: list = []
+        try:
+            while self._waiters:
+                waiters, self._waiters = self._waiters, []
+                try:
+                    queued = await asyncio.wait_for(
+                        self._squeue_all(), self.squeue_timeout
+                    )
+                except Exception as exc:
+                    failures += 1
+                    if failures < self.squeue_failures:
+                        logger.warning(f"squeue failed, skipping this cycle: {exc}")
+                        self._waiters[:0] = waiters  # asked again next cycle
+                    else:
+                        failure = RuntimeError(
+                            f"squeue failed {failures} times in a row: {exc}"
+                        )
+                        for future in waiters:
+                            if not future.done():
+                                future.set_exception(failure)
+                        failures = 0
+                else:
+                    failures = 0
+                    for future in waiters:
+                        if not future.done():
+                            future.set_result(queued)
+                waiters = []
+                await asyncio.sleep(self.poll_delay)
+        finally:
+            # a poller that dies (e.g. is cancelled) must not leave jobs waiting
+            stranded = [*waiters, *self._waiters]
+            self._waiters = []
+            for future in stranded:
+                if not future.done():
+                    future.set_exception(RuntimeError("Slurm queue poller stopped"))
 
     @staticmethod
     async def _squeue_all() -> frozenset[str]:
-        cmd = ("squeue", "-h", "--me", "-r", "-o", "%i")
+        cmd = ("squeue", "-h", f"--user={getpass.getuser()}", "-r", "-o", "%i")
         rc, stdout, stderr = await base.read_and_display_async(*cmd, hide_display=True)
-        if "slurm_load_jobs error" in stderr:
-            return frozenset()
+        if rc or "slurm_load_jobs error" in stderr:
+            raise RuntimeError(f"squeue exited {rc}: {stderr.strip()}")
         return frozenset(stdout.split())
 
     async def _verify_exit_code(self, jobid):

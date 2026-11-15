@@ -1,6 +1,7 @@
 """One ``squeue`` per poll cycle and ``sbatch --array`` for split nodes, with Slurm faked."""
 
 import asyncio
+import getpass
 import pickle
 import re
 import types
@@ -24,6 +25,14 @@ class FakeSlurm:
         self.calls = []
         self.tasks = {}  # job id -> {"index", "attempt", "listed", "err", "out"}
         self.next_id = 100
+        self.squeue_calls = 0
+        self.squeue_fail_first = 0
+        self.squeue_fail_rc = 1
+        self.seen = set()  # ids some squeue has listed
+        self.premature = []  # ids sacct was asked about before squeue listed them
+
+    async def squeue_hook(self):
+        """Overridden to suspend inside squeue."""
 
     def of(self, name):
         return [c for c in self.calls if c[0] == name]
@@ -54,14 +63,22 @@ class FakeSlurm:
                 )
             return 0, f"Submitted batch job {base_id}\n", ""
         if cmd[0] == "squeue":
-            assert "--me" in cmd and "-j" not in cmd, cmd
+            assert f"--user={getpass.getuser()}" in cmd, cmd
+            assert "--me" not in cmd and "-j" not in cmd, cmd
+            self.squeue_calls += 1
+            if self.squeue_calls <= self.squeue_fail_first:
+                return self.squeue_fail_rc, "", "slurm_load_jobs error: timed out"
             listed = [t for t, v in self.tasks.items() if v["listed"] > 0]
             for t in listed:
                 self.tasks[t]["listed"] -= 1
+            self.seen.update(listed)
+            await self.squeue_hook()
             return 0, "".join(f"{t}\n" for t in listed), ""
         if cmd[0] == "sacct":
             assert "-P" in cmd and "-X" in cmd
             tid = cmd[cmd.index("-j") + 1]
+            if tid not in self.seen:
+                self.premature.append(tid)
             task = self.tasks[tid]
             plan = self.plans.get(task["index"], ["COMPLETED"])
             state = plan[min(task["attempt"], len(plan) - 1)]
@@ -105,10 +122,16 @@ def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwa
     return fake, worker, jobs
 
 
-def run_all(worker, jobs, **kwargs):
+def run_all(worker, jobs, reruns=None):
+    reruns = reruns or [False] * len(jobs)
+
     async def go():
         return await asyncio.wait_for(
-            asyncio.gather(*(worker.run(j) for j in jobs), return_exceptions=True), 30
+            asyncio.gather(
+                *(worker.run(j, rerun=r) for j, r in zip(jobs, reruns)),
+                return_exceptions=True,
+            ),
+            30,
         )
 
     return asyncio.run(go())
@@ -241,3 +264,141 @@ def test_user_array_and_output_options_make_a_job_ineligible(args):
     job = types.SimpleNamespace(state_index=0)
     assert slurm.SlurmWorker(sbatch_args=args)._array_eligible(job) is False
     assert slurm.SlurmWorker(sbatch_args="--partition=x")._array_eligible(job) is True
+
+
+def test_squeue_asks_for_this_user_not_me(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 2, split=False)
+    run_all(worker, jobs)
+    for call in fake.of("squeue"):
+        assert f"--user={getpass.getuser()}" in call and "--me" not in call
+
+
+def test_failed_squeue_cycle_is_skipped_not_read_as_empty(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 3, split=False)
+    fake.squeue_fail_first = 2
+    assert run_all(worker, jobs) == [True] * 3
+    assert fake.premature == []  # no job went to sacct on a failed poll
+    assert len(fake.of("squeue")) == 2 + 4
+
+
+def test_squeue_failing_in_a_row_fails_the_waiting_jobs(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 3, split=False)
+    fake.squeue_fail_first = 99
+    results = run_all(worker, jobs)
+    assert all(
+        isinstance(r, RuntimeError) and "3 times in a row" in str(r) for r in results
+    )
+    assert len(fake.of("squeue")) == 3  # one per cycle, up to the limit
+    assert fake.of("sacct") == []
+
+
+def test_squeue_failure_limit_is_a_setting(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 1, split=False, squeue_failures=5)
+    fake.squeue_fail_first = 99
+    (result,) = run_all(worker, jobs)
+    assert "5 times in a row" in str(result) and len(fake.of("squeue")) == 5
+
+
+def test_nonzero_exit_without_a_message_is_also_a_failure(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 1, split=False)
+    fake.squeue_fail_first = 1
+    orig = fake.__call__
+
+    async def silent(*cmd, **kw):
+        rc, out, err = await orig(*cmd, **kw)
+        return rc, out, "" if cmd[0] == "squeue" else err
+
+    monkeypatch.setattr(slurm.base, "read_and_display_async", silent)
+    assert run_all(worker, jobs) == [True]
+    assert fake.premature == []
+
+
+def test_hung_squeue_counts_as_a_failure(tmp_path, monkeypatch):
+    fake, worker, jobs = make(
+        tmp_path, monkeypatch, 1, split=False, squeue_timeout=0.05, squeue_failures=2
+    )
+
+    async def hang():
+        await asyncio.sleep(60)
+
+    fake.squeue_hook = hang
+    (result,) = run_all(worker, jobs)
+    assert isinstance(result, RuntimeError) and "2 times in a row" in str(result)
+
+
+def test_job_submitted_during_a_running_squeue_is_not_judged_by_it(
+    tmp_path, monkeypatch
+):
+    """A poll in flight predates the job submitted meanwhile, so its listing must not
+    be used to decide that job: it is absent from it only because it was not yet queued.
+    """
+    fake, worker, jobs = make(tmp_path, monkeypatch, 2, split=False, queue_cycles=2)
+    started, release = asyncio.Event(), asyncio.Event()
+    first = True
+
+    async def pause():
+        nonlocal first
+        if first:
+            first = False
+            started.set()
+            await release.wait()
+
+    fake.squeue_hook = pause
+
+    async def go():
+        a = asyncio.ensure_future(worker.run(jobs[0]))
+        await started.wait()  # job 0's squeue is running
+        b = asyncio.ensure_future(worker.run(jobs[1]))  # submitted during it
+        for _ in range(20):
+            await asyncio.sleep(0)
+        release.set()
+        return await asyncio.wait_for(asyncio.gather(a, b), 30)
+
+    assert asyncio.run(go()) == [True, True]
+    assert fake.premature == []
+
+
+def test_cancelled_poller_does_not_strand_its_waiters(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 1, split=False)
+    started = asyncio.Event()
+
+    async def hang():
+        started.set()
+        await asyncio.sleep(60)
+
+    fake.squeue_hook = hang
+
+    async def go():
+        job = asyncio.ensure_future(worker.run(jobs[0]))
+        await started.wait()
+        worker._poller.cancel()
+        return await asyncio.wait_for(asyncio.gather(job, return_exceptions=True), 5)
+
+    (result,) = asyncio.run(go())
+    assert isinstance(result, RuntimeError) and "poller stopped" in str(result)
+
+
+def test_cache_root_is_part_of_the_grouping_key(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 4)
+    for job in jobs[2:]:
+        job.cache_root = tmp_path / "other"
+    assert run_all(worker, jobs) == [True] * 4
+    sbatches = fake.of("sbatch")
+    assert [a for c in sbatches for a in c if a.startswith("--array")] == [
+        "--array=0-1",
+        "--array=0-1",
+    ]
+    assert len(sbatches) == 2
+    manifests = sorted(p.read_text().split()[0] for p in tmp_path.rglob("jobs.txt"))
+    assert len(manifests) == 2
+
+
+def test_rerun_is_part_of_the_grouping_key(tmp_path, monkeypatch):
+    fake, worker, jobs = make(tmp_path, monkeypatch, 4)
+    assert run_all(worker, jobs, reruns=[False, False, True, True]) == [True] * 4
+    sbatches = fake.of("sbatch")
+    assert len(sbatches) == 2
+    scripts = sorted(p.read_text() for p in tmp_path.rglob("batchscript_array.sh"))
+    assert len(scripts) == 2
+    assert sum("rerun=True" in t for t in scripts) == 1
+    assert sum("rerun=False" in t for t in scripts) == 1
