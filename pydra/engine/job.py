@@ -192,8 +192,10 @@ class Job(ty.Generic[TaskType]):
     def __getstate__(self):
         # Carry the checksum, so a worker never rehashes the task's code
         self.checksum
-        # The task stays an object in the state, so the pickler that serialises the
-        # job (always cloudpickle) serialises the task once, in the same stream
+        # The task stays an object in the state, so it is serialised in the job's own
+        # stream, and jobs pickled together (a workflow's node jobs) share one memo.
+        # A Job therefore requires cloudpickle: the stdlib pickle cannot serialise the
+        # task class, so a worker plugin must hand a Job over as ``cloudpickle.dumps(job)``
         state = self.__dict__.copy()
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.

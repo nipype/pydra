@@ -1,6 +1,7 @@
 """The cheap submission path of proposal 0001 §3.2: a job's task is pickled once, and the
 hashes that name results are unchanged."""
 
+import pickle
 import sys
 from pathlib import Path
 import cloudpickle as cp
@@ -50,18 +51,26 @@ def test_job_state_holds_the_task_itself(tmp_path):
     assert job.__getstate__()["task"] is job.task
 
 
-def test_task_is_visited_once_per_job_pickle(tmp_path, monkeypatch):
+def test_jobs_pickled_in_one_stream_share_the_task_class(tmp_path):
+    """A workflow job's ``_job.pklz`` embeds its node jobs. Their tasks share one
+    cloudpickle memo, so the task class is serialised once, not once per job."""
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        jobs = [Job(Double(x=i), submitter=sub, name="Double") for i in range(50)]
+        for job in jobs:
+            job.checksum
+        per_job = len(cp.dumps(jobs)) / len(jobs)
+        alone = len(cp.dumps(jobs[0]))
+    assert alone > 5000  # the class is carried by value, as a worker needs it
+    assert per_job < alone / 3
+
+
+def test_job_requires_cloudpickle(tmp_path):
+    """The task is held as an object, so a pickler that cannot serialise task classes
+    by value (the stdlib's) cannot pickle a Job"""
     job = make_job(tmp_path)
-    visits = []
-    real = type(job.task).__getstate__
-
-    def getstate(self):
-        visits.append(1)
-        return real(self)
-
-    monkeypatch.setattr(type(job.task), "__getstate__", getstate)
-    cp.dumps(job)
-    assert len(visits) == 1
+    with pytest.raises((pickle.PicklingError, AttributeError, TypeError)):
+        pickle.dumps(job)
+    assert cp.loads(cp.dumps(job)).task.x == 3
 
 
 def test_pickled_job_keeps_its_checksum_and_task(tmp_path):
