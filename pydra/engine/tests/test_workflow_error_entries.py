@@ -7,7 +7,7 @@ from pydra.engine import WorkflowError
 from pydra.engine import job as job_module
 from pydra.engine.job import Job
 from pydra.engine.submitter import JobErrorEntry, Submitter
-from pydra.engine.tests.test_on_error import Propagate
+from pydra.engine.tests.test_on_error import BadInput, Propagate
 
 
 @pytest.mark.parametrize(
@@ -23,6 +23,7 @@ def test_entries_name_the_failed_job(worker, on_error, tmp_path):
     assert isinstance(entry, JobErrorEntry)
     assert entry.job_name == "A"
     assert entry.state_index == 1
+    assert entry.phase == "run"
     assert entry.exception_type == "builtins.Exception"
     assert "i'm raising an exception!" in entry.message
     assert "Traceback" in entry.traceback
@@ -33,8 +34,30 @@ def test_entries_name_the_failed_job(worker, on_error, tmp_path):
     assert sub.entries == error.entries
 
 
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_entries_record_unresolvable_inputs(worker, tmp_path):
+    """An element whose inputs cannot be resolved has an entry with phase
+    ``resolution``, apart from those of jobs that ran and errored"""
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    with Submitter(
+        worker=worker, on_error="raise_at_end", cache_root=tmp_path / "cache"
+    ) as sub:
+        with pytest.raises(WorkflowError) as excinfo:
+            sub(BadInput(xs=[0, 1, 2, 3], marks=str(marks)), raise_errors=True)
+    (entry,) = excinfo.value.entries
+    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    assert entry.exception_type
+    assert "Traceback" in entry.traceback
+    assert len(excinfo.value.errors) == 1
+    assert "B(1)" in excinfo.value.errors[0]
+    assert pickle.loads(pickle.dumps(excinfo.value)).entries == [entry]
+
+
 def test_entries_survive_pickling():
-    entry = JobErrorEntry("A", 3, "builtins.ValueError", "bad", "Traceback ...")
+    entry = JobErrorEntry(
+        "A", 3, "builtins.ValueError", "bad", "Traceback ...", "resolution"
+    )
     error = pickle.loads(pickle.dumps(WorkflowError("failed", ["one"], [entry])))
     assert error.entries == [entry]
     assert (str(error), error.errors) == ("failed", ["one"])

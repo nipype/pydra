@@ -73,6 +73,9 @@ class JobErrorEntry:
         ``str()`` of the exception
     traceback : str
         The formatted traceback
+    phase : str
+        ``"run"`` if the job ran and errored, ``"resolution"`` if its inputs could
+        not be resolved from its upstream results, so it never ran
     """
 
     job_name: str
@@ -80,6 +83,7 @@ class JobErrorEntry:
     exception_type: str
     message: str
     traceback: str
+    phase: str = "run"
 
 
 class WorkflowError(RuntimeError):
@@ -91,8 +95,8 @@ class WorkflowError(RuntimeError):
         A description of each errored job, and of each element whose inputs could not
         be resolved
     entries : list[JobErrorEntry]
-        A record of each errored job, in the order of its failure. An element whose
-        inputs could not be resolved has no entry
+        A record of each errored job and of each element whose inputs could not be
+        resolved, in the order of failure; see ``JobErrorEntry.phase``
     """
 
     def __init__(
@@ -540,8 +544,8 @@ class Submitter:
         wf_job.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
         on_error = self._loop_on_error(is_async=False)
-        errors = self.pop_resolution_errors(exec_graph)
         entries: list[JobErrorEntry] = []
+        errors = self.pop_resolution_errors(exec_graph, entries)
         while (tasks or any(not n.done for n in exec_graph.nodes)) and not (
             errors and on_error == "fail_fast"
         ):
@@ -560,7 +564,7 @@ class Submitter:
                 finally:
                     job._awaiting_run = False
             tasks = self.get_runnable_tasks(exec_graph)
-            errors.extend(self.pop_resolution_errors(exec_graph))
+            errors.extend(self.pop_resolution_errors(exec_graph, entries))
             if errors and on_error == "fail_fast":
                 break
         if errors:
@@ -592,8 +596,8 @@ class Submitter:
         failed: set[str] = set()
         tasks = self.get_runnable_tasks(exec_graph)
         on_error = self._loop_on_error(is_async=True)
-        errors = self.pop_resolution_errors(exec_graph)
         entries: list[JobErrorEntry] = []
+        errors = self.pop_resolution_errors(exec_graph, entries)
         try:
             while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
                 if not tasks and not task_futures:
@@ -713,7 +717,7 @@ class Submitter:
                 if errors and on_error == "fail_fast":
                     break
                 tasks = self.get_runnable_tasks(exec_graph)
-                errors.extend(self.pop_resolution_errors(exec_graph))
+                errors.extend(self.pop_resolution_errors(exec_graph, entries))
                 if errors and on_error == "fail_fast":
                     break
         finally:
@@ -722,15 +726,18 @@ class Submitter:
             # shared with other code (e.g. in Jupyter notebooks)
             for task_future in task_futures:
                 task_future.cancel()
-            errors.extend(self.pop_resolution_errors(exec_graph))
+            errors.extend(self.pop_resolution_errors(exec_graph, entries))
             if errors:
                 raise workflow_error(workflow_task, errors, entries)
 
     @staticmethod
-    def pop_resolution_errors(exec_graph: DiGraph["NodeExecution"]) -> list[str]:
+    def pop_resolution_errors(
+        exec_graph: DiGraph["NodeExecution"],
+        entries: "list[JobErrorEntry] | None" = None,
+    ) -> list[str]:
         """The errors of elements whose inputs could not be resolved, which have not
-        been collected before"""
-        return [e for n in exec_graph.nodes for e in n.pop_resolution_errors()]
+        been collected before. Their records are added to ``entries`` if given"""
+        return [e for n in exec_graph.nodes for e in n.pop_resolution_errors(entries)]
 
     async def fetch_finished(
         self, futures
@@ -907,6 +914,7 @@ class NodeExecution(ty.Generic[TaskType]):
 
     # Descriptions of input-resolution errors not yet collected by ``Submitter``
     _resolution_errors: list[str]
+    _resolution_entries: "list[JobErrorEntry]"
     # The progress of the predecessors when the blocked elements were last checked
     _progress: tuple | None
 
@@ -930,6 +938,7 @@ class NodeExecution(ty.Generic[TaskType]):
         self.workflow = workflow
         self.graph = None
         self._resolution_errors = []
+        self._resolution_entries = []
         self._progress = None
 
     @property
@@ -1227,10 +1236,19 @@ class NodeExecution(ty.Generic[TaskType]):
             self._resolution_errors.append(
                 f"Job {name!r}, inputs could not be resolved, errored:\n{format_exc()}"
             )
+            self._resolution_entries.append(
+                error_entry(self.name, index, exc, phase="resolution")
+            )
 
-    def pop_resolution_errors(self) -> list[str]:
-        """The input-resolution errors recorded since the last call"""
+    def pop_resolution_errors(
+        self, entries: "list[JobErrorEntry] | None" = None
+    ) -> list[str]:
+        """The input-resolution errors recorded since the last call, and their records
+        added to ``entries`` if given"""
         errors, self._resolution_errors = self._resolution_errors, []
+        records, self._resolution_entries = self._resolution_entries, []
+        if entries is not None:
+            entries.extend(records)
         return errors
 
 
@@ -1266,16 +1284,21 @@ def record_job_error(
     """Add the description and the record of a job's error to ``errors`` and
     ``entries``, called while its exception is being handled"""
     errors.append(job_error(job))
-    exc = sys.exc_info()[1]
+    entries.append(error_entry(job.name, job.state_index, sys.exc_info()[1]))
+
+
+def error_entry(
+    job_name: str, state_index: int | None, exc: BaseException, phase: str = "run"
+) -> JobErrorEntry:
+    """The record of an exception, called while it is being handled"""
     exc_class = type(exc)
-    entries.append(
-        JobErrorEntry(
-            job_name=job.name,
-            state_index=job.state_index,
-            exception_type=f"{exc_class.__module__}.{exc_class.__qualname__}",
-            message=str(exc),
-            traceback=format_exc(),
-        )
+    return JobErrorEntry(
+        job_name=job_name,
+        state_index=state_index,
+        exception_type=f"{exc_class.__module__}.{exc_class.__qualname__}",
+        message=str(exc),
+        traceback=format_exc(),
+        phase=phase,
     )
 
 
