@@ -3,6 +3,7 @@
 import asyncio
 import typing as ty
 import re
+import warnings
 import os
 from pathlib import Path
 from traceback import format_exc
@@ -27,7 +28,6 @@ from pydra.engine.store import (
     PickleStore,
     ResultStore,
     ReusePolicy,
-    remove_from_cache,
 )
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_root
@@ -111,10 +111,9 @@ class Submitter:
     messengers_args : dict[str, Any], optional
         Argument(s) used by `messegner`. Saved in the `audit` attribu
     clean_stale_locks : bool, optional
-        Whether to clean stale lock files, i.e. lock files that were created before the
-        start of the current run. Don't set if using a global cache where there are
-        potentially multiple workflows that are running concurrently. By default (None),
-        lock files will be cleaned if the *debug* worker is used
+        Deprecated and ignored. A lease whose holder stopped renewing it is taken over
+        once it is older than ``stale_after`` (see
+        :class:`~pydra.engine.lease.LeaseSettings`), whichever host left it
     store : ResultStore, optional
         Where jobs run and their results are kept, by default a
         :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
@@ -260,6 +259,7 @@ class Submitter:
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         worker = self._make_worker(worker, kwargs)
+        worker.plugin_name()  # a worker class must name its plugin
         self.worker = worker
         self.router = router
         self.workers = {DEFAULT_WORKER: worker}
@@ -267,11 +267,15 @@ class Submitter:
             self.workers[name] = self._make_worker(spec, {})
         self._sync_pool = None
         self.run_start_time = None
-        self.clean_stale_locks = (
-            clean_stale_locks
-            if clean_stale_locks is not None
-            else (self.worker.plugin_name() == "debug")
-        )
+        if clean_stale_locks is not None:
+            warnings.warn(
+                "Submitter(clean_stale_locks=...) is deprecated and has no effect: a "
+                "lease whose holder stopped renewing it is taken over after "
+                "LeaseSettings.stale_after",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        self.clean_stale_locks = False
         if on_error is not None and on_error not in self.ON_ERROR_MODES:
             raise ValueError(
                 f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
@@ -434,11 +438,11 @@ class Submitter:
         if result is None:
             if job.lockfile.exists():
                 raise RuntimeError(
-                    f"Job {job} has a lockfile, but no result was found. "
-                    "This may be due to another submission that is currently running, or the hard "
-                    "interrupt (e.g. a debugging abortion) interrupting a previous run. "
-                    f"In the case of an interrupted run, please remove {str(job.lockfile)!r} "
-                    "and resubmit."
+                    f"Job {job} has a lease, but no result was found. "
+                    "This may be due to another submission that is currently running. "
+                    f"A lease left by an interrupted run ({str(job.lockfile)!r}) is "
+                    "taken over once it has not been renewed for "
+                    "LeaseSettings.stale_after; resubmit then."
                 )
             raise RuntimeError(f"Job {job} has no result in {str(job.cache_dir)!r}")
         return result
@@ -757,14 +761,6 @@ class Submitter:
             self._sync_pool, lambda: worker.run(job, rerun=rerun)
         )
 
-    def _check_locks(self, tasks: list[Job]) -> None:
-        """Check for stale lock files and remove them."""
-        if self.clean_stale_locks:
-            for job in tasks:
-                start_time = job.run_start_time
-                if start_time and start_time < self.run_start_time:
-                    remove_from_cache(job.lockfile)
-
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """Parse a graph and return all runnable tasks.
 
@@ -795,7 +791,6 @@ class Submitter:
             if not node.started:
                 not_started.add(node)
             tasks.extend(node.get_runnable_tasks(graph))
-        self._check_locks(tasks)
         if len(tasks) > self.max_concurrent:
             logger.info(
                 "Reducing number of tasks to run concurrently from %d to %d",

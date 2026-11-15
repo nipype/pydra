@@ -30,7 +30,6 @@ from typing import (
     Sequence,
     Set,
 )
-from filelock import SoftFileLock
 import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
@@ -38,6 +37,7 @@ import fileformats.core.exceptions
 from pydra.utils.general import (
     STDLIB_MODULES,
     add_exc_note,
+    atomic_write,
     get_fields,
     in_stdlib,
     user_cache_root,
@@ -220,12 +220,14 @@ class PersistentCache:
         except KeyError:
             pass
         key_path = self.location / blake2b(str(key).encode()).hexdigest()
-        with SoftFileLock(key_path.with_suffix(".lock")):
-            if key_path.exists():
-                return Hash(key_path.read_bytes())
-            hsh = calculate_hash()
-            key_path.write_bytes(hsh)
-            self._hashes[key] = Hash(hsh)
+        if key_path.exists():
+            return Hash(key_path.read_bytes())
+        # Two processes may both calculate the same hash; each replaces the entry
+        # atomically with the same bytes, so no lock is needed
+        hsh = calculate_hash()
+        with atomic_write(key_path) as f:
+            f.write(hsh)
+        self._hashes[key] = Hash(hsh)
         return Hash(hsh)
 
     def clean_up(self):
@@ -240,8 +242,6 @@ class PersistentCache:
         PersistentCache._session_cleanups_done.add(self.location)
         now = datetime.now()
         for path in self.location.iterdir():
-            if path.name.endswith(".lock"):
-                continue
             days = (now - datetime.fromtimestamp(path.lstat().st_atime)).days
             if days > self.cleanup_period:
                 path.unlink(missing_ok=True)

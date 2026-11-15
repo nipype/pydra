@@ -12,7 +12,6 @@ import os
 import cloudpickle as cp
 import getpass
 from time import strftime
-from filelock import SoftFileLock
 from fileformats.generic import FileSet
 from pydra.utils.general import (
     attrs_values,
@@ -274,6 +273,9 @@ def save(
     """
     Save a :class:`~pydra.compose.base.Task` object and/or results.
 
+    Each file is replaced atomically. No lock is taken: a job's own files are written
+    while its lease is held (see `pydra.engine.job.Job.run`).
+
     Parameters
     ----------
     task_path : :obj:`Path`
@@ -295,22 +297,20 @@ def save(
     if name_prefix is None:
         name_prefix = ""
 
-    lockfile = task_path.parent / (task_path.name + "_save.lock")
-    with SoftFileLock(lockfile):
-        if result:
-            if result.task and is_workflow(result.task) and result.outputs is not None:
-                # copy files to the workflow directory
-                result.outputs = copyfile_workflow(
-                    wf_path=task_path, outputs=result.outputs
-                )
-            with atomic_write(task_path / f"{name_prefix}_result.pklz") as fp:
-                cp.dump(result, fp)
-        if job:
-            with atomic_write(task_path / f"{name_prefix}_job.pklz") as fp:
-                cp.dump(job, fp)
-        if return_values:
-            with atomic_write(task_path / f"{name_prefix}_return_values.pklz") as fp:
-                cp.dump(job, fp)
+    if result:
+        if result.task and is_workflow(result.task) and result.outputs is not None:
+            # copy files to the workflow directory
+            result.outputs = copyfile_workflow(
+                wf_path=task_path, outputs=result.outputs
+            )
+        with atomic_write(task_path / f"{name_prefix}_result.pklz") as fp:
+            cp.dump(result, fp)
+    if job:
+        with atomic_write(task_path / f"{name_prefix}_job.pklz") as fp:
+            cp.dump(job, fp)
+    if return_values:
+        with atomic_write(task_path / f"{name_prefix}_return_values.pklz") as fp:
+            cp.dump(job, fp)
 
 
 def copyfile_workflow(
