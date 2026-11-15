@@ -4,6 +4,7 @@ import re
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
+import getpass
 import os
 import logging
 import attrs
@@ -444,7 +445,10 @@ class SlurmWorker(base.Worker):
 
     @staticmethod
     def _squeue_cmd() -> tuple[str, ...]:
-        return ("squeue", "-h", f"--user={os.getuid()}", "-r", "-o", "%i")
+        # a numeric uid is accepted by --user; Slurm runs only on POSIX, but the
+        # worker is importable and unit-testable elsewhere
+        user = os.getuid() if hasattr(os, "getuid") else getpass.getuser()
+        return ("squeue", "-h", f"--user={user}", "-r", "-o", "%i")
 
     async def _squeue_all(self) -> frozenset[str]:
         rc, stdout, stderr = await base.read_and_display_async(

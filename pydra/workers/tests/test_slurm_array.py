@@ -1,7 +1,7 @@
 """One ``squeue`` per poll cycle and ``sbatch --array`` for split nodes, with Slurm faked."""
 
 import asyncio
-import os
+import sys
 import time
 import pickle
 import re
@@ -9,6 +9,8 @@ import types
 import pytest
 from pydra.utils.resources import ComputeResources
 from pydra.workers import slurm
+
+USER_FLAG = slurm.SlurmWorker._squeue_cmd()[2]
 
 
 class FakeSlurm:
@@ -64,7 +66,7 @@ class FakeSlurm:
                 )
             return 0, f"Submitted batch job {base_id}\n", ""
         if cmd[0] == "squeue":
-            assert f"--user={os.getuid()}" in cmd, cmd
+            assert USER_FLAG in cmd, cmd
             assert "--me" not in cmd and "-j" not in cmd, cmd
             self.squeue_calls += 1
             if self.squeue_calls <= self.squeue_fail_first:
@@ -271,7 +273,7 @@ def test_squeue_asks_for_this_user_not_me(tmp_path, monkeypatch):
     fake, worker, jobs = make(tmp_path, monkeypatch, 2, split=False)
     run_all(worker, jobs)
     for call in fake.of("squeue"):
-        assert f"--user={os.getuid()}" in call and "--me" not in call
+        assert USER_FLAG in call and "--me" not in call
 
 
 def test_failed_squeue_cycle_is_skipped_not_read_as_empty(tmp_path, monkeypatch):
@@ -334,7 +336,7 @@ def test_hung_squeue_subprocess_is_killed_at_the_timeout(tmp_path, monkeypatch):
             return proc
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
-        return await real("sleep", "30", **kwargs)
+        return await real(sys.executable, "-c", "import time; time.sleep(30)", **kwargs)
 
     monkeypatch.setattr(slurm.base, "read_and_display_async", hanging_squeue)
     start = time.monotonic()
