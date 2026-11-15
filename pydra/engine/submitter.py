@@ -4,6 +4,7 @@ import asyncio
 import typing as ty
 import re
 import os
+import sys
 from pathlib import Path
 from traceback import format_exc
 from tempfile import mkdtemp
@@ -56,21 +57,60 @@ WORKER_KWARG_FAIL_NOTE = "Attempting to instantiate worker submitter"
 OnError = ty.Literal["raise_at_end", "fail_fast"]
 
 
+@attrs.frozen
+class JobErrorEntry:
+    """The error of one job of a workflow, as plain picklable values
+
+    Attributes
+    ----------
+    job_name : str
+        The name of the job
+    state_index : int | None
+        The index of the job's element within its split, None if it has none
+    exception_type : str
+        The qualified name of the exception's class, ``module.Class``
+    message : str
+        ``str()`` of the exception
+    traceback : str
+        The formatted traceback
+    phase : str
+        ``"run"`` if the job ran and errored, ``"resolution"`` if its inputs could
+        not be resolved from its upstream results, so it never ran
+    """
+
+    job_name: str
+    state_index: int | None
+    exception_type: str
+    message: str
+    traceback: str
+    phase: str = "run"
+
+
 class WorkflowError(RuntimeError):
     """Raised when jobs of a workflow errored
 
     Attributes
     ----------
     errors : list[str]
-        A description of each errored job
+        A description of each errored job, and of each element whose inputs could not
+        be resolved
+    entries : list[JobErrorEntry]
+        A record of each errored job and of each element whose inputs could not be
+        resolved, in the order of failure; see ``JobErrorEntry.phase``
     """
 
-    def __init__(self, message: str, errors: list[str]):
+    def __init__(
+        self,
+        message: str,
+        errors: list[str],
+        entries: "list[JobErrorEntry] | None" = None,
+    ):
         super().__init__(message)
         self.errors = errors
+        self.entries = list(entries) if entries is not None else []
 
     def __reduce__(self):
-        return (type(self), (self.args[0], self.errors))
+        return (type(self), (self.args[0], self.errors, self.entries))
 
 
 class Submitter:
@@ -142,6 +182,9 @@ class Submitter:
         stop the executor's processes), so they finish after the call returns, and
         their lock files remain until they do or until the pool is torn down with
         ``shutdown(cancel_futures=True)``
+    telemetry : bool
+        Whether to check for a newer version of pydra, once per session. The
+        ``NO_ET`` environment variable also turns the check off
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -161,9 +204,12 @@ class Submitter:
     run_start_time: datetime | None
     propagate_rerun: bool
     on_error: OnError
+    telemetry: bool
     # The error summary of the last call, one entry per errored job. It is per-instance
     # state reset by each call, so it is only meaningful when calls are not concurrent
     errors: list[str]
+    # The records of the errored jobs of the last call, see ``errors``
+    entries: list[JobErrorEntry]
 
     ON_ERROR_MODES = ty.get_args(OnError)
 
@@ -185,6 +231,7 @@ class Submitter:
         store: ResultStore | None = None,
         reuse: str | ReusePolicy | None = None,
         on_error: OnError | None = None,
+        telemetry: bool = True,
         **kwargs,
     ):
 
@@ -204,7 +251,9 @@ class Submitter:
         elif not callable(router):
             raise TypeError(f"'router' must be callable, not {router!r}")
 
-        Job.check_etelemetry()
+        self.telemetry = telemetry
+        if telemetry:
+            Job.check_etelemetry()
 
         self.audit = Audit(
             audit_flags=audit_flags,
@@ -279,6 +328,7 @@ class Submitter:
         self._on_error_arg = on_error
         self.on_error = self._loop_on_error(self.worker.is_async)
         self.errors = []
+        self.entries = []
         self.worker_kwargs = kwargs
         for each in self.workers.values():
             each.loop = self.loop
@@ -413,11 +463,13 @@ class Submitter:
             hooks=hooks,
         )
         self.errors = []
+        self.entries = []
         try:
             self.run_start_time = datetime.now()
             self.submit(job, rerun=rerun)
         except Exception as exc:
             self.errors = exc.errors if isinstance(exc, WorkflowError) else []
+            self.entries = exc.entries if isinstance(exc, WorkflowError) else []
             error_msg = (
                 f"Full crash report for {type(task).__name__!r} job is here: "
                 + str(job.cache_dir / "_error.pklz")
@@ -492,7 +544,8 @@ class Submitter:
         wf_job.return_values = {"workflow": wf, "exec_graph": exec_graph}
         tasks = self.get_runnable_tasks(exec_graph)
         on_error = self._loop_on_error(is_async=False)
-        errors = self.pop_resolution_errors(exec_graph)
+        entries: list[JobErrorEntry] = []
+        errors = self.pop_resolution_errors(exec_graph, entries)
         while (tasks or any(not n.done for n in exec_graph.nodes)) and not (
             errors and on_error == "fail_fast"
         ):
@@ -507,15 +560,15 @@ class Submitter:
                         raise
                     # The job may have failed before it could save a result
                     job._errored = True
-                    errors.append(job_error(job))
+                    record_job_error(job, errors, entries)
                 finally:
                     job._awaiting_run = False
             tasks = self.get_runnable_tasks(exec_graph)
-            errors.extend(self.pop_resolution_errors(exec_graph))
+            errors.extend(self.pop_resolution_errors(exec_graph, entries))
             if errors and on_error == "fail_fast":
                 break
         if errors:
-            raise workflow_error(wf_job, errors)
+            raise workflow_error(wf_job, errors, entries)
 
     async def expand_workflow_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
@@ -543,7 +596,8 @@ class Submitter:
         failed: set[str] = set()
         tasks = self.get_runnable_tasks(exec_graph)
         on_error = self._loop_on_error(is_async=True)
-        errors = self.pop_resolution_errors(exec_graph)
+        entries: list[JobErrorEntry] = []
+        errors = self.pop_resolution_errors(exec_graph, entries)
         try:
             while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
                 if not tasks and not task_futures:
@@ -659,11 +713,11 @@ class Submitter:
                         # otherwise remain queued indefinitely
                         failed.add(job.checksum)
                         job._errored = True
-                        errors.append(job_error(job))
+                        record_job_error(job, errors, entries)
                 if errors and on_error == "fail_fast":
                     break
                 tasks = self.get_runnable_tasks(exec_graph)
-                errors.extend(self.pop_resolution_errors(exec_graph))
+                errors.extend(self.pop_resolution_errors(exec_graph, entries))
                 if errors and on_error == "fail_fast":
                     break
         finally:
@@ -672,15 +726,18 @@ class Submitter:
             # shared with other code (e.g. in Jupyter notebooks)
             for task_future in task_futures:
                 task_future.cancel()
-            errors.extend(self.pop_resolution_errors(exec_graph))
+            errors.extend(self.pop_resolution_errors(exec_graph, entries))
             if errors:
-                raise workflow_error(workflow_task, errors)
+                raise workflow_error(workflow_task, errors, entries)
 
     @staticmethod
-    def pop_resolution_errors(exec_graph: DiGraph["NodeExecution"]) -> list[str]:
+    def pop_resolution_errors(
+        exec_graph: DiGraph["NodeExecution"],
+        entries: "list[JobErrorEntry] | None" = None,
+    ) -> list[str]:
         """The errors of elements whose inputs could not be resolved, which have not
-        been collected before"""
-        return [e for n in exec_graph.nodes for e in n.pop_resolution_errors()]
+        been collected before. Their records are added to ``entries`` if given"""
+        return [e for n in exec_graph.nodes for e in n.pop_resolution_errors(entries)]
 
     async def fetch_finished(
         self, futures
@@ -857,6 +914,7 @@ class NodeExecution(ty.Generic[TaskType]):
 
     # Descriptions of input-resolution errors not yet collected by ``Submitter``
     _resolution_errors: list[str]
+    _resolution_entries: "list[JobErrorEntry]"
     # The progress of the predecessors when the blocked elements were last checked
     _progress: tuple | None
 
@@ -880,6 +938,7 @@ class NodeExecution(ty.Generic[TaskType]):
         self.workflow = workflow
         self.graph = None
         self._resolution_errors = []
+        self._resolution_entries = []
         self._progress = None
 
     @property
@@ -1177,10 +1236,19 @@ class NodeExecution(ty.Generic[TaskType]):
             self._resolution_errors.append(
                 f"Job {name!r}, inputs could not be resolved, errored:\n{format_exc()}"
             )
+            self._resolution_entries.append(
+                error_entry(self.name, index, exc, phase="resolution")
+            )
 
-    def pop_resolution_errors(self) -> list[str]:
-        """The input-resolution errors recorded since the last call"""
+    def pop_resolution_errors(
+        self, entries: "list[JobErrorEntry] | None" = None
+    ) -> list[str]:
+        """The input-resolution errors recorded since the last call, and their records
+        added to ``entries`` if given"""
         errors, self._resolution_errors = self._resolution_errors, []
+        records, self._resolution_entries = self._resolution_entries, []
+        if entries is not None:
+            entries.extend(records)
         return errors
 
 
@@ -1210,13 +1278,42 @@ def job_error(job: "Job") -> str:
     return f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
 
 
-def workflow_error(wf_job: "Job[workflow.Task]", errors: list[str]) -> WorkflowError:
+def record_job_error(
+    job: "Job", errors: list[str], entries: list[JobErrorEntry]
+) -> None:
+    """Add the description and the record of a job's error to ``errors`` and
+    ``entries``, called while its exception is being handled"""
+    errors.append(job_error(job))
+    entries.append(error_entry(job.name, job.state_index, sys.exc_info()[1]))
+
+
+def error_entry(
+    job_name: str, state_index: int | None, exc: BaseException, phase: str = "run"
+) -> JobErrorEntry:
+    """The record of an exception, called while it is being handled"""
+    exc_class = type(exc)
+    return JobErrorEntry(
+        job_name=job_name,
+        state_index=state_index,
+        exception_type=f"{exc_class.__module__}.{exc_class.__qualname__}",
+        message=str(exc),
+        traceback=format_exc(),
+        phase=phase,
+    )
+
+
+def workflow_error(
+    wf_job: "Job[workflow.Task]",
+    errors: list[str],
+    entries: "list[JobErrorEntry] | None" = None,
+) -> WorkflowError:
     """The error raised at the end of a workflow whose jobs errored"""
     all_errors = "\n\n".join(errors)
     return WorkflowError(
         f"Workflow job {wf_job} failed with errors:\n\n{all_errors}\n\n"
         f"See output directory for details: {wf_job.cache_dir}",
         errors,
+        entries,
     )
 
 
