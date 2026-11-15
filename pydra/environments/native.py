@@ -17,7 +17,8 @@ class Native(base.Environment):
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         keys = ["return_code", "stdout", "stderr"]
         cmd_args = job.task._command_args(values=job.inputs)
-        values = base.execute(cmd_args)
+        job.cache_dir.mkdir(parents=True, exist_ok=True)
+        values = base.execute(cmd_args, cwd=job.cache_dir)
         output = dict(zip(keys, values))
         if output["return_code"]:
             msg = f"Error running '{job.name}' job with {cmd_args}:"

@@ -5,6 +5,7 @@ import logging
 import os
 import inspect
 import sys
+import warnings
 from pathlib import Path
 import typing as ty
 from uuid import uuid4
@@ -167,6 +168,7 @@ class Job(ty.Generic[TaskType]):
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
+        self.chdir = submitter.chdir
         self.cache_root = submitter.cache_root
         self.store = submitter.store
         self._run_start_time = None
@@ -210,6 +212,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
 
     @classmethod
@@ -343,6 +346,38 @@ class Job(ty.Generic[TaskType]):
         if self.persist_pickle:
             save(self.cache_dir, job=self)
 
+    @property
+    def _enters_cache_dir(self) -> bool:
+        """Whether the job runs with the process working directory set to its cache
+        directory: unless the submitter was given ``chdir=False``."""
+        return self.chdir
+
+    def _warn_if_outputs_outside_cache_dir(self, outputs, cwd) -> None:
+        """Under ``chdir=False``, warn about FileSet outputs of a Python task that are
+        in the caller's directory ``cwd`` rather than the cache directory: a relative
+        path written by the function, which other jobs can overwrite."""
+        if self.chdir or self.task._executor_name != "function":
+            return
+        root = self.cache_dir.resolve()
+        caller = Path(cwd).resolve()
+        for name in outputs:
+            vals = getattr(outputs, name, None)
+            for val in vals if isinstance(vals, (list, tuple)) else [vals]:
+                if not isinstance(val, FileSet):
+                    continue
+                for path in val.fspaths:
+                    resolved = Path(path).resolve()
+                    if resolved.is_relative_to(caller) and not resolved.is_relative_to(
+                        root
+                    ):
+                        warnings.warn(
+                            f"Output {name!r} of {self.name!r} is {str(path)!r}, in the "
+                            f"caller's directory {str(caller)!r} rather than its cache "
+                            f"directory {str(root)!r}: with chdir=False a relative path "
+                            "is written in the caller's directory, where other jobs can "
+                            "overwrite it and corrupt cache hits"
+                        )
+
     def _pickle_to_commit(self, result: Result) -> "Job | None":
         """The job to write beside ``result``: this job if it is to be persisted or
         has failed, otherwise None."""
@@ -373,9 +408,11 @@ class Job(ty.Generic[TaskType]):
                     self._cached_result = result
                     return result
             self._errored = False
+            enters = self._enters_cache_dir
             cwd = os.getcwd()
             self._populate_filesystem()
-            os.chdir(self.cache_dir)
+            if enters:
+                os.chdir(self.cache_dir)
             result = Result(
                 outputs=None,
                 runtime=None,
@@ -385,13 +422,14 @@ class Job(ty.Generic[TaskType]):
                 context=self.context,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir)
+            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
             if self.audit.audit_check(AuditFlag.PROV):
                 self.audit.audit_task(job=self)
             try:
                 self.audit.monitor()
                 self.task._run(self, rerun)
                 result.outputs = self.task.Outputs._from_job(self)
+                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -407,7 +445,8 @@ class Job(ty.Generic[TaskType]):
                     self._awaiting_run = False
                     self._remove_info_file()
                 finally:
-                    os.chdir(cwd)
+                    if enters:
+                        os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
@@ -440,6 +479,7 @@ class Job(ty.Generic[TaskType]):
                     self._cached_result = result
                     return result
             self._errored = False
+            enters = self._enters_cache_dir
             cwd = os.getcwd()
             self._populate_filesystem()
             result = Result(
@@ -451,11 +491,12 @@ class Job(ty.Generic[TaskType]):
                 context=self.context,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir)
+            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
             try:
                 self.audit.monitor()
                 await self.task._run_async(self, rerun)
                 result.outputs = self.task.Outputs._from_job(self)
+                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -472,7 +513,8 @@ class Job(ty.Generic[TaskType]):
                     self._awaiting_run = False
                     self._remove_info_file()
                 finally:
-                    os.chdir(cwd)
+                    if enters:
+                        os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job

@@ -4,6 +4,7 @@ from __future__ import annotations
 import typing as ty
 import re
 import glob
+from pathlib import Path
 from collections import defaultdict
 import inspect
 from copy import copy
@@ -605,8 +606,11 @@ class GlobCallable:
     def __init__(self, pattern: str):
         self.pattern = pattern
 
-    def __call__(self) -> generic.FileSet:
-        matches = glob.glob(self.pattern)
+    def __call__(self, cache_dir) -> generic.FileSet:
+        matches = [
+            str(Path(cache_dir) / m)
+            for m in glob.glob(self.pattern, root_dir=cache_dir)
+        ]
         if not matches:
             raise FileNotFoundError(f"No files found matching pattern: {self.pattern}")
         return matches
