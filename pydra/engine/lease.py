@@ -541,6 +541,8 @@ class DirectoryLease:
                 self._refused = err
                 return False
             raise
+        if not self._claim(gone, claimed):
+            return False
         self._remove(gone)
         if tokens:
             self._broke(holder, age)
@@ -577,10 +579,32 @@ class DirectoryLease:
             self.settings.stale_after,
         )
 
+    def _claim(self, gone: Path, claimed: str) -> bool:
+        """Whether this process claimed the entry ``claimed`` it renamed to ``gone``.
+
+        A rename does not settle this alone: on Windows a rename opens its source and
+        renames the open handle, so two processes renaming one entry can both
+        succeed, the second moving the directory the first just moved. Each then
+        makes ``claimed-<name>`` in the directory it moved, which is one directory
+        whatever its name now, and only one ``mkdir`` succeeds. A process whose
+        directory was moved on before its ``mkdir`` finds nothing at ``gone``."""
+        try:
+            os.mkdir(gone / f"claimed-{claimed}")
+        except OSError:
+            return False
+        return True
+
     def _remove(self, claimed: Path) -> None:
-        """Remove a claimed entry and then the lease directory, if nothing else is
+        """Remove a claimed entry and every ``gone-`` entry beside it, which are
+        claimed or released remains, then the lease directory, if nothing else is
         in it."""
         shutil.rmtree(claimed, ignore_errors=True)
+        try:
+            remains = [e for e in os.listdir(self.lockfile) if e.startswith("gone-")]
+        except OSError:
+            remains = []
+        for entry in remains:
+            shutil.rmtree(self.lockfile / entry, ignore_errors=True)
         try:
             os.rmdir(self.lockfile)
         except OSError:

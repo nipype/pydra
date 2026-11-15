@@ -355,6 +355,49 @@ def test_real_heartbeat_keeps_a_waiter_in_another_process_out(tmp_path):
     assert holder.lost is None
 
 
+def test_second_rename_of_a_claimed_token_does_not_count_twice(tmp_path, monkeypatch):
+    """On Windows a rename opens its source and renames the open handle, so a second
+    taker whose rename started before the first finished moves the directory the
+    first has just claimed, and both renames succeed. Exactly one of them takes the
+    lease over, and the lease is left removable at once."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    planted = newest_mtime(lockfile)
+    clock = Clock(planted + 11)
+    settings = LeaseSettings(stale_after=10, timeout=10, attribute_delay=0)
+    first, second = (
+        DirectoryLease("abc", tmp_path, lockfile, settings=settings, clock=clock)
+        for _ in range(2)
+    )
+    for lease in (first, second):
+        lease._prepare()
+    real_rename = os.rename
+    calls, outcomes = [], []
+
+    def handle_rename(src, dst, *args, **kwargs):
+        src, dst = Path(src), Path(dst)
+        if src != token_dir:
+            return real_rename(src, dst, *args, **kwargs)
+        calls.append(dst)
+        if len(calls) == 1:
+            # the second taker, which listed the lease before either moved it,
+            # opens the token directory; meanwhile the first takes it over
+            outcomes.append(first._judge())
+            return  # its handle rename moved the directory, below, and succeeded
+        real_rename(src, dst)  # the first taker's rename
+        real_rename(dst, calls[0])  # the second's open handle moves it again
+
+    monkeypatch.setattr(os, "rename", handle_rename)
+    outcomes.append(second._judge())
+    monkeypatch.setattr(os, "rename", real_rename)
+    assert len(calls) == 2  # both renames succeeded
+    assert len(first.broke) + len(second.broke) == 1
+    assert outcomes.count(True) >= 1
+    assert not lockfile.exists()
+    with DirectoryLease("abc", tmp_path, lockfile, settings=settings, clock=clock):
+        pass
+
+
 @pytest.mark.timeout(60)
 def test_several_waiters_on_one_dead_lease(tmp_path):
     """Of several processes judging one dead lease, one takes it over; each then
