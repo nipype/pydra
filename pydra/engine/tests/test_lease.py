@@ -311,15 +311,59 @@ def test_lost_lease_does_not_commit(tmp_path):
     assert not lease.cache_dir.exists()
 
 
+WAITER = textwrap.dedent("""
+    import json, sys
+    from pathlib import Path
+    from pydra.engine.lease import DirectoryLease, LeaseSettings, LeaseTimeout
+
+    lockfile = Path(sys.argv[1])
+    settings = LeaseSettings(
+        stale_after=2, timeout=2, attribute_delay=0, max_wait=float(sys.argv[2])
+    )
+    waiter = DirectoryLease("abc", lockfile.parent, lockfile, settings=settings)
+    try:
+        with waiter:
+            outcome = {"error": None}
+    except LeaseTimeout as err:
+        outcome = {"error": type(err).__name__, "message": str(err)}
+    outcome["broke"] = waiter.broke
+    print(json.dumps(outcome))
+    """)
+
+
+@pytest.mark.timeout(120)
+def test_real_heartbeat_keeps_a_waiter_in_another_process_out(tmp_path):
+    """A holder renewed by its own heartbeat thread is never taken over by a waiter
+    in another process: the waiter gives up at max_wait, three stale bounds on."""
+    lockfile = tmp_path / "abc.lock"
+    settings = LeaseSettings(stale_after=2, timeout=2, attribute_delay=0)
+    script = tmp_path / "waiter.py"
+    script.write_text(WAITER)
+    with DirectoryLease("abc", tmp_path, lockfile, settings=settings) as holder:
+        waiter = subprocess.run(
+            [sys.executable, str(script), str(lockfile), "6"],
+            capture_output=True,
+            text=True,
+            timeout=100,
+        )
+        assert waiter.returncode == 0, waiter.stderr
+        outcome = json.loads(waiter.stdout.strip().splitlines()[-1])
+        assert holder.prove()
+    assert outcome["error"] == "LeaseTimeout"
+    assert "max_wait" in outcome["message"]
+    assert outcome["broke"] == []
+    assert holder.lost is None
+
+
 @pytest.mark.timeout(60)
 def test_several_waiters_on_one_dead_lease(tmp_path):
     """Of several processes judging one dead lease, one takes it over; each then
     holds the lease in turn."""
     lockfile = tmp_path / "abc.lock"
-    token_dir = plant_foreign_lease(lockfile)
+    plant_foreign_lease(lockfile)
     old = time.time() - 3600
-    os.utime(token_dir, (old, old))
-    os.utime(lockfile, (old, old))
+    for path in sorted(lockfile.rglob("*"), reverse=True) + [lockfile]:
+        os.utime(path, (old, old))  # the holder record, then its directories
     settings = LeaseSettings(stale_after=10, timeout=60, attribute_delay=0)
     leases = [
         DirectoryLease("abc", tmp_path, lockfile, settings=settings) for _ in range(4)
