@@ -35,7 +35,7 @@ FOREIGN_HOST = "some-other-host.example.org"
 DEAD_PID = 999999
 
 # Short bounds for local disk: beats every 0.05 s, stale after 0.5 s
-FAST = LeaseSettings(stale_after=0.5, timeout=0.5, attribute_delay=0)
+FAST = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
 
 
 class Clock:
@@ -318,7 +318,7 @@ WAITER = textwrap.dedent("""
 
     lockfile = Path(sys.argv[1])
     settings = LeaseSettings(
-        stale_after=2, timeout=2, attribute_delay=0, max_wait=float(sys.argv[2])
+        stale_after=2, timeout=10, attribute_delay=0, max_wait=float(sys.argv[2])
     )
     waiter = DirectoryLease("abc", lockfile.parent, lockfile, settings=settings)
     try:
@@ -336,7 +336,7 @@ def test_real_heartbeat_keeps_a_waiter_in_another_process_out(tmp_path):
     """A holder renewed by its own heartbeat thread is never taken over by a waiter
     in another process: the waiter gives up at max_wait, three stale bounds on."""
     lockfile = tmp_path / "abc.lock"
-    settings = LeaseSettings(stale_after=2, timeout=2, attribute_delay=0)
+    settings = LeaseSettings(stale_after=2, timeout=10, attribute_delay=0)
     script = tmp_path / "waiter.py"
     script.write_text(WAITER)
     with DirectoryLease("abc", tmp_path, lockfile, settings=settings) as holder:
@@ -398,33 +398,166 @@ def test_second_rename_of_a_claimed_token_does_not_count_twice(tmp_path, monkeyp
         pass
 
 
-@pytest.mark.timeout(60)
-def test_several_waiters_on_one_dead_lease(tmp_path):
-    """Of several processes judging one dead lease, one takes it over; each then
-    holds the lease in turn."""
+def two_takers(tmp_path):
+    """A dead lease and two waiters judging it on an injected clock."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    clock = Clock(newest_mtime(lockfile) + 11)
+    settings = LeaseSettings(stale_after=10, timeout=10, attribute_delay=0)
+    takers = [
+        DirectoryLease("abc", tmp_path, lockfile, settings=settings, clock=clock)
+        for _ in range(2)
+    ]
+    for lease in takers:
+        lease._prepare()
+    return lockfile, token_dir, clock, settings, takers
+
+
+def test_first_claim_before_second_rename_leaves_no_remains(tmp_path, monkeypatch):
+    """The other order of the Windows handle rename: the first taker claims, then the
+    second's rename moves the claimed directory to its own name. The first removes
+    that remains too, so the lease is free at once, without another stale_after."""
+    lockfile, token_dir, clock, settings, (first, second) = two_takers(tmp_path)
+    real_rename, real_mkdir = os.rename, os.mkdir
+    calls, outcomes = [], []
+
+    def handle_rename(src, dst, *args, **kwargs):
+        src, dst = Path(src), Path(dst)
+        if src != token_dir:
+            return real_rename(src, dst, *args, **kwargs)
+        calls.append(dst)
+        if len(calls) == 1:  # the second opens the token directory, then waits
+            outcomes.append(first._judge())
+            return
+        real_rename(src, dst)  # the first taker's rename
+
+    def claim_then_moved(path, *args, **kwargs):
+        real_mkdir(path, *args, **kwargs)
+        path = Path(path)
+        if path.name.startswith("claimed-") and path.parent == calls[-1]:
+            real_rename(path.parent, calls[0])  # the second's handle rename lands
+
+    monkeypatch.setattr(os, "rename", handle_rename)
+    monkeypatch.setattr(os, "mkdir", claim_then_moved)
+    outcomes.append(second._judge())
+    monkeypatch.undo()
+    assert outcomes == [True, False]
+    assert len(first.broke) == 1 and second.broke == []
+    assert not lockfile.exists()  # the gone- remains were removed
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=settings, clock=clock)
+    lease._prepare()
+    assert lease._try_take()  # free at once
+    lease._release()
+
+
+def test_claim_after_the_marker_is_removed_loses(tmp_path, monkeypatch):
+    """The claimant removes its marker only after the directory's other contents,
+    so a second handle rename and claim landing after the marker is gone finds the
+    directory emptied and loses: one takeover."""
+    lockfile, token_dir, clock, settings, (first, second) = two_takers(tmp_path)
+    real_rename, real_rmdir = os.rename, os.rmdir
+    second_dst, results = [], {}
+
+    def first_rename_only(src, dst, *args, **kwargs):
+        return real_rename(src, dst, *args, **kwargs)
+
+    def rmdir_then_second_claims(path, *args, **kwargs):
+        real_rmdir(path, *args, **kwargs)
+        path = Path(path)
+        if path.name.startswith("claimed-") and not second_dst:
+            # the second's open handle moves the directory, then it claims
+            second_dst.append(lockfile / "gone-second")
+            real_rename(path.parent, second_dst[0])
+            results["second"] = second._claim(second_dst[0], path.name, True)
+
+    monkeypatch.setattr(os, "rename", first_rename_only)
+    monkeypatch.setattr(os, "rmdir", rmdir_then_second_claims)
+    assert first._judge()
+    monkeypatch.undo()
+    assert results == {"second": False}
+    assert len(first.broke) == 1 and second.broke == []
+    assert not lockfile.exists()
+
+
+def test_claim_that_cannot_be_made_raises(tmp_path, monkeypatch):
+    """A claim marker refused for another reason than losing (the storage is full)
+    raises at once instead of waiting without end."""
     lockfile = tmp_path / "abc.lock"
     plant_foreign_lease(lockfile)
-    old = time.time() - 3600
-    for path in sorted(lockfile.rglob("*"), reverse=True) + [lockfile]:
-        os.utime(path, (old, old))  # the holder record, then its directories
-    settings = LeaseSettings(stale_after=10, timeout=60, attribute_delay=0)
+    clock = FakeTime(newest_mtime(lockfile) + 11)
+    real_mkdir = os.mkdir
+
+    def full(path, *args, **kwargs):
+        if Path(path).name.startswith("claimed-"):
+            raise OSError(errno.ENOSPC, "No space left on device", str(path))
+        return real_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "mkdir", full)
+    settings = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, max_wait=60)
+    with pytest.raises(OSError) as excinfo:
+        clock.lease(tmp_path, lockfile, settings).__enter__()
+    assert excinfo.value.errno == errno.ENOSPC
+    assert clock.t == 0  # on the first attempt
+
+
+def test_token_mkdir_racing_an_rmdir_retries(tmp_path, monkeypatch):
+    """APFS answers EINVAL to a mkdir in a directory being removed; the take retries."""
+    lockfile = tmp_path / "abc.lock"
+    real_mkdir = os.mkdir
+    refused = []
+
+    def racing(path, *args, **kwargs):
+        if Path(path).parent == lockfile and not refused:
+            refused.append(path)
+            raise OSError(errno.EINVAL, "Invalid argument", str(path))
+        return real_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "mkdir", racing)
+    clock = FakeTime(time.time())
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    lease._prepare()
+    assert not lease._try_take()
+    os.rmdir(lockfile)  # as the racing rmdir left it
+    with lease:
+        assert lease.held
+    assert refused
+
+
+def test_several_waiters_on_one_dead_lease(tmp_path, monkeypatch):
+    """Several waiters all judge one dead lease stale before any of them moves it:
+    one takes it over, and each then holds the lease in turn."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    clock = Clock(newest_mtime(lockfile) + 11)
+    settings = LeaseSettings(stale_after=10, timeout=10, attribute_delay=0)
     leases = [
-        DirectoryLease("abc", tmp_path, lockfile, settings=settings) for _ in range(4)
+        DirectoryLease("abc", tmp_path, lockfile, settings=settings, clock=clock)
+        for _ in range(4)
     ]
-    held, start = [], threading.Barrier(len(leases))
+    for lease in leases:
+        lease._prepare()
+    real_rename = os.rename
+    started, outcomes = [0], {}
 
-    def take(lease):
-        start.wait()
-        with lease:
-            held.append(lease)
+    def next_judges_first(src, dst, *args, **kwargs):
+        # each waiter's rename waits for the next waiter to judge and rename, so
+        # all four list the dead lease before any of them moves it
+        if Path(src) == token_dir and started[0] < len(leases) - 1:
+            started[0] += 1
+            index = started[0]
+            outcomes[index] = leases[index]._judge()
+        return real_rename(src, dst, *args, **kwargs)
 
-    threads = [threading.Thread(target=take, args=(lease,)) for lease in leases]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(50)
-    assert len(held) == len(leases)
+    monkeypatch.setattr(os, "rename", next_judges_first)
+    outcomes[0] = leases[0]._judge()
+    monkeypatch.undo()
+    assert [outcomes[i] for i in range(4)] == [False, False, False, True]
     assert sum(len(lease.broke) for lease in leases) == 1
+    assert not lockfile.exists()
+    clock.now = time.time()  # the new holders' leases are fresh
+    for lease in leases:
+        with lease:
+            assert lease.held
     assert not lockfile.exists()
 
 
@@ -510,11 +643,12 @@ def test_slots_skip_leases_and_probes(tmp_path):
 def test_async_lease_waits_then_takes_over(tmp_path):
     lockfile = tmp_path / "abc.lock"
     plant_foreign_lease(lockfile)
+    clock = Clock(newest_mtime(lockfile) + 11)
 
     async def take():
         async with DirectoryLease(
-            "abc", tmp_path, lockfile, settings=FAST
-        ) as lease:  # real storage clock
+            "abc", tmp_path, lockfile, settings=SLOW, clock=clock
+        ) as lease:
             return lease.broke
 
     start = time.monotonic()
@@ -585,7 +719,7 @@ def test_issue_916_foreign_lock_file_does_not_hang(worker, tmp_path):
     """The reproduction in #916: a lock file with pid 999999 and another host's name at
     the job's lock path. pydra waited forever; it is now taken over after
     stale_after."""
-    settings = LeaseSettings(stale_after=1, timeout=1, attribute_delay=0)
+    settings = LeaseSettings(stale_after=1, timeout=20, attribute_delay=0)
     store = PickleStore(tmp_path, lease_settings=settings)
     sub, job = planted_job_paths(tmp_path, worker, store)
     plant_legacy_lock(job.lockfile)

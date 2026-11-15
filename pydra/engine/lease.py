@@ -412,8 +412,12 @@ class DirectoryLease:
         token_dir = self.lockfile / token
         try:
             os.mkdir(token_dir)
-        except FileNotFoundError:  # removed as empty by a process taking it over
-            return False
+        except OSError as err:
+            # the lease was removed as empty by a process taking it over; APFS
+            # answers EINVAL instead of ENOENT when the rmdir races this mkdir
+            if err.errno in (errno.ENOENT, errno.EINVAL, _ESTALE):
+                return False
+            raise
         try:
             others = [e for e in os.listdir(self.lockfile) if e != token]
         except FileNotFoundError:
@@ -533,6 +537,10 @@ class DirectoryLease:
             return True
         gone = self.lockfile / f"gone-{uuid.uuid4().hex}"
         try:
+            had_contents = bool(os.listdir(self.lockfile / claimed))
+        except OSError:
+            had_contents = False
+        try:
             os.rename(self.lockfile / claimed, gone)
         except OSError as err:
             if err.errno in (errno.ENOENT, errno.EINVAL, _ESTALE):
@@ -541,9 +549,10 @@ class DirectoryLease:
                 self._refused = err
                 return False
             raise
-        if not self._claim(gone, claimed):
+        marker = f"claimed-{claimed}"
+        if not self._claim(gone, marker, had_contents):
             return False
-        self._remove(gone)
+        self._remove(gone, keep_last=marker)
         if tokens:
             self._broke(holder, age)
         else:
@@ -579,26 +588,73 @@ class DirectoryLease:
             self.settings.stale_after,
         )
 
-    def _claim(self, gone: Path, claimed: str) -> bool:
-        """Whether this process claimed the entry ``claimed`` it renamed to ``gone``.
+    def _claim(self, gone: Path, marker: str, had_contents: bool) -> bool:
+        """Whether this process claimed the entry it renamed to ``gone``.
 
         A rename does not settle this alone: on Windows a rename opens its source and
         renames the open handle, so two processes renaming one entry can both
         succeed, the second moving the directory the first just moved. Each then
-        makes ``claimed-<name>`` in the directory it moved, which is one directory
-        whatever its name now, and only one ``mkdir`` succeeds. A process whose
-        directory was moved on before its ``mkdir`` finds nothing at ``gone``."""
+        makes ``marker`` in the directory it moved, which is one directory whatever
+        its name now, and only one ``mkdir`` succeeds. A process whose directory was
+        moved on before its ``mkdir`` finds nothing at ``gone``.
+
+        The claimant removes the directory's contents before its marker (see
+        `_remove`). A ``mkdir`` that lands after the marker is gone finds the
+        directory emptied, though it ``had_contents`` before the rename, and loses
+        too; it removes what it moved. Only a directory that was already empty can
+        be claimed twice, which counts no takeover.
+
+        Raises
+        ------
+        OSError
+            The marker could not be made for another reason than losing (for
+            example the storage is full).
+        """
         try:
-            os.mkdir(gone / f"claimed-{claimed}")
-        except OSError:
+            os.mkdir(gone / marker)
+        except OSError as err:
+            lost = err.errno in (errno.ENOENT, errno.EEXIST, _ESTALE) or (
+                os.name == "nt" and isinstance(err, PermissionError)
+            )  # Windows refuses a mkdir in a directory pending deletion
+            if not lost:
+                raise
+            logger.debug("Lost the claim of %s: %s", gone, err)
             return False
+        if had_contents:
+            try:
+                rest = [e for e in os.listdir(gone) if e != marker]
+            except OSError:
+                rest = None  # moved on by a later rename: this mkdir still won
+            if rest == []:
+                logger.debug("Lost the claim of %s: being removed", gone)
+                self._remove(gone)
+                return False
         return True
 
-    def _remove(self, claimed: Path) -> None:
-        """Remove a claimed entry and every ``gone-`` entry beside it, which are
-        claimed or released remains, then the lease directory, if nothing else is
-        in it."""
-        shutil.rmtree(claimed, ignore_errors=True)
+    def _remove(self, claimed: Path, keep_last: str | None = None) -> None:
+        """Remove a claimed entry, keeping its claim marker ``keep_last`` until its
+        other contents are gone, then every ``gone-`` entry beside it (claimed or
+        released remains, or a claim in flight that has lost), then the lease
+        directory, if nothing else is in it."""
+        try:
+            contents = [e for e in os.listdir(claimed) if e != keep_last]
+        except OSError:
+            contents = []
+        for entry in contents:
+            path = claimed / entry
+            if os.path.isdir(path) and not os.path.islink(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+        for last in ([claimed / keep_last] if keep_last else []) + [claimed]:
+            try:
+                os.rmdir(last)
+            except OSError:
+                pass
+        shutil.rmtree(claimed, ignore_errors=True)  # anything made meanwhile
         try:
             remains = [e for e in os.listdir(self.lockfile) if e.startswith("gone-")]
         except OSError:
