@@ -3,7 +3,6 @@ import errno
 import json
 import shutil
 import os
-import signal
 import socket
 import subprocess
 import sys
@@ -615,7 +614,7 @@ def test_rerun_after_sigkill_takes_over(tmp_path):
     while not started.exists():
         assert time.monotonic() < deadline, killed.stderr.read()
         time.sleep(0.01)
-    os.kill(killed.pid, signal.SIGKILL)
+    killed.kill()  # SIGKILL, or TerminateProcess on Windows
     killed.communicate(timeout=30)
     assert any(p.suffix == ".lock" for p in (tmp_path / "cache").iterdir())
     started.unlink()

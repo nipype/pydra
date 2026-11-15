@@ -477,11 +477,21 @@ class DirectoryLease:
         return record or None
 
     def _newest_mtime(self, entries: list[str]) -> float | None:
+        """The newest mtime of the lease, its entries and theirs (the holder record
+        and heartbeats), so a renewal shows even where a directory's own mtime is
+        reported late."""
         mtimes = []
-        for path in [self.lockfile] + [self.lockfile / e for e in entries]:
+        paths = [self.lockfile]
+        for entry in entries:
+            paths.append(self.lockfile / entry)
+            try:
+                paths.extend(self.lockfile / entry / e for e in os.listdir(paths[-1]))
+            except OSError:
+                pass
+        for path in paths:
             try:
                 mtimes.append(os.lstat(path).st_mtime)
-            except FileNotFoundError:
+            except OSError:
                 continue
         try:  # read again after listing, so a takeover renamed meanwhile shows
             mtimes.append(os.lstat(self.lockfile).st_mtime)
@@ -519,7 +529,7 @@ class DirectoryLease:
                 return False
             except OSError:
                 return False
-            self._broke(holder, age)
+            logger.debug("Removed the empty stale lease %s", self.lockfile)
             return True
         gone = self.lockfile / f"gone-{uuid.uuid4().hex}"
         try:
@@ -532,7 +542,10 @@ class DirectoryLease:
                 return False
             raise
         self._remove(gone)
-        self._broke(holder, age)
+        if tokens:
+            self._broke(holder, age)
+        else:
+            logger.debug("Removed the remains of a takeover in %s", self.lockfile)
         return True
 
     def _judge_legacy(self, st: os.stat_result) -> bool:
@@ -555,6 +568,7 @@ class DirectoryLease:
         return True
 
     def _broke(self, holder: dict | None, age: float) -> None:
+        """Record that a holder's lease was taken over."""
         self.broke.append({"holder": holder, "age": age})
         logger.warning(
             "Took over the lease %s from %s (stale after %.1fs)",
