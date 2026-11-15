@@ -8,7 +8,8 @@ Run ``python benchmark.py <command>``:
     Per-item overhead of a trivial python task split over ``n`` ints (``kind`` is
     ``split``) or of a 2-node workflow split over ``n`` ints (``kind`` is ``chain``), on
     ``worker`` (``debug`` or ``cf``). Prints cold and cached time per item, the extension
-    of 10% more items, and the filesystem entries per item. With no spec it runs
+    of 10% more items, the same items in reverse order (a new outer job whose items are
+    all cached), and the filesystem entries per item. With no spec it runs
     ``split:debug:200 split:cf:200 chain:debug:200 chain:cf:200``.
 ``partial-failure``
     Whether one failing element of an 8-way split blocks the downstream node for the
@@ -96,13 +97,19 @@ def overhead(kind, n, worker, **worker_kwargs):
         )
     )
 
-    def make(m):
-        return (Double() if kind == "split" else Chain()).split(x=list(range(m)))
+    def make(m, reverse=False):
+        items = list(range(m))[:: -1 if reverse else 1]
+        return (Double() if kind == "split" else Chain()).split(x=items)
 
     out = {}
     try:
-        for label, m in (("cold", n), ("warm", n), ("extend10pct", n + n // 10)):
-            task = make(m)
+        for label, m, reverse in (
+            ("cold", n, False),
+            ("warm", n, False),
+            ("extend10pct", n + n // 10, False),
+            ("allcached", n, True),
+        ):
+            task = make(m, reverse)
             t0 = time.perf_counter()
             with Submitter(worker=worker, cache_root=root, **worker_kwargs) as sub:
                 res = sub(task)
@@ -116,6 +123,7 @@ def overhead(kind, n, worker, **worker_kwargs):
     print(
         f"{kind:6s} worker={worker:5s} n={n:5d} cold={out['cold']:.2f}s ({cold_ms:.1f} ms/item) "
         f"warm={out['warm']:.2f}s ({warm_ms:.2f} ms/item) +10%={out['extend10pct']:.2f}s "
+        f"all-cached={out['allcached']:.2f}s ({1e3 * out['allcached'] / n:.2f} ms/item) "
         f"fs_entries={files} ({files / n:.1f}/item)",
         flush=True,
     )
