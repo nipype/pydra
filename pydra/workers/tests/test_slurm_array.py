@@ -1,7 +1,8 @@
 """One ``squeue`` per poll cycle and ``sbatch --array`` for split nodes, with Slurm faked."""
 
 import asyncio
-import getpass
+import os
+import time
 import pickle
 import re
 import types
@@ -63,7 +64,7 @@ class FakeSlurm:
                 )
             return 0, f"Submitted batch job {base_id}\n", ""
         if cmd[0] == "squeue":
-            assert f"--user={getpass.getuser()}" in cmd, cmd
+            assert f"--user={os.getuid()}" in cmd, cmd
             assert "--me" not in cmd and "-j" not in cmd, cmd
             self.squeue_calls += 1
             if self.squeue_calls <= self.squeue_fail_first:
@@ -270,7 +271,7 @@ def test_squeue_asks_for_this_user_not_me(tmp_path, monkeypatch):
     fake, worker, jobs = make(tmp_path, monkeypatch, 2, split=False)
     run_all(worker, jobs)
     for call in fake.of("squeue"):
-        assert f"--user={getpass.getuser()}" in call and "--me" not in call
+        assert f"--user={os.getuid()}" in call and "--me" not in call
 
 
 def test_failed_squeue_cycle_is_skipped_not_read_as_empty(tmp_path, monkeypatch):
@@ -313,17 +314,36 @@ def test_nonzero_exit_without_a_message_is_also_a_failure(tmp_path, monkeypatch)
     assert fake.premature == []
 
 
-def test_hung_squeue_counts_as_a_failure(tmp_path, monkeypatch):
+def test_hung_squeue_subprocess_is_killed_at_the_timeout(tmp_path, monkeypatch):
+    """A real child that sleeps past ``squeue_timeout`` fails the job at the timeout,
+    and is not waited for."""
+    real = slurm.base.read_and_display_async
     fake, worker, jobs = make(
-        tmp_path, monkeypatch, 1, split=False, squeue_timeout=0.05, squeue_failures=2
+        tmp_path, monkeypatch, 1, split=False, squeue_timeout=0.3, squeue_failures=1
     )
+    children = []
 
-    async def hang():
-        await asyncio.sleep(60)
+    async def hanging_squeue(*cmd, **kwargs):
+        if cmd[0] != "squeue":
+            return await fake(*cmd, **kwargs)
+        original = asyncio.create_subprocess_exec
 
-    fake.squeue_hook = hang
+        async def spy(*args, **kw):
+            proc = await original(*args, **kw)
+            children.append(proc)
+            return proc
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+        return await real("sleep", "30", **kwargs)
+
+    monkeypatch.setattr(slurm.base, "read_and_display_async", hanging_squeue)
+    start = time.monotonic()
     (result,) = run_all(worker, jobs)
-    assert isinstance(result, RuntimeError) and "2 times in a row" in str(result)
+    elapsed = time.monotonic() - start
+    assert isinstance(result, RuntimeError)
+    assert "squeue_timeout=0.3" in str(result) and "squeue" in str(result)
+    assert elapsed < 5, f"waited {elapsed:.1f}s for a child that sleeps 30s"
+    assert children and children[0].returncode is not None  # the child is gone
 
 
 def test_job_submitted_during_a_running_squeue_is_not_judged_by_it(

@@ -4,7 +4,7 @@ import re
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
-import getpass
+import os
 import logging
 import attrs
 from pydra.engine.job import Job, save
@@ -28,7 +28,7 @@ class SlurmWorker(base.Worker):
     Parameters
     ----------
     poll_delay
-        Seconds between poll cycles. Each cycle makes one ``squeue --user=<you>`` call
+        Seconds between poll cycles. Each cycle makes one ``squeue --user=<your uid>`` call
         for every job awaiting a poll.
     sbatch_args
         Extra ``sbatch`` options for every job.
@@ -410,6 +410,11 @@ class SlurmWorker(base.Worker):
                         self._squeue_all(), self.squeue_timeout
                     )
                 except Exception as exc:
+                    if isinstance(exc, asyncio.TimeoutError):
+                        exc = RuntimeError(
+                            f"`{' '.join(self._squeue_cmd())}` did not finish within "
+                            f"squeue_timeout={self.squeue_timeout}s"
+                        )
                     failures += 1
                     if failures < self.squeue_failures:
                         logger.warning(f"squeue failed, skipping this cycle: {exc}")
@@ -438,9 +443,13 @@ class SlurmWorker(base.Worker):
                     future.set_exception(RuntimeError("Slurm queue poller stopped"))
 
     @staticmethod
-    async def _squeue_all() -> frozenset[str]:
-        cmd = ("squeue", "-h", f"--user={getpass.getuser()}", "-r", "-o", "%i")
-        rc, stdout, stderr = await base.read_and_display_async(*cmd, hide_display=True)
+    def _squeue_cmd() -> tuple[str, ...]:
+        return ("squeue", "-h", f"--user={os.getuid()}", "-r", "-o", "%i")
+
+    async def _squeue_all(self) -> frozenset[str]:
+        rc, stdout, stderr = await base.read_and_display_async(
+            *self._squeue_cmd(), hide_display=True
+        )
         if rc or "slurm_load_jobs error" in stderr:
             raise RuntimeError(f"squeue exited {rc}: {stderr.strip()}")
         return frozenset(stdout.split())
