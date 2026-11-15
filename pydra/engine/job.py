@@ -192,8 +192,9 @@ class Job(ty.Generic[TaskType]):
     def __getstate__(self):
         # Carry the checksum, so a worker never rehashes the task's code
         self.checksum
+        # The task stays an object in the state, so the pickler that serialises the
+        # job (always cloudpickle) serialises the task once, in the same stream
         state = self.__dict__.copy()
-        state["task"] = cp.dumps(state["task"])
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
@@ -203,7 +204,10 @@ class Job(ty.Generic[TaskType]):
         return state
 
     def __setstate__(self, state):
-        state["task"] = cp.loads(state["task"])
+        if isinstance(
+            state["task"], bytes
+        ):  # a job pickled before the task was inlined
+            state["task"] = cp.loads(state["task"])
         self.__dict__.update(state)
         # _cached_result is excluded from __getstate__; ensure it always exists
         # so that result() works correctly on deserialized jobs.
