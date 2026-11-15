@@ -49,9 +49,10 @@ class StorageCapabilities:
     Attributes
     ----------
     atomic_mkdir : bool
-        ``mkdir`` of a name that exists fails, so exactly one of two makers wins.
+        ``mkdir`` of a name that exists fails (checked by one process making a name
+        twice), which is what lets one of two makers win.
     atomic_rename : bool
-        A rename of a file replaces its target whole, a directory is renamed whole,
+        A replace of a file replaces its target whole, a directory is renamed whole,
         and a rename onto a directory that is not empty fails.
     server_clock : bool
         A new entry moves its directory's mtime, so mtimes read from the storage are a
@@ -164,7 +165,7 @@ def probe_capabilities(root: os.PathLike) -> StorageCapabilities:
 
         (work / "a").write_bytes(b"new")
         (work / "b").write_bytes(b"old")
-        os.rename(work / "a", work / "b")
+        os.replace(work / "a", work / "b")
         replaced = (work / "b").read_bytes() == b"new" and not (work / "a").exists()
         os.mkdir(work / "from")
         os.rename(work / "from", work / "to")

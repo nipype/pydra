@@ -11,7 +11,8 @@ import typing as ty
 import warnings
 from pathlib import Path
 from pydra.engine.context import RECORD
-from pydra.engine.lease import DirectoryLease, Lease, LeaseSettings
+from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
+from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
 from pydra.engine.result import Result, load_result, save
 from pydra.utils.general import ensure_list, atomic_write
 
@@ -26,6 +27,9 @@ Context = ty.Mapping[str, ty.Any]
 CONTEXT_FILE = "_context.json"
 """The file in a slot holding the context its result was recorded in, read by
 ``PickleStore.lookup`` before the result is loaded."""
+
+LEASE_SUFFIX = ".lock"
+"""The suffix of a job's lease in ``PickleStore.cache_root``."""
 
 REMOVE_ATTEMPTS = 5
 """How many times ``remove_from_cache`` tries a removal blocked by held or pending files."""
@@ -334,6 +338,21 @@ def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
     )
 
 
+def _is_store_internal(name: str) -> bool:
+    """Whether ``name`` in a cache root is a lease or a probe, not a job's directory."""
+    return name.endswith(LEASE_SUFFIX) or name.startswith((PROBE_PREFIX, CLOCK_PREFIX))
+
+
+def lease_still_held(lease: Lease) -> bool:
+    """Whether ``lease`` has not been taken over: asked of the storage if the lease
+    can `~pydra.engine.lease.DirectoryLease.prove` it, otherwise read from its
+    ``lost`` attribute if it has one."""
+    prove = getattr(lease, "prove", None)
+    if callable(prove):
+        return bool(prove())
+    return not getattr(lease, "lost", None)
+
+
 def context_key(context: Context) -> str:
     """The name of the slot holding results recorded in ``context``."""
     return hashlib.sha256(
@@ -386,6 +405,8 @@ class ResultStore(ty.Protocol):
         """Store ``result``, and ``job`` if given, as those of the job held under ``lease``.
 
         Both are written together, so a reader never sees a result without its job.
+        A store raises `~pydra.engine.lease.LeaseLost`, writing nothing, if ``lease``
+        was taken over by another process while it was held.
         """
 
 
@@ -479,7 +500,11 @@ class PickleStore:
         checksums = (
             [checksum]
             if checksum is not None
-            else sorted(p.name for p in self.cache_root.iterdir() if p.is_dir())
+            else sorted(
+                p.name
+                for p in self.cache_root.iterdir()
+                if p.is_dir() and not _is_store_internal(p.name)
+            )
         )
         for name in checksums:
             directory = self.cache_root / name
@@ -487,7 +512,7 @@ class PickleStore:
                 yield from sorted(p for p in directory.iterdir() if p.is_dir())
 
     def lockfile(self, checksum: str, context: Context) -> Path:
-        return self.cache_root / f"{checksum}-{context_key(context)}.lock"
+        return self.cache_root / f"{checksum}-{context_key(context)}{LEASE_SUFFIX}"
 
     def acquire(self, checksum: str, context: Context) -> DirectoryLease:
         return DirectoryLease(
@@ -500,6 +525,12 @@ class PickleStore:
     def commit(
         self, lease: DirectoryLease, result: Result, job: "Job | None" = None
     ) -> None:
+        if not lease_still_held(lease):
+            raise LeaseLost(
+                f"The lease {lease.lockfile} was taken over by another process while "
+                f"held, so this process does not write its result to {lease.cache_dir}",
+                lease.lockfile,
+            )
         lease.cache_dir.mkdir(parents=True, exist_ok=True)
         with atomic_write(lease.cache_dir / CONTEXT_FILE, "w") as f:
             json.dump(result.context, f, sort_keys=True)

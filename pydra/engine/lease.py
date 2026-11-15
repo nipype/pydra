@@ -81,6 +81,38 @@ class LeaseTimeout(TimeoutError):
         self.age = age
 
 
+class LeaseUnavailable(LeaseTimeout):
+    """A stale lease could not be taken over because the storage refused it (for
+    example the lease directory belongs to another user and is not writable). The
+    message names the lease, its holder and the refusal; ``error`` is the refusal."""
+
+    def __init__(
+        self,
+        message: str,
+        lockfile: Path,
+        holder: dict | None,
+        age: float | None,
+        error: OSError,
+    ):
+        super().__init__(message, lockfile, holder, age)
+        self.error = error
+
+
+class LeaseLost(RuntimeError):
+    """A lease was taken over by another process while it was held, so what it
+    guarded is not written by its former holder.
+
+    Attributes
+    ----------
+    lockfile : Path
+        The lease that was lost.
+    """
+
+    def __init__(self, message: str, lockfile: Path):
+        super().__init__(message)
+        self.lockfile = lockfile
+
+
 @ty.runtime_checkable
 class Lease(ty.Protocol):
     """The right to run one job, held while it is entered with ``with`` or
@@ -105,7 +137,14 @@ class LeaseSettings:
 
     A holder renews its lease every ``renew_fraction * stale_after`` seconds. Another
     process takes the lease over once the newest mark the holder left is older than
-    ``stale_after`` on the storage clock, and gives up waiting after ``timeout``.
+    ``stale_after`` on the storage clock.
+
+    A waiter behind a holder that keeps renewing waits for as long as the holder runs,
+    as it would for any job it needs. ``timeout`` counts only time in which no renewal
+    has been seen and the lease could not be taken over: a stale lease the storage
+    refuses to let this process remove (`LeaseUnavailable`) or a lock file of an
+    earlier pydra that cannot be removed. The clock restarts whenever the newest mark
+    in the lease advances. ``max_wait``, if set, caps the whole wait regardless.
 
     Two inequalities are checked on construction.
 
@@ -124,27 +163,40 @@ class LeaseSettings:
     step of its clock. A crashed holder is taken over 5 to 6 minutes after its last
     heartbeat, at the cost of one ``mkdir`` and one ``rmdir`` per running job every
     30 s. ``timeout`` 600 s is above the required ``300 + 60 = 360`` with room for the
-    poll interval (``POLL_MAX``); a wait longer than that is for a live holder, and
-    the error names it.
+    poll interval (``POLL_MAX``).
+
+    A regular file at a lease path is a lock left by a pydra that used
+    ``filelock.SoftFileLock``. Such a file is never renewed, so it is taken over once
+    older than ``stale_after`` even if the old process is still running. Do not run
+    an older pydra and this one on the same cache at the same time: an old job that
+    runs longer than ``stale_after`` is run again by the new process, which removes
+    the old job's working directory.
 
     Parameters
     ----------
     stale_after : float
         Seconds on the storage clock after the last heartbeat at which a lease is stale.
     timeout : float
-        Seconds a wait for a lease lasts before `LeaseTimeout`.
+        Seconds without a renewal of a lease that cannot be taken over after which a
+        wait ends in `LeaseTimeout`.
     renew_fraction : float
         Heartbeat interval as a fraction of ``stale_after``.
     attribute_delay : float
         Seconds a client may see a directory's mtime late on this storage.
+    max_wait : float | None
+        Seconds after which any wait ends in `LeaseTimeout`, even behind a holder that
+        keeps renewing; None (default) for no cap.
     """
 
     stale_after: float = STALE_AFTER
     timeout: float = TIMEOUT
     renew_fraction: float = RENEW_FRACTION
     attribute_delay: float = ATTRIBUTE_DELAY
+    max_wait: float | None = None
 
     def __attrs_post_init__(self):
+        if self.max_wait is not None and self.max_wait < 0:
+            raise ValueError(f"max_wait must not be negative (got {self.max_wait})")
         if self.stale_after <= 0 or self.timeout < 0 or self.attribute_delay < 0:
             raise ValueError(
                 "stale_after must be positive and timeout and attribute_delay not "
@@ -246,17 +298,21 @@ class DirectoryLease:
     is older than ``settings.stale_after``, measured on the storage server's clock (the
     mtime of a file just created beside the lease), never this host's. Takeover renames
     the holder's token directory, so of several processes taking one lease over exactly
-    one succeeds, and a holder that was taken over finds out at its next heartbeat. A
-    wait ends after ``settings.timeout`` in `LeaseTimeout`, which names the holder.
+    one succeeds, and a holder that was taken over finds out at its next heartbeat or
+    when it calls `prove`. A waiter waits while the holder keeps renewing; it gives up
+    in `LeaseTimeout`, which names the holder, only after ``settings.timeout`` without
+    a renewal in which the lease could not be taken over, or after
+    ``settings.max_wait`` if that is set.
 
     A regular file at ``lockfile`` is a lock written by an earlier pydra
     (``filelock.SoftFileLock``). It is judged by its own mtime and removed once older
-    than ``stale_after``.
+    than ``stale_after``, whether or not the process that wrote it still runs (see
+    `LeaseSettings`).
 
-    The lease guards against running a job twice; it is not what keeps results
-    correct. Results are written atomically, so a holder that is taken over while it
-    still runs (a process stopped for longer than ``stale_after``) at worst repeats the
-    work.
+    A holder taken over while it still ran (a process stopped for longer than
+    ``stale_after``) must not write what the lease guards: `prove` tells it whether it
+    still holds the lease, and `pydra.engine.store.PickleStore.commit` refuses with
+    `LeaseLost` when it does not.
 
     Parameters
     ----------
@@ -271,6 +327,10 @@ class DirectoryLease:
     clock : callable, optional
         Returns the current time on the storage; by default `storage_now` of the
         lease's parent directory.
+    monotonic : callable, optional
+        Returns seconds on a local monotonic clock, for the wait's bounds.
+    sleep : callable, optional
+        Sleeps between attempts of a synchronous wait.
     """
 
     checksum: str
@@ -278,6 +338,8 @@ class DirectoryLease:
     lockfile: Path
     settings: LeaseSettings = attrs.field(factory=LeaseSettings)
     clock: ty.Callable[[], float] | None = attrs.field(default=None, repr=False)
+    monotonic: ty.Callable[[], float] = attrs.field(default=time.monotonic, repr=False)
+    sleep: ty.Callable[[float], None] = attrs.field(default=time.sleep, repr=False)
     broke: list[dict] = attrs.field(factory=list, init=False, repr=False)
     lost: str | None = attrs.field(default=None, init=False, repr=False)
     _token: str | None = attrs.field(default=None, init=False, repr=False)
@@ -285,6 +347,11 @@ class DirectoryLease:
     _last_seen: tuple[dict | None, float | None] = attrs.field(
         default=(None, None), init=False, repr=False
     )
+    _newest_seen: float | None = attrs.field(default=None, init=False, repr=False)
+    _refused: OSError | None = attrs.field(default=None, init=False, repr=False)
+    _deadline: float = attrs.field(default=0.0, init=False, repr=False)
+    _cap: float | None = attrs.field(default=None, init=False, repr=False)
+    _delay: float = attrs.field(default=POLL_MIN, init=False, repr=False)
 
     @property
     def held(self) -> bool:
@@ -295,6 +362,26 @@ class DirectoryLease:
         """The record of the process holding the lease, None if none can be read."""
         return self._read_holder()[0]
 
+    def prove(self) -> bool:
+        """Whether this process still holds the lease, asked of the storage: a
+        directory is made and removed in the holder's token directory, which fails
+        once the lease was taken over. A lease found taken over is marked lost."""
+        if self._token is None or self.lost is not None:
+            return False
+        proof = self.lockfile / self._token / f"proof-{uuid.uuid4().hex}"
+        try:
+            os.mkdir(proof)
+        except OSError as err:
+            if err.errno == errno.ENOENT or err.errno == _ESTALE:
+                self._lose("its holder directory was removed")
+                return False
+            return True  # not shown lost; the heartbeat judges a lasting failure
+        try:
+            os.rmdir(proof)
+        except OSError:
+            pass
+        return True
+
     # Taking
 
     def _now(self) -> float:
@@ -302,11 +389,15 @@ class DirectoryLease:
             return self.clock()
         return storage_now(self.lockfile.parent)
 
-    def _prepare(self) -> float:
+    def _prepare(self) -> None:
         self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         require_lease_storage(self.lockfile.parent)
         self.broke, self.lost, self._last_seen = [], None, (None, None)
-        return time.monotonic() + self.settings.timeout
+        self._newest_seen, self._refused, self._delay = None, None, POLL_MIN
+        now = self.monotonic()
+        self._deadline = now + self.settings.timeout
+        max_wait = self.settings.max_wait
+        self._cap = now + max_wait if max_wait is not None else None
 
     def _try_take(self) -> bool:
         """Make the lease directory and record this process in it; whether it is held."""
@@ -410,6 +501,7 @@ class DirectoryLease:
         newest = self._newest_mtime(entries)
         if newest is None:
             return True
+        self._saw(newest)
         age = self._now() - newest
         self._last_seen = (holder, age)
         if age <= self.settings.stale_after:
@@ -422,6 +514,9 @@ class DirectoryLease:
         else:
             try:
                 os.rmdir(self.lockfile)  # a taker that died between its two mkdirs
+            except PermissionError as err:
+                self._refused = err
+                return False
             except OSError:
                 return False
             self._broke(holder, age)
@@ -432,12 +527,16 @@ class DirectoryLease:
         except OSError as err:
             if err.errno in (errno.ENOENT, errno.EINVAL, _ESTALE):
                 return False  # another process took it over first
+            if err.errno in (errno.EACCES, errno.EPERM):
+                self._refused = err
+                return False
             raise
         self._remove(gone)
         self._broke(holder, age)
         return True
 
     def _judge_legacy(self, st: os.stat_result) -> bool:
+        self._saw(st.st_mtime)
         age = self._now() - st.st_mtime
         holder = self._read_legacy()
         self._last_seen = (holder, age)
@@ -447,7 +546,10 @@ class DirectoryLease:
             os.unlink(self.lockfile)  # fails on a directory, so never on a new lease
         except FileNotFoundError:
             return True
-        except (IsADirectoryError, PermissionError):
+        except IsADirectoryError:
+            return False
+        except PermissionError as err:
+            self._refused = err
             return False
         self._broke(holder, age)
         return True
@@ -470,14 +572,42 @@ class DirectoryLease:
         except OSError:
             pass
 
-    def _timeout(self) -> LeaseTimeout:
+    def _saw(self, newest: float) -> None:
+        """Note the newest mark in the lease; restart the wait's bound if it advanced,
+        since the holder has then been shown alive."""
+        if self._newest_seen is not None and newest > self._newest_seen:
+            self._deadline = self.monotonic() + self.settings.timeout
+            self._refused = None
+        if self._newest_seen is None or newest > self._newest_seen:
+            self._newest_seen = newest
+
+    def _timeout(self, capped: bool) -> LeaseTimeout:
         holder, age = self._last_seen
         if holder is None:
             holder = self.holder()
+        held_by = f"the lease {self.lockfile}, held by {_describe(holder, age)}"
+        if self._refused is not None and not capped:
+            err = self._refused
+            return LeaseUnavailable(
+                f"Cannot take over {held_by}: it is stale, but removing it was refused "
+                f"({err.strerror or err}). Its owner or an administrator can remove "
+                f"{self.lockfile}; a cache shared between users needs group-writable "
+                "directories",
+                lockfile=self.lockfile,
+                holder=holder,
+                age=age,
+                error=err,
+            )
+        if capped:
+            why = f"max_wait {self.settings.max_wait:.1f}s passed"
+        else:
+            why = (
+                f"no renewal was seen for {self.settings.timeout:.1f}s and it could not "
+                "be taken over"
+            )
         return LeaseTimeout(
-            f"Timed out after {self.settings.timeout:.1f}s waiting for the lease "
-            f"{self.lockfile}, held by {_describe(holder, age)}; it is taken over once "
-            f"not renewed for {self.settings.stale_after:.1f}s",
+            f"Gave up waiting for {held_by}: {why}; a lease is taken over once not "
+            f"renewed for {self.settings.stale_after:.1f}s",
             lockfile=self.lockfile,
             holder=holder,
             age=age,
@@ -487,6 +617,21 @@ class DirectoryLease:
         if self._try_take():
             return True
         return self._judge() and self._try_take()
+
+    def _step(self) -> float | None:
+        """Try to take the lease once: None if it is held now, otherwise the seconds to
+        wait before the next try. Raises `LeaseTimeout` when a bound has passed."""
+        if self._attempt():
+            return None
+        now = self.monotonic()
+        if self._cap is not None and now >= self._cap:
+            raise self._timeout(capped=True)
+        if now >= self._deadline:
+            raise self._timeout(capped=False)
+        bound = self._deadline if self._cap is None else min(self._deadline, self._cap)
+        delay = min(self._delay, bound - now)
+        self._delay = min(self._delay * 2, POLL_MAX)
+        return delay
 
     # Releasing
 
@@ -519,15 +664,10 @@ class DirectoryLease:
     # Protocol
 
     def __enter__(self) -> "DirectoryLease":
-        deadline = self._prepare()
-        delay = POLL_MIN
+        self._prepare()
         try:
-            while not self._attempt():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise self._timeout()
-                time.sleep(min(delay, remaining))
-                delay = min(delay * 2, POLL_MAX)
+            while (delay := self._step()) is not None:
+                self.sleep(delay)
         except BaseException:
             self._release()
             raise
@@ -537,15 +677,10 @@ class DirectoryLease:
         self._release()
 
     async def __aenter__(self) -> "DirectoryLease":
-        deadline = self._prepare()
-        delay = POLL_MIN
+        self._prepare()
         try:
-            while not self._attempt():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise self._timeout()
-                await asyncio.sleep(min(delay, remaining))
-                delay = min(delay * 2, POLL_MAX)
+            while (delay := self._step()) is not None:
+                await asyncio.sleep(delay)
         except BaseException:
             self._release()
             raise

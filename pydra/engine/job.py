@@ -17,7 +17,13 @@ from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
 from pydra.engine.context import job_context
-from pydra.engine.store import check_declared_code, remove_from_cache
+from pydra.engine.lease import LeaseLost, LeaseTimeout
+from pydra.engine.store import (
+    check_declared_code,
+    lease_still_held,
+    remove_from_cache,
+)
+from pydra.utils.storage import StorageUnsupported
 from pydra.engine.result import (
     RuntimeSpec,
     Result,
@@ -389,7 +395,8 @@ class Job(ty.Generic[TaskType]):
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.cache_dir, error=traceback)
+                if lease_still_held(lease):
+                    record_error(self.cache_dir, error=traceback)
                 result.errored = True
                 raise
             finally:
@@ -452,7 +459,8 @@ class Job(ty.Generic[TaskType]):
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.cache_dir, error=traceback)
+                if lease_still_held(lease):
+                    record_error(self.cache_dir, error=traceback)
                 result.errored = True
                 self._errored = True
                 raise
@@ -677,7 +685,13 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(job_pkl.parent, error=traceback)
-            result = Result(output=None, runtime=None, errored=True, task=None)
+            result = Result(
+                outputs=None,
+                runtime=None,
+                errored=True,
+                task=None,
+                cache_dir=job_pkl.parent,
+            )
             save(job_pkl.parent, result=result)
         raise
 
@@ -687,6 +701,9 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
             job.submitter.submit(job, rerun=rerun)
         else:
             job.run(rerun=rerun)
+    except (LeaseTimeout, LeaseLost, StorageUnsupported):
+        # the job's slot belongs to another process, or was never entered
+        raise
     except Exception as e:
         # creating result and error files if missing
         errorfile = job.cache_dir / "_error.pklz"
@@ -695,7 +712,13 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(job.cache_dir, error=traceback)
         if not resultfile.exists():  # not sure if this is needed
-            result = Result(output=None, runtime=None, errored=True, task=None)
+            result = Result(
+                outputs=None,
+                runtime=None,
+                errored=True,
+                task=None,
+                cache_dir=job.cache_dir,
+            )
             save(job.cache_dir, result=result)
         e.add_note(f" full crash report is here: {errorfile}")
         raise
