@@ -176,8 +176,10 @@ Anything new is opt-in until maintainers decide otherwise.
 - **Slurm, three PRs:**
   - **A0:** the `--error` crash, in both places, with a test.
   - **A1:** a requeue budget, and no requeue of a user's `CANCELLED`.
-  - **A2:** one `squeue --me` per poll cycle for all jobs, and `sbatch --array` for split states,
-    reusing the tuple path at `slurm.py:49-62`.
+  - **A2:** one `squeue --user=<user>` per poll cycle for all jobs (a failed poll is skipped, and
+    raises only after `squeue_failures` in a row), and `sbatch --array` for the elements of a split
+    node that become runnable together, one pickle per element and a manifest read by the array
+    task (`max_array_size`, `0` turns it off). The old tuple path in `_prepare_runscripts` is removed.
 - **`pydra-workers-pool` (plugin):**
   - Jobs go to a lease queue on a shared filesystem.
   - Pool processes on any substrate (local, Slurm, Kubernetes) claim, run and commit through the
