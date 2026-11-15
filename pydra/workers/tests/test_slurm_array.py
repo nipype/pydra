@@ -424,3 +424,39 @@ def test_rerun_is_part_of_the_grouping_key(tmp_path, monkeypatch):
     assert len(scripts) == 2
     assert sum("rerun=True" in t for t in scripts) == 1
     assert sum("rerun=False" in t for t in scripts) == 1
+
+
+@pytest.mark.parametrize("split", [False, True])
+def test_no_poller_task_is_left_pending_after_close(tmp_path, monkeypatch, split):
+    fake, worker, jobs = make(
+        tmp_path, monkeypatch, 2, split=split, poll_delay=30, queue_cycles=0
+    )
+
+    def pollers():
+        return [
+            t
+            for t in asyncio.all_tasks()
+            if "_poll_cycles" in repr(t.get_coro()) and not t.done()
+        ]
+
+    async def go():
+        assert await asyncio.wait_for(
+            asyncio.gather(*(worker.run(j) for j in jobs)), 30
+        ) == [True, True]
+        worker.close()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        return pollers()
+
+    assert asyncio.run(go()) == []
+
+
+def test_close_leaves_no_pending_task_in_a_stopped_loop(tmp_path, monkeypatch):
+    fake, worker, jobs = make(
+        tmp_path, monkeypatch, 1, split=False, poll_delay=30, queue_cycles=0
+    )
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(worker.run(jobs[0]))
+    worker.close()
+    assert not [t for t in asyncio.all_tasks(loop) if not t.done()]
+    loop.close()

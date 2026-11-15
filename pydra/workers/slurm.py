@@ -49,6 +49,15 @@ class SlurmWorker(base.Worker):
         skipped, not read as an empty queue.
     squeue_timeout
         Seconds after which one ``squeue`` call counts as failed.
+
+    Notes
+    -----
+    An array is submitted, and accepted or refused, as one request. On a partition whose
+    QOS limits the jobs a user may have submitted (``MaxSubmitPU``, which counts every
+    array task), an array larger than the limit is rejected whole
+    (``QOSMaxSubmitJobPerUserLimit``), where separate submissions would have had the
+    first ``MaxSubmitPU`` accepted. Set ``max_array_size`` at or below the site's
+    per-user submit limit, or to ``0``. There is no automatic fallback.
     """
 
     _cmd = "sbatch"
@@ -72,6 +81,8 @@ class SlurmWorker(base.Worker):
     _pending: dict = attrs.field(factory=dict, init=False, repr=False)
     _pending_loop: ty.Any = attrs.field(default=None, init=False, repr=False)
     _flushes: set = attrs.field(factory=set, init=False, repr=False)
+    _active: int = attrs.field(default=0, init=False, repr=False)
+    _retired: list = attrs.field(factory=list, init=False, repr=False)
 
     _runtime_state = (
         "error",
@@ -81,6 +92,8 @@ class SlurmWorker(base.Worker):
         "_pending",
         "_pending_loop",
         "_flushes",
+        "_active",
+        "_retired",
     )
 
     def __getstate__(self) -> dict[str, ty.Any]:
@@ -97,6 +110,8 @@ class SlurmWorker(base.Worker):
         state["_waiters"] = []
         state["_pending"] = {}
         state["_flushes"] = set()
+        state["_active"] = 0
+        state["_retired"] = []
         super().__setstate__(state)
 
     def _prepare_runscripts(self, job, interpreter="/bin/sh", rerun=False):
@@ -183,6 +198,33 @@ class SlurmWorker(base.Worker):
 
     async def run(self, job: "Job[base.TaskType]", rerun: bool = False) -> "Result":
         """Worker submission API."""
+        self._active += 1
+        try:
+            return await self._run(job, rerun)
+        finally:
+            self._active -= 1
+            if not self._active:  # the last job is gone: stop polling the queue
+                self._stop_poller()
+
+    def _stop_poller(self):
+        poller, self._poller = self._poller, None
+        if poller is not None and not poller.done():
+            poller.cancel()
+            self._retired.append(poller)
+
+    def close(self):
+        """Stop the queue poller, leaving no pending task behind."""
+        self._stop_poller()
+        retired = [p for p in self._retired if not p.done()]
+        self._retired = []
+        loop = self._poll_loop
+        if retired and loop is not None and not loop.is_running():
+            if not loop.is_closed():
+                loop.run_until_complete(
+                    asyncio.gather(*retired, return_exceptions=True)
+                )
+
+    async def _run(self, job: "Job[base.TaskType]", rerun: bool = False) -> "Result":
         if self._array_eligible(job):
             jobid, error_file = await self._submit_grouped(job, rerun)
         else:
