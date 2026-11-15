@@ -2,6 +2,7 @@
 
 import os
 import typing as ty
+from pathlib import Path
 from pydra.utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from pydra.utils.general import attrs_values
 from fileformats.core import FileSet
@@ -36,7 +37,7 @@ class Audit:
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
 
-    def start_audit(self, odir):
+    def start_audit(self, odir, chdir=True):
         """
         Start recording provenance.
 
@@ -47,6 +48,9 @@ class Audit:
         ----------
         odir : :obj:`os.pathlike`
             Message output directory.
+        chdir : :obj:`bool`
+            Whether to make ``odir`` the working directory. If not, messages without
+            an explicit ``message_dir`` are still written under ``odir``.
 
         """
         self.odir = odir
@@ -61,7 +65,9 @@ class Audit:
                 "executedBy": user_id,
             }
 
-        os.chdir(self.odir)
+        self._chdir = chdir
+        if chdir:
+            os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
             self.audit_message(start_message, AuditFlag.PROV)
         if self.audit_check(AuditFlag.RESOURCE):
@@ -137,14 +143,10 @@ class Audit:
 
         """
         if self.audit_flags & flags:
-            if self.messenger_args:
-                send_message(
-                    make_message(message),
-                    messengers=self.messengers,
-                    **self.messenger_args,
-                )
-            else:
-                send_message(make_message(message), messengers=self.messengers)
+            args = dict(self.messenger_args or {})
+            if not getattr(self, "_chdir", True) and not args.get("message_dir"):
+                args["message_dir"] = Path(self.odir) / "messages"
+            send_message(make_message(message), messengers=self.messengers, **args)
 
     def audit_check(self, flag):
         """

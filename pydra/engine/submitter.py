@@ -185,6 +185,13 @@ class Submitter:
     telemetry : bool
         Whether to check for a newer version of pydra, once per session. The
         ``NO_ET`` environment variable also turns the check off
+    chdir : bool
+        Whether a job runs with the process working directory set to its cache
+        directory, by default True. With ``chdir=False`` Python and workflow tasks run in
+        the caller's working directory and the process directory never changes, so
+        several jobs can share one process. A relative path a function writes then lands
+        in the caller's directory, not the job's cache directory, and is not moved.
+        Shell tasks still run in their cache directory
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -232,6 +239,7 @@ class Submitter:
         reuse: str | ReusePolicy | None = None,
         on_error: OnError | None = None,
         telemetry: bool = True,
+        chdir: bool = True,
         **kwargs,
     ):
 
@@ -251,6 +259,7 @@ class Submitter:
         elif not callable(router):
             raise TypeError(f"'router' must be callable, not {router!r}")
 
+        self.chdir = chdir
         self.telemetry = telemetry
         if telemetry:
             Job.check_etelemetry()

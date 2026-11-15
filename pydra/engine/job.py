@@ -161,6 +161,7 @@ class Job(ty.Generic[TaskType]):
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
+        self.chdir = submitter.chdir
         self.cache_root = submitter.cache_root
         self.store = submitter.store
         self._run_start_time = None
@@ -204,6 +205,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
 
     @classmethod
@@ -337,6 +339,13 @@ class Job(ty.Generic[TaskType]):
         if self.persist_pickle:
             save(self.cache_dir, job=self)
 
+    @property
+    def _enters_cache_dir(self) -> bool:
+        """Whether the job runs with the process working directory set to its cache
+        directory: always, unless the submitter was given ``chdir=False``, which
+        exempts every task but a shell command, whose subprocess inherits it."""
+        return self.chdir or self.task._executor_name == "executable"
+
     def _pickle_to_commit(self, result: Result) -> "Job | None":
         """The job to write beside ``result``: this job if it is to be persisted or
         has failed, otherwise None."""
@@ -367,9 +376,11 @@ class Job(ty.Generic[TaskType]):
                     self._cached_result = result
                     return result
             self._errored = False
+            enters = self._enters_cache_dir
             cwd = os.getcwd()
             self._populate_filesystem()
-            os.chdir(self.cache_dir)
+            if enters:
+                os.chdir(self.cache_dir)
             result = Result(
                 outputs=None,
                 runtime=None,
@@ -379,7 +390,7 @@ class Job(ty.Generic[TaskType]):
                 context=self.context,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir)
+            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
             if self.audit.audit_check(AuditFlag.PROV):
                 self.audit.audit_task(job=self)
             try:
@@ -400,7 +411,8 @@ class Job(ty.Generic[TaskType]):
                     self._awaiting_run = False
                     self._remove_info_file()
                 finally:
-                    os.chdir(cwd)
+                    if enters:
+                        os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
@@ -433,6 +445,7 @@ class Job(ty.Generic[TaskType]):
                     self._cached_result = result
                     return result
             self._errored = False
+            enters = self._enters_cache_dir
             cwd = os.getcwd()
             self._populate_filesystem()
             result = Result(
@@ -444,7 +457,7 @@ class Job(ty.Generic[TaskType]):
                 context=self.context,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir)
+            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
             try:
                 self.audit.monitor()
                 await self.task._run_async(self, rerun)
@@ -464,7 +477,8 @@ class Job(ty.Generic[TaskType]):
                     self._awaiting_run = False
                     self._remove_info_file()
                 finally:
-                    os.chdir(cwd)
+                    if enters:
+                        os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
