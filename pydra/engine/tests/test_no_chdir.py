@@ -224,23 +224,20 @@ def test_shell_relative_outputs_resolve_under_cache_dir(caller_dir, tmp_path):
         outputs=(
             [
                 shell.out(name="made", type=File, callable=lambda: "made.txt"),
-                shell.out(
-                    name="globbed", type=File, callable=shell.GlobCallable("made.*")
-                ),
+                shell.out(name="globbed", type=list[File], default="made.*"),
             ]
-            if hasattr(shell, "GlobCallable")
-            else [shell.out(name="made", type=File, callable=lambda: "made.txt")]
         ),
     )
     cache = tmp_path / "cache"
     with Submitter(worker="debug", cache_root=cache, chdir=False) as sub:
         res = sub(Cmd())
     assert Path(res.outputs.made).resolve().is_relative_to(cache.resolve())
+    assert Path(res.outputs.globbed[0]).resolve().is_relative_to(cache.resolve())
     assert not (caller_dir / "made.txt").exists()
     assert Path(os.getcwd()).resolve() == caller_dir
 
 
-def test_python_file_output_outside_cache_dir_warns(caller_dir, tmp_path):
+def test_python_relative_file_output_warns(caller_dir, tmp_path):
     from fileformats.generic import File
 
     @python.define
@@ -249,5 +246,32 @@ def test_python_file_output_outside_cache_dir_warns(caller_dir, tmp_path):
         return File("out.txt")
 
     with Submitter(worker="debug", cache_root=tmp_path / "cache", chdir=False) as sub:
-        with pytest.warns(UserWarning, match="outside its cache directory"):
+        with pytest.warns(UserWarning, match="rather than its cache directory"):
             sub(Write(x=1))
+
+
+def test_absolute_outputs_do_not_warn(caller_dir, tmp_path):
+    """A pass-through of an absolute input and an explicit absolute output dir are
+    correct, so they are not reported"""
+    import warnings
+    from fileformats.generic import File
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "in.txt").write_text("a")
+
+    @python.define
+    def Through(in_file: File) -> File:
+        return in_file
+
+    @python.define
+    def WriteAbs(out_dir: str) -> File:
+        p = Path(out_dir) / "o.txt"
+        p.write_text("b")
+        return File(p)
+
+    with Submitter(worker="debug", cache_root=tmp_path / "cache", chdir=False) as sub:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            sub(Through(in_file=data / "in.txt"))
+            sub(WriteAbs(out_dir=str(data)))

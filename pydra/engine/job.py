@@ -346,25 +346,30 @@ class Job(ty.Generic[TaskType]):
         directory: unless the submitter was given ``chdir=False``."""
         return self.chdir
 
-    def _warn_if_outputs_outside_cache_dir(self, outputs) -> None:
+    def _warn_if_outputs_outside_cache_dir(self, outputs, cwd) -> None:
         """Under ``chdir=False``, warn about FileSet outputs of a Python task that are
-        outside the cache directory: they are mutable and shared by other jobs."""
+        in the caller's directory ``cwd`` rather than the cache directory: a relative
+        path written by the function, which other jobs can overwrite."""
         if self.chdir or self.task._executor_name != "function":
             return
         root = self.cache_dir.resolve()
+        caller = Path(cwd).resolve()
         for name in outputs:
             vals = getattr(outputs, name, None)
             for val in vals if isinstance(vals, (list, tuple)) else [vals]:
                 if not isinstance(val, FileSet):
                     continue
                 for path in val.fspaths:
-                    if not Path(path).resolve().is_relative_to(root):
+                    resolved = Path(path).resolve()
+                    if resolved.is_relative_to(caller) and not resolved.is_relative_to(
+                        root
+                    ):
                         warnings.warn(
-                            f"Output {name!r} of {self.name!r} is {str(path)!r}, outside "
-                            f"its cache directory {str(root)!r}: with chdir=False a "
-                            "relative path is written in the caller's directory, where "
-                            "other jobs can overwrite it and corrupt cache hits",
-                            stacklevel=2,
+                            f"Output {name!r} of {self.name!r} is {str(path)!r}, in the "
+                            f"caller's directory {str(caller)!r} rather than its cache "
+                            f"directory {str(root)!r}: with chdir=False a relative path "
+                            "is written in the caller's directory, where other jobs can "
+                            "overwrite it and corrupt cache hits"
                         )
 
     def _pickle_to_commit(self, result: Result) -> "Job | None":
@@ -418,7 +423,7 @@ class Job(ty.Generic[TaskType]):
                 self.audit.monitor()
                 self.task._run(self, rerun)
                 result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs)
+                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -484,7 +489,7 @@ class Job(ty.Generic[TaskType]):
                 self.audit.monitor()
                 await self.task._run_async(self, rerun)
                 result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs)
+                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
