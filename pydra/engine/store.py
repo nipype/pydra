@@ -39,6 +39,8 @@ slot holds a result that did not error (see `PickleStore.success_record`)."""
 
 logger = logging.getLogger("pydra")
 
+_record_exists = os.path.exists
+
 REMOVE_ATTEMPTS = 5
 """How many times ``remove_from_cache`` tries a removal blocked by held or pending files."""
 
@@ -538,36 +540,29 @@ class PickleStore:
         `commit` writes it as its last step, only for such a result and only while
         the lease is still held; `withdraw_success` removes it under the lease before
         the slot is rewritten. A slot without one (errored, running, in a read-only
-        cache, or written before records existed) is read under its lease."""
+        cache, written before records existed, or whose record could not be
+        written) is read under its lease."""
         return self.cache_root / SUCCESS_DIR / f"{checksum}-{context_key(context)}"
 
-    def success_records(self) -> set[str]:
-        """The names of the success records in ``cache_root``, read with one
-        ``scandir`` of its `SUCCESS_DIR`; empty if there is none."""
-        try:
-            with os.scandir(self.cache_root / SUCCESS_DIR) as entries:
-                return {e.name for e in entries if not e.name.startswith(".")}
-        except FileNotFoundError:
-            return set()
-
     def read_succeeded(
-        self, checksum: str, context: Context, records: ty.Container[str]
+        self, checksum: str, context: Context, task: "Task | None"
     ) -> Result | None:
-        """The result in the slot of ``checksum`` under ``context`` in ``cache_root``,
-        read without the lease, if ``records`` (from `success_records`) names its
-        success record; None if it does not, or if the result cannot be read in one
-        attempt or has errored, in which case the job is to be run under its lease."""
-        key = context_key(context)
-        if f"{checksum}-{key}" not in records:
+        """The result of ``checksum`` under ``context``, read without the lease, if
+        its slot in ``cache_root`` has a success record (one existence check); None
+        if it has none, or if `lookup` returns no result, an errored one or one from
+        another context, in which case the job is to be run under its lease.
+
+        The result is read through `lookup`, the call a job makes on a hit under its
+        lease, so a store that overrides it to refuse, verify or record reuse sees
+        this read too."""
+        if not _record_exists(self.success_record(checksum, context)):
             return None
         try:
-            result = load_result(
-                f"{checksum}/{key}", [self.cache_root], retries=1, polling_interval=0
-            )
+            result = self.lookup(checksum, context, task)
         except Exception as e:  # removed, rewritten or unreadable: run it leased
             logger.debug("Reading the result of %s without its lease: %s", checksum, e)
             return None
-        if result is None or result.errored:
+        if result is None or result.errored or result.cross_context:
             return None
         return result
 
@@ -612,5 +607,13 @@ class PickleStore:
                 lease.lockfile,
             )
         record = self._success_record_of(lease)
-        record.parent.mkdir(exist_ok=True)
-        os.close(os.open(record, os.O_WRONLY | os.O_CREAT, CACHE_FILE_MODE))
+        try:
+            record.parent.mkdir(exist_ok=True)
+            os.close(os.open(record, os.O_WRONLY | os.O_CREAT, CACHE_FILE_MODE))
+        except OSError as e:
+            logger.warning(
+                "Could not write the success record %s (%s); the job's result is "
+                "stored and is read under its lease when next reused",
+                record,
+                e,
+            )

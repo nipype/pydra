@@ -762,22 +762,21 @@ class Submitter:
         """Read, without their leases, the results of the jobs whose slots carry a
         success record, and return the other jobs, which are to be dispatched.
 
-        The cache root is scanned once (`PickleStore.success_records`). A job read
-        this way is complete: its result is cached on it and it is not dispatched, so
-        it takes no lease. A job without a record (its slot has errored, is running,
-        is in a read-only cache or was written before records existed), or whose
-        result cannot be read in one attempt or has errored, is dispatched and runs
-        under its lease as before. A store without records dispatches every job.
+        Each job costs one existence check of its own record
+        (`PickleStore.read_succeeded`). A job read this way is complete: its result
+        is cached on it and it is not dispatched, so it takes no lease. A job without
+        a record (its slot has errored, is running, is in a read-only cache or was
+        written before records existed), or whose result the store's ``lookup`` does
+        not return, returns errored or returns from another context, is dispatched
+        and runs under its lease as before. A store without records dispatches every
+        job.
         """
-        scan = getattr(self.store, "success_records", None)
-        if scan is None or not jobs:
-            return jobs
-        records = scan()
-        if not records:
+        read = getattr(self.store, "read_succeeded", None)
+        if read is None:
             return jobs
         dispatch = []
         for job in jobs:
-            result = self.store.read_succeeded(job.checksum, job.context, records)
+            result = read(job.checksum, job.context, job.task)
             if result is None:
                 dispatch.append(job)
                 continue

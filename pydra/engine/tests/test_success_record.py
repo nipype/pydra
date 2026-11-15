@@ -247,7 +247,6 @@ def test_commit_writes_the_record_last_and_only_on_success(tmp_path, monkeypatch
         store.commit(lease, Result(cache_dir=lease.cache_dir))
     assert written == [("save", False)]
     assert store.success_record("abc", {}).exists()
-    assert store.success_record("abc", {}).name in store.success_records()
     with store.acquire("def", {}) as lease:
         store.commit(lease, Result(cache_dir=lease.cache_dir, errored=True))
     assert not store.success_record("def", {}).exists()
@@ -283,15 +282,16 @@ def test_holder_that_loses_its_lease_while_saving_writes_no_record(
 
 def test_read_succeeded_needs_the_record_and_a_good_result(tmp_path):
     store = PickleStore(tmp_path)
-    assert store.read_succeeded("abc", {}, store.success_records()) is None
+    assert store.read_succeeded("abc", {}, None) is None
     with store.acquire("abc", {}) as lease:
         store.commit(lease, Result(cache_dir=lease.cache_dir))
-    found = store.success_records()
-    assert found == {f"abc-{context_key({})}"}
-    assert store.read_succeeded("abc", {}, found).cache_dir == lease.cache_dir
-    assert store.read_succeeded("abc", {}, set()) is None  # not in this round's scan
+    assert store.read_succeeded("abc", {}, None).cache_dir == lease.cache_dir
     (lease.cache_dir / "_result.pklz").write_bytes(b"\x80")
-    assert store.read_succeeded("abc", {}, found) is None
+    assert store.read_succeeded("abc", {}, None) is None
+    with store.acquire("abc", {}) as lease:
+        store.commit(lease, Result(cache_dir=lease.cache_dir))
+    store.success_record("abc", {}).unlink()
+    assert store.read_succeeded("abc", {}, None) is None
 
 
 def test_records_are_not_slots(tmp_path):
@@ -307,8 +307,7 @@ def test_readonly_cache_is_read_under_the_lease(tmp_path):
         PickleStore(ro).commit(lease, Result(cache_dir=lease.cache_dir))
     store = PickleStore(primary, [ro])
     primary.mkdir()
-    assert store.success_records() == set()
-    assert store.read_succeeded("abc", {}, {"abc"}) is None
+    assert store.read_succeeded("abc", {}, None) is None
     assert store.lookup("abc", {}, None) is not None
 
 
@@ -357,3 +356,115 @@ def test_errored_rerun_leaves_no_record(tmp_path):
         job.run(rerun=True)
     assert not record.exists()
     sub.close()
+
+
+# Cost, failures to write, reruns and the store's hit hook
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_record_checks_grow_with_the_queued_jobs_not_the_cache(
+    tmp_path, worker, monkeypatch
+):
+    """Each queued job costs one existence check of its own record; the record
+    directory is never listed, however many records it holds"""
+    import os
+
+    root = tmp_path / "cache"
+    (root / SUCCESS_DIR).mkdir(parents=True)
+    for i in range(2000):  # records of earlier work in the same cache root
+        (root / SUCCESS_DIR / f"python-{i:032x}-0000000000000000").touch()
+    checks: list[str] = []
+    listed: list[str] = []
+    exists = store_module._record_exists
+
+    def counting_exists(path):
+        checks.append(str(path))
+        return exists(path)
+
+    scandir, listdir = os.scandir, os.listdir
+
+    def counting_scandir(path="."):
+        if SUCCESS_DIR in str(path):
+            listed.append(str(path))
+        return scandir(path)
+
+    def counting_listdir(path="."):
+        if SUCCESS_DIR in str(path):
+            listed.append(str(path))
+        return listdir(path)
+
+    monkeypatch.setattr(store_module, "_record_exists", counting_exists)
+    monkeypatch.setattr(os, "scandir", counting_scandir)
+    monkeypatch.setattr(os, "listdir", counting_listdir)
+    run_split(root, worker, [1, 2, 3, 4, 5])
+    assert len(checks) == 5  # cold: one check per queued element
+    checks.clear()
+    assert run_split(root, worker, [5, 4, 3, 2, 1]).outputs.out == [15, 12, 9, 6, 3]
+    assert len(checks) == 5  # all cached: one check per queued element
+    assert listed == []
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or getattr(__import__("os"), "geteuid", lambda: 1)() == 0,
+    reason="needs POSIX permissions and a non-root user",
+)
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_unwritable_record_directory_does_not_fail_a_job(
+    tmp_path, worker, counted, caplog
+):
+    root = tmp_path / "cache"
+    (root / SUCCESS_DIR).mkdir(parents=True)
+    (root / SUCCESS_DIR).chmod(0o555)  # created by another user, umask 022
+    try:
+        result = run_split(root, worker, [1, 2])
+        assert not result.errored
+        assert result.outputs.out == [3, 6]
+        assert records(root) == []
+        counted["run"].clear()
+        assert run_split(root, worker, [2, 1]).outputs.out == [6, 3]
+        assert sorted(nodes(counted)) == ["Triple"] * 2  # the leased path
+    finally:
+        (root / SUCCESS_DIR).chmod(0o755)
+    if worker == "debug":
+        assert "Could not write the success record" in caplog.text
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_rerun_reruns_recorded_jobs_in_the_same_cache_root(tmp_path, worker, counted):
+    root = tmp_path / "cache"
+    task = Triple().split(x=[1, 2, 3])
+    with Submitter(worker=worker, cache_root=root) as sub:
+        sub(task)
+    assert len(records(root)) == 4
+    counted["run"].clear()
+    with Submitter(worker=worker, cache_root=root) as sub:
+        assert sub(task, rerun=True).outputs.out == [3, 6, 9]
+    assert sorted(nodes(counted)) == ["Triple"] * 3
+
+
+class RefusingStore(PickleStore):
+    """A store whose hit hook refuses the first reuse of each stored ``Triple``
+    result in a process, as a store sampling results for verification might"""
+
+    def __init__(self, cache_root):
+        super().__init__(cache_root)
+        self.refused = []
+
+    def lookup(self, checksum, context, task, stored=None):
+        if type(task).__name__ == "Triple" and checksum not in self.refused:
+            self.refused.append(checksum)
+            return None
+        return super().lookup(checksum, context, task, stored)
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_store_hit_hook_is_called_on_the_lease_free_path(tmp_path, worker, counted):
+    root = tmp_path / "cache"
+    run_split(root, worker, [1, 2, 3])
+    assert len(records(root)) == 4
+    counted["run"].clear()
+    store = RefusingStore(root)
+    with Submitter(worker=worker, cache_root=root, store=store) as sub:
+        assert sub(Triple().split(x=[3, 2, 1])).outputs.out == [9, 6, 3]
+    assert len(store.refused) == 3  # asked on the lease-free path
+    assert sorted(nodes(counted)) == ["Triple"] * 3  # refused, so run under the lease
