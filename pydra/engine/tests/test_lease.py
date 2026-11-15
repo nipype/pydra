@@ -103,7 +103,8 @@ def plant_legacy_lock(lockfile: Path) -> None:
 
 
 def newest_mtime(lockfile: Path) -> float:
-    return max(p.lstat().st_mtime for p in [lockfile, *lockfile.iterdir()])
+    """The newest mtime in a lease: itself, its entries and theirs."""
+    return max(p.lstat().st_mtime for p in [lockfile, *lockfile.rglob("*")])
 
 
 def test_directory_lease_is_a_lease(tmp_path):
