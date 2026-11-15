@@ -189,9 +189,14 @@ class Submitter:
         Whether a job runs with the process working directory set to its cache
         directory, by default True. With ``chdir=False`` Python and workflow tasks run in
         the caller's working directory and the process directory never changes, so
-        several jobs can share one process. A relative path a function writes then lands
-        in the caller's directory, not the job's cache directory, and is not moved.
-        Shell tasks still run in their cache directory
+        several jobs can share one process. Shell tasks run their command with the
+        cache directory as its working directory, and relative outputs of shell tasks
+        are resolved under it. A relative path a Python function writes lands in the
+        caller's directory, not the job's cache directory, and is not moved: another job
+        can overwrite it, so a cache hit can return a different file's content (a warning
+        is emitted when a ``FileSet`` output lies outside the cache directory). The
+        ``pre_run_task``/``post_run_task`` hooks see the caller's directory, and audit
+        messages without an explicit ``message_dir`` go to ``<cache_dir>/messages``
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """

@@ -50,6 +50,7 @@ class Docker(base.Container):
         job.cache_dir.mkdir(parents=True, exist_ok=True)
         values = base.execute(
             docker_args + [docker_img] + job.task._command_args(values=arg_values),
+            cwd=job.cache_dir,
         )
         output = dict(zip(keys, values))
         if output["return_code"]:

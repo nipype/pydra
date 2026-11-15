@@ -35,6 +35,7 @@ class Singularity(base.Container):
             singularity_args
             + [singularity_img]
             + job.task._command_args(values=values),
+            cwd=job.cache_dir,
         )
         output = dict(zip(keys, values))
         if output["return_code"]:

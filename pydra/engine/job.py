@@ -5,6 +5,7 @@ import logging
 import os
 import inspect
 import sys
+import warnings
 from pathlib import Path
 import typing as ty
 from uuid import uuid4
@@ -342,9 +343,29 @@ class Job(ty.Generic[TaskType]):
     @property
     def _enters_cache_dir(self) -> bool:
         """Whether the job runs with the process working directory set to its cache
-        directory: always, unless the submitter was given ``chdir=False``, which
-        exempts every task but a shell command, whose subprocess inherits it."""
-        return self.chdir or self.task._executor_name == "executable"
+        directory: unless the submitter was given ``chdir=False``."""
+        return self.chdir
+
+    def _warn_if_outputs_outside_cache_dir(self, outputs) -> None:
+        """Under ``chdir=False``, warn about FileSet outputs of a Python task that are
+        outside the cache directory: they are mutable and shared by other jobs."""
+        if self.chdir or self.task._executor_name != "function":
+            return
+        root = self.cache_dir.resolve()
+        for name in outputs:
+            vals = getattr(outputs, name, None)
+            for val in vals if isinstance(vals, (list, tuple)) else [vals]:
+                if not isinstance(val, FileSet):
+                    continue
+                for path in val.fspaths:
+                    if not Path(path).resolve().is_relative_to(root):
+                        warnings.warn(
+                            f"Output {name!r} of {self.name!r} is {str(path)!r}, outside "
+                            f"its cache directory {str(root)!r}: with chdir=False a "
+                            "relative path is written in the caller's directory, where "
+                            "other jobs can overwrite it and corrupt cache hits",
+                            stacklevel=2,
+                        )
 
     def _pickle_to_commit(self, result: Result) -> "Job | None":
         """The job to write beside ``result``: this job if it is to be persisted or
@@ -397,6 +418,7 @@ class Job(ty.Generic[TaskType]):
                 self.audit.monitor()
                 self.task._run(self, rerun)
                 result.outputs = self.task.Outputs._from_job(self)
+                self._warn_if_outputs_outside_cache_dir(result.outputs)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -462,6 +484,7 @@ class Job(ty.Generic[TaskType]):
                 self.audit.monitor()
                 await self.task._run_async(self, rerun)
                 result.outputs = self.task.Outputs._from_job(self)
+                self._warn_if_outputs_outside_cache_dir(result.outputs)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)

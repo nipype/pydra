@@ -2,6 +2,7 @@
 (proposal 0001, H0)."""
 
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -110,21 +111,22 @@ def test_concurrent_python_tasks_do_not_race_on_cwd(caller_dir, tmp_path):
     assert Path(os.getcwd()).resolve() == caller_dir
 
 
-def test_shell_tasks_still_run_in_cache_dir(caller_dir, tmp_path):
+def test_shell_tasks_run_in_cache_dir_without_chdir(caller_dir, tmp_path, print_cwd):
     cache = tmp_path / "cache"
     with Submitter(worker="debug", cache_root=cache, chdir=False) as sub:
-        res = sub(shell.define("pwd")())
+        res = sub(shell.define(print_cwd)())
     assert Path(res.outputs.stdout.strip()).resolve().is_relative_to(cache.resolve())
     assert Path(os.getcwd()).resolve() == caller_dir
 
 
-def test_workflow_of_python_tasks_keeps_cwd(caller_dir, tmp_path):
+@pytest.mark.parametrize("w", ["debug", "cf"])
+def test_workflow_of_python_tasks_keeps_cwd(caller_dir, tmp_path, w):
     @workflow.define
     def Wf(x: int) -> str:
         p = workflow.add(Probe(x=x))
         return p.seen
 
-    with Submitter(worker="debug", cache_root=tmp_path / "cache", chdir=False) as sub:
+    with Submitter(worker=w, cache_root=tmp_path / "cache", chdir=False) as sub:
         res = sub(Wf(x=2))
     assert Path(res.outputs.out).resolve() == caller_dir
     assert Path(os.getcwd()).resolve() == caller_dir
@@ -141,3 +143,111 @@ def test_audit_messages_go_to_the_job_dir(caller_dir, tmp_path):
         res = sub(Probe(x=1))
     assert not (caller_dir / "messages").exists()
     assert list((res.cache_dir / "messages").glob("*.jsonld"))
+
+
+@pytest.fixture
+def print_cwd(tmp_path):
+    script = tmp_path / "print_cwd.py"
+    script.write_text("import os, time\ntime.sleep(0.3)\nprint(os.getcwd())\n")
+    return [sys.executable, str(script)]
+
+
+def test_shell_task_never_changes_process_cwd(caller_dir, tmp_path, print_cwd):
+    """Two overlapping shell tasks leave the process cwd alone, and each runs in its
+    own cache dir"""
+    out, seen = {}, []
+
+    def run(i):
+        with Submitter(
+            worker="debug", cache_root=tmp_path / f"cache{i}", chdir=False
+        ) as sub:
+            out[i] = sub(shell.define(print_cwd)()).outputs.stdout.strip()
+
+    def watch():
+        for _ in range(20):
+            seen.append(Path(os.getcwd()).resolve())
+            time.sleep(0.03)
+
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(2)]
+    threads.append(threading.Thread(target=watch))
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert set(seen) == {caller_dir}
+    for i in range(2):
+        assert Path(out[i]).resolve().is_relative_to((tmp_path / f"cache{i}").resolve())
+    assert Path(os.getcwd()).resolve() == caller_dir
+
+
+def test_python_cwd_while_shell_task_runs_in_another_thread(
+    caller_dir, tmp_path, print_cwd
+):
+    marker = tmp_path / "started"
+
+    @python.define
+    def WaitThenCwd(marker: str) -> str:
+        import os
+        import time
+
+        for _ in range(100):
+            if os.path.exists(marker):
+                break
+            time.sleep(0.05)
+        time.sleep(0.2)
+        return os.getcwd()
+
+    def run_shell():
+        marker.touch()
+        with Submitter(
+            worker="debug", cache_root=tmp_path / "cache-sh", chdir=False
+        ) as sub:
+            sub(shell.define(print_cwd)())
+
+    t = threading.Thread(target=run_shell)
+    t.start()
+    with Submitter(
+        worker="debug", cache_root=tmp_path / "cache-py", chdir=False
+    ) as sub:
+        res = sub(WaitThenCwd(marker=str(marker)))
+    t.join()
+    assert Path(res.outputs.out).resolve() == caller_dir
+
+
+def test_shell_relative_outputs_resolve_under_cache_dir(caller_dir, tmp_path):
+    from fileformats.generic import File
+
+    script = tmp_path / "make.py"
+    script.write_text("open('made.txt', 'w').write('hi')\n")
+    Cmd = shell.define(
+        [sys.executable, str(script)],
+        outputs=(
+            [
+                shell.out(name="made", type=File, callable=lambda: "made.txt"),
+                shell.out(
+                    name="globbed", type=File, callable=shell.GlobCallable("made.*")
+                ),
+            ]
+            if hasattr(shell, "GlobCallable")
+            else [shell.out(name="made", type=File, callable=lambda: "made.txt")]
+        ),
+    )
+    cache = tmp_path / "cache"
+    with Submitter(worker="debug", cache_root=cache, chdir=False) as sub:
+        res = sub(Cmd())
+    assert Path(res.outputs.made).resolve().is_relative_to(cache.resolve())
+    assert not (caller_dir / "made.txt").exists()
+    assert Path(os.getcwd()).resolve() == caller_dir
+
+
+def test_python_file_output_outside_cache_dir_warns(caller_dir, tmp_path):
+    from fileformats.generic import File
+
+    @python.define
+    def Write(x: int) -> File:
+        Path("out.txt").write_text(str(x))
+        return File("out.txt")
+
+    with Submitter(worker="debug", cache_root=tmp_path / "cache", chdir=False) as sub:
+        with pytest.warns(UserWarning, match="outside its cache directory"):
+            sub(Write(x=1))

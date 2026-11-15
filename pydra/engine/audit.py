@@ -36,6 +36,7 @@ class Audit:
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
+        self._chdir = True
 
     def start_audit(self, odir, chdir=True):
         """
@@ -144,7 +145,7 @@ class Audit:
         """
         if self.audit_flags & flags:
             args = dict(self.messenger_args or {})
-            if not getattr(self, "_chdir", True) and not args.get("message_dir"):
+            if not self._chdir and not args.get("message_dir"):
                 args["message_dir"] = Path(self.odir) / "messages"
             send_message(make_message(message), messengers=self.messengers, **args)
 
@@ -167,10 +168,15 @@ class Audit:
     def audit_task(self, job: "Job"):
         import subprocess as sp
         from pydra.utils.general import get_fields
+        from pydra.compose.shell.task import join_cmd
 
         label = job.name
 
-        command = job.task.cmdline if hasattr(job.task, "executable") else None
+        command = (
+            join_cmd(job.task._command_args(values=job.inputs))
+            if hasattr(job.task, "executable")
+            else None
+        )
         attr_list = get_fields(job.task)
         for attrs in attr_list:
             input_name = attrs.name

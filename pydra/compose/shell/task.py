@@ -18,6 +18,7 @@ from pydra.utils.general import (
     position_sort,
 )
 from pydra.utils.typing import (
+    TypeParser,
     is_fileset_or_union,
     state_array_support,
     is_optional,
@@ -95,6 +96,11 @@ class ShellOutputs(base.Outputs):
                 resolved_value = cls._resolve_default_value(fld, job.cache_dir)
             else:
                 resolved_value = cls._resolve_value(fld, job)
+            if fld.name not in ("return_code", "stdout", "stderr") and (
+                TypeParser.contains_type(FileSet, fld.type)
+                or TypeParser.contains_type(Path, fld.type)
+            ):
+                resolved_value = _under(resolved_value, job.cache_dir)
             # Set the resolved value
             try:
                 setattr(outputs, fld.name, resolved_value)
@@ -615,3 +621,12 @@ def split_cmd(cmd: str | None):
 # Alias ShellTask to Task so we can refer to it by shell.Task
 Task = ShellTask
 Outputs = ShellOutputs
+
+
+def _under(value: ty.Any, cache_dir: Path) -> ty.Any:
+    """A relative path, or a container of them, made absolute under ``cache_dir``."""
+    if isinstance(value, (str, Path)) and value and not Path(value).is_absolute():
+        return type(value)(cache_dir / value)
+    if isinstance(value, (list, tuple)):
+        return type(value)(_under(v, cache_dir) for v in value)
+    return value
