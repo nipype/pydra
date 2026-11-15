@@ -251,7 +251,7 @@ def test_wf_shell_cmd_1(worker, tmp_path):
         res = sub(wf)
 
     assert "_result.pklz" in res.outputs.out
-    assert "_job.pklz" in res.outputs.out
+    assert "_job.pklz" not in res.outputs.out
 
 
 # customised input task

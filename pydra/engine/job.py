@@ -151,6 +151,10 @@ class Job(ty.Generic[TaskType]):
         # has not finished
         self._awaiting_run = False
         self._context = None
+        # Whether `_populate_filesystem` and `store.commit` write ``_job.pklz`` for a
+        # job that succeeds. In-process workers clear it; a failed job always keeps
+        # its pickle, which `pydracli crash --rerun` reads.
+        self.persist_pickle = True
         # The stored contexts of the checksum read by `check_declared_code`, for the
         # job's first lookup
         self._stored_contexts = None
@@ -198,6 +202,7 @@ class Job(ty.Generic[TaskType]):
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
         self.__dict__.setdefault("_awaiting_run", False)
+        self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
         self.__dict__.setdefault("_stored_contexts", None)
 
@@ -327,8 +332,15 @@ class Job(ty.Generic[TaskType]):
         if not self.can_resume and self.cache_dir.exists():
             remove_from_cache(self.cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=self.can_resume)
-        # Save job pkl into the output directory for future reference
-        save(self.cache_dir, job=self)
+        # Save job pkl into the output directory for future reference. An in-process
+        # worker never reads it back, so it is written only if the job fails.
+        if self.persist_pickle:
+            save(self.cache_dir, job=self)
+
+    def _pickle_to_commit(self, result: Result) -> "Job | None":
+        """The job to write beside ``result``: this job if it is to be persisted or
+        has failed, otherwise None."""
+        return self if self.persist_pickle or result.errored else None
 
     def run(self, rerun: bool = False):
         """Prepare the job working directory, execute the task, and save the
@@ -384,7 +396,7 @@ class Job(ty.Generic[TaskType]):
                 try:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
-                    self.store.commit(lease, result, job=self)
+                    self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
                 finally:
@@ -448,7 +460,7 @@ class Job(ty.Generic[TaskType]):
                 try:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
-                    self.store.commit(lease, result, job=self)
+                    self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
                 finally:
