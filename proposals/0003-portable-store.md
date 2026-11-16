@@ -269,7 +269,8 @@ class PortableStore:
 
    When `stored` is true the staging directory is removed. When it is false the staged entry is kept,
    unpublished, in the work directory (§5.4), and `Committed.kept` names it.
-9. Once §7.3 has decided the job's result, the executing process writes `<work dir>/_committed.json`:
+9. Once §7.3 has decided the job's result, the executing process writes `<work dir>/_committed.json`
+   (to a temporary name, then renamed into place):
    `stored`, and where the result is read from, an `EntryRef` or the kept entry. This is how a process
    other than the executing one reads the result (§7.2).
 
@@ -360,9 +361,13 @@ returns a work directory. It is called many times and in several processes (`eng
   calls `work_dir(job)` when the store defines it, because `ResultStore.cache_dir(checksum, context)`
   cannot reach the attempt. `check_declared_code`, which uses `cache_dir` only to ask whether the
   context's own slot holds a result (`engine/store.py:302`), asks `PortableStore` for the entry path
-  instead. It must return an absolute path on storage the
-  executing process can write, and outside `<root>` for a `shared` root. The store creates the
-  directory `0o700` if it is absent and never removes one it did not create.
+  instead. It must return an absolute path on storage the executing process can write, and outside
+  `<root>` for a `shared` root. The path must also be readable by the runner's process and by every
+  process that runs a downstream job, because `_committed.json` and kept outputs are read there
+  (§7.2). For a `shared` root, and for any executor that runs jobs on other nodes, that means storage
+  every such node sees, not node-local scratch; a store used with an out-of-process executor checks
+  at hand-out that the runner's process can see the work directory. The store creates the directory
+  `0o700` if it is absent and never removes one it did not create.
 - **The default** is `<root>/work/<attempt>/` for a `private` root. A `shared` root has no default:
   `PortableStore(work_dir=...)` is required, because a work directory holds a job's pickles and crash
   file, which other users must not read.
@@ -638,7 +643,12 @@ goes by `store.read(entry: EntryRef, task)`, which verifies the entry (§6.2) an
 - `Job.result()` reads by `job.committed` when it is set, and otherwise by
   `<work dir>/_committed.json` when that exists (`engine/job.py:617-624` today reads through
   `lookup`). A `_committed.json` that names an `EntryRef` is read by `store.read`; one that names the
-  kept entry or `_outputs.pklz` is read from the work directory (§5.4);
+  kept entry or `_outputs.pklz` is read from the work directory (§5.4). The executing process writes
+  it to a temporary name in the work directory and renames it into place, so a reader sees no file or
+  a whole one. When it is absent after the visibility retry, `Job.result()` reads the entry at the
+  job's own address, under the lookup context's fingerprint, by `store.read`, which recovers every
+  `stored=True` job published there; only when that read also finds nothing is the job reported
+  `Failed`, naming the work directory;
 - RFC 0002's `complete(job, outcome)` holds the `Result` on the job (RFC 0002 §3.1), so readers in
   the runner's process use it without a store read. RFC 0002's `Outcome` is `Result | Failed |
   NotRun` and has no place for the `Committed`; this proposal puts it on the `Result`
@@ -875,6 +885,7 @@ Revision 3 answers the first re-review:
 | I13 residual | §7.3, §10 (`replace=True` never serves the occupant) |
 | RFC 0002 requirements | §13, one list; §7.2 no longer cites RFC 0002 §3.1 for a field it does not have |
 | nit: `verify_files="size"` | §6.2, §9 (owner's assertion; requires `durability="member"`) |
+| NI-4 work directory readers (second re-review) | §5.4 (readable by the runner and downstream processes; shared storage for shared roots and multi-node executors; checked at hand-out); §7.2 (fallback to `store.read` at the job's own address); §5.1 step 9, §7.2 (`_committed.json` written by temporary and rename) |
 
 Revision 2 answered the first review:
 
