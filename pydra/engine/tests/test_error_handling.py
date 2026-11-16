@@ -234,14 +234,16 @@ def test_rerun_errored_recovers(tmp_path, worker):
 
 
 def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
-    """The submitter does not read the stored result of a job it has queued until the
-    job's run has finished"""
+    """The submitter does not read the stored result of a job it has queued and
+    dispatches until the job's run has finished. A job read without its lease, from a
+    slot with a success record, is not dispatched"""
     from pydra.engine import submitter as submitter_module
     from pydra.engine.store import PickleStore
     from pydra.workers import cf
 
     in_flight: set[str] = set()
     reads_in_flight: list[str] = []
+    dispatched: set[str] = set()
 
     release = submitter_module.NodeExecution._release
 
@@ -253,6 +255,7 @@ def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
     run = cf.Worker.run
 
     async def recording_run(self, job, rerun=False):
+        dispatched.add(job.checksum)
         try:
             return await run(self, job, rerun=rerun)
         finally:
@@ -260,7 +263,7 @@ def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
 
     lookup = PickleStore.lookup
 
-    def recording_lookup(self, checksum, context, task):
+    def recording_lookup(self, checksum, context, task, stored=None):
         if checksum in in_flight:
             reads_in_flight.append(checksum)
         return lookup(self, checksum, context, task)
@@ -274,9 +277,11 @@ def test_rerun_errored_slots_not_read_while_rerunning(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="even error"):
         wf(worker="cf", cache_root=tmp_path / "cache")
     reads_in_flight.clear()
+    dispatched.clear()
     flag.touch()
     assert wf(worker="cf", cache_root=tmp_path / "cache").out == [2, 4, 6, 8, 10]
-    assert reads_in_flight == []
+    assert dispatched  # the errored elements were rerun
+    assert not set(reads_in_flight) & dispatched
 
 
 @python.define
