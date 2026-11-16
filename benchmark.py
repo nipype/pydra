@@ -8,7 +8,10 @@ Run ``python benchmark.py <command>``:
     Per-item overhead of a trivial python task split over ``n`` ints (``kind`` is
     ``split``) or of a 2-node workflow split over ``n`` ints (``kind`` is ``chain``), on
     ``worker`` (``debug`` or ``cf``). Prints cold and cached time per item, the extension
-    of 10% more items, and the filesystem entries per item. With no spec it runs
+    of 10% more items, the same items in reverse order (a new outer job whose items are
+    all cached), and the filesystem entries per item. ``--records N`` first fills the
+    cache root's success-record directory with ``N`` records of other jobs, as a
+    long-lived cache root holds. With no spec it runs
     ``split:debug:200 split:cf:200 chain:debug:200 chain:cf:200``.
 ``partial-failure``
     Whether one failing element of an 8-way split blocks the downstream node for the
@@ -71,7 +74,7 @@ def _count_files(root):
     return sum(len(f) + len(d) for _, d, f in os.walk(root))
 
 
-def overhead(kind, n, worker, **worker_kwargs):
+def overhead(kind, n, worker, records=0, **worker_kwargs):
     """Time ``n`` items cold, cached, and with 10% more items, and print the result."""
     from pydra.compose import python, workflow
     from pydra.engine.submitter import Submitter
@@ -96,26 +99,40 @@ def overhead(kind, n, worker, **worker_kwargs):
         )
     )
 
-    def make(m):
-        return (Double() if kind == "split" else Chain()).split(x=list(range(m)))
+    if records:
+        filler = root / ".pydra-succeeded"
+        filler.mkdir()
+        for i in range(records):
+            (filler / f"python-{i:032x}-0000000000000000").touch()
+
+    def make(m, reverse=False):
+        items = list(range(m))[:: -1 if reverse else 1]
+        return (Double() if kind == "split" else Chain()).split(x=items)
 
     out = {}
     try:
-        for label, m in (("cold", n), ("warm", n), ("extend10pct", n + n // 10)):
-            task = make(m)
+        for label, m, reverse in (
+            ("cold", n, False),
+            ("warm", n, False),
+            ("extend10pct", n + n // 10, False),
+            ("allcached", n, True),
+        ):
+            task = make(m, reverse)
             t0 = time.perf_counter()
             with Submitter(worker=worker, cache_root=root, **worker_kwargs) as sub:
                 res = sub(task)
             out[label] = time.perf_counter() - t0
             assert not res.errored, res
-        files = _count_files(root)
+        files = _count_files(root) - records
     finally:
         shutil.rmtree(root)
     cold_ms = 1e3 * out["cold"] / n
     warm_ms = 1e3 * out["warm"] / n
     print(
-        f"{kind:6s} worker={worker:5s} n={n:5d} cold={out['cold']:.2f}s ({cold_ms:.1f} ms/item) "
+        f"{kind:6s} worker={worker:5s} n={n:5d} records={records} "
+        f"cold={out['cold']:.2f}s ({cold_ms:.1f} ms/item) "
         f"warm={out['warm']:.2f}s ({warm_ms:.2f} ms/item) +10%={out['extend10pct']:.2f}s "
+        f"all-cached={out['allcached']:.2f}s ({1e3 * out['allcached'] / n:.2f} ms/item) "
         f"fs_entries={files} ({files / n:.1f}/item)",
         flush=True,
     )
@@ -176,6 +193,9 @@ def main(argv=None):
         metavar="kind:worker:n",
         help=f"default: {' '.join(DEFAULT_OVERHEAD)}",
     )
+    p.add_argument(
+        "--records", type=int, default=0, help="records already in the cache"
+    )
     sub.add_parser("partial-failure", help="one failed element of a split")
     args = parser.parse_args(argv)
     if args.command in (None, "toy"):
@@ -183,7 +203,13 @@ def main(argv=None):
     elif args.command == "overhead":
         for spec in args.specs or DEFAULT_OVERHEAD:
             kind, worker, n = spec.split(":")
-            overhead(kind, int(n), worker, **({"n_procs": 4} if worker == "cf" else {}))
+            overhead(
+                kind,
+                int(n),
+                worker,
+                records=args.records,
+                **({"n_procs": 4} if worker == "cf" else {}),
+            )
     else:
         partial_failure()
 

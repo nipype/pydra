@@ -567,6 +567,8 @@ class Submitter:
         while (tasks or any(not n.done for n in exec_graph.nodes)) and not (
             errors and on_error == "fail_fast"
         ):
+            if not (rerun and self.propagate_rerun):
+                tasks = self.read_succeeded(tasks)
             for job in tasks:
                 try:
                     if is_workflow(job.task):  # expanded here, not placed by the router
@@ -697,6 +699,8 @@ class Submitter:
                                     "or more types in your interface inputs."
                                 )
                             raise RuntimeError(msg)
+                job_rerun = rerun and self.propagate_rerun
+                fresh = []
                 for job in tasks:
                     if job.checksum in finished:
                         job._awaiting_run = False
@@ -706,7 +710,13 @@ class Submitter:
                         if job is not futured[job.checksum]:
                             sharing[job.checksum].add(job)
                     else:
-                        job_rerun = rerun and self.propagate_rerun
+                        fresh.append(job)
+                if fresh and not job_rerun:
+                    fresh = self.read_succeeded(fresh)
+                for job in fresh:
+                    if job.checksum in futured:  # an earlier job of this round
+                        sharing[job.checksum].add(job)
+                    else:
                         if is_workflow(job.task):
                             # expanded in this loop, not placed by the router
                             coroutine = job.run_async(rerun=job_rerun)
@@ -747,6 +757,33 @@ class Submitter:
             errors.extend(self.pop_resolution_errors(exec_graph, entries))
             if errors:
                 raise workflow_error(workflow_task, errors, entries)
+
+    def read_succeeded(self, jobs: list["Job[TaskType]"]) -> list["Job[TaskType]"]:
+        """Read, without their leases, the results of the jobs whose slots carry a
+        success record, and return the other jobs, which are to be dispatched.
+
+        Each job costs one existence check of its own record
+        (`PickleStore.read_succeeded`). A job read this way is complete: its result
+        is cached on it and it is not dispatched, so it takes no lease. A job without
+        a record (its slot has errored, is running, is in a read-only cache or was
+        written before records existed), or whose result the store's ``lookup`` does
+        not return, returns errored or returns from another context, is dispatched
+        and runs under its lease as before. A store without records dispatches every
+        job.
+        """
+        read = getattr(self.store, "read_succeeded", None)
+        if read is None:
+            return jobs
+        dispatch = []
+        for job in jobs:
+            result = read(job.checksum, job.context, job.task)
+            if result is None:
+                dispatch.append(job)
+                continue
+            job.hooks.pre_run(job)
+            job._cached_result = result
+            job._awaiting_run = False
+        return dispatch
 
     @staticmethod
     def pop_resolution_errors(
