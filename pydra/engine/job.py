@@ -331,6 +331,14 @@ class Job(ty.Generic[TaskType]):
         )
         return self._inputs
 
+    def _withdraw_success(self, lease) -> None:
+        """Remove the success record of the job's slot, under ``lease``, before the
+        slot is rewritten, so the submitter never reads it without the lease while it
+        is rewritten (a store without records has nothing to remove)."""
+        withdraw = getattr(self.store, "withdraw_success", None)
+        if withdraw is not None:
+            withdraw(lease)
+
     def _populate_filesystem(self):
         """
         Invoked immediately after the lockfile is generated, this function:
@@ -416,6 +424,7 @@ class Job(ty.Generic[TaskType]):
             self._errored = False
             enters = self._enters_cache_dir
             cwd = os.getcwd()
+            self._withdraw_success(lease)
             self._populate_filesystem()
             if enters:
                 os.chdir(self.cache_dir)
@@ -487,6 +496,7 @@ class Job(ty.Generic[TaskType]):
             self._errored = False
             enters = self._enters_cache_dir
             cwd = os.getcwd()
+            self._withdraw_success(lease)
             self._populate_filesystem()
             result = Result(
                 outputs=None,

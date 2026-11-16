@@ -3,6 +3,7 @@
 import errno
 import hashlib
 import json
+import logging
 import os
 import shutil
 import sys
@@ -14,7 +15,7 @@ from pydra.engine.context import RECORD
 from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
 from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
 from pydra.engine.result import Result, load_result, save
-from pydra.utils.general import ensure_list, atomic_write
+from pydra.utils.general import CACHE_FILE_MODE, ensure_list, atomic_write
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
@@ -30,6 +31,15 @@ CONTEXT_FILE = "_context.json"
 
 LEASE_SUFFIX = ".lock"
 """The suffix of a job's lease in ``PickleStore.cache_root``."""
+
+SUCCESS_DIR = ".pydra-succeeded"
+"""The directory in ``PickleStore.cache_root`` holding the jobs' success records: one
+empty file per slot, named ``<checksum>-<context key>``, whose presence says that the
+slot holds a result that did not error (see `PickleStore.success_record`)."""
+
+logger = logging.getLogger("pydra")
+
+_record_exists = os.path.exists
 
 REMOVE_ATTEMPTS = 5
 """How many times ``remove_from_cache`` tries a removal blocked by held or pending files."""
@@ -339,8 +349,13 @@ def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
 
 
 def _is_store_internal(name: str) -> bool:
-    """Whether ``name`` in a cache root is a lease or a probe, not a job's directory."""
-    return name.endswith(LEASE_SUFFIX) or name.startswith((PROBE_PREFIX, CLOCK_PREFIX))
+    """Whether ``name`` in a cache root is a lease, a success record or a probe, not a
+    job's directory."""
+    return (
+        name.endswith(LEASE_SUFFIX)
+        or name == SUCCESS_DIR
+        or name.startswith((PROBE_PREFIX, CLOCK_PREFIX))
+    )
 
 
 def lease_still_held(lease: Lease) -> bool:
@@ -417,6 +432,10 @@ class PickleStore:
     ``readonly_caches`` trust everyone who can write to them with code execution as the
     reading user. Only point the store at caches whose writers you trust. Files are
     written atomically with mode ``0o644`` adjusted by the umask.
+
+    A slot whose job succeeded carries a success record in `SUCCESS_DIR` (see
+    `success_record`), so the submitter reads its result without the lease and does
+    not dispatch the job.
 
     Parameters
     ----------
@@ -514,6 +533,49 @@ class PickleStore:
     def lockfile(self, checksum: str, context: Context) -> Path:
         return self.cache_root / f"{checksum}-{context_key(context)}{LEASE_SUFFIX}"
 
+    def success_record(self, checksum: str, context: Context) -> Path:
+        """The path of the record saying that the slot of ``checksum`` under
+        ``context`` in ``cache_root`` holds a result that did not error.
+
+        `commit` writes it as its last step, only for such a result and only while
+        the lease is still held; `withdraw_success` removes it under the lease before
+        the slot is rewritten. A slot without one (errored, running, in a read-only
+        cache, written before records existed, or whose record could not be
+        written) is read under its lease."""
+        return self.cache_root / SUCCESS_DIR / f"{checksum}-{context_key(context)}"
+
+    def read_succeeded(
+        self, checksum: str, context: Context, task: "Task | None"
+    ) -> Result | None:
+        """The result of ``checksum`` under ``context``, read without the lease, if
+        its slot in ``cache_root`` has a success record (one existence check); None
+        if it has none, or if `lookup` returns no result, an errored one or one from
+        another context, in which case the job is to be run under its lease.
+
+        The result is read through `lookup`, the call a job makes on a hit under its
+        lease, so a store that overrides it to refuse, verify or record reuse sees
+        this read too."""
+        if not _record_exists(self.success_record(checksum, context)):
+            return None
+        try:
+            result = self.lookup(checksum, context, task)
+        except Exception as e:  # removed, rewritten or unreadable: run it leased
+            logger.debug("Reading the result of %s without its lease: %s", checksum, e)
+            return None
+        if result is None or result.errored or result.cross_context:
+            return None
+        return result
+
+    def withdraw_success(self, lease: DirectoryLease) -> None:
+        """Remove the success record of the job held under ``lease``, before its slot
+        is rewritten; called with the lease held."""
+        self._success_record_of(lease).unlink(missing_ok=True)
+
+    @staticmethod
+    def _success_record_of(lease: DirectoryLease) -> Path:
+        name = lease.lockfile.name[: -len(LEASE_SUFFIX)]
+        return lease.lockfile.parent / SUCCESS_DIR / name
+
     def acquire(self, checksum: str, context: Context) -> DirectoryLease:
         return DirectoryLease(
             checksum,
@@ -535,3 +597,23 @@ class PickleStore:
         with atomic_write(lease.cache_dir / CONTEXT_FILE, "w") as f:
             json.dump(result.context, f, sort_keys=True)
         save(lease.cache_dir, result=result, job=job)
+        if result.errored:
+            return
+        if not lease_still_held(lease):
+            raise LeaseLost(
+                f"The lease {lease.lockfile} was taken over by another process while "
+                f"its result was written to {lease.cache_dir}, so this process does not "
+                "record it as a success",
+                lease.lockfile,
+            )
+        record = self._success_record_of(lease)
+        try:
+            record.parent.mkdir(exist_ok=True)
+            os.close(os.open(record, os.O_WRONLY | os.O_CREAT, CACHE_FILE_MODE))
+        except OSError as e:
+            logger.warning(
+                "Could not write the success record %s (%s); the job's result is "
+                "stored and is read under its lease when next reused",
+                record,
+                e,
+            )
