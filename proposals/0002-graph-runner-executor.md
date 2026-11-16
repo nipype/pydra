@@ -159,8 +159,8 @@ class Absent:
   is never served the other's result. A `checksum=` or `__checksum__` hook (K2) receives the
   `Absent` object itself among the resolved inputs, but whether it digests it is not known: the
   hook is an opaque callable (`compose/base/task.py:489-507`), and a hook may key an input on its
-  upstream's key rather than on its value. The runner therefore does not rely on it ("Accepted
-  absence the checksum may not see", below).
+  upstream's key rather than on its value. The runner therefore does not rely on it ("Absence the
+  checksum may not see", below).
 - **What a reader does with one.** An input field declares `absent="propagate" | "accept" |
   "drop"`. It is a field attribute like `hash_eq` (`compose/base/field.py:208-229`). The default
   depends on what the field reads:
@@ -178,18 +178,33 @@ class Absent:
   in declaration order. Its `cause` is unchanged, and `source` keeps the node that produced it. A
   `"drop"` field on a combined value receives the list without its absent elements. `"accept"` passes
   the value as resolved.
-- **Accepted absence the checksum may not see.** A field whose value pydra does not hash (the
+- **Absence the checksum may not see.** A field whose value pydra does not hash (the
   `container_path` exclusion at `compose/base/task.py:561`), and every field of a task with a
   supplied checksum (`__checksum__` or `checksum=`, `:489-507`), could change from a value to an
-  `Absent` with no checksum change. Neither case can be detected at definition time. For such a
-  task, when an `"accept"` field holds an `Absent` (or, for a combined value, any element does),
-  the runner appends a suffix to `job.checksum` (`job.py:237-246`) before the store, sharing and
-  commit steps: `-absent-` and the hex digest of the sorted `(field, element index, cause)` of
-  every such `Absent`. It stays one path component, as `:496-506` requires. A task with no
-  accepted `Absent` keeps its checksum unchanged, so no existing cache slot moves. Example: a
-  gather over records whose key is built from its upstreams' keys gets a different checksum in a
-  run where record 7 was routed off than in a run where record 7 ran, although the upstream keys
-  are the same in both.
+  `Absent`, or lose an element to `"drop"`, with no checksum change. Neither case can be detected
+  at definition time. For such a task, when an `"accept"` field holds an `Absent`, or a combined
+  `"accept"` or `"drop"` field has absent elements (kept or dropped), the runner appends a suffix
+  to `job.checksum` (`job.py:237-246`) before the store, sharing and commit steps: `-absent-` and
+  the hex digest of the sorted `(field, element index, cause)` of every such `Absent`, where the
+  index is the element's position before dropping. It stays one path component, as `:496-506`
+  requires. A task with no accepted or dropped `Absent` keeps its checksum unchanged, so no
+  existing cache slot moves. Example: a gather over records whose key is built from its upstreams'
+  keys gets a different checksum in a run where record 7 was routed off than in a run where
+  record 7 ran, although the upstream keys are the same in both.
+- **The checksum-change check compares the unsuffixed checksum.** After a job with
+  `__checksum__` runs, `Job._check_for_hash_changes` recomputes `task._checksum` and raises if it
+  differs from `job.checksum` (`job.py:642-647`, called at `:468` and `:537`). The suffix is the
+  runner's, not the task's, so the job keeps its unsuffixed checksum beside the suffixed one, and
+  the check compares `task._checksum` with the unsuffixed value. Without that, every
+  supplied-checksum job that runs with an absence would fail the check.
+- **The suffix is one level deep in pydra; a driver carries it further.** A reader of a suffixed
+  job holds no `Absent` and gets no suffix. A reader whose checksum pydra computes from values
+  needs none: the suffixed job's output differs between the two runs, and so does the reader's
+  hash. Only a supplied checksum built from upstream keys can miss it, and such keys come from the
+  system that supplies them. §3.5 therefore requires that a driver's reference for a job carry the
+  whole `job.checksum` and that downstream supplied keys be built from it. Carrying the suffix
+  forward inside the runner was rejected: pydra cannot see how a hook builds its key, and the
+  driver must fold absence into its own key anyway (§3.5).
 - **Splitter inputs.** A splitter input that resolves to an `Absent` gives the node no elements.
   The node is absent as a whole, and a reader of it receives that `Absent` rather than an empty
   `StateArray`, so absence is distinguishable from an empty list. Today a splitter over an upstream
@@ -654,10 +669,16 @@ What such a driver must and need not supply:
   because a workflow job waiting for its lease is advanced only by a later `ready()` (§3.1). A
   driver with nothing in flight and `retry_after` set is waiting, not stuck; it calls `stuck()`
   only when `retry_after` is `None`.
-- **A supplied checksum sees absence through the suffix.** If its store adapter maps pydra
-  checksums to its own keys, it keys on the whole `job.checksum`, including the absence suffix of
-  §2.3(a). A key it computes itself from upstream keys alone does not see an accepted `Absent`,
-  and would serve a gather computed when that element was present.
+- **A supplied checksum sees absence through the suffix, transitively.** The reference a driver
+  returns for a job carries the whole `job.checksum`, suffix included, and a downstream supplied
+  key that names an upstream output is built from that value, not from the upstream's key before
+  the suffix (§2.3(a)). A key built from unsuffixed upstream keys does not see an accepted or
+  dropped `Absent` two levels down: a report read from a gather would be served from the run in
+  which record 7 was present. A driver whose keys have a fixed form (senselab's ADR-002 key
+  digest is a `Hex64`, and ADR-001 makes the node's checksum equal to it) cannot use the suffixed
+  string as its key. Its adapter folds the absence triples into its own key derivation instead,
+  so the suffix is redundant there; the stale read it prevents would come from the driver's own
+  store, since pydra's store holds only the run's completion records in that design.
 - **Infrastructure faults and held queues** are `NotRun(held=True)`. They are not errors, readers
   stay blocked, and the run ends incomplete and resumable. Content failures are `Failed`, or an
   errored `Result`.
