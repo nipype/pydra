@@ -1,10 +1,10 @@
 # Proposal 0003: a portable result store (proposal 0001, D2)
 
-Status: proposed, for maintainer discussion; revision 2. Branch `rfc/portable-store`, off
+Status: proposed, for maintainer discussion; revision 3. Branch `rfc/portable-store`, off
 `enh/execution-extensions` at `3f734f9a` (the merge of #929). This is the design of D2
 (`PortableStore`), which proposal 0001 §3.3 step 3 names in one paragraph. Line references are to
 `3f734f9a` unless another commit is named. RFC 0002 is #930 at `2ac1ba18`. Revision 2 answers the
-review of #931; §12 maps each finding to the text that resolves it.
+review of #931 and revision 3 its first re-review; §12 maps each finding to the text that resolves it.
 
 ## 1. Motivation
 
@@ -32,15 +32,16 @@ without forking it.
 
 **One motivating user.** senselab 2.x (sensein/senselab#617) keeps its own content-addressed store,
 `store@6/<d[:2]>/<d>/<f>/` with `result.json`, `context.json` and arrays as `<sha256>.npy`, committed
-by staging and rename (senselab `2.x` at `46608622`,
+by staging and rename (senselab `2.x` at `4472cfbb`,
 `packages/senselab-core/src/senselab_core/runtime/store.py:3-15`, `:503-552`). Its key `d` is the
-digest of a key record stored in `result.json`, and its fingerprint `f` is taken over a context of
-its own (torch build, env lock, model identity) that pydra's context does not hold (`:299-307`,
-`:532-538`). It is reached only through descriptors (`runtime/storage.py:350-365`), and serves
-through a serve/verify/refuse verdict (`runtime/servable.py:25-53`). senselab has decided to move
-onto D2 before its 2.0.0 release, so this design has to carry such a store with no loss of
-guarantees, and to move its existing entries by translation, not recomputation (§8.2). The rest of
-this proposal does not refer to senselab.
+digest of a key record stored in `result.json`, and its fingerprint `f` is taken over a context of its
+own (torch build, env lock, model identity) that pydra's context does not hold (`:299-307`,
+`:532-538`). Its entries are made read-only after the rename (`:520`, `:548`, `:555-560`) inside
+group-writable directories (`runtime/storage.py:57`, `:152-161`). It is reached only through
+descriptors (`runtime/storage.py:350-365`), and serves through a serve/verify/refuse verdict
+(`runtime/servable.py:25-53`). senselab has decided to move onto D2 before its 2.0.0 release, so this
+design has to carry such a store with no loss of guarantees, and to move its existing entries by
+translation, not recomputation (§8.2). The rest of this proposal does not refer to senselab.
 
 ## 2. Goals, non-goals, compatibility, threat model
 
@@ -120,7 +121,8 @@ root is `private` (§5.4).
   "identity": {"name": "pydra-identity@1", "fingerprint": "pydra-context@1", "recorded_only": []},
   "shard": "sha256-2",
   "dirs": {"staging": "staging", "quarantine": "quarantine", "sidecars": {}},
-  "modes": {"file": "0o444", "dir": "0o755", "staging": "0o700"},
+  "modes": {"file": "0o444", "entry": "0o755", "sealed": null, "container": "0o755",
+            "side": "0o755", "staging": "0o700"},
   "pickle": false
 }
 ```
@@ -139,7 +141,13 @@ root is `private` (§5.4).
 - **No header.** A root with entries but no header is a `PickleStore` cache or another tool's
   directory and raises `LegacyLayout`, naming the migration (§8).
 - **`modes`** are the store policy's (§9). Recording them makes two users with different defaults
-  fail at open rather than write entries with mixed modes.
+  fail at open rather than write entries with mixed modes. `file` is a committed member's mode;
+  `entry` is the entry directory's mode, set before the rename; `sealed`, when not null, is the
+  narrower mode it is given after the rename; `container` is the mode of `<entries>`, `<shard>` and
+  `<cdir>`; `side` is the mode of the directories named in `dirs` and of `leases/` and `work/`;
+  `staging` is the mode of a writer's own `staging/<uuid>/` while it writes. `file`, `entry` and
+  `sealed` never carry group or other write; `container` and `side` may, and must for a root that
+  several users write (§9).
 - **`pickle`** says whether writers to this root may write pickle members. It is set when the root is
   created and is a writer rule: with `false`, no writer pickles, whatever trust it declared. A reader
   never decides to unpickle from the header, because anyone who can write the root can write the
@@ -165,8 +173,9 @@ class StoreIdentity(Protocol):
 ```
 
 - **The default, `pydra-identity@1`,** returns `None` as the key (pydra's checksum is not the digest
-  of a stored record; `check_key` is then true), `job.context` as the context in both phases
-  (`engine/job.py:249-262`), and as fingerprint `pydra-context@1`: the full sha256 of the canonical
+  of a stored record; `check_key` is then true), `job_context(job.task, job.environment)` as the
+  context in both phases, which is what `Job.context` builds today (`engine/job.py:249-262`), and as
+  fingerprint `pydra-context@1`: the full sha256 of the canonical
   JSON (RFC 8785) of the context without the `recorded_only` fields. By default none is recorded-only,
   so two contexts share a slot exactly when they are equal, as with `context_key` today, but with 256
   bits instead of 64. A collision in a shared store would make one context's result serve another,
@@ -182,6 +191,14 @@ class StoreIdentity(Protocol):
   which may store the record. On read the store calls `check_key(checksum_in_entry, key_in_entry)` and
   treats a false as misfiled. This lets a downstream store whose checksum is the digest of its own key
   record bind each entry to that record, as §6.2 binds it to its context.
+- **How it is called.** Under a store that has an `identity`, `Job.context` returns
+  `store.identity.context(job, "lookup")`, built once in the submitting process and carried with the
+  job as today. Every call that passes `job.context` therefore passes the identity's lookup context:
+  `acquire` (`engine/job.py:415`), `lookup` (`:617-624`), `read_succeeded`
+  (`engine/submitter.py:779`) and the declared-version check (`engine/job.py:259-261`). Without that
+  delegation those calls would fingerprint pydra's context and look in slots that nothing is
+  published under. The calls that need more than a context take the job: `find(job)` returns a typed
+  lookup result (§7.1), and `work_dir(job)` reads the attempt from it (§5.4).
 - **Where it is configured.** `PortableStore(identity=...)`. The identity object must be picklable,
   because `context(job, "execute")` runs in worker processes; it travels with the store.
 - **`recorded_only`** fields are kept in `context.json` and reach the reuse hook, but do not split
@@ -206,6 +223,7 @@ class Committed:
     own_digest: str                  # the digest of our encoded outputs
     committed_digest: str | None     # the digest of the entry at the address; None if it cannot be read (§5.2)
     stored: bool                     # our outputs, or outputs equal to them, are in the store
+    kept: str | None                 # with stored=False: where our outputs are kept (§5.4)
 
 class PortableStore:
     def publish(self, checksum: str, key: KeyRecord, context: Context, outputs: Mapping[str, Any],
@@ -226,27 +244,41 @@ class PortableStore:
 3. If the job is marked to verify (§7.1), `Reuse.compare` runs now, before anything is visible.
 4. The commit hook runs (§7.4). If it raises, the staging directory is removed and nothing is
    committed.
-5. The staging directory gets its committed mode through its descriptor (by default `0o755`: the
+5. The staging directory gets the `entry` mode through its descriptor (by default `0o755`: the
    owner keeps write permission, because a directory without it cannot be renamed into another
-   parent) and is `fsync`ed. Nothing is changed after the rename, so a writer killed after it leaves
-   an entry every user can read.
+   parent) and is `fsync`ed. The entry is readable by every user it is meant for before it is
+   visible, so a writer killed after the rename leaves a readable entry.
 6. `rename(staging/<uuid>, <entries>/<shard>/<cdir>/<fingerprint>)`, both relative to directory
-   descriptors. The parent directories are created the same way: each is made in `staging/`, given its
-   mode, and renamed into place; a loser of that rename uses the existing directory. A kill can then
-   never leave a shard or checksum directory with a private mode.
-7. If the rename succeeds, the parent is `fsync`ed and `Committed(won=True, stored=True,
-   committed_digest=own_digest)` is returned.
+   descriptors. The parent directories are created the same way: each is made in `staging/`, given the
+   `container` mode, and renamed into place; a loser of that rename uses the existing directory. A
+   kill can then never leave a shard or checksum directory with a private mode.
+7. If the rename succeeds and the policy has a `sealed` mode, the entry directory is given it
+   through a descriptor opened on the new name. A kill between the rename and the seal leaves an
+   entry in the `entry` mode, which is readable and is sealed by its owner's next read (§6.2). The
+   parent is `fsync`ed and `Committed(won=True, stored=True, committed_digest=own_digest)` is
+   returned.
 8. If the rename fails and the target exists, the store reads the target's `entry.json`. If it
    carries this writer's token, the rename did succeed and its reply was lost (NFS): the result is as
-   in step 7. Otherwise another writer was first. The staging directory is removed, and the target is
-   read and verified (§6.2):
+   in step 7. Otherwise another writer was first, and the target is read and verified (§6.2):
    - it verifies: `committed_digest` is its digest, `won=False`, and `stored` is true exactly when the
      two digests are equal;
    - it is corrupt or misfiled: it is quarantined (§6.3) and the commit is retried, a bounded number
      of times;
    - it cannot be read by this store (`EntryNotTrusted`, `EntryFormatUnknown`, `StoreUnavailable` on
-     its members): `committed_digest=None`, `stored=False`. The writer's own outputs are kept in its
-     work directory, which is not removed (§5.4).
+     its members): `committed_digest=None`, `stored=False`.
+
+   When `stored` is true the staging directory is removed. When it is false the staged entry is kept,
+   unpublished, in the work directory (§5.4), and `Committed.kept` names it.
+9. Once §7.3 has decided the job's result, the executing process writes `<work dir>/_committed.json`:
+   `stored`, and where the result is read from, an `EntryRef` or the kept entry. This is how a process
+   other than the executing one reads the result (§7.2).
+
+**A parent this user cannot write.** If making `staging/<uuid>`, entering or creating `<shard>` or
+`<cdir>`, or the rename fails with `EACCES` or `EPERM`, `publish` raises `StoreNotWritable`, a
+`StoreUnavailable` naming the directory, its owner and mode, and the header's `container` and `side`
+modes. A root whose `container` and `side` modes are not group-writable (the default) is written by
+its creator only, and this is the error another user's first publish gets. It is a configuration
+error, so the job errors; it is not taken for a lost race.
 
 What the job's result is after a lost race is §7.3.
 
@@ -282,9 +314,10 @@ Other notes:
   of the rank-0 entry path relative to the shard descriptor, the cost of #929's existence check
   (`:558`), followed by the full lookup through the reuse hook (§7.1). It returns a result only on a
   `SERVE` verdict, as #929 returns none for a cross-context hit (`:565`); `VERIFY` and `REFUSE` return
-  `None`, and the job is dispatched. `withdraw_success` is not defined, which `Job` and `Submitter`
-  already allow (`engine/job.py:338-340`, `engine/submitter.py:774`).
-
+  `None`, and the job is dispatched. Because it returns a `Result | None`, it cannot carry the verify
+  mark, so a runner over a `PortableStore` calls `find(job)` (§7.1) in its place, and a `Verify` sets
+  `job.verify` before the job is dispatched (§13). `withdraw_success` is not defined, which `Job` and
+  `Submitter` already allow (`engine/job.py:338-340`, `engine/submitter.py:774`).
 ### 5.3 De-duplication leases (optional)
 
 `PortableStore(dedupe=...)` decides whether two submitters of one job compute it once.
@@ -320,7 +353,14 @@ returns a work directory. It is called many times and in several processes (`eng
   the job carries it to the executing process with its checksum and context (RFC 0002 §3.4). A job
   looked up but never handed out has none.
 - **The contract.** `work_dir(checksum: str, fingerprint: str, attempt: str) -> Path` is pure: the
-  same arguments give the same path in every process. It must return an absolute path on storage the
+  same arguments give the same path in every process. `fingerprint` is that of the job's lookup
+  context (§4), which the runner and the executing process both hold; the execute context is not known
+  until the task has run. `PortableStore.work_dir(job)` calls it with `job.checksum`,
+  `identity.fingerprint(job.context)` and `job.attempt`, and `Job.cache_dir` (`engine/job.py:287-289`)
+  calls `work_dir(job)` when the store defines it, because `ResultStore.cache_dir(checksum, context)`
+  cannot reach the attempt. `check_declared_code`, which uses `cache_dir` only to ask whether the
+  context's own slot holds a result (`engine/store.py:302`), asks `PortableStore` for the entry path
+  instead. It must return an absolute path on storage the
   executing process can write, and outside `<root>` for a `shared` root. The store creates the
   directory `0o700` if it is absent and never removes one it did not create.
 - **The default** is `<root>/work/<attempt>/` for a `private` root. A `shared` root has no default:
@@ -329,9 +369,19 @@ returns a work directory. It is called many times and in several processes (`eng
 - **Resumable tasks.** A task with `can_resume` (`engine/job.py:282-284`, `:355-357`) gets
   `attempt="resume"`, so its work directory is stable across runs. It is then guarded by the
   de-duplication lease, which such a store needs whatever its `dedupe` default.
-- **Lifetime.** After a publish with `stored=True` the default work directory is removed. After a
-  failure, or `stored=False`, it is kept and reported. `collect` removes default work directories older
-  than the policy's work age (§9).
+- **Kept outputs.** When `publish` returns `stored=False` (§5.1 step 8, §6.3, §7.3), the staged
+  entry is moved to `<work dir>/_entry/`, by rename when the work directory is on the root's
+  filesystem and otherwise by copy, each member re-hashed against `entry.json`; the staging directory
+  is then removed. A kept entry is read with the checks of §6.2 except the address, its `checksum`
+  and `fingerprint` compared with the job's instead, and as `private` when the work directory passes
+  the ownership check of §6.4, as it does for the user who ran the job. An output that could not be
+  encoded at all (§6.4) has no staged entry: it is cloudpickled to `<work dir>/_outputs.pklz`, the
+  trust `_job.pklz` already has there, and read back only after the same ownership check. A kept
+  result serves the run that produced it; the next run computes the job again.
+- **Lifetime.** After a publish with `stored=True` the default work directory is emptied except for
+  `_committed.json`, which the runner removes once it holds the job's outcome. After a failure, or
+  `stored=False`, it is kept and reported. `collect` removes default work directories older than the
+  policy's work age (§9), which must exceed the longest run that reads a kept result.
 - **Crashes.** An errored job writes `_error.json` into its work directory (§11), so the crash path is
   `work_dir(checksum, fingerprint, job.attempt) / "_error.json"`, which the submitter's message can
   name (`engine/submitter.py:491-494`) and `pydracli crash` can read.
@@ -386,14 +436,19 @@ through that descriptor:
 - opens each member with `O_NOFOLLOW`, requires a regular file, and checks its size and sha256
   against `entry.json`. File members are checked when the entry is read, not when the path is first
   used, so a reader never hands out a path to an unchecked file. The policy's `verify_files="size"`
-  (§9) narrows the check to sizes for a `private` root, where nobody but the owner can change a
-  member; it is refused for a `shared` root;
+  (§9) narrows the check to sizes for a `private` root. It is the owner's assertion that their own
+  processes do not change a member in place, and it is refused for a `shared` root and unless
+  `durability="member"`, because a crash under `"entry"` or `"none"` can leave a member with its
+  recorded size and stale or zero-filled blocks;
 - loads arrays with `numpy.load(..., allow_pickle=False)`;
 - recomputes the output digest over the encoded outputs and requires it to equal the recorded one.
 
-A committed entry whose modes differ from the header's is resealed when its reader owns it, and read
-as it is otherwise. A failed check quarantines the entry (§6.3); an entry is never served from a
-partial read. An `OSError` on read or write is raised as `StoreUnavailable` and moves nothing.
+A committed entry is expected in the `sealed` mode when the header has one, and in the `entry` mode
+otherwise; an entry in the `entry` mode under a `sealed` policy is one whose writer was killed before
+the seal (§5.1 step 7). An entry whose modes differ from the expected ones is resealed when its reader
+owns it, and read as it is otherwise. A failed check quarantines the entry (§6.3); an entry is never
+served from a partial read. An `OSError` on read or write is raised as `StoreUnavailable` and moves
+nothing.
 
 ### 6.3 Quarantine
 
@@ -412,9 +467,10 @@ and a writer, can race, so the move is fenced:
 permission on the directory itself. A user who does not own a corrupt entry cannot move it to
 `quarantine/` and cannot change its mode. The store then renames it within its own parent to
 `q-<uuid>`, which needs write permission only on the parent, and which is not a fingerprint and is
-never served. The same fence applies. `collect` removes `q-` names when it can and logs the owner when
+never served. The parent is writable by other users only when the `container` mode makes it so
+(§3.2, §9). The same fence applies. `collect` removes `q-` names when it can and logs the owner when
 it cannot. If the parent is not writable either, the entry stays, the read raises `CorruptEntry` with
-the path and its owner, and the job runs and keeps its outputs as `stored=False`.
+the path and its owner, and the job runs and keeps its outputs as `stored=False` (§5.4).
 
 `store.evict(entry: EntryRef, expected_digest: str)` uses the same steps and restores the moved copy
 when its digest is not `expected_digest`, so an evict never removes an entry committed after its
@@ -483,12 +539,14 @@ PortableStore(root, trust="shared", readonly=[Root(path, trust="shared"), ...],
   A field whose declared type has no codec raises `UnencodableOutput` then, naming the field and the
   type, before any computation.
 - **An output with no codec, found at publish.** A field typed `Any`, or a value whose runtime type
-  differs from its declaration, can only be found at publish. Then the job does not error: its
-  `Result` holds the outputs in memory for the rest of the run, `Committed.stored` is false, the work
-  directory is kept, and a warning names the field and the type. Downstream jobs of the same run use
-  the outputs. The next run computes the job again. Under a root that allows pickles, the value is
-  cloudpickled into `<sha256>.pkl`, tagged in `entry.json` with the cloudpickle version and the
-  Python major.minor, and read back only by a matching interpreter.
+  differs from its declaration, can only be found at publish. Then the job does not error:
+  `Committed.stored` is false, the outputs are kept in the work directory as `_outputs.pklz` (§5.4),
+  and a warning names the field and the type. The `Result` in the executing process holds them, and a
+  runner in another process, such as one behind a Slurm job, reads them from the work directory
+  (§7.2). Downstream jobs of the same run use the outputs. The next run computes the job again. Under
+  a root that allows pickles, the value is cloudpickled into `<sha256>.pkl`, tagged in `entry.json`
+  with the cloudpickle version and the Python major.minor, and read back only by a matching
+  interpreter.
 
 ## 7. Reuse
 
@@ -518,7 +576,26 @@ class Reuse(Protocol):
                entry: StoredEntry) -> None: ...                  # the reuse record
     def compare(self, candidate: Candidate, stored: StoredEntry, fresh: Mapping[str, Any],
                 fresh_digest: str, task: Task | None) -> None: ...   # before the fresh commit
+
+@attrs.frozen
+class Hit:     result: Result
+@attrs.frozen
+class Verify:  candidate: Candidate
+@attrs.frozen
+class Miss:    pass
+Lookup = Hit | Verify | Miss
+
+class PortableStore:
+    def find(self, job: Job) -> Lookup: ...
+    def lookup(self, checksum: str, context: Context, task: Task | None, stored=None) -> Result | None: ...
 ```
+
+`find(job)` is the lookup. It takes the job, so the identity and the attempt are reachable, and its
+result says whether to verify. `lookup`, the `ResultStore` method (`engine/store.py:389-404`), is
+kept as an adapter that returns the `Hit`'s result and `None` otherwise; a caller that holds a job
+and finds `find` on the store (as `Submitter` finds `read_succeeded`, `engine/submitter.py:774`)
+calls `find` instead, and sets `job.verify` from a `Verify`. In pydra those callers are `Job.run`
+under the lease (`engine/job.py:418-423`) and the runner's `ready()` (§13).
 
 - **Ranking.** `rank` returns the admitted candidates, best first. The store reads only
   `context.json` to rank.
@@ -529,8 +606,8 @@ class Reuse(Protocol):
     store ranks again. The verdict therefore always applies to the context of the members it reads.
     Then the entry is read (§6.2), `served` is called, and the result is returned. A corrupt candidate
     is quarantined and the next one is taken.
-  - `VERIFY`: the lookup returns no result and marks the job to verify against the candidate.
-  - `REFUSE`: the lookup returns no result and the job runs. It ends the lookup, because a reason to
+  - `VERIFY`: `find` returns `Verify(candidate)`, and the caller marks the job to verify against it.
+  - `REFUSE`: `find` returns `Miss` and the job runs. It ends the lookup, because a reason to
     refuse, such as a licence recorded in the stored context, usually applies to every candidate of
     the job.
   - `SKIP`: the next candidate is considered.
@@ -538,13 +615,13 @@ class Reuse(Protocol):
   not served and the job runs, so no result is served without its record. The `Reuse` object is
   picklable and runs in whichever process looks up: the runner in `ready()`, or a worker under the
   lease in `Job.run`. A record it writes must be durable in that process.
-- **The verify mark** is `job.verify: Candidate | None`. It is set by the lookup that returned
-  `VERIFY`, in the runner or under the lease, and travels with the job to the executing process, as
-  the checksum and context do (RFC 0002 §3.4). `publish(..., verify=job.verify)` reads the candidate
-  and calls `compare` with the stored entry and the job's fresh outputs and digest, after staging and
-  before the commit hook and the rename (§5.1 step 3). What a comparison records, and where, is the
-  hook's; it may write a sidecar (§7.4) or hand a record to the commit hook. If `compare` raises, the
-  job errors and nothing is committed.
+- **The verify mark** is `job.verify: Candidate | None`. It is set from the `Verify` that `find`
+  returned, in the runner or under the lease, and travels with the job to the executing process beside
+  the checksum and context, which RFC 0002 §3.4 has to name (§13). `publish(..., verify=job.verify)`
+  reads the candidate and calls `compare` with the stored entry and the job's fresh outputs and
+  digest, after staging and before the commit hook and the rename (§5.1 step 3). What a comparison
+  records, and where, is the hook's; it may write a sidecar (§7.4) or hand a record to the commit
+  hook. If `compare` raises, the job errors and nothing is committed.
 - **Verify at rank 0.** A rank-0 candidate is at the job's own address, so the fresh entry cannot be
   committed beside it. `compare` still runs against the fresh outputs, which is the point of the
   verify; the rename then fails as in §5.1 step 8, and the result is as in §7.3.
@@ -558,15 +635,21 @@ process holds `Committed`, and the job's `Result` is built from it. Every later 
 goes by `store.read(entry: EntryRef, task)`, which verifies the entry (§6.2) and calls neither `rank`,
 `verdict` nor `served`:
 
-- `Job.result()` reads by `job.committed` when it is set (`engine/job.py:616-626` today reads through
-  `lookup`);
-- RFC 0002's `complete(job, outcome)` holds the `Result` on the job, and the outcome carries the
-  `Committed`, so readers in the runner's process use it without a store read (RFC 0002 §3.1);
-- an executor that reports from another process, such as the Slurm adapter that reads results after
-  the job (RFC 0002 §3.3), reads by the `EntryRef` the job wrote beside its work directory
-  (`<work dir>/_committed.json`), not by `lookup`;
-- lazy fields that read an upstream job (`engine/lazy.py:189`) and the submitter's final read
-  (`engine/submitter.py:503-513`) go through `Job.result()` and so read by `EntryRef`.
+- `Job.result()` reads by `job.committed` when it is set, and otherwise by
+  `<work dir>/_committed.json` when that exists (`engine/job.py:617-624` today reads through
+  `lookup`). A `_committed.json` that names an `EntryRef` is read by `store.read`; one that names the
+  kept entry or `_outputs.pklz` is read from the work directory (§5.4);
+- RFC 0002's `complete(job, outcome)` holds the `Result` on the job (RFC 0002 §3.1), so readers in
+  the runner's process use it without a store read. RFC 0002's `Outcome` is `Result | Failed |
+  NotRun` and has no place for the `Committed`; this proposal puts it on the `Result`
+  (`Result.committed`), which leaves the union as it is and which `complete` has to keep (§13);
+- an executor that reports from another process, such as the Slurm and SGE adapter, which reads the
+  result with `job.result()` after the job returns `True` (RFC 0002 §3.3), reads through
+  `_committed.json`, not by `lookup`, so a job whose outputs were not stored still reports a
+  `Result`. The adapter's visibility retry applies to `_committed.json`;
+- lazy fields that read an upstream job (`engine/lazy.py:189`), `runner.result()` (RFC 0002 §3.1) and
+  the submitter's final read (`engine/submitter.py:503-513`) go through `Job.result()` and so read the
+  same way, including for an outer job whose outputs were not stored.
 
 `lookup` is therefore called only where a reuse can happen: in `ready()` (through `read_succeeded`, or
 for every job under `lookup_before_dispatch`, RFC 0002 §3.1) and under the lease in `Job.run`.
@@ -585,13 +668,14 @@ When `publish` returns `won=False`:
 | Case | The job's result | Recorded as |
 |---|---|---|
 | `stored=True` (equal digests) | its own outputs, read by `EntryRef` from the committed entry | an execution; `served` is not called |
-| unequal digests, and the hook gives `SERVE` for the committed entry as a rank-0 candidate | the committed entry's outputs | a reuse; `served` is called |
-| unequal digests and `REFUSE` or `SKIP`; or the entry cannot be read (`committed_digest=None`) | its own outputs, uncommitted (`Result.stored=False`), files in the kept work directory | an execution that was not stored; no error |
+| unequal digests, `replace=False`, and the hook gives `SERVE` for the committed entry as a rank-0 candidate | the committed entry's outputs | a reuse; `served` is called |
+| unequal digests and `REFUSE` or `SKIP`, or `replace=True`; or the entry cannot be read (`committed_digest=None`) | its own outputs, uncommitted (`Result.stored=False`), read from the kept entry (§5.4) | an execution that was not stored; no error |
 
 Equal digests are the common race, two writers of a deterministic task, and are not a reuse. The
 last row means a job whose address holds an entry this user may not use still completes, every run,
 from its own outputs. That repeats the computation on each run, which is the cost of the refusal; it
-never raises.
+never raises. A publish with `replace=True` (§10) never serves the occupant: the hook is not asked,
+and the job's result is its own outputs, stored only when the digests are equal.
 
 ### 7.4 Compatibility with `ReusePolicy`, read-only roots, the commit hook and sidecars
 
@@ -671,8 +755,11 @@ the same. The steps:
    finds no version directory of its own name and creates a new, empty tree, which the adopted store
    never reads; the store logs a warning when it sees that directory.
 3. In the header, name the existing staging, quarantine and store-level record directories (`dirs`,
-   §3.2), so nothing else is moved. Records that old code adds to a sidecar directory after adoption
-   are in the format the adopted hook reads, so they are not lost.
+   §3.2), so nothing else is moved, and state the modes the existing tree has: `sealed` equal to the
+   mode of its committed entry directories and `container` and `side` to those of the directories that
+   hold them. Entries then match the header and are not resealed on read; a header whose `sealed`
+   differs would have each owner reseal every entry on first read. Records that old code adds to a
+   sidecar directory after adoption are in the format the adopted hook reads, so they are not lost.
 
 Each entry still verifies against its address, its key record and its context (§6.2, §4), so a
 translation that went wrong is caught on read and quarantined. Only a change to checksums,
@@ -688,12 +775,21 @@ fingerprints or the output encoding forces a recompute, because it creates a new
 - **Wrong kinds.** A symlink, or an object of the wrong kind, where the store expects a directory or
   member is quarantined (§6.3); one that cannot be moved raises `WrongKindError`, naming the path and
   its owner.
-- **The policy.** `StorePolicy(file_mode, dir_mode, staging_mode, durability, verify_files, ages)`.
-  Modes are recorded in the header (§3.2) and set through descriptors, never from the umask. Today
-  `atomic_write` creates files `0o644` adjusted by the umask (`utils/general.py:65`, `:89`).
-  `durability` is `"member"` (default: every member, the directory and the parent `fsync`ed),
-  `"entry"` (one flush before the rename) or `"none"`. `verify_files` is `"digest"` (default) or
-  `"size"` (private roots only, §6.2).
+- **The policy.** `StorePolicy(file_mode, entry_mode, sealed_mode, container_mode, side_mode,
+  staging_mode, durability, verify_files, ages)`. Modes are recorded in the header (§3.2) and set
+  through descriptors, never from the umask. Today `atomic_write` creates files `0o644` adjusted by
+  the umask (`utils/general.py:65`, `:89`). `entry_mode` must include owner write and search (§5.1
+  step 5); `file_mode`, `entry_mode` and `sealed_mode` must not include group or other write, which is
+  what keeps a committed entry unchangeable by anyone but its owner (§2). The default
+  (`0o444`, `0o755`, none, `0o755`, `0o755`, `0o700`) gives a root that one user writes and everyone
+  reads. A root that a group writes needs group-writable containers and side directories, for
+  example `file_mode=0o440, entry_mode=0o2750, sealed_mode=0o2550, container_mode=0o2770,
+  side_mode=0o2770`: any member of the group can create shards, checksum directories and staging
+  directories and can move a corrupt entry to `q-<uuid>` (§6.3), and each entry is read-only after
+  its seal. `durability` is `"member"` (default: every member, the directory and the parent
+  `fsync`ed), `"entry"` (one flush before the rename) or `"none"`. `verify_files` is `"digest"`
+  (default) or `"size"`, which is accepted only for a `private` root with `durability="member"`
+  (§6.2).
 - **Collection.** `store.collect()` removes, by descriptor, `staging/` directories, default work
   directories, quarantined objects and `q-` and aside names older than the policy's ages. A
   quarantined object is aged from its move (§6.3 step 4). A writer with a large copy in progress
@@ -721,24 +817,27 @@ fingerprints or the output encoding forces a recompute, because it creates a new
 this one's when `dedupe` is on), computes the job and publishes with `replace=True`: just before the
 rename, the store evicts the entry at the address with `evict(entry, expected_digest)` (§6.3), where
 `expected_digest` is the digest it read when the job started, and then renames. If another writer
-commits between the evict and the rename, the rerun loses that race and §7.3 applies. A rerun is
-therefore not a costly no-op, and the replaced entry goes to `quarantine/`, from which `collect`
-removes it.
+commits between the evict and the rename, or the evict cannot move the entry (the rerun's user does
+not own it, or the parent is not writable), the rerun loses the race. It then never serves the
+occupant: its result is its own outputs, stored only if the digests are equal and otherwise kept as
+`stored=False` (§5.4, §7.3). A rerun therefore always returns a fresh computation, and the replaced
+entry goes to `quarantine/`, from which `collect` removes it.
 
 **What an executor does, by store** (RFC 0002 §3.4 keeps the table for `PickleStore`):
 
 | Step | `PickleStore` | `PortableStore` |
 |---|---|---|
 | Lease | always, for every leaf job (`engine/job.py:415`) | only with `dedupe`, a resumable task, or a rerun |
-| Hit under the lease | `lookup` (`engine/job.py:418-424`) | `lookup` through the reuse hook; may set `job.verify` |
+| Hit under the lease | `lookup` (`engine/job.py:418-424`) | `find(job)` through the reuse hook; a `Verify` sets `job.verify` |
 | Where the job runs | the slot | `work_dir(checksum, fingerprint, job.attempt)` |
 | Commit | `commit` under the lease; raises `LeaseLost` | `publish`; never raises `LeaseLost`; returns `Committed` |
 | Success record | written last; withdrawn before a rerun (`engine/store.py:587-620`, `engine/job.py:427`) | none: the entry is the record |
 | Failure | `_error.pklz` and an errored result in the slot | `_error.json` in the work directory; nothing in the store |
-| Reporting | the `Result` | the `Result` and the `Committed` (§7.2) |
+| Reporting | the `Result` | the `Result`, carrying the `Committed`; from another process, through `_committed.json` (§7.2) |
 
 The runner writes workflow jobs, the executor leaf jobs, as RFC 0002 §3.4 says; both write through
-`publish` under a `PortableStore`.
+`publish` under a `PortableStore`. The table is for leaf jobs; the workflow-job steps that RFC 0002
+§3.1 gives the runner take the `PortableStore` form listed in §13.
 
 **Provenance.** RFC 0002's audit hook emits `reused` for jobs settled from the store and `executed`
 before a commit (RFC 0002 §3.4). Those are pydra's records. `Reuse.served` is a downstream system's
@@ -761,9 +860,23 @@ A `PortableStore` stores no failure.
   job. The observable behaviour is the same: an errored job runs again, a successful one does not.
 - **Within a run.** `Job.errored`, RFC 0002's `Failed` outcome and the error summary on the submitter
   (0001 §3.1) are in memory and unchanged; downstream elements of an errored element stay unrunnable.
-- A job whose result was not stored (§6.4, §7.3) is not a failure. Its downstream jobs run.
+- A job whose result was not stored (§6.4, §7.3) is not a failure. Its downstream jobs run, reading
+  its kept outputs in whichever process they run (§5.4, §7.2).
 
-## 12. Changes in revision 2
+## 12. Changes in revisions 2 and 3
+
+Revision 3 answers the first re-review:
+
+| Finding | Resolved in |
+|---|---|
+| NI-1 `stored=False` across processes | §5.1 steps 8-9 (staged entry kept, `Committed.kept`, `_committed.json`); §5.4 (kept entry or `_outputs.pklz` in the work directory, read under the ownership check; work directory lifetime); §6.4; §7.2 (`Job.result()`, the Slurm and SGE adapter, `runner.result()`, the submitter's final read) |
+| NI-2 one directory mode | §3.2, §9 (`file`, `entry`, `sealed`, `container`, `side`, `staging`; no group write on entries; a group-written example); §5.1 steps 5-7 (seal after the rename) and `StoreNotWritable`; §6.2 (expected modes, reseal after a kill before the seal); §6.3; §8.2 step 3 |
+| NI-3 lookup calls carry no job | §4 (`Job.context` is the identity's lookup context; the calls it reaches); §5.2, §7.1 (`find(job)` returning `Hit`, `Verify` or `Miss`; `lookup` as an adapter); §5.4 (`work_dir(job)`, lookup fingerprint, `Job.cache_dir`) |
+| I13 residual | §7.3, §10 (`replace=True` never serves the occupant) |
+| RFC 0002 requirements | §13, one list; §7.2 no longer cites RFC 0002 §3.1 for a field it does not have |
+| nit: `verify_files="size"` | §6.2, §9 (owner's assertion; requires `durability="member"`) |
+
+Revision 2 answered the first review:
 
 | Finding | Resolved in |
 |---|---|
@@ -811,16 +924,44 @@ the same saving where the filesystem has one, without that case.
 | PR | Contents | Depends on |
 |---|---|---|
 | P1 | `pydra.utils.storagedir`: a descriptor-relative directory handle (`child`, `open_new`, `rename`, `link`, `lstat`, `scandir`, `set_mode`), the wrong-kind rule, `StorePolicy`, reflink copy with hashing; Windows reparse-point checks; `PlatformUnsupported`. Unused by `PickleStore`. Tests: a symlink swapped in at each level, wrong kinds, modes under a permissive umask, copy of a hard-linked input leaves the original's mode | — |
-| P2 | layout header (atomic write, checks), `<cdir>` and shard rules, `StoreIdentity` and `pydra-identity@1` | P1 |
+| P2 | layout header (atomic write, checks), `<cdir>` and shard rules, `StoreIdentity` and `pydra-identity@1`; `Job.context` through the identity | P1 |
 | P3 | `EntryFormat`, `pydra-entry@1`, the codec registry and encoding table, member digests; trust per root and the ownership walk; `UnencodableOutput` at hand-out | P2 |
-| P4 | `PortableStore`: `publish` and `Committed`, first writer wins with the writer token, modes before rename, fenced quarantine and `q-` names, `evict`, `collect`; `read(EntryRef)`; work directories and `attempt`; optional anonymous de-duplication lease; `commit` as an adapter; errors to `_error.json`; `pydracli crash`. Tests: two processes racing one checksum (equal and unequal digests), SIGKILL before and after the rename, a lost lease that still commits, a lost rename reply, two readers quarantining one entry while a writer commits, a non-owner reader, a read-only root, case-colliding supplied checksums, `debug` and `cf` parity | P3, #928 |
-| P5 | `Reuse` protocol, the `ReusePolicy` wrapper, `job.verify` and `compare`, the reuse record, the lost-race table, `on_commit` and sidecars, read-only roots | P4, K2 |
+| P4 | `PortableStore`: `publish` and `Committed`, first writer wins with the writer token, modes before rename and the seal after it, `StoreNotWritable`, kept entries and `_committed.json`, fenced quarantine and `q-` names, `evict`, `collect`; `read(EntryRef)`; work directories and `attempt`; optional anonymous de-duplication lease; `commit` as an adapter; errors to `_error.json`; `pydracli crash`. Tests: two processes racing one checksum (equal and unequal digests), SIGKILL before and after the rename, a lost lease that still commits, a lost rename reply, two readers quarantining one entry while a writer commits, a non-owner reader, a second writer on a default-mode root (`StoreNotWritable`) and on a group-writable one, a SIGKILL between rename and seal, a `stored=False` result read by another process through `_committed.json`, a read-only root, case-colliding supplied checksums, `debug` and `cf` parity | P3, #928 |
+| P5 | `Reuse` protocol, `find(job)` and `Hit`/`Verify`/`Miss`, the `ReusePolicy` wrapper, `job.verify` and `compare`, the reuse record, the lost-race table, `on_commit` and sidecars, read-only roots | P4, K2 |
 | P6 | `read_succeeded` for `PortableStore` through the reuse hook; `rerun` as evict and replace | P5, #929 |
 | P7 | `migrate()`, `pydracli store migrate` and `legacy=` | P4 |
 | P8 | `Submitter(store="portable")`; RFC 0002 R4's executor reporting of `Committed`; documentation; Windows CI for `private` | P5, RFC 0002 R4 |
 
-P1 to P3 change no behaviour. P4 is the first PR a user can opt into. RFC 0002 needs one addition, the
-`attempt` id on handed-out jobs (§5.4), and its executors report `Committed` beside the `Result` (§7.2).
+P1 to P3 change no behaviour. P4 is the first PR a user can opt into.
+
+**What RFC 0002 (#930 at `2ac1ba18`) needs.** None of these contradicts RFC 0002; each is an
+addition its text has to state:
+
+1. **`attempt` on handed-out jobs.** `ready()` gives each job in `Round.dispatch` an `attempt` id
+   (§5.4). RFC 0002 has none.
+2. **`Committed` in the outcome.** RFC 0002 §3.1 has `Outcome = Result | Failed | NotRun`, with no
+   place for it. This proposal carries it as `Result.committed`, so the union is unchanged;
+   `complete()` keeps it with the `Result` it holds, and R4's reporting passes it through.
+3. **What travels with a job.** RFC 0002 §3.4 lists the checksum and the context. Under a
+   `PortableStore` the job also carries `attempt` and `verify` (§7.1), and its context is the
+   identity's lookup context (§4).
+4. **Lookups in `ready()`.** Through `read_succeeded` and under `lookup_before_dispatch`, a runner over
+   a store that has `find` calls `find(job)`, settles a `Hit`, dispatches a `Miss`, and dispatches a
+   `Verify` with `job.verify` set (§5.2, §7.1).
+5. **Result reads.** The Slurm and SGE adapter (RFC 0002 §3.3), `runner.result()` (RFC 0002 §3.1) and
+   `Submitter.__call__`'s final read (`engine/submitter.py:503-513`) read through `Job.result()`, which
+   under a `PortableStore` reads `_committed.json`, so a job whose outputs were not stored reports
+   its `Result` and its readers run (§5.4, §7.2). The visibility retry applies to `_committed.json`.
+6. **Workflow jobs.** The steps RFC 0002 §3.1 gives the runner for a workflow job take this form:
+   - *Lease:* `try_take` on what `acquire` returns, which is always held unless `dedupe` is on, the
+     task is resumable or the job is a rerun (§5.3, §10);
+   - *Store check:* `find(job)`, before or under the lease; a `Hit` is `workflow-stored` and its
+     nodes are not expanded, a `Verify` sets `job.verify` and the workflow is expanded;
+   - *Expansion:* no success record is withdrawn, because there is none (§5.2);
+   - *Commit:* `publish` of the `WorkflowOutputs` with the workflow job's key and execute context,
+     returning `Committed`; it never raises `LeaseLost`, so the `phase="commit"` entry does not
+     arise. An error in a node publishes nothing, writes `_error.json` to the workflow job's work
+     directory and records the error entry as today (§11).
 
 ## 14. Open questions for maintainers
 
