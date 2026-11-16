@@ -42,7 +42,8 @@ The interleaving has costs that do not depend on any one user:
 - Readiness and error propagation testable without workers or processes.
 - External drivers (a workflow manager, a service, a notebook) that call `ready()` and
   `complete()` and run jobs their own way, while pydra keeps the graph semantics (§3.5).
-- One loop instead of two.
+- One readiness implementation instead of two expansion loops. It is driven by two small drivers,
+  a synchronous one for `debug` and an asynchronous one for every other worker (§3.2).
 
 **One motivating user.** senselab 2.x (sensein/senselab#617) compiles its pipelines to a pydra
 workflow, supplies each node's checksum through `checksum=` (0001 §3.12), and runs the jobs on its
@@ -83,10 +84,10 @@ that is not a failure. This section answers from the code which of these pydra h
   `_has_failed`/`_has_succeeded` at `:1301-1314`).
 - **Data-dependent construction.** A nested workflow is constructed when its job runs
   (`submitter.py:604`). Its inputs are resolved by then, and every input that is not lazy is passed
-  to the constructor as a value (`engine/workflow.py:98-102`, `:148-163`). The constructor is Python,
-  so it can branch on an upstream output, and it can add a workflow of its own type again. The
-  constructed workflow is cached by the hash of its non-lazy inputs (`engine/workflow.py:107-131`,
-  `:211-214`).
+  to the constructor as a value (`engine/workflow.py:99-103`, called at `:164`). The constructor is
+  Python, so it can branch on an upstream output, and it can add a workflow of its own type again.
+  The constructed workflow is cached by the hash of its non-lazy inputs
+  (`engine/workflow.py:107-131`, `:211-214`).
 - **Routing by an empty split.** A predicate task that returns `[x]` or `[]`, a node split over it
   and a combine give a static graph in which the branch not taken has zero elements and its reader
   receives an empty list. A node with no elements yields an empty `StateArray`
@@ -156,8 +157,10 @@ class Absent:
   not keyed, like the execution context (0001 §3.11): renaming an upstream node does not change a
   reader's checksum. Two causes give two checksums, so a reader that behaves differently per cause
   is never served the other's result. A `checksum=` or `__checksum__` hook (K2) receives the
-  `Absent` object itself among the resolved inputs and must digest it; the hook's documentation
-  says so.
+  `Absent` object itself among the resolved inputs, but whether it digests it is not known: the
+  hook is an opaque callable (`compose/base/task.py:489-507`), and a hook may key an input on its
+  upstream's key rather than on its value. The runner therefore does not rely on it ("Accepted
+  absence the checksum may not see", below).
 - **What a reader does with one.** An input field declares `absent="propagate" | "accept" |
   "drop"`. It is a field attribute like `hash_eq` (`compose/base/field.py:208-229`). The default
   depends on what the field reads:
@@ -175,10 +178,18 @@ class Absent:
   in declaration order. Its `cause` is unchanged, and `source` keeps the node that produced it. A
   `"drop"` field on a combined value receives the list without its absent elements. `"accept"` passes
   the value as resolved.
-- **Fields excluded from the checksum.** A field whose value is not hashed (the `container_path`
-  exclusion at `compose/base/task.py:561`, or a K1/K2 task whose hook ignores the field) could
-  change from a value to an `Absent` with no checksum change. Such a field may not declare
-  `"accept"`; defining it raises at definition time.
+- **Accepted absence the checksum may not see.** A field whose value pydra does not hash (the
+  `container_path` exclusion at `compose/base/task.py:561`), and every field of a task with a
+  supplied checksum (`__checksum__` or `checksum=`, `:489-507`), could change from a value to an
+  `Absent` with no checksum change. Neither case can be detected at definition time. For such a
+  task, when an `"accept"` field holds an `Absent` (or, for a combined value, any element does),
+  the runner appends a suffix to `job.checksum` (`job.py:237-246`) before the store, sharing and
+  commit steps: `-absent-` and the hex digest of the sorted `(field, element index, cause)` of
+  every such `Absent`. It stays one path component, as `:496-506` requires. A task with no
+  accepted `Absent` keeps its checksum unchanged, so no existing cache slot moves. Example: a
+  gather over records whose key is built from its upstreams' keys gets a different checksum in a
+  run where record 7 was routed off than in a run where record 7 ran, although the upstream keys
+  are the same in both.
 - **Splitter inputs.** A splitter input that resolves to an `Absent` gives the node no elements.
   The node is absent as a whole, and a reader of it receives that `Absent` rather than an empty
   `StateArray`, so absence is distinguishable from an empty list. Today a splitter over an upstream
@@ -216,11 +227,12 @@ class Absent:
   computes exactly what the ungated job computes, so keying it on the gate would split one result
   across two cache slots and two identities. A gated-off job computes nothing and needs no identity.
   The precedence rule is what makes this safe. An accepting reader sees the gate's effect only
-  through an `Absent` input, which is hashed by `cause` (§2.3(a)), so a gate flip changes the
-  reader's checksum.
+  through an `Absent` input, which is hashed by `cause`, or enters the absence suffix when the
+  reader's checksum is supplied or the field is not hashed (§2.3(a)). Either way a gate flip
+  changes the reader's checksum.
 - **The gate is an input of the node.** The `State` class is unchanged, but three places that list
   a node's inputs must include `when`/`unless`:
-  - `Node._get_upstream_states` iterates `self.input_values` (`engine/node.py:209-230`). It must
+  - `Node._get_upstream_states` iterates `self.input_values` (`engine/node.py:210-230`). It must
     include the gate, so a gated node takes the predicate's state as it would a data input's.
   - `NodeExecution._lazy_reads` iterates the task's fields (`submitter.py:1140-1157`). It must yield
     the gate, so the gate is read at the element's state index and the element waits for it.
@@ -308,12 +320,20 @@ class GraphRunner:
 class Round:
     dispatch: list[Job]           # each handed out once; job.rerun already set
     settled: list[Settled]        # completed inside this call, never dispatched
+    unrunnable: list[Unrunnable]  # marked unrunnable inside this call
+    retry_after: float | None     # seconds until a waiting workflow lease is tried again
 
 @attrs.frozen
 class Settled:
     job: Job
     how: Literal["stored", "shared", "gated", "absent", "workflow-stored"]
     result: Result
+
+@attrs.frozen
+class Unrunnable:
+    node: str                     # the node's name; its workflow path after R6
+    index: int | None             # the state index, None for the node as a whole
+    upstream: list[str]           # the upstream nodes whose failed or unrunnable elements it reads
 
 Outcome = Result | Failed | NotRun
 @attrs.frozen
@@ -333,6 +353,12 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
   use it without a store read.
 - `Failed` is a job that could not be run, recorded as `record_job_error` does now
   (`submitter.py:1327-1333`). Readers become unrunnable.
+- **Unrunnable elements are reported.** An element that reads a failed or unrunnable upstream
+  element has no `Job`, no `Settled` and no error entry: entries have `phase="run"` or
+  `"resolution"` only (`submitter.py:1286`, `:1336-1348`). `NodeExecution` already records, per
+  index, the upstream nodes that made it unrunnable (`unrunnable` at `:942`, set at `:1251` for a
+  whole node and `:1267` per element). `ready()` reports each newly marked entry once, in
+  `Round.unrunnable`, so a driver can record a descendant of a failure as blocked by it.
 - `NotRun` is neither. The job stays pending: its readers stay blocked, no error is recorded, and
   `held=True` says the cause was infrastructure. A later `ready()` hands the job out again only after
   `runner.retry(job)`. A run that ends with `NotRun` jobs is incomplete, not failed: `done` is true
@@ -343,16 +369,18 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
 resolved from (`NodeExecution._upstream`, `submitter.py:1179-1196`), so a driver need not recover
 them from values.
 
-**`stuck()`.** When `ready()` returns nothing, nothing is in flight and `done` is false, the driver
-calls `stuck()`. It returns today's diagnosis (`submitter.py:634-701`) for the driver to raise. The
-store-visibility retry that today precedes that diagnosis moves into the executor adapter
-(§3.3), because only an adapter that reads results from the store needs it.
+**`stuck()`.** When `ready()` returns nothing, nothing is in flight, `retry_after` is `None` and
+`done` is false, the driver calls `stuck()`. It returns today's diagnosis (`submitter.py:634-701`)
+for the driver to raise. A workflow job waiting for its lease is not stuck: while one waits,
+`retry_after` is set and `stuck()` returns `None`. The store-visibility retry that today precedes
+that diagnosis moves into the executor adapter (§3.3), because only an adapter that reads results
+from the store needs it.
 
 **What moves into it, unchanged in behaviour:**
 - workflow construction and the execution graph (`submitter.py:604-607`);
 - `NodeExecution`: `State` preparation, lazy resolution, per-element release and unrunnable
   marking (`:926-1299`);
-- `on_error` (`:376-381`, `:741-750`), and error records (`:1316-1363`);
+- `on_error` (`:376-381`, `:745-750`), and error records (`:1316-1363`);
 - deduplication by checksum (`:610-616`, `:702-719`), now after the gate (§2.3(b));
 - the success-record read before dispatch (#929, `submitter.py:761-787`).
 
@@ -373,10 +401,24 @@ are written by the runner. For each workflow job the runner does what `Job.run_a
 (`job.py:475-538`):
 - **Lease.** It takes the workflow job's lease and keeps its heartbeat (one thread per lease,
   `engine/lease.py:251`) until the commit. An external driver's `ready()` must not block, so the
-  runner takes the lease with one non-blocking attempt (`DirectoryLease._step`, `lease.py:715-731`,
-  made public as `Lease.try_take()`). A workflow job whose lease another process holds is tried
-  again on later calls. It is neither dispatched nor settled, so it appears as `waiting` in
-  `plan()` and in `stuck()`'s diagnosis, and the driver keeps waiting rather than raising.
+  runner takes the lease one attempt at a time. `Lease.try_take() -> float | None` makes public
+  one pass of the loop in `DirectoryLease.__aenter__` (`lease.py:773-781`). The first call runs
+  `_prepare()` (`:392-400`), which sets the wait's bounds; every call runs `_step()`
+  (`:715-728`), which keeps `_deadline` and `_newest_seen` between attempts (`:669-676`), takes
+  over a stale lease (`_judge`, `:521`), and returns `None` once the lease is held or the delay
+  before the next attempt. A workflow job whose lease another process holds is neither dispatched
+  nor settled. The runner keeps its `Lease` object and tries again on the first `ready()` after the
+  delay, and `Round.retry_after` is the smallest delay over every waiting lease. A driver waits for
+  the next outcome or for `retry_after`, whichever comes first, then calls `ready()` again (§3.2,
+  §3.5). The job appears as `waiting` in `plan()`, and `stuck()` returns `None` while it waits.
+  Two cases this covers: a run resubmitted after its coordinator was killed while expanding finds
+  the old lease, waits, and takes it over once it is `STALE_AFTER` old (`:27`), as today; a second
+  submitter of the same workflow on a shared cache waits, takes the lease when the first releases
+  it, and finds `workflow-stored` under it.
+- **`LeaseTimeout`.** If a bound passes (`LeaseSettings.timeout` without a renewal seen, or
+  `max_wait`), `_step` raises `LeaseTimeout` (`:721-724`). The runner records it as an error
+  entry of the workflow job with `phase="lease"`, the job's readers become unrunnable, and
+  `ready()` does not raise it.
 - **Store check.** Under the lease it checks the store first. A stored, non-errored, acceptable
   result completes the workflow job as `workflow-stored`, and its nodes are not expanded. This is
   today's behaviour (`job.py:489-497`), not a resume regression.
@@ -431,10 +473,11 @@ class Executor(Protocol):
 ```
 
 - **Outcomes are pushed.** Every job submitted is reported exactly once, through `report`, as a
-  `Result`, `Failed` or `NotRun`. The driver turns each report into `runner.complete()` on its own
-  loop (`loop.call_soon_threadsafe`). One `asyncio.Event` therefore waits across every executor of
-  a run. That closes the first draft's gap: it had a per-executor `wait` and a driver waiting across
-  several.
+  `Result`, `Failed` or `NotRun`. The asynchronous driver turns each report into
+  `runner.complete()` on its own loop (`loop.call_soon_threadsafe`). One `asyncio.Event` therefore
+  waits across every executor of a run. The synchronous driver binds `runner.complete` itself, so
+  an inline executor's report is applied before `submit` returns. The asynchronous driver closes
+  the first draft's gap: it had a per-executor `wait` and a driver waiting across several.
 - **`rerun`** is read from each job (`job.rerun`, §3.1), not passed per call, so `propagate_rerun`
   is kept.
 - **`submit`** takes a sequence. An executor with `batches = False` is given one job per call. One
@@ -453,37 +496,70 @@ class Executor(Protocol):
   submissions. A system whose executors pass references drives the runner from outside instead
   (§3.5).
 
-**The driver.** `Submitter` becomes a driver over one runner and its executors. It owns the event
-loop, as now (`get_open_loop`, `submitter.py:1400`, and `_own_loop`). Inside a running loop, such
-as Jupyter, it behaves as today.
+**The drivers.** `Submitter` becomes a driver over one runner and its executors. There are two
+drivers over the same `ready()`/`complete()`, because one `async` driver cannot keep what `debug`
+does now.
+
+A run whose executors are all inline (`debug`, the default) is driven by a synchronous loop, as
+`expand_workflow` is now (`submitter.py:548-591`). No event loop runs while a task runs:
+`Submitter.submit` calls `worker.run` directly (`:531`). A task may therefore call `asyncio.run`
+or run a nested `Submitter` with an asynchronous worker (`run_until_complete`, `:529`), and a
+`debug` run inside a notebook's running loop needs no `nest_asyncio`, as today. Each report is
+applied before `submit` returns, so `runner.failed` is current when the next job is considered.
+
+```python
+def drive_inline(runner, executor):
+    executor.bind(runner.complete)           # reports straight into the runner, same thread
+    while not runner.done:
+        rnd = runner.ready()
+        audit(rnd.settled, rnd.unrunnable)
+        for job in rnd.dispatch:
+            executor.submit([job])           # runs the job; complete() has run on return
+            if runner.failed and on_error == "fail_fast":
+                raise runner.first_error     # the task's own exception object, as :579-580
+        if not rnd.dispatch and not rnd.settled and not rnd.unrunnable:
+            if rnd.retry_after is not None:
+                time.sleep(rnd.retry_after)  # a workflow lease held by another process
+            elif diagnosis := runner.stuck():
+                raise RuntimeError(diagnosis)
+    raise_entries(runner)                    # WorkflowError from runner.entries, as :757-759
+```
+
+Every other run is driven by an asynchronous loop. It owns the event loop as now (`get_open_loop`,
+`:1400`, and `_own_loop`, `:323`); inside a running loop it behaves as today's asynchronous path.
+An inline executor routed beside asynchronous ones runs on the helper thread of `_run_blocking`
+(`:856-870`) and reports through `call_soon_threadsafe` like the others, as a synchronous worker
+does beside asynchronous ones now.
 
 ```python
 async def drive(runner, executors, router):
-    progressed = asyncio.Event()
+    loop, progressed = asyncio.get_running_loop(), asyncio.Event()
+    def on_outcome(job, out):
+        runner.complete(job, out); progressed.set()
     for ex in executors.values():
         ex.bind(lambda job, out: loop.call_soon_threadsafe(on_outcome, job, out))
     try:
         while not runner.done:
             rnd = runner.ready(limit=max_concurrent - in_flight)
-            audit(rnd.settled)
+            audit(rnd.settled, rnd.unrunnable)
             for name, jobs in group_by(router, rnd.dispatch):
-                ex = executors[name]
-                if ex.inline:                    # debug: one job, completed before the next
-                    for job in jobs:
-                        ex.submit([job])         # reports before returning
-                        if runner.failed and on_error == "fail_fast":
-                            raise runner.first_error   # the task's own exception object
-                else:
-                    open_handles.add(ex.submit(jobs))
-            if not rnd.dispatch and not open_handles and not runner.done:
+                open_handles.add(executors[name].submit(jobs))
+            if rnd.settled or rnd.unrunnable:
+                continue                     # their readers may be ready now
+            if not rnd.dispatch and not open_handles and rnd.retry_after is None:
                 if diagnosis := runner.stuck():
                     raise RuntimeError(diagnosis)
-            await progressed.wait(); progressed.clear()
+            try:                             # the next outcome, or the next lease attempt
+                await asyncio.wait_for(progressed.wait(), rnd.retry_after)
+            except TimeoutError:
+                pass
+            progressed.clear()
             if runner.failed and on_error == "fail_fast":
                 break
     finally:
         for handle in open_handles:
             handle.executor.cancel(handle)
+    raise_entries(runner)                    # including the first error after a fail_fast break
 ```
 
 `Submitter.__call__` keeps its signature and return value (`submitter.py:402-514`), including the
@@ -493,11 +569,13 @@ implicit split workflow (`:443-465`). The router keeps its signature (`utils/rou
 
 - **`InlineExecutor(worker)`, for `debug`** (`workers/debug.py:14-28`). `inline = True`. `submit`
   calls `worker.run(job)` in the caller's thread, as `Submitter.submit` does now
-  (`submitter.py:531`), and reports before returning. Under `fail_fast` the driver re-raises the
-  task's own exception object before submitting the next job, as `:579-580` does now. Signal
-  handlers, `ContextVar`s set by the caller, `pdb` and main-thread-only libraries keep working, and
-  no job runs after the first failure. The helper thread of `_run_blocking` (`:856-870`) is used
-  only for a synchronous worker routed beside asynchronous ones, as now.
+  (`submitter.py:531`), and reports before returning, straight into `runner.complete` under the
+  synchronous driver (§3.2). Under `fail_fast` that driver re-raises the task's own exception
+  object before submitting the next job, as `:579-580` does now. No event loop is running, so
+  signal handlers, `ContextVar`s set by the caller, `pdb`, main-thread-only libraries, a nested
+  `asyncio.run` and a notebook keep working, and no job runs after the first failure. The helper
+  thread of `_run_blocking` (`:856-870`) is used only for a synchronous worker routed beside
+  asynchronous ones, as now.
 - **`WorkerExecutor(worker)`, for every asynchronous worker,** including third-party plugins found
   through `Worker.plugin` (`workers/base.py:65-95`). It schedules `worker.run(job)` per job on the
   driver's loop and reports when the coroutine ends:
@@ -555,10 +633,12 @@ A system that runs jobs its own way, for example by passing references rather th
 runner = GraphRunner(task, store, on_error="raise_at_end", lookup_before_dispatch=True)
 while not runner.done:
     rnd = runner.ready()
-    record(rnd.settled)                          # stored, shared, gated, absent: with causes
+    record(rnd.settled, rnd.unrunnable)          # stored, shared, gated, absent; blocked
     for job in rnd.dispatch:
         send(job, runner.upstream(job))          # which upstream jobs fed each input
-    for job, outcome in receive():               # Result, Failed, or NotRun(held=True)
+    if rnd.settled or rnd.unrunnable:
+        continue                                 # their readers may be ready now
+    for job, outcome in receive(timeout=rnd.retry_after):  # returns empty on timeout
         runner.complete(job, outcome)
 ```
 
@@ -566,8 +646,18 @@ What such a driver must and need not supply:
 - **Outputs may be references,** except where the runner reads values. A gate's predicate must
   resolve to a `bool` or an `Absent`. Absence must be reported as pydra's `Absent`, not as a
   reference to one. A value that a downstream splitter splits over must be a real sequence.
-- **Every settled job is visible** in `Round.settled`, with how and, for absences, the cause. A
-  driver can therefore log every node as run, reused or typed-absent without the audit hook.
+- **Every settled job is visible** in `Round.settled`, with how and, for absences, the cause, and
+  every element blocked by a failure in `Round.unrunnable`, with the upstream nodes that blocked
+  it. A driver can therefore log every node as run, reused, typed-absent or blocked without the
+  audit hook.
+- **It must not block without a bound.** `receive` waits at most `retry_after` when that is set,
+  because a workflow job waiting for its lease is advanced only by a later `ready()` (§3.1). A
+  driver with nothing in flight and `retry_after` set is waiting, not stuck; it calls `stuck()`
+  only when `retry_after` is `None`.
+- **A supplied checksum sees absence through the suffix.** If its store adapter maps pydra
+  checksums to its own keys, it keys on the whole `job.checksum`, including the absence suffix of
+  §2.3(a). A key it computes itself from upstream keys alone does not see an accepted `Absent`,
+  and would serve a gather computed when that element was present.
 - **Infrastructure faults and held queues** are `NotRun(held=True)`. They are not errors, readers
   stay blocked, and the run ends incomplete and resumable. Content failures are `Failed`, or an
   errored `Result`.
@@ -585,7 +675,7 @@ What such a driver must and need not supply:
   job after the first failure (§3.3).
 - **Named behaviour changes, in R6 only:** `max_concurrent` caps the whole run rather than each
   nested workflow; equal-checksum jobs in different nested workflows run once.
-- **New and opt-in:** `GraphRunner`, `Round`, `Outcome`, `Executor`, `Lease.try_take`,
+- **New and opt-in:** `GraphRunner`, `Round`, `Unrunnable`, `Outcome`, `Executor`, `Lease.try_take`,
   `ResultStore.read_succeeded` (optional), `RunIncomplete`, `Absent`, `absent=`, `when=`/`unless=`,
   `select(n)`, `workflow.loop`.
 - **Changed internals:** `Submitter.expand_workflow`, `expand_workflow_async`,
@@ -609,15 +699,15 @@ additions behind them.
 | PR | Contents | Depends on | Behaviour |
 |---|---|---|---|
 | R1 | extract `GraphRunner` (`ready`, `complete`, `done`, `stuck`) from `expand_workflow_async` and `NodeExecution`, one runner per workflow job, driven by `Job.run_async` as now | — | none; existing suite unchanged |
-| R2 | one driver for synchronous and asynchronous workers; `InlineExecutor` for `debug`; `expand_workflow` becomes a wrapper | R1 | none; `debug` keeps the caller's thread and `fail_fast` order |
+| R2 | the two drivers over one runner: synchronous for all-inline runs, asynchronous otherwise; `InlineExecutor` for `debug`; `expand_workflow` becomes a wrapper | R1 | none; `debug` keeps the caller's thread, no running loop, and `fail_fast` order |
 | R3 | `Executor` protocol (`bind`, `submit`, `cancel`, `close`), `WorkerExecutor` with the store read and visibility retry for workers that return `True`; the router dispatches to executors | R2 | none |
 | R4 | reported completion: `complete()` holds the result on the job; `update_status` stops polling dispatched jobs; the visibility retry leaves the loop for the adapter | R3 | none |
 | R5 | `submit_many` for Slurm and SGE; tick and sleep grouping removed | R3 | array composition per round (§3.3) |
-| R6 | flattening: one runner per call; the runner leases, checks, expands and commits workflow jobs; `Lease.try_take`; array key gains the workflow path | R4, R5 | named changes (§4.1); tests updated for them |
-| R7 | driver model: `Round.settled`, `NotRun`/`RunIncomplete`, `upstream()`, `lookup_before_dispatch`, `read_succeeded` in the protocol | R4 | opt-in |
+| R6 | flattening: one runner per call; the runner leases, checks, expands and commits workflow jobs; `Lease.try_take` and `Round.retry_after`; array key gains the workflow path | R4, R5 | named changes (§4.1); tests updated for them |
+| R7 | driver model: `Round.settled`, `Round.unrunnable`, `NotRun`/`RunIncomplete`, `upstream()`, `lookup_before_dispatch`, `read_succeeded` in the protocol | R4 | opt-in |
 | R8 | `plan()` (subsumes J2) | R6, F2, B2 | opt-in |
 | E2 | partial `State` (0001 §3.1 step 2): per-element release of nested fan-out, including an `Absent` splitter input per element | R1 | 0001's |
-| R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the definition-time check on unhashed fields; whole-node absence for a splitter input | R6, E2 | opt-in |
+| R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the absence suffix for supplied checksums and unhashed fields; whole-node absence for a splitter input | R6, E2 | opt-in |
 | R10b | `when=`/`unless=`: node inputs, upstream states, lazy reads and edges; the precedence rule; `select(n)` | R10a | opt-in |
 | R11 | `workflow.loop` with `index=`, `rounds`, `converged` | R10b | opt-in |
 
