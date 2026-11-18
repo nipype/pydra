@@ -4,10 +4,10 @@ Status: proposed, for maintainer discussion; revision 3. Branch `rfc/portable-ta
 `enh/execution-extensions` at `3f734f9a`. Line references are to `3f734f9a` unless a branch is named.
 Proposal 0001 names are used throughout: **K1** is a declared `version=` (0001 §3.11), **K2** a
 supplied `checksum=` with the reuse hook (0001 §3.12), **G1** the environment checksum recorded and
-never keyed (0001 §3.5). RFC 0003 is `rfc/portable-store` at `8be263c9` (its revision 3); its
+never keyed (0001 §3.5). RFC 0003 is `rfc/portable-store` at `547f7b1d`; its
 section numbers below are that revision's. The probes cited in §8 were run on one macOS arm64
-machine under load. Timings are upper bounds. Revision 2 answers the review of #932 and revision 3
-its first re-review; §12 maps each blocking and important finding to the text that resolves it.
+machine under load. Timings are upper bounds. Revision 2 answers the review of #932, revision 3
+its first re-review and revision 4 its second; §12 maps each blocking and important finding to the text that resolves it.
 
 ## 1. Motivation
 
@@ -255,16 +255,23 @@ This part exists. The proposal keeps it and fixes two gaps.
   walk uses live objects, not a static import graph, so `from x import y`, aliases and re-exports
   resolve as Python resolves them.
 - **Gap 1: inputs that are user-class instances.** The digest of a user-class instance carries its
-  class's code as the walk encodes a user class it reaches: `_class_code` (`hash.py:1194-1236`),
-  the `ast@1` encoding of the whole `ClassDef`, which includes `__init__`, `__call__`,
-  `__getitem__` and every other method, followed by the walk's references of its methods
-  (`hash.py:1343-1347`). The walk already does this for a user-class value it reads from a global
-  (`hash.py:1460-1463`); this applies it to inputs. `bytes_repr_type`, which the first draft used,
+  class's **class digest**, `class@1`, which this proposal defines once and uses in every place a
+  user class enters the key (gap 1 here, `type@1` in §5.1, `$class` and `py@1` in §6.2): the
+  sha256 of what the walk produces when it reaches the class as a definition, which is
+  `_class_code` (`hash.py:1194-1236`), the `ast@1` encoding of the whole `ClassDef` with
+  `__init__`, `__call__`, `__getitem__` and every other method, followed by the encoded references
+  the walk yields for the class (`class_references`, `hash.py:1343-1347`): its bases, walked as
+  classes in turn, and the closures, globals and defaults its methods read, walked as functions, so
+  a module-level helper a method calls is in it (`hash.py:1311-1341`). The walk already does this
+  for a user-class value it reads from a global (`hash.py:1460-1463`); this applies it to inputs.
+  An edit to a base class's method or to a helper therefore changes the digest, as an edit to the
+  class's own body does. `bytes_repr_type`, which the first draft used,
   leaves out every name starting with `__` (`hash.py:614-616`), and its `__dict__` bytes differ
   between Python minors for an `Enum` (`_hashable_values_` and `_unhashable_values_map_` appeared
   in 3.13). Probe §8.8: with `_class_code`, editing `__call__` changes the checksum, editing an
   unrelated class does not, and a task taking a user `Enum` member has one checksum under 3.11 and
-  3.13.
+  3.13. The probe covers a class body only; I4's tests add a method inherited from a user base
+  class, a method that calls a module-level user helper, and an edit to each.
 - **Gap 2: library references carry versions** (§4.1).
 
 **What falls back, and how the user overrides it:**
@@ -305,18 +312,39 @@ constructed, as running it does first, through `Workflow.construct` (`engine/wor
 which runs the constructor without running a node and is memoised by the non-lazy inputs, so a
 miss reuses the constructed graph. The record gets `nodes`: for each node, by name, its `job`
 fields (§3.1), resolved as a shell job resolves them (§5.2, §5.3); a Python node has none and is
-left out. A node that is itself a workflow is constructed with its lazy inputs left lazy
-(`construct(..., lazy=...)`, `engine/workflow.py:80`, `:90-92`), and contributes its own `nodes`.
+left out. A node that is itself a workflow contributes its own `nodes` when all its inputs are
+concrete at keying; otherwise it is `"deferred"` (below).
 Node checksums are not in the record: they depend on upstream outputs that do not exist at keying,
 and they are already a function of the constructor's code, the workflow's inputs and the run facts.
 
-**A workflow whose nodes cannot be resolved at keying is never served whole.** A nested
-constructor that reads the value of a lazy input fails to construct lazily, and an environment that
-cannot be resolved is `unresolved` (§5.3). Such a node is recorded as `"deferred"`. A workflow
-record holding `"deferred"` is still computed and its entry still written, but a lookup of it is a
-miss by rule: the job is expanded and each node is looked up under its own key, so nodes whose run
-facts did not change are served from their own entries. The cost of the rule is one expansion; the
-cost of keying is one construction per workflow job, which a miss would pay anyway.
+**A workflow whose nodes cannot be resolved at keying is never served whole.** Two kinds of node
+are recorded as `"deferred"`:
+- a nested workflow any of whose inputs is lazy at keying (fed by an upstream output). Its shape
+  may depend on that value, and a lazy construction does not reliably fail when it does:
+  `LazyInField.__eq__` returns `False` (`engine/lazy.py:107-112`), so `if mode == "fast"`,
+  `isinstance`, `is None` and truthiness all build one branch without error, which may not be the
+  branch that runs. pydra documents a nested workflow branching on an upstream output as its way to
+  write a conditional (`docs/source/tutorial/6-workflow.ipynb:245-246`). The nested job is still
+  keyed when it runs, with its inputs then concrete, and is served whole from its own entry;
+- a node whose environment or tool version is `unresolved` (§5.2, §5.3).
+
+A workflow record holding `"deferred"` is still computed and its entry still written, but a lookup
+of it is a miss by rule: the job is expanded and each node is looked up under its own key, so
+nodes whose run facts did not change are served from their own entries. **Cost.** An outer
+workflow with a nested workflow fed by an upstream output is never served whole, only node by node:
+one expansion and one lookup per node, each of which may hit. Offline, with an image that is
+neither local nor given by digest, every node under it is `unresolved`, so a finished workflow is
+not readable whole either, only node by node, and its shell nodes are not served to another
+process (§5.3 step 5). Keying costs one construction per workflow job, which a miss would pay
+anyway. The construction now runs when the workflow job's checksum is first computed, which is
+before the job is dispatched and before its work directory exists (the store and lease calls take
+`Job.checksum`, `engine/job.py:266`, `:415`, `:487`, and `__getstate__` computes it,
+`engine/job.py:192-194`). A constructor error is therefore raised from that call, in the
+submitting process, and is not recorded as the job's error in its work directory.
+
+A future alternative needs no construction at keying: the workflow's entry records, for each shell
+job that ran under it, the reference it requested and what that resolved to, and a lookup
+re-resolves the requested references and misses on any difference.
 
 `version=` becomes available for workflows (§6.1). It replaces the constructor's code, not
 `nodes`.
@@ -343,8 +371,7 @@ be reused for this.
   metadata of §5.1, as today's branch for such classes does. `_class_code` is not used for them: a
   class built by `define` has no source, and its fallback holds only member functions
   (`hash.py:1229-1236`);
-- any other user class: its qualified name and `_class_code` (`hash.py:1194-1236`), as in gap 1
-  (§4.2), so a user `Enum` return type has one digest under every minor. Today's `bytes_repr_type`
+- any other user class: its qualified name and its `class@1` (§4.2), so a user `Enum` return type has one digest under every minor. Today's `bytes_repr_type`
   hashes its `__dict__` and differs between 3.11 and 3.13;
 - a union, written `X | Y`, `Union[X, Y]` or `Optional[X]`: one tag, `union`, over the sorted,
   de-duplicated digests of its flattened members, with `None` as `NoneType`. The origin is not
@@ -525,8 +552,9 @@ Everything else is 0003's form as it stands: `{"$set": …}`, `{"$complex": …}
 value as a typed string. One addition applies at any depth: **a value whose type is user code
 carries its class.** A `$codec` value of a user class (a project's `attrs` class registered with
 `register_codec`, which it must be to be a `PortableStore` output at all) is
-`{"$codec": "<tag>", "value": …, "$class": "code@1:<sha256 of _class_code>"}` in the digest form, so
-`list[Params]` re-keys when `Params.scale` is edited, as a bare `Params` does (gap 1, §4.2). The
+`{"$codec": "<tag>", "value": …, "$class": "class@1:<hex>"}` in the digest form, with the class
+digest of §4.2, so `list[Params]` re-keys when `Params.scale`, a base class's method or a helper it
+calls is edited, as a bare `Params` does (gap 1, §4.2). The
 output encoding has no `$class`; it is identity, not data.
 
 A digest is then one string `<tag>@<n>:<hex>`, from `pydra/utils/digest.py`, which a registry
@@ -537,7 +565,7 @@ extends (`register_digest(type, fn)`). The first row that applies wins:
 | `numpy.ndarray` exactly (not a subclass), whose dtype holds no references | `npy@1:` the sha256 of its canonical `.npy` bytes (below). Inside a container it appears as `{"$array": "<same sha256>"}` |
 | `FileSet` (`File`, `Directory`, any `fileformats` type) with a registered tag | `file@1:` the sha256 of the JCS of `{"$fileset": "<registered type tag>", "files": [[<key>, <content sha256>], …]}`, sorted by key, where the key is the one `FileSet.byte_chunks` yields today (`hash.py:703-708`). It does not depend on the directory or the file name, as today (probe §8.2) |
 | a value whose digest form exists: `None`, `bool`, numbers, `str`, `Path`, every type with a codec in the registry, and containers of these (a user class with a codec carries `$class`) | `json@1:` the sha256 of the JCS of its digest form |
-| anything else: a user-class instance without a codec, a container holding one, array subclasses, arrays of object or `StringDType`, a `FileSet` subclass with no registered tag | `py@1:` from today's `bytes_repr`. Gap 1 is made in the generic serialiser (`hash.py:417-437`), so a user-class instance carries its `_class_code` at any depth of a `py@1` value; object arrays are digested element by element, as now (`hash.py:1794-1795`); an unregistered `FileSet` keeps today's content hash (`hash.py:692-708`) |
+| anything else: a user-class instance without a codec, a container holding one, array subclasses, arrays of object or `StringDType`, a `FileSet` subclass with no registered tag | `py@1:` from today's `bytes_repr`. Gap 1 is made in the generic serialiser (`hash.py:417-437`), so a user-class instance carries its `class@1` (§4.2) at any depth of a `py@1` value; object arrays are digested element by element, as now (`hash.py:1794-1795`); an unregistered `FileSet` keeps today's content hash (`hash.py:692-708`) |
 
 - **The canonical `.npy`** is the byte form of 0003's `.npy` member: format version 1.0 as
   `numpy.lib.format.write_array(..., version=(1, 0), allow_pickle=False)` writes it, with the dtype
@@ -564,21 +592,28 @@ extends (`register_digest(type, fn)`). The first row that applies wins:
   documentation says so.
 - **Shared with RFC 0003: arrays.** `npy@1:<hex>` is, by construction, the name of the entry's array
   member `<hex>.npy` (0003 §6.1), because the preimage is the member's bytes.
-- **Shared with RFC 0003: file sets, by carrying the digest.** `file@1` cannot be recomputed from a
-  decoded multi-file value. 0003 stores each file as `files/<sha256>/<name>` and decodes to paths
-  inside the entry (0003 §6.1, §6.4). A single `File` has the key `"."` wherever it lies, but a
-  two-file set side by side has keys like `['.hdr', '.img']` and the same files in per-file
-  directories `['<sha>/a.hdr', '<sha>/a.img']`, and a `Directory`'s keys are relative to its root,
-  which per-file directories do not keep (review run, fileformats 0.22.7). So the digest travels
-  with the value: the writer computes `file@1` of each `$fileset` output from the value in the work
-  directory, where the keys are the producer's, and 0003 records it in the `$fileset` encoding
-  (§9.2). When a store decodes a `$fileset` it has verified every member against `entry.json`
-  (0003 §6.2), and it puts the recorded digest into the in-memory digest cache under
-  `fileset_cache_key` of the decoded paths (`hash.py:658-689`). A downstream input of that value
-  then gets the producer's `file@1` without reading a file. The in-memory entry skips the 2 s
-  settle window, because the members are sealed read-only and were just checked; the persistent
-  cache keeps the window. A file set that is not read through a store is digested from its
-  files, as any input.
+- **Shared with RFC 0003: file sets, with their keys kept.** RFC 0003 stores a `FileSet` output under
+  one directory, `files/<set>/<path>`, with the set's files laid out as the producer had them: a
+  `File` or a multi-file set (a NIfTI `.hdr`/`.img` pair) side by side under their own names, a
+  `Directory` with its tree (0003 §6.1). Decoding therefore gives a value whose `byte_chunks` keys
+  are the producer's (`"."` for one file, `".hdr"` and `".img"` for the pair, paths relative to the
+  root for a directory), `entry.json` records those keys and each member's sha256, and `<set>` is
+  the set's `file@1`. The read check requires `<set>` to be the `file@1` of the recorded type tag,
+  keys and member digests, and the decoded keys to be the recorded ones (0003 §6.2). Two
+  consequences for inputs:
+  - the digest is read from the entry, not recomputed: the store that decodes a verified `$fileset`
+    puts `<set>` into the in-memory digest cache under `fileset_cache_key` of the decoded paths
+    (`hash.py:658-689`), which saves reading the files. The in-memory entry skips the 2 s settle
+    window, because the members are sealed read-only and were just checked; the persistent cache
+    keeps the window;
+  - recomputing it agrees: a process without that cache entry, such as the worker that runs the
+    downstream job and re-hashes its `FileSet` inputs after the run (`engine/job.py:653-698`,
+    `compose/base/task.py:524-529`), computes `file@1` from the decoded files and gets `<set>`,
+    because the keys and the contents are the producer's. Without the key-preserving layout a
+    two-file or `Directory` input read from a store would give another `file@1` there and the job
+    would fail with "Input field hashes have changed".
+
+  A file set that is not read through a store is digested from its files, as any input.
 - **One tag registry.** The `$fileset` type tags and `$codec` tags are one registry, defined in
   `pydra/utils/digest.py` by I0 (`register_codec(type, tag, encode, decode)` and the `FileSet`
   tags), and used by 0003's entry format; 0003 does not define a second one (§9.2, §10).
@@ -736,48 +771,34 @@ installed), private registries with credentials, big-endian hosts, and Lmod.
 - **`pydracli check-versions` tables** (`pydra/scripts/cli.py:75-128`) store `code_digest`s. Those
   digests cover user code only (`hash.py:1705-1721`), so they do not change.
 
-### 9.2 What RFC 0003 has to state
+### 9.2 What RFC 0003 carries
 
-None of these contradicts RFC 0003's design; each is text its document has to carry, as 0003 §13
-lists what RFC 0002 needs. RFC 0003's next revision carries the first four, cited here by the
-sections that hold them:
+RFC 0003 at `547f7b1d` carries what this proposal needs from it; none of it changes 0003's
+protocols. By section:
 
-1. **The `$array` row is exactly `numpy.ndarray` whose dtype holds no references** (0003 §6.4), the
-   set §6.2 gives `npy@1`. A `MaskedArray`, an `np.matrix` or a `StringDType` array has no canonical
-   `.npy`; as an output it goes through a codec or pickling, as any other type does.
-2. **numpy scalars have a concrete form** (0003 §6.4): the dtype and the value, the value as a typed
-   string, so `np.float32(1)` and `np.float64(1)` differ and the digest form of §6.2 is defined for
-   them.
-3. **One tag registry shared with I0** (0003 §6.4, §13 P3): `register_codec` and the `$fileset`
-   type tags live in `pydra/utils/digest.py` (I0), and 0003's entry format uses them. On the input
-   side an unregistered `FileSet` subclass falls to `py@1` (§6.2); on the output side 0003 keeps
-   `UnencodableOutput`.
-4. **The scope of `migrate()` and `legacy=` under `@2`** (0003 §8.1, §6.4). `migrate()` publishes
-   "through the target's identity", but it has no `Job` to build an `@2` record from, and an old
-   automatic checksum with a `None` key fails `@2`'s `check_key`. After this proposal both are for
-   `@1` targets and for projects whose identity is their own (`checksum=`, a custom
-   `StoreIdentity`); a `legacy=` root's automatic entries are not served under `@2`.
-
-It also has to carry these, which follow from this proposal and are not in that list:
-
-5. **Checksums change once** (0003 §2, §4, §8.1). 0003's non-goal "Changing job checksums", its
-   "defaults that do not change: ... checksums" and "No job is recomputed: checksums are unchanged"
-   hold under `pydra-identity@1`. From the release that carries this proposal the default identity
-   is `pydra-identity@2`, every checksum changes once, `@1` checksums can no longer be produced,
-   and a root created or migrated under `@1` raises `StoreLayoutMismatch` under `@2` (§9.1).
-6. **Order of delivery** (0003 §13). I1 needs `StoreIdentity` and the header (0003 P2). P7
-   (`migrate()`) waits for I1, or its release notes say that a root migrated under `@1` is not
-   readable by the next release. P3 depends on I0 for the digests and the registry, and I0 depends
-   on nothing (§10).
-7. **The canonical `.npy`** (0003 §6.1, §6.4): the member is the canonical `.npy` of §6.2 (format
-   1.0, little-endian, C order), named by its sha256, which is `npy@1`.
-8. **`file@1` in the `$fileset` encoding** (0003 §6.4, §6.2): the writer records the `file@1` of
-   each `$fileset` output, computed from the value in the work directory, and the read check covers
-   it, so a decoded value can carry its digest (§6.2).
+1. **`$array` is exactly `numpy.ndarray` whose dtype holds no references** (0003 §6.4), the set §6.2
+   gives `npy@1`. Subclasses and reference dtypes have no default codec there and are `py@1` here.
+2. **numpy scalars** have the form `{"$npscalar": ["<dtype>", "<value>"]}`, the value as a typed
+   string (0003 §6.4), which §6.2's digest form uses as it stands.
+3. **One tag registry**, in `pydra/utils/digest.py` (I0), shared by `$fileset` and `$codec` tags;
+   an unregistered `FileSet` subclass is `UnencodableOutput` as an output there and `py@1` as an
+   input here (0003 §6.4, §13).
+4. **`migrate()` and `legacy=` under `@2`** (0003 §8.1): `migrate()` migrates only slots asserted to
+   have supplied checksums (`supplied_checksums=True`) and publishes them with the key
+   `{"scheme": "pydra-identity@2", "supplied": <checksum>}`, which `check_key` accepts (§3.1); a
+   `legacy=` root is useful only to jobs with a supplied checksum.
+5. **Checksums change once** (0003 §2, §4, §8.1): checksums are unchanged only under
+   `pydra-identity@1`; from the release that carries this proposal `@2` is the default, `@1`
+   checksums can no longer be produced, and an `@1` root raises `StoreLayoutMismatch` under `@2`.
+6. **Order of delivery** (0003 §13): P3 after I0, P7 after I1 and I8.
+7. **The canonical `.npy`** (0003 §6.1): the array member is §6.2's canonical `.npy`, named by its
+   sha256, which is `npy@1`.
+8. **File sets keep their keys** (0003 §6.1, §6.2): `files/<set>/<path>`, laid out as the producer
+   had them, `<set>` named by the set's `file@1`, the keys recorded, and both checked on read
+   (§6.2 above).
 9. **Numbers.** `pydra-identity@2`'s record holds no JSON numbers (§6.2), so 0003's JCS of the key
-   record is exact. 0003's output digest still passes Python `int` to JCS as a JSON number (0003
-   §6.4); adopting `$int`/`$float` there too would make the output encoding and the digest form
-   differ only in `$tuple` and `$class`. That is 0003's choice; nothing here depends on it.
+   record is exact. 0003's output encoding keeps JSON numbers for Python `int` and `float`; nothing
+   here depends on it.
 
 ## 10. Delivery
 
@@ -797,7 +818,7 @@ and P3 uses it rather than defining it.
 | I1 | identity record and `IDENTITY_SCHEME = "pydra-identity@2"`; checksum = sha256 of its JCS; `walk` field; the `pydra-identity@2` `StoreIdentity` with `key` and `check_key`; record kept with the result; `pydracli explain` | yes | I0, RFC 0003 P2 |
 | I2 | inputs through I0; `Path` as a value; persistent hits populate memory; decoded `$fileset` values carry their recorded `file@1` | yes | I1, 0003 P3 for the decoded digests |
 | I3 | library references as `dist==identity`; owners of input value types; one owner lookup shared with `context.py`, with the `packages_distributions` fallback; unowned modules; documentation of `PYDRA_USER_PACKAGES` across sites | yes | I1 |
-| I4 | user-class instance inputs with `_class_code`, at any depth, and `$class` for user-class codec values; `type@1` (fields classes, unions, `Literal`, `Annotated`); the §8.3 and §8.8 cases as regression tests on every supported minor; close #777 | yes | I1 |
+| I4 | `class@1` (`_class_code` and the walk's class references), used for user-class instance inputs at any depth, and `$class` for user-class codec values; `type@1` (fields classes, unions, `Literal`, `Annotated`); the §8.3 and §8.8 cases, plus a base-class method and a method's helper edited, as regression tests on every supported minor; close #777 | yes | I1 |
 | I5 | shell template in the record; `job` field and `Job.checksum` as the digest of the job's record; workflow `nodes` and the `"deferred"` rule; `version=`, `version_command=` and `version_pattern=` for shell, with the worker re-check under `Native`; `version=` for workflows | yes | I1, I4 |
 | I6 | resolved references for Docker (given, `RepoDigests`, local `Id` for local builds and re-tagged images, registry `HEAD`; digest keyed, repository carried), Singularity (`docker://` digest, `.sif` content with the worker check) and Lmod (full names); `execute` runs the resolved reference without `:{tag}`; `resolve_images=`; unresolved rule | yes | I5, G1 |
 | I7 | `tools` context field, built in the submitting process; `ConsistentReuse` compares it; owning-package lookups behind a time limit | no (context) | I5 |
@@ -828,7 +849,19 @@ Lmod resolution is measured on a cluster that has Lmod before it is merged.
 - Should there be a one-release `PYDRA_IDENTITY=legacy` switch, or is one announced recompute
   acceptable during the 1.0 alphas?
 
-## 12. Changes in revisions 2 and 3
+## 12. Changes in revisions 2 to 4
+
+Revision 4 answers the second re-review of #932 at `e98634c6`, made jointly with RFC 0003 at
+`547f7b1d`:
+
+| Finding | How it is addressed |
+|---|---|
+| R2-B1 a nested constructor branching on a lazy input builds the wrong branch silently | A nested workflow with any lazy input at keying is `"deferred"`, whether or not lazy construction raises; its job is keyed and served whole when it runs. The cost (never served whole, node by node) is stated, and the re-resolve alternative is named as future work (§4.3) |
+| R2-B1 cost notes | Offline with a non-local image, a finished workflow is readable only node by node; the construction runs when the workflow job's checksum is first computed, so a constructor error raises there and is not a recorded job error (§4.3) |
+| R2-I1 `$class` leaves out the walk's references | One definition, `class@1`: `_class_code` plus the walk's class references (bases, the functions and globals methods reach), used for gap 1, `type@1`, `$class` and `py@1`; I4 tests a base-class method and a helper (§4.2, §5.1, §6.2, §10) |
+| R2-I2 0004 describes an RFC 0003 that no longer exists | Re-pinned to `547f7b1d`; the file-set passage rewritten on 0003's key-preserving `files/<set>/<path>` layout: the digest is read from the entry, and recomputing it in a worker agrees (§6.2); §9.2 reworded to what 0003 carries, by section |
+
+Nits of rounds 1 and 2 are not addressed in this revision.
 
 Revision 3 answers the first re-review of #932 at `871c5d96`:
 
@@ -848,7 +881,7 @@ Revision 2 answers the review of #932 at `6a4d8f84`. Blocking and important find
 
 | Finding | How it is addressed |
 |---|---|
-| B1 `pydra-identity@1` collides with RFC 0003's name; stale 0003 citations | Renamed `pydra-identity@2`, defined as a 0003 `StoreIdentity` with `key` and `check_key`, header shape taken from 0003 §3.2 (§3.1); `@1` roots raise `StoreLayoutMismatch`, no cross-scheme migration, and why (§9.1); order of delivery and the text 0003 must carry (§9.2, §10 I1 after 0003 P2); every 0003 citation re-pinned to `8be263c9` |
+| B1 `pydra-identity@1` collides with RFC 0003's name; stale 0003 citations | Renamed `pydra-identity@2`, defined as a 0003 `StoreIdentity` with `key` and `check_key`, header shape taken from 0003 §3.2 (§3.1); `@1` roots raise `StoreLayoutMismatch`, no cross-scheme migration, and why (§9.1); order of delivery and the text 0003 must carry (§9.2, §10 I1 after 0003 P2); every 0003 citation re-pinned to `8be263c9` (now `547f7b1d`) |
 | B2 `npy@1`/`file@1` are not 0003's member names | `npy@1` is the sha256 of the canonical `.npy` bytes that are 0003's member, so the names are equal by construction; `file@1` is computed from what `entry.json` records, with the per-member key 0003 has to add; the digest form is 0003's output encoding with two stated substitutions, so sets, complex, bytes, datetimes, `Path` and numpy scalars use 0003's form (§6.2, §9.2) |
 | B3 `Path` by content breaks output locations | Design change: a `Path` is a value (`{"$path": …}`, as 0003), never tested for existence; content identity is declared by typing a field `File`/`Directory`. Why, and what stays per-host (§6.2) |
 | B4 environment keys not bound to what runs | Design change: the reference is resolved once in the submitting process and the worker executes the resolved reference (`repo@sha256:…`, local `Id`, full Lmod names), or fails; `.sif` and `Native` version are re-checked in the worker; local builds never consult the registry (§5.2, §5.3) |
