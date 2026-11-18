@@ -1,6 +1,6 @@
 # Proposal 0004: portable automatic task identity
 
-Status: proposed, for maintainer discussion; revision 3. Branch `rfc/portable-task-identity`, off
+Status: proposed, for maintainer discussion; revision 4. Branch `rfc/portable-task-identity`, off
 `enh/execution-extensions` at `3f734f9a`. Line references are to `3f734f9a` unless a branch is named.
 Proposal 0001 names are used throughout: **K1** is a declared `version=` (0001 §3.11), **K2** a
 supplied `checksum=` with the reuse hook (0001 §3.12), **G1** the environment checksum recorded and
@@ -326,10 +326,17 @@ are recorded as `"deferred"`:
   branch that runs. pydra documents a nested workflow branching on an upstream output as its way to
   write a conditional (`docs/source/tutorial/6-workflow.ipynb:245-246`). The nested job is still
   keyed when it runs, with its inputs then concrete, and is served whole from its own entry;
+- a nested workflow node with a splitter. Its inputs may all be concrete (`Inner(x=x).split(mode=
+  modes)` over a list), but at run each state element is constructed from its own task
+  (`engine/submitter.py:1027-1036`), so one construction of the node's task does not show which
+  branch each element takes. Each element job is keyed when it runs and is served whole from its
+  own entry. Contributing `nodes` per state element, each constructed from the element's task as
+  the run does, is future work;
 - a node whose environment or tool version is `unresolved` (§5.2, §5.3).
 
-A workflow record holding `"deferred"` is still computed and its entry still written, but a lookup
-of it is a miss by rule: the job is expanded and each node is looked up under its own key, so
+A workflow record holding `"deferred"` at any depth of `nodes` is still computed and its entry
+still written, but a lookup of it is a miss by rule, so a concrete nested workflow with a deferred
+child defers its parent too: the job is expanded and each node is looked up under its own key, so
 nodes whose run facts did not change are served from their own entries. **Cost.** An outer
 workflow with a nested workflow fed by an upstream output is never served whole, only node by node:
 one expansion and one lookup per node, each of which may hit. Offline, with an image that is
@@ -340,7 +347,11 @@ anyway. The construction now runs when the workflow job's checksum is first comp
 before the job is dispatched and before its work directory exists (the store and lease calls take
 `Job.checksum`, `engine/job.py:266`, `:415`, `:487`, and `__getstate__` computes it,
 `engine/job.py:192-194`). A constructor error is therefore raised from that call, in the
-submitting process, and is not recorded as the job's error in its work directory.
+submitting process, and is not recorded as the job's error in its work directory. For a nested
+workflow that first use is `read_succeeded` or the de-duplication loop (`engine/submitter.py:571`,
+`:705`), outside the per-job error handling (`:737-744`); I5 computes the checksum of each job of a
+round inside that handling, so a constructor error at keying is recorded as that job's error and
+the parent's loop continues under its `on_error` mode, as a constructor error at run is today.
 
 A future alternative needs no construction at keying: the workflow's entry records, for each shell
 job that ran under it, the reference it requested and what that resolved to, and a lookup
@@ -819,7 +830,7 @@ and P3 uses it rather than defining it.
 | I2 | inputs through I0; `Path` as a value; persistent hits populate memory; decoded `$fileset` values carry their recorded `file@1` | yes | I1, 0003 P3 for the decoded digests |
 | I3 | library references as `dist==identity`; owners of input value types; one owner lookup shared with `context.py`, with the `packages_distributions` fallback; unowned modules; documentation of `PYDRA_USER_PACKAGES` across sites | yes | I1 |
 | I4 | `class@1` (`_class_code` and the walk's class references), used for user-class instance inputs at any depth, and `$class` for user-class codec values; `type@1` (fields classes, unions, `Literal`, `Annotated`); the §8.3 and §8.8 cases, plus a base-class method and a method's helper edited, as regression tests on every supported minor; close #777 | yes | I1 |
-| I5 | shell template in the record; `job` field and `Job.checksum` as the digest of the job's record; workflow `nodes` and the `"deferred"` rule; `version=`, `version_command=` and `version_pattern=` for shell, with the worker re-check under `Native`; `version=` for workflows | yes | I1, I4 |
+| I5 | shell template in the record; `job` field and `Job.checksum` as the digest of the job's record; workflow `nodes` and the `"deferred"` rule; checksums of a round computed inside the per-job error handling; `version=`, `version_command=` and `version_pattern=` for shell, with the worker re-check under `Native`; `version=` for workflows | yes | I1, I4 |
 | I6 | resolved references for Docker (given, `RepoDigests`, local `Id` for local builds and re-tagged images, registry `HEAD`; digest keyed, repository carried), Singularity (`docker://` digest, `.sif` content with the worker check) and Lmod (full names); `execute` runs the resolved reference without `:{tag}`; `resolve_images=`; unresolved rule | yes | I5, G1 |
 | I7 | `tools` context field, built in the submitting process; `ConsistentReuse` compares it; owning-package lookups behind a time limit | no (context) | I5 |
 | I8 | `.pydra-identity` marker and the announcement; `pydra-identity@2` as the `PortableStore` default. Ships with I1–I6 | no (switches the default identity) | I1 |
@@ -860,6 +871,8 @@ Revision 4 answers the second re-review of #932 at `e98634c6`, made jointly with
 | R2-B1 cost notes | Offline with a non-local image, a finished workflow is readable only node by node; the construction runs when the workflow job's checksum is first computed, so a constructor error raises there and is not a recorded job error (§4.3) |
 | R2-I1 `$class` leaves out the walk's references | One definition, `class@1`: `_class_code` plus the walk's class references (bases, the functions and globals methods reach), used for gap 1, `type@1`, `$class` and `py@1`; I4 tests a base-class method and a helper (§4.2, §5.1, §6.2, §10) |
 | R2-I2 0004 describes an RFC 0003 that no longer exists | Re-pinned to `547f7b1d`; the file-set passage rewritten on 0003's key-preserving `files/<set>/<path>` layout: the digest is read from the entry, and recomputing it in a worker agrees (§6.2); §9.2 reworded to what 0003 carries, by section |
+
+| R3-I1 a split nested workflow builds one branch | A nested workflow node with a splitter is `"deferred"`; per-element `nodes` named as future work (§4.3). With it, three nits: `"deferred"` at any depth is a miss, the per-job error isolation of constructor errors at keying (§4.3, §10 I5), the status line |
 
 Nits of rounds 1 and 2 are not addressed in this revision.
 
