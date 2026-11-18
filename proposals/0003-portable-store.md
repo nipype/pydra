@@ -56,12 +56,14 @@ translation, not recomputation (§8.2). The rest of this proposal does not refer
 - a migration from `PickleStore`, as a function, that does not recompute.
 
 **Non-goals:**
-- Changing job checksums. A `PortableStore` slot is under the same checksum as today.
+- Changing job checksums. Under `pydra-identity@1` a `PortableStore` slot is under the same
+  checksum as today. RFC 0004 changes every automatic checksum once, in its own release (§4).
 - A database or object-store backend. The layout is for POSIX filesystems, including NFS, and for
   private stores on Windows. An object-store backend can implement the same protocol later.
 - Changing `PickleStore`, which stays the default until maintainers decide otherwise (§13).
 
-**Defaults that do not change:** `PickleStore` and its layout; the `debug` worker; checksums;
+**Defaults that do not change:** `PickleStore` and its layout; the `debug` worker; checksums under
+`pydra-identity@1`;
 `Submitter(cache_root=...)`; `ReusePolicy` and the three built-in policies.
 
 **Threat model.** A user who can write a `shared` root can make other users' runs read a wrong
@@ -180,6 +182,13 @@ class StoreIdentity(Protocol):
   so two contexts share a slot exactly when they are equal, as with `context_key` today, but with 256
   bits instead of 64. A collision in a shared store would make one context's result serve another,
   so the shortened form is not kept.
+- **After RFC 0004.** RFC 0004 adds `pydra-identity@2`, whose key is the identity record that the
+  checksum is the digest of. From the release that carries it, `pydra-identity@2` is the default,
+  every automatic checksum changes once, and `@1` checksums can no longer be produced. A root
+  created under `@1` raises `StoreLayoutMismatch` naming `identity` when opened under `@2`, also
+  when it holds only supplied-checksum entries, whose `@1` key record is `None` and so cannot be
+  told from automatic ones; such a root is re-created, or kept open under an explicit
+  `identity=` of `pydra-identity@1` for as long as that code ships.
 - **The two phases.** `context(job, "lookup")` runs in the process that looks the job up: the runner
   in `ready()` or `Job.run` under the lease. `context(job, "execute")` runs in the process that runs
   the job, after the task has run and before `publish`, so a context can record facts of the worker
@@ -422,13 +431,27 @@ The default, `pydra-entry@1` in `results@1/`:
 <fingerprint>/entry.json            format, checksum, key record or null, fingerprint, writer token,
                                     output digest, encoded outputs, each member's sha256 and size
 <fingerprint>/context.json          format, the context
-<fingerprint>/<sha256>.npy          one per array, named by the sha256 of its bytes
+<fingerprint>/<sha256>.npy          one per array, its canonical `.npy` (below), named by its sha256
 <fingerprint>/<sha256>.bin          one per bytes output
-<fingerprint>/files/<sha256>/<name> one per file output, named by the sha256 of its content
+<fingerprint>/files/<set>/<path>    one directory per file output, named by its `file@1` digest,
+                                    holding the set's files laid out as the producer had them
 <fingerprint>/<sha256>.pkl          pickle members, under a root whose header allows them (§6.4)
 ```
 
 `Result`, `_job.pklz` and `_error.pklz` are never written to an entry.
+
+- **Canonical `.npy`.** An array member is the canonical `.npy` of RFC 0004 §6.2: format version 1.0,
+  as `numpy.lib.format.write_array(..., version=(1, 0), allow_pickle=False)` writes it, with the dtype
+  converted to little-endian and the data copied to C order. Its name is the sha256 of those bytes,
+  which is RFC 0004's `npy@1` digest. Both proposals compute it with `pydra/utils/digest.py` (§13).
+- **File outputs keep their keys.** A `FileSet` output is stored under one directory, `files/<set>/`.
+  The files of a `File` or of a multi-file set (a NIfTI `.hdr`/`.img` pair) sit side by side there
+  under their own names, and a `Directory` is `files/<set>/<its name>/` with its tree. Decoding then
+  gives a value whose `FileSet.byte_chunks` keys (`utils/hash.py:702-707`) are the producer's:
+  `"."` for a single file, `".hdr"` and `".img"` for the pair, paths relative to the root for a
+  directory. `entry.json` records the keys, and `<set>` is RFC 0004's `file@1` of the recorded
+  type tag and `[key, content sha256]` pairs, so the digest of a decoded output is read from the
+  entry, not recomputed from its files.
 
 ### 6.2 Reading binds an entry to its address and to its members
 
@@ -438,6 +461,8 @@ through that descriptor:
 - reads `context.json`, recomputes the fingerprint and requires it to equal the directory name;
 - reads `entry.json`, requires its `checksum` to give this `<cdir>`, its `fingerprint` to equal the
   directory name, its `format` to be one it reads, and `identity.check_key` to accept its key record;
+- for each `$fileset`, requires `<set>` to be the `file@1` of its recorded type tag, keys and member
+  digests, and the decoded value's `byte_chunks` keys to be the recorded keys;
 - opens each member with `O_NOFOLLOW`, requires a regular file, and checks its size and sha256
   against `entry.json`. File members are checked when the entry is read, not when the path is first
   used, so a reader never hands out a path to an unchecked file. The policy's `verify_files="size"`
@@ -528,13 +553,19 @@ PortableStore(root, trust="shared", readonly=[Root(path, trust="shared"), ...],
 | `dict` with other keys | `{"$dict": [[key, value], ...]}`, sorted by the canonical JSON of the key |
 | `datetime`, `date` | `{"$datetime": "<ISO 8601>"}`; a naive datetime is refused in a `shared` root |
 | `pathlib.Path` that is not a `FileSet` | `{"$path": "<str>"}`; the path is a value, its file is not stored |
-| `numpy.ndarray` (not object dtype), numpy scalars | `{"$array": "<sha256>"}` and a canonical `.npy` member; scalars as JSON with their dtype |
-| `File`, `Directory`, any `FileSet` | `{"$fileset": "<registered type tag>", "files": ["files/<sha256>/<name>", ...]}`; decoded to paths inside the entry |
+| `numpy.ndarray` exactly (not a subclass), whose dtype holds no references (not object, not `StringDType`, no such field in a structured dtype) | `{"$array": "<sha256>"}` and a canonical `.npy` member (§6.1). Subclasses (`numpy.ma.MaskedArray`, `numpy.matrix`) and reference dtypes have no default codec: they are pickled under a root that allows it and are otherwise unencodable, as in RFC 0004 they are `py@1` |
+| numpy scalars | `{"$npscalar": ["<dtype>", "<value>"]}`: the dtype's `str` in little-endian form, and the value as a string: a decimal for integers, `float.hex` for floating types up to `float64`, `[re, im]` of those for complex, `"true"`/`"false"` for `bool_`, the integer count for `datetime64` and `timedelta64`, whose unit is in the dtype. `np.float32(1)` is `["<f4", "0x1.0000000000000p+0"]` and `np.float64(1)` is `["<f8", ...]`. `longdouble` and its complex form are unencodable, because `float.hex` would round them |
+| `File`, `Directory`, any `FileSet` | `{"$fileset": "<registered type tag>", "files": [[<key>, "files/<set>/<path>"], ...]}`, sorted by key; decoded to paths inside the entry (§6.1) |
 | `Absent` (RFC 0002 §2.3(a)) | `{"$absent": {"cause": ..., "source": ...}}` |
 | `attrs` classes, `enum` members, other types with a codec | `{"$codec": "<tag>", "value": ...}` through `register_codec(type, tag, encode, decode)` |
 
-- **Decoding never imports.** A `$fileset` type tag and a `$codec` tag are looked up only in the
-  registry that `register_codec` fills in this process, never resolved as a module or class name.
+- **One tag registry.** `$fileset` and `$codec` tags live in one registry in `pydra/utils/digest.py`,
+  RFC 0004's I0, which `register_codec` here and `register_digest` there both fill, so a tag means the
+  same type in an entry and in an input digest. It lands with I0, before P3 (§13). An unregistered
+  `FileSet` subclass is unencodable as an output (`UnencodableOutput`, below); as an input RFC 0004
+  digests it as `py@1`, so it keys as today and never reads as an entry member.
+- **Decoding never imports.** A `$fileset` type tag and a `$codec` tag are looked up only in that
+  registry as this process has filled it, never resolved as a module or class name.
   An unknown tag raises `EntryFormatUnknown`; the entry is not served. This holds when `task` is
   `None`. A codec's `decode` builds a value from JSON and members only. Codecs for the standard
   library types above, `fileformats` types, `Absent`, numpy scalars, `attrs` classes and `enum`
@@ -741,13 +772,24 @@ function from its own recorded step and gets one `MigratedSlot` per source slot 
   is reported and leaves the slot unmigrated.
 - It copies no `_job.pklz`, `_error.pklz`, lease or `.pydra-succeeded/` record.
 
-No job is recomputed: checksums are unchanged, and the outputs are decoded and encoded, not produced.
+No job is recomputed: under `pydra-identity@1` checksums are unchanged, and the outputs are decoded
+and encoded, not produced. A root migrated under `@1` raises `StoreLayoutMismatch` under `@2` (§4).
+
+**Scope under `pydra-identity@2`.** `migrate()` has no `Job` to build an `@2` record from, and an old
+automatic checksum is not an `@2` checksum, so under `@2` it migrates only slots whose checksums were
+supplied: it is called with `supplied_checksums=True`, the caller's assertion, and publishes each slot
+with the key `{"scheme": "pydra-identity@2", "supplied": <checksum>}`. Without that flag it refuses
+an `@2` target, naming the identity. A slot wrongly asserted to be supplied is harmless: its checksum
+is never produced under `@2`, so no lookup reaches it. Under any other identity (`@1` kept
+explicitly, or a downstream one, §8.2) it behaves as above.
 
 A run can also read an unmigrated cache in place: `PortableStore(legacy=[Root(cache_root,
 trust="private")])`. Legacy roots are read only when declared `private` or `trusted`, and a `private`
 one passes the ownership check of §6.4 on the cache root and on each slot directory it reads. A hit
 there is published into `<root>` under the stored context's fingerprint, not the current one, so the
-old cache is read once per result.
+old cache is read once per result. It is published with the current job's key record, so under `@2`
+a `legacy=` root is useful only to jobs with a supplied checksum, the only `@2` checksums that name
+an old slot; for every other job it costs one `lstat` and finds nothing.
 
 ### 8.2 From an existing store already in this shape
 
@@ -885,6 +927,7 @@ Revision 3 answers the first re-review:
 | I13 residual | §7.3, §10 (`replace=True` never serves the occupant) |
 | RFC 0002 requirements | §13, one list; §7.2 no longer cites RFC 0002 §3.1 for a field it does not have |
 | nit: `verify_files="size"` | §6.2, §9 (owner's assertion; requires `durability="member"`) |
+| RFC 0004 §9.2 and its review | §2, §4 (checksums unchanged only under `pydra-identity@1`; `@2` default after RFC 0004; `@1` roots under `@2`); §8.1 (`migrate()` and `legacy=` under `@2`, `supplied_checksums`); §6.1 (canonical `.npy`; file outputs under `files/<set>/` keeping `byte_chunks` keys); §6.2 (set digest and keys checked on read); §6.4 (`$array` for exact reference-free `ndarray` only, `$npscalar`, one tag registry with RFC 0004 I0); §13 (P3 after I0, P7 after I1 and I8) |
 | NI-4 work directory readers (second re-review) | §5.4 (readable by the runner and downstream processes; shared storage for shared roots and multi-node executors; checked at hand-out); §7.2 (fallback to `store.read` at the job's own address); §5.1 step 9, §7.2 (`_committed.json` written by temporary and rename) |
 
 Revision 2 answered the first review:
@@ -936,14 +979,21 @@ the same saving where the filesystem has one, without that case.
 |---|---|---|
 | P1 | `pydra.utils.storagedir`: a descriptor-relative directory handle (`child`, `open_new`, `rename`, `link`, `lstat`, `scandir`, `set_mode`), the wrong-kind rule, `StorePolicy`, reflink copy with hashing; Windows reparse-point checks; `PlatformUnsupported`. Unused by `PickleStore`. Tests: a symlink swapped in at each level, wrong kinds, modes under a permissive umask, copy of a hard-linked input leaves the original's mode | — |
 | P2 | layout header (atomic write, checks), `<cdir>` and shard rules, `StoreIdentity` and `pydra-identity@1`; `Job.context` through the identity | P1 |
-| P3 | `EntryFormat`, `pydra-entry@1`, the codec registry and encoding table, member digests; trust per root and the ownership walk; `UnencodableOutput` at hand-out | P2 |
+| P3 | `EntryFormat`, `pydra-entry@1`, codecs over RFC 0004's tag registry and the encoding table, canonical `.npy` and member digests from `pydra/utils/digest.py`, file outputs under `files/<set>/` with their keys; trust per root and the ownership walk; `UnencodableOutput` at hand-out | P2, RFC 0004 I0 |
 | P4 | `PortableStore`: `publish` and `Committed`, first writer wins with the writer token, modes before rename and the seal after it, `StoreNotWritable`, kept entries and `_committed.json`, fenced quarantine and `q-` names, `evict`, `collect`; `read(EntryRef)`; work directories and `attempt`; optional anonymous de-duplication lease; `commit` as an adapter; errors to `_error.json`; `pydracli crash`. Tests: two processes racing one checksum (equal and unequal digests), SIGKILL before and after the rename, a lost lease that still commits, a lost rename reply, two readers quarantining one entry while a writer commits, a non-owner reader, a second writer on a default-mode root (`StoreNotWritable`) and on a group-writable one, a SIGKILL between rename and seal, a `stored=False` result read by another process through `_committed.json`, a read-only root, case-colliding supplied checksums, `debug` and `cf` parity | P3, #928 |
 | P5 | `Reuse` protocol, `find(job)` and `Hit`/`Verify`/`Miss`, the `ReusePolicy` wrapper, `job.verify` and `compare`, the reuse record, the lost-race table, `on_commit` and sidecars, read-only roots | P4, K2 |
 | P6 | `read_succeeded` for `PortableStore` through the reuse hook; `rerun` as evict and replace | P5, #929 |
-| P7 | `migrate()`, `pydracli store migrate` and `legacy=` | P4 |
+| P7 | `migrate()`, `pydracli store migrate` and `legacy=`; `supplied_checksums=` | P4, RFC 0004 I1 and I8 |
 | P8 | `Submitter(store="portable")`; RFC 0002 R4's executor reporting of `Committed`; documentation; Windows CI for `private` | P5, RFC 0002 R4 |
 
 P1 to P3 change no behaviour. P4 is the first PR a user can opt into.
+
+**Order with RFC 0004.** RFC 0004's I0 (`pydra/utils/digest.py`: the digest form, the canonical
+`.npy`, the tag registry) depends on nothing and lands first; P3 builds on it. P2 lands before
+RFC 0004's I1, which needs `StoreIdentity` and the header. So the order is P1, P2, then I0 and I1 in
+either order, then P3, with no cycle. P7 waits for RFC 0004's I1 and I8, which makes
+`pydra-identity@2` the default; this assumes RFC 0004 ships I8 with I1. Otherwise a user who
+migrates before them migrates into a root that the next release cannot open (§4, §8.1).
 
 **What RFC 0002 (#930 at `2ac1ba18`) needs.** None of these contradicts RFC 0002; each is an
 addition its text has to state:
