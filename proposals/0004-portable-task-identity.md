@@ -1,13 +1,13 @@
 # Proposal 0004: portable automatic task identity
 
-Status: proposed, for maintainer discussion; revision 2. Branch `rfc/portable-task-identity`, off
+Status: proposed, for maintainer discussion; revision 3. Branch `rfc/portable-task-identity`, off
 `enh/execution-extensions` at `3f734f9a`. Line references are to `3f734f9a` unless a branch is named.
 Proposal 0001 names are used throughout: **K1** is a declared `version=` (0001 §3.11), **K2** a
 supplied `checksum=` with the reuse hook (0001 §3.12), **G1** the environment checksum recorded and
 never keyed (0001 §3.5). RFC 0003 is `rfc/portable-store` at `8be263c9` (its revision 3); its
 section numbers below are that revision's. The probes cited in §8 were run on one macOS arm64
-machine under load. Timings are upper bounds. Revision 2 answers the review of #932; §12 maps each
-blocking and important finding to the text that resolves it.
+machine under load. Timings are upper bounds. Revision 2 answers the review of #932 and revision 3
+its first re-review; §12 maps each blocking and important finding to the text that resolves it.
 
 ## 1. Motivation
 
@@ -90,12 +90,41 @@ A job's checksum is the digest of a small JSON document, its identity record:
 }
 ```
 
+A shell job's record adds what it runs in, and a workflow's record what its nodes run in (§4.3):
+
+```json
+{
+  "scheme": "pydra-identity@2",
+  "kind": "shell",
+  "walk": {"…": "…"},
+  "task": {"template": "…", "version": "6.0.7"},
+  "job": {"environment": "docker@1:sha256:e48f59cd…", "tool_version": null},
+  "outputs": "type@1:…",
+  "inputs": {"…": "…"}
+}
+```
+
 - `checksum = f"{kind}-{sha256(JCS(record))}"`, where JCS is RFC 8785 canonical JSON, the encoding
   RFC 0003 uses for `pydra-context@1` (0003 §4). Numbers never reach JCS as JSON numbers (§6.2), so
   RFC 8785's double-precision number form does not apply.
 - Every input is one typed digest string (§6.2). A value with no portable encoding falls back to
   today's `bytes_repr`, tagged `py@1:`, so a value that hashes today still hashes.
-- `task` is the code part: §4 for Python tasks, §5 for shell tasks. `walk` is the classification
+- `task` is the code part: §4 for Python tasks, §5.1-§5.2 for shell tasks, including a declared
+  `version`. `job` is what the job runs in, which belongs to the job and not to the task: the
+  resolved environment reference (§5.3) and the tool version a `version_command` reported
+  (§5.2). Python jobs have no `job` field (G1). A workflow job has `nodes` instead (§4.3).
+- **The job checksum is no longer `task._checksum` for shell and workflow tasks.** Today
+  `Job.checksum` is the task's (`engine/job.py:236-246`) and the environment is the job's, the
+  node's or the submitter's (`engine/job.py:133-135`, `engine/node.py:40`,
+  `engine/submitter.py:319-321`). Under this proposal `Job.checksum` is the digest of the job's
+  record, which is the task's record plus `job` (or `nodes`). `task._checksum` stays the digest of
+  the task's record without them, and the task-level uses keep it: a task passed as an input value
+  (`compose/base/task.py:706-715`) is a value and does not run, so its environment is not part of
+  it; the element checksums of a split task (`task.py:531-550`) are supplied checksums (K2); the
+  context's module collection (`engine/context.py:509-510`) and the hash-change message
+  (`engine/lazy.py:195-208`) do not key anything. Cache directories, leases, the store and the
+  success record all take `Job.checksum` already.
+- `walk` is the classification
   that shaped it: the `code_hash` tier (`PYDRA_CODE_HASH`, `hash.py:944-947`) and the packages
   `PYDRA_USER_PACKAGES` moves (`hash.py:976-997`). Both already change today's checksum; in the
   record a mismatch between sites is visible in `pydracli explain` instead of hidden in a digest.
@@ -132,7 +161,7 @@ digest, a module version) is keyed only in the form that is then executed (§5.3
 | the distributions owning the library types of input values | — |
 | the shell command template | the resolved executable path and the sha256 of its file |
 | a declared tool version, or the declared part of a version command's output | the owning OS or conda package of the executable |
-| the image reference a container is run by | the local image id and the per-platform manifest digest |
+| the digest of the image a container is run by | the local image id and the per-platform manifest digest |
 | the full Lmod module names the environment loads | the Lmod tree, `MODULEPATH`, modules loaded as dependencies |
 | input values and declared content, with dtype and shape | hardware, CUDA, environment variables |
 
@@ -264,8 +293,33 @@ same PR.
 ### 4.3 Workflows
 
 A workflow's constructor is walked like a function today (the `code_hash` documented at
-`compose/workflow.py:141-153`). Its nodes are keyed by their own records. Nothing changes except
-that `version=` becomes available (§6.1).
+`compose/workflow.py:141-153`), and a workflow job with a stored result returns it without
+expanding its nodes (`engine/job.py:487-495`). The constructor's code and the workflow's inputs do
+not hold what §5 keys for a node: a node's environment is given when it is added, and its tag, its
+tool's version or its Lmod default can move while the constructor and inputs stay the same. Keyed
+by code and inputs alone, the workflow would serve its old outputs after the image under one of
+its nodes was re-pushed.
+
+**The workflow record carries its nodes' run facts.** When a workflow job is keyed, the workflow is
+constructed, as running it does first, through `Workflow.construct` (`engine/workflow.py:76-130`),
+which runs the constructor without running a node and is memoised by the non-lazy inputs, so a
+miss reuses the constructed graph. The record gets `nodes`: for each node, by name, its `job`
+fields (§3.1), resolved as a shell job resolves them (§5.2, §5.3); a Python node has none and is
+left out. A node that is itself a workflow is constructed with its lazy inputs left lazy
+(`construct(..., lazy=...)`, `engine/workflow.py:80`, `:90-92`), and contributes its own `nodes`.
+Node checksums are not in the record: they depend on upstream outputs that do not exist at keying,
+and they are already a function of the constructor's code, the workflow's inputs and the run facts.
+
+**A workflow whose nodes cannot be resolved at keying is never served whole.** A nested
+constructor that reads the value of a lazy input fails to construct lazily, and an environment that
+cannot be resolved is `unresolved` (§5.3). Such a node is recorded as `"deferred"`. A workflow
+record holding `"deferred"` is still computed and its entry still written, but a lookup of it is a
+miss by rule: the job is expanded and each node is looked up under its own key, so nodes whose run
+facts did not change are served from their own entries. The cost of the rule is one expansion; the
+cost of keying is one construction per workflow job, which a miss would pay anyway.
+
+`version=` becomes available for workflows (§6.1). It replaces the constructor's code, not
+`nodes`.
 
 ## 5. Shell tasks
 
@@ -283,10 +337,27 @@ be reused for this.
 **`type@1`** is the digest of a type, used for field types here and for the record's `outputs`:
 - a standard-library or builtin type: its qualified name;
 - a library type: `lib:{dist}=={identity}:{qualname}` (§4.1);
-- a user class: its qualified name and `_class_code` (`hash.py:1194-1236`), as in gap 1 (§4.2), so
-  a user `Enum` return type has one digest under every minor. Today's `bytes_repr_type` hashes its
-  `__dict__` and differs between 3.11 and 3.13;
-- a generic alias or union: its origin's digest and its arguments' digests, in order.
+- a class with pydra or attrs fields, which includes every task's `Outputs` class and every class
+  built by `define`: its qualified name and the encoding of its fields by `_versioned_fields`
+  (`hash.py:602-609`, `:1676-1690`), names, types (as `type@1`), `path_template`s and the other
+  metadata of §5.1, as today's branch for such classes does. `_class_code` is not used for them: a
+  class built by `define` has no source, and its fallback holds only member functions
+  (`hash.py:1229-1236`);
+- any other user class: its qualified name and `_class_code` (`hash.py:1194-1236`), as in gap 1
+  (§4.2), so a user `Enum` return type has one digest under every minor. Today's `bytes_repr_type`
+  hashes its `__dict__` and differs between 3.11 and 3.13;
+- a union, written `X | Y`, `Union[X, Y]` or `Optional[X]`: one tag, `union`, over the sorted,
+  de-duplicated digests of its flattened members, with `None` as `NoneType`. The origin is not
+  used: `get_origin(int | None)` is `types.UnionType` under 3.11-3.13 and `typing.Union` under 3.14,
+  while `Optional[int]` is `typing.Union` on all of them (§8.8), and `int | str == str | int`;
+- any other generic alias (`list[int]`, `dict[str, X]`, `Callable[[int], str]`): its origin's
+  digest and its arguments' digests in order, with a list of argument types (`Callable`'s first
+  argument) as a list and `...` as the token `...` (`tuple[int, ...]`);
+- `Literal[...]`: the tag `literal` over the sorted digest forms (§6.2) of its values, since
+  `Literal["a", 1] == Literal[1, "a"]`;
+- `Annotated[T, *meta]`: `T`'s digest followed by the digests of the metadata values (§6.2), in
+  order;
+- a `TypeVar` or `ParamSpec`: its name and the digests of its bound and constraints.
 
 ### 5.2 The executable
 
@@ -299,6 +370,10 @@ be reused for this.
     install prefix, `git --version` an `(Apple Git-155)` suffix and `bash --version` its host
     triple (review run), so the whole output gives one tool release a key per platform. A command
     whose output the pattern does not match raises `VersionCommandError` at checksum time.
+
+  A declared `version` belongs to the task and is `task.version` in the record. A version command's
+  result depends on where it runs, so it is `job.tool_version` (§3.1), and a workflow carries it in
+  `nodes` (§4.3).
 - **Where the version command runs.** Only under `Native`, and only in the submitting process, once
   per process per resolved executable path, memoised in memory. It is not cached in
   `PersistentCache`: a shim (pyenv, conda wrappers, FSL wrapper scripts, `/usr/bin/git` on macOS)
@@ -345,23 +420,27 @@ A key resolved in one place and an execution resolved in another can disagree: a
 a moved tag, a node with other module defaults. **The rule: the environment resolves its reference
 once, in the submitting process, carries the resolved reference with the job, and the worker
 executes that reference, never the tag or the short name.** A worker that cannot run it fails the
-job. `Docker.execute` and `Singularity.execute` therefore stop appending `:{tag}` to a reference
+job. The resolved reference is the record's `job.environment` (§3.1); in a workflow it is the
+node's entry in `nodes` (§4.3), so a moved tag under a node re-keys the workflow too. `Docker.execute` and `Singularity.execute` therefore stop appending `:{tag}` to a reference
 that is already resolved (`docker.py:36`, `singularity.py:16`, `base.py:133-137`); today
 `image="repo@sha256:…"` would run `repo@sha256:…:latest` and `image="x.sif"` would run
 `x.sif:latest`.
 
 - **Docker**, in order:
-  1. `image@sha256:…` given, or `identity=` given (`environments/base.py:128-137`): key it and run
-     it, with no lookup. `identity=` is the author's assertion and is keyed as written.
+  1. `image@sha256:…` given, or `identity=` given (`environments/base.py:128-137`): key the digest and run
+     the reference, with no lookup. `identity=` is the author's assertion and is keyed as written.
   2. The tag is in the submitting host's image store, with `RepoDigests`: `docker image inspect
      --format '{{json .RepoDigests}}'` (probe §8.6: about 30 ms, no network). The entry whose
      repository equals the image's repository is used; that is the digest the image was pulled by,
      the index digest when it was pulled by a multi-platform tag (probe §8.6: `busybox:latest`), a
-     platform manifest digest when it was pulled by one. Key `repo@sha256:<digest>` and run it. If
-     several entries have that repository, the image was pulled by several digests; the newest
-     pull cannot be told from `inspect`, so the tag is treated as not local and step 3 decides.
-  3. The tag is in the image store with no `RepoDigests`: a local build or a `docker load`. Key
-     `docker-local@1:<Id>` and run `<Id>`. The registry is never asked for such an image: a local
+     platform manifest digest when it was pulled by one. Key `docker@1:sha256:<digest>` and run
+     `repo@sha256:<digest>`.
+  3. The tag is in the image store, and step 2 does not apply: no `RepoDigests` (a local build or a
+     `docker load`), no entry for the image's repository (an image pulled under another name and
+     re-tagged, `docker tag ghcr.io/org/tool:1.2 tool:latest`), or several entries for it (pulled by
+     several digests, and `inspect` does not say which pull the tag now names). Key
+     `docker-local@1:<Id>` and run `<Id>`: this is the image that runs on this host, and asking the
+     registry for `library/tool:latest` would key, and run, another publisher's image. The registry is never asked for such an image: a local
      rebuild of `nipreps/fmriprep:latest` would otherwise be keyed by the published image while
      `docker run` executes the build. The key is per image store, so it reuses on that host, and
      on a cluster whose workers load the same image, as today's local-`Id` identity does
@@ -369,8 +448,12 @@ that is already resolved (`docker.py:36`, `singularity.py:16`, `base.py:133-137`
   4. The tag is not local: the registry, once per tag per `Submitter` run: an anonymous token
      request, then `HEAD /v2/<repo>/manifests/<tag>` with the index media types in `Accept`,
      reading `Docker-Content-Digest`. Probe §8.6: 60–90 ms for the token and 100–120 ms for the
-     `HEAD` on Docker Hub. Never a pull. Key and run `repo@sha256:<digest>`; the worker pulls that
-     digest, which does not move.
+     `HEAD` on Docker Hub. Never a pull. Key `docker@1:sha256:<digest>` and run
+     `repo@sha256:<digest>`; the worker pulls that digest, which does not move.
+- **The digest is keyed, the repository is carried.** A digest names the image's bytes wherever it
+  is pulled from, so `org/fsl@sha256:d` and the same image through a site mirror,
+  `mirror.site/org/fsl@sha256:d`, share one key. The repository goes with the job, in the
+  environment, as the place the worker pulls from, and in the context.
   5. Offline and not local: the key carries `image:tag` and `unresolved`, the context carries
      `unknown` (`engine/context.py:520-521`), and the job runs the tag. The result is used within
      the process and never served to another. `Submitter(resolve_images="require")` raises
@@ -438,16 +521,23 @@ exactly:
 
 Everything else is 0003's form as it stands: `{"$set": …}`, `{"$complex": …}`, `{"$bytes":
 "<sha256>"}`, `{"$dict": …}`, `{"$datetime": …}`, `{"$path": "<str>"}`, `{"$array": "<sha256>"}`,
-`{"$codec": "<tag>", "value": …}`. A digest is then one string `<tag>@<n>:<hex>`, from
-`pydra/utils/digest.py`, which a registry extends (`register_digest(type, fn)`):
+`{"$codec": "<tag>", "value": …}`, and numpy scalars in 0003's scalar form (0003 §6.4) with the
+value as a typed string. One addition applies at any depth: **a value whose type is user code
+carries its class.** A `$codec` value of a user class (a project's `attrs` class registered with
+`register_codec`, which it must be to be a `PortableStore` output at all) is
+`{"$codec": "<tag>", "value": …, "$class": "code@1:<sha256 of _class_code>"}` in the digest form, so
+`list[Params]` re-keys when `Params.scale` is edited, as a bare `Params` does (gap 1, §4.2). The
+output encoding has no `$class`; it is identity, not data.
+
+A digest is then one string `<tag>@<n>:<hex>`, from `pydra/utils/digest.py`, which a registry
+extends (`register_digest(type, fn)`). The first row that applies wins:
 
 | Value | Digest |
 |---|---|
 | `numpy.ndarray` exactly (not a subclass), whose dtype holds no references | `npy@1:` the sha256 of its canonical `.npy` bytes (below). Inside a container it appears as `{"$array": "<same sha256>"}` |
-| `FileSet` (`File`, `Directory`, any `fileformats` type) | `file@1:` the sha256 of the JCS of `{"$fileset": "<registered type tag>", "files": [[<key>, <content sha256>], …]}`, sorted by key, where the key is the one `FileSet.byte_chunks` yields today (`hash.py:703-708`). It does not depend on the directory or the file name, as today (probe §8.2) |
-| a user-class instance | `py@1:` from `bytes_repr`, followed by its class's `_class_code` (§4.2) |
-| any other value whose digest form exists: `None`, `bool`, numbers, `str`, containers of them, `Path` and every type with a 0003 codec | `json@1:` the sha256 of the JCS of its digest form |
-| anything else, including array subclasses and arrays of object or `StringDType` | `py@1:` from today's `bytes_repr`; object arrays element by element, as now (`hash.py:1794-1795`) |
+| `FileSet` (`File`, `Directory`, any `fileformats` type) with a registered tag | `file@1:` the sha256 of the JCS of `{"$fileset": "<registered type tag>", "files": [[<key>, <content sha256>], …]}`, sorted by key, where the key is the one `FileSet.byte_chunks` yields today (`hash.py:703-708`). It does not depend on the directory or the file name, as today (probe §8.2) |
+| a value whose digest form exists: `None`, `bool`, numbers, `str`, `Path`, every type with a codec in the registry, and containers of these (a user class with a codec carries `$class`) | `json@1:` the sha256 of the JCS of its digest form |
+| anything else: a user-class instance without a codec, a container holding one, array subclasses, arrays of object or `StringDType`, a `FileSet` subclass with no registered tag | `py@1:` from today's `bytes_repr`. Gap 1 is made in the generic serialiser (`hash.py:417-437`), so a user-class instance carries its `_class_code` at any depth of a `py@1` value; object arrays are digested element by element, as now (`hash.py:1794-1795`); an unregistered `FileSet` keeps today's content hash (`hash.py:692-708`) |
 
 - **The canonical `.npy`** is the byte form of 0003's `.npy` member: format version 1.0 as
   `numpy.lib.format.write_array(..., version=(1, 0), allow_pickle=False)` writes it, with the dtype
@@ -472,13 +562,26 @@ Everything else is 0003's form as it stands: `{"$set": …}`, `{"$complex": …}
   the digest form, so one `Path` has one digest under 3.11 and 3.13. An absolute path is still a
   per-host string: a relative path, or one under a layout the sites share, is portable, and the
   documentation says so.
-- **Shared with RFC 0003.** `npy@1:<hex>` is, by construction, the name of the entry's array member
-  `<hex>.npy` (0003 §6.1), because the preimage is the member's bytes. `file@1` is computed from
-  what `entry.json` records for a `$fileset`: its type tag and, for each member, its content sha256
-  (the `files/<sha256>/` name) and its key, which 0003 has to record (§9.2). An upstream output
-  that a store has read is then a downstream input whose digest is computed from the entry, without
-  reading an array or a file again. Both proposals use `pydra/utils/digest.py` for the member
-  digests and the digest form.
+- **Shared with RFC 0003: arrays.** `npy@1:<hex>` is, by construction, the name of the entry's array
+  member `<hex>.npy` (0003 §6.1), because the preimage is the member's bytes.
+- **Shared with RFC 0003: file sets, by carrying the digest.** `file@1` cannot be recomputed from a
+  decoded multi-file value. 0003 stores each file as `files/<sha256>/<name>` and decodes to paths
+  inside the entry (0003 §6.1, §6.4). A single `File` has the key `"."` wherever it lies, but a
+  two-file set side by side has keys like `['.hdr', '.img']` and the same files in per-file
+  directories `['<sha>/a.hdr', '<sha>/a.img']`, and a `Directory`'s keys are relative to its root,
+  which per-file directories do not keep (review run, fileformats 0.22.7). So the digest travels
+  with the value: the writer computes `file@1` of each `$fileset` output from the value in the work
+  directory, where the keys are the producer's, and 0003 records it in the `$fileset` encoding
+  (§9.2). When a store decodes a `$fileset` it has verified every member against `entry.json`
+  (0003 §6.2), and it puts the recorded digest into the in-memory digest cache under
+  `fileset_cache_key` of the decoded paths (`hash.py:658-689`). A downstream input of that value
+  then gets the producer's `file@1` without reading a file. The in-memory entry skips the 2 s
+  settle window, because the members are sealed read-only and were just checked; the persistent
+  cache keeps the window. A file set that is not read through a store is digested from its
+  files, as any input.
+- **One tag registry.** The `$fileset` type tags and `$codec` tags are one registry, defined in
+  `pydra/utils/digest.py` by I0 (`register_codec(type, tag, encode, decode)` and the `FileSet`
+  tags), and used by 0003's entry format; 0003 does not define a second one (§9.2, §10).
 - No value is normalised. NaN payloads and `-0.0` give misses, which are safe;
   senselab-style normalisation is left to a registered digest.
 - The persistent stat-to-digest cache (`hash.py:148-255`) is used for `file@1`, keyed by
@@ -513,6 +616,10 @@ Per process, once:
 - Lmod: one extra `lmod` purge-and-load per module list in the submitting process, not measured
   (§5.3). `execute`'s own call in the worker is unchanged.
 - A version command: once in the submitting process and once per worker process (§5.2).
+
+Per workflow job: one construction of its graph at keying (§4.3), memoised by its non-lazy inputs
+and reused by the run on a miss, plus the environment resolutions of its shell nodes, which are
+memoised per tag or module list as above.
 
 Per task definition, memoised per process: the walk (`hash.py:1601-1642`), unchanged. A checksum of
 a trivial Python task on a fresh instance takes 0.21 ms (§8.7). The record adds one JCS
@@ -585,6 +692,10 @@ arm64. pydra at `3f734f9a`.
      digests; a strided view equals its contiguous copy; a `MaskedArray` and a `StringDType` array
      are routed to `py@1`. Streaming `write_array` into sha256 took 45 ms for 100 MB, against 42 ms
      for the sha256 of the buffer alone.
+   - Unions (revision 3, under 3.11, 3.13 and 3.14 through `uv`): `get_origin(int | None)` is
+     `types.UnionType` under 3.11 and 3.13 and `typing.Union` under 3.14; `get_origin(Optional[int])`
+     is `typing.Union` under all three; `int | str == str | int` and `Literal["a", 1] ==
+     Literal[1, "a"]` on all three. Hence the order-free `union` and `literal` tags of `type@1`.
 
 Not checked: Linux or Windows (the encoding has no platform input, but the classification of §4.1
 depends on the install layout, and the version-pattern and image steps were run on macOS only),
@@ -615,46 +726,82 @@ installed), private registries with credentials, big-endian hosts, and Lmod.
   record. Any change to what is keyed or how a digest is computed bumps it; a new digest type adds
   a tag (`npy@2`) and leaves the old ones as they are. `ast@1` stays a separate version inside it
   (`hash.py:92`), so an AST encoding change is visible in the record.
-- **Projects with `checksum=`** are unaffected: their checksums are theirs.
+- **Projects with `checksum=`** keep their checksums, and a `PickleStore` cache of theirs is read
+  as before. A `PortableStore` root of theirs created under `@1` is not: its header names `@1`, so
+  it raises `StoreLayoutMismatch` under `@2`, and an `@1` entry's key record is `None` (0003 §4), so
+  a supplied entry cannot be told from an automatic one and `@2` cannot read only the former. Such
+  a root is re-created and its jobs run once. `PortableStore` and this scheme both ship in the 1.0
+  alphas (§10), so the roots that exist under `@1` are the ones made between 0003 P4 and I1, and
+  0003 says so (§9.2).
 - **`pydracli check-versions` tables** (`pydra/scripts/cli.py:75-128`) store `code_digest`s. Those
   digests cover user code only (`hash.py:1705-1721`), so they do not change.
 
 ### 9.2 What RFC 0003 has to state
 
 None of these contradicts RFC 0003's design; each is text its document has to carry, as 0003 §13
-lists what RFC 0002 needs:
+lists what RFC 0002 needs. RFC 0003's next revision carries the first four, cited here by the
+sections that hold them:
 
-1. **Checksums change once.** 0003's non-goal "Changing job checksums" and "No job is recomputed:
-   checksums are unchanged" (0003 §2, §8.1) hold under `pydra-identity@1`. From the release that
-   carries this proposal the default identity is `pydra-identity@2`, every checksum changes once,
-   and a root migrated by `migrate()` under `@1` is not readable under `@2`.
-2. **Order of delivery.** This proposal's I1 needs `StoreIdentity` and the header (0003 P2). If
-   0003 P7 (`migrate()`) ships before I1, users who migrate do so into a root that the next release
-   cannot read; the release notes of P7 say so, or P7 waits for I1.
-3. **Member digests from `pydra/utils/digest.py`.** P3's `.npy` member is the canonical `.npy` of
-   §6.2 and is named by its sha256, which is `npy@1`. P3 uses the digest module for this, so P3
-   depends on this proposal's I0, which changes no behaviour.
-4. **The key of each file member.** `entry.json` records, for each `$fileset`, the key
-   `FileSet.byte_chunks` gives each member, so `file@1` can be computed from the entry (§6.2).
-5. **Numbers in a key record.** `pydra-identity@2`'s record holds no JSON numbers (§6.2), so 0003's
-   JCS of the record is exact.
+1. **The `$array` row is exactly `numpy.ndarray` whose dtype holds no references** (0003 §6.4), the
+   set §6.2 gives `npy@1`. A `MaskedArray`, an `np.matrix` or a `StringDType` array has no canonical
+   `.npy`; as an output it goes through a codec or pickling, as any other type does.
+2. **numpy scalars have a concrete form** (0003 §6.4): the dtype and the value, the value as a typed
+   string, so `np.float32(1)` and `np.float64(1)` differ and the digest form of §6.2 is defined for
+   them.
+3. **One tag registry shared with I0** (0003 §6.4, §13 P3): `register_codec` and the `$fileset`
+   type tags live in `pydra/utils/digest.py` (I0), and 0003's entry format uses them. On the input
+   side an unregistered `FileSet` subclass falls to `py@1` (§6.2); on the output side 0003 keeps
+   `UnencodableOutput`.
+4. **The scope of `migrate()` and `legacy=` under `@2`** (0003 §8.1, §6.4). `migrate()` publishes
+   "through the target's identity", but it has no `Job` to build an `@2` record from, and an old
+   automatic checksum with a `None` key fails `@2`'s `check_key`. After this proposal both are for
+   `@1` targets and for projects whose identity is their own (`checksum=`, a custom
+   `StoreIdentity`); a `legacy=` root's automatic entries are not served under `@2`.
+
+It also has to carry these, which follow from this proposal and are not in that list:
+
+5. **Checksums change once** (0003 §2, §4, §8.1). 0003's non-goal "Changing job checksums", its
+   "defaults that do not change: ... checksums" and "No job is recomputed: checksums are unchanged"
+   hold under `pydra-identity@1`. From the release that carries this proposal the default identity
+   is `pydra-identity@2`, every checksum changes once, `@1` checksums can no longer be produced,
+   and a root created or migrated under `@1` raises `StoreLayoutMismatch` under `@2` (§9.1).
+6. **Order of delivery** (0003 §13). I1 needs `StoreIdentity` and the header (0003 P2). P7
+   (`migrate()`) waits for I1, or its release notes say that a root migrated under `@1` is not
+   readable by the next release. P3 depends on I0 for the digests and the registry, and I0 depends
+   on nothing (§10).
+7. **The canonical `.npy`** (0003 §6.1, §6.4): the member is the canonical `.npy` of §6.2 (format
+   1.0, little-endian, C order), named by its sha256, which is `npy@1`.
+8. **`file@1` in the `$fileset` encoding** (0003 §6.4, §6.2): the writer records the `file@1` of
+   each `$fileset` output, computed from the value in the work directory, and the read check covers
+   it, so a decoded value can carry its digest (§6.2).
+9. **Numbers.** `pydra-identity@2`'s record holds no JSON numbers (§6.2), so 0003's JCS of the key
+   record is exact. 0003's output digest still passes Python `int` to JCS as a JSON number (0003
+   §6.4); adopting `$int`/`$float` there too would make the output encoding and the digest form
+   differ only in `$tuple` and `$class`. That is 0003's choice; nothing here depends on it.
 
 ## 10. Delivery
 
-The checksum-changing PRs (I1–I6) merge into a feature branch and ship together, so caches are
-recomputed once, not six times.
+The checksum-changing PRs (I1–I6) merge into a feature branch and ship together with I8, so caches
+are recomputed once, not six times, and the default `PortableStore` identity switches to `@2` in
+the same release that changes the checksums. Shipped without I8, the default would still be `@1`
+(0003 §4) while every checksum was an `@2` value, and an `@1` root would open without error and
+serve nothing, which is the failure the `@2` name exists to prevent.
+
+Order, with RFC 0003's PRs: I0 depends on nothing. 0003 P1 → P2 → P3, with P3 after I0 because it
+uses I0's digests and tag registry. I1 needs I0 and P2. There is no cycle: I0 holds the registry,
+and P3 uses it rather than defining it.
 
 | PR | Contents | Changes checksums | Depends on |
 |---|---|---|---|
-| I0 | `pydra/utils/digest.py`: the digest form, typed digests (`json@1`, `npy@1` as canonical `.npy`, `file@1`, `py@1`), `register_digest`, JCS. Unused. Tests: dtype and structured dtypes, shape, byte order, non-contiguous arrays, subclasses and reference dtypes routed to `py@1`, `1` against `1.0`, integers above 2^53, relocation | no | — |
+| I0 | `pydra/utils/digest.py`: the digest form, typed digests (`json@1`, `npy@1` as canonical `.npy`, `file@1`, `py@1`), `register_digest`, JCS, and the tag registry (`register_codec`, `FileSet` type tags) that 0003 P3 uses. Unused. Tests: dtype and structured dtypes, shape, byte order, non-contiguous arrays, subclasses and reference dtypes routed to `py@1`, `1` against `1.0`, integers above 2^53, relocation | no | — |
 | I1 | identity record and `IDENTITY_SCHEME = "pydra-identity@2"`; checksum = sha256 of its JCS; `walk` field; the `pydra-identity@2` `StoreIdentity` with `key` and `check_key`; record kept with the result; `pydracli explain` | yes | I0, RFC 0003 P2 |
-| I2 | inputs through I0; `Path` as a value; persistent hits populate memory | yes | I1 |
+| I2 | inputs through I0; `Path` as a value; persistent hits populate memory; decoded `$fileset` values carry their recorded `file@1` | yes | I1, 0003 P3 for the decoded digests |
 | I3 | library references as `dist==identity`; owners of input value types; one owner lookup shared with `context.py`, with the `packages_distributions` fallback; unowned modules; documentation of `PYDRA_USER_PACKAGES` across sites | yes | I1 |
-| I4 | user-class instance inputs with `_class_code`; `type@1`; the §8.3 and §8.8 cases as regression tests on every supported minor; close #777 | yes | I1 |
-| I5 | shell template in the record; `version=`, `version_command=` and `version_pattern=` for shell, with the worker re-check under `Native`; `version=` for workflows | yes | I1, I4 |
-| I6 | resolved references for Docker (given, `RepoDigests`, local `Id`, registry `HEAD`), Singularity (`docker://` digest, `.sif` content with the worker check) and Lmod (full names); `execute` runs the resolved reference without `:{tag}`; `resolve_images=`; unresolved rule | yes | I5, G1 |
+| I4 | user-class instance inputs with `_class_code`, at any depth, and `$class` for user-class codec values; `type@1` (fields classes, unions, `Literal`, `Annotated`); the §8.3 and §8.8 cases as regression tests on every supported minor; close #777 | yes | I1 |
+| I5 | shell template in the record; `job` field and `Job.checksum` as the digest of the job's record; workflow `nodes` and the `"deferred"` rule; `version=`, `version_command=` and `version_pattern=` for shell, with the worker re-check under `Native`; `version=` for workflows | yes | I1, I4 |
+| I6 | resolved references for Docker (given, `RepoDigests`, local `Id` for local builds and re-tagged images, registry `HEAD`; digest keyed, repository carried), Singularity (`docker://` digest, `.sif` content with the worker check) and Lmod (full names); `execute` runs the resolved reference without `:{tag}`; `resolve_images=`; unresolved rule | yes | I5, G1 |
 | I7 | `tools` context field, built in the submitting process; `ConsistentReuse` compares it; owning-package lookups behind a time limit | no (context) | I5 |
-| I8 | `.pydra-identity` marker and the announcement; `pydra-identity@2` as the `PortableStore` default | no | I1 |
+| I8 | `.pydra-identity` marker and the announcement; `pydra-identity@2` as the `PortableStore` default. Ships with I1–I6 | no (switches the default identity) | I1 |
 | I9 | `pydracli check-reach` (runtime reach check under `sys.setprofile`) | no | I4 |
 
 Each PR has tests on `debug` and `cf`. I3 and I6 have tests that run without network, Docker or
@@ -681,7 +828,21 @@ Lmod resolution is measured on a cluster that has Lmod before it is merged.
 - Should there be a one-release `PYDRA_IDENTITY=legacy` switch, or is one announced recompute
   acceptable during the 1.0 alphas?
 
-## 12. Changes in revision 2
+## 12. Changes in revisions 2 and 3
+
+Revision 3 answers the first re-review of #932 at `871c5d96`:
+
+| Finding | How it is addressed |
+|---|---|
+| R1-B1 a workflow's key holds none of what §5 keys | Design change: the record names `task.version` and `job` (`environment`, `tool_version`); `Job.checksum` is the digest of the job's record and `task._checksum` keeps the environment-free task record, with the rule for each task-level use (§3.1). A workflow record carries `nodes`, the run facts of every node of the constructed graph, nested workflows constructed with lazy inputs; a node that cannot be resolved is `"deferred"` and makes the workflow a miss by rule, so its nodes are looked up under their own keys (§4.3, §5.2, §5.3) |
+| R1-I1 (B1 residual) `@2` default outside the group; `checksum=` roots | I8 ships with I1–I6, and why (§10); `checksum=` projects' `@1` `PortableStore` roots are re-created, and why `@2` cannot read only their supplied entries (§9.1) |
+| R1-I2 (B2 residual) `file@1` not recomputable from a decoded multi-file value | The writer records `file@1` per `$fileset`; a store that decodes a verified `$fileset` primes the in-memory digest cache with it, so the downstream input gets the producer's digest (§6.2, §9.2 item 8) |
+| R1-I3 (I4 residual) `type@1` unions and `Outputs` classes | Fields classes (every `Outputs`, every `define` class) by `_versioned_fields`; unions under one order-free tag; rules for `Literal`, `Annotated`, `Callable`, `...`, type variables (§5.1); probe §8.8 |
+| R1-I4 user-class instance inside a container with a codec | Precedence stated ("the first row that applies wins"); a user-class `$codec` value carries `$class` in the digest form; gap 1 lives in the generic serialiser, so it holds at any depth of `py@1` (§6.2) |
+| R1-I5 (B4, I8 residual) Docker re-tagged images, step reference, registry name in the key | Step 3 now covers no `RepoDigests`, no entry for the repository and several entries, all keyed and run by `Id`; the registry is asked only when the tag is not local; the key is `docker@1:sha256:<digest>` and the repository is carried, so mirrors share keys (§5.3) |
+| R1-I6 §9.2 incomplete; I0 ↔ 0003 P3 cycle | The tag registry moves into I0 and P3 uses it; the order is stated (I0 independent; P1 → P2 → P3 after I0; I1 after I0 and P2) (§10); §9.2 lists the four changes RFC 0003's next revision carries, by section, and the five further items (§9.2) |
+
+Nits of round 1 are not addressed in this revision.
 
 Revision 2 answers the review of #932 at `6a4d8f84`. Blocking and important findings:
 
