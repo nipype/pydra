@@ -222,7 +222,8 @@ lib:{dist}=={identity}:{module.qualname}
     string of an editable install does not follow its code. It is never `git:<commit>`, so the same
     code has the same key whether or not git is available and whether or not the tree is clean.
     Package data counts because a changed data file must never give a stale hit; a stray note in a
-    package directory costs only a safe miss.
+    package directory costs only a safe miss. An editable library over 256 MiB or 10 000 files is
+    identified as unknown (`?`).
 
   An identity `_identify` cannot compute (`:246-260`) is keyed as `?` and the context gets
   `unknown`, as today for the context (`engine/context.py:520-521`).
@@ -920,6 +921,12 @@ Lmod resolution is measured on a cluster that has Lmod before it is merged.
 - Should `resolve_images` default to `"best-effort"` (proposed) or `"require"`?
 - Is `version_command=` with `version_pattern=` worth adding, or is `version=` enough for shell
   tasks?
+- An editable install left as user code (not keyed as a library) is identified by the code the
+  task reaches. A change to a data file inside that package, read at run time, is not seen, so a
+  stale result is served (measured: changing `factor.txt` from 2 to 3 reuses the result computed
+  with 2). Options: digest the package files of every editable the task's code reaches, as for
+  libraries (cost: safe misses on stray files, and a size cap), or document that data read at run
+  time must be a task input. Default in this proposal: unchanged; the first is recommended.
 - Should there be a one-release `PYDRA_IDENTITY=legacy` switch, or is one announced recompute
   acceptable during the 1.0 alphas?
 
