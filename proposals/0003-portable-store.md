@@ -570,6 +570,9 @@ PortableStore(root, trust="shared", readonly=[Root(path, trust="shared"), ...],
   digests it as `py@1`, so it keys as today and never reads as an entry member.
 - **Decoding never imports.** A `$fileset` type tag and a `$codec` tag are looked up only in that
   registry as this process has filled it, never resolved as a module or class name.
+- **`$digest` is reserved.** RFC 0004 §6.2 uses `{"$digest": ...}` for a nested registered digest in
+  an input's digest form; no output codec emits it, and a decoder that meets it in an entry raises
+  `CorruptEntry`.
   An unknown tag raises `EntryFormatUnknown`; the entry is not served. This holds when `task` is
   `None`. A codec's `decode` builds a value from JSON and members only. Codecs for the standard
   library types above, `fileformats` types, `Absent`, numpy scalars, `attrs` classes and `enum`
