@@ -130,6 +130,12 @@ class EntryFormat(ty.Protocol):
         """Read ``context.json``: the context and its bytes."""
         ...
 
+    def identify(self, entry: StorageDir) -> tuple[str, str]:
+        """The checksum and the writer token that the entry records, read without verifying
+        the entry (the store reads a writer's token to tell a rename whose reply was lost, and
+        an entry's checksum where its directory name is a hash of it)."""
+        ...
+
     def read(
         self,
         entry: StorageDir,
@@ -263,6 +269,23 @@ class PydraEntryV1:
         return digest
 
     # -- reading -----------------------------------------------------------------------
+
+    def identify(self, entry: StorageDir) -> tuple[str, str]:
+        """The ``checksum`` and ``writer`` that ``entry.json`` records.
+
+        Raises
+        ------
+        CorruptEntry
+            ``entry.json`` is missing, not a regular file, or lacks either.
+        """
+        doc = _json(_read_file(entry, "entry.json"), "entry.json")
+        if (
+            not isinstance(doc, dict)
+            or not isinstance(doc.get("checksum"), str)
+            or not isinstance(doc.get("writer"), str)
+        ):
+            raise CorruptEntry("entry.json records no checksum and writer")
+        return doc["checksum"], doc["writer"]
 
     def context(self, entry: StorageDir) -> tuple[Context, bytes]:
         """Read ``context.json``: the context and the file's bytes.
