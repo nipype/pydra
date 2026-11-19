@@ -179,6 +179,8 @@ class Task(ty.Generic[OutputsType]):
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
     # the library modules reached when the checksum was last computed
     _code_modules = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the references to library code, with identities, reached when it was last computed
+    _code_refs = attrs.field(default=None, init=False, eq=False, repr=False)
     # the `code_digest`s of the functions with declared versions the checksum reached
     # (its own, its nodes', its inputs'), by ``module.qualname==version``, when it was
     # last computed
