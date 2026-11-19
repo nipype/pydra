@@ -18,6 +18,8 @@ from pydra.utils.general import (
 )
 from pydra.utils.hash import PersistentCache
 from pydra.engine.audit import Audit
+from pydra.engine.drivers import drive_inline
+from pydra.engine.executor import InlineExecutor
 from pydra.engine.job import Job
 from pydra.engine.runner import (  # noqa: F401
     Failed,
@@ -539,16 +541,36 @@ class Submitter:
         return runner
 
     def expand_workflow(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
-        """Expands and executes a workflow job synchronously. Typically only used during
-        debugging and testing, as the asynchronous version is more efficient.
+        """Deprecated: expand and execute a workflow job synchronously. Use a
+        :class:`~pydra.engine.runner.GraphRunner` with
+        :func:`~pydra.engine.drivers.drive_inline`"""
+        warnings.warn(
+            "Submitter.expand_workflow is deprecated, use GraphRunner with drive_inline",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._expand(wf_job, rerun)
 
-        Parameters
-        ----------
-        job : :obj:`~pydra.engine.job.Job[workflow.Task]`
-            Workflow Job object
-
-        """
+    def _expand(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
+        """Expand and execute a workflow job synchronously, in the calling thread"""
         runner = self._runner(wf_job, rerun, is_async=False)
+        if len(self.workers) == 1 and not self.worker.is_async:
+            drive_inline(
+                runner,
+                InlineExecutor(self.worker, self.worker_for),
+                on_error=runner.on_error,
+                audit=self.audit,
+                limit=self._limit(),
+            )
+        else:  # TEMPORARY: removed in R3, where drive takes the non-inline runs
+            # jobs are routed to workers of another kind
+            self._expand_routed(runner)
+        if runner.errors:
+            raise workflow_error(wf_job, runner.errors, runner.entries)
+
+    def _expand_routed(self, runner: GraphRunner) -> None:
+        """Temporary, removed in R3: the synchronous loop for a submitter whose router
+        may place a job on a worker the inline executor cannot run"""
         fail_fast = runner.on_error == "fail_fast"
         limit = self._limit()
         dispatch = runner.ready(limit).dispatch
@@ -571,10 +593,20 @@ class Submitter:
             dispatch = runner.ready(limit).dispatch
             if runner.errors and fail_fast:
                 break
-        if runner.errors:
-            raise workflow_error(wf_job, runner.errors, runner.entries)
 
     async def expand_workflow_async(
+        self, workflow_task: "Job[workflow.Task]", rerun: bool
+    ) -> None:
+        """Deprecated: expand and execute a workflow job asynchronously. Use a
+        :class:`~pydra.engine.runner.GraphRunner` with the asynchronous driver"""
+        warnings.warn(
+            "Submitter.expand_workflow_async is deprecated, use GraphRunner with drive",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        await self._expand_async(workflow_task, rerun)
+
+    async def _expand_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
     ) -> None:
         """
