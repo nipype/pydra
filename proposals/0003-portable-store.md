@@ -294,9 +294,18 @@ What the job's result is after a lost race is §7.3.
 
 Other notes:
 - On POSIX `rename(2)` onto an existing non-empty directory fails with `ENOTEMPTY` or `EEXIST`; onto
-  an empty one it replaces it, which is harmless because an empty directory is not an entry. On
-  Windows `os.rename` onto any existing directory fails. Both make the rename a first-writer-wins
-  primitive. `staging/` is under `<root>`, so the rename never crosses filesystems.
+  an empty one it replaces it. On Windows `os.rename` onto any existing directory fails. Both make the
+  rename a first-writer-wins primitive for entries. `staging/` is under `<root>`, so the rename never
+  crosses filesystems.
+- **Containers are not stable across another writer's rename.** Replacing an empty directory is not
+  harmless for its containers: two writers can each create an empty `<shard>` or `<cdir>` and rename
+  it into place, and a writer that already holds a descriptor on the replaced one keeps working in a
+  directory that is no longer in the tree, so its own rename then fails with `ENOENT` (seen with six
+  threads publishing one address on macOS). So after each rename of its own, and on `ENOENT` or
+  `ESTALE` while staging or renaming, a writer compares the device and inode of each container it
+  holds with those of the same path walked again from `<root>`. If any differs, it walks down again
+  and retries the step, a bounded number of times. It never assumes a container it holds is still the
+  one at its path.
 - An entry is never written in place or partly visible. Its existence means it is complete.
 - **File outputs.** An output that is itself a symlink to a file is resolved at staging and its target
   copied, because the outputs are the writer's own and the digest covers the copied content. A
