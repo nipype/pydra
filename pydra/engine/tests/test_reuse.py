@@ -412,6 +412,9 @@ def GoldenWf(a: int) -> int:
 def test_tasks_without_hook_keep_checksums(monkeypatch):
     """Checksums of tasks without the hook under ``pydra-identity@2`` (RFC 0004 I1):
     the sha256 of the identity record"""
+    # the record carries the walk classification, which these environment variables set
+    monkeypatch.delenv("PYDRA_USER_PACKAGES", raising=False)
+    monkeypatch.delenv("PYDRA_CODE_HASH", raising=False)
     # the module name depends on pytest's import mode, and is part of a declared version
     monkeypatch.setattr(inc_one, "__module__", "pydra.engine.tests.test_reuse")
     for task, checksum in [
@@ -431,6 +434,9 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
 def test_code_hashed_tasks_keep_checksums(monkeypatch):
     """Checksums of tasks whose function's code is hashed under ``pydra-identity@2``,
     the same on every Python version (the record's digests are the ``ast@1`` hashes)"""
+    # the record carries the walk classification, which these environment variables set
+    monkeypatch.delenv("PYDRA_USER_PACKAGES", raising=False)
+    monkeypatch.delenv("PYDRA_CODE_HASH", raising=False)
     # the workflow references AddOne, library code, by its function's qualified name,
     # which depends on pytest's import mode
     function = get_fields(AddOne).function.default

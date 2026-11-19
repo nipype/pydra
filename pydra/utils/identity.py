@@ -8,8 +8,11 @@ belong to the job and not to the task.
 
 The digest strings of the record are the preimages the engine computed before the
 record existed, under their tags: ``code@1`` (the walk of the executor), ``type@1`` (the
-``Outputs`` class) and ``py@1`` (an input). Each is computed once, in the submitting
-process, and carried with the job; a worker never recomputes one from source.
+``Outputs`` class) and ``py@1`` (an input). A job's record is built once, in the
+submitting process, and carried with the job: ``Job.record``, ``Job.checksum`` and the
+store identity's ``key`` never rebuild it in a worker. ``Task._checksum`` and
+``Task._hash`` rebuild it on every call, as the checksum always was (pydra issue #936,
+fixed with the walk in RFC 0004 I4).
 """
 
 from __future__ import annotations

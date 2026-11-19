@@ -67,3 +67,54 @@ def test_explain_command_reads_result_directories(tmp_path):
     result = CliRunner().invoke(cli, ["explain", str(dirs[0]), str(dirs[1])])
     assert result.exit_code == 1
     assert "inputs.a" in result.output
+
+
+def test_explain_old_result_without_record(tmp_path, monkeypatch):
+    import cloudpickle as cp
+
+    from pydra.engine.result import Result
+
+    old = tmp_path / "old"
+    old.mkdir()
+    result = Result(cache_dir=old)
+    # a result pickled before the record existed leaves the slot unset
+    full = Result.__getstate__
+
+    def without_record(self):
+        state = full(self)
+        del state["record"]
+        return state
+
+    monkeypatch.setattr(Result, "__getstate__", without_record)
+    (old / "_result.pklz").write_bytes(cp.dumps(result))
+    monkeypatch.undo()
+    out = CliRunner().invoke(cli, ["explain", str(old), str(old)])
+    assert out.exit_code == 1
+    assert "no identity record" in out.output
+    assert "Traceback" not in out.output
+
+
+def test_explain_result_with_none_record(tmp_path):
+    import cloudpickle as cp
+
+    from pydra.engine.result import Result
+
+    d = tmp_path / "none"
+    d.mkdir()
+    (d / "_result.pklz").write_bytes(cp.dumps(Result(cache_dir=d)))
+    out = CliRunner().invoke(cli, ["explain", str(d), str(d)])
+    assert out.exit_code == 1
+    assert "no identity record" in out.output
+
+
+def test_explain_directory_without_result(tmp_path):
+    out = CliRunner().invoke(cli, ["explain", str(tmp_path), str(tmp_path)])
+    assert out.exit_code == 1
+    assert "_result.pklz" in out.output
+    assert not isinstance(out.exception, FileNotFoundError)
+
+
+def test_explain_renders_values():
+    one = {"a": "x"}
+    assert explain_records(one, {"a": "y"}) == ['a: "x" -> "y"']
+    assert explain_records(one, {}) == ['a: "x" -> (missing)']

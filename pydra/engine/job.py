@@ -205,7 +205,6 @@ class Job(ty.Generic[TaskType]):
         state.pop("_awaiting_run", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
-        state["_record"] = self.record
         return state
 
     def __setstate__(self, state):
@@ -253,7 +252,8 @@ class Job(ty.Generic[TaskType]):
     def record(self) -> dict[str, ty.Any]:
         """The identity record the job's checksum is the digest of (see
         `pydra.utils.identity.job_record`), built once in the submitting process and
-        carried with the job to the worker, which never recomputes it from source."""
+        carried with the job to the worker. ``Job.record``, ``Job.checksum`` and
+        ``PydraIdentityV2.key`` use the carried record and never rebuild it."""
         if self._record is None:
             self._record = job_record(self)
         return self._record

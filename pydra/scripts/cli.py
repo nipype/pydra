@@ -136,7 +136,7 @@ _WALK_HINT = (
 
 
 def _flatten(value, prefix=""):
-    if isinstance(value, dict) and value:
+    if isinstance(value, dict) and (value or not prefix):
         for key in sorted(value):
             yield from _flatten(value[key], f"{prefix}.{key}" if prefix else key)
     else:
@@ -167,10 +167,18 @@ def load_record(path: str | Path) -> dict:
     ``_result.pklz`` holds it (`pydra.engine.result.Result.record`)"""
     path = Path(path)
     if path.is_dir():
-        with open(path / "_result.pklz", "rb") as f:
-            record = cp.load(f).record
+        result_file = path / "_result.pklz"
+        if not result_file.exists():
+            raise click.ClickException(
+                f"{path} has no _result.pklz: only a finished job holds its identity record"
+            )
+        with open(result_file, "rb") as f:
+            record = getattr(cp.load(f), "record", None)
         if record is None:
-            raise click.ClickException(f"{path} holds no identity record")
+            raise click.ClickException(
+                f"{path} holds no identity record (its result was written before "
+                "pydra-identity@2)"
+            )
         return record
     return json.loads(path.read_text())
 

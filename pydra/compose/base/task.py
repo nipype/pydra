@@ -536,8 +536,10 @@ class Task(ty.Generic[OutputsType]):
         """Detects any changes in the hashed values between the current inputs and the
         previously calculated values. The executor is not rehashed: its hash is only
         computed by the process that submits the job."""
+        previous = self._hashes
         _, new_hashes = self._compute_hashes(exclude=self._executor_name)
-        return [k for k, v in new_hashes.items() if v != self._hashes[k]]
+        self._hashes = previous
+        return [k for k, v in new_hashes.items() if v != previous[k]]
 
     def _element_checksums(self) -> list[str]:
         """The supplied checksums of the elements of a split task, in state order"""
@@ -577,14 +579,15 @@ class Task(ty.Generic[OutputsType]):
         return inputs
 
     def _compute_hashes(
-        self, exclude: str | None = None, collect: bool = False
+        self, exclude: str | None = None
     ) -> ty.Tuple[bytes, ty.Dict[str, str]]:
         """Compute the digests of the fields of the identity record, leaving out
-        `exclude`. With `collect` the library modules and declared code the walk reaches
-        are kept (see `pydra.utils.identity.field_digests`)"""
+        `exclude`. Without `exclude` they are kept as ``_hashes``, with the library
+        modules and declared code the walk reaches (see
+        `pydra.utils.identity.field_digests`)"""
         from pydra.utils.identity import field_digests
 
-        digests = field_digests(self, exclude, collect=collect or exclude is None)
+        digests = field_digests(self, exclude, collect=exclude is None)
         if exclude is None:
             self._hashes = digests
         return hash_function(sorted(digests.items())), digests

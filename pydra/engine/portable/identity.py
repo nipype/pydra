@@ -10,7 +10,7 @@ import attrs
 
 from pydra.engine.context import job_context
 from pydra.utils.digest import jcs
-from pydra.utils.identity import IDENTITY_SCHEME, job_record, record_checksum
+from pydra.utils.identity import IDENTITY_SCHEME, record_checksum
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
@@ -112,7 +112,9 @@ class PydraIdentityV2(PydraIdentityV1):
     name: ty.ClassVar[str] = IDENTITY_SCHEME
 
     def key(self, job: "Job") -> KeyRecord:
-        return job_record(job)
+        """The job's record as carried with it from the submitting process, never rebuilt
+        from the task (a worker may be unable to read the function's source)."""
+        return job.record
 
     def check_key(self, checksum: str, key: KeyRecord) -> bool:
         """Whether ``key`` is a ``pydra-identity@2`` record that digests to ``checksum``,
