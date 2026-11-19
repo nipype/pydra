@@ -3,6 +3,7 @@ its jobs are released, completed and marked unrunnable. Drivers (see
 :class:`~pydra.engine.submitter.Submitter`) loop over a :class:`GraphRunner`, taking the
 jobs it hands out, running them and reporting each outcome."""
 
+import itertools
 import typing as ty
 from traceback import format_exc, format_exception
 import re
@@ -14,6 +15,19 @@ from pydra.engine.graph import DiGraph
 from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.job import Job
+from pydra.engine.state import (
+    Entry,
+    PydraStateError,
+    compatible,
+    expand_rpn,
+    flatten,
+    is_sequence,
+    remove_inp_from_splitter_rpn,
+    rpn_terms,
+    scalar_operands,
+)
+from pydra.utils.general import ensure_list
+from pydra.utils.typing import StateArray
 
 logger = logging.getLogger("pydra.submitter")
 
@@ -52,7 +66,12 @@ class JobErrorEntry:
         The formatted traceback
     phase : str
         ``"run"`` if the job ran and errored, ``"resolution"`` if its inputs could
-        not be resolved from its upstream results, so it never ran
+        not be resolved from its upstream results, so it never ran, ``"expansion"`` if
+        a block of a partial node could not be expanded, so it has no element
+    state_key : tuple | None
+        The key of the element on a partial node, whose ``state_index`` is then None
+    block : tuple | None
+        The key of the block that could not be expanded (phase ``"expansion"``)
     """
 
     job_name: str
@@ -61,38 +80,165 @@ class JobErrorEntry:
     message: str
     traceback: str
     phase: str = "run"
+    state_key: tuple | None = None
+    block: tuple | None = None
+
+
+class _AllElements:
+    """Reads every element of a node (a whole read)"""
+
+    def __repr__(self):
+        return "ALL"
+
+
+ALL = _AllElements()
+
+
+@attrs.frozen
+class GroupRead:
+    """Reads the elements of one combined group of a partial node"""
+
+    key: tuple
+
+
+@attrs.frozen
+class Block:
+    """A block of a partial node that failed before it was expanded, so has no element.
+    It is a key of ``NodeExecution.unrunnable``
+
+    Attributes
+    ----------
+    source : str
+        The node the failure came from: the node itself for its own block, else the
+        upstream node whose failed block it inherits
+    key : tuple
+        The key of the block in ``source``
+    fields : tuple
+        The coordinates fixed by the block, as ``(path, coordinate)`` pairs in the path
+        space of the node that holds it
+    """
+
+    source: str
+    key: tuple
+    fields: tuple
+
+    def __str__(self):
+        return f"{self.source}[block {_key_text(self.key)}]"
+
+
+def _key_text(key: tuple) -> str:
+    return ",".join(str(k) for k in key)
+
+
+def element_label(
+    name: str, state_index: int | None, state_key: tuple | None = None
+) -> str:
+    """The name of an element in messages: ``B[1,0]`` on a partial node (its key),
+    ``B(3)`` on any other split node, ``B`` without a split"""
+    if state_key is not None:
+        return f"{name}[{_key_text(state_key)}]"
+    if state_index is not None:
+        return f"{name}({state_index})"
+    return name
+
+
+class _BlockState:
+    __slots__ = ("fields", "status")
+
+    def __init__(self, fields: dict):
+        self.fields = fields
+        self.status = "pending"  # "expanded", "failed" or "errored"
+
+
+class _Partial:
+    """The structure of a partial node, worked out from its splitter and its
+    upstream nodes once they have started
+
+    Attributes
+    ----------
+    inner : dict
+        Each of the node's split inputs that is an upstream output, ``"<node>.<input>"``
+        mapped to its lazy field
+    rpn : list
+        The splitter in RPN without the prev-state term of each inner source
+        (``state.py`` ``prepare_states_ind``), which fixes the element order
+    sources : list
+        The nodes whose final keys make up a block key: the inner sources, then the
+        partial upstream nodes of prev-state terms
+    linked : set
+        The sources linked through the node's ``State`` (an inner source that is
+        neither stateless nor combined to nothing)
+    elem_paths, group_paths, final_paths : list
+        The paths of an element key, of a group key (None without a combiner), and of
+        the keys the node's readers see
+    units : list
+        ``(inner path, source paths)`` of each inner input still split in the final
+        keys: an inner position means something only beside its source's coordinates
+    prev_fields : dict
+        The node's non-split inputs read through each prev-state term
+    group_by_block : bool
+        Whether the groups of a block are known from the block alone, so that a block
+        with no element still has its groups
+    """
+
+    def __init__(self):
+        self.inner: dict[str, LazyOutField] = {}
+        self.rpn: list[str] = []
+        self.sources: list[str] = []
+        self.linked: set[str] = set()
+        self.elem_paths: list[tuple] = []
+        self.group_paths: list[tuple] | None = None
+        self.final_paths: list[tuple] = []
+        self.units: list[tuple[tuple, list[tuple]]] = []
+        self.prev_fields: dict[str, list[str]] = {}
+        self.group_by_block = False
+
+
+def _dedupe(paths: ty.Iterable[tuple]) -> list[tuple]:
+    return list(dict.fromkeys(paths))
 
 
 class NodeExecution(ty.Generic[TaskType]):
     """A wrapper around a workflow node containing the execution state of the tasks that
-    are generated from it"""
+    are generated from it.
+
+    A node is classified once its upstream nodes have started (``mode``):
+
+    * ``"static"``: its elements are known when it starts, indexed by int as before;
+    * ``"partial"``: it splits over an upstream output (or reads a partial node through
+      its state), so it is expanded one *block* per upstream element as each succeeds.
+      Its elements are keyed by ``state_key``, a tuple of coordinates that never
+      changes; ``state_index`` is filled in when the node is *sealed* (every block
+      expanded);
+    * ``"barrier"``: a shape that cannot be expanded per block, which waits for every
+      upstream node to be done as before;
+    * ``"error"``: a combiner that cannot apply, reported as a resolution error.
+    """
 
     name: str
     node: "Node"
     submitter: "Submitter"
 
     # List of tasks that were completed successfully
-    successful: dict[int, list["Job[TaskType]"]]
+    successful: dict[ty.Any, "Job[TaskType]"]
     # List of tasks that failed
     # (an element whose inputs could not be resolved is mapped to the exception)
-    errored: dict[int, "Job[TaskType] | Exception"]
+    errored: dict[ty.Any, "Job[TaskType] | Exception"]
     # Elements that couldn't be run due to upstream errors, mapped to the upstream
     # nodes whose errored or unrunnable elements they read (keyed by None if the whole
-    # node couldn't be started)
-    unrunnable: dict[int | None, list["NodeExecution"]]
+    # node couldn't be started, by a ``Block`` for a block that failed unexpanded)
+    unrunnable: dict[ty.Any, list["NodeExecution"]]
     # List of tasks that are queued
-    queued: dict[int, "Job[TaskType]"]
+    queued: dict[ty.Any, "Job[TaskType]"]
     # List of tasks that are queued
-    running: dict[int, tuple["Job[TaskType]", datetime]]
+    running: dict[ty.Any, tuple["Job[TaskType]", datetime]]
     # Elements that are waiting on upstream elements, mapped to the upstream nodes and
-    # the indices of their elements that they read
-    # (a range of all of an upstream node's indices stands for reading all of its elements)
-    blocked: (
-        dict[int | None, list[tuple["NodeExecution", range | list[int | None]]]] | None
-    )
+    # what of them they read (a range of all of a static node's indices, or ``ALL``,
+    # stands for reading all of its elements)
+    blocked: dict[ty.Any, list[tuple["NodeExecution", ty.Any]]] | None
 
     # Jobs of the elements, created when they are released or first read
-    _tasks: dict[int | None, "Job[TaskType] | None"] | None
+    _tasks: dict[ty.Any, "Job[TaskType] | None"] | None
 
     workflow: "Workflow"
 
@@ -126,6 +272,27 @@ class NodeExecution(ty.Generic[TaskType]):
         self._resolution_errors = []
         self._resolution_entries = []
         self._progress = None
+        self._mode: str | None = None
+        self._mode_error: Exception | None = None
+        self._node_error: Exception | None = None
+        self._partial: _Partial | None = None
+        # partial nodes only
+        self._blocks: dict[tuple, _BlockState] | None = None
+        self._inherited: set = set()
+        self._block_errors: list[str] = []
+        self._vals: dict[tuple, dict] = {}
+        self._inputs_ind: dict[tuple, dict] = {}
+        self._groups: dict[tuple, list[tuple]] = {}
+        self._group_of: dict[tuple, tuple] = {}
+        self._closed: set[tuple] = set()
+        self._static_entries: dict[str, list] = {}
+        self._version = 0
+        self._sealed = False
+        self._rank: dict[tuple, int] = {}
+        self._keys_by_rank: list[tuple] = []
+        self._legacy: "bool | Exception | None" = None
+        self._legacy_groups: list[tuple] = []
+        self._reg_token: tuple | None = None
 
     @property
     def state(self):
@@ -133,7 +300,7 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def __repr__(self):
         return (
-            f"NodeExecution(name={self.name!r}, blocked={list(self.blocked)}, "
+            f"NodeExecution(name={self.name!r}, blocked={list(self.blocked or ())}, "
             f"queued={list(self.queued)}, running={list(self.running)}, "
             f"successful={list(self.successful)}, errored={list(self.errored)}, "
             f"unrunnable={list(self.unrunnable)})"
@@ -148,23 +315,35 @@ class NodeExecution(ty.Generic[TaskType]):
         return self.node._task
 
     @property
+    def is_partial(self) -> bool:
+        return self._mode == "partial"
+
+    @property
     def tasks(self) -> list["Job[TaskType]"]:
         """The jobs of all elements, in state order, creating any that do not exist
         yet (all upstream elements they read must have succeeded)"""
         if self._tasks is None:
             raise RuntimeError("Tasks have not been generated")
-        return [self.job(index) for index in self._tasks]
+        indices = sorted(self._tasks) if self.is_partial else self._tasks
+        return [self.job(index) for index in indices]
 
-    def job(self, index: int | None) -> "Job[TaskType]":
+    def job(self, index: ty.Any) -> "Job[TaskType]":
         """The job of one element of the node, created on first use. The upstream
         elements that its lazy inputs read must have completed by then.
 
         Parameters
         ----------
-        index : int or None
-            The state index of the element, None if the node has no state
+        index : int, tuple or None
+            The state index of the element (its key on a partial node; an int on a
+            sealed partial node is its flat index), None if the node has no state
         """
+        if self.is_partial and isinstance(index, int):
+            index = self._keys_by_rank[index]
         if (job := self._tasks[index]) is None:
+            if self.is_partial:
+                state_index, state_key = self._rank.get(index), index
+            else:
+                state_index, state_key = index, None
             job = self._tasks[index] = Job(
                 task=self._split_task(index),
                 submitter=self.submitter,
@@ -172,9 +351,203 @@ class NodeExecution(ty.Generic[TaskType]):
                 name=self.node.name,
                 hooks=self.node._hooks,
                 resources=self.node._resources,
-                state_index=index,
+                state_index=state_index,
+                state_key=state_key,
             )
         return job
+
+    # ------------------------------------------------------------------------------
+    # Classification
+
+    @property
+    def mode(self) -> str | None:
+        """``"static"``, ``"partial"``, ``"barrier"`` or ``"error"`` once classified
+        (when every upstream node has started), else None"""
+        return self._mode
+
+    def _source_paths(self, name: str) -> list[tuple]:
+        """The paths of the final keys of an upstream node"""
+        node = self.graph.node(name)
+        if node._classify() == "partial":
+            return node._partial.final_paths
+        if not node.state:
+            return []
+        return [(n,) for n in node.state.keys_final]
+
+    def _source_names(self, name: str) -> set[str]:
+        return {p[-1] for p in self._source_paths(name)}
+
+    def _classify(self) -> str:
+        """Classify the node; its upstream nodes must have started"""
+        if self._mode is not None:
+            return self._mode
+        self._mode = "static"
+        state = self.state
+        if not state:
+            return self._mode
+        graph = self.graph
+        rpn = list(state.splitter_rpn_compact)
+        inner = {
+            name: value
+            for name, value in self.node.state_values.items()
+            if name in state.current_splitter_rpn and isinstance(value, LazyOutField)
+        }
+        inner_sources = list(dict.fromkeys(v._node.name for v in inner.values()))
+        prev_terms = [
+            t
+            for t in rpn_terms(rpn)
+            if t.startswith("_") and t[1:] in state.other_states
+        ]
+        partial_prevs = [
+            t[1:]
+            for t in prev_terms
+            if t[1:] not in inner_sources and graph.node(t[1:])._classify() == "partial"
+        ]
+        if not inner and not partial_prevs:
+            return self._mode
+        self._mode = self._classify_partial(
+            rpn, inner, inner_sources, prev_terms, partial_prevs
+        )
+        return self._mode
+
+    def _classify_partial(self, rpn, inner, inner_sources, prev_terms, partial_prevs):
+        state = self.state
+        graph = self.graph
+        spec = _Partial()
+        spec.inner = inner
+        spec.linked = {u for u in inner_sources if u in state.other_states}
+        spec.rpn = remove_inp_from_splitter_rpn(rpn, [f"_{u}" for u in spec.linked])
+        spec.sources = inner_sources + partial_prevs
+        # (3) a container dimension set by the user on an inner input
+        user_ndim = self.node._task._container_ndim or {}
+        if any(user_ndim.get(name.split(".", 1)[1], 1) > 1 for name in inner):
+            return "barrier"
+        # (5) a non-split input read from an inner source, directly or through an
+        # upstream node that shares the source's coordinates
+        reduced_terms = set(rpn_terms(spec.rpn))
+        for name, value in attrs_values(self.node._task).items():
+            if not isinstance(value, LazyOutField) or f"{self.name}.{name}" in inner:
+                continue
+            source = graph.node(value._node.name)
+            if value._node.name in inner_sources or (
+                source.state
+                and source.state.splitter_rpn_final
+                and f"_{source.name}" not in reduced_terms
+            ):
+                return "barrier"
+        source_names = set()
+        for u in inner_sources:
+            source_names |= self._source_names(u)
+        for t in prev_terms:
+            if t[1:] not in inner_sources and source_names & self._source_names(t[1:]):
+                return "barrier"
+
+        # (1) and (2): ``.`` pairs only the node's own static terms, or the inner inputs
+        # of one source
+        def tag(term):
+            if term in inner:
+                return "inner:" + inner[term]._node.name
+            if term.startswith("_") and term[1:] in partial_prevs:
+                return "partial:" + term[1:]
+            return "static"
+
+        for left, right in scalar_operands(spec.rpn, tag):
+            if not (
+                left == right
+                and len(left) == 1
+                and not next(iter(left)).startswith("partial:")
+            ):
+                return "barrier"
+
+        def term_paths(term):
+            if term in inner:
+                u = inner[term]._node.name
+                base = (
+                    [("_" + u,) + p for p in self._source_paths(u)]
+                    if u in spec.linked
+                    else []
+                )
+                return base + [(term,)]
+            if term.startswith("_"):
+                return [(term,) + p for p in self._source_paths(term[1:])]
+            return [(term,)]
+
+        spec.elem_paths = _dedupe(p for t in rpn_terms(spec.rpn) for p in term_paths(t))
+        units = []
+        for term, value in inner.items():
+            u = value._node.name
+            base = (
+                [("_" + u,) + p for p in self._source_paths(u)]
+                if u in spec.linked
+                else []
+            )
+            units.append(((term,), base))
+        for t in rpn_terms(spec.rpn):
+            if t.startswith("_") and t[1:] in partial_prevs:
+                prefix = (t,)
+                for j, srcs in graph.node(t[1:])._partial.units:
+                    units.append((prefix + j, [prefix + s for s in srcs]))
+        for u in spec.linked:
+            if graph.node(u)._classify() == "partial":
+                prefix = ("_" + u,)
+                for j, srcs in graph.node(u)._partial.units:
+                    units.append((prefix + j, [prefix + s for s in srcs]))
+        combiner = list(state.combiner or [])
+        if combiner:
+            keep = {
+                u
+                for u in spec.linked
+                if all(n in combiner for n, v in inner.items() if v._node.name == u)
+            }
+            group_rpn = remove_inp_from_splitter_rpn(
+                rpn, [f"_{u}" for u in spec.linked if u not in keep]
+            )
+            candidates = _dedupe(
+                p
+                for t in rpn_terms(group_rpn)
+                if not (t in inner and t in combiner)
+                for p in term_paths(t)
+            )
+            every = set(spec.elem_paths) | set(candidates)
+            for name in combiner:
+                matches = {p for p in every if p[-1] == name}
+                if len(matches) != 1:
+                    return "barrier"
+            spec.group_paths = [p for p in candidates if p[-1] not in combiner]
+            removed = {p for p in every if p[-1] in combiner}
+            final_units = []
+            for j, srcs in units:
+                if j in removed:
+                    continue
+                if any(s in removed for s in srcs):
+                    if len(j) == 1:
+                        self._mode_error = PydraStateError(
+                            f"Node {self.name!r} combines {combiner} but keeps its split "
+                            f"input {j[-1]!r}: combining the block axis without its "
+                            "inner input has no element order"
+                        )
+                        return "error"
+                    return "barrier"
+                final_units.append((j, srcs))
+            spec.units = final_units
+            spec.final_paths = spec.group_paths
+            inner_paths = {j for j, _ in units}
+            spec.group_by_block = not (inner_paths & set(spec.group_paths))
+        else:
+            spec.units = units
+            spec.final_paths = spec.elem_paths
+        for t in rpn_terms(spec.rpn):
+            if t.startswith("_"):
+                spec.prev_fields[t[1:]] = [
+                    f
+                    for f in state.other_states[t[1:]][1]
+                    if f"{self.name}.{f}" not in inner
+                ]
+        self._partial = spec
+        return "partial"
+
+    # ------------------------------------------------------------------------------
+    # Starting
 
     def start(self) -> None:
         """Prepare the state of the node and record, for each of its elements, the
@@ -191,6 +564,12 @@ class NodeExecution(ty.Generic[TaskType]):
                         )
                     else:
                         values[name] = value
+            if self._mode == "barrier":
+                try:
+                    self._check_barrier(values)
+                except PydraStateError as exc:
+                    self._fail_node(exc)
+                    return
             self.state.prepare_states(values)
             self.state.prepare_inputs()
             indices = range(len(self.state.states_ind))
@@ -203,14 +582,478 @@ class NodeExecution(ty.Generic[TaskType]):
             for node, inds in upstream:
                 if isinstance(inds, range):
                     missing = [] if len(inds) == len(node._tasks) else list(inds)
-                else:
+                elif isinstance(inds, list):
                     missing = [i for i in inds if i not in node._tasks]
+                else:
+                    missing = []
                 if missing:
                     raise RuntimeError(
                         f"Element {index} of node {self.name!r} reads elements {missing} "
                         f"of node {node.name!r}, which has elements {list(node._tasks)}"
                     )
             self.blocked[index] = upstream
+
+    def _check_barrier(self, values: dict) -> None:
+        """Refuse what today's ``State`` gets silently wrong: a ragged or mixed inner
+        input, an inner source that is combined, or a partial upstream node whose
+        elements today's ``State`` cannot index (raises ``PydraStateError``)"""
+        for name, value in self.node.state_values.items():
+            if name not in values or not isinstance(value, LazyOutField):
+                continue
+            source = self.graph.node(value._node.name)
+            if (
+                source.state
+                and source.state.combiner
+                and source.state.splitter_rpn_final
+            ):
+                raise PydraStateError(
+                    f"Node {self.name!r} splits {name!r} over the output of combined node "
+                    f"{source.name!r}, which only a partial node can index"
+                )
+            items = list(values[name]) if is_sequence(values[name]) else []
+            kinds = {len(i) if is_sequence(i) else None for i in items}
+            if len(kinds) > 1:
+                raise PydraStateError(
+                    f"Node {self.name!r} splits {name!r} over upstream values of unequal "
+                    f"lengths {sorted(kinds, key=str)}, which only a partial node can index"
+                )
+        for name in self.state.other_states:
+            node = self.graph.node(name)
+            if node.is_partial:
+                if (error := node._legacy_prepare()) is not True:
+                    raise PydraStateError(
+                        f"Node {self.name!r} reads partial node {name!r} through a splitter "
+                        f"that cannot be expanded per element: {error}"
+                    )
+
+    def _fail_node(self, exc: Exception) -> None:
+        """Record an error of the whole node, which runs no element"""
+        self._node_error = exc
+        self.errored[None] = exc
+        self._tasks = {}
+        self.blocked = {}
+        try:
+            raise exc
+        except Exception:
+            trace = format_exc()
+        self._resolution_errors.append(
+            f"Node {self.name!r}, its state could not be prepared, errored:\n{trace}"
+        )
+        self._resolution_entries.append(
+            error_entry(self.name, None, exc, phase="resolution")
+        )
+
+    def _start_partial(self) -> None:
+        """Start a partial node: no element is known yet; blocks are registered as their
+        source keys appear"""
+        spec = self._partial
+        self._tasks = {}
+        self.blocked = {}
+        self._blocks = {}
+        for term in rpn_terms(spec.rpn):
+            if term in spec.inner:
+                continue
+            if term.startswith("_"):
+                name = term[1:]
+                if name in spec.sources:
+                    continue
+                source = self.graph.node(name)
+                self._static_entries[term] = [
+                    Entry(
+                        {(term, n): c for n, c in ind.items()},
+                        {},
+                        {name: g},
+                    )
+                    for g, ind in enumerate(source.state.states_ind_final)
+                ]
+            else:
+                value = self.node.state_values[term]
+                if isinstance(value, LazyField):
+                    value = value._get_value(workflow=self.workflow, graph=self.graph)
+                ndim = (self.state.container_ndim or {}).get(term, 1)
+                items = list(flatten(ensure_list(value), max_depth=ndim))
+                self._static_entries[term] = [
+                    Entry({(term,): i}, {term: v}, {}) for i, v in enumerate(items)
+                ]
+        self._register()
+
+    # ------------------------------------------------------------------------------
+    # The final keys a node shows its readers
+
+    def _final_keys(self) -> list:
+        """The final keys of the node that exist now"""
+        if self.is_partial:
+            if self._partial.group_paths is None:
+                return sorted(self._tasks)
+            return sorted(g for g in self._groups if self._group_closed(g))
+        if not self.state:
+            return [None]
+        return list(range(len(self.state.states_ind_final)))
+
+    def _final_fields(self, key) -> dict:
+        """The coordinate of each final path of one final key"""
+        if self.is_partial:
+            return dict(zip(self._partial.final_paths, key))
+        if key is None or not self.state:
+            return {}
+        return {(n,): c for n, c in self.state.states_ind_final[key].items()}
+
+    def _final_status(self, key) -> str:
+        """``"ok"``, ``"failed"`` or ``"pending"`` for the elements of one final key"""
+        spec = self._read_indices(key)
+        if _has_failed(self, spec):
+            return "failed"
+        if _has_succeeded(self, spec):
+            return "ok"
+        return "pending"
+
+    def _failed_blocks(self) -> list[tuple[ty.Any, dict]]:
+        """Each failed or errored block of the node, own or inherited, with the fields it
+        fixes in the node's path space"""
+        if not self.is_partial or self._blocks is None:
+            return []
+        own = [
+            (("block", k), b.fields)
+            for k, b in self._blocks.items()
+            if b.status in ("failed", "errored")
+        ]
+        return own + [
+            (("from", k.source, k.key), dict(k.fields))
+            for k in self.unrunnable
+            if isinstance(k, Block) and k.source != self.name
+        ]
+
+    # ------------------------------------------------------------------------------
+    # Blocks
+
+    def _register(self) -> None:
+        """Register a block for each new combination of source keys, and a failed
+        block for each failed block of a partial source"""
+        spec = self._partial
+        token = tuple(self.graph.node(n)._token() for n in spec.sources)
+        if token == self._reg_token:
+            return
+        self._reg_token = token
+        lists = []
+        for name in spec.sources:
+            source = self.graph.node(name)
+            if name in spec.linked or source.is_partial:
+                lists.append(source._final_keys())
+            else:
+                lists.append([None])
+        for combo in itertools.product(*lists):
+            if combo in self._blocks:
+                continue
+            fields = {}
+            for name, key in zip(spec.sources, combo):
+                source = self.graph.node(name)
+                for p, c in source._final_fields(key).items():
+                    fields[("_" + name,) + p] = c
+            self._blocks[combo] = _BlockState(fields)
+            self._version += 1
+        for name in spec.sources:
+            source = self.graph.node(name)
+            for ident, fields in source._failed_blocks():
+                if (name, ident) in self._inherited:
+                    continue
+                self._inherited.add((name, ident))
+                prefixed = tuple((("_" + name,) + p, c) for p, c in fields.items())
+                block = Block(source=name, key=ident[1:], fields=prefixed)
+                self.unrunnable[block] = [source]
+                self._version += 1
+
+    def _expand_ready(self) -> None:
+        """Expand each pending block whose inner sources have succeeded, and fail each
+        whose inner source has failed"""
+        spec = self._partial
+        for bkey in sorted(self._blocks, key=_sort_key):
+            block = self._blocks[bkey]
+            if block.status != "pending":
+                continue
+            statuses = []
+            for name, key in zip(spec.sources, bkey):
+                if name not in {v._node.name for v in spec.inner.values()}:
+                    continue
+                source = self.graph.node(name)
+                if name in spec.linked or source.is_partial:
+                    statuses.append((source, source._final_status(key)))
+                else:
+                    statuses.append((source, source._final_status(None)))
+            if failed := [s for s, status in statuses if status == "failed"]:
+                block.status = "failed"
+                self.unrunnable[Block(self.name, bkey, tuple(block.fields.items()))] = (
+                    failed
+                )
+                self._version += 1
+            elif all(status == "ok" for _, status in statuses):
+                self._expand(bkey, block)
+
+    def _expand(self, bkey: tuple, block: _BlockState) -> None:
+        spec = self._partial
+        entries = dict(self._static_entries)
+        skeleton = dict(self._static_entries)
+        positions = dict(zip(spec.sources, bkey))
+        try:
+            for term in rpn_terms(spec.rpn):
+                if term in spec.inner:
+                    lf = spec.inner[term]
+                    u = lf._node.name
+                    key = positions[u]
+                    value = lf._get_value(
+                        workflow=self.workflow, graph=self.graph, state_index=key
+                    )
+                    items = list(value) if is_sequence(value) else [value]
+                    base = {p: c for p, c in block.fields.items() if p[0] == "_" + u}
+                    terms = {u: key} if u in spec.linked else {}
+                    entries[term] = [
+                        Entry({**base, (term,): j}, {term: v}, terms)
+                        for j, v in enumerate(items)
+                    ]
+                    skeleton[term] = [Entry(dict(base), {}, terms)]
+                elif term.startswith("_") and term[1:] in spec.sources:
+                    name = term[1:]
+                    base = {p: c for p, c in block.fields.items() if p[0] == term}
+                    entries[term] = skeleton[term] = [
+                        Entry(base, {}, {name: positions[name]})
+                    ]
+            elements = expand_rpn(spec.rpn, entries)
+        except Exception as exc:
+            block.status = "errored"
+            self._version += 1
+            label = f"{self.name}[block {_key_text(bkey)}]"
+            try:
+                raise exc
+            except Exception:
+                trace = format_exc()
+            self._block_errors.append(
+                f"Job {label!r}, could not be expanded, errored:\n{trace}"
+            )
+            self._resolution_errors.append(self._block_errors[-1])
+            self._resolution_entries.append(
+                error_entry(self.name, None, exc, phase="expansion", block=bkey)
+            )
+            return
+        block.status = "expanded"
+        self._version += 1
+        if spec.group_paths is not None and spec.group_by_block:
+            for entry in expand_rpn(spec.rpn, skeleton):
+                self._groups.setdefault(
+                    tuple(entry.fields[p] for p in spec.group_paths), []
+                )
+        for entry in elements:
+            key = tuple(entry.fields[p] for p in spec.elem_paths)
+            self._tasks[key] = None
+            self._vals[key] = entry.values
+            self._inputs_ind[key] = {
+                f"{self.name}.{field}": entry.terms[name]
+                for name, fields in spec.prev_fields.items()
+                if name in entry.terms
+                for field in fields
+            }
+            if spec.group_paths is not None:
+                group = tuple(entry.fields[p] for p in spec.group_paths)
+                self._groups.setdefault(group, []).append(key)
+                self._group_of[key] = group
+            self.blocked[key] = self._upstream(key)
+
+    # ------------------------------------------------------------------------------
+    # Settled, sealed, groups
+
+    def _block_sources(self) -> list["NodeExecution"]:
+        return [self.graph.node(n) for n in self._partial.sources]
+
+    @property
+    def settled(self) -> bool:
+        """Whether every element the node will have is known: its sources are settled,
+        every source key has a registered block, and no block is pending. A node that is
+        not partial is settled once started"""
+        if not self.is_partial:
+            return bool(self.started)
+        if self._blocks is None:
+            return False
+        self._register()
+        if any(b.status == "pending" for b in self._blocks.values()):
+            return False
+        return all(s.settled for s in self._block_sources())
+
+    @property
+    def sealed(self) -> bool:
+        """Whether the node is settled with every block expanded and every source
+        sealed; its elements then get their flat ``state_index``"""
+        if not self.is_partial:
+            return bool(self.started)
+        if self._sealed:
+            return True
+        if not self.settled or any(
+            b.status != "expanded" for b in self._blocks.values()
+        ):
+            return False
+        if any(isinstance(k, Block) for k in self.unrunnable):
+            return False
+        if not all(s.sealed for s in self._block_sources()):
+            return False
+        self._sealed = True
+        self._keys_by_rank = sorted(self._tasks)
+        self._rank = {k: i for i, k in enumerate(self._keys_by_rank)}
+        for key, job in self._tasks.items():
+            if job is not None:
+                job.state_index = self._rank[key]
+        return True
+
+    def _may_produce(self, assignment: dict) -> bool:
+        """Whether an element whose final coordinates agree with ``assignment`` may still
+        appear (conservative: True when it cannot be ruled out)"""
+        if not self.is_partial:
+            return not self.started
+        if self._blocks is None:
+            return True
+        self._register()
+        for block in self._blocks.values():
+            if block.status == "pending" and compatible(block.fields, assignment):
+                return True
+        for source in self._block_sources():
+            prefix = "_" + source.name
+            sub = {p[1:]: c for p, c in assignment.items() if p[0] == prefix}
+            if source._may_produce(sub) or source._has_open_group(sub):
+                return True
+        return False
+
+    def _has_open_group(self, assignment: dict) -> bool:
+        if not self.is_partial or self._partial.group_paths is None:
+            return False
+        paths = self._partial.group_paths
+        return any(
+            not self._group_closed(g) and compatible(dict(zip(paths, g)), assignment)
+            for g in self._groups
+        )
+
+    def _group_closed(self, group: tuple) -> bool:
+        if group in self._closed:
+            return True
+        if self._may_produce(dict(zip(self._partial.group_paths, group))):
+            return False
+        self._closed.add(group)
+        return True
+
+    def _group_failed(self, group: tuple) -> bool:
+        if any(
+            m in self.errored or m in self.unrunnable
+            for m in self._groups.get(group, ())
+        ):
+            return True
+        assignment = dict(zip(self._partial.group_paths, group))
+        return any(
+            compatible(fields, assignment) for _, fields in self._failed_blocks()
+        )
+
+    def _blocks_summary(self) -> str:
+        """The blocks of a partial node that are not expanded, for ``stuck()``"""
+        if not self.is_partial or self._blocks is None:
+            return ""
+        by_status = defaultdict(list)
+        for key, block in self._blocks.items():
+            if block.status != "expanded":
+                by_status[block.status].append(key)
+        unsettled = [s.name for s in self._block_sources() if not s.settled]
+        return "".join(
+            f", {status} blocks={keys}" for status, keys in sorted(by_status.items())
+        ) + (f", unsettled sources={unsettled}" if unsettled else "")
+
+    def _token(self) -> tuple:
+        """The progress of the node as its readers see it"""
+        token = (len(self.successful), len(self.errored), len(self.unrunnable))
+        if self.is_partial:
+            token += (
+                self._version,
+                tuple(s._token() for s in self._block_sources()),
+            )
+        return token
+
+    # ------------------------------------------------------------------------------
+    # Today's ``State`` for a barrier reader of a partial node
+
+    def _legacy_prepare(self) -> "bool | Exception":
+        """Prepare the node's ``State`` as today's barrier path would, for a barrier
+        reader, once the node is sealed. Returns True, or the reason it cannot be
+        (a ragged or combined source, or an order today's ``State`` gets wrong)"""
+        if self._legacy is not None:
+            return self._legacy
+        if not self.sealed:
+            self._legacy = PydraStateError(f"node {self.name!r} is not sealed")
+            return self._legacy
+        try:
+            for source in self._block_sources():
+                if (
+                    source.is_partial
+                    and (error := source._legacy_prepare()) is not True
+                ):
+                    raise PydraStateError(str(error))
+            values = {}
+            for name, value in self.node.state_values.items():
+                if name in self.state.current_splitter_rpn and name not in ("*", "."):
+                    if isinstance(value, LazyField):
+                        values[name] = value._get_value(
+                            workflow=self.workflow, graph=self.graph
+                        )
+                    else:
+                        values[name] = value
+            self._check_barrier(values)
+            self.state.prepare_states(values)
+            self.state.prepare_inputs()
+            own = [k for k in self._vals[self._keys_by_rank[0]]] if self._tasks else []
+            legacy = [{k: v[k] for k in own if k in v} for v in self.state.states_val]
+            if legacy != [self._vals[k] for k in self._keys_by_rank]:
+                raise PydraStateError(
+                    f"today's State orders the elements of {self.name!r} differently"
+                )
+            if self._partial.group_paths is not None:
+                groups = sorted(self._groups)
+                mine = [sorted(self._rank[m] for m in self._groups[g]) for g in groups]
+                theirs = [
+                    sorted(self.state.final_combined_ind_mapping[i])
+                    for i in range(len(self.state.final_combined_ind_mapping))
+                ]
+                if self.state.ind_l_final and mine != theirs:
+                    raise PydraStateError(
+                        f"today's State groups the elements of {self.name!r} differently"
+                    )
+                self._legacy_groups = groups
+        except Exception as exc:
+            self._legacy = exc
+        else:
+            self._legacy = True
+        return self._legacy
+
+    # ------------------------------------------------------------------------------
+    # Reading
+
+    def read_value(self, retrieve: ty.Callable[["Job"], ty.Any], state_index: ty.Any):
+        """The value of a partial node's output for a reader (see
+        ``LazyOutField._get_value``): one element, one group, or all of them once
+        sealed"""
+        spec = self._partial
+        if isinstance(state_index, int):
+            if spec.group_paths is None:
+                state_index = self._keys_by_rank[state_index]
+            else:
+                state_index = self._legacy_groups[state_index]
+        if state_index is None:
+            if not self.sealed:
+                raise RuntimeError(
+                    f"Cannot read every element of node {self.name!r}: it is not sealed "
+                    "(an upstream element has not completed, or has failed)"
+                )
+            if spec.group_paths is None:
+                return StateArray(retrieve(self.job(k)) for k in self._keys_by_rank)
+            if not spec.group_paths:
+                return [retrieve(self.job(k)) for k in self._keys_by_rank]
+            return StateArray(
+                [retrieve(self.job(m)) for m in sorted(self._groups[g])]
+                for g in sorted(self._groups)
+            )
+        if spec.group_paths is None:
+            return retrieve(self.job(state_index))
+        return [retrieve(self.job(m)) for m in sorted(self._groups[state_index])]
 
     @property
     def started(self) -> bool:
@@ -226,6 +1069,8 @@ class NodeExecution(ty.Generic[TaskType]):
     def done(self) -> bool:
         self.update_status()
         if not self.started:
+            return False
+        if self.is_partial and not self.settled:
             return False
         # Check to see if any previously queued tasks have completed
         return not (self.queued or self.blocked or self.running)
@@ -249,11 +1094,11 @@ class NodeExecution(ty.Generic[TaskType]):
             else:
                 errored = False
             if is_done:
-                self.successful[job.state_index] = self.queued.pop(index)
+                self.successful[index] = self.queued.pop(index)
             elif job.errored or errored:
-                self.errored[job.state_index] = self.queued.pop(index)
+                self.errored[index] = self.queued.pop(index)
             elif not job._awaiting_run and job.run_start_time:
-                self.running[job.state_index] = (
+                self.running[index] = (
                     self.queued.pop(index),
                     job.run_start_time,
                 )
@@ -267,46 +1112,54 @@ class NodeExecution(ty.Generic[TaskType]):
             else:
                 errored = False
             if is_done:
-                self.successful[job.state_index] = self.running.pop(index)[0]
+                self.successful[index] = self.running.pop(index)[0]
             elif job.errored or errored:
-                self.errored[job.state_index] = self.running.pop(index)[0]
+                self.errored[index] = self.running.pop(index)[0]
 
     @property
     def all_failed(self) -> bool:
-        return (self.unrunnable or self.errored) and not (
-            self.successful or self.blocked or self.queued
+        pending = self.is_partial and not self.settled
+        return (self.unrunnable or self.errored or self._block_errors) and not (
+            self.successful or self.blocked or self.queued or pending
         )
 
-    def _lazy_reads(
-        self, index: int | None
-    ) -> ty.Iterator[tuple[str, LazyField, int | None]]:
+    def _lazy_reads(self, index: ty.Any) -> ty.Iterator[tuple[str, LazyField, ty.Any]]:
         """The lazy inputs of one element that are read from upstream (i.e. are not
         state values), with the state index each is read at
 
         Parameters
         ----------
-        index : int or None
-            The state index of the element, None if the node has no state
+        index : int, tuple or None
+            The state index of the element (its key on a partial node), None if the
+            node has no state
         """
-        vals = self.state.states_val[index] if index is not None else {}
-        inputs_ind = self.state.inputs_ind[index] if index is not None else {}
+        if self.is_partial:
+            vals = self._vals[index]
+            inputs_ind = self._inputs_ind[index]
+        else:
+            vals = self.state.states_val[index] if index is not None else {}
+            inputs_ind = self.state.inputs_ind[index] if index is not None else {}
         for name, value in attrs_values(self.node._task).items():
             state_key = f"{self.name}.{name}"
             if isinstance(value, LazyField) and state_key not in vals:
                 yield name, value, inputs_ind.get(state_key)
 
-    def _split_task(self, index: int | None) -> "Task[OutputType]":
+    def _split_task(self, index: ty.Any) -> "Task[OutputType]":
         """Resolve the task of one element of the node from its state values and the
         upstream values its lazy inputs read
 
         Parameters
         ----------
-        index : int or None
-            The state index of the element, None if the node has no state
+        index : int, tuple or None
+            The state index of the element (its key on a partial node), None if the
+            node has no state
         """
         resolved = {}
         if index is not None:
-            vals = self.state.states_val[index]
+            if self.is_partial:
+                vals = self._vals[index]
+            else:
+                vals = self.state.states_val[index]
             for name in self.node.input_names:
                 if (state_key := f"{self.name}.{name}") in vals:
                     resolved[name] = vals[state_key]
@@ -316,16 +1169,15 @@ class NodeExecution(ty.Generic[TaskType]):
             )
         return attrs.evolve(self.node._task, **resolved)
 
-    def _upstream(
-        self, index: int | None
-    ) -> list[tuple["NodeExecution", list[int | None]]]:
-        """The upstream nodes, and the indices of their elements, that ``_split_task``
-        reads to resolve one element
+    def _upstream(self, index: ty.Any) -> list[tuple["NodeExecution", ty.Any]]:
+        """The upstream nodes, and what of them, that ``_split_task`` reads to resolve
+        one element
 
         Parameters
         ----------
-        index : int or None
-            The state index of the element, None if the node has no state
+        index : int, tuple or None
+            The state index of the element (its key on a partial node), None if the
+            node has no state
         """
         upstream = []
         for _, value, state_index in self._lazy_reads(index):
@@ -334,31 +1186,35 @@ class NodeExecution(ty.Generic[TaskType]):
                 upstream.append((node, node._read_indices(state_index)))
         return upstream
 
-    def _read_indices(self, state_index: int | None) -> range | list[int | None]:
-        """The indices of the elements of this node that a downstream lazy field reads
-        at the given state index (see ``LazyOutField._get_value``)
+    def _read_indices(self, state_index: ty.Any) -> ty.Any:
+        """What of this node a downstream lazy field reads at the given state index
+        (see ``LazyOutField._get_value``)
 
         Parameters
         ----------
-        state_index : int or None
+        state_index : int, tuple or None
             The state index the lazy field is read at, None to read all elements, which
-            are returned as a range so that readers need not store every index
+            are returned as a range (``ALL`` on a partial node) so that readers need not
+            store every index
         """
+        if self.is_partial:
+            spec = self._partial
+            if state_index is None:
+                return ALL
+            if isinstance(state_index, int):  # a barrier reader, after the seal
+                if spec.group_paths is None:
+                    return [self._keys_by_rank[state_index]]
+                state_index = self._legacy_groups[state_index]
+            if spec.group_paths is None:
+                return [state_index]
+            if not spec.group_paths:
+                return ALL
+            return GroupRead(state_index)
         if not self.state:
             return [None]
         if state_index is None or (self.state.combiner and not self.state.ind_l_final):
             return range(len(self.state.states_ind))
         return list(self.state.final_combined_ind_mapping[state_index])
-
-    @property
-    def _splits_upstream_output(self) -> bool:
-        """Whether the node's own splitter splits over an upstream output, in which case
-        its state can only be prepared once the upstream nodes are done"""
-        return bool(self.state) and any(
-            isinstance(value, LazyOutField)
-            for name, value in self.node.state_values.items()
-            if name in self.state.current_splitter_rpn
-        )
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """For a given node, release the elements whose upstream elements have
@@ -381,25 +1237,44 @@ class NodeExecution(ty.Generic[TaskType]):
         # seen as errored rather than as done-and-successful
         preds_done = [p.done for p in predecessors]
         if not self.started:
-            resplit = self._splits_upstream_output
-            if unrunnable := [
+            # a predecessor that failed as a whole fails this node before it is
+            # classified (classifying reads the predecessors' prepared states)
+            if whole := [
                 p
                 for p in predecessors
-                if (p._tasks is None and p.unrunnable)
-                or (resplit and (p.errored or p.unrunnable))
+                if (p._tasks is None and p.unrunnable) or p._node_error is not None
             ]:
-                self.unrunnable = {None: unrunnable}
+                self.unrunnable = {None: whole}
                 self.blocked = {}
-            elif all(
-                d if resplit else p.started for p, d in zip(predecessors, preds_done)
-            ):
-                self.start()
-        progress = tuple(
-            (len(p.successful), len(p.errored), len(p.unrunnable)) for p in predecessors
-        )
-        if self.blocked and progress != self._progress:
+            elif all(p.started for p in predecessors):
+                mode = self._classify()
+                if mode == "barrier" and (
+                    unrunnable := [
+                        p
+                        for p in predecessors
+                        if p.errored or p.unrunnable or p._block_errors
+                    ]
+                ):
+                    self.unrunnable = {None: unrunnable}
+                    self.blocked = {}
+                elif mode == "error":
+                    self._fail_node(self._mode_error)
+                elif mode == "partial":
+                    self._start_partial()
+                elif mode == "static" or all(preds_done):
+                    self.start()
+        if not self.started:
+            return []
+        progress = tuple(p._token() for p in predecessors)
+        pending = self.is_partial and not self.settled
+        if (self.blocked or pending) and progress != self._progress:
             self._progress = progress
-            for index, upstream in list(self.blocked.items()):
+            if self.is_partial:
+                self._register()
+                self._expand_ready()
+            indices = sorted(self.blocked) if self.is_partial else list(self.blocked)
+            for index in indices:
+                upstream = self.blocked[index]
                 if unrunnable := list(
                     dict.fromkeys(p for p, inds in upstream if _has_failed(p, inds))
                 ):
@@ -408,23 +1283,30 @@ class NodeExecution(ty.Generic[TaskType]):
                 elif all(_has_succeeded(p, inds) for p, inds in upstream):
                     del self.blocked[index]
                     self._release(index)
+        if self.is_partial:
+            self.sealed  # assigns the flat indices as soon as the node is sealed
         return list(self.queued.values())
 
-    def _release(self, index: int | None) -> None:
+    def _release(self, index: ty.Any) -> None:
         """Queue the job of an element whose upstream elements have all succeeded, or
         record the element as errored if its inputs cannot be resolved from them"""
         try:
             job = self.queued[index] = self.job(index)
             job._awaiting_run = True
         except Exception as exc:
-            name = self.name if index is None else f"{self.name}({index})"
+            if self.is_partial:
+                name = element_label(self.name, None, index)
+                entry = error_entry(
+                    self.name, None, exc, phase="resolution", state_key=index
+                )
+            else:
+                name = element_label(self.name, index)
+                entry = error_entry(self.name, index, exc, phase="resolution")
             self.errored[index] = exc
             self._resolution_errors.append(
                 f"Job {name!r}, inputs could not be resolved, errored:\n{format_exc()}"
             )
-            self._resolution_entries.append(
-                error_entry(self.name, index, exc, phase="resolution")
-            )
+            self._resolution_entries.append(entry)
 
     def pop_resolution_errors(
         self, entries: "list[JobErrorEntry] | None" = None
@@ -438,17 +1320,34 @@ class NodeExecution(ty.Generic[TaskType]):
         return errors
 
 
-def _has_failed(node: NodeExecution, indices: range | list[int | None]) -> bool:
-    """Whether any of the elements of a node at the given indices has errored or is
+def _sort_key(key: tuple) -> tuple:
+    """Orders block keys, whose positions may be None (a stateless source)"""
+    return tuple((k is not None, k) for k in key)
+
+
+def _has_failed(node: NodeExecution, indices: ty.Any) -> bool:
+    """Whether any of the elements of a node that a reader reads has errored or is
     unrunnable"""
-    if len(indices) == len(node._tasks):
+    if indices is ALL:
+        return bool(node.errored or node.unrunnable or node._block_errors)
+    if isinstance(indices, GroupRead):
+        return node._group_failed(indices.key)
+    if not node.is_partial and len(indices) == len(node._tasks):
         return bool(node.errored or node.unrunnable)
     return any(i in node.errored or i in node.unrunnable for i in indices)
 
 
-def _has_succeeded(node: NodeExecution, indices: range | list[int | None]) -> bool:
-    """Whether the elements of a node at the given indices have all succeeded"""
-    if len(indices) == len(node._tasks):
+def _has_succeeded(node: NodeExecution, indices: ty.Any) -> bool:
+    """Whether the elements of a node that a reader reads have all succeeded"""
+    if indices is ALL:
+        if node.is_partial and not node.sealed:
+            return False
+        return len(node.successful) == len(node._tasks)
+    if isinstance(indices, GroupRead):
+        return node._group_closed(indices.key) and all(
+            m in node.successful for m in node._groups.get(indices.key, ())
+        )
+    if not node.is_partial and len(indices) == len(node._tasks):
         return len(node.successful) == len(node._tasks)
     return all(i in node.successful for i in indices)
 
@@ -458,14 +1357,21 @@ def job_error(job: "Job", exc: BaseException) -> str:
     error_msg = "".join(format_exception(type(exc), exc, exc.__traceback__))
     if match := re.match(r'.*"""(.*)""".*', error_msg, flags=re.DOTALL | re.MULTILINE):
         error_msg = match.group(1)
-    task_name = job.name
-    if job.state_index is not None:
-        task_name += f"({job.state_index})"
+    task_name = element_label(
+        job.name,
+        job.state_index if job.state_key is None else None,
+        job.state_key,
+    )
     return f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
 
 
 def error_entry(
-    job_name: str, state_index: int | None, exc: BaseException, phase: str = "run"
+    job_name: str,
+    state_index: int | None,
+    exc: BaseException,
+    phase: str = "run",
+    state_key: tuple | None = None,
+    block: tuple | None = None,
 ) -> JobErrorEntry:
     """The record of an exception"""
     exc_class = type(exc)
@@ -476,6 +1382,8 @@ def error_entry(
         message=str(exc),
         traceback="".join(format_exception(exc_class, exc, exc.__traceback__)),
         phase=phase,
+        state_key=state_key,
+        block=block,
     )
 
 
@@ -718,7 +1626,14 @@ class GraphRunner:
             if self._first_error is None:
                 self._first_error = exc
             self._errors.append(job_error(job, exc))
-            self._entries.append(error_entry(job.name, job.state_index, exc))
+            self._entries.append(
+                error_entry(
+                    job.name,
+                    job.state_index if job.state_key is None else None,
+                    exc,
+                    state_key=job.state_key,
+                )
+            )
         elif getattr(outcome, "errored", False):
             self._failed = True
         self._collect_resolution_errors()
@@ -733,6 +1648,7 @@ class GraphRunner:
             (
                 f"{n.name}: started={bool(n.started)}, "
                 f"blocked={list(n.blocked or ())}, queued={list(n.queued)}"
+                + n._blocks_summary()
             )
             for n in exec_graph.nodes
             if not n.done
