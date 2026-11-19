@@ -14,6 +14,7 @@ import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
 from pydra.utils.hash import hash_function
+from pydra.utils.identity import job_record, record_checksum
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
@@ -146,6 +147,7 @@ class Job(ty.Generic[TaskType]):
 
         self.allow_cache_override = True
         self._checksum = None
+        self._record = None
         self._uid = uuid4().hex
         self.hooks = hooks if hooks is not None else TaskHooks()
         self._errored = False
@@ -218,6 +220,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("_record", None)
         self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
 
@@ -242,8 +245,18 @@ class Job(ty.Generic[TaskType]):
         """
         if self._checksum is not None:
             return self._checksum
-        self._checksum = self.task._checksum
+        self._checksum = record_checksum(self.record)
         return self._checksum
+
+    @property
+    def record(self) -> dict[str, ty.Any]:
+        """The identity record the job's checksum is the digest of (see
+        `pydra.utils.identity.job_record`), built once in the submitting process and
+        carried with the job to the worker. ``Job.record``, ``Job.checksum`` and
+        ``PydraIdentityV2.key`` use the carried record and never rebuild it."""
+        if self._record is None:
+            self._record = job_record(self)
+        return self._record
 
     @property
     def context(self) -> dict[str, ty.Any]:
@@ -440,6 +453,7 @@ class Job(ty.Generic[TaskType]):
                 cache_dir=self.cache_dir,
                 task=self.task,
                 context=self.context,
+                record=self.record,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir, chdir=enters)
@@ -510,6 +524,7 @@ class Job(ty.Generic[TaskType]):
                 cache_dir=self.cache_dir,
                 task=self.task,
                 context=self.context,
+                record=self.record,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.cache_dir, chdir=enters)
