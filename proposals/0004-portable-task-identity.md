@@ -587,11 +587,37 @@ extends (`register_digest(type, fn)`). The first row that applies wins:
 
 | Value | Digest |
 |---|---|
+| a value whose type has a registered digest function | the function's own string. Inside a container it appears as `{"$digest": "<that string>"}` (below) |
 | `numpy.ndarray` exactly (not a subclass), whose dtype holds no references | `npy@1:` the sha256 of its canonical `.npy` bytes (below). Inside a container it appears as `{"$array": "<same sha256>"}` |
 | `FileSet` (`File`, `Directory`, any `fileformats` type) with a registered tag | `file@1:` the sha256 of the JCS of `{"$fileset": "<registered type tag>", "files": [[<key>, <content sha256>], …]}`, sorted by key, where the key is the one `FileSet.byte_chunks` yields today (`hash.py:703-708`). It does not depend on the directory or the file name, as today (probe §8.2) |
 | a value whose digest form exists: `None`, `bool`, numbers, `str`, `Path`, every type with a codec in the registry, and containers of these (a user class with a codec carries `$class`) | `json@1:` the sha256 of the JCS of its digest form |
 | anything else: a user-class instance without a codec, a container holding one, array subclasses, arrays of object or `StringDType`, a `FileSet` subclass with no registered tag | `py@1:` from today's `bytes_repr`. Gap 1 is made in the generic serialiser (`hash.py:417-437`), so a user-class instance carries its `class@1` (§4.2) at any depth of a `py@1` value; object arrays are digested element by element, as now (`hash.py:1794-1795`); an unregistered `FileSet` keeps today's content hash (`hash.py:692-708`) |
 
+- **Registered digests.** A digest registered with `register_digest(type, fn)` wins over every
+  built-in row: registering one for `int` replaces `$int`, and one for `numpy.ndarray` replaces
+  `npy@1`. That is the hook for a project that wants normalisation, such as rounding floats. At top
+  level the input's digest is the string the function returns. Nested at any depth in a container,
+  the value's digest form is `{"$digest": "<that string>"}`. A user dict key `$digest` is written
+  `$$digest`, as 0003 writes every key that starts with `$` (0003 §6.4), so the form stays
+  unambiguous. 0003 never emits `$digest` in an output encoding and refuses it on decode. The
+  function's result must match `[a-z][a-z0-9_]*@[0-9]+:[0-9a-f]{16,}`, a scheme, a version and at
+  least 16 hex digits, and its scheme must not be one of the built-in ones (`json`, `npy`, `file`,
+  `py`, `class`, `code`, `type`); a result that does not match raises when the digest is computed.
+  Codec tags may contain dots, but digest schemes may not.
+- **A value with no digest raises.** A `str`, a `Path` or a dict key that is not well-formed
+  Unicode (a lone surrogate) has no JCS form (RFC 8785 §3.2.2.2), and today's `bytes_repr` raises
+  `UnicodeEncodeError` for it too. There is no `py@1` fallback: the digest raises, and the error
+  names the input field (I2).
+- **Reference-dtype arrays at any depth.** An array whose dtype holds references (object,
+  `StringDType`, a structured dtype with an object field) is digested element by element wherever
+  it appears: at top level, in a list, tuple or dict, in an `attrs` instance, as an array subclass.
+  Today `bytes_repr_numpy` walks elements only when `dtype == "object"` (`hash.py:1792-1797`) and
+  hashes the pointer bytes otherwise. So two nested `StringDType` arrays of different strings
+  collide (a false hit), and two structured arrays with object fields of equal content differ (a
+  false miss). The fix is in the generic serialiser, `bytes_repr_numpy` walking elements whenever
+  the dtype holds references, so every depth has one definition. It changes today's checksums for
+  those arrays, so it lands with I2 or as a separate bug fix, not in I0, and a pydra issue tracks
+  today's collision.
 - **The canonical `.npy`** is the byte form of 0003's `.npy` member: format version 1.0 as
   `numpy.lib.format.write_array(..., version=(1, 0), allow_pickle=False)` writes it, with the dtype
   converted to little-endian and the data in C order. Its header carries `descr`, so two
@@ -839,9 +865,9 @@ and P3 uses it rather than defining it.
 
 | PR | Contents | Changes checksums | Depends on |
 |---|---|---|---|
-| I0 | `pydra/utils/digest.py`: the digest form, typed digests (`json@1`, `npy@1` as canonical `.npy`, `file@1`, `py@1`), `register_digest`, JCS, and the tag registry (`register_codec`, `FileSet` type tags) that 0003 P3 uses. Unused. Tests: dtype and structured dtypes, shape, byte order, non-contiguous arrays, subclasses and reference dtypes routed to `py@1`, `1` against `1.0`, integers above 2^53, relocation | no | — |
+| I0 | `pydra/utils/digest.py`: the digest form, typed digests (`json@1`, `npy@1` as canonical `.npy`, `file@1`, `py@1`), `register_digest` with its precedence, nested `$digest` form and result grammar, JCS, and the tag registry (`register_codec`, `FileSet` type tags) that 0003 P3 uses. Unused. Tests: dtype and structured dtypes, shape, byte order, non-contiguous arrays, subclasses and reference dtypes routed to `py@1`, `1` against `1.0`, integers above 2^53, relocation | no | — |
 | I1 | identity record and `IDENTITY_SCHEME = "pydra-identity@2"`; checksum = sha256 of its JCS; `walk` field; the `pydra-identity@2` `StoreIdentity` with `key` and `check_key`; record kept with the result; `pydracli explain` | yes | I0, RFC 0003 P2 |
-| I2 | inputs through I0; `Path` as a value; persistent hits populate memory; decoded `$fileset` values carry their recorded `file@1` | yes | I1, 0003 P3 for the decoded digests |
+| I2 | inputs through I0, with the field named in a digest error; `Path` as a value; reference-dtype arrays element by element at any depth; persistent hits populate memory; decoded `$fileset` values carry their recorded `file@1` | yes | I1, 0003 P3 for the decoded digests |
 | I3 | library references as `dist==identity`; owners of input value types; one owner lookup shared with `context.py`, with the `packages_distributions` fallback; unowned modules; documentation of `PYDRA_USER_PACKAGES` across sites | yes | I1 |
 | I4 | `class@1` (`_class_code` and the walk's class references), used for user-class instance inputs at any depth, and `$class` for user-class codec values; `type@1` (fields classes, unions, `Literal`, `Annotated`); the §8.3 and §8.8 cases, plus a base-class method and a method's helper edited, as regression tests on every supported minor; close #777 | yes | I1 |
 | I5 | shell template in the record; `job` field and `Job.checksum` as the digest of the job's record; workflow `nodes` and the `"deferred"` rule; checksums of a round computed inside the per-job error handling; `version=`, `version_command=` and `version_pattern=` for shell, with the worker re-check under `Native`; `version=` for workflows | yes | I1, I4 |
