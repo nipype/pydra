@@ -371,7 +371,11 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
 
 - **Under a `PortableStore`: `job.attempt`.** `ready()` gives each job in `Round.dispatch` an
   `attempt` id, a UUID, when it hands the job out; a task with `can_resume` gets `"resume"`. A job
-  that is settled, propagated or marked unrunnable is never handed out and has none. The store
+  that is settled, propagated or marked unrunnable is never handed out and has none. A workflow
+  job is never in `Round.dispatch`, so the runner also gives an attempt to each workflow job when it
+  starts to expand it (after the store check, §3.1 "Workflow jobs under the split"), and to the
+  outer job when it is created (`submitter.py:476-481`). A workflow job completed as
+  `workflow-stored` is not expanded and has none. The store
   derives the job's work directory from `job.checksum`, the lookup context's fingerprint and
   `job.attempt` (RFC 0003 §5.4), so the checksum there is the suffixed one of §2.3(a). A
   `PickleStore` ignores `attempt`.
@@ -641,7 +645,7 @@ implicit split workflow (`:443-465`). The router keeps its signature (`utils/rou
     caching. The adapter then retries with backoff up to `visibility_timeout`, by default today's
     eleven seconds (`submitter.py:628-634`). Only after that does it report `Failed` with today's
     diagnosis text. The tolerance moves here because only a store-reading adapter needs it.
-  - **Under a `PortableStore`** `job.result()` (`job.py:612-624` reads through `lookup` today)
+  - **Under a `PortableStore`** `job.result()` (`job.py:617-624` reads through `lookup` today)
     reads by `job.committed` when set, otherwise by `<work dir>/_committed.json`, and when that is
     absent after the visibility retry, by `store.read` of the entry at the job's own address. Only
     when that also finds nothing does the adapter report `Failed`, naming the work directory (RFC
@@ -785,7 +789,10 @@ additions behind them.
 RFC 0003's P8 depends on R4, which passes `Result.committed` through. Its P4 changes how
 `Job.result()` reads (§3.3), which the R3 adapter uses unchanged. The `find` and `attempt` parts of
 R7 and the `PortableStore` form in R6 can land with or after RFC 0003 P5 and P4; with a
-`PickleStore` they are inert.
+`PickleStore` they are inert. RFC 0003's P4 defines `work_dir` and `attempt`; R7 assigns `attempt`
+in `ready()`. Whichever lands first uses the rule of §3.1 ("Under a `PortableStore`:
+`job.attempt`"): before R7 the submitter's expansion loop gives the attempt at hand-out, and to
+workflow and outer jobs as stated there.
 
 R5 no longer depends on #929, which has merged; the first draft listed it because arrays and the
 success-record read changed the same dispatch code. Each PR has tests on `debug` and `cf`, and on
