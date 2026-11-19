@@ -689,7 +689,12 @@ class GraphRunner:
         self._child: dict[Job, _Frame] = {}
         if self._root.owned:
             job.rerun = rerun
-            self._prepare(self._root)
+            try:
+                self._prepare(self._root)
+            except Exception as exc:
+                self._root.state = "finished"
+                self._root_error = exc
+                self._fail_root(self._root, exc)
         else:
             self._expand(self._root, task)
 
@@ -747,7 +752,10 @@ class GraphRunner:
         frame = _Frame(job, parent, parent.path + (label,), owned=True)
         self._child[job] = frame
         self._frames.append(frame)
-        self._prepare(frame)
+        try:
+            self._prepare(frame)
+        except Exception as exc:  # a hook or the store refused: an entry, not a raise
+            self._fail(frame, exc, "run")
 
     def _try_lease(self, frame: _Frame) -> None:
         now = time.monotonic()
@@ -764,7 +772,11 @@ class GraphRunner:
         job = frame.job
         rerun = self.rerun if frame.parent is None else job.rerun
         if not rerun:
-            result = job.result()
+            try:
+                result = job.result()
+            except Exception as exc:
+                self._fail(frame, exc, "run")
+                return
             if result is not None and not result.errored:
                 job._cached_result = result
                 job._held = result
@@ -809,6 +821,10 @@ class GraphRunner:
         """Commit the result of a workflow job whose nodes are done (or that failed
         while expanding)"""
         job = frame.job
+        if error is None and not frame.errors and not frame.nodes_done:
+            frame.state = "finished"  # interrupted: nothing is built or stored
+            self._release_lease(frame)
+            return
         if error is None and frame.errors:
             from pydra.engine.submitter import workflow_error
 
@@ -848,13 +864,14 @@ class GraphRunner:
                 self._finish(frame)
 
     def close(self) -> None:
-        """Release what the runner holds: the workflow jobs that have errors are
-        committed as errored, the others give up their leases uncommitted. Idempotent;
-        a driver calls it however the run ends"""
+        """Release what the runner holds: a workflow job with errors of its own is
+        committed as errored, any other that is not finished gives up its lease and
+        stores nothing (its unfinished nodes did not run, so no result is built).
+        Idempotent; a driver calls it however the run ends"""
         for frame in reversed(list(self._frames)):
             if frame.state == "finished" or not frame.owned:
                 continue
-            if frame.state == "expanding" and (frame.errors or self._failed):
+            if frame.state == "expanding" and frame.errors:
                 self._finish(frame)
             else:
                 frame.state = "finished"

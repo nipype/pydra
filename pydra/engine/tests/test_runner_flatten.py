@@ -1,6 +1,7 @@
 """Flattening: one runner per ``Submitter`` call leases, checks, expands and commits the
 workflow jobs of every level, and hands out the leaf jobs of all of them together"""
 
+import json
 import os
 import shutil
 import subprocess
@@ -132,15 +133,6 @@ def AfterWrapped(log: str, hold: float) -> int:
     return after.out
 
 
-def wrapped(log, hold):
-    """``Wrapped`` as another process imports it: pytest names this module differently,
-    which would give the task another checksum"""
-    import importlib
-
-    module = importlib.import_module("pydra.engine.tests.test_runner_flatten")
-    return module.Wrapped(log=str(log), hold=hold)
-
-
 def runner_for(root: Path, task, settings=SETTINGS, **kwargs):
     store = PickleStore(root, lease_settings=settings)
     sub = Submitter(worker="debug", store=store)
@@ -160,33 +152,62 @@ def drive(sub, runner):
     )
 
 
-def hold_in_process(root, log, hold):
-    """Run ``Wrapped`` to completion as another process does"""
-    store = PickleStore(root, lease_settings=SETTINGS)
-    with Submitter(worker="debug", store=store) as sub:
-        sub(wrapped(log, hold))
+# Another process holds the lease of the workflow job. It is given the cache root, the
+# checksum and the lock path as the first process computed them, and imports nothing of
+# this module, so these tests do not depend on how the package is installed.
+HOLDER = textwrap.dedent("""
+    import json, sys, time
+    from pathlib import Path
+    from pydra.engine.lease import DirectoryLease, LeaseSettings
+
+    spec = json.loads(sys.argv[1])
+    lease = DirectoryLease(
+        spec["checksum"],
+        Path(spec["cache_dir"]),
+        Path(spec["lockfile"]),
+        settings=LeaseSettings(**spec["settings"]),
+    )
+    lease.__enter__()
+    Path(spec["ready"]).touch()
+    time.sleep(spec["hold"])
+    lease.__exit__(None, None, None)
+    """)
 
 
-def spawn(call: str, *args) -> subprocess.Popen:
-    code = textwrap.dedent(f"""
-        import sys
-        from pathlib import Path
-        from pydra.engine.tests.test_runner_flatten import {call}
-        {call}(*[Path(a) if a.startswith("/") else float(a) for a in sys.argv[1:]])
-        """)
+def spawn_holder(job, store, ready: Path, hold: float) -> subprocess.Popen:
+    spec = {
+        "checksum": job.checksum,
+        "cache_dir": str(job.cache_dir),
+        "lockfile": str(store.lockfile(job.checksum, job.context)),
+        "ready": str(ready),
+        "hold": hold,
+        "settings": {"stale_after": 1, "timeout": 30, "attribute_delay": 0},
+    }
     return subprocess.Popen(
-        [sys.executable, "-c", code, *[str(a) for a in args]],
+        [sys.executable, "-c", HOLDER, json.dumps(spec)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
 
 
-def wait_for(path: Path, timeout=30):
+def wait_for(path: Path, proc: subprocess.Popen, timeout=30):
     deadline = time.monotonic() + timeout
     while not path.exists():
+        if proc.poll() is not None:
+            _, err = proc.communicate()
+            pytest.fail(f"the holder ended before taking the lease:\n{err}")
         assert time.monotonic() < deadline, f"{path} did not appear"
         time.sleep(0.02)
+
+
+def finish(proc: subprocess.Popen, killed=False):
+    if killed:
+        proc.kill()
+    _, err = proc.communicate(timeout=60)
+    if not killed:
+        assert proc.returncode == 0, err
+    assert "Traceback" not in err, err
 
 
 def count_expansions(monkeypatch):
@@ -203,14 +224,23 @@ def count_expansions(monkeypatch):
     return calls
 
 
+def log_lines(log: Path) -> list[str]:
+    return log.read_text().splitlines() if log.exists() else []
+
+
 @pytest.mark.timeout(120)
 def test_second_submitter_waits_then_reads_stored(tmp_path, monkeypatch):
-    log = tmp_path / "runs.log"
-    first = spawn("hold_in_process", tmp_path / "cache", log, 2.0)
+    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+    sub0, first = runner_for(root, Wrapped(log=str(log), hold=0.0))
+    with sub0:
+        drive(sub0, first)
+        assert first.result().outputs.out == 7
+    assert len(log_lines(log)) == 1
+    sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
+    holder = spawn_holder(runner.job, sub.store, ready, hold=2.0)
     try:
-        wait_for(Path(str(log) + ".started"))
+        wait_for(ready, holder)
         expansions = count_expansions(monkeypatch)
-        sub, runner = runner_for(tmp_path / "cache", wrapped(log, 2.0), SETTINGS)
         with sub:
             rnd = runner.ready()
             assert rnd.dispatch == []
@@ -221,33 +251,18 @@ def test_second_submitter_waits_then_reads_stored(tmp_path, monkeypatch):
         assert expansions == []
         assert not runner.errors
     finally:
-        out, err = first.communicate(timeout=60)
-    assert first.returncode == 0, err
-    assert len(log.read_text().splitlines()) == 1
-
-
-def hold_lease_forever(root, log, ready):
-    """Take the lease of the ``Wrapped`` job and die with it held, as a killed
-    coordinator does"""
-    store = PickleStore(root, lease_settings=SETTINGS)
-    sub = Submitter(worker="debug", store=store)
-    job = Job(wrapped(log, 0.0), submitter=sub, name="main")
-    lease = store.acquire(job.checksum, job.context)
-    lease.__enter__()
-    Path(ready).touch()
-    time.sleep(600)
+        finish(holder)
+    assert len(log_lines(log)) == 1
 
 
 @pytest.mark.timeout(120)
 def test_stale_workflow_lease_taken_over(tmp_path):
-    log = tmp_path / "runs.log"
-    ready = tmp_path / "held"
-    holder = spawn("hold_lease_forever", tmp_path / "cache", log, ready)
+    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+    sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
+    holder = spawn_holder(runner.job, sub.store, ready, hold=600)
     try:
-        wait_for(ready)
-        holder.kill()
-        holder.wait()
-        sub, runner = runner_for(tmp_path / "cache", wrapped(log, 0.0))
+        wait_for(ready, holder)
+        finish(holder, killed=True)
         with sub:
             assert runner.ready().retry_after is not None  # the lease is not yet stale
             start = time.monotonic()
@@ -257,36 +272,37 @@ def test_stale_workflow_lease_taken_over(tmp_path):
         assert not runner.errors
     finally:
         holder.kill()
-    assert len(log.read_text().splitlines()) == 1
+    assert len(log_lines(log)) == 1
 
 
 @pytest.mark.timeout(120)
 def test_live_holder_not_taken_over_past_stale_after(tmp_path, monkeypatch):
-    """The holder expands for three times ``stale_after`` with its heartbeat running,
-    so the second submitter keeps waiting and never expands"""
-    log = tmp_path / "runs.log"
-    first = spawn("hold_in_process", tmp_path / "cache", log, 3.0)
+    """The holder keeps its lease, renewing, for three times ``stale_after``, so the
+    second submitter keeps waiting and never expands"""
+    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+    sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
+    holder = spawn_holder(runner.job, sub.store, ready, hold=3.0)
     try:
-        wait_for(Path(str(log) + ".started"))
+        wait_for(ready, holder)
         expansions = count_expansions(monkeypatch)
-        sub, runner = runner_for(tmp_path / "cache", wrapped(log, 3.0))
         with sub:
             start = time.monotonic()
             retries = 0
-            while not runner.done:
+            while time.monotonic() - start < 2.2:  # the holder lives for 3 s
                 rnd = runner.ready()
-                assert rnd.dispatch == []
+                assert rnd.dispatch == [] and expansions == []
                 if rnd.retry_after is not None:
                     retries += 1
-                    time.sleep(rnd.retry_after)
-            waited = time.monotonic() - start
+                time.sleep(min(rnd.retry_after or 0.05, 0.2))
+            assert retries > 1
+            assert time.monotonic() - start > 2 * SETTINGS.stale_after
+            assert expansions == []
+            finish(holder)
+            drive(sub, runner)  # the lease is free: the waiter now expands
             assert runner.result().outputs.out == 7
-        assert retries > 1
-        assert waited > SETTINGS.stale_after
-        assert expansions == []
     finally:
-        first.communicate(timeout=60)
-    assert len(log.read_text().splitlines()) == 1
+        holder.kill()
+    assert len(log_lines(log)) == 1
 
 
 def test_lease_timeout_is_entry_readers_unrunnable(tmp_path):
@@ -452,3 +468,270 @@ def test_cached_nested_workflow_rerun(tmp_path, rerun):
     with Submitter(worker="debug", cache_root=cache) as sub:
         sub(Other(logdir=str(logdir)), rerun=rerun)
     assert len(list(logdir.glob("*.span"))) == (4 if rerun else 0)
+
+
+# An interrupted workflow is not committed
+
+
+@python.define
+def Boom(x: int) -> int:
+    raise ValueError("boom")
+
+
+@python.define
+def Sink(marker: str, gate: str) -> int:
+    """Waits for ``gate`` to exist, if given, then records that it ran"""
+    import time
+    import uuid
+
+    if gate:
+        deadline = time.monotonic() + 60
+        while not Path(gate).exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+    Path(marker, f"sink-{uuid.uuid4().hex}").touch()
+    return 1
+
+
+def make_branches(reads_sink: bool):
+    @workflow.define
+    def Failing(x: int) -> int:
+        return workflow.add(Boom(x=x)).out
+
+    @workflow.define
+    def Sunk(marker: str, gate: str) -> int:
+        out = workflow.add(Twin(x=1), name="out")
+        sink = workflow.add(Sink(marker=marker, gate=gate), name="sink")
+        return sink.out if reads_sink else out.out
+
+    @workflow.define
+    def Branches(marker: str, gate: str) -> int:
+        workflow.add(Failing(x=1), name="a")
+        return workflow.add(Sunk(marker=marker, gate=gate), name="b").out
+
+    @workflow.define
+    def Fixed(marker: str, gate: str) -> int:
+        return workflow.add(Sunk(marker=marker, gate=gate), name="b").out
+
+    return Sunk, Branches, Fixed
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("reads_sink", [False, True])
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_interrupted_nested_workflow_is_not_committed(tmp_path, worker, reads_sink):
+    """Branch ``a`` fails, so ``fail_fast`` stops the run with workflow ``b`` unfinished:
+    ``b`` is released and stores nothing, and the next run executes its ``sink``"""
+    Sunk, Branches, Fixed = make_branches(reads_sink)
+    marker = tmp_path / "marker"
+    marker.mkdir()
+    release = tmp_path / "release"
+    gate = str(release) if worker == "cf" else ""
+    cache = tmp_path / "cache"
+    extra = {"n_procs": 4} if worker == "cf" else {}
+    sub = Submitter(worker=worker, cache_root=cache, on_error="fail_fast", **extra)
+    try:
+        with pytest.raises(Exception):
+            sub(Branches(marker=str(marker), gate=gate), raise_errors=True)
+        b = Job(Sunk(marker=str(marker), gate=gate), submitter=sub, name="b")
+        assert b.result() is None
+        assert not list(cache.glob("workflow-*.lock"))
+    finally:
+        release.touch()
+        sub.close()
+    sinks = len(list(marker.iterdir()))
+    with Submitter(worker=worker, cache_root=cache) as sub2:
+        result = sub2(Fixed(marker=str(marker), gate=gate))
+    assert not result.errored
+    assert result.outputs.out == (1 if reads_sink else 2)
+    if worker == "debug":
+        assert (sinks, len(list(marker.iterdir()))) == (0, 1)
+
+
+def test_close_commits_an_errored_workflow_with_errors_and_nothing_else(tmp_path):
+    from pydra.engine.runner import Failed
+
+    Sunk, Branches, Fixed = make_branches(False)
+    task = Branches(marker=str(tmp_path), gate="")
+    sub, runner = runner_for(tmp_path / "cache", task)
+    with sub:
+        leaves = runner.ready().dispatch
+        names = {j.name for j in leaves}
+        assert {"Boom", "out", "sink"} <= names
+        boom = next(j for j in leaves if j.name == "Boom")
+        runner.complete(boom, Failed(ValueError("boom")))
+        runner.close()
+        graph = runner.exec_graph
+        a, b = graph["a"].job(None), graph["b"].job(None)
+        assert a.result().errored  # it has an error of its own
+        assert b.result() is None  # it was only interrupted
+        assert runner.job.result().errored
+        assert not list(sub.store.lockfile(a.checksum, a.context).parent.glob("*.lock"))
+
+
+def test_close_releases_the_leases(tmp_path):
+    sub, runner = runner_for(tmp_path / "cache", AfterWrapped(log=os.devnull, hold=0.0))
+    with sub:
+        assert [j.name for j in runner.ready().dispatch] == ["Counted"]
+        lockfiles = list((tmp_path / "cache").glob("*.lock"))
+        assert len(lockfiles) == 2  # the outer and the nested workflow
+        runner.close()
+        runner.close()  # idempotent
+        assert not list((tmp_path / "cache").glob("*.lock"))
+        _, again = runner_for(
+            tmp_path / "cache", AfterWrapped(log=os.devnull, hold=0.0)
+        )
+        assert again.ready().retry_after is None
+
+
+# Errors while starting a workflow job are entries with the real exception
+
+
+def refuse(job, *args):
+    raise PermissionError("hook says no")
+
+
+def test_error_starting_a_nested_workflow_is_an_entry(tmp_path):
+    @workflow.define
+    def Starting(x: int) -> int:
+        w = workflow.add(
+            Wrapped(log=os.devnull, hold=0.0),
+            hooks=TaskHooks(pre_run_task=refuse),
+            name="inner",
+        )
+        return w.out
+
+    with Submitter(worker="debug", cache_root=tmp_path, on_error="raise_at_end") as sub:
+        with pytest.raises(WorkflowError) as raised:
+            sub(Starting(x=1))
+    (entry,) = [e for e in raised.value.entries if e.job_name == "inner"]
+    assert entry.exception_type == "builtins.PermissionError"
+    assert "hook says no" in entry.message
+
+
+def test_error_starting_the_outer_workflow_is_raised_as_itself(tmp_path):
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        with pytest.raises(PermissionError, match="hook says no"):
+            sub(
+                Wrapped(log=os.devnull, hold=0.0),
+                hooks=TaskHooks(pre_run_task=refuse),
+            )
+
+
+@pytest.mark.parametrize("hook", ["pre_run"])
+def test_error_in_a_nested_pre_run_hook_is_an_entry(tmp_path, hook):
+    @workflow.define(outputs=["first", "second"])
+    def Hooked(x: int, marker: str):
+        w = workflow.add(
+            Wrapped(log=os.devnull, hold=0.0),
+            hooks=TaskHooks(**{hook: refuse}),
+            name="inner",
+        )
+        s = workflow.add(Sink(marker=marker, gate=""), name="other")
+        return w.out, s.out
+
+    marker = tmp_path / "marker"
+    marker.mkdir()
+    with Submitter(
+        worker="debug", cache_root=tmp_path / "cache", on_error="raise_at_end"
+    ) as sub:
+        with pytest.raises(WorkflowError) as raised:
+            sub(Hooked(x=1, marker=str(marker)))
+    (entry,) = [e for e in raised.value.entries if e.job_name == "inner"]
+    assert entry.exception_type == "builtins.PermissionError"
+    assert len(list(marker.iterdir())) == 1  # the independent branch ran
+
+
+# The runner places jobs in their workflows, and waits without a current task
+
+
+def test_runner_sets_the_workflow_path(tmp_path):
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        runner = GraphRunner(
+            make_outer(2)(logdir=str(tmp_path)),
+            sub.store,
+            on_error="raise_at_end",
+            submitter=sub,
+        )
+        leaves = runner.ready().dispatch
+        assert len(leaves) == 8
+        assert {j.workflow_path for j in leaves} == {("in0",), ("in1",)}
+        runner.close()
+
+
+@workflow.define
+def Passthrough(x: int) -> int:
+    return x
+
+
+def test_workflow_without_nodes_on_cf(tmp_path):
+    with Submitter(worker="cf", cache_root=tmp_path) as sub:
+        assert sub(Passthrough(x=3)).outputs.out == 3
+
+
+NEST_ASYNCIO_SCRIPT = textwrap.dedent("""
+    import asyncio, sys
+    import nest_asyncio
+    from pydra.compose import python, workflow
+    from pydra.engine.submitter import Submitter
+
+    @python.define
+    def Inc(x: int) -> int:
+        return x + 1
+
+    @workflow.define
+    def Wf(x: int) -> int:
+        return workflow.add(Inc(x=x)).out
+
+    async def main(cache):
+        with Submitter(worker="cf", cache_root=cache) as sub:
+            return sub(Wf(x=1), raise_errors=True).outputs.out
+
+    if __name__ == "__main__":
+        nest_asyncio.apply()
+        print(asyncio.run(main(sys.argv[1])))
+    """)
+
+
+def test_workflow_on_an_async_worker_inside_nest_asyncio(tmp_path):
+    """A notebook applies ``nest_asyncio``, under which no task is current (3.14)"""
+    pytest.importorskip("nest_asyncio")
+    script = tmp_path / "nb.py"
+    script.write_text(NEST_ASYNCIO_SCRIPT)
+    done = subprocess.run(
+        [sys.executable, str(script), str(tmp_path / "cache")],
+        capture_output=True,
+        text=True,
+        timeout=100,
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "2"
+
+
+# Arrays of the elements of split nodes in nested workflows
+
+
+@python.define
+def Shift(x: int, by: int) -> int:
+    return x + by
+
+
+@workflow.define
+def Shifted(by: int) -> list[int]:
+    return workflow.add(Shift(by=by).split(x=[1, 2, 3]), name="shift").out
+
+
+@workflow.define
+def TwoShifts(a: int, b: int) -> list[int]:
+    first = workflow.add(Shifted(by=a), name="first")
+    workflow.add(Shifted(by=b), name="second")
+    return first.out
+
+
+def test_nested_arrays_by_path(any_worker, tmp_path):
+    """Nodes of one name in two nested workflows go to two arrays, not one"""
+    with Submitter(worker=any_worker, cache_root=tmp_path / "cache") as sub:
+        result = sub(TwoShifts(a=10, b=20))
+    assert result.outputs.out == [11, 12, 13]
+    if any_worker == "slurm":
+        arrays = list((tmp_path / "cache").glob("slurm_scripts/array_*_3"))
+        assert len(arrays) == 2

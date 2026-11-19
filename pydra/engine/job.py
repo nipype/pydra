@@ -433,7 +433,7 @@ class Job(ty.Generic[TaskType]):
         return result
 
     def _finish_workflow(
-        self, lease, result: Result, error: BaseException | None
+        self, lease, result: Result | None, error: BaseException | None
     ) -> BaseException | None:
         """Commit the result of a workflow job whose nodes are done, under its lease,
         and run its ``post_run`` hook if it succeeded. Returns the error of the
@@ -441,6 +441,15 @@ class Job(ty.Generic[TaskType]):
         succeeded. Raises what the commit raises (`LeaseLost`), after which nothing is
         stored."""
         cwd = os.getcwd()
+        if result is None:  # it failed while starting
+            result = Result(
+                outputs=None,
+                runtime=None,
+                errored=False,
+                cache_dir=self.cache_dir,
+                task=self.task,
+                context=self.context,
+            )
         if error is None:
             try:
                 result.outputs = self.task.Outputs._from_job(self)

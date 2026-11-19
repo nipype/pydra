@@ -197,10 +197,17 @@ async def drive(
                     send(name, jobs)
             pump()
             if in_flight or rnd.retry_after is not None:
-                try:  # the next outcome, or the next attempt at a workflow lease
-                    await asyncio.wait_for(progressed.wait(), rnd.retry_after)
-                except asyncio.TimeoutError:
-                    pass
+                # the next outcome, or the next attempt at a workflow lease; no timeout
+                # context is entered, which needs a current task (none under
+                # nest_asyncio)
+                wake = None
+                if rnd.retry_after is not None:
+                    wake = loop.call_later(rnd.retry_after, progressed.set)
+                try:
+                    await progressed.wait()
+                finally:
+                    if wake is not None:
+                        wake.cancel()
                 progressed.clear()
             if fail_fast and runner.failed:
                 break
