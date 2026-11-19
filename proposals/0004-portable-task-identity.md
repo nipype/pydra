@@ -208,19 +208,21 @@ lib:{dist}=={identity}:{module.qualname}
   - from an archive: `version@{archive hash}` (`:263-270`). A compiled wheel has one hash per
     platform, so the key splits across platforms; that is a safe miss, and an index install is
     the portable form;
-  - from a local directory, not editable (`pip install /src` in a Dockerfile): `version@record:
-    {digest of RECORD}` (`:285-288`). The version string of such a package does not follow its
-    code, and setuptools-scm or hatch-vcs put the commit and the dirty flag into its local segment,
-    so neither the public version nor the local segment identifies it; its `RECORD`'s file hashes
-    do. The digest covers only the `RECORD` entries outside `*.dist-info/`: the metadata files
-    there (`RECORD` itself, `INSTALLER`, `direct_url.json`) differ between installs of the same code;
+  - from a local directory, not editable (`pip install /src` in a Dockerfile): `dir:<digest>` over
+    every hashed `RECORD` row outside `*.dist-info/` whose file is inside the install root, with no
+    version prefix (today's context form is `version@record:…`, `:285-288`). The version string of
+    such a package does not follow its code, and setuptools-scm or hatch-vcs put the commit and the
+    dirty flag into its local segment, so neither the public version nor the local segment
+    identifies it; the installed files' hashes do. The metadata files under `*.dist-info/`
+    (`RECORD` itself, `INSTALLER`, `direct_url.json`) differ between installs of the same code and
+    are left out;
   - editable, or a local checkout keyed as a library (an editable install inside `site-packages`
-    that `PYDRA_USER_PACKAGES` marks as library code with `-name`): always `dir:<digest of its
-    importable files>`, the files under the package's import paths that Python can import, with no
-    version prefix, since the version string of an editable install does not follow its code. It
-    is never `git:<commit>`, so the same code has the same key whether or not git is available and
-    whether or not the tree is clean. Untracked files that are not
-    importable (notes, build output, data) do not count, so they neither dirty nor re-key it.
+    that `PYDRA_USER_PACKAGES` marks as library code with `-name`): always `dir:<digest>` over every
+    file in its package directories, data files included, with no version prefix, since the version
+    string of an editable install does not follow its code. It is never `git:<commit>`, so the same
+    code has the same key whether or not git is available and whether or not the tree is clean.
+    Package data counts because a changed data file must never give a stale hit; a stray note in a
+    package directory costs only a safe miss.
 
   An identity `_identify` cannot compute (`:246-260`) is keyed as `?` and the context gets
   `unknown`, as today for the context (`engine/context.py:520-521`).
@@ -964,7 +966,7 @@ Revision 2 answers the review of #932 at `6a4d8f84`. Blocking and important find
 | I2 `npy@1` over `dtype.str` | Preimage is the canonical `.npy` (header `descr`, little-endian, C order); subclasses and reference dtypes stay on `py@1`; non-contiguous copies and the cost limited to contiguous arrays stated; probe §8.8 (§6.2, §7) |
 | I3 `AnyReuse` claim false | Owners of input value types keyed (`task.values`, §4.1); §6.3 rewritten to state what `AnyReuse` still serves (transitive, dynamic dispatch) and that `ConsistentReuse` refuses it |
 | I4 gap 1 misses dunders, unstable across minors; `type@1` unspecified | Gap 1 uses `_class_code` (whole `ClassDef` under `ast@1`); `type@1` specified (§4.2, §5.1); probe §8.8: `__call__` edit seen, `Enum` input equal under 3.11 and 3.13 |
-| I5 public version is not an identity for local, archive or VCS installs | The key uses `_identify`'s identity for direct-URL installs (`@commit`, `@archive hash`, `@record:`); public version only for index installs (§4.1) |
+| I5 public version is not an identity for local, archive or VCS installs | The key uses `_identify`'s identity for direct-URL installs (`@commit`, `@archive hash`, `dir:`); public version only for index installs (§4.1) |
 | I6 `version_command` stdout machine-dependent; stale cache for shims; container start | `version_pattern` keys only the declared part; memoised per process, not in `PersistentCache`; run under `Native` only, re-checked in the worker; not-found rule stated (§5.2) |
 | I7 `tools` filled in the worker | `tools` is built in the submitting process with the rest of the lookup context; a missing executable is a stable `found: false`; worker facts only in 0003's execute-phase context (§5.2) |
 | I8 local and offline images lose reuse; `RepoDigests` selection | Local builds keyed by `docker-local@1:<Id>` and run by it (reused per image store, as today); `RepoDigests` entry chosen by repository, several entries fall to the registry; air-gapped images resolve locally (§5.3) |
