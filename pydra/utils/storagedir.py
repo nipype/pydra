@@ -209,6 +209,11 @@ class StorePolicy:
             raise ValueError(
                 f"sealed_mode={self.sealed_mode:#o} must include owner read and search"
             )
+        for name in ("container_mode", "side_mode"):
+            if getattr(self, name) & 0o700 != 0o700:
+                raise ValueError(
+                    f"{name}={getattr(self, name):#o} must give the owner read, write and search"
+                )
         if self.staging_mode & 0o700 != 0o700:
             raise ValueError(
                 f"staging_mode={self.staging_mode:#o} must give the owner read, write and search"
@@ -229,16 +234,25 @@ class StorePolicy:
             raise ValueError("ages must be a StoreAges")
 
 
-_DEVICE_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL"}
-    | {f"COM{i}" for i in range(1, 10)}
-    | {f"LPT{i}" for i in range(1, 10)}
-)
+_DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} | {
+    f"{d}{n}" for d in ("COM", "LPT") for n in "123456789\u00b9\u00b2\u00b3"
+}
+_RESERVED_CHARS = frozenset('<>:"|?*')
+
+
+def _windows_reserved(name: str) -> bool:
+    """Whether Windows would not treat ``name`` as an ordinary file name: a device name (with or
+    without an extension), a reserved character or control character, or a trailing space or dot.
+    Written out, after ``ntpath.isreserved``, so that it does not need Python 3.13."""
+    if name[-1] in ". " or any(c in _RESERVED_CHARS or ord(c) < 32 for c in name):
+        return True
+    return name.partition(".")[0].rstrip(" ").upper() in _DEVICE_NAMES
 
 
 def _check_name(name: str, strict: bool = False) -> None:
     """``name`` is one path component. ``strict`` (the path backend) also refuses what Windows
-    reads as a drive, an alternate data stream, or a name it silently trims."""
+    reads as a drive, an alternate data stream, a device, or a name it silently trims.
+    """
     if (
         not isinstance(name, str)
         or name in ("", ".", "..")
@@ -246,14 +260,7 @@ def _check_name(name: str, strict: bool = False) -> None:
         or "\\" in name
         or "\0" in name
         or (os.altsep and os.altsep in name)
-        or (
-            strict
-            and (
-                ":" in name
-                or name[-1] in ". "
-                or name.split(".")[0].upper() in _DEVICE_NAMES
-            )
-        )
+        or (strict and _windows_reserved(name))
     ):
         raise ValueError(f"{name!r} is not a single path component")
 
@@ -634,7 +641,12 @@ class StorageDir:
             self._member(name)
             os.rmdir(self._sub(name))
             return
-        os.rmdir(name, dir_fd=self._fd)
+        try:
+            os.rmdir(name, dir_fd=self._fd)
+        except OSError as err:
+            if err.errno in (errno.ENOTDIR, errno.ELOOP):
+                raise _wrong_kind(self._sub(name), "directory") from err
+            raise
 
     def lstat(self, name: str) -> os.stat_result:
         """``lstat`` of ``name`` in this directory."""
@@ -649,15 +661,19 @@ class StorageDir:
         """List this directory. Each listing opens its own directory offset on first use, so
         listings may be nested or interleaved, and closing a listing early releases it. Every
         entry carries an ``lstat`` taken as it is yielded, so it stays valid after the listing
-        ends; a name removed meanwhile is skipped."""
+        ends; a name removed meanwhile is skipped. The listing needs search permission on the
+        directory (it opens ``.`` afresh), reports every error, including a closed handle, on its
+        first advance, not here, and costs one ``fstatat`` per name."""
         self._live()
         return self._entries()
 
     def _entries(self) -> ty.Iterator["StorageEntry"]:
+        self._live()
         if self._path_mode:
             self._guard()
             with os.scandir(self.path) as listing:
                 for entry in listing:
+                    self._live()
                     try:
                         st = entry.stat(follow_symlinks=False)
                     except FileNotFoundError:
@@ -669,6 +685,7 @@ class StorageDir:
             with os.scandir(fd) as listing:
                 names = (entry.name for entry in listing)
                 for name in names:
+                    self._live()
                     try:
                         st = os.stat(name, dir_fd=fd, follow_symlinks=False)
                     except FileNotFoundError:

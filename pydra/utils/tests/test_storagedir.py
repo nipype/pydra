@@ -906,7 +906,7 @@ def test_windows_device_names_are_refused_in_path_mode(tmp_path, monkeypatch, na
     root = StorageDir.open_root(tmp_path, StorePolicy(), trust="trusted")
     with pytest.raises(ValueError):
         root.open_new(name, 0o444)
-    for ok in ("null", "console", "com10", "COM0", "a.con"):
+    for ok in ("null", "console", "com10", "COM0", "a.con", "xcon", "con-1"):
         root.open_new(ok, 0o444).close()
 
 
@@ -927,9 +927,10 @@ def test_rmdir(root):
 @POSIX_ONLY
 def test_rmdir_does_not_follow_a_symlink(root, tmp_path):
     (Path(root.path) / "l").symlink_to(tmp_path, target_is_directory=True)
-    with pytest.raises(OSError):
+    with pytest.raises(WrongKindError):
         root.rmdir("l")
     assert tmp_path.is_dir()
+    assert os.path.islink(Path(root.path) / "l")
 
 
 def test_policy_requires_owner_read_and_search():
@@ -940,7 +941,26 @@ def test_policy_requires_owner_read_and_search():
         {"entry_mode": 0o500},
         {"sealed_mode": 0o100},
         {"sealed_mode": 0o300},
+        {"container_mode": 0o055},
+        {"container_mode": 0o500},
+        {"side_mode": 0o650},
+        {"side_mode": 0o070},
     ):
         with pytest.raises(ValueError, match="owner"):
             StorePolicy(**kw)
     StorePolicy(file_mode=0o400, entry_mode=0o700, sealed_mode=0o500)
+
+
+def test_scandir_after_close_raises_on_either_backend(root):
+    held = root.child("d", create=True)
+    for i in range(3):
+        with held.open_new(f"f{i}", 0o444):
+            pass
+    with root.child("d") as d:
+        unstarted = d.scandir()
+        started = d.scandir()
+        next(started)
+    with pytest.raises(ValueError, match="closed"):
+        next(unstarted)
+    with pytest.raises(ValueError, match="closed"):
+        next(started)
