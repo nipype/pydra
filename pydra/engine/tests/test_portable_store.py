@@ -1467,7 +1467,9 @@ def test_corrupt_budget_is_bounded(tmp_path, monkeypatch):
     store = make(tmp_path)
     c = publish(store)
     corrupt(entry_path(tmp_path / "root", c))
-    store.visibility_timeout = 30
+    store.visibility_timeout = (
+        2  # an unbounded budget fails the count below, not the clock
+    )
     n = []
 
     def quarantine(self, *a, **k):
@@ -1618,3 +1620,128 @@ def test_a_paused_mover_cannot_take_the_entry_a_writer_committed(tmp_path, monke
     assert gone == []
     assert entry.is_dir() and store.read(c.entry, None).outputs == OUT
     assert len(quarantined(tmp_path / "root")) == 1
+
+
+# -- fix round 3 ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("err", [errno.ENOTDIR, errno.ENOTEMPTY, errno.EEXIST])
+def test_set_aside_refusal_of_its_own_move_is_not_an_error(tmp_path, monkeypatch, err):
+    """The compare-and-move refused: the object is already moved, or is not the one looked at."""
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    rmtree(entry)
+    entry.write_text("x")
+
+    def fail(self, name, target, new_name):
+        if "quarantine" in target.path:
+            raise OSError(err, "refused")
+
+    recording_rename(monkeypatch, [], fail)
+    root, handles = open_parent(store, c)
+    try:
+        store._set_aside(root, handles[-1], c.entry.fingerprint)  # does not raise
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert entry.exists()
+
+
+@pytest.mark.parametrize("where", ["cdir", "shard"])
+def test_a_regular_file_where_a_container_belongs_is_set_aside(tmp_path, where):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    target = entry.parent if where == "cdir" else entry.parent.parent
+    rmtree(target)
+    target.write_text("x")
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+    assert len(quarantined(tmp_path / "root")) == 1
+    assert store.read(again.entry, None).outputs == OUT
+
+
+@pytest.mark.parametrize("err", [errno.ENOENT, errno.ESTALE])
+def test_a_container_rename_that_lost_its_parent_walks_again(
+    tmp_path, monkeypatch, err
+):
+    store = make(tmp_path)
+    seen = []
+
+    def fail(self, name, target, new_name):
+        if not at_address((None, None, None, new_name)) and not seen:
+            seen.append(1)
+            raise OSError(err, "the parent is gone")
+
+    recording_rename(monkeypatch, [], fail)
+    c = publish(store)
+    assert (c.won, c.stored) == (True, True)
+
+
+@pytest.mark.parametrize("writers", [8, 16])
+def test_container_herd_over_a_regular_file(tmp_path, writers):
+    store = make(tmp_path)
+    c = publish(store)
+    probe = entry_path(tmp_path / "root", c).parent
+    for rnd in range(25):
+        name = f"python-herd{rnd}"
+        first = publish(store, checksum=name)
+        victim = entry_path(tmp_path / "root", first).parent
+        rmtree(victim)
+        victim.write_text("x")
+        barrier = threading.Barrier(writers)
+        out: list = [None] * writers
+
+        def go(i):
+            barrier.wait()
+            try:
+                out[i] = publish(store, checksum=name)
+            except BaseException as err:  # noqa
+                out[i] = err
+
+        ts = [threading.Thread(target=go, args=(i,)) for i in range(writers)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        assert not [o for o in out if isinstance(o, BaseException)], out
+        assert [o.won for o in out].count(True) == 1
+    assert probe.exists()
+
+
+def zero_ino(st):
+    return os.stat_result((st[0], 0, *tuple(st)[2:10]))
+
+
+def test_a_zero_inode_is_not_an_identity(tmp_path, monkeypatch):
+    """st_ino 0 identifies nothing: every quarantine gets a random name, not one shared name."""
+    store = make(tmp_path)
+    cs = [publish(store, checksum=f"python-z{i}") for i in range(3)]
+    for c in cs:
+        corrupt(entry_path(tmp_path / "root", c))
+    real_l, real_f = StorageDir.lstat, StorageDir.fstat
+    monkeypatch.setattr(StorageDir, "lstat", lambda self, n: zero_ino(real_l(self, n)))
+    monkeypatch.setattr(StorageDir, "fstat", lambda self: zero_ino(real_f(self)))
+    for c in cs:
+        with pytest.raises(CorruptEntry):
+            store.read(c.entry, None)
+    assert len(quarantined(tmp_path / "root")) == 3
+    for c in cs:
+        assert not entry_path(tmp_path / "root", c).exists()
+
+
+def test_an_empty_directory_occupant_is_removed_not_moved(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    rmtree(entry)
+    entry.mkdir()
+    root, handles = open_parent(store, c)
+    try:
+        r = store._quarantine(
+            root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+        )
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert r is True
+    assert not entry.exists() and quarantined(tmp_path / "root") == []

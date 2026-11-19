@@ -147,7 +147,11 @@ def _is_wrong_kind(st: os.stat_result) -> bool:
 
 def _inode_name(st: os.stat_result) -> str:
     """A UUID-shaped name for a directory's inode: the target of the rename that moves it aside.
-    ``st_dev`` is left out because it is client-local on network storage."""
+    ``st_dev`` is left out because it is client-local on network storage. An inode number of 0
+    identifies nothing, so such a directory gets a random name and no claim of identity.
+    """
+    if st.st_ino == 0:
+        return uuid.uuid4().hex
     return uuid.UUID(int=st.st_ino % (1 << 128)).hex
 
 
@@ -394,6 +398,16 @@ class PortableStore:
         except FileNotFoundError:
             return
         except OSError as err:
+            if err.errno in (errno.ENOTDIR, errno.ENOTEMPTY, errno.EEXIST):
+                return  # the compare-and-move refused: already moved, or not the object seen
+            try:
+                now = parent.lstat(name)
+            except FileNotFoundError:
+                return
+            if (now.st_dev, now.st_ino) != (st.st_dev, st.st_ino) or (
+                stat.S_ISDIR(now.st_mode) and not _is_link(now)
+            ):
+                return  # replaced meanwhile (the Windows refusal has no distinct errno)
             raise _wrong_kind_error(where) from err
         logger.warning(
             "%s is not an entry or a directory and was moved to quarantine", where
@@ -422,8 +436,10 @@ class PortableStore:
         this user cannot move it across directories), where ``<uuid>`` is built from the inode
         that was found corrupt, so the rename is a compare-and-move: a late mover that meets a
         valid entry at the name renames it onto a target that is already there and moves
-        nothing (an empty occupant, and storage without a stable ``st_ino``, fall back to the
-        check after the move). The moved copy is re-verified the moved copy against its
+        nothing. An empty directory is removed with ``rmdir`` first, which fails on any entry
+        (a rename onto an empty directory would succeed). A store needs stable, non-zero
+        inode numbers to publish at all (the checks on a container's identity depend on them);
+        an inode number of 0 gets a random name. The moved copy is re-verified against its
         address, and put it back if it verifies, because another writer committed a valid entry
         between the caller's check and the rename. A corrupt copy is stamped, so that
         ``collect`` ages it from the move.
@@ -451,6 +467,10 @@ class PortableStore:
             return True
         with entry:
             held = entry.fstat()
+            try:
+                empty = not any(True for _ in entry.scandir())
+            except OSError:
+                empty = False
             if identity is not None and (held.st_dev, held.st_ino) != (
                 identity.st_dev,
                 identity.st_ino,
@@ -469,6 +489,17 @@ class PortableStore:
             return True
         if (now.st_dev, now.st_ino) != (held.st_dev, held.st_ino):
             return False
+        if empty:
+            try:
+                parent.rmdir(name)  # fails ENOTEMPTY on any entry: a compare-and-remove
+            except FileNotFoundError:
+                return True
+            except OSError as err:
+                if err.errno in (errno.ENOTEMPTY, errno.EEXIST):
+                    return False  # something was committed at the name since
+                logger.warning("could not remove %s: %s", where, err)
+                return None
+            return True
         moved = _inode_name(held)
         try:
             with self._quarantine_dir(root) as q:
