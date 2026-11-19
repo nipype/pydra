@@ -1179,7 +1179,7 @@ def test_code_hash_library_objects_by_name():
     def f(x):
         return numpy.add(numpy.mean(x), os.environ)
 
-    numpy_version = numpy.__version__.encode()
+    numpy_version = hash_module.owner_of("numpy")[1].encode()
     encoded = b"".join(bytes_repr(f, Cache()))
     assert b"global:numpy=module:numpy==%s:numpy" % numpy_version in encoded
     assert b"global:os=module:os" in encoded
@@ -1196,7 +1196,7 @@ def test_code_hash_library_instances_by_name(load_modules, owned_libpkg):
         },
         directory="site-packages",
     )
-    numpy_version = numpy.__version__.encode()
+    numpy_version = hash_module.owner_of("numpy")[1].encode()
     encoded = b"".join(bytes_repr(main.f, Cache()))
     assert b"global:CONFIG=lib:libpkg==1.0:libpkg.state.CONFIG" in encoded
     assert b"global:environ=lib:os.environ" in encoded

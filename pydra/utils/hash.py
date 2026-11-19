@@ -278,6 +278,8 @@ class Cache:
     code_hash: ty.Optional[str] = attrs.field(default=None)
     # the library modules reached by the functions hashed with this cache
     modules: ty.Set[str] = attrs.field(factory=set)
+    # the references to library code, with their identities, in those functions
+    refs: ty.Set[str] = attrs.field(factory=set)
     # the `code_digest` of each function hashed with this cache, by its id
     digests: ty.Dict[int, str] = attrs.field(factory=dict)
     # the `code_digest`s of the functions hashed with a declared version, by their
@@ -1039,9 +1041,25 @@ def is_library(obj: object) -> bool:
     return isinstance(module, str) and _module_is_library(module)
 
 
+ENGINE_PACKAGES = frozenset(
+    {"compose", "engine", "environments", "utils", "workers", "scripts"}
+)
+"""The subpackages of pydra that are the engine, referenced by qualified name with no
+identity, as the standard library is. ``pydra.tasks`` is not: it is keyed by its owner."""
+
+
 def _is_stdlib(module: str) -> bool:
     top = module.partition(".")[0]
     return top == "builtins" or top in STDLIB_MODULES
+
+
+def is_unversioned(module: str) -> bool:
+    """Whether references to `module` carry no identity: the standard library, builtins
+    and the engine (`ENGINE_PACKAGES`). The context records pydra's identity."""
+    parts = module.split(".")
+    return _is_stdlib(module) or (
+        parts[0] == "pydra" and (len(parts) == 1 or parts[1] in ENGINE_PACKAGES)
+    )
 
 
 def _owners(module: str) -> list[str] | None:
@@ -1095,15 +1113,16 @@ def owner_of(module: str) -> tuple[str, str] | None:
 def forget_owners() -> None:
     """Forget the owners of modules and the memoised walks that carry them, so they are
     read again after a distribution is installed into the running interpreter"""
-    owner_of.cache_clear()
     with _walk_memo_lock:
+        owner_of.cache_clear()
         _walk_memo.clear()
 
 
 def library_owner(module: str) -> str:
     """The prefix a reference to library code of `module` carries: ``{dist}=={identity}:``,
-    ``?:`` if no distribution owns it, and nothing for the standard library"""
-    if _is_stdlib(module):
+    ``?:`` if no distribution owns it, and nothing for the standard library and the
+    engine (`is_unversioned`)"""
+    if is_unversioned(module):
         return ""
     owner = owner_of(module)
     return "?:" if owner is None else f"{owner[0]}=={owner[1]}:"
@@ -1112,7 +1131,9 @@ def library_owner(module: str) -> str:
 def _is_unowned_python(module: str) -> bool:
     """Whether `module` is a pure-Python library module that no distribution owns, which
     is walked as user code, not referenced by name"""
-    if _is_stdlib(module) or owner_of(module) is not None:
+    if is_unversioned(module) or _package_override(module) is True:
+        return False  # or named library code by ``-pkg``
+    if owner_of(module) is not None:
         return False
     file = getattr(sys.modules.get(module), "__file__", None)
     return bool(file) and file.endswith(".py")
@@ -1371,12 +1392,20 @@ class _CodeWalk:
         self.dynamic = False
         self.modules: set[str] = set()
         self.found: set[str] = set()  # the modules of the reference being serialized
+        # the references to library code with an identity, and those of the reference
+        # being serialized
+        self.refs: set[str] = set()
+        self.found_refs: set[str] = set()
 
     def library(self, module: str, kind: str, name: str) -> bytes:
         """The reference ``{kind}:{owner}:{name}`` to library code of `module`, where
         the owner is `library_owner` (RFC 0004 section 4.1)"""
         self.found.add(module)
-        return f"{kind}:{library_owner(module)}{name}".encode()
+        owner = library_owner(module)
+        ref = f"{kind}:{owner}{name}"
+        if owner:
+            self.found_refs.add(ref)
+        return ref.encode()
 
     def in_scope(self, obj: ty.Any) -> bool:
         if self.code_hash == "user":
@@ -1405,7 +1434,9 @@ class _CodeWalk:
                 continue  # a builtin, or not defined
             value, path = namespace[chain[0]], chain[0]
             for attr in chain[1:]:
-                if not isinstance(value, types.ModuleType) or is_library(value):
+                if not isinstance(value, types.ModuleType) or (
+                    is_library(value) and not _is_unowned_python(value.__name__)
+                ):
                     break
                 try:
                     value = getattr(value, attr)
@@ -1445,7 +1476,7 @@ class _CodeWalk:
         if value is _EMPTY_CELL:
             return b"<empty>"
         if isinstance(value, types.ModuleType):
-            if is_library(value):
+            if is_library(value) and not _is_unowned_python(value.__name__):
                 return self.library(value.__name__, "module", value.__name__)
             return f"module:{value.__name__}".encode()
         if isinstance(value, logging.Logger):
@@ -1571,6 +1602,7 @@ class _CodeWalk:
             with _walk_memo_lock:
                 _walk_memo.setdefault(self.root, {})[key] = memo
         self.cache.modules.update(self.modules)
+        self.cache.refs.update(self.refs)
         digest = self.cache.digests[id(self.root)] = sha256(
             b"".join(len(code).to_bytes(8, "big") + code for code, _ in entries)
         ).hexdigest()
@@ -1591,12 +1623,12 @@ class _CodeWalk:
 
     def walk(self, key: tuple) -> tuple[list[tuple[bytes, bytes]], "_WalkMemo"]:
         memo = _WalkMemo(self.root, key)
-        self.modules = set()
+        self.modules, self.refs = set(), set()
         entries = []
         n = 0
         while n < len(self.definitions):
             obj = self.definitions[n]
-            if is_library(obj):
+            if is_library(obj) and not _is_unowned_python(obj.__module__):
                 memo.modules.add(obj.__module__)
             if isinstance(obj, type):
                 code = _class_code(obj, self.cache)
@@ -1614,11 +1646,12 @@ class _CodeWalk:
                 if name == "code" or name.startswith("member:"):
                     checked.append((name, memo.ref(value)))
                     continue
-                self.dynamic, self.found = False, set()
+                self.dynamic, self.found, self.found_refs = False, set(), set()
                 ref = self.reference(name, value, obj)
                 refs.append(name.encode() + b"=" + ref)
                 held = None if self.dynamic else memo.ref(value)
                 (self.modules if held is None else memo.modules).update(self.found)
+                (self.refs if held is None else memo.refs).update(self.found_refs)
                 checked.append((name, held))
                 statics.append(None if held is None else ref)
             memo.checked.append(checked)
@@ -1630,6 +1663,7 @@ class _CodeWalk:
         if None in memo.definitions:
             memo.definitions = []  # cannot be checked, so never replayed
         self.modules.update(memo.modules)
+        self.refs.update(memo.refs)
         return entries, memo
 
     def replay(self, memo: "_WalkMemo") -> list[tuple[bytes, bytes]] | None:
@@ -1641,7 +1675,7 @@ class _CodeWalk:
             return None
         self.definitions = definitions
         self.numbers = {id(d): i for i, d in enumerate(definitions)}
-        self.modules = set(memo.modules)
+        self.modules, self.refs = set(memo.modules), set(memo.refs)
         entries = []
         for obj, checked, code, statics in zip(
             definitions, memo.checked, memo.codes, memo.parts
@@ -1655,9 +1689,10 @@ class _CodeWalk:
             parts = []
             for (name, value), static in zip(_references(current), statics):
                 if static is None:
-                    self.found = set()
+                    self.found, self.found_refs = set(), set()
                     static = self.reference(name, value, obj)
                     self.modules.update(self.found)
+                    self.refs.update(self.found_refs)
                 parts.append(name.encode() + b"=" + static)
             entries.append((code, b",".join(parts)))
         if len(self.definitions) != len(definitions):
@@ -1697,6 +1732,7 @@ class _WalkMemo:
         self.parts: list[list[bytes | None]] = []
         self.files: dict[str, int | None] = {}
         self.modules: set[str] = set()
+        self.refs: set[str] = set()
         root_ref = weakref.ref(root)
         memo_ref = weakref.ref(self)
 

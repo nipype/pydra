@@ -56,12 +56,20 @@ and the distribution that owns it and its identity (``lib:numpy==2.1.0:numpy.add
 public version of an index install (the local label such as ``+cu121`` names a build for
 a platform and is recorded in the context, not keyed), ``version@commit`` of a VCS
 install, ``version@hash`` of an archive and ``version@record:hash`` of a local directory
-install, which is a digest of its ``RECORD``. The owner is the distribution whose
+install, which is a digest of the ``path,hash`` entries of its ``RECORD`` outside
+``*.dist-info`` (what was installed, not how). An editable install, which is library code
+when named with ``-mypkg``, has no version in its identity: ``git:<commit>`` in a clean
+git checkout, otherwise ``dir:<digest of the importable files>`` (untracked notes and data
+are ignored). The engine itself (``pydra.compose``, ``pydra.engine``,
+``pydra.environments``, ``pydra.utils``, ``pydra.workers``, ``pydra.scripts``) is
+referenced by qualified name with no identity, like the standard library; the context
+records pydra's identity. ``pydra.tasks.*`` is keyed by the distribution that owns it. The
+identity record lists the references in ``task.refs``. The owner is the distribution whose
 ``RECORD`` lists the module's file, else the one distribution that
 ``importlib.metadata.packages_distributions()`` names for its top-level package. An
 extension module that no distribution owns is referenced as ``lib:?:`` and its results
 are not reused by other processes; a pure-Python module that none owns is hashed as user
-code. Only the distributions that code reaches directly are keyed, not what they
+code, and does not make the context unknown. Only the distributions that code reaches directly are keyed, not what they
 require, and the distributions that own the library types of the input values (a numpy
 array, a pandas frame) are keyed too. The ``PYDRA_USER_PACKAGES`` environment variable overrides that boundary with a
 comma-separated list of packages, ``mypkg`` to hash an installed package as user code

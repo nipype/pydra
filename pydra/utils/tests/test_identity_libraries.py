@@ -22,9 +22,12 @@ from pydra.utils.identity import task_record
 FAKELIB = "def scale(a):\n    return 2 * a\n\n\nclass Thing:\n    pass\n"
 USER = (
     "from fakelib import scale\nimport fakelib\nimport os\nfrom json import dumps\nfrom os import environ\n"
-    "from numpy import add\n\n\n"
+    "from numpy import add, zeros\nfrom pathlib import Path\nimport numpy\n\n"
+    "SUM = numpy.ndarray.sum\n\n\n"
     "def f(x):\n    return scale(x), os, dumps(x), fakelib, environ\n\n\n"
-    "def h(x):\n    return add(x, 1)\n\n\n"
+    "def h(x):\n    return add(x, 1), zeros, SUM\n\n\n"
+    "def k(x):\n    return fakelib.scale(x)\n\n\n"
+    "class Local:\n    pass\n\n\n"
     "def g(x):\n    return x\n"
 )
 
@@ -43,9 +46,11 @@ class FakeDist:
 
     def read_text(self, name):
         if name == "direct_url.json" and self.direct is not None:
-            return json.dumps(self.direct)
+            return (
+                self.direct if isinstance(self.direct, str) else json.dumps(self.direct)
+            )
         if name == "RECORD":
-            return "\n".join(self.files)
+            return "\n".join(f"{f},sha256={f},1" for f in self.files)
         return None
 
 
@@ -71,10 +76,11 @@ def libs(monkeypatch, tmp_path):
         requires=("base>=1",),
         others=None,
         top_level=None,
+        base="1.0",
     ):
         dists = [
             FakeDist("fakelib", version, direct, site, files, requires),
-            FakeDist("base", "1.0"),
+            FakeDist("base", base),
         ]
         dists += [FakeDist(n, *v) for n, v in (others or {}).items()]
         monkeypatch.setattr(importlib.metadata, "distributions", lambda: iter(dists))
@@ -159,33 +165,146 @@ def test_stdlib_unversioned(libs):
 
 
 def test_ufunc_owner_from_file(libs):
-    """numpy.add is owned by the distribution whose RECORD lists the file of numpy"""
+    """numpy.add is owned by the distribution whose RECORD lists the file of numpy; a
+    builtin function and a method descriptor of numpy are owned the same way"""
     path = numpy.__file__
     libs.install(
         others={"numpy": ("9.9", None, "/", [path.lstrip("/")])},
         top_level={"numpy": ["numpy"]},
     )
+    encoded = _encoded(libs.user.h)
+    assert b"global:add=lib:numpy==9.9:numpy.add" in encoded
+    assert b"global:zeros=lib:numpy==9.9:numpy.zeros" in encoded
+    assert b"global:SUM=lib:numpy==9.9:numpy.ndarray.sum" in encoded
     assert owner_of("numpy") == ("numpy", "9.9")
-    assert b"global:add=lib:numpy==9.9:numpy.add" in _encoded(libs.user.h)
 
 
-def test_unowned_extension_lib_question(libs, monkeypatch):
-    """An extension module no distribution owns is referenced as ``lib:?:`` and the
-    context cannot name its version; a pure-Python one is walked as user code"""
+def test_unowned_extension_is_referenced_not_walked(libs, monkeypatch):
+    """A function or type of an extension module no distribution owns is referenced as
+    ``lib:?:`` and never walked, and the context cannot name its version"""
     ext = types.ModuleType("extmod")
-    ext.__file__ = str(libs.site / "extmod.cpython-313-x86_64-linux-gnu.so")
+    ext.__file__ = str(libs.site / "extmod.so")
+
+    namespace = {"__name__": "extmod"}
+    exec(compile("def func(x):\n    return x\n", ext.__file__, "exec"), namespace)
+    func = namespace["func"]
     Kind = type("Kind", (), {"__module__": "extmod"})
-    ext.THING = Kind()
+    ext.func, ext.Kind = func, Kind
     monkeypatch.setitem(sys.modules, "extmod", ext)
-    namespace = {"THING": ext.THING, "__name__": "uses_ext"}
-    exec("def f(x):\n    return THING\n", namespace)
-    assert b"global:THING=lib:?:extmod.THING" in _encoded(namespace["f"])
+    namespace = {"func": func, "Kind": Kind, "__name__": "uses_ext"}
+    exec("def f(x):\n    return func, Kind\n", namespace)
+    encoded = _encoded(namespace["f"])
+    assert b"global:Kind=lib:?:extmod.Kind" in encoded
+    assert b"global:func=lib:?:extmod.func" in encoded
+    assert b"#1" not in encoded
     assert context.package_versions({"extmod"}) == {"extmod": None}
-    # fakelib not owned: walked as user code, not referenced by name
+    assert "extmod" in hash_module.library_modules(namespace["f"])
+
+
+def test_unowned_python_is_walked_and_keyed_by_code(libs):
+    """A pure-Python module no distribution owns is walked as user code, whether a
+    name or the module is read; the context does not call it unknown"""
     libs.install(top_level={}, files=())
-    encoded = _encoded(libs.user.f)
-    assert b"lib:fakelib" not in encoded and b"fakelib.scale" not in encoded
-    assert b"return(2*a)" in encoded.replace(b" ", b"") or b"BinOp" in encoded
+    for func in (libs.user.f, libs.user.k):
+        encoded = _encoded(func)
+        assert b"lib:fakelib" not in encoded and b"module:?:" not in encoded
+    assert b"global:fakelib.scale=#" in _encoded(libs.user.k)
+    before = _hash(libs.user.k)
+    source = libs.site / "fakelib" / "__init__.py"
+    source.write_text(FAKELIB.replace("2 * a", "3 * a"))
+    importlib.reload(sys.modules["fakelib"])
+    context.clear_caches()
+    assert _hash(libs.user.k) != before
+    assert "fakelib" not in hash_module.library_modules(libs.user.k)
+
+
+def test_unidentifiable_distribution_is_keyed_as_unknown(libs):
+    libs.install(direct="{not json")
+    assert b"lib:fakelib==?:fakelib.scale" in _encoded(libs.user.f)
+    assert context.package_versions({"fakelib"})["fakelib"] is None
+
+
+def test_engine_modules_carry_no_identity(libs, monkeypatch):
+    """The engine is referenced by qualified name, as the standard library is, never in
+    ``task.values``; ``pydra.tasks`` is keyed by the distribution that owns it"""
+    from pydra.compose import workflow
+    from pydra.utils.typing import StateArray
+
+    assert hash_module.library_owner("pydra.compose.workflow") == ""
+    assert hash_module.library_owner("pydra.engine.state") == ""
+    assert hash_module.library_owner("pydra.utils.hash") == ""
+    assert hash_module.library_owner("pydra") == ""
+    tasks = types.ModuleType("pydra.tasks.faketasks")
+    tasks.__file__ = str(libs.site / "pydra" / "tasks" / "faketasks.py")
+    monkeypatch.setitem(sys.modules, "pydra.tasks.faketasks", tasks)
+    libs.install(
+        others={
+            "pydra": ("1.0",),
+            "pydra-tasks-fake": (
+                "3.0",
+                None,
+                libs.site,
+                ["pydra/tasks/faketasks.py"],
+            ),
+        },
+        top_level={"pydra": ["pydra", "pydra-tasks-fake"]},
+    )
+    assert (
+        hash_module.library_owner("pydra.tasks.faketasks") == "pydra-tasks-fake==3.0:"
+    )
+    task = python.define(libs.user.g)(x=StateArray([1, 2]))
+    assert task_record(task)["task"]["values"] == []
+    assert "pydra" not in {
+        r.partition("==")[0][4:] for r in task_record(task)["task"]["refs"]
+    }
+    assert workflow.define is not None
+
+
+def test_namespace_owner_needs_one_distribution(libs):
+    """A module two distributions claim is owned by the one whose RECORD lists its
+    file, and by none if no RECORD does"""
+    libs.install(
+        files=("fakelib/__init__.py",),
+        others={"fakelib-fork": ("2.0",)},
+        top_level={"fakelib": ["fakelib", "fakelib-fork"]},
+    )
+    assert owner_of("fakelib") == ("fakelib", "1.0")
+    libs.install(
+        files=(),
+        others={"fakelib-fork": ("2.0",)},
+        top_level={"fakelib": ["fakelib", "fakelib-fork"]},
+    )
+    assert owner_of("fakelib") is None
+
+
+def test_editable_root_owns_a_module(libs, tmp_path):
+    """A module of an editable install is owned through its source directory"""
+    source = tmp_path / "src"
+    (source / "fakelib").mkdir(parents=True)
+    (source / "fakelib" / "__init__.py").write_text(FAKELIB)
+    direct = {"url": source.as_uri(), "dir_info": {"editable": True}}
+    monkey = sys.modules["fakelib"]
+    monkey.__file__ = str(source / "fakelib" / "__init__.py")
+    libs.install(direct=direct, files=("fakelib.pth",), top_level={})
+    owner = owner_of("fakelib")
+    assert owner is not None and owner[0] == "fakelib"
+    assert owner[1].startswith(("git:", "dir:"))
+
+
+def test_refs_in_record(libs):
+    """``task.refs`` lists the references to library code with their identities, the
+    standard library left out, and again from the memoised walk"""
+    task = python.define(libs.user.f)(x=1)
+    refs = task_record(task)["task"]["refs"]
+    assert "lib:fakelib==1.0:fakelib.scale" in refs
+    assert "module:fakelib==1.0:fakelib" in refs
+    assert not any(r.startswith(("lib:os", "lib:json", "module:os")) for r in refs)
+    assert refs == sorted(refs)
+    assert task_record(python.define(libs.user.f)(x=1))["task"]["refs"] == refs
+    libs.install(version="2.0")
+    after = task_record(python.define(libs.user.f)(x=1))["task"]["refs"]
+    assert "lib:fakelib==2.0:fakelib.scale" in after
+    assert "lib:fakelib==1.0:fakelib.scale" not in after
 
 
 def test_packages_distributions_fallback(libs):
@@ -218,26 +337,47 @@ def test_input_value_type_owner_keyed(libs):
     assert after._checksum != before
     plain = python.define(libs.user.g)(x=1)
     assert task_record(plain)["task"]["values"] == []
+    # the standard library, user code and no owner are left out
+    for value in (Path("/x"), libs.user.Local()):
+        record = task_record(python.define(libs.user.g)(x=value))
+        assert record["task"]["values"] == []
+    # the executor field is not a value
+    assert record["task"]["values"] == []
 
 
 def test_transitive_not_keyed(libs):
     """fakelib requires base; base is in the context's closure, not in the key"""
     before = _hash(libs.user.f)
-    libs.install()
-    context._distributions()["base"].version  # read
     assert b"base" not in _encoded(libs.user.f)
-    assert set(context.package_versions({"fakelib"})) == {"base", "fakelib"}
-    # a new version of base, which the record does not name, does not re-key
-    libs.install(others={"base": ("2.0",)})
+    assert context.package_versions({"fakelib"})["base"] == "1.0"
+    libs.install(base="2.0")
+    assert context.package_versions({"fakelib"})["base"] == "2.0"
     assert _hash(libs.user.f) == before
+
+
+def test_record_digest_ignores_install_metadata(libs):
+    """The identity of a local-directory install is that of the code it installed, not
+    of the metadata of how: two installs of the same files from different places are
+    one key, and an edited file is another"""
+    here = {"url": "file:///home/a/src", "dir_info": {}}
+    there = {"url": "file:///home/b/src", "dir_info": {}}
+    libs.install(
+        direct=here,
+        files=("fakelib/__init__.py", "fakelib-1.0.dist-info/direct_url.json"),
+    )
+    first = _encoded(libs.user.f)
+    libs.install(
+        direct=there, files=("fakelib/__init__.py", "fakelib-1.0.dist-info/INSTALLER")
+    )
+    assert _encoded(libs.user.f) == first
+    libs.install(direct=here, files=("fakelib/__init__.py", "fakelib/more.py"))
+    assert _encoded(libs.user.f) != first
 
 
 def test_real_installed_numpy_owner():
     """The venv's numpy, owned through the files of its ``RECORD``"""
     dist = importlib.metadata.distribution("numpy")
-    files = {str(dist.locate_file(f)) for f in dist.files or ()}
-    assert numpy.__file__ in files or Path(numpy.__file__).resolve() in {
-        Path(f).resolve() for f in files
-    }
-    assert owner_of("numpy") == ("numpy", Version(numpy.__version__).public)
+    files = {Path(str(dist.locate_file(f))).resolve() for f in dist.files or ()}
+    assert Path(numpy.__file__).resolve() in files
+    assert owner_of("numpy") == ("numpy", Version(dist.version).public)
     assert hash_module.library_owner("numpy.linalg").startswith("numpy==")

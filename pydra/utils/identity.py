@@ -26,7 +26,7 @@ from pydra.utils.hash import (
     LIBRARY_PACKAGES,
     USER_PACKAGES_ENV_VAR,
     Cache,
-    _is_stdlib,
+    is_unversioned,
     _module_is_library,
     _package_overrides,
     check_code_hash,
@@ -79,6 +79,7 @@ def field_digests(
     digests["Outputs"] = f"type@1:{hash_function(task.Outputs, cache=cache)}"
     if collect:
         task._code_modules = frozenset(cache.modules)
+        task._code_refs = sorted(cache.refs)
         task._declared_code = {
             k: ",".join(sorted(v)) for k, v in sorted(cache.declared.items())
         }
@@ -96,7 +97,8 @@ def library_values(task: "Task") -> list[str]:
     sorted ``dist:{dist}=={identity}`` strings (RFC 0004 section 4.1). The walk of the
     code sees only the library code a function names, so ``def f(x): return x.mean()``
     would not be re-keyed by an upgrade of the library of ``x`` without them. A type of
-    the standard library, of user code or of no single distribution is left out."""
+    the standard library or the engine, of user code, or of no single distribution
+    (the context records it as unknown) is left out."""
     from pydra.engine.context import _value_modules
 
     modules: set[str] = set()
@@ -108,7 +110,7 @@ def library_values(task: "Task") -> list[str]:
         for m in modules
         if isinstance(m, str)
         and m != "__main__"
-        and not _is_stdlib(m)
+        and not is_unversioned(m)
         and _module_is_library(m)
         and (o := owner_of(m)) is not None
     }
@@ -121,7 +123,10 @@ def task_record(task: "Task") -> Record:
         return {"scheme": IDENTITY_SCHEME, "supplied": task._supplied_checksum()}
     digests = dict(task._compute_hashes()[1])
     outputs = digests.pop("Outputs")
-    code: dict[str, ty.Any] = {"values": library_values(task)}
+    code: dict[str, ty.Any] = {
+        "refs": list(task._code_refs or ()),
+        "values": library_values(task),
+    }
     if _executor_is_code(task) and task._executor_name in digests:
         code["code"] = digests.pop(task._executor_name)
     return {

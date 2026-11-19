@@ -2,6 +2,7 @@
 the environment and the identities of the installed distributions. It is never part
 of the job checksum; a reuse policy (see :mod:`pydra.engine.store`) compares it."""
 
+import csv
 import dataclasses
 import functools
 import hashlib
@@ -131,11 +132,14 @@ def _capped_digest(root: Path, files: list[Path]) -> str:
     )
 
 
+IMPORTABLE_SUFFIXES = (".py", ".so", ".pyd")
+"""The files of a package that identify its code; notes, data and byte-code do not."""
+
+
 def _git_identity(root: Path, paths: list[Path]) -> str | None:
-    """``git:<commit>``, followed by a digest of the modified and untracked files in
-    `paths` that are not ignored, if `root` is in a git checkout"""
+    """``git:<commit>`` if `root` is in a git checkout and none of the importable files
+    in `paths` is modified, untracked (and not ignored) or deleted, otherwise None"""
     commit = _git(root, "rev-parse", "HEAD")
-    top = _git(root, "rev-parse", "--show-toplevel")
     status = _git(
         root,
         "status",
@@ -145,19 +149,14 @@ def _git_identity(root: Path, paths: list[Path]) -> str | None:
         "--",
         *(str(p) for p in paths),
     )
-    if not commit or not top or status is None:
+    if not commit or status is None:
         return None
-    top_dir = Path(top.strip())
     entries = status.split("\0")
-    changed = [
-        top_dir / entry[3:]
-        for i, entry in enumerate(entries)
-        if len(entry) > 3 and not (i and entries[i - 1][:1] == "R")
-    ]
-    identity = f"git:{commit.strip()}"
-    if changed:
-        identity += "+" + _capped_digest(top_dir, sorted(changed))
-    return identity
+    for i, entry in enumerate(entries):
+        if len(entry) > 3 and not (i and entries[i - 1][:1] == "R"):
+            if entry[3:].endswith(IMPORTABLE_SUFFIXES):
+                return None
+    return f"git:{commit.strip()}"
 
 
 def _package_files(paths: list[Path]) -> list[Path]:
@@ -263,10 +262,10 @@ class _Installed:
 def _identify(installed: _Installed) -> tuple[str | None, str | None]:
     """The identity of an installed distribution, or why it is unknown. The identity
     is its version, followed by the commit or archive hash it was installed from, or
-    for an install from a local directory by ``git:<commit>[+<digest of changed
-    files>]`` for an editable install in a git checkout, a digest of its packages'
-    files for another editable install, and a digest of the files it installed (its
-    ``RECORD``) otherwise. An editable install's packages are read up to
+    for an install from a local directory by ``version@record:<digest of its RECORD
+    entries outside *.dist-info>``. An editable install has no version in it: it is
+    ``git:<commit>`` in a clean git checkout, else ``dir:<digest of the importable
+    files of its packages>``. An editable install's packages are read up to
     `IDENTITY_MAX_FILES` and `IDENTITY_MAX_BYTES`."""
     version, direct = installed.version, installed.direct
     if not version:
@@ -294,15 +293,34 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
             return None, f"no package of it was found under {root!r}"
         try:
             identity = _git_identity(Path(root), paths) or (
-                "dir:" + _capped_digest(Path(root), _package_files(paths))
+                "dir:"
+                + _capped_digest(
+                    Path(root),
+                    [
+                        f
+                        for f in _package_files(paths)
+                        if f.name.endswith(IMPORTABLE_SUFFIXES)
+                    ],
+                )
             )
         except _TooLarge as e:
             return None, str(e)
-        return f"{version}@{identity}", None
+        return identity, None
     record = installed.dist.read_text("RECORD")
     if not record:
         return None, "it was installed from a local source without a RECORD"
-    return f"{version}@record:{_digest([record.encode()])}", None
+    return f"{version}@record:{_record_digest(record)}", None
+
+
+def _record_digest(record: str) -> str:
+    """A digest of the ``path,hash`` entries of a ``RECORD`` outside ``*.dist-info/``,
+    which name the code installed and not how: ``direct_url.json``, ``INSTALLER``
+    and an installer's own files differ between two installs of the same code"""
+    entries = set()
+    for row in csv.reader(record.splitlines()):
+        if len(row) >= 2 and row[1] and ".dist-info/" not in row[0]:
+            entries.add((row[0], row[1]))
+    return _digest(f"{path},{hash_}".encode() for path, hash_ in sorted(entries))
 
 
 def _direct_url(dist) -> ty.Any:
