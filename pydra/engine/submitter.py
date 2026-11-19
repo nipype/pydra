@@ -557,19 +557,20 @@ class Submitter:
         if len(self.workers) == 1 and not self.worker.is_async:
             drive_inline(
                 runner,
-                InlineExecutor(self.worker),
+                InlineExecutor(self.worker, self.worker_for),
                 on_error=runner.on_error,
                 audit=self.audit,
                 limit=self._limit(),
             )
-        else:  # jobs are routed to workers of another kind
+        else:  # TEMPORARY: removed in R3, where drive takes the non-inline runs
+            # jobs are routed to workers of another kind
             self._expand_routed(runner)
         if runner.errors:
             raise workflow_error(wf_job, runner.errors, runner.entries)
 
     def _expand_routed(self, runner: GraphRunner) -> None:
-        """The synchronous loop for a submitter whose router may place a job on a
-        worker the inline executor cannot run"""
+        """Temporary, removed in R3: the synchronous loop for a submitter whose router
+        may place a job on a worker the inline executor cannot run"""
         fail_fast = runner.on_error == "fail_fast"
         limit = self._limit()
         dispatch = runner.ready(limit).dispatch

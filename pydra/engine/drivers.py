@@ -31,7 +31,8 @@ def drive_inline(
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
     audit : Audit
-        Reserved: jobs report to the audit of their submitter
+        Inert until R7, when the driver reports the runner's settled and unrunnable
+        elements to it; jobs report to the audit of their submitter
     limit : int, optional
         The most jobs to take from the runner per round, None if unlimited
     """

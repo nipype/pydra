@@ -366,7 +366,7 @@ def test_on_error_unresolvable_input_fail_fast(worker, tmp_path):
             sub(task, raise_errors=True)
 
 
-def test_on_error_debug_loop_wraps_submit(tmp_path, monkeypatch):
+def test_on_error_debug_driver_collects_worker_errors(tmp_path, monkeypatch):
     """The debug driver reports an exception the worker raises as the job's failure, so
     that ``raise_at_end`` collects it and goes on"""
     from pydra.engine import WorkflowError

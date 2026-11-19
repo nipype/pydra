@@ -76,22 +76,58 @@ def FailThenIndependent(path: str):
     return r.out, t.out
 
 
+@workflow.define
+def OneThread(x: int):
+    return workflow.add(ThreadId(x=x), name="T").out
+
+
+@workflow.define
+def OneVar(x: int):
+    return workflow.add(ReadVar(x=x), name="R").out
+
+
+@workflow.define
+def OneAsyncio(x: int):
+    return workflow.add(RunsAsyncio(x=x), name="A").out
+
+
+@workflow.define(outputs=["t", "v", "a"])
+def Mixed(x: int):
+    t = workflow.add(ThreadId(x=x), name="T")
+    v = workflow.add(ReadVar(x=t.out), name="V")
+    a = workflow.add(RunsAsyncio(x=x), name="A")
+    return t.out, v.out, a.out
+
+
+# The tasks run as nodes of a workflow, which is what drives them through drive_inline
+# and the InlineExecutor
+
+
 def test_debug_runs_in_caller_thread(tmp_path):
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
-        result = sub(ThreadId(x=1))
+        result = sub(OneThread(x=1))
     assert result.outputs.out == threading.get_ident()
 
 
 def test_debug_contextvar_visible(tmp_path):
     VAR.set("caller")
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
-        result = sub(ReadVar(x=1))
+        result = sub(OneVar(x=1))
     assert result.outputs.out == "caller"
 
 
 def test_debug_task_may_call_asyncio_run(tmp_path):
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
-        assert sub(RunsAsyncio(x=1)).outputs.out == 2
+        assert sub(OneAsyncio(x=1)).outputs.out == 2
+
+
+def test_debug_workflow_nodes_share_thread_and_context(tmp_path):
+    VAR.set("caller")
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        outputs = sub(Mixed(x=1)).outputs
+    assert outputs.t == threading.get_ident()
+    assert outputs.v == "caller"
+    assert outputs.a == 2
 
 
 def test_debug_inside_running_loop(tmp_path):
@@ -100,7 +136,7 @@ def test_debug_inside_running_loop(tmp_path):
             return sub(Chain(x=1)).outputs.out
 
     assert asyncio.run(outer()) == 12
-    assert "nest_asyncio" not in sys.modules
+    assert "nest_asyncio" not in sys.modules  # not installed with the test extra
 
 
 def test_debug_fail_fast_raises_task_exception_object(tmp_path):
@@ -154,16 +190,35 @@ def test_deprecated_wrappers_warn(tmp_path):
         with pytest.warns(DeprecationWarning, match="get_runnable_tasks"):
             sub.get_runnable_tasks(runner.exec_graph)
 
-    async def go():
-        with Submitter(worker="debug", cache_root=tmp_path / "b") as sub2:
-            job = _workflow_job(sub2, Chain(x=2))
-            with pytest.warns(DeprecationWarning, match="expand_workflow_async"):
-                await sub2.expand_workflow_async(job, rerun=False)
-
-    asyncio.run(go())
+    with Submitter(worker="debug", cache_root=tmp_path / "b") as sub2:
+        job = _workflow_job(sub2, Chain(x=2))
+        with pytest.warns(DeprecationWarning, match="expand_workflow_async"):
+            sub2.loop.run_until_complete(sub2.expand_workflow_async(job, rerun=False))
 
 
 def _workflow_job(sub, task):
     from pydra.engine.job import Job
 
     return Job(task, submitter=sub, name="main", environment=sub.environment)
+
+
+def test_debug_consults_the_router_per_job(tmp_path):
+    """Under a single debug worker the router is still asked where each job runs, and a
+    name that is not one of the submitter's workers is an error"""
+    from pydra.engine import WorkflowError
+
+    asked = []
+
+    def router(job):
+        asked.append(job.name)
+        return None
+
+    with Submitter(worker="debug", router=router, cache_root=tmp_path / "ok") as sub:
+        assert sub(Chain(x=1)).outputs.out == 12
+    assert asked == ["A", "B"]
+
+    with Submitter(
+        worker="debug", router=lambda job: "gpu", cache_root=tmp_path / "bad"
+    ) as sub:
+        with pytest.raises((ValueError, WorkflowError), match="gpu"):
+            sub(Chain(x=1))

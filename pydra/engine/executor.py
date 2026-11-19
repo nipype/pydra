@@ -36,14 +36,20 @@ class InlineExecutor:
     ----------
     worker : Worker
         A synchronous worker, whose ``run`` executes a job
+    worker_for : Callable[[Job], Worker], optional
+        Chooses the worker of each job (the submitter's router); an exception it raises
+        is the job's failure. Without it every job runs on ``worker``
     """
 
     batches = False
     checks_store = True
     inline = True
 
-    def __init__(self, worker: "Worker"):
+    def __init__(
+        self, worker: "Worker", worker_for: "ty.Callable[[Job], Worker] | None" = None
+    ):
         self.worker = worker
+        self.worker_for = worker_for
         self._report: "ty.Callable[[Job, Outcome], None] | None" = None
 
     def bind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
@@ -58,7 +64,8 @@ class InlineExecutor:
         handle = Handle(self, tuple(jobs), set(jobs))
         for job in handle.jobs:
             try:
-                outcome: "Outcome" = self.worker.run(job, rerun=job.rerun)
+                worker = self.worker_for(job) if self.worker_for else self.worker
+                outcome: "Outcome" = worker.run(job, rerun=job.rerun)
             except Exception as exc:
                 outcome = Failed(exc)
             handle.open.discard(job)
