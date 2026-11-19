@@ -212,13 +212,28 @@ lib:{dist}=={identity}:{module.qualname}
     {digest of RECORD}` (`:285-288`). The version string of such a package does not follow its
     code, and setuptools-scm or hatch-vcs put the commit and the dirty flag into its local segment,
     so neither the public version nor the local segment identifies it; its `RECORD`'s file hashes
-    do.
+    do. The digest covers only the `RECORD` entries outside `*.dist-info/`: the metadata files
+    there (`RECORD` itself, `INSTALLER`, `direct_url.json`) differ between installs of the same code;
+  - editable, or a local checkout keyed as a library (an editable install inside `site-packages`
+    that `PYDRA_USER_PACKAGES` marks as library code with `-name`): `git:<commit>`, with no version
+    prefix, when the checkout is a clean git work tree, since the version string of an editable
+    install does not follow its code; otherwise `dir:<digest of its importable files>`, the files
+    under the package's import paths that Python can import. Untracked files that are not
+    importable (notes, build output, data) do not count, so they neither dirty nor re-key it.
 
   An identity `_identify` cannot compute (`:246-260`) is keyed as `?` and the context gets
   `unknown`, as today for the context (`engine/context.py:520-521`).
 - **The standard library and builtins** keep `lib:{module.qualname}` with no version. The Python
   minor is already compared by `ConsistentReuse` (`engine/store.py:246-260`). Keying it would bring
   back the false misses across minors that `ast@1` removed.
+- **pydra's engine** is referenced the same way: a reference into `pydra.compose`, `pydra.engine`,
+  `pydra.environments`, `pydra.utils`, `pydra.workers` or `pydra.scripts` is
+  `lib:{module.qualname}` with no identity, and pydra's types never enter `task.values`. The
+  context keeps pydra's identity, and `IDENTITY_SCHEME` versions what the engine contributes to a
+  checksum. Keying pydra's version would re-key every workflow and split task at every pydra
+  release, and at every edit of an editable pydra checkout, because their keys reach engine code,
+  while a plain task's key does not. Task packages under `pydra.tasks.*` are libraries like any
+  other and are keyed by their owning distribution.
 - **C extensions** (`numpy.add`, a ufunc whose `__module__` is `numpy`) are owned like any other
   module. The owner is found from the module's file (§8.5). No source is read.
 - **Editable installs** live outside `site-packages`, so `_path_is_library` already classifies them
@@ -394,7 +409,9 @@ be reused for this.
 - a standard-library or builtin type: its qualified name;
 - a library type: `lib:{dist}=={identity}:{qualname}` (§4.1);
 - a class with pydra or attrs fields, which includes every task's `Outputs` class and every class
-  built by `define`: its qualified name and the encoding of its fields by `_versioned_fields`
+  built by `define`: the encoding of its fields only, not its qualified name, so two equivalent
+  tasks defined in different ways (a decorated function, a class, a `define` call) share a
+  checksum. The fields are encoded by `_versioned_fields`
   (`hash.py:602-609`, `:1676-1690`), names, types (as `type@1`), `path_template`s and the other
   metadata of §5.1, as today's branch for such classes does. `_class_code` is not used for them: a
   class built by `define` has no source, and its fallback holds only member functions
