@@ -508,8 +508,11 @@ and a writer, can race, so the move is a compare-and-move, and it is fenced:
    mover read and found corrupt. The first mover moves that directory. A late mover that found the
    same directory corrupt, when the address now holds another, valid directory, renames that one
    onto the existing, non-empty `quarantine/<uuid>`, and the rename fails and moves nothing. No lock
-   is taken. On storage whose inodes are not stable, and for an empty directory at the address,
-   which a rename would replace, the name is a random UUID and steps 2 and 3 are the only guard.
+   is taken. A store requires stable, non-zero inode numbers to publish, because its identity checks
+   rely on them. Where a filesystem reports `st_ino == 0`, the quarantine name is a random UUID, which
+   claims no identity, and the protection degrades to the fence of steps 2 and 3. An empty directory
+   at the address, which a rename would replace rather than fail on, is removed (`rmdir`) before the
+   move.
 2. Re-verify the moved copy against the address it came from (§6.2).
 3. If it verifies, it was not the corrupt entry: another writer committed a valid one at the address
    between this reader's check and its rename. Rename it back without replacement. If the address is
@@ -1038,13 +1041,13 @@ migrates before them migrates into a root that the next release cannot open (§4
    under a `PortableStore` the job carries `attempt` and `verify` (§7.1), and its context is the
    identity's lookup context (§4).
 4. **Lookups in `ready()`** (carried: RFC 0002 §3.1). Through `read_succeeded` and under
-   `lookup_before_dispatch`, a runner over a store that has `find` calls `find(job)`, settles a `Hit`, dispatches a `Miss`, and dispatches a
-   `Verify` with `job.verify` set (§5.2, §7.1).
+   `lookup_before_dispatch`, a runner over a store that has `find` calls `find(job)`, settles a
+   `Hit`, dispatches a `Miss`, and dispatches a `Verify` with `job.verify` set (§5.2, §7.1).
 5. **Result reads** (carried: RFC 0002 §3.3, §3.1). The Slurm and SGE adapter (RFC 0002 §3.3),
-   `runner.result()` (RFC 0002 §3.1) and
-   `Submitter.__call__`'s final read (`engine/submitter.py:503-513`) read through `Job.result()`, which
-   under a `PortableStore` reads `_committed.json`, so a job whose outputs were not stored reports
-   its `Result` and its readers run (§5.4, §7.2). The visibility retry applies to `_committed.json`.
+   `runner.result()` (RFC 0002 §3.1) and `Submitter.__call__`'s final read
+   (`engine/submitter.py:503-513`) read through `Job.result()`, which under a `PortableStore` reads
+   `_committed.json`, so a job whose outputs were not stored reports its `Result` and its readers run
+   (§5.4, §7.2). The visibility retry applies to `_committed.json`.
 6. **Workflow jobs** (carried: RFC 0002 §3.1). The steps RFC 0002 §3.1 gives the runner for a
    workflow job take this form:
    - *Lease:* `try_take` on what `acquire` returns, which is always held unless `dedupe` is on, the
