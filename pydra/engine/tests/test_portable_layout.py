@@ -1,6 +1,8 @@
 import hashlib
 import json
+import errno
 import os
+import pickle
 import re
 import subprocess
 import sys
@@ -17,6 +19,7 @@ from pydra.engine.portable.layout import (
     HEADER_NAME,
     LayoutHeader,
     LegacyLayout,
+    StoreLayoutAbsent,
     StoreLayoutMismatch,
     StoreLayoutUnknown,
     cdir_for,
@@ -38,6 +41,11 @@ TRUST = "trusted" if IS_WINDOWS else "private"
 
 def _open(path):
     return StorageDir.open_root(path, StorePolicy(), trust=TRUST)
+
+
+def _rewrite(root_path, doc) -> None:
+    (root_path / HEADER_NAME).unlink()  # a committed header is read-only
+    (root_path / HEADER_NAME).write_text(json.dumps(doc))
 
 
 @pytest.fixture
@@ -126,7 +134,7 @@ def test_unknown_format_major_raises(root, expected, tmp_path, fmt):
     open_layout(root, expected)
     doc = _stored(tmp_path / "root")
     doc["format"] = fmt
-    (tmp_path / "root" / HEADER_NAME).write_text(json.dumps(doc))
+    _rewrite(tmp_path / "root", doc)
     with pytest.raises(StoreLayoutUnknown):
         open_layout(root, expected)
 
@@ -142,7 +150,7 @@ def test_minor_version_and_unknown_keys_are_accepted(root, expected, tmp_path):
     doc = _stored(tmp_path / "root")
     doc["format"] = "pydra-store@1.7"
     doc["future"] = {"x": 1}
-    (tmp_path / "root" / HEADER_NAME).write_text(json.dumps(doc))
+    _rewrite(tmp_path / "root", doc)
     got = open_layout(root, expected)
     assert got.format == "pydra-store@1.7"
     assert got.entries == expected.entries
@@ -160,7 +168,6 @@ MISMATCHES: dict[str, ty.Callable[[LayoutHeader], LayoutHeader]] = {
     "modes": lambda h: attrs.evolve(h, modes={**h.modes, "container": "0o2775"}),
     "shard": lambda h: attrs.evolve(h, shard="prefix2"),
     "dirs": lambda h: attrs.evolve(h, dirs={**h.dirs, "staging": "stage"}),
-    "pickle": lambda h: attrs.evolve(h, pickle=True),
 }
 
 
@@ -209,8 +216,8 @@ def test_empty_root_is_not_legacy(root, expected):
 
 def test_stale_temp_header_removed(root, expected, tmp_path):
     path = tmp_path / "root"
-    stale = path / ".pydra-store.0123456789abcdef.tmp"
-    fresh = path / ".pydra-store.fedcba9876543210.tmp"
+    stale = path / ".pydra-store.0123456789abcdef0123456789abcdef.tmp"
+    fresh = path / ".pydra-store.fedcba9876543210fedcba9876543210.tmp"
     stale.write_text("{")
     fresh.write_text("{")
     old = time.time() - StorePolicy().ages.staging - 60
@@ -358,3 +365,151 @@ def test_job_context_through_identity(tmp_path):
         assert job2.context == {"marked": True, "phase": "lookup"}
         assert job2.context is job2.context
         assert SEEN == ["lookup"]
+
+
+def test_header_mode_is_policy_file_mode(tmp_path):
+    path = tmp_path / "root"
+    path.mkdir()
+    with _open(path) as root:
+        open_layout(root, LayoutHeader.for_store(PydraIdentityV1()))
+    assert (path / HEADER_NAME).stat().st_mode & 0o777 == 0o444
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="group modes")
+def test_header_mode_under_group_policy(tmp_path):
+    path = tmp_path / "root"
+    path.mkdir()
+    policy = StorePolicy(file_mode=0o440, container_mode=0o2770, side_mode=0o2770)
+    os.chmod(path, 0o2770)
+    root = StorageDir.open_root(path, policy, trust="shared")
+    with root:
+        open_layout(root, LayoutHeader.for_store(PydraIdentityV1(), policy))
+    assert (path / HEADER_NAME).stat().st_mode & 0o777 == 0o440
+
+
+@pytest.mark.parametrize("created", [False, True])
+def test_pickle_is_recorded_not_compared(root, expected, created):
+    first = attrs.evolve(expected, pickle=created)
+    open_layout(root, first)
+    got = open_layout(root, attrs.evolve(expected, pickle=not created))
+    assert got.pickle is created
+
+
+def test_legacy_rechecks_header_after_scan(root, expected, tmp_path, monkeypatch):
+    from pydra.engine.portable import layout
+
+    real = layout._sweep_and_scan
+
+    def interleaved(r, *a):
+        # another opener links the header and makes its first directory after our read
+        (tmp_path / "root" / HEADER_NAME).write_bytes(expected.to_json())
+        (tmp_path / "root" / "staging").mkdir()
+        return real(r, *a)
+
+    monkeypatch.setattr(layout, "_sweep_and_scan", interleaved)
+    assert open_layout(root, expected) == expected
+
+
+def test_legacy_message_says_new_root_is_empty(root, expected, tmp_path):
+    (tmp_path / "root" / "x").mkdir()
+    with pytest.raises(LegacyLayout, match="empty"):
+        open_layout(root, expected)
+
+
+def test_exceptions_pickle(expected):
+    import cloudpickle
+
+    exc = StoreLayoutMismatch("shard", "differs in shard")
+    for dumps, loads in (
+        (pickle.dumps, pickle.loads),
+        (cloudpickle.dumps, pickle.loads),
+    ):
+        back = loads(dumps(exc))
+        assert type(back) is StoreLayoutMismatch
+        assert back.key == "shard" and str(back) == "differs in shard"
+    for cls in (StoreLayoutUnknown, LegacyLayout, StoreLayoutAbsent):
+        assert type(pickle.loads(pickle.dumps(cls("m")))) is cls
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [[1, "a"], [{"a": 1}, {"b": 2}], "host", None, 3],
+)
+def test_malformed_recorded_only_is_unknown(root, expected, tmp_path, bad):
+    open_layout(root, expected)
+    doc = _stored(tmp_path / "root")
+    doc["identity"]["recorded_only"] = bad
+    _rewrite(tmp_path / "root", doc)
+    with pytest.raises(StoreLayoutUnknown):
+        open_layout(root, expected)
+
+
+@pytest.mark.parametrize(
+    "key,bad", [("entries", 1), ("entry_format", None), ("shard", 2), ("pickle", "yes")]
+)
+def test_malformed_scalar_keys_are_unknown(root, expected, tmp_path, key, bad):
+    open_layout(root, expected)
+    doc = _stored(tmp_path / "root")
+    doc[key] = bad
+    _rewrite(tmp_path / "root", doc)
+    with pytest.raises(StoreLayoutUnknown):
+        open_layout(root, expected)
+
+
+def test_recorded_only_string_refused():
+    with pytest.raises(TypeError):
+        PydraIdentityV1(recorded_only="host")  # type: ignore[arg-type]
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="POSIX link errors")
+@pytest.mark.parametrize("code", [errno.EPERM, errno.ENOTSUP])
+def test_link_failure_is_store_unavailable(root, expected, monkeypatch, code):
+    def refuse(name, new_name):
+        raise (PermissionError if code == errno.EPERM else OSError)(code, "no links")
+
+    monkeypatch.setattr(root, "link", refuse)
+    with pytest.raises(StoreUnavailable) as info:
+        open_layout(root, expected)
+    assert not isinstance(info.value, PermissionError)
+
+
+def test_no_create_never_writes(root, expected, tmp_path):
+    with pytest.raises(StoreLayoutAbsent):
+        open_layout(root, expected, create=False)
+    assert list((tmp_path / "root").iterdir()) == []
+
+
+def test_no_create_checks_existing(root, expected):
+    open_layout(root, expected)
+    assert open_layout(root, expected, create=False) == expected
+    with pytest.raises(StoreLayoutMismatch):
+        open_layout(root, MISMATCHES["shard"](expected), create=False)
+
+
+def test_no_create_on_legacy_root(root, expected, tmp_path):
+    (tmp_path / "root" / "x").mkdir()
+    with pytest.raises(LegacyLayout):
+        open_layout(root, expected, create=False)
+
+
+@pytest.mark.skipif(
+    IS_WINDOWS or os.geteuid() == 0, reason="needs a read-only POSIX root"
+)
+def test_no_create_on_read_only_root(tmp_path, expected):
+    path = tmp_path / "ro"
+    path.mkdir()
+    with _open(path) as writable:
+        open_layout(writable, expected)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    os.chmod(path, 0o555)
+    os.chmod(empty, 0o555)
+    try:
+        with _open(path) as r:
+            assert open_layout(r, expected, create=False) == expected
+        with _open(empty) as r:
+            with pytest.raises(StoreLayoutAbsent):
+                open_layout(r, expected, create=False)
+    finally:
+        os.chmod(path, 0o755)
+        os.chmod(empty, 0o755)

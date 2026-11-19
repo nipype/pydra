@@ -58,6 +58,12 @@ class StoreIdentity(ty.Protocol):
         ...
 
 
+def _fields(value: ty.Iterable[str]) -> frozenset[str]:
+    if isinstance(value, (str, bytes)):
+        raise TypeError(f"recorded_only is a collection of field names, got {value!r}")
+    return frozenset(value)
+
+
 @attrs.frozen
 class PydraIdentityV1:
     """``pydra-identity@1``: pydra's checksum is not the digest of a stored record, the context
@@ -65,7 +71,7 @@ class PydraIdentityV1:
     (``pydra-context@1``) is the full sha256 of the RFC 8785 canonical JSON of the context
     without the ``recorded_only`` fields."""
 
-    recorded_only: frozenset[str] = attrs.field(factory=frozenset, converter=frozenset)
+    recorded_only: frozenset[str] = attrs.field(factory=frozenset, converter=_fields)
     name: ty.ClassVar[str] = "pydra-identity@1"
     fingerprint_name: ty.ClassVar[str] = "pydra-context@1"
 

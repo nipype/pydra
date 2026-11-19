@@ -27,6 +27,7 @@ __all__ = [
     "StoreLayoutUnknown",
     "StoreLayoutMismatch",
     "LegacyLayout",
+    "StoreLayoutAbsent",
     "LayoutHeader",
     "open_layout",
     "cdir_for",
@@ -43,9 +44,7 @@ MAX_HEADER_BYTES = 1 << 16
 _CDIR_RAW = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}")
 _FORMAT_RE = re.compile(r"pydra-store@(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _HEX2 = re.compile(r"[0-9a-f]{2}")
-_TEMP_RE = re.compile(
-    r"\.pydra-store\.[0-9a-f]{32}\.tmp|\.pydra-store\.[0-9a-f]{16}\.tmp"
-)
+_TEMP_RE = re.compile(r"\.pydra-store\.[0-9a-f]{32}\.tmp")
 
 
 class StoreLayoutUnknown(StoreUnavailable):
@@ -59,9 +58,17 @@ class StoreLayoutMismatch(StoreUnavailable):
         super().__init__(message)
         self.key = key
 
+    def __reduce__(self) -> tuple:
+        return (type(self), (self.key, str(self)))
+
 
 class LegacyLayout(StoreUnavailable):
-    """The root holds entries but no header: a ``PickleStore`` cache or another tool's directory."""
+    """The root holds names but no header: a ``PickleStore`` cache or another tool's directory.
+    A new root must be an empty directory."""
+
+
+class StoreLayoutAbsent(StoreUnavailable):
+    """The root is empty and ``open_layout`` was told not to create the header."""
 
 
 def _mode(mode: int | None) -> str | None:
@@ -88,7 +95,8 @@ class LayoutHeader:
         ``file``, ``entry``, ``sealed``, ``container``, ``side`` and ``staging``, each an
         ``"0o..."`` string or None.
     pickle : bool
-        Whether writers to this root may write pickle members.
+        Whether writers to this root may write pickle members. It is recorded when the root is
+        created and never compared on open (RFC 0003 sections 3.2 and 6.4).
     """
 
     format: str
@@ -178,9 +186,19 @@ class LayoutHeader:
             k in ident for k in ("name", "fingerprint", "recorded_only")
         ):
             raise StoreLayoutUnknown(f"{HEADER_NAME} has a malformed identity")
+        only = ident["recorded_only"]
+        if not isinstance(only, list) or not all(isinstance(f, str) for f in only):
+            raise StoreLayoutUnknown(
+                f"{HEADER_NAME} has a malformed identity.recorded_only"
+            )
         for name in ("dirs", "modes"):
             if not isinstance(doc[name], dict):
                 raise StoreLayoutUnknown(f"{HEADER_NAME} has a malformed {name}")
+        for name in ("entries", "entry_format", "shard"):
+            if not isinstance(doc[name], str):
+                raise StoreLayoutUnknown(f"{HEADER_NAME} has a malformed {name}")
+        if not isinstance(doc["pickle"], bool):
+            raise StoreLayoutUnknown(f"{HEADER_NAME} has a malformed pickle")
         return cls(**{n: doc[n] for n in names})
 
 
@@ -200,7 +218,7 @@ def _differing_key(stored: LayoutHeader, expected: LayoutHeader) -> str | None:
             return "identity"
     if _recorded(stored) != _recorded(expected):
         return "recorded_only"
-    for key in ("shard", "dirs", "modes", "pickle"):
+    for key in ("shard", "dirs", "modes"):
         if getattr(stored, key) != getattr(expected, key):
             return key
     return None
@@ -239,23 +257,29 @@ def _shown(header: LayoutHeader, key: str) -> str:
     return repr(getattr(header, key))
 
 
-def _sweep_and_scan(root: StorageDir, expected: LayoutHeader) -> list[str]:
-    """Remove header temporaries older than the staging age; return the other names present."""
+def _sweep_and_scan(root: StorageDir) -> list[str]:
+    """Remove header temporaries older than the staging age (best effort); return the first
+    other names present."""
     age = root.policy.ages.staging
     now = time.time()
-    others = []
-    for entry in list(root.scandir()):
+    others: list[str] = []
+    for entry in root.scandir():
         if entry.name == HEADER_NAME:
             continue
         if _TEMP_RE.fullmatch(entry.name) and entry.is_file():
             if now - entry.stat().st_mtime > age:
                 try:
                     root.unlink(entry.name)
-                except FileNotFoundError:
+                except OSError:
                     pass
             continue
         others.append(entry.name)
+        if len(others) > 3:
+            break
     return others
+
+
+_NO_LINK = (errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOSYS, errno.EMLINK)
 
 
 def _publish(root: StorageDir, tmp: str) -> bool:
@@ -267,20 +291,15 @@ def _publish(root: StorageDir, tmp: str) -> bool:
             root.link(tmp, HEADER_NAME)
     except FileExistsError:
         return False
-    except PermissionError:
-        if IS_WINDOWS and (
-            root.path and os.path.exists(os.path.join(root.path, HEADER_NAME))
-        ):
-            return False
-        raise
     except OSError as err:
-        if err.errno in (
-            errno.EPERM,
-            errno.ENOTSUP,
-            errno.EOPNOTSUPP,
-            errno.ENOSYS,
-            errno.EMLINK,
-        ):
+        if IS_WINDOWS and isinstance(err, PermissionError):
+            try:
+                root.lstat(HEADER_NAME)
+            except OSError:
+                pass
+            else:
+                return False
+        if err.errno in _NO_LINK:
             raise StoreUnavailable(
                 "this filesystem cannot link a file without replacing, so "
                 f"{HEADER_NAME} cannot be created: {err}"
@@ -289,12 +308,31 @@ def _publish(root: StorageDir, tmp: str) -> bool:
     return True
 
 
-def open_layout(root: StorageDir, expected: LayoutHeader) -> LayoutHeader:
+def _legacy(root: StorageDir, others: list[str]) -> StoreUnavailable:
+    return LegacyLayout(
+        f"{root.path} has names ({', '.join(sorted(others)[:3])}"
+        f"{', ...' if len(others) > 3 else ''}) but no {HEADER_NAME}: it is a PickleStore "
+        "cache or another tool's directory; migrate it (RFC 0003 section 8). A new root "
+        "must be an empty directory"
+    )
+
+
+def open_layout(
+    root: StorageDir, expected: LayoutHeader, *, create: bool = True
+) -> LayoutHeader:
     """Check ``root``'s header against ``expected``, creating it if the root is empty.
 
-    The header is written to a private temporary, ``fsync``ed, and linked to its name, which
-    fails if the name exists, so a concurrent opener sees none or a complete one. Header
-    temporaries older than the staging age are removed.
+    The header is written to a private temporary with the policy's ``file_mode``, ``fsync``ed,
+    and linked to its name, which fails if the name exists, so a concurrent opener sees none or
+    a complete one. Header temporaries older than the staging age are removed. A new root must
+    be an empty directory. Every stored key but ``pickle`` must equal ``expected``'s; ``pickle``
+    is recorded at creation and returned as stored.
+
+    Parameters
+    ----------
+    create : bool
+        With False nothing is written (a read-only root works) and an empty root raises
+        `StoreLayoutAbsent`.
 
     Returns
     -------
@@ -309,24 +347,29 @@ def open_layout(root: StorageDir, expected: LayoutHeader) -> LayoutHeader:
         A stored key differs from ``expected``; ``key`` names it.
     LegacyLayout
         The root holds names but no header.
+    StoreLayoutAbsent
+        The root is empty and ``create`` is false.
     """
     for _ in range(8):
         data = _read(root)
         if data is not None:
             return _check(LayoutHeader.from_json(data), expected)
-        others = _sweep_and_scan(root, expected)
+        others = _sweep_and_scan(root)
         if others:
-            raise LegacyLayout(
-                f"{root.path} has entries ({', '.join(sorted(others)[:3])}"
-                f"{', ...' if len(others) > 3 else ''}) but no {HEADER_NAME}: it is a PickleStore "
-                "cache or another tool's directory; migrate it (RFC 0003 section 8) or use an empty root"
+            data = _read(root)  # another opener may have linked it since the first read
+            if data is not None:
+                return _check(LayoutHeader.from_json(data), expected)
+            raise _legacy(root, others)
+        if not create:
+            raise StoreLayoutAbsent(
+                f"{root.path} is empty and has no {HEADER_NAME}; it was not created"
             )
         tmp = f"{TEMP_PREFIX}{uuid.uuid4().hex}{TEMP_SUFFIX}"
-        with root.open_new(tmp, 0o600) as f:
-            f.write(expected.to_json())
-            f.flush()
-            os.fsync(f.fileno())
         try:
+            with root.open_new(tmp, root.policy.file_mode) as f:
+                f.write(expected.to_json())
+                f.flush()
+                os.fsync(f.fileno())
             made = _publish(root, tmp)
         finally:
             try:
