@@ -215,10 +215,11 @@ lib:{dist}=={identity}:{module.qualname}
     do. The digest covers only the `RECORD` entries outside `*.dist-info/`: the metadata files
     there (`RECORD` itself, `INSTALLER`, `direct_url.json`) differ between installs of the same code;
   - editable, or a local checkout keyed as a library (an editable install inside `site-packages`
-    that `PYDRA_USER_PACKAGES` marks as library code with `-name`): `git:<commit>`, with no version
-    prefix, when the checkout is a clean git work tree, since the version string of an editable
-    install does not follow its code; otherwise `dir:<digest of its importable files>`, the files
-    under the package's import paths that Python can import. Untracked files that are not
+    that `PYDRA_USER_PACKAGES` marks as library code with `-name`): always `dir:<digest of its
+    importable files>`, the files under the package's import paths that Python can import, with no
+    version prefix, since the version string of an editable install does not follow its code. It
+    is never `git:<commit>`, so the same code has the same key whether or not git is available and
+    whether or not the tree is clean. Untracked files that are not
     importable (notes, build output, data) do not count, so they neither dirty nor re-key it.
 
   An identity `_identify` cannot compute (`:246-260`) is keyed as `?` and the context gets
