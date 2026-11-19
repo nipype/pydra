@@ -163,11 +163,9 @@ class Encoder:
         if tp is int:
             return value
         if tp is float:
-            if math.isfinite(value) and not (
-                value == 0 and math.copysign(1, value) < 0
-            ):
+            if math.isfinite(value):
                 return value
-            return {"$float": "-0.0" if math.isfinite(value) else str(value)}
+            return {"$float": str(value)}
         if tp is str:
             try:
                 value.encode("utf-8")
@@ -264,6 +262,16 @@ class Encoder:
         if not paths:
             raise UnencodableOutput(field, tp, "it holds no files")
         dirs = [p for p in fspaths if p.is_dir()]
+        for top in dirs:
+            for here, subdirs, _files in os.walk(top):
+                for sub in subdirs:
+                    if os.path.islink(os.path.join(here, sub)):
+                        raise UnencodableOutput(
+                            field,
+                            tp,
+                            f"{os.path.join(here, sub)} is a symlink to a directory, which "
+                            "is not copied",
+                        )
         planned: list[tuple[str, Path, str]] = []
         for key, src in zip(keys, paths):
             owner = next((d for d in dirs if src.is_relative_to(d)), None)
@@ -278,7 +286,7 @@ class Encoder:
         tree = files.child(scratch, create=True, mode=self.policy.entry_mode)
         made: list[StorageDir] = [tree]
         try:
-            copied: list[tuple[str, str, str]] = []
+            copied: list[tuple[str, str, str, int]] = []
             for key, src, rel in planned:
                 *dir_parts, leaf = rel.split("/")
                 dest = tree
@@ -286,13 +294,13 @@ class Encoder:
                     dest = dest.child(part, create=True, mode=self.policy.entry_mode)
                     made.append(dest)
                 try:
-                    sha, _size = copy_hashed(src, dest, leaf, self.policy.file_mode)
+                    sha, size = copy_hashed(src, dest, leaf, self.policy.file_mode)
                 except WrongKindError as err:
                     raise UnencodableOutput(
                         field, tp, f"{src} is not a regular file"
                     ) from err
-                copied.append((key, rel, sha))
-            set_hex = fileset_digest(tag, [(k, sha) for k, _, sha in copied]).split(
+                copied.append((key, rel, sha, size))
+            set_hex = fileset_digest(tag, [(k, sha) for k, _, sha, _ in copied]).split(
                 ":", 1
             )[1]
             if self.policy.durability == "member":
@@ -301,16 +309,15 @@ class Encoder:
         finally:
             for d in made:
                 d.close()
-        _rename_or_discard(files, scratch, set_hex)
+        _merge_set(files, scratch, set_hex)
         if self.policy.durability == "member":
             files.sync()
         files.close()
-        for key, rel, sha in copied:
-            member = f"files/{set_hex}/{rel}"
-            size = os.stat(os.path.join(self.staging.path, *member.split("/"))).st_size
-            self.members[member] = {"sha256": sha, "size": size}
+        for key, rel, sha, size in copied:
+            self.members[f"files/{set_hex}/{rel}"] = {"sha256": sha, "size": size}
         listing = sorted(
-            ([k, f"files/{set_hex}/{rel}"] for k, rel, _ in copied), key=lambda p: p[0]
+            ([k, f"files/{set_hex}/{rel}"] for k, rel, _, _ in copied),
+            key=lambda p: p[0],
         )
         return {"$fileset": tag, "files": listing}
 
@@ -325,15 +332,24 @@ def _remove_tree(parent: StorageDir, name: str) -> None:
     parent.rmdir(name)
 
 
-def _rename_or_discard(files: StorageDir, scratch: str, set_hex: str) -> None:
-    """Make ``files/<scratch>`` the set directory ``files/<set_hex>``, or drop it when an equal
-    set is already there."""
+def _merge_set(files: StorageDir, scratch: str, set_hex: str) -> None:
+    """Make ``files/<scratch>`` the set directory ``files/<set_hex>``. When an equal set is
+    already there (the name is the digest of keys and contents, not of the file names), each
+    top-level name of the new tree that the set does not hold yet is moved into it, and the
+    rest of the scratch tree is dropped."""
     try:
         files.lstat(set_hex)
     except FileNotFoundError:
         files.rename(scratch, files, set_hex)
-    else:
-        _remove_tree(files, scratch)
+        return
+    with files.child(scratch) as tree, files.child(set_hex) as target:
+        have = {e.name for e in target.scandir()}
+        for e in list(tree.scandir()):
+            if e.name not in have:
+                tree.rename(e.name, target, e.name)
+        if target.policy.durability == "member":
+            target.sync()
+    _remove_tree(files, scratch)
 
 
 # -- decoding ----------------------------------------------------------------------------
@@ -394,6 +410,8 @@ class Decoder:
         self.entry_path = entry_path
         self.allow_pickle = allow_pickle
         self.referenced: set[str] = set()
+        self.trees: list[tuple[str, list[str]]] = []
+        """The file sets decoded: each one's set name and its top-level names."""
 
     def decode_outputs(self, outputs: ty.Mapping[str, JSON]) -> dict[str, ty.Any]:
         return {name: self.decode(doc) for name, doc in outputs.items()}
@@ -446,9 +464,10 @@ class Decoder:
             raise ValueError("not a string")
         if body in _NONFINITE:
             return _NONFINITE[body]
-        if body == "-0.0":
-            return -0.0
-        return float.fromhex(body)
+        value = float.fromhex(body)
+        if value.hex() != body:  # only what float.hex writes
+            raise ValueError(f"{body!r} is not a float.hex form")
+        return value
 
     def _complex(self, doc: dict, body: JSON, hashable: bool) -> complex:
         re_, im = body
@@ -480,9 +499,12 @@ class Decoder:
         import io
 
         try:
-            return npformat.read_array(io.BytesIO(data), allow_pickle=False)
+            array = npformat.read_array(io.BytesIO(data), allow_pickle=False)
         except Exception as err:
             raise CorruptEntry(f"{body}.npy is not a readable array: {err}") from err
+        if not is_canonical_array(array) or canonical_npy(array) != data:
+            raise CorruptEntry(f"{body}.npy is not a canonical .npy")
+        return array
 
     def _pickle(self, doc: dict, body: JSON, hashable: bool) -> ty.Any:
         name = f"{body}.pkl"
@@ -613,6 +635,7 @@ class Decoder:
             )
         self.referenced.update(paths)
         tops = sorted({parts[2] for parts in split})
+        self.trees.append((set_hex, tops))
         base = os.path.join(self.entry_path, "files", set_hex)
         try:
             value = codec.type([os.path.join(base, t) for t in tops])
@@ -688,6 +711,11 @@ def type_is_encodable(tp: ty.Any) -> bool:
         if any(a is ty.Any or a is object for a in members):
             return True
         return all(type_is_encodable(a) for a in members)
+    if np is not None and origin is not None:  # NDArray[...] and ndarray[...]
+        from numpy.typing import NDArray
+
+        if origin is np.ndarray or origin is NDArray:
+            return True
     if origin is ty.Literal:
         return all(type(a) in (type(None), bool, int, str, bytes) for a in args)
     if origin is not None:

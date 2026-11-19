@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import stat
 import typing as ty
 
 import attrs
@@ -34,6 +35,7 @@ from pydra.engine.portable.identity import (
     PydraIdentityV1,
     StoreIdentity,
 )
+from pydra.engine.portable.layout import cdir_for
 from pydra.engine.portable.trust import TRUSTS, Trust, check_private
 from pydra.utils.storagedir import StorageDir, StoreUnavailable, WrongKindError
 
@@ -135,8 +137,12 @@ class EntryFormat(ty.Protocol):
         fingerprint: str,
         task: "Task | None",
         trust: Trust,
+        *,
+        root: StorageDir,
     ) -> StoredEntry:
-        """Read and verify an entry (RFC 0003 section 6.2).
+        """Read and verify an entry (RFC 0003 section 6.2). ``root`` is the root the entry is
+        under, which gives its `EntryRef` and the start of the ownership walk; ``entry`` may
+        be at any depth below it (a quarantined copy is).
 
         Raises
         ------
@@ -163,17 +169,6 @@ def _dumps(doc: ty.Any, *, sort_keys: bool = False) -> bytes:
         ensure_ascii=True,
         allow_nan=False,
     ).encode("ascii")
-
-
-def _entry_ref(entry: StorageDir, checksum: str, fingerprint: str) -> EntryRef:
-    """An entry is at ``<root>/<entries>/<shard>/<cdir>/<fingerprint>``: its root is four levels
-    up."""
-    from pydra.engine.portable.layout import cdir_for
-
-    path = entry.path.rstrip(os.sep)
-    for _ in range(4):
-        path = os.path.dirname(path)
-    return EntryRef(root=path, cdir=cdir_for(checksum), fingerprint=fingerprint)
 
 
 @attrs.frozen
@@ -286,6 +281,8 @@ class PydraEntryV1:
         fingerprint: str,
         task: "Task | None",
         trust: Trust,
+        *,
+        root: StorageDir,
     ) -> StoredEntry:
         """Read ``entry`` and bind it to its address and to its members (RFC 0003 section 6.2).
 
@@ -313,13 +310,15 @@ class PydraEntryV1:
         if trust not in TRUSTS:
             raise ValueError(f"trust must be one of {TRUSTS}, got {trust!r}")
         try:
-            return self._read(entry, checksum, fingerprint, task, trust)
+            return self._read(entry, checksum, fingerprint, task, trust, root=root)
         except RecursionError:
             raise CorruptEntry("entry.json is nested too deeply") from None
         except StoreUnavailable:
             raise
         except OSError as err:
             raise StoreUnavailable(f"{entry.path}: {err}") from err
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as err:
+            raise CorruptEntry(f"{entry.path} is malformed: {err!r}") from err
 
     def _read(
         self,
@@ -328,6 +327,8 @@ class PydraEntryV1:
         fingerprint: str,
         task: "Task | None",
         trust: Trust,
+        *,
+        root: StorageDir,
     ) -> StoredEntry:
         names = {e.name: e for e in entry.scandir()}
         foreign = sorted(n for n in names if not _MEMBERS.fullmatch(n))
@@ -381,7 +382,7 @@ class PydraEntryV1:
             raise CorruptEntry("entry.json does not list context.json")
         pickles = sorted(n for n in members if n.endswith(".pkl"))
         if pickles:
-            _admit_pickles(entry, pickles[0], trust)
+            _admit_pickles(entry, root, pickles, trust)
         verify = entry.policy.verify_files
         blobs: dict[str, bytes] = {}
         for name, rec in members.items():
@@ -408,6 +409,7 @@ class PydraEntryV1:
             fetch, members, entry.path, allow_pickle=trust in ("private", "trusted")
         )
         outputs = decoder.decode_outputs(doc["outputs"])
+        _check_trees(entry, decoder.trees, members)
         stray = sorted(set(members) - decoder.referenced - {"context.json"})
         if stray:
             raise CorruptEntry(
@@ -417,11 +419,11 @@ class PydraEntryV1:
         if digest != doc["digest"]:
             raise CorruptEntry("the outputs do not give the recorded output digest")
         return StoredEntry(
-            outputs=_declared(task, outputs),
+            outputs=_declared(task, outputs, entry.path),
             context=context,
             key=doc.get("key"),
             digest=digest,
-            ref=_entry_ref(entry, checksum, fingerprint),
+            ref=EntryRef(str(root.path), cdir_for(checksum), fingerprint),
         )
 
     @staticmethod
@@ -521,62 +523,136 @@ def _verify_blob(entry: StorageDir, name: str, rec: dict, verify: str) -> bytes:
     return data
 
 
-def _admit_pickles(entry: StorageDir, member: str, trust: Trust) -> None:
-    """Gate, before any member is opened, an entry that holds a pickle."""
+def _admit_pickles(
+    entry: StorageDir, root: StorageDir, pickles: list[str], trust: Trust
+) -> None:
+    """Gate, before any member is opened, an entry that holds pickles.
+
+    Under ``private``, every directory from ``root`` to the entry, ``entry.json`` (whose records
+    bind the pickles) and every pickle member must belong to the current user and not be
+    writable by anyone else."""
     if trust == "shared":
         raise EntryNotTrusted(
-            f"{entry.path} holds a pickle member ({member}) and this root is shared: a shared "
-            "root never opens one"
+            f"{entry.path} holds a pickle member ({pickles[0]}) and this root is shared: a "
+            "shared root never opens one"
         )
     if trust == "trusted":
         return
-    path = entry.path.rstrip(os.sep)
-    names = []
-    for _ in range(4):
-        path, name = os.path.split(path)
-        names.append(name)
-    names.reverse()
-    with StorageDir.open_root(path, entry.policy, trust="private") as root:
-        cur = root
-        chain: list[StorageDir] = []
-        try:
-            for n in names:
-                try:
-                    cur = cur.child(n)
-                except WrongKindError as err:
-                    raise EntryNotTrusted(
-                        f"{os.path.join(path, *names)}: {err}"
-                    ) from err
-                chain.append(cur)
-            here, there = cur.fstat(), entry.fstat()
-            if (here.st_dev, here.st_ino) != (
-                there.st_dev,
-                there.st_ino,
-            ) and not _same_file(here, there):
-                raise EntryNotTrusted(f"{entry.path} is no longer at its address")
-        finally:
-            for d in chain:
-                d.close()
+    rel = os.path.relpath(entry.path, root.path)
+    if rel == os.curdir or rel.split(os.sep)[0] == os.pardir:
+        raise StoreUnavailable(f"{entry.path} is not below the root {root.path}")
+    names = rel.split(os.sep)
+    chain: list[StorageDir] = []
+    cur = root
+    try:
+        for n in names:
+            try:
+                cur = cur.child(n)
+            except WrongKindError as err:
+                raise EntryNotTrusted(f"{entry.path}: {err}") from err
+            chain.append(cur)
+        here, there = cur.fstat(), entry.fstat()
+        if (here.st_dev, here.st_ino) != (there.st_dev, there.st_ino):
+            raise EntryNotTrusted(f"{entry.path} is not where its path says")
+    finally:
+        for d in chain:
+            d.close()
+    for member in ("entry.json", *pickles):
         check_private(root, [*names, member])
 
 
-def _same_file(a: os.stat_result, b: os.stat_result) -> bool:
-    """On a platform without inode numbers (Windows) every stat gives zero: nothing to
-    compare."""
-    return a.st_ino == 0 and b.st_ino == 0
+def _walk(parent: StorageDir, name: str, path: str, members: ty.Mapping) -> None:
+    """Every object below a handed-out tree is a listed regular file or a directory."""
+    try:
+        mode = parent.lstat(name).st_mode
+        if stat.S_ISREG(mode):
+            if path not in members:
+                raise CorruptEntry(f"{path} is in the entry but not in entry.json")
+        elif stat.S_ISDIR(mode):
+            with parent.child(name) as d:
+                for e in list(d.scandir()):
+                    _walk(d, e.name, f"{path}/{e.name}", members)
+        else:
+            raise CorruptEntry(
+                f"{path} is a symlink or another object that is not a file"
+            )
+    except WrongKindError as err:
+        raise CorruptEntry(f"{path} is not what it should be: {err}") from err
+
+
+def _check_trees(
+    entry: StorageDir, trees: list[tuple[str, list[str]]], members: ty.Mapping
+) -> None:
+    """Walk each file set handed out by descriptor and refuse anything that is not a listed
+    regular file or a directory, and anything under ``files/`` no output names."""
+    try:
+        files = entry.child("files")
+    except FileNotFoundError:
+        if trees:
+            raise CorruptEntry("the entry has no files/ directory") from None
+        return
+    except WrongKindError as err:
+        raise CorruptEntry(f"files is not a directory: {err}") from err
+    with files:
+        tops: dict[str, set[str]] = {}
+        for set_hex, names in trees:
+            tops.setdefault(set_hex, set()).update(names)
+        for e in files.scandir():
+            if e.name not in tops or not e.is_dir():
+                raise CorruptEntry(f"files/{e.name} is not a file set of the entry")
+        for set_hex, names in tops.items():
+            try:
+                set_dir = files.child(set_hex)
+            except (FileNotFoundError, WrongKindError) as err:
+                raise CorruptEntry(f"files/{set_hex} cannot be read: {err}") from err
+            with set_dir:
+                for e in set_dir.scandir():
+                    if e.name not in names:
+                        raise CorruptEntry(
+                            f"files/{set_hex}/{e.name} is not named by an output"
+                        )
+                for name in sorted(names):
+                    _walk(set_dir, name, f"files/{set_hex}/{name}", members)
 
 
 # -- declared types ----------------------------------------------------------------------
 
 
-def _declared(task: "Task | None", outputs: dict[str, ty.Any]) -> dict[str, ty.Any]:
+def _fileset_leaves(value: ty.Any) -> ty.Iterator[ty.Any]:
+    from fileformats.core.fileset import FileSet
+
+    if isinstance(value, FileSet):
+        yield value
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        for v in value:
+            yield from _fileset_leaves(v)
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            yield from _fileset_leaves(k)
+            yield from _fileset_leaves(v)
+
+
+def _has_fileset(tp: ty.Any) -> bool:
+    from fileformats.core.fileset import FileSet
+
+    if isinstance(tp, type) and issubclass(tp, FileSet):
+        return True
+    return any(_has_fileset(a) for a in ty.get_args(tp))
+
+
+def _declared(
+    task: "Task | None", outputs: dict[str, ty.Any], entry_path: str
+) -> dict[str, ty.Any]:
     """Decode each output to the type its field declares (a tuple, a set), where the task is
-    known; a value that does not take the type is left as decoded."""
+    known; a value that does not take the type is left as decoded, except for a field that
+    declares a file set. A file set handed out is always a path inside the entry: one that
+    coercion made from anything else is `CorruptEntry`."""
     if task is None:
         return outputs
     from pydra.utils.general import get_fields
     from pydra.utils.typing import TypeParser
 
+    base = os.path.join(os.path.normpath(entry_path), "files") + os.sep
     fields = {f.name: f for f in get_fields(getattr(task, "Outputs", task))}
     out = {}
     for name, value in outputs.items():
@@ -587,6 +663,10 @@ def _declared(task: "Task | None", outputs: dict[str, ty.Any]) -> dict[str, ty.A
         try:
             out[name] = TypeParser(field.type)(value)
         except Exception as err:
+            if _has_fileset(field.type):
+                raise CorruptEntry(
+                    f"output {name!r} is declared {field.type} and its value is not one: {err}"
+                ) from err
             logger.warning(
                 "output %r does not take its declared type %s: %s",
                 name,
@@ -594,6 +674,12 @@ def _declared(task: "Task | None", outputs: dict[str, ty.Any]) -> dict[str, ty.A
                 err,
             )
             out[name] = value
+        for leaf in _fileset_leaves(out[name]):
+            for p in leaf.fspaths:
+                if not os.path.normpath(os.fspath(p)).startswith(base):
+                    raise CorruptEntry(
+                        f"output {name!r} would be handed the path {p}, which is outside the entry"
+                    )
     return out
 
 

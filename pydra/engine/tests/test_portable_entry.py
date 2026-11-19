@@ -19,6 +19,7 @@ from fileformats.generic import Directory, File
 from pydra.compose import python
 from pydra.engine.job import Job
 from pydra.engine.portable import codecs
+from pydra.engine.portable.codecs import type_is_encodable
 from pydra.engine.portable.entry import (
     CorruptEntry,
     EntryFormatUnknown,
@@ -136,7 +137,12 @@ def read(
     for part in path.relative_to(root.path).parts:
         entry = entry.child(part)
     with entry:
-        return fmt.read(entry, checksum, fp, task, trust)
+        return fmt.read(entry, checksum, fp, task, trust, root=root)
+
+
+def _keys(value) -> list:
+    """The ``byte_chunks`` keys of a file set, with POSIX separators."""
+    return [k.replace(os.sep, "/") for k, _ in value.byte_chunks()]
 
 
 def entry_json(root, checksum=CHECKSUM, fp=FP) -> dict:
@@ -261,9 +267,10 @@ def test_float_nonfinite_tags(root):
     )
 
 
-def test_float_negative_zero_keeps_sign(root):
-    got = roundtrip(root, {"z": -0.0})
-    assert str(got["z"]) == "-0.0"
+def test_float_negative_zero_is_plain_json_and_keeps_sign(root):
+    assert encoded(root, {"z": -0.0})["z"] == 0.0
+    assert str(read(root).outputs["z"]) == "-0.0"
+    assert "-0.0" in (entry_path(root) / "entry.json").read_text()
 
 
 def test_complex(root):
@@ -486,7 +493,7 @@ def test_fileset_nifti_pair_keeps_keys(root, tmp_path, tags):
     assert digest(value) == set_name
     got = read(root).outputs["scan"]
     assert type(got) is Pair
-    assert [k for k, _ in got.byte_chunks()] == [".hdr", ".img"]
+    assert _keys(got) == [".hdr", ".img"]
     base = entry_path(root) / "files" / set_hex
     assert (base / "scan.hdr").read_bytes() == b"header"
     assert all(Path(p).parent == base for p in got.fspaths)
@@ -501,7 +508,7 @@ def test_single_file_key_is_dot(root, tmp_path, tags):
     assert [k for k, _ in enc["files"]] == ["."]
     assert enc["files"][0][1].endswith("/one.dat")
     got = read(root).outputs["f"]
-    assert [k for k, _ in got.byte_chunks()] == ["."]
+    assert _keys(got) == ["."]
 
 
 def test_directory_output_sits_under_its_name(root, tmp_path, tags):
@@ -521,7 +528,7 @@ def test_directory_output_sits_under_its_name(root, tmp_path, tags):
     assert (
         Path(next(iter(got.fspaths))) == entry_path(root) / "files" / set_hex / "tree"
     )
-    assert [k for k, _ in got.byte_chunks()] == keys
+    assert _keys(got) == keys
 
 
 def test_fileset_is_copied_never_linked(root, tmp_path, tags):
@@ -553,6 +560,8 @@ def test_fifo_in_directory_output_is_unencodable(root, tmp_path, tags):
     d = tmp_path / "tree"
     d.mkdir()
     (d / "ok.txt").write_bytes(b"ok")
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("no FIFOs on this platform")
     os.mkfifo(d / "pipe")
     with pytest.raises(UnencodableOutput) as err:
         publish(root, {"d": Directory(d)})
@@ -763,9 +772,9 @@ def test_misfiled_by_checksum_and_by_fingerprint(root):
     fmt = PydraEntryV1()
     with entry:
         with pytest.raises(MisfiledEntry):
-            fmt.read(entry, "python-other", FP, None, TRUST)
+            fmt.read(entry, "python-other", FP, None, TRUST, root=root)
         with pytest.raises(MisfiledEntry):
-            fmt.read(entry, CHECKSUM, "0" * 64, None, TRUST)
+            fmt.read(entry, CHECKSUM, "0" * 64, None, TRUST, root=root)
     assert issubclass(MisfiledEntry, CorruptEntry)
 
 
@@ -1186,3 +1195,461 @@ def test_check_encodable_accepts_a_task_instance_and_names_the_field():
         check_encodable(G, allow_pickle=False)
     assert err.value.field == "bad" and err.value.type is Opaque
     assert "bad" in str(err.value)
+
+
+# -- fix round 1 -------------------------------------------------------------------------
+
+
+def _write(path: Path, data: bytes) -> None:
+    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+    path.write_bytes(data)
+
+
+def _relist(root, name: str, data: bytes) -> None:
+    sha = hashlib.sha256(data).hexdigest()
+    edit_entry(
+        root,
+        lambda d: d["members"].__setitem__(name, {"sha256": sha, "size": len(data)}),
+        redigest=False,
+    )
+
+
+def _swap_blob(root, old: str, data: bytes, suffix: str, new_doc) -> str:
+    """Replace the member ``old`` with ``data`` and have the output refer to it."""
+    sha = hashlib.sha256(data).hexdigest()
+    os.chmod(entry_path(root) / old, stat.S_IWRITE | stat.S_IREAD)
+    (entry_path(root) / old).unlink()
+    (entry_path(root) / f"{sha}{suffix}").write_bytes(data)
+
+    def edit(doc):
+        del doc["members"][old]
+        doc["members"][f"{sha}{suffix}"] = {"sha256": sha, "size": len(data)}
+        doc["outputs"]["a"] = new_doc(sha)
+
+    edit_entry(root, edit)
+    return sha
+
+
+def _dat(tmp_path, name, content=b""):
+    d = tmp_path / "src"
+    d.mkdir(exist_ok=True)
+    (d / name).write_bytes(content)
+    return Tagged(d / name)
+
+
+def _names(value) -> set:
+    return {Path(p).name for p in value.fspaths}
+
+
+def test_equal_file_sets_under_different_names_publish(root, tmp_path, tags):
+    out, err = _dat(tmp_path, "stdout.dat"), _dat(tmp_path, "stderr.dat")
+    c, d = _dat(tmp_path, "c.dat", b"same"), _dat(tmp_path, "d.dat", b"same")
+    publish(root, {"o": out, "e": err, "pair": [c, d]})
+    got = read(root).outputs
+    assert _names(got["o"]) == {"stdout.dat"} and _names(got["e"]) == {"stderr.dat"}
+    assert [_names(v) for v in got["pair"]] == [{"c.dat"}, {"d.dat"}]
+    assert all(Path(p).read_bytes() == b"same" for v in got["pair"] for p in v.fspaths)
+    assert (
+        len(list((entry_path(root) / "files").iterdir())) == 2
+    )  # one tree per distinct set
+
+
+def test_equal_directories_under_different_names_publish(root, tmp_path, tags):
+    for name in ("a", "b"):
+        (tmp_path / name / "sub").mkdir(parents=True)
+        (tmp_path / name / "x.txt").write_bytes(b"x")
+        (tmp_path / name / "sub" / "y.txt").write_bytes(b"y")
+    publish(root, {"a": Directory(tmp_path / "a"), "b": Directory(tmp_path / "b")})
+    got = read(root).outputs
+    assert _names(got["a"]) == {"a"} and _names(got["b"]) == {"b"}
+    assert _keys(got["a"]) == _keys(got["b"]) == ["sub/y.txt", "x.txt"]
+    assert len(list((entry_path(root) / "files").iterdir())) == 1
+
+
+def test_a_second_name_in_one_set_is_recorded_as_a_member(root, tmp_path, tags):
+    publish(root, {"o": _dat(tmp_path, "one.dat"), "e": _dat(tmp_path, "two.dat")})
+    members = entry_json(root)["members"]
+    assert sorted(m.rsplit("/", 1)[1] for m in members if m.startswith("files/")) == [
+        "one.dat",
+        "two.dat",
+    ]
+
+
+def _two_pickles(root):
+    fmt = PydraEntryV1(pickle=True, trust="private")
+    publish(
+        root,
+        {"a": np.ma.MaskedArray(np.arange(2)), "b": np.ma.MaskedArray(np.arange(3))},
+        fmt=fmt,
+    )
+    return fmt, sorted(entry_path(root).glob("*.pkl"))
+
+
+@posix_only
+@pytest.mark.parametrize("which", [0, 1])
+def test_every_pickle_member_gets_the_mode_check_through_read(root, which):
+    fmt, pkls = _two_pickles(root)
+    assert len(pkls) == 2
+    read(root, fmt=fmt, trust="private")
+    os.chmod(pkls[which], 0o666)
+    with pytest.raises(EntryNotTrusted):
+        read(root, fmt=fmt, trust="private")
+
+
+@posix_only
+def test_entry_json_gets_the_mode_check_with_pickles(root):
+    fmt, _ = _two_pickles(root)
+    os.chmod(entry_path(root) / "entry.json", 0o666)
+    with pytest.raises(EntryNotTrusted):
+        read(root, fmt=fmt, trust="private")
+    assert read(root, fmt=fmt, trust="trusted").outputs["a"].shape == (2,)
+
+
+@posix_only
+def test_size_policy_does_not_let_a_rewritten_pickle_run(tmp_path):
+    d = tmp_path / "r"
+    d.mkdir()
+    with StorageDir.open_root(
+        d, StorePolicy(verify_files="size"), trust="private"
+    ) as r:
+        fmt, pkls = _two_pickles(r)
+        os.chmod(pkls[1], 0o666)
+        with pytest.raises(EntryNotTrusted):
+            read(r, fmt=fmt, trust="private")
+
+
+def _plain_entry_json(root, fn):
+    path = entry_path(root) / "entry.json"
+    os.chmod(path, 0o644)
+    doc = json.loads(path.read_text())
+    fn(doc)
+    path.write_text(json.dumps(doc))
+
+
+def test_lone_surrogate_in_an_output_is_corrupt_not_a_valueerror(root):
+    publish(root, {"a": "x"})
+    _plain_entry_json(root, lambda d: d["outputs"].update(a="\ud800"))
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+@pytest.mark.parametrize("bad", [{"n": 2**60}, {"n": "\ud800"}, {"n": 1e999}])
+def test_unfingerprintable_context_is_corrupt_not_a_valueerror(root, bad):
+    publish(root, {"a": 1})
+    raw = json.dumps({"format": "pydra-entry@1", "context": bad}).encode("ascii")
+    _write(entry_path(root) / "context.json", raw)
+    _relist(root, "context.json", raw)
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+@python.define(outputs={"f": File})
+def FileOut(x: int) -> File:
+    raise NotImplementedError
+
+
+@pytest.mark.parametrize("value", ["/etc/hosts", Path("/etc/hosts")])
+def test_a_file_field_is_never_handed_a_path_outside_the_entry(root, value):
+    publish(root, {"f": value})
+    with pytest.raises(CorruptEntry):
+        read(root, task=FileOut(x=1))
+
+
+@posix_only
+def test_a_symlinked_directory_inside_a_directory_output_is_refused(
+    root, tmp_path, tags
+):
+    d = tmp_path / "tree"
+    d.mkdir()
+    (d / "a.txt").write_bytes(b"a")
+    publish(root, {"d": Directory(d)})
+    read(root)
+    (set_dir,) = (entry_path(root) / "files").iterdir()
+    (set_dir / "tree" / "linkdir").symlink_to(tmp_path)
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+@posix_only
+def test_a_symlinked_directory_in_a_directory_output_is_unencodable_at_stage(
+    root, tmp_path, tags
+):
+    d = tmp_path / "tree"
+    (tmp_path / "elsewhere").mkdir()
+    d.mkdir()
+    (d / "a.txt").write_bytes(b"a")
+    (d / "linkdir").symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(UnencodableOutput):
+        publish(root, {"d": Directory(d)})
+
+
+def test_an_unreferenced_directory_under_files_is_corrupt(root, tmp_path, tags):
+    publish(root, {"f": _dat(tmp_path, "one.dat", b"1")})
+    (entry_path(root) / "files" / ("0" * 64)).mkdir()
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+def test_ndarray_annotations_are_encodable():
+    import numpy.typing as npt
+
+    for tp in (
+        npt.NDArray[np.float64],
+        ty.Optional[npt.NDArray[np.int32]],
+        ty.List[npt.NDArray[np.float32]],
+    ):
+        assert type_is_encodable(tp), tp
+    assert not type_is_encodable(ty.List[Opaque])
+
+
+@pytest.mark.parametrize(
+    "bad", ["1.5", "NaN", "infinity", " 1 ", "0x1.8p+0 ", "-0.0", ""]
+)
+def test_float_tag_accepts_only_what_is_written(root, bad):
+    publish(root, {"a": 1})
+    edit_entry(root, lambda d: d["outputs"].update(a={"$float": bad}))
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+def test_float_tag_accepts_the_written_forms(root):
+    publish(root, {"a": 1})
+    for text, check in (
+        ("nan", lambda v: v != v),
+        ("-inf", lambda v: v == float("-inf")),
+        ((1.5).hex(), lambda v: v == 1.5),
+        ((-0.0).hex(), lambda v: str(v) == "-0.0"),
+    ):
+        edit_entry(root, lambda d, t=text: d["outputs"].update(a={"$float": t}))
+        assert check(read(root).outputs["a"])
+
+
+def test_read_takes_the_root_it_is_given(root):
+    fmt = PydraEntryV1(pickle=True, trust="private")
+    publish(root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
+    entry_dir = entry_path(root)
+    quarantine = root.child("quarantine", create=True)
+    name = uuid.uuid4().hex
+    # the copy section 6.3 re-verifies sits two levels below the root, not four
+    with root.child("results@1") as entries:
+        with (
+            entries.child(entry_dir.parent.parent.name) as sh,
+            sh.child(CHECKSUM) as cd,
+        ):
+            cd.rename(FP, quarantine, name)
+    with quarantine.child(name) as moved:
+        got = fmt.read(moved, CHECKSUM, FP, None, TRUST, root=root)
+    assert got.ref.root == str(root.path) and got.outputs["v"].shape == (2,)
+    if not IS_WINDOWS:
+        os.chmod(Path(root.path) / "quarantine" / name, 0o775)
+        with quarantine.child(name) as moved:
+            with pytest.raises(EntryNotTrusted):
+                fmt.read(moved, CHECKSUM, FP, None, TRUST, root=root)
+
+
+@posix_only
+def test_private_walk_checks_the_handle_is_the_address(root):
+    fmt = PydraEntryV1(pickle=True, trust="private")
+    publish(root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
+    other = fmt.identity.fingerprint({**CTX, "n": 99})
+    publish(
+        root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt, context={**CTX, "n": 99}
+    )
+    real = entry_path(root)
+    elsewhere = entry_path(root, fp=other)
+    handle = root
+    for part in elsewhere.relative_to(root.path).parts:
+        handle = handle.child(part)
+    with handle:
+        handle.path = str(real)  # a handle that is not where its path says
+        with pytest.raises(EntryNotTrusted):
+            fmt.read(handle, CHECKSUM, other, None, "private", root=root)
+
+
+def test_a_tampered_file_member_is_corrupt(root, tmp_path, tags):
+    src = tmp_path / "scan.dat"
+    src.write_bytes(b"0123456789")
+    publish(root, {"f": Tagged(src)})
+    (member,) = (entry_path(root) / "files").glob("*/scan.dat")
+    _write(member, b"0123456780")  # the same size
+    with pytest.raises(CorruptEntry):
+        read(root)
+    _write(member, b"012345678")  # a shorter one
+    with pytest.raises(CorruptEntry):
+        read(root)
+    _write(member, b"0123456789")
+    read(root)
+
+
+def test_a_file_member_is_checked_by_size_alone_under_the_size_policy(tmp_path, tags):
+    if IS_WINDOWS:
+        pytest.skip("verify_files='size' needs a private root")
+    d = tmp_path / "r"
+    d.mkdir()
+    with StorageDir.open_root(
+        d, StorePolicy(verify_files="size"), trust="private"
+    ) as r:
+        src = tmp_path / "scan.dat"
+        src.write_bytes(b"0123456789")
+        publish(r, {"f": Tagged(src)})
+        (member,) = (entry_path(r) / "files").glob("*/scan.dat")
+        _write(member, b"0123456780")
+        read(r, trust="private")
+        _write(member, b"01234567")
+        with pytest.raises(CorruptEntry):
+            read(r, trust="private")
+
+
+class _Rejecting(PydraIdentityV1):
+    def check_key(self, checksum, key):
+        return False
+
+
+def test_check_key_is_asked_on_read(root):
+    publish(root, {"a": 1}, key={"k": 1})
+    fmt = PydraEntryV1(identity=_Rejecting(), pickle=False, trust=TRUST)
+    with pytest.raises(MisfiledEntry):
+        read(root, fmt=fmt)
+    read(root)
+
+
+def test_a_swapped_context_is_misfiled_even_when_relisted(root):
+    publish(root, {"a": 1})
+    raw = json.dumps({"format": "pydra-entry@1", "context": {**CTX, "n": 2}}).encode(
+        "ascii"
+    )
+    _write(entry_path(root) / "context.json", raw)
+    _relist(root, "context.json", raw)
+    with pytest.raises(MisfiledEntry):
+        read(root)
+
+
+def test_an_object_array_member_is_never_unpickled(root, tmp_path):
+    import io
+
+    marker = tmp_path / "ran"
+
+    class Payload:
+        def __reduce__(self):
+            return (open, (str(marker), "w"))
+
+    publish(root, {"a": np.arange(3)})
+    (npy,) = [p.name for p in entry_path(root).glob("*.npy")]
+    buf = io.BytesIO()
+    np.save(buf, np.array([Payload()], dtype=object), allow_pickle=True)
+    _swap_blob(root, npy, buf.getvalue(), ".npy", lambda sha: {"$array": sha})
+    with pytest.raises(CorruptEntry):
+        read(root)
+    assert not marker.exists()
+
+
+def test_a_non_canonical_npy_member_is_corrupt(root):
+    import io
+
+    from numpy.lib import format as npformat
+
+    arr = np.arange(6, dtype="<i4")
+    publish(root, {"a": arr})
+    (npy,) = [p.name for p in entry_path(root).glob("*.npy")]
+    for write in (
+        lambda b: npformat.write_array(b, arr, version=(2, 0)),
+        lambda b: npformat.write_array(b, arr.astype(">i4"), version=(1, 0)),
+        lambda b: npformat.write_array(
+            b, np.asfortranarray(arr.reshape(2, 3)), version=(1, 0)
+        ),
+    ):
+        buf = io.BytesIO()
+        write(buf)
+        _swap_blob(root, npy, buf.getvalue(), ".npy", lambda s: {"$array": s})
+        with pytest.raises(CorruptEntry):
+            read(root)
+        (npy,) = [p.name for p in entry_path(root).glob("*.npy")]
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "../x.bin",
+        "files/../x",
+        "/abs.bin",
+        "a\\b.bin",
+        "files/" + "0" * 64,
+        "xx.npy",
+        "entry.json",
+    ],
+)
+def test_member_names_are_validated_in_the_member_table(root, member):
+    publish(root, {"a": 1})
+    rec = {"sha256": "0" * 64, "size": 0}
+    edit_entry(root, lambda d: d["members"].__setitem__(member, rec))
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+def test_a_traversal_listed_in_members_and_outputs_is_corrupt(root, tmp_path, tags):
+    f = tmp_path / "one.dat"
+    f.write_bytes(b"abc")
+    publish(root, {"f": Tagged(f)})
+    sha = hashlib.sha256(b"abc").hexdigest()
+    bad = "files/" + "0" * 64 + "/../../one.dat"
+
+    def edit(doc):
+        doc["outputs"]["f"]["files"][0][1] = bad
+        doc["members"][bad] = {"sha256": sha, "size": 3}
+
+    edit_entry(root, edit)
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+def test_a_file_set_in_two_set_directories_is_corrupt(root, tmp_path, tags):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "scan.hdr").write_bytes(b"h")
+    (src / "scan.img").write_bytes(b"i")
+    publish(root, {"s": Pair([src / "scan.hdr", src / "scan.img"])})
+    other = "1" * 64
+
+    def edit(doc):
+        files = doc["outputs"]["s"]["files"]
+        old = files[1][1]
+        new = old.replace(old.split("/")[1], other)
+        files[1][1] = new
+        doc["members"][new] = doc["members"].pop(old)
+
+    edit_entry(root, edit)
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"size": "x", "sha256": "0" * 64},
+        {"size": True, "sha256": "0" * 64},
+        {"size": 1},
+        {"size": 1, "sha256": "zz"},
+        [],
+        None,
+    ],
+)
+def test_member_records_are_validated(root, record):
+    publish(root, {"b": b"bytes"})
+    (name,) = [n for n in entry_json(root)["members"] if n.endswith(".bin")]
+    edit_entry(root, lambda d: d["members"].__setitem__(name, record))
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+def test_context_json_must_be_listed(root):
+    publish(root, {"a": 1})
+    edit_entry(root, lambda d: d["members"].pop("context.json"))
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+def test_a_listed_member_no_output_claims_is_corrupt(root):
+    publish(root, {"b": b"bytes"})
+    edit_entry(root, lambda d: d["outputs"].update(b=1))
+    with pytest.raises(CorruptEntry):
+        read(root)
