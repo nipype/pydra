@@ -1,6 +1,7 @@
 """Executors: where the jobs a :class:`~pydra.engine.runner.GraphRunner` releases run"""
 
 import asyncio
+import inspect
 import time
 import typing as ty
 import attrs
@@ -42,7 +43,7 @@ class Executor(ty.Protocol):
     R7 reports it ``NotRun``, as RFC 0002 §3.2 has it.
     """
 
-    batches: ty.ClassVar[bool]
+    batches: bool
     checks_store: ty.ClassVar[bool]
     inline: ty.ClassVar[bool]
 
@@ -123,6 +124,17 @@ def no_result_diagnosis(job: "Job") -> str:
     return f"Job {job} has no result in {str(job.cache_dir)!r}"
 
 
+def _accepts_done(submit_many: "ty.Callable") -> bool:
+    """Whether ``submit_many`` takes the optional ``done`` callback"""
+    try:
+        params = inspect.signature(submit_many).parameters
+    except (TypeError, ValueError):
+        return False
+    return "done" in params or any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+    )
+
+
 class WorkerExecutor:
     """Runs jobs on a :class:`~pydra.workers.base.Worker`, on the driver's event loop
 
@@ -131,8 +143,10 @@ class WorkerExecutor:
     ``True`` instead of a result (slurm, sge) is read back with ``job.result()``,
     retried with backoff for up to ``visibility_timeout`` seconds, then reported
     :class:`~pydra.engine.runner.Failed`. A synchronous worker runs on a helper thread.
-    A worker with ``submit_many`` (slurm, sge) is given the jobs of a ``submit`` call
-    together, so it can place them in arrays; ``batches`` is then true.
+    A worker with ``submit_many(jobs)`` (slurm, sge) is given the jobs of a ``submit``
+    call together, so it can place them in arrays; ``batches`` is then true. A
+    ``submit_many`` that also takes ``done(job, outcome)`` is passed it, so a job is
+    reported when it ends rather than when the round does.
 
     Parameters
     ----------
@@ -166,6 +180,7 @@ class WorkerExecutor:
         self.visibility_timeout = visibility_timeout
         self.blocking = blocking
         self.batches = hasattr(worker, "submit_many")
+        self._reports_done = self.batches and _accepts_done(worker.submit_many)
         self._report: "ty.Callable[[Job, Outcome], None] | None" = None
         self._tasks: "dict[Job, asyncio.Task]" = {}
         self._submissions: "dict[Handle, asyncio.Task]" = {}
@@ -206,7 +221,15 @@ class WorkerExecutor:
                     future.set_result(outcome)
 
         try:
-            outcomes = await self.worker.submit_many(jobs, done=ended)
+            if self._reports_done:
+                outcomes = await self.worker.submit_many(jobs, done=ended)
+            else:
+                outcomes = await self.worker.submit_many(jobs)
+            if len(outcomes) != len(jobs):
+                raise RuntimeError(
+                    f"{type(self.worker).__name__}.submit_many returned "
+                    f"{len(outcomes)} outcomes for {len(jobs)} jobs"
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:

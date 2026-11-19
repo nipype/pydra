@@ -268,3 +268,148 @@ def test_executor_hands_the_round_to_submit_many(tmp_path):
         )
         assert runner.done and not runner.failed
         assert worker.rounds == [4]
+
+
+def run_round(sub, worker, n=4):
+    from pydra.engine.drivers import drive
+    from pydra.engine.runner import GraphRunner
+
+    runner = GraphRunner(
+        Split(xs=list(range(n))), sub.store, on_error="raise_at_end", submitter=sub
+    )
+    worker.loop = sub.loop
+    executor = WorkerExecutor(worker)
+    sub.loop.run_until_complete(
+        asyncio.wait_for(
+            drive(
+                runner,
+                {"default": executor},
+                lambda job: "default",
+                max_concurrent=float("inf"),
+                on_error="raise_at_end",
+                audit=sub.audit,
+            ),
+            20,
+        )
+    )
+    return runner, executor
+
+
+class RfcSignature(Batching):
+    """``submit_many(jobs)`` exactly as RFC 0002 section 3.3 names it"""
+
+    async def submit_many(self, jobs):
+        self.rounds.append(len(jobs))
+        for job in jobs:
+            job.run(rerun=job.rerun)
+        return [True] * len(jobs)
+
+
+class NeverCallsDone(Batching):
+    """Takes ``done`` but leaves every job to the returned list"""
+
+    async def submit_many(self, jobs, done=None):
+        self.rounds.append(len(jobs))
+        for job in jobs:
+            job.run(rerun=job.rerun)
+        return [True] * len(jobs)
+
+
+@pytest.mark.parametrize("kind", [RfcSignature, NeverCallsDone])
+def test_worker_need_not_call_done(tmp_path, kind):
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        worker = kind()
+        runner, _ = run_round(sub, worker)
+        assert runner.done and not runner.failed and worker.rounds == [4]
+
+
+class ShortList(Batching):
+    async def submit_many(self, jobs, done=None):
+        for job in jobs[:-1]:
+            job.run(rerun=job.rerun)
+        return [True] * (len(jobs) - 1)
+
+
+def test_short_outcome_list_fails_the_missing_job(tmp_path):
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        runner, _ = run_round(sub, ShortList())
+        assert runner.failed
+
+
+class Hangs(Batching):
+    cancelled = 0
+
+    async def submit_many(self, jobs, done=None):
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            type(self).cancelled += 1
+            raise
+
+
+def test_cancel_cancels_the_submission(tmp_path):
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        worker = Hangs()
+        worker.loop = sub.loop
+        executor = WorkerExecutor(worker)
+        executor.bind(lambda job, outcome: None)
+
+        async def go():
+            from pydra.engine.runner import GraphRunner
+
+            runner = GraphRunner(
+                Split(xs=[0, 1]), sub.store, on_error="raise_at_end", submitter=sub
+            )
+            handle = executor.submit(runner.ready().dispatch)
+            await asyncio.sleep(0.05)
+            executor.cancel(handle)
+            await asyncio.sleep(0.05)
+
+        sub.loop.run_until_complete(go())
+        assert Hangs.cancelled == 1
+
+
+def test_one_failing_sbatch_fails_its_chunk_only(tmp_path, monkeypatch):
+    fake, worker, jobs = slurm_round(tmp_path, monkeypatch, 5, max_array_size=2)
+    sbatches = []
+
+    async def flaky(*cmd, **kwargs):
+        if cmd[0] == "sbatch":
+            sbatches.append(cmd)
+            if len(sbatches) == 2:
+                return 1, "", "sbatch: error: boom"
+        return await fake(*cmd, **kwargs)
+
+    monkeypatch.setattr(slurm.base, "read_and_display_async", flaky)
+    out = submit(worker, jobs)
+    assert [o is True for o in out].count(True) == 3
+    failed = [i for i, o in enumerate(out) if o is not True]
+    assert len(failed) == 2 and failed[1] == failed[0] + 1
+    assert all("boom" in str(out[i]) for i in failed)
+
+
+def test_sge_resource_sets_make_separate_arrays(sge_round):
+    fake, make = sge_round
+    worker, jobs = make(4)
+    for job in jobs[2:]:
+        job.resources = ComputeResources(cpus=4)
+    assert asyncio.run(asyncio.wait_for(worker.submit_many(jobs), 30)) == [True] * 4
+    qsubs = [c for c in fake.calls if c[0] == "qsub"]
+    assert sorted(c[1:3] for c in qsubs) == [("-t", "1-2"), ("-t", "1-2")]
+    assert sorted("smp" in c for c in qsubs) == [False, True]
+
+
+def test_sge_done_is_called_for_every_job(sge_round):
+    fake, make = sge_round
+    worker, jobs = make(3)
+    ended = []
+    asyncio.run(worker.submit_many(jobs, done=lambda j, o: ended.append((j, o))))
+    assert [j for j, _ in ended] == jobs and {o for _, o in ended} == {True}
+
+
+def test_sge_max_threads_below_the_round_chunks_the_array(sge_round):
+    fake, make = sge_round
+    worker, jobs = make(3, max_threads=2)
+    assert asyncio.run(asyncio.wait_for(worker.submit_many(jobs), 5)) == [True] * 3
+    qsubs = [c[1:3] for c in fake.calls if c[0] == "qsub"]
+    assert sorted(qsubs) == [("-t", "1-1"), ("-t", "1-2")]

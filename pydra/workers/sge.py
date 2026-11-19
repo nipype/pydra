@@ -305,7 +305,10 @@ class SgeWorker(base.Worker):
 
         runs = []
         for qsub_args, members in groups.items():
-            size = self._array_length(self._requested(qsub_args)[2])
+            threads, _, mem_cmd = self._requested(qsub_args)
+            size = self._array_length(mem_cmd)
+            if self.max_threads is not None:
+                size = min(size, max(1, self.max_threads // threads))
             for start in range(0, len(members), size):
                 runs.append(array(qsub_args, members[start : start + size]))
         await asyncio.gather(*runs)
