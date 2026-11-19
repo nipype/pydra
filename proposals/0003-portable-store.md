@@ -298,8 +298,11 @@ Other notes:
   Windows `os.rename` onto any existing directory fails. Both make the rename a first-writer-wins
   primitive. `staging/` is under `<root>`, so the rename never crosses filesystems.
 - An entry is never written in place or partly visible. Its existence means it is complete.
-- **File outputs.** A symlink among the outputs is resolved at staging and its target copied, because
-  the outputs are the writer's own. A file output outside `files_from` is copied too. A special file
+- **File outputs.** An output that is itself a symlink to a file is resolved at staging and its target
+  copied, because the outputs are the writer's own and the digest covers the copied content. A
+  symlink to a directory inside a `Directory` output raises `UnencodableOutput`: `FileSet.byte_chunks`,
+  and so RFC 0004's `file@1`, does not descend into it, so copying its target would store content
+  that the entry's digest does not cover. A file output outside `files_from` is copied too. A special file
   (FIFO, socket, device) inside a `Directory` output raises `UnencodableOutput` (§6.4).
 - **Cost.** Every file output is read once and written once, and hashed in the same pass. With a
   reflink the write is free. `fsync` of each member, the staging directory and the parent costs a
