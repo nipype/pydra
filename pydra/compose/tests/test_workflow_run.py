@@ -4507,3 +4507,30 @@ def test_wf_ndst_combine_two_upstreams(worker: str, tmp_path: Path):
     outputs = worky(worker=worker, cache_root=tmp_path)
 
     assert outputs.out == [2, 4, 6]
+
+
+def test_construct_lazy_graph_not_reused_for_concrete_task():
+    """A graph constructed with a lazy input must not be returned for a concrete one"""
+    from pydra.compose import python, workflow
+    from pydra.engine.workflow import Workflow
+
+    @python.define
+    def Fast(x: int) -> int:
+        return x + 1
+
+    @python.define
+    def Slow(x: int) -> int:
+        return x + 2
+
+    @workflow.define
+    def Inner(x: int, mode: str) -> int:
+        if mode == "fast":
+            node = workflow.add(Fast(x=x), name="fast")
+        else:
+            node = workflow.add(Slow(x=x), name="slow")
+        return node.out
+
+    Workflow.clear_cache()
+    Workflow.construct(Inner(x=1, mode="fast"), lazy=["mode"])
+    wf = Workflow.construct(Inner(x=1, mode="fast"))
+    assert [n.name for n in wf.nodes] == ["fast"]
