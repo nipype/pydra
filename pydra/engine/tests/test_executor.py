@@ -4,7 +4,7 @@ import asyncio
 import pytest
 from pydra.compose import python, workflow
 from pydra.engine.drivers import drive
-from pydra.engine.executor import Executor, WorkerExecutor
+from pydra.engine.executor import Executor, WorkerExecutor, no_result_diagnosis
 from pydra.engine.runner import Failed, GraphRunner
 from pydra.engine.store import LEASE_SUFFIX
 from pydra.engine.submitter import Submitter
@@ -129,7 +129,7 @@ def test_true_returning_worker_never_visible(tmp_path):
         ex = WorkerExecutor(worker, visibility_timeout=0.5)
         (outcome,) = sub.loop.run_until_complete(submit_and_wait(ex, job))
         assert isinstance(outcome, Failed)
-        assert "no result" in str(outcome.error)
+        assert str(outcome.error) == no_result_diagnosis(job)
 
 
 def test_router_dispatches_to_executors(tmp_path):
@@ -182,17 +182,26 @@ def test_call_soon_batching_worker_sees_round(tmp_path):
         assert worker.batches == [4]
 
 
-class Hangs(base.Worker):
+class LeaseHang(base.Worker):
+    """Takes the job's lease, as ``Job.run_async`` does, then waits forever"""
+
     _plugin_name = "debug"
+    cancelled = 0
 
     async def run(self, job, rerun=False):
-        await asyncio.Event().wait()
+        async with job.store.acquire(job.checksum, job.context):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                type(self).cancelled += 1
+                raise
 
 
-def test_interrupt_cancels_open_handles(tmp_path):
+def test_interrupt_cancels_open_handles(tmp_path, monkeypatch):
+    monkeypatch.setattr(LeaseHang, "cancelled", 0)
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
         runner = make_runner(sub, Split(xs=[0, 1, 2, 3]))
-        worker = Hangs()
+        worker = LeaseHang()
         worker.loop = sub.loop
         ex = Counting(worker)
 
@@ -209,14 +218,86 @@ def test_interrupt_cancels_open_handles(tmp_path):
             )
             await asyncio.sleep(0.3)
             assert len(ex.calls) == 4
+            assert len(leases(tmp_path)) == 4
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
 
         sub.loop.run_until_complete(interrupted())
         assert len(ex.cancelled) == 4
-        assert not [p for p in tmp_path.rglob("*") if p.name.endswith(LEASE_SUFFIX)]
+        assert LeaseHang.cancelled == 4  # every run coroutine was cancelled
+        assert not leases(tmp_path)  # and released its lease
         assert not ex._tasks  # nothing is left scheduled
+
+
+def leases(root):
+    return [p for p in root.rglob("*") if p.name.endswith(LEASE_SUFFIX)]
+
+
+@python.define
+def Boom(x: int) -> int:
+    raise ValueError("BOOM")
+
+
+@python.define
+def Touch(x: int, mark: str) -> int:
+    import pathlib
+
+    pathlib.Path(mark, f"ran-{x}").touch()
+    return x
+
+
+@python.define
+def Remote(x: int) -> int:
+    return x
+
+
+@workflow.define(outputs=["a", "t1", "t2", "t3"])
+def FailThenTouch(x: int, mark: str):
+    a = workflow.add(Boom(x=x), name="a")
+    t1 = workflow.add(Touch(x=1, mark=mark), name="t1")
+    t2 = workflow.add(Touch(x=2, mark=mark), name="t2")
+    t3 = workflow.add(Touch(x=3, mark=mark), name="t3")
+    return a.out, t1.out, t2.out, t3.out
+
+
+@workflow.define(outputs=["r", "a", "t1", "t2", "t3"])
+def MixedFailThenTouch(x: int, mark: str):
+    r = workflow.add(Remote(x=x), name="r", resources=GPU)
+    a = workflow.add(Boom(x=x), name="a")
+    t1 = workflow.add(Touch(x=1, mark=mark), name="t1")
+    t2 = workflow.add(Touch(x=2, mark=mark), name="t2")
+    t3 = workflow.add(Touch(x=3, mark=mark), name="t3")
+    return r.out, a.out, t1.out, t2.out, t3.out
+
+
+@workflow.define(outputs=["r", "inner"])
+def NestedMixed(x: int, mark: str):
+    r = workflow.add(Remote(x=x), name="r", resources=GPU)
+    inner = workflow.add(FailThenTouch(x=x, mark=mark), name="inner")
+    return r.out, inner.a
+
+
+def mixed_submitter(tmp_path):
+    return Submitter(
+        worker="debug",
+        workers={"pool": "cf"},
+        router=lambda job: "pool" if job.resources is not None else None,
+        cache_root=tmp_path / "cache",
+    )
+
+
+@pytest.mark.parametrize("task", [MixedFailThenTouch, NestedMixed])
+def test_mixed_run_runs_no_job_after_the_first_failure(tmp_path, task):
+    """A debug main worker routed beside cf keeps the fail_fast contract, also in a
+    nested workflow, whose default is the submitter's"""
+    mark = tmp_path / "mark"
+    mark.mkdir()
+    with mixed_submitter(tmp_path) as sub:
+        assert sub.on_error == "fail_fast"
+        with pytest.raises(ValueError, match="BOOM"):
+            sub(task(x=1, mark=str(mark)))
+    assert sorted(p.name for p in mark.iterdir()) == []
 
 
 def test_all_inline_workers_use_drive_inline(tmp_path, monkeypatch):
@@ -243,7 +324,7 @@ def test_all_inline_workers_use_drive_inline(tmp_path, monkeypatch):
         cache_root=tmp_path / "b",
     ) as sub:
         assert sub(Pipeline(x=1)).outputs.out == 4
-    assert "drive" in calls
+    assert calls[0] == "drive"
 
 
 def test_blocking_worker_runs_on_the_running_loop(tmp_path):

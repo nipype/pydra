@@ -2,7 +2,7 @@
 
 import asyncio
 import typing as ty
-from collections import defaultdict
+from collections import defaultdict, deque
 from pydra.engine.runner import Failed, GraphRunner, OnError
 
 if ty.TYPE_CHECKING:
@@ -70,6 +70,9 @@ async def drive(
 ) -> None:
     """Run every job of the runner on the executors, on the running event loop
 
+    Under ``fail_fast`` an executor whose ``serial`` attribute is true (a synchronous
+    worker) has one job in flight at a time, so none starts after the first failure.
+
     The jobs of each round are grouped by the executor the router names, and handed to it
     in node order, one call per job unless the executor batches. Outcomes are reported
     onto this loop. With ``on_error="fail_fast"`` the first failure stops the run. On the
@@ -86,7 +89,7 @@ async def drive(
         Called with each job; the name of its executor. An exception it raises is the
         job's failure
     max_concurrent : float
-        The most jobs in flight at once, ``inf`` if unlimited
+        The most jobs in flight at once; a float because ``inf`` means unlimited
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
     audit : Audit
@@ -100,6 +103,11 @@ async def drive(
     # the jobs not run because a job with the same checksum is being run, by checksum
     sharing: "dict[str, set[Job]]" = defaultdict(set)
     futured: "dict[str, Job]" = {}
+    # jobs waiting for an executor that runs one at a time under fail_fast, and the
+    # number it has in flight
+    waiting: "dict[str, deque[Job]]" = defaultdict(deque)
+    busy: "dict[str, int]" = defaultdict(int)
+    sent_to: "dict[Job, str]" = {}
     finished: set[str] = set()  # the checksums of the jobs whose runs have ended
     failed: set[str] = set()  # the checksums of the jobs whose runs failed
 
@@ -108,7 +116,23 @@ async def drive(
             return None
         return max(0, int(max_concurrent) - len(in_flight))
 
+    def send(name: str, jobs: "list[Job]") -> None:
+        executor = executors[name]
+        for job in jobs:
+            sent_to[job] = name
+        busy[name] += len(jobs)
+        for batch in [jobs] if executor.batches else [[j] for j in jobs]:
+            open_handles.append(executor.submit(batch))
+
+    def pump() -> None:
+        """Hand each one-at-a-time executor its next waiting job once it is idle"""
+        for name, queue in waiting.items():
+            if queue and not busy[name] and not (fail_fast and runner.errors):
+                send(name, [queue.popleft()])
+
     def on_outcome(job: "Job", outcome: "Outcome") -> None:
+        if job in sent_to:
+            busy[sent_to.pop(job)] -= 1
         in_flight.discard(job)
         finished.add(job.checksum)
         for ran in sharing.pop(job.checksum, ()):
@@ -117,6 +141,7 @@ async def drive(
             failed.add(job.checksum)
         runner.complete(job, outcome)
         open_handles[:] = [h for h in open_handles if h.open]
+        pump()
         progressed.set()
 
     def report(job: "Job", outcome: "Outcome") -> None:
@@ -154,10 +179,12 @@ async def drive(
                         in_flight.add(job)
                         on_outcome(job, Failed(exc))
             for name, jobs in by_executor.items():
-                executor = executors[name]
                 in_flight.update(jobs)
-                for batch in [jobs] if executor.batches else [[j] for j in jobs]:
-                    open_handles.append(executor.submit(batch))
+                if fail_fast and getattr(executors[name], "serial", False):
+                    waiting[name].extend(jobs)
+                else:
+                    send(name, jobs)
+            pump()
             if in_flight:
                 await progressed.wait()
                 progressed.clear()

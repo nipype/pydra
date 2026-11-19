@@ -37,8 +37,9 @@ class Executor(ty.Protocol):
     """Where the jobs a runner releases run
 
     Every job submitted is reported exactly once through the callable given to
-    :meth:`bind`, as a ``Result`` or :class:`~pydra.engine.runner.Failed`; a job of a
-    cancelled handle is not reported. The callable may be invoked from any thread.
+    :meth:`bind`, as a ``Result`` or :class:`~pydra.engine.runner.Failed`. The callable
+    may be invoked from any thread. Until R7 a job of a cancelled handle is not reported;
+    R7 reports it ``NotRun``, as RFC 0002 §3.2 has it.
     """
 
     batches: ty.ClassVar[bool]
@@ -138,12 +139,18 @@ class WorkerExecutor:
     visibility_timeout : float
         How long a result the worker reported written may take to be visible
     blocking : Callable[[Worker, Job, bool], Awaitable], optional
-        Runs a job of a synchronous worker off the loop; by default the loop's own pool
+        Runs a job of a synchronous worker off the loop; by default the loop's own thread pool (the submitter passes its single helper thread)
     """
 
     batches = False
     checks_store = True
     inline = False
+
+    @property
+    def serial(self) -> bool:
+        """Whether the worker is synchronous: its jobs run one at a time on a helper
+        thread, which the driver feeds one at a time under ``fail_fast``"""
+        return not self.worker.is_async
 
     def __init__(
         self,

@@ -18,7 +18,7 @@ from pydra.utils.general import (
 from pydra.utils.hash import PersistentCache
 from pydra.engine.audit import Audit
 from pydra.engine.drivers import drive, drive_inline
-from pydra.engine.executor import InlineExecutor, WorkerExecutor
+from pydra.engine.executor import InlineExecutor, WorkerExecutor, no_result_diagnosis
 from pydra.engine.job import Job
 from pydra.engine.runner import (  # noqa: F401
     Failed,
@@ -474,15 +474,7 @@ class Submitter:
         PersistentCache().clean_up()
         result = job.result()
         if result is None:
-            if job.lockfile.exists():
-                raise RuntimeError(
-                    f"Job {job} has a lease, but no result was found. "
-                    "This may be due to another submission that is currently running. "
-                    f"A lease left by an interrupted run ({str(job.lockfile)!r}) is "
-                    "taken over once it has not been renewed for "
-                    "LeaseSettings.stale_after; resubmit then."
-                )
-            raise RuntimeError(f"Job {job} has no result in {str(job.cache_dir)!r}")
+            raise RuntimeError(no_result_diagnosis(job))
         return result
 
     def submit(self, job: "Job[TaskType]", rerun: bool = False) -> None:
@@ -594,11 +586,17 @@ class Submitter:
         job : :obj:`~pydra.engine.job.Job[workflow.Task]`
             Workflow Job object
         """
-        runner = self._runner(workflow_task, rerun, is_async=True)
+        runner = self._runner(workflow_task, rerun, is_async=self.worker.is_async)
         try:
             await self._drive(runner)
         finally:
             if runner.errors:
+                if (
+                    not self.worker.is_async
+                    and runner.on_error == "fail_fast"
+                    and runner.first_error is not None
+                ):  # a nested workflow of a synchronous run raises the task's exception
+                    raise runner.first_error
                 raise workflow_error(workflow_task, runner.errors, runner.entries)
 
     async def _drive(self, runner: GraphRunner) -> None:
