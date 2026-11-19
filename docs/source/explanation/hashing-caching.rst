@@ -50,10 +50,35 @@ hash follows the code they reach:
 
 A function or class outside the tier is identified by its qualified name. Library code,
 the standard library, packages installed in ``site-packages`` and pydra itself, is
-always identified by its qualified name, never its code: its version is not part of the
-hash. The ``PYDRA_USER_PACKAGES`` environment variable overrides that boundary with a
+never identified by its code. The standard library is identified by its qualified name.
+A function or class of an installed distribution is identified by its qualified name
+and the distribution that owns it and its identity (``lib:numpy==2.1.0:numpy.add``): the
+public version of an index install (the local label such as ``+cu121`` names a build for
+a platform and is recorded in the context, not keyed), ``version@commit`` of a VCS
+install, ``version@hash`` of an archive. An install from a local directory, editable
+(library code when named with ``-mypkg``) or not, has no version in its identity: it is
+``dir:<digest of its importable files>`` (``.py``, ``.so``, ``.pyd``), so the same code
+has one key whatever git, the install commit or the untracked notes beside it; for a
+non-editable install the digest is of the ``path,hash`` entries of its ``RECORD`` outside
+``*.dist-info``. The engine itself (``pydra.compose``, ``pydra.engine``,
+``pydra.environments``, ``pydra.utils``, ``pydra.workers``, ``pydra.scripts``) is
+referenced by qualified name with no identity, like the standard library; the context
+records pydra's identity. ``pydra.tasks.*`` is keyed by the distribution that owns it. The
+identity record lists the references in ``task.refs``. The owner is the distribution whose
+``RECORD`` lists the module's file, else the one distribution that
+``importlib.metadata.packages_distributions()`` names for its top-level package. An
+extension module that no distribution owns is referenced as ``lib:?:`` and its results
+are not reused by other processes; a pure-Python module that none owns is hashed as user
+code, and does not make the context unknown. Only the distributions that code reaches directly are keyed, not what they
+require, and the distributions that own the library types of the input values (a numpy
+array, a pandas frame) are keyed too. The ``PYDRA_USER_PACKAGES`` environment variable overrides that boundary with a
 comma-separated list of packages, ``mypkg`` to hash an installed package as user code
-and ``-mypkg`` to treat one (for instance an editable install) as library code. Set the
+and ``-mypkg`` to treat one (for instance an editable install) as library code. **Set it
+the same way on every site that should share results:** a package installed as a wheel on
+a cluster is library code keyed by name and version, and the same package in an editable
+checkout on a laptop is user code keyed by its source, so the two sites compute different
+checksums for the same code, unless both set ``PYDRA_USER_PACKAGES=mypkg``. The ``walk``
+field of the identity record carries the overrides, so a mismatch is named. Set the
 tier per task with ``python.define(code_hash=...)`` or ``workflow.define(code_hash=...)``,
 or for all tasks with the ``PYDRA_CODE_HASH`` environment variable.
 

@@ -20,7 +20,7 @@ import cloudpickle as cp
 import pytest
 from fileformats.generic import File
 
-from pydra.compose import python
+from pydra.compose import python, workflow
 from pydra.engine.job import Job
 from pydra.engine.portable.identity import PydraIdentityV2
 from pydra.engine.submitter import Submitter
@@ -751,11 +751,12 @@ def test_only_an_unpickled_job_carries_digests():
     job.checksum
     assert job.task._carried is None
     clone = cp.loads(cp.dumps(job))
-    assert set(clone.task._carried) == {"Outputs", clone.task._executor_name}
+    assert set(clone.task._carried) == set(job.task._hashes)
+    assert {"a", "b", "Outputs", clone.task._executor_name} <= set(clone.task._carried)
     assert clone.task._carried["Outputs"] == type_digest(job.task.Outputs)
 
 
-def test_run_through_a_worker_without_source(any_worker, tmp_path, monkeypatch):
+def test_run_through_a_worker(any_worker, tmp_path, monkeypatch):
     outputs = Carried(a=1)(cache_root=tmp_path, worker=any_worker)
     assert outputs.out == 3
 
@@ -775,3 +776,324 @@ def test_changed_outputs_digest_is_reported(tmp_path, monkeypatch):
     monkeypatch.setattr(type(job.task), "_hash_changes", lambda self: ["Outputs"])
     with pytest.raises(RuntimeError, match="Input field hashes have changed"):
         job._check_for_hash_changes()
+
+
+# ---------------------------------------------------------------------------
+# #936: inputs a worker without source cannot re-hash. Each task has a File field, so
+# the worker re-checks its input hashes after the run.
+# ---------------------------------------------------------------------------
+
+
+def _helper(x):
+    return x + 1
+
+
+class Scaler:
+    def __init__(self, k):
+        self.k = k
+
+    def __call__(self, x):
+        return _helper(x) * self.k
+
+
+def double(x: int) -> int:
+    return x * 2
+
+
+@python.define
+def ApplyObj(f: File, p: object, x: int) -> int:
+    return p(x) if isinstance(p, Scaler) else x
+
+
+@python.define
+def ApplyFn(f: File, p: ty.Callable, x: int) -> int:
+    return p(x)
+
+
+@python.define
+def InnerAdd(a: int) -> int:
+    return a + 1
+
+
+@workflow.define
+def InnerWf(a: int) -> int:
+    return workflow.add(InnerAdd(a=a)).out
+
+
+@pytest.fixture
+def script_like():
+    """Pickle this module by value, as a script's functions and classes are, so a worker
+    imports nothing from it"""
+    module = sys.modules[__name__]
+    cp.register_pickle_by_value(module)
+    yield
+    cp.unregister_pickle_by_value(module)
+
+
+def _file(tmp_path):
+    path = tmp_path / "in.txt"
+    path.write_text("x")
+    return path
+
+
+def _no_crash(root):
+    assert list(Path(root).rglob("_error.pklz")) == []
+
+
+def _wf_with(task_factory):
+    @workflow.define
+    def Wf(f: File, x: int) -> int:
+        return workflow.add(task_factory(f)).out
+
+    return Wf
+
+
+INPUTS = {
+    "user-class instance": lambda f: ApplyObj(f=f, p=Scaler(2), x=3),
+    "function": lambda f: ApplyFn(f=f, p=double, x=3),
+    "standalone task": lambda f: ApplyObj(f=f, p=InnerAdd(a=1), x=3),
+    "workflow": lambda f: ApplyObj(f=f, p=InnerWf(a=1), x=3),
+}
+
+
+@pytest.mark.parametrize("case", sorted(INPUTS))
+def test_standalone_job_with_file_and_unhashable_without_source(
+    case, any_worker, tmp_path, script_like
+):
+    """A non-file input is never rehashed in a worker: a worker without source (cloudpickle
+    3.1.3) neither fails nor writes a crash report"""
+    outputs = INPUTS[case](_file(tmp_path))(
+        cache_root=tmp_path / "cache", worker=any_worker
+    )
+    assert outputs.out in (3, 6, 8)
+    _no_crash(tmp_path / "cache")
+
+
+@pytest.mark.parametrize("case", sorted(INPUTS))
+def test_workflow_job_with_file_and_unhashable_without_source(
+    case, any_worker, tmp_path, script_like
+):
+    Wf = _wf_with(lambda f, c=INPUTS[case]: c(f))
+    outputs = Wf(f=_file(tmp_path), x=1)(
+        cache_root=tmp_path / "cache", worker=any_worker
+    )
+    assert outputs.out in (3, 6, 8)
+    _no_crash(tmp_path / "cache")
+
+
+@python.define
+def Mutate(f: File) -> int:
+    with open(f, "a") as handle:
+        handle.write("x")
+    return 1
+
+
+def test_file_changed_by_the_job_is_still_detected(
+    any_worker, tmp_path, script_like, caplog
+):
+    """A job that changes its File input fails with the change reported: the debug worker
+    raises, and a pool worker raises after it committed the result, which the submitter
+    logs"""
+    raised = ""
+    try:
+        Mutate(f=_file(tmp_path))(cache_root=tmp_path / "cache", worker=any_worker)
+    except RuntimeError as e:
+        raised = str(e)
+    assert "hashes have changed" in raised or "Task execution failed" in caplog.text
+
+
+def test_file_changed_by_the_job_is_reported_by_the_unpickled_job(tmp_path):
+    """What a worker does with the job it unpickles"""
+    job = Job(
+        name="t",
+        task=Mutate(f=_file(tmp_path)),
+        submitter=Submitter(cache_root=tmp_path / "cache"),
+    )
+    job.checksum
+    clone = cp.loads(cp.dumps(job))
+    with pytest.raises(RuntimeError, match="hashes have changed"):
+        clone.run()
+
+
+def test_outputs_digest_is_taken_from_the_carried_ones():
+    job = Job(name="t", task=Carried(a=1), submitter=Submitter())
+    job.checksum
+    clone = cp.loads(cp.dumps(job))
+    marker = "type@1:" + "0" * 64
+    clone.task._carried["Outputs"] = marker
+    assert clone.task._compute_hashes()[1]["Outputs"] == marker
+
+
+def test_only_file_fields_are_rehashed_in_a_worker(tmp_path, monkeypatch):
+    job = Job(
+        name="t",
+        task=ApplyObj(f=_file(tmp_path), p=Scaler(2), x=3),
+        submitter=Submitter(),
+    )
+    job.checksum
+    clone = cp.loads(cp.dumps(job))
+    monkeypatch.setattr(
+        hash_module,
+        "_class_digest",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("rehashed a class")),
+    )
+    assert clone.task._hash_changes() == []
+
+
+# ---------------------------------------------------------------------------
+# class@1 is stable under compiler-generated class members (3.14 annotate functions)
+# ---------------------------------------------------------------------------
+
+ANNOTATED_PACKAGE = {
+    "annpkg/__init__.py": "",
+    "annpkg/models.py": """
+        import dataclasses
+
+
+        @dataclasses.dataclass
+        class Point:
+            x: int = 0
+            y: "list[int] | None" = None
+
+            def norm(self):
+                return abs(self.x)
+
+
+        class Plain:
+            scale: int = 2
+
+            def go(self, a):
+                return a * self.scale
+    """,
+}
+
+ANNOTATED_SCRIPT = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from annpkg.models import Plain, Point
+from pydra.utils.hash import class_digest, type_digest
+print(json.dumps({
+    "point": class_digest(Point), "plain": class_digest(Plain),
+    "point_type": type_digest(Point),
+}))
+"""
+
+
+def _annotated(root, comment=False):
+    for name, source in ANNOTATED_PACKAGE.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = textwrap.dedent(source).lstrip("\n")
+        if comment:
+            text = text.replace("@dataclasses", "# a comment\n\n@dataclasses")
+            text = text.replace("class Plain:", "# another\nclass Plain:")
+        path.write_text(text)
+    out = subprocess.run(
+        [sys.executable, "-c", ANNOTATED_SCRIPT, str(root)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return json.loads(out.strip().splitlines()[-1])
+
+
+def test_annotated_class_digest_ignores_comments_and_line_numbers(tmp_path):
+    assert _annotated(tmp_path / "a") == _annotated(tmp_path / "b", comment=True)
+
+
+# equal on 3.11, 3.12, 3.13, 3.14 and 3.15
+ANNOTATED_GOLDEN = {
+    "point": "class@1:80835a0969d4de9ffa2c372ca3274f648d113b75bd368e2505d0f3ed36107ebb",
+    "plain": "class@1:acb16c123d662ed93c99cac88d6aad74b941974eb54d8d75bfc1149d768cd6a8",
+    "point_type": "type@1:557e3fd71e9fb16b7fb89296b3f1467024ac0a0469b522d3fcaf87a503c65d16"
+}
+
+
+def test_annotated_class_golden(tmp_path):
+    assert _annotated(tmp_path) == ANNOTATED_GOLDEN
+
+
+# ---------------------------------------------------------------------------
+# type@1 of the field types of a fields class
+# ---------------------------------------------------------------------------
+
+
+def _outputs_digest(tp):
+    @python.define(outputs={"out": python.out(type=tp)})
+    def F(a: int):
+        return a
+
+    return type_digest(F.Outputs)
+
+
+def test_pep585_field_types_are_digested_by_their_arguments():
+    assert _outputs_digest(list[int]) != _outputs_digest(list[str])
+    assert _outputs_digest(list[File]) != _outputs_digest(list[ty.Any])
+    from fileformats.generic import Directory
+
+    assert _outputs_digest(list[File]) != _outputs_digest(list[Directory])
+    assert _outputs_digest(dict[str, int]) != _outputs_digest(dict[str, list[File]])
+    assert _outputs_digest(ty.List[int]) == _outputs_digest(list[int])
+
+
+def test_bare_typing_aliases_are_digested_by_name():
+    assert _outputs_digest(ty.List) != _outputs_digest(ty.Dict)
+    assert _outputs_digest(ty.Callable) != _outputs_digest(ty.Sequence)
+
+
+def test_typevar_field_digest_has_name_bound_constraints_and_variance():
+    T, U = ty.TypeVar("T"), ty.TypeVar("U")
+    assert _outputs_digest(T) == _outputs_digest(ty.TypeVar("T"))
+    assert _outputs_digest(T) != _outputs_digest(U)
+    assert _outputs_digest(T) != _outputs_digest(ty.TypeVar("T", covariant=True))
+    assert _outputs_digest(T) != _outputs_digest(ty.TypeVar("T", bound=int))
+
+
+def test_forward_ref_is_its_string():
+    assert td(ty.ForwardRef("Foo")) == td(ty.ForwardRef("Foo"))
+    assert td(ty.ForwardRef("Foo")) != td(ty.ForwardRef("Bar"))
+    assert _outputs_digest(ty.ForwardRef("Foo")) != _outputs_digest(ty.ForwardRef("Bar"))
+
+
+def test_none_argument_is_nonetype():
+    assert td(dict[str, None]) == td(ty.Dict[str, None]) == td(dict[str, type(None)])
+
+
+def test_library_type_carries_its_owner():
+    import numpy
+
+    from pydra.utils.hash import Cache, bytes_repr_type
+
+    cache = Cache()
+    data = b"".join(bytes_repr_type(numpy.ndarray, cache))
+    assert data.startswith(b"type:(lib:numpy==")
+    assert data.endswith(b":numpy.ndarray)")
+    assert "numpy" in cache.modules
+    assert any(r.startswith("lib:numpy==") for r in cache.refs)
+    assert b"lib:" not in b"".join(bytes_repr_type(Path, Cache()))
+
+
+# equal on 3.11, 3.12, 3.13, 3.14 and 3.15
+TYPE_GOLDEN_2 = {
+    "list": "type@1:b2ff601d40c18f4065b2e2322ada0e90e776a8df2235093d0c658b2eec53b4ce",
+    "tlist": "type@1:b2ff601d40c18f4065b2e2322ada0e90e776a8df2235093d0c658b2eec53b4ce",
+    "paramspec": "type@1:0ba0266553649af4552feb205bfd1c49e0ac724289aa6efee3afe8b3a41fcaa2",
+    "callable_p": "type@1:b216773194079f0c07bc19ceac6d99059b2d9b568a2628c622c12e0f3f1b2290",
+    "typevar": "type@1:6dadccec566fc278b6009ef9d8b79f341724847b35e226cb98afe81cff4cf8f1",
+    "forward": "type@1:825b1802a065b69799034e1cd5022b56da737c11276fe78ea482dbe94519842a",
+    "dict_none": "type@1:baf77c7f0ebbc1de56d155ec80e8d9d4b8b1c1c1f1c44a052a619d1039949ea1"
+}
+
+
+def test_type_digest_goldens_2():
+    P = ty.ParamSpec("P")
+    T = ty.TypeVar("T", bound=int)
+    assert {
+        "list": _outputs_digest(list[int]),
+        "tlist": _outputs_digest(ty.List[int]),
+        "paramspec": td(P),
+        "callable_p": td(ty.Callable[P, int]),
+        "typevar": td(T),
+        "forward": td(ty.ForwardRef("Foo")),
+        "dict_none": td(dict[str, None]),
+    } == TYPE_GOLDEN_2

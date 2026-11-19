@@ -179,15 +179,17 @@ class Task(ty.Generic[OutputsType]):
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
     # the library modules reached when the checksum was last computed
     _code_modules = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the references to library code, with identities, reached when it was last computed
+    _code_refs = attrs.field(default=None, init=False, eq=False, repr=False)
     # the `code_digest`s of the functions with declared versions the checksum reached
     # (its own, its nodes', its inputs'), by ``module.qualname==version``, when it was
     # last computed
     _declared_code = attrs.field(default=None, init=False, eq=False, repr=False)
 
-    # The digests of the executor's code and of the ``Outputs`` class computed by the
-    # process that submitted the job, set by `_carry_digests` when the job is unpickled
-    # (a worker may not be able to read the source) and None in the submitting process
-    # (pydra issue #936)
+    # The digests of the fields and of the ``Outputs`` class computed by the process that
+    # submitted the job, set by `_carry_digests` when the job is unpickled (a worker may
+    # not be able to read the source) and None in the submitting process (pydra issue
+    # #936)
     _carried = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
@@ -505,16 +507,13 @@ class Task(ty.Generic[OutputsType]):
         return record_checksum(task_record(self))
 
     def _carry_digests(self) -> None:
-        """Keep the digests of the code and of the ``Outputs`` class that the submitting
-        process computed (``_hashes``), so a process that unpickles the task never
-        recomputes them from source, which it may not be able to read"""
+        """Keep the digests the submitting process computed (``_hashes``), so a process
+        that unpickles the task never recomputes them from source, which it may not be
+        able to read. Only the fields that hold files are hashed again (see
+        `pydra.utils.identity.field_digests`): their content can change between the
+        submission and the run."""
         if self._hashes:
-            self._carried = {
-                k: v
-                for k, v in self._hashes.items()
-                if k == "Outputs"
-                or (k == self._executor_name and v.startswith("code@1:"))
-            }
+            self._carried = dict(self._hashes)
 
     def _supplied_checksum(self) -> str:
         """The checksum returned by ``__checksum__``, which must be a single path
