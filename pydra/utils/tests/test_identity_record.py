@@ -256,7 +256,7 @@ def test_check_key_refuses_misfiled_and_malformed_keys():
     assert not ident.check_key(task._checksum + "-absent-" + "0" * 64, record)
     assert not ident.check_key(task._checksum[:-1], record)
     # a record carrying "absent" digests to neither (the suffix rule is I8's)
-    with_absent = dict(record, absent=[["out", "0", "dropped"]])
+    with_absent = dict(record, absent=[["out", {"$int": "0"}, "dropped"]])
     assert not ident.check_key(task._checksum, with_absent)
     assert not ident.check_key(record_checksum(with_absent), record)
     for bad in (
@@ -277,6 +277,13 @@ def Fields(a: int, b: int = 2) -> int:
     return a + b
 
 
+def _str_fields(a: int) -> str:
+    return str(a)
+
+
+StrFields = python.define(_str_fields, outputs={"out": str})
+
+
 def test_python_record_shape():
     record = task_record(Fields(a=1))
     assert record["kind"] == "python"
@@ -284,8 +291,7 @@ def test_python_record_shape():
     assert set(record["inputs"]) == {"a", "b"}
     assert record["inputs"]["a"].startswith("py@1:")
     # the outputs digest follows the Outputs class
-    other = python.define(lambda a: a, outputs={"out": str}, inputs={"a": int})
-    assert task_record(other(a=1))["outputs"] != record["outputs"]
+    assert task_record(StrFields(a=1))["outputs"] != record["outputs"]
 
 
 def test_shell_record_shape():
