@@ -1,6 +1,8 @@
 """Completion is reported to the runner, not polled from the store"""
 
 import asyncio
+import sys
+import traceback
 import time
 from types import SimpleNamespace
 import pytest
@@ -226,13 +228,17 @@ def test_errored_result_entry_carries_the_recorded_error(submitter, tmp_path):
     (a,) = runner.ready().dispatch
     cache_dir = tmp_path / "slurm-like"
     cache_dir.mkdir()
-    record_error(cache_dir, ValueError("remote boom"))
+    try:
+        raise ValueError("remote boom")
+    except ValueError:
+        record_error(cache_dir, error=traceback.format_exception(*sys.exc_info()))
     runner.complete(
         a, Result(cache_dir=cache_dir, outputs=None, errored=True, task=a.task)
     )
     (entry,) = runner.entries
     assert entry.exception_type == "builtins.ValueError"
-    assert "remote boom" in entry.message
+    assert entry.message == "remote boom"
+    assert "Traceback" in entry.traceback and "remote boom" in entry.traceback
     assert "remote boom" in runner.errors[0]
 
 

@@ -3,6 +3,7 @@ its jobs are released, completed and marked unrunnable. Drivers (see
 :class:`~pydra.engine.submitter.Submitter`) loop over a :class:`GraphRunner`, taking the
 jobs it hands out, running them and reporting each outcome."""
 
+import builtins
 import typing as ty
 from traceback import format_exc, format_exception
 import re
@@ -472,14 +473,32 @@ def job_error(job: "Job", exc: BaseException) -> str:
 
 def result_error(job: "Job", result: "Result") -> BaseException:
     """The error of an errored result: the one its worker recorded beside it
-    (``_error.pklz``), or a description of its absence"""
+    (``_error.pklz``), or a description of its absence
+
+    The recorded error is the list of traceback lines ``record_error`` is given (an
+    exception object is accepted too). Its last line names the exception type and
+    message; the type is restored when it is a builtin, else it is a ``RuntimeError``
+    carrying that line. The recorded text becomes the entry's traceback.
+    """
     recorded = getattr(result, "errors", None)
-    if recorded:
-        error = recorded.get("error message")
-        if isinstance(error, BaseException):
-            return error
-        if error:
-            return RuntimeError(str(error))
+    error = recorded.get("error message") if recorded else None
+    if isinstance(error, BaseException):
+        return error
+    if isinstance(error, str):
+        error = [error]
+    if error:
+        text = "".join(error)
+        last = text.rstrip().splitlines()[-1] if text.strip() else ""
+        name, _, message = last.partition(": ")
+        cls = getattr(builtins, name, None)
+        if not (isinstance(cls, type) and issubclass(cls, BaseException)):
+            cls, message = RuntimeError, last
+        try:
+            exc = cls(message)
+        except Exception:
+            exc = RuntimeError(last)
+        exc.recorded_traceback = text  # type: ignore[attr-defined]
+        return exc
     return RuntimeError(
         f"Job {job.name!r} errored and left no error record in {str(job.cache_dir)!r}"
     )
@@ -495,7 +514,8 @@ def error_entry(
         state_index=state_index,
         exception_type=f"{exc_class.__module__}.{exc_class.__qualname__}",
         message=str(exc),
-        traceback="".join(format_exception(exc_class, exc, exc.__traceback__)),
+        traceback=getattr(exc, "recorded_traceback", None)
+        or "".join(format_exception(exc_class, exc, exc.__traceback__)),
         phase=phase,
     )
 
@@ -649,6 +669,7 @@ class GraphRunner:
         can progress. Every kind of progress a pass can make must be part of the value.
         """
         return (
+            # settling a job from the store hands it out without changing any node
             len(self._handed),
             tuple(
                 (
