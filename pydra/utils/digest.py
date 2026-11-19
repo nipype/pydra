@@ -19,7 +19,7 @@ import typing as ty
 from decimal import Decimal
 
 import attrs
-from fileformats.core.fileset import FileSet
+from fileformats.core.fileset import FileSet, MockMixin
 
 try:
     import numpy as np
@@ -192,13 +192,13 @@ def _register(entry: Codec) -> None:
             f"tag {entry.tag!r} is already registered for {existing.type!r}"
         )
     prior = _entry(entry.type)
-    if prior is not None and not prior.default:
-        if prior.tag not in (None, entry.tag):
+    if prior is not None:
+        if not prior.default and prior.tag not in (None, entry.tag):
             raise ValueError(
                 f"{entry.type!r} is already registered under tag {prior.tag!r}"
             )
-        entry = attrs.evolve(entry, digest=prior.digest)
-    elif prior is not None:
+        # a default tag is replaced by a registration; a registered digest is kept, and
+        # the default tag stays readable through `lookup_fileset_tag`
         entry = attrs.evolve(entry, digest=prior.digest)
     _BY_TAG[entry.tag] = entry
     _BY_TYPE[entry.type] = entry
@@ -233,7 +233,7 @@ def register_digest(
         attrs.evolve(prior, digest=fn) if prior is not None else Codec(type_, digest=fn)
     )
     _BY_TYPE[type_] = entry
-    if entry.tag is not None:
+    if entry.tag is not None and not entry.default:
         _BY_TAG[entry.tag] = entry
 
 
@@ -262,6 +262,11 @@ def _entry(type_: type) -> Codec | None:
     return entry
 
 
+def entry_of(type_: type) -> Codec | None:
+    """The entry of exactly ``type_``: registered, or a default ``$fileset`` one."""
+    return _entry(type_)
+
+
 def lookup_tag(tag: str) -> Codec | None:
     """The entry registered under ``tag``; looks in the registry only, never imports."""
     return _BY_TAG.get(tag)
@@ -277,76 +282,48 @@ def tag_of(type_: type) -> str | None:
 # Default file set tags
 # ---------------------------------------------------------------------------
 
-_FALLBACK_SHIPPED = ("application", "generic", "image", "text")
-
-
-def _shipped_subpackages() -> frozenset[str]:
-    """The ``fileformats.<name>`` packages the ``fileformats`` distribution itself ships;
-    extension packages (``fileformats-medimage``) are not among them."""
-    try:
-        from importlib.metadata import distribution
-
-        files = distribution("fileformats").files or []
-        names = {
-            parts[1]
-            for parts in (str(f).replace("\\", "/").split("/") for f in files)
-            if len(parts) > 2 and parts[0] == "fileformats"
-        }
-    except Exception:  # metadata missing, as in a frozen or vendored install
-        names = set()
-    return frozenset((names or set(_FALLBACK_SHIPPED)) - {"testing", "vendor"})
-
-
-_SHIPPED = _shipped_subpackages()
-
-
-def _default_tag(type_: type) -> tuple[str, type] | None:
-    """``mime_like`` of the nearest class in the MRO of ``type_`` that has one, with that
-    class. A class defined outside the ``fileformats`` namespace has none of its own."""
-    for klass in type_.__mro__:
-        if isinstance(klass, type) and issubclass(klass, FileSet):
-            try:
-                return str(klass.mime_like), klass
-            except Exception:
-                continue
-    return None
-
 
 def _default_fileset_entry(type_: type) -> Codec | None:
-    parts = type_.__module__.split(".")
-    if len(parts) < 2 or parts[0] != "fileformats" or parts[1] not in _SHIPPED:
+    """The entry of a ``FileSet`` class nobody registered: its ``mime_like`` is the tag,
+    computed here, on demand, whatever package the class comes from. A class with no
+    ``mime_like`` (defined outside the ``fileformats`` namespace) has none, and is
+    ``py@1``, as is a mock, which has no files. Not entered in the tag registry:
+    `lookup_fileset_tag` resolves a tag.
+    """
+    if issubclass(type_, MockMixin):
         return None
-    found = _default_tag(type_)
-    if found is None:
+    try:
+        tag = str(type_.mime_like)
+    except Exception:
         return None
-    tag, owner = found
     entry = Codec(type_, tag, fileset=True, default=True)
     _BY_TYPE[type_] = entry
-    if owner is type_:  # a tag decodes to the class that owns it
-        _BY_TAG.setdefault(tag, entry)
     return entry
 
 
-def _register_default_filesets() -> None:
-    """Give every class of the ``fileformats`` distribution its default tag, so that a
-    store can decode its tags; a class defined later is tagged when first looked up."""
-    import importlib
+def lookup_fileset_tag(tag: str, declared: ty.Iterable[type] = ()) -> Codec | None:
+    """The entry that decodes the ``$fileset`` tag ``tag``: a user registration of it, else
+    a declared class whose ``mime_like`` is ``tag``, else the class ``fileformats``
+    resolves the tag to (it imports from the ``fileformats`` namespace only)."""
+    entry = _BY_TAG.get(tag)
+    if entry is not None:
+        return entry
+    for klass in declared:
+        if isinstance(klass, type) and issubclass(klass, FileSet):
+            found = _entry(klass)
+            if found is not None and found.default and found.tag == tag:
+                return found
+    try:
+        from fileformats.core import from_mime
 
-    for name in sorted(_SHIPPED):
-        try:
-            importlib.import_module(f"fileformats.{name}")
-        except Exception:
-            continue
-    todo = list(FileSet.__subclasses__())
-    seen: set[type] = set()
-    while todo:
-        klass = todo.pop()
-        if klass in seen:
-            continue
-        seen.add(klass)
-        todo.extend(klass.__subclasses__())
-        if isinstance(klass, type):
-            _entry(klass)
+        klass = from_mime(tag)
+    except Exception:
+        return None
+    if isinstance(klass, type) and issubclass(klass, FileSet):
+        found = _entry(klass)
+        if found is not None and found.tag == tag:
+            return found
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -545,6 +522,3 @@ def digest(value: ty.Any, cache: ty.Any = None) -> str:
     except _NoDigestForm:
         return _py_digest(value, cache)
     return "json@1:" + _sha256(jcs(form))
-
-
-_register_default_filesets()

@@ -37,6 +37,8 @@ from pydra.utils.digest import (
     fileset_digest,
     is_canonical_array,
     jcs,
+    entry_of,
+    lookup_fileset_tag,
     lookup_tag,
     np,
     npformat,
@@ -150,9 +152,9 @@ class Encoder:
             ``value`` has no codec and cannot be pickled here.
         """
         tp = type(value)
-        tag = tag_of(tp)
+        codec = entry_of(tp)
+        tag = codec.tag if codec is not None else None
         if tag is not None:
-            codec = lookup_tag(tag)
             assert codec is not None
             if codec.fileset:
                 return self._fileset(value, tag, field)
@@ -380,6 +382,14 @@ def _tag_keys(doc: dict) -> list[str]:
     return [k for k in doc if k.startswith("$") and not k.startswith("$$")]
 
 
+def _fileset_classes(tp: ty.Any) -> ty.Iterator[type]:
+    """The ``FileSet`` classes a declared type names, at any depth of its arguments."""
+    if isinstance(tp, type) and issubclass(tp, FileSet):
+        yield tp
+    for arg in ty.get_args(tp):
+        yield from _fileset_classes(arg)
+
+
 class Decoder:
     """Decodes the JSON of an entry's outputs.
 
@@ -410,11 +420,24 @@ class Decoder:
         self.entry_path = entry_path
         self.allow_pickle = allow_pickle
         self.referenced: set[str] = set()
+        self.declared: tuple[type, ...] = ()
+        """The file set classes the field being decoded declares, which a shared tag
+        decodes to."""
         self.trees: list[tuple[str, list[str]]] = []
         """The file sets decoded: each one's set name and its top-level names."""
 
-    def decode_outputs(self, outputs: ty.Mapping[str, JSON]) -> dict[str, ty.Any]:
-        return {name: self.decode(doc) for name, doc in outputs.items()}
+    def decode_outputs(
+        self,
+        outputs: ty.Mapping[str, JSON],
+        declared: ty.Mapping[str, ty.Any] | None = None,
+    ) -> dict[str, ty.Any]:
+        """``declared`` maps an output field to its declared type."""
+        out = {}
+        for name, doc in outputs.items():
+            self.declared = tuple(_fileset_classes((declared or {}).get(name)))
+            out[name] = self.decode(doc)
+        self.declared = ()
+        return out
 
     def decode(self, doc: JSON, hashable: bool = False) -> ty.Any:
         """The value of ``doc``. ``hashable`` is set for a set element or a dict key, where a
@@ -588,7 +611,9 @@ class Decoder:
             ) from err
 
     def _fileset(self, doc: dict, body: JSON, hashable: bool) -> ty.Any:
-        codec = lookup_tag(body) if isinstance(body, str) else None
+        codec = (
+            lookup_fileset_tag(body, self.declared) if isinstance(body, str) else None
+        )
         if codec is None or not codec.fileset:
             raise EntryFormatUnknown(
                 f"file set tag {body!r} is not registered in this process"

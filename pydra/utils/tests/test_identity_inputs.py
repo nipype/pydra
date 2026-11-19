@@ -5,17 +5,26 @@ issue #942)."""
 import hashlib
 import os
 import shutil
+import subprocess
+import sys
+import textwrap
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import numpy as np
 import pytest
-from fileformats.generic import Directory, File
+import fileformats.application.misc as misc_formats
+from fileformats.application import Pdf
+from fileformats.audio import Wav
+from fileformats.generic import Directory, DirectoryOf, File
 from fileformats.text import Plain
 
 from pydra.compose import python
 from pydra.engine.tests.test_portable_entry import (  # noqa: F401
     Pair,
     entry_path,
+    CHECKSUM,
+    FP,
+    TRUST,
     publish,
     read,
     root,
@@ -320,3 +329,111 @@ def test_registered_digest_wins_over_npy_and_file(tmp_path):
     assert digest({"k": np.arange(3)}) == "json@1:" + sha(
         jcs({"k": {"$digest": "mine@1:" + "ef" * 16}})
     )
+
+
+# -- default tags: any FileSet class, tag from mime_like, resolved on demand -----------------
+
+WAV_BYTES = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\0" * 20
+
+
+def test_default_tag_for_any_fileformats_class(tmp_path):
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(WAV_BYTES)
+    assert (
+        digest(Wav(wav))
+        == "file@1:25d722acb56193e38b3dab7dfa968edaf0791dcc597fd71d74b88775052f759d"
+    )
+    assert dg.tag_of(Wav) == "audio/wav"
+    assert dg.tag_of(DirectoryOf[Plain]) == "text/plain+directory-of"
+
+
+def test_no_registry_walk_for_a_class_without_a_mime_like(tmp_path):
+    class Foreign(File):
+        ext = ".txt"
+
+    assert dg.tag_of(Foreign) is None
+
+
+FRESH_READER = textwrap.dedent("""
+    import sys
+    from pathlib import Path
+    from pydra.engine.tests.test_portable_entry import read, TRUST
+    from pydra.utils.storagedir import StorageDir, StorePolicy
+
+    handle = StorageDir.open_root(Path(sys.argv[1]), StorePolicy(), trust=TRUST)
+    out = read(handle).outputs
+    for name in sorted(out):
+        t = type(out[name])
+        print(name, t.__module__, t.__qualname__, t.mime_like)
+    """)
+
+
+def test_default_tagged_sets_decode_in_a_fresh_process(root, tmp_path):  # noqa: F811
+    src = tmp_path / "src"
+    (src / "tree").mkdir(parents=True)
+    (src / "one.bin").write_bytes(b"payload")
+    (src / "tree" / "a.txt").write_bytes(b"a")
+    publish(
+        root,
+        {"f": File(src / "one.bin"), "d": DirectoryOf[Plain](src / "tree")},
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", FRESH_READER, str(root.path)],
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode == 0, done.stderr
+    lines = {ln.split()[0]: ln.split() for ln in done.stdout.splitlines()}
+    assert lines["f"][3] == "generic/file"
+    assert lines["d"][3] == "text/plain+directory-of"
+
+
+@python.define(outputs={"d": misc_formats.Pdf})
+def MiscPdfOut(x: int) -> misc_formats.Pdf:
+    raise NotImplementedError
+
+
+def _published_pdf(root, tmp_path):  # noqa: F811
+    src = tmp_path / "doc.pdf"
+    src.write_bytes(b"%PDF-1.4\nbody")
+    publish(root, {"d": misc_formats.Pdf(src)})
+
+
+def test_shared_tag_decodes_to_the_declared_class(root, tmp_path):  # noqa: F811
+    assert misc_formats.Pdf.mime_like == Pdf.mime_like
+    assert misc_formats.Pdf is not Pdf
+    _published_pdf(root, tmp_path)
+    got = read(root, task=MiscPdfOut(x=1)).outputs["d"]
+    assert type(got) is misc_formats.Pdf
+
+
+def test_shared_tag_decodes_to_the_resolvers_class_when_undeclared(
+    root, tmp_path
+):  # noqa: F811
+    from fileformats.core import from_mime
+
+    _published_pdf(root, tmp_path)
+    got = read(root).outputs["d"]
+    assert type(got) is from_mime("application/pdf")
+
+
+def test_user_registration_of_a_default_tag_wins_and_two_user_ones_clash():
+    register_fileset_tag(misc_formats.Pdf, "application/pdf")
+    assert dg.lookup_tag("application/pdf").type is misc_formats.Pdf
+    with pytest.raises(ValueError, match="already registered"):
+        register_fileset_tag(Pdf, "application/pdf")
+
+
+def test_registered_digest_survives_a_later_tag_registration(tmp_path):
+    one = tmp_path / "one.txt"
+    one.write_bytes(b"content")
+    register_digest(File, lambda value: "mine@1:" + "cd" * 16)
+    register_fileset_tag(File, "test.inputs.Later")
+    assert digest(File(one)) == "mine@1:" + "cd" * 16
+    assert dg.tag_of(File) == "test.inputs.Later"
+
+
+def test_mock_file_set_is_not_read_as_files(tmp_path):
+    mock = File.mock(tmp_path / "never-written.txt")
+    assert dg.tag_of(type(mock)) is None
+    assert digest(mock).startswith("py@1:")
