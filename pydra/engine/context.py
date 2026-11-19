@@ -115,10 +115,6 @@ def _capped_digest(root: Path, files: list[Path]) -> str:
     )
 
 
-IMPORTABLE_SUFFIXES = (".py", ".so", ".pyd")
-"""The files of a package that identify its code; notes, data and byte-code do not."""
-
-
 def _package_files(paths: list[Path]) -> list[Path]:
     """The files of the packages and modules at `paths`, leaving out hidden
     directories, ``__pycache__`` and compiled byte-code"""
@@ -223,10 +219,10 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
     """The identity of an installed distribution, or why it is unknown. The identity
     is its version, followed by the commit or archive hash it was installed from. An
     install from a local directory, editable or not, has no version in it: it is
-    ``dir:<digest of its importable files>`` (``.py``, ``.so``, ``.pyd``), read from the
-    source for an editable install and from its ``RECORD`` entries outside
-    ``*.dist-info`` otherwise. An editable install's packages are read up to
-    `IDENTITY_MAX_FILES` and `IDENTITY_MAX_BYTES`."""
+    ``dir:<digest of its files>``, read from the files of its packages for an editable
+    install and from its ``RECORD`` entries outside ``*.dist-info`` otherwise. An
+    editable install's packages are read up to `IDENTITY_MAX_FILES` and
+    `IDENTITY_MAX_BYTES`."""
     version, direct = installed.version, installed.direct
     if not version:
         return None, "it has no version"
@@ -252,14 +248,7 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
         if not paths:
             return None, f"no package of it was found under {root!r}"
         try:
-            identity = "dir:" + _capped_digest(
-                Path(root),
-                [
-                    f
-                    for f in _package_files(paths)
-                    if f.name.endswith(IMPORTABLE_SUFFIXES)
-                ],
-            )
+            identity = "dir:" + _capped_digest(Path(root), _package_files(paths))
         except _TooLarge as e:
             return None, str(e)
         return identity, None
@@ -270,17 +259,17 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
 
 
 def _record_digest(record: str) -> str:
-    """A digest of the ``path,hash`` entries of the importable files of a ``RECORD``
-    outside ``*.dist-info/``,
-    which name the code installed and not how: ``direct_url.json``, ``INSTALLER``
-    and an installer's own files differ between two installs of the same code"""
+    """A digest of the hashed ``path,hash`` entries of a ``RECORD`` that stay inside the
+    install, leaving out ``*.dist-info/`` and the scripts outside it (``../``): what was
+    installed, not how or where. ``direct_url.json``, ``INSTALLER`` and an installer's
+    own files differ between two installs of the same files"""
     entries = set()
     for row in csv.reader(record.splitlines()):
         if (
             len(row) >= 2
             and row[1]
             and ".dist-info/" not in row[0]
-            and row[0].endswith(IMPORTABLE_SUFFIXES)
+            and not row[0].startswith(("../", "/"))
         ):
             entries.add((row[0], row[1]))
     return _digest(f"{path},{hash_}".encode() for path, hash_ in sorted(entries))
