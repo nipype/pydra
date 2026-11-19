@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import hashlib
 import logging
 import os
 import random
@@ -64,6 +65,8 @@ logger = logging.getLogger("pydra")
 
 _DENIED = (errno.EACCES, errno.EPERM, errno.EROFS)
 _ATTEMPTS = 4
+CLEAR_STALE = 60.0
+"""Seconds after which a clearing lock is taken to be a dead process's."""
 VISIBILITY_TIMEOUT = 11.0
 """Seconds a publish backs off while other writers settle the directories above its address."""
 _STALE = getattr(errno, "ESTALE", errno.ENOENT)
@@ -401,7 +404,66 @@ class PortableStore:
                 return recorded
         return cdir
 
+    @contextlib.contextmanager
+    def _clearing(
+        self, root: StorageDir, cdir: str, fingerprint: str
+    ) -> ty.Iterator[bool]:
+        """Serialise the removal of whatever is at one address: ``leases/<hash>.lock`` is made
+        with ``O_EXCL`` and held for the check and the move, so a corrupt entry that two parties
+        both found is moved by one of them, and the other never moves the valid entry that a
+        writer commits in the gap. A lock older than ``CLEAR_STALE`` belongs to a dead process
+        and is broken. Yields False when it is held or cannot be made."""
+        name = (
+            hashlib.sha256(f"clear/{cdir}/{fingerprint}".encode()).hexdigest() + ".lock"
+        )
+        try:
+            leases = root.child("leases", create=True, mode=self.policy.side_mode)
+        except OSError:
+            yield False
+            return
+        with leases:
+            held = False
+            for _ in range(2):
+                try:
+                    leases.open_new(name, 0o644).close()
+                    held = True
+                    break
+                except FileExistsError:
+                    try:
+                        old = time.time() - leases.lstat(name).st_mtime > CLEAR_STALE
+                        if old:
+                            leases.unlink(name)
+                            continue
+                    except FileNotFoundError:
+                        continue
+                    except OSError:
+                        pass
+                    break
+                except OSError:
+                    break
+            try:
+                yield held
+            finally:
+                if held:
+                    with contextlib.suppress(OSError):
+                        leases.unlink(name)
+
     def _quarantine(
+        self,
+        root: StorageDir,
+        parent: StorageDir,
+        name: str,
+        cdir: str,
+        identity: os.stat_result | None,
+    ) -> bool | None:
+        """`_quarantine_locked` under the address's clearing lock; False if another party holds
+        it (it is moving the entry, or replacing it)."""
+        with self._clearing(root, cdir, name) as held:
+            if not held:
+                return False
+            return self._quarantine_locked(root, parent, name, cdir, identity)
+
+    def _quarantine_locked(
         self,
         root: StorageDir,
         parent: StorageDir,
@@ -468,7 +530,16 @@ class PortableStore:
                     holder = parent
                 else:
                     holder = None
-                return self._after_move(root, parent, name, cdir, moved, holder or q)
+                holder = holder or q
+                at = holder.lstat(moved)
+                if (at.st_dev, at.st_ino) != (held.st_dev, held.st_ino):
+                    # another entry took the name between the check and the rename: put it
+                    # back at once, before anything else, so the address is empty briefly
+                    holder.rename(moved, parent, name)
+                    with contextlib.suppress(OSError):
+                        self._narrow(parent, name)
+                    return False
+                return self._after_move(root, parent, name, cdir, moved, holder)
         except FileNotFoundError:
             return True
         except OSError as err:

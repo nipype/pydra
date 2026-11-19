@@ -1191,3 +1191,45 @@ def test_commit_uses_the_execute_context(tmp_path):
 def test_result_defaults_to_stored(tmp_path):
     assert Result(cache_dir=tmp_path).stored is True
     assert Result(cache_dir=tmp_path).committed is None
+
+
+@posix_only
+def test_clearing_lock_serialises_quarantine(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    corrupt(entry)
+    with store._open() as root:
+        with (
+            root.child("results@1") as e,
+            e.child(entry.parent.parent.name) as s,
+            s.child(entry.parent.name) as d,
+        ):
+            with store._clearing(root, c.entry.cdir, c.entry.fingerprint) as held:
+                assert held is True
+                assert len(list((tmp_path / "root" / "leases").iterdir())) == 1
+                # another party finds it held and does not move the entry
+                assert (
+                    store._quarantine(root, d, c.entry.fingerprint, c.entry.cdir, None)
+                    is False
+                )
+                assert entry.is_dir()
+            assert list((tmp_path / "root" / "leases").iterdir()) == []
+            assert (
+                store._quarantine(root, d, c.entry.fingerprint, c.entry.cdir, None)
+                is True
+            )
+    assert not entry.exists() and len(quarantined(tmp_path / "root")) == 1
+
+
+@posix_only
+def test_stale_clearing_lock_is_broken(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    with store._open() as root:
+        with store._clearing(root, c.entry.cdir, c.entry.fingerprint):
+            (lock,) = (tmp_path / "root" / "leases").iterdir()
+            old = 1_000_000_000
+            os.utime(lock, (old, old))
+            with store._clearing(root, c.entry.cdir, c.entry.fingerprint) as held:
+                assert held is True
