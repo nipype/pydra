@@ -1,8 +1,9 @@
 """Typed digests, RFC 8785 canonical JSON and the shared tag registry (RFC 0004 §6.2).
 
-``digest(value)`` is one string ``"<tag>@<n>:<hex>"``. ``register_codec`` and
-``register_fileset_tag`` fill one registry of tags that RFC 0003's store reads back; a tag
-is only ever looked up there, never resolved as a module or class name.
+``digest(value)`` is one string ``"<tag>@<n>:<hex>"``. ``register_codec``,
+``register_fileset_tag`` and ``register_digest`` fill one registry of types; the tags are
+what RFC 0003's store reads back, and a tag is only ever looked up there, never resolved as
+a module or class name. numpy is optional: without it the numpy rows are inactive.
 """
 
 from __future__ import annotations
@@ -12,14 +13,20 @@ import hashlib
 import io
 import json
 import math
+import os
+import re
 import typing as ty
 from decimal import Decimal
 
 import attrs
-import numpy as np
 from fileformats.core.fileset import FileSet
-from numpy.lib import format as npformat
-import os
+
+try:
+    import numpy as np
+    from numpy.lib import format as npformat
+except ImportError:  # numpy is optional
+    np = None  # type: ignore[assignment]
+    npformat = None  # type: ignore[assignment]
 
 JSON = ty.Any
 
@@ -29,6 +36,7 @@ __all__ = [
     "digest",
     "digest_form",
     "fileset_digest",
+    "is_canonical_array",
     "jcs",
     "lookup_tag",
     "register_codec",
@@ -37,7 +45,9 @@ __all__ = [
     "tag_of",
 ]
 
-MAX_SAFE_INT = 2**53
+# Integers beyond 2**53 are not exact as ECMAScript doubles (this bound is one above
+# JavaScript's MAX_SAFE_INTEGER, and 2**53 itself is exact).
+MAX_EXACT_INT = 2**53
 
 
 # ---------------------------------------------------------------------------
@@ -47,12 +57,13 @@ MAX_SAFE_INT = 2**53
 
 def _es_number(x: float) -> str:
     """ECMAScript ``Number::toString`` of a finite double."""
+    x = float(x)
     if math.isnan(x) or math.isinf(x):
         raise ValueError("JCS cannot represent NaN or infinity")
     if x == 0:
         return "0"
     sign = "-" if x < 0 else ""
-    _, digit_tuple, exp = Decimal(repr(abs(x))).as_tuple()
+    _, digit_tuple, exp = Decimal(float.__repr__(abs(x))).as_tuple()
     digits = "".join(map(str, digit_tuple)).rstrip("0") or "0"
     # the value is 0.<digits> * 10**n
     n = len(digit_tuple) + exp
@@ -70,8 +81,18 @@ def _es_number(x: float) -> str:
     return sign + body
 
 
+def _check_str(s: str) -> str:
+    try:
+        s.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError(
+            "JCS strings must be well-formed Unicode (RFC 8785 3.2.2.2); found a lone surrogate"
+        ) from None
+    return s
+
+
 def _utf16_key(s: str) -> bytes:
-    return s.encode("utf-16-be", "surrogatepass")
+    return s.encode("utf-16-be")
 
 
 def _jcs(obj: JSON, out: list[str]) -> None:
@@ -82,9 +103,9 @@ def _jcs(obj: JSON, out: list[str]) -> None:
     elif obj is False:
         out.append("false")
     elif isinstance(obj, str):
-        out.append(json.dumps(obj, ensure_ascii=False))
+        out.append(json.dumps(_check_str(obj), ensure_ascii=False))
     elif isinstance(obj, int):
-        if abs(obj) > MAX_SAFE_INT:
+        if abs(obj) > MAX_EXACT_INT:
             raise ValueError(
                 f"integer {obj} is not exact as a JSON number; digest forms carry it as a string"
             )
@@ -99,12 +120,14 @@ def _jcs(obj: JSON, out: list[str]) -> None:
             _jcs(item, out)
         out.append("]")
     elif isinstance(obj, dict):
-        out.append("{")
-        for i, key in enumerate(sorted(obj, key=_utf16_key)):
+        for key in obj:
             if not isinstance(key, str):
                 raise TypeError(
                     f"JCS object keys must be strings, got {type(key).__name__}"
                 )
+            _check_str(key)
+        out.append("{")
+        for i, key in enumerate(sorted(obj, key=_utf16_key)):
             if i:
                 out.append(",")
             out.append(json.dumps(key, ensure_ascii=False))
@@ -116,10 +139,14 @@ def _jcs(obj: JSON, out: list[str]) -> None:
 
 
 def jcs(obj: JSON) -> bytes:
-    """The RFC 8785 canonical form of a JSON value, as UTF-8 bytes."""
+    """The RFC 8785 canonical form of a JSON value, as UTF-8 bytes.
+
+    Raises ``TypeError`` for a non-string key or a non-JSON value and ``ValueError`` for
+    NaN, infinity, an integer above 2**53 or a string with a lone surrogate.
+    """
     out: list[str] = []
     _jcs(obj, out)
-    return "".join(out).encode("utf-8", "surrogatepass")
+    return "".join(out).encode("utf-8")
 
 
 def _sha256(data: bytes) -> str:
@@ -133,21 +160,25 @@ def _sha256(data: bytes) -> str:
 
 @attrs.define(frozen=True)
 class Codec:
-    """A registered tag: a ``$codec`` (with encode/decode) or a ``$fileset`` type tag."""
+    """The registry entry of one type: a ``$codec`` (``encode``/``decode``), a ``$fileset``
+    type tag, and/or a registered ``digest`` function. ``tag`` is None for a digest-only
+    entry."""
 
     type: type
-    tag: str
+    tag: str | None = None
     encode: ty.Callable | None = None
     decode: ty.Callable | None = None
     fileset: bool = False
+    digest: ty.Callable[[ty.Any], str] | None = None
 
 
 _BY_TAG: dict[str, Codec] = {}
 _BY_TYPE: dict[type, Codec] = {}
-_DIGESTS: dict[type, ty.Callable[[ty.Any], str]] = {}
+_DIGEST_RE = re.compile(r"[a-z][a-z0-9_]*@[0-9]+:[0-9a-f]{16,}")
 
 
 def _register(entry: Codec) -> None:
+    assert entry.tag is not None
     existing = _BY_TAG.get(entry.tag)
     if existing is not None and (existing.type, existing.fileset) != (
         entry.type,
@@ -157,10 +188,12 @@ def _register(entry: Codec) -> None:
             f"tag {entry.tag!r} is already registered for {existing.type!r}"
         )
     prior = _BY_TYPE.get(entry.type)
-    if prior is not None and prior.tag != entry.tag:
-        raise ValueError(
-            f"{entry.type!r} is already registered under tag {prior.tag!r}"
-        )
+    if prior is not None:
+        if prior.tag not in (None, entry.tag):
+            raise ValueError(
+                f"{entry.type!r} is already registered under tag {prior.tag!r}"
+            )
+        entry = attrs.evolve(entry, digest=prior.digest)
     _BY_TAG[entry.tag] = entry
     _BY_TYPE[entry.type] = entry
 
@@ -174,12 +207,39 @@ def register_codec(
 
 def register_fileset_tag(type_: type, tag: str) -> None:
     """Register a ``FileSet`` subclass under the ``$fileset`` type tag ``tag``."""
+    if not (isinstance(type_, type) and issubclass(type_, FileSet)):
+        raise TypeError(f"{type_!r} is not a FileSet subclass")
     _register(Codec(type_, tag, fileset=True))
 
 
-def register_digest(type_: type, fn: ty.Callable[[ty.Any], str]) -> None:
-    """Register ``fn(value) -> "<tag>@<n>:<hex>"`` as the digest of exactly ``type_``."""
-    _DIGESTS[type_] = fn
+def register_digest(
+    type_: type, fn: ty.Callable[[ty.Any], str], *, replace: bool = False
+) -> None:
+    """Register ``fn(value) -> "<tag>@<n>:<hex>"`` as the digest of exactly ``type_``.
+
+    It applies at any depth, where a digest form holds ``{"$digest": "<digest>"}``. A type
+    that already has one raises ``ValueError`` unless ``replace=True``.
+    """
+    prior = _BY_TYPE.get(type_)
+    if prior is not None and prior.digest is not None and not replace:
+        raise ValueError(f"{type_!r} already has a registered digest")
+    entry = (
+        attrs.evolve(prior, digest=fn) if prior is not None else Codec(type_, digest=fn)
+    )
+    _BY_TYPE[type_] = entry
+    if entry.tag is not None:
+        _BY_TAG[entry.tag] = entry
+
+
+def _registered_digest(entry: Codec, value: ty.Any) -> str:
+    assert entry.digest is not None
+    result = entry.digest(value)
+    if not isinstance(result, str) or not _DIGEST_RE.fullmatch(result):
+        raise ValueError(
+            f"digest function for {entry.type!r} returned {result!r}, "
+            "not '<tag>@<n>:<hex>'"
+        )
+    return result
 
 
 def lookup_tag(tag: str) -> Codec | None:
@@ -198,22 +258,37 @@ def tag_of(type_: type) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _holds_references(dtype: np.dtype) -> bool:
-    if dtype.hasobject or dtype.kind == "T":
+def _dtype_any(dtype: "np.dtype", pred: ty.Callable[["np.dtype"], bool]) -> bool:
+    if pred(dtype):
         return True
     if dtype.fields:
-        return any(_holds_references(f[0]) for f in dtype.fields.values())
-    if dtype.subdtype is not None:
-        return _holds_references(dtype.subdtype[0])
-    return False
+        return any(_dtype_any(f[0], pred) for f in dtype.fields.values())
+    return dtype.subdtype is not None and _dtype_any(dtype.subdtype[0], pred)
 
 
-def _is_plain_array(value: ty.Any) -> bool:
-    return type(value) is np.ndarray and not _holds_references(value.dtype)
+def _holds_references(dtype: "np.dtype") -> bool:
+    return _dtype_any(dtype, lambda d: d.hasobject or d.kind == "T")
 
 
-def canonical_npy(arr: np.ndarray) -> bytes:
-    """``.npy`` 1.0 bytes of ``arr`` as little-endian, C-ordered data."""
+def is_canonical_array(value: ty.Any) -> bool:
+    """True for an ``ndarray`` exactly (no subclass) whose dtype holds no references: the
+    arrays that have a canonical ``.npy`` form. Any other array is ``py@1`` or, in a store,
+    unencodable."""
+    return (
+        np is not None
+        and type(value) is np.ndarray
+        and not _holds_references(value.dtype)
+    )
+
+
+def canonical_npy(arr: "np.ndarray") -> bytes:
+    """``.npy`` 1.0 bytes of ``arr`` as little-endian, C-ordered data.
+
+    Raises ``TypeError`` unless ``is_canonical_array(arr)``: a subclass such as
+    ``MaskedArray`` would lose its mask.
+    """
+    if not is_canonical_array(arr):
+        raise TypeError(f"{type(arr).__name__} has no canonical .npy form")
     little = arr.dtype.newbyteorder("<")
     data = np.array(arr, dtype=little, order="C", copy=True, subok=False)
     buf = io.BytesIO()
@@ -227,13 +302,18 @@ def canonical_npy(arr: np.ndarray) -> bytes:
 
 
 class _NoDigestForm(Exception):
-    """The value has no portable digest form (it falls back to ``py@1``)."""
+    """The value has no portable digest form; ``digest`` falls back to ``py@1``."""
 
 
 def fileset_digest(type_tag: str, members: ty.Sequence[tuple[str, str]]) -> str:
     """``file@1`` of a set: ``members`` are ``(key, content sha256)`` pairs."""
     files = [[k, s] for k, s in sorted(members, key=lambda m: m[0])]
     return "file@1:" + _sha256(jcs({"$fileset": type_tag, "files": files}))
+
+
+def _posix_key(key: str, sep: str = os.sep) -> str:
+    """A member key with ``/`` separators on every OS."""
+    return key.replace(sep, "/") if sep != "/" else key
 
 
 def _fileset_members(value: FileSet) -> list[tuple[str, str]]:
@@ -244,12 +324,8 @@ def _fileset_members(value: FileSet) -> list[tuple[str, str]]:
         h = hashlib.sha256()
         for chunk in chunks:
             h.update(chunk)
-        members.append((key, h.hexdigest()))
+        members.append((_posix_key(key), h.hexdigest()))
     return members
-
-
-def _file_digest(value: FileSet) -> str:
-    return fileset_digest(_BY_TYPE[type(value)].tag, _fileset_members(value))
 
 
 def _is_tagged_fileset(value: ty.Any) -> bool:
@@ -257,12 +333,11 @@ def _is_tagged_fileset(value: ty.Any) -> bool:
     return isinstance(value, FileSet) and entry is not None and entry.fileset
 
 
-def _npscalar(value: np.generic) -> JSON:
+def _npscalar(value: "np.generic") -> JSON:
     dtype = value.dtype
-    if dtype.kind not in "iufcbmM" or dtype in (
-        np.dtype(np.longdouble),
-        np.dtype(np.clongdouble),
-    ):
+    # longdouble and its complex are 'g' and 'G'; float64 ('d') and complex128 ('D') stay
+    # encodable on platforms where long double has the same width
+    if dtype.kind not in "iufcbmM" or dtype.char in "gG":
         raise _NoDigestForm
     little = dtype.newbyteorder("<")
     kind = dtype.kind
@@ -274,24 +349,25 @@ def _npscalar(value: np.generic) -> JSON:
         text = [float(value.real).hex(), float(value.imag).hex()]
     elif kind == "b":
         text = "true" if bool(value) else "false"
-    elif kind in "mM":
+    else:  # "m", "M"
         text = str(int(value.astype("int64")))
-    else:
-        raise _NoDigestForm
     return {"$npscalar": [little.str, text]}
 
 
 def digest_form(value: ty.Any) -> JSON:
     """RFC 0003's output encoding with typed numbers and tagged tuples (RFC 0004 §6.2).
 
-    Raises ``_NoDigestForm`` (an ``Exception``) for a value that has none.
+    Raises an ``Exception`` for a value that has none, which ``digest`` turns into ``py@1``.
     """
     if value is None or isinstance(value, bool):
         return value
     entry = _BY_TYPE.get(type(value))
-    if entry is not None and not entry.fileset:
+    if entry is not None and entry.digest is not None:
+        return {"$digest": _registered_digest(entry, value)}
+    if entry is not None and entry.tag is not None and not entry.fileset:
+        assert entry.encode is not None
         return {"$codec": entry.tag, "value": digest_form(entry.encode(value))}
-    if entry is not None and isinstance(value, FileSet):
+    if entry is not None and entry.fileset and isinstance(value, FileSet):
         return {
             "$fileset": entry.tag,
             "files": [[k, s] for k, s in sorted(_fileset_members(value))],
@@ -304,7 +380,7 @@ def digest_form(value: ty.Any) -> JSON:
     if tp is str:
         return value
     if tp is complex:
-        return {"$complex": [float(value.real).hex(), float(value.imag).hex()]}
+        return {"$complex": [digest_form(value.real), digest_form(value.imag)]}
     if tp is bytes:
         return {"$bytes": _sha256(value)}
     if tp is list:
@@ -312,8 +388,7 @@ def digest_form(value: ty.Any) -> JSON:
     if tp is tuple:
         return {"$tuple": [digest_form(v) for v in value]}
     if tp in (set, frozenset):
-        forms = [digest_form(v) for v in value]
-        return {"$set": sorted(forms, key=jcs)}
+        return {"$set": sorted((digest_form(v) for v in value), key=jcs)}
     if tp is dict:
         if all(type(k) is str for k in value):
             return {
@@ -326,9 +401,9 @@ def digest_form(value: ty.Any) -> JSON:
         return {"$datetime": value.isoformat()}
     if isinstance(value, os.PathLike) and not isinstance(value, FileSet):
         return {"$path": os.fspath(value)}
-    if _is_plain_array(value):
+    if is_canonical_array(value):
         return {"$array": _sha256(canonical_npy(value))}
-    if tp.__module__ == "numpy" and isinstance(value, np.generic):
+    if np is not None and tp.__module__ == "numpy" and isinstance(value, np.generic):
         return _npscalar(value)
     raise _NoDigestForm
 
@@ -336,18 +411,27 @@ def digest_form(value: ty.Any) -> JSON:
 def _py_digest(value: ty.Any) -> str:
     from pydra.utils.hash import hash_object
 
+    if (
+        np is not None
+        and type(value) is np.ndarray
+        and _dtype_any(value.dtype, lambda d: d.kind == "T")
+    ):
+        # StringDType strings can live on the heap, so ``tobytes()`` holds only
+        # references and arrays of different long strings collide: digest the elements
+        value = ("numpy.ndarray", str(value.dtype), value.shape, value.tolist())
     return "py@1:" + hash_object(value).hex()
 
 
 def digest(value: ty.Any) -> str:
     """The typed digest ``"<tag>@<n>:<hex>"`` of ``value``; the first §6.2 row that applies."""
-    fn = _DIGESTS.get(type(value))
-    if fn is not None:
-        return fn(value)
-    if _is_plain_array(value):
+    entry = _BY_TYPE.get(type(value))
+    if entry is not None and entry.digest is not None:
+        return _registered_digest(entry, value)
+    if is_canonical_array(value):
         return "npy@1:" + _sha256(canonical_npy(value))
     if _is_tagged_fileset(value):
-        return _file_digest(value)
+        entry = _BY_TYPE[type(value)]
+        return fileset_digest(str(entry.tag), _fileset_members(value))
     try:
         form = digest_form(value)
     except _NoDigestForm:

@@ -1,6 +1,8 @@
+import datetime
 import hashlib
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,6 +22,12 @@ from pydra.utils.digest import (
     register_fileset_tag,
     tag_of,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_registry(monkeypatch):
+    monkeypatch.setattr(dg, "_BY_TAG", dict(dg._BY_TAG))
+    monkeypatch.setattr(dg, "_BY_TYPE", dict(dg._BY_TYPE))
 
 
 def npy(a):
@@ -160,8 +168,12 @@ def test_lookup_tag_never_imports():
     }
     with pytest.raises(ValueError):
         register_codec(int, "test.lookup.P", str, int)
+    from fileformats.generic import File
+
     with pytest.raises(ValueError):
-        register_fileset_tag(dict, "test.lookup.P")
+        register_fileset_tag(File, "test.lookup.P")
+    with pytest.raises(TypeError):
+        register_fileset_tag(dict, "test.lookup.other")
     register_codec(P, "test.lookup.P", lambda p: {"v": p.v}, lambda d: P(d["v"]))
 
 
@@ -171,7 +183,23 @@ def test_register_digest():
 
     register_digest(Q, lambda q: "q@1:" + "0" * 64)
     assert digest(Q()) == "q@1:" + "0" * 64
-    assert digest([Q()]).startswith("py@1:")
+    nested = digest([Q(), {"k": (Q(),)}])
+    assert nested.startswith("json@1:")
+    assert digest_form([Q()]) == [{"$digest": "q@1:" + "0" * 64}]
+    with pytest.raises(ValueError):
+        register_digest(Q, lambda q: "q@1:" + "1" * 64)
+    register_digest(Q, lambda q: "q@1:" + "1" * 64, replace=True)
+    assert digest(Q()) == "q@1:" + "1" * 64
+    assert digest([Q()]) != nested
+
+    class R:
+        pass
+
+    register_digest(R, lambda r: 5)
+    with pytest.raises(ValueError):
+        digest(R())
+    with pytest.raises(ValueError):
+        digest([R()])
 
 
 def test_jcs_rfc8785_vectors():
@@ -222,3 +250,146 @@ def test_jcs_rfc8785_vectors():
     with pytest.raises(ValueError):
         jcs(2**60)
     assert dg.jcs.__module__ == "pydra.utils.digest"
+
+
+def test_float64_scalars_are_json1():
+    for v in (np.float64(1.0), np.complex128(1 + 2j), np.float32(1.0)):
+        assert digest(v).startswith("json@1:"), type(v)
+    assert digest_form(np.float64(1)) == {"$npscalar": ["<f8", (1.0).hex()]}
+    assert digest_form(np.float32(1)) == {"$npscalar": ["<f4", (1.0).hex()]}
+    assert digest(np.longdouble(1)).startswith("py@1:")
+
+
+def test_no_numpy_import_and_jcs():
+    code = (
+        "import sys; sys.modules['numpy'] = None\n"
+        "from pydra.utils import digest as d\n"
+        "assert d.jcs({'b': 1, 'a': [True]}) == b'{\"a\":[true],\"b\":1}'\n"
+        "assert d.digest(1).startswith('json@1:')\n"
+        "assert d.digest([1, 'x']).startswith('json@1:')\n"
+        "assert 'numpy' not in [k for k, v in sys.modules.items() if v is not None]\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
+def test_stringdtype_elementwise():
+    if not hasattr(np.dtypes, "StringDType"):
+        pytest.skip("numpy without StringDType")
+    T = np.dtypes.StringDType()
+    a = np.array(["a" * 40], dtype=T)
+    b = np.array(["b" * 40], dtype=T)
+    assert digest(a) != digest(b)
+    assert digest(a) == digest(np.array(["a" * 40], dtype=T))
+    assert digest(a) != digest(a.reshape(1, 1))
+    assert digest(a).startswith("py@1:")
+    assert digest(np.array(["a" * 40, "b"], dtype=T)) != digest(
+        np.array(["b", "a" * 40], dtype=T)
+    )
+
+
+def test_jcs_rejects_lone_surrogates_and_nonstr_keys():
+    with pytest.raises(ValueError):
+        jcs({"k": "\udcff"})
+    with pytest.raises(ValueError):
+        jcs({"\udcff": 1})
+    with pytest.raises(TypeError):
+        jcs({1: 2})
+    with pytest.raises(TypeError):
+        jcs({1: 2, "a": 3})
+    assert jcs(np.float64(1.5)) == b"1.5"
+
+
+def test_canonical_npy_refuses_non_plain_arrays():
+    from pydra.utils.digest import is_canonical_array
+
+    masked = np.ma.masked_array([1, 2, 3], mask=[0, 1, 0])
+    assert not is_canonical_array(masked)
+    assert not is_canonical_array(np.matrix([1]))
+    assert not is_canonical_array(np.array([object()]))
+    assert is_canonical_array(np.arange(3))
+    assert not is_canonical_array([1])
+    with pytest.raises(TypeError):
+        canonical_npy(masked)
+    with pytest.raises(TypeError):
+        canonical_npy(np.array([object()]))
+
+
+def test_complex_form_is_typed_floats():
+    assert digest_form(1 + 2j) == {
+        "$complex": [{"$float": (1.0).hex()}, {"$float": (2.0).hex()}]
+    }
+    assert digest_form(complex("nan+infj")) == {
+        "$complex": [{"$float": "nan"}, {"$float": "inf"}]
+    }
+
+
+def test_posix_keys():
+    assert dg._posix_key("a\\b\\c", sep="\\") == "a/b/c"
+    assert dg._posix_key("a/b", sep="/") == "a/b"
+
+
+def test_registry_state_does_not_leak():
+    assert lookup_tag("test.lookup.P") is None
+    assert lookup_tag("test.relocation.Tagged") is None
+
+
+def test_golden_forms():
+    h = lambda b: hashlib.sha256(b).hexdigest()  # noqa: E731
+    # the exact forms
+    assert digest_form({2, 1}) == {"$set": [{"$int": "1"}, {"$int": "2"}]}
+    assert jcs(digest_form({"b", "a"})) == b'{"$set":["a","b"]}'
+    assert jcs(digest_form({2: "x", 1: "y"})) == (
+        b'{"$dict":[[{"$int":"1"},"y"],[{"$int":"2"},"x"]]}'
+    )
+    assert digest_form(b"ab") == {"$bytes": h(b"ab")}
+    assert digest_form(datetime.datetime(2020, 1, 2, 3, 4, 5)) == {
+        "$datetime": "2020-01-02T03:04:05"
+    }
+    assert digest_form(datetime.date(2020, 1, 2)) == {"$datetime": "2020-01-02"}
+    assert digest_form(np.int16(-3)) == {"$npscalar": ["<i2", "-3"]}
+    assert digest_form(np.bool_(True)) == {"$npscalar": ["|b1", "true"]}
+    assert digest_form(np.complex64(1 + 2j)) == {
+        "$npscalar": ["<c8", [(1.0).hex(), (2.0).hex()]]
+    }
+    assert digest_form(np.datetime64("2020-01-01", "D")) == {
+        "$npscalar": ["<M8[D]", "18262"]
+    }
+    # golden digests, one per kind
+    golden = {
+        "set": ({"b", "a"}, "json@1:" + h(b'{"$set":["a","b"]}')),
+        "bytes": (b"ab", "json@1:" + h(jcs({"$bytes": h(b"ab")}))),
+        "int": (1, "json@1:" + h(b'{"$int":"1"}')),
+        "tuple": ((), "json@1:" + h(b'{"$tuple":[]}')),
+    }
+    for name, (value, expected) in golden.items():
+        assert digest(value) == expected, name
+    assert digest(np.arange(4, dtype="<i4")) == (
+        "npy@1:3f7c5f11c6d38f164cb3cef1ac88a2a119a8556e3c9a14c32e2f24d8cba2521c"
+    )
+    assert fileset_digest("t", [("a", "11" * 32)]) == "file@1:" + h(
+        jcs({"$fileset": "t", "files": [["a", "11" * 32]]})
+    )
+
+
+def test_file_digest_hidden_and_nested(tmp_path):
+    from fileformats.generic import Directory
+
+    register_fileset_tag(Directory, "test.golden.Directory")
+    root = tmp_path / "d"
+    (root / "sub" / "deep").mkdir(parents=True)
+    (root / "top.txt").write_bytes(b"t")
+    (root / "sub" / "deep" / "x.txt").write_bytes(b"x")
+    d0 = digest(Directory(root))
+    sha = lambda b: hashlib.sha256(b).hexdigest()  # noqa: E731
+    expected = fileset_digest(
+        "test.golden.Directory",
+        [("top.txt", sha(b"t")), ("sub/deep/x.txt", sha(b"x"))],
+    )
+    assert d0 == expected
+    (root / ".hidden").write_bytes(b"h")
+    assert digest(Directory(root)) != d0
+    assert digest(Directory(root)) == fileset_digest(
+        "test.golden.Directory",
+        [("top.txt", sha(b"t")), ("sub/deep/x.txt", sha(b"x")), (".hidden", sha(b"h"))],
+    )
