@@ -139,8 +139,8 @@ class WorkerExecutor:
     visibility_timeout : float
         How long a result the worker reported written may take to be visible
     blocking : Callable[[Worker, Job, bool], Awaitable], optional
-        Runs a job of a synchronous worker off the loop; by default the loop's own thread pool; the submitter passes its single
-        helper thread
+        Runs a job of a synchronous worker off the loop; by default the loop's own
+        thread pool, the submitter passes its single helper thread
     """
 
     batches = False
