@@ -81,9 +81,11 @@ store's.
 ```
 <root>/pydra-store.json                                    layout header (§3.2)
 <root>/<entries>/<shard>/<cdir>/<fingerprint>/             one committed entry
-<root>/<entries>/<shard>/<cdir>/q-<uuid>                   an entry its reader could not move to quarantine (§6.3)
+<root>/<entries>/<shard>/<cdir>/q-<uuid>                   an entry its reader could not move to quarantine
+                                                           (§6.3); the UUID is derived from the entry's inode
 <root>/staging/<uuid>/                                     a writer's entry or directory before its rename
-<root>/quarantine/<uuid>                                   entries and wrong-kind objects moved aside
+<root>/quarantine/<uuid>                                   entries and wrong-kind objects moved aside; an
+                                                           entry's UUID is derived from its inode (§6.3)
 <root>/sidecars/<name>@<major>/...                         store-level records owned by a hook (§7.4)
 <root>/leases/<lease name>.lock                            optional de-duplication leases (§5.3)
 ```
@@ -499,22 +501,31 @@ nothing.
 ### 6.3 Quarantine
 
 Quarantine moves an entry aside so the address heals. Two readers of one corrupt entry, or a reader
-and a writer, can race, so the move is fenced:
+and a writer, can race, so the move is a compare-and-move, and it is fenced:
 
-1. Rename the entry to `quarantine/<uuid>`, relative to descriptors.
+1. Rename the entry to `quarantine/<uuid>`, relative to descriptors, where `<uuid>` is derived from
+   the inode (`st_ino`, never `st_dev`, which differs between NFS clients) of the directory the
+   mover read and found corrupt. The first mover moves that directory. A late mover that found the
+   same directory corrupt, when the address now holds another, valid directory, renames that one
+   onto the existing, non-empty `quarantine/<uuid>`, and the rename fails and moves nothing. No lock
+   is taken. On storage whose inodes are not stable, and for an empty directory at the address,
+   which a rename would replace, the name is a random UUID and steps 2 and 3 are the only guard.
 2. Re-verify the moved copy against the address it came from (§6.2).
 3. If it verifies, it was not the corrupt entry: another writer committed a valid one at the address
    between this reader's check and its rename. Rename it back without replacement. If the address is
-   occupied again, the moved copy stays in `quarantine/` as a duplicate, which costs space only.
+   occupied again, the moved copy stays in `quarantine/`. That is not only a cost in space: when the
+   two entries' digests differ, a writer that was told `stored=True` for the moved entry would see
+   its outputs replaced at the address by others. The inode-derived name of step 1 keeps a valid
+   entry from being moved in the first place; this step remains for the fallback.
 4. Otherwise stamp its mtime (so `collect` ages it from the move) and log the address and the check
    that failed.
 
 **A reader that cannot move the entry.** Moving a directory into another parent needs write
 permission on the directory itself. A user who does not own a corrupt entry cannot move it to
 `quarantine/` and cannot change its mode. The store then renames it within its own parent to
-`q-<uuid>`, which needs write permission only on the parent, and which is not a fingerprint and is
-never served. The parent is writable by other users only when the `container` mode makes it so
-(§3.2, §9). The same fence applies. `collect` removes `q-` names when it can and logs the owner when
+`q-<uuid>`, with the UUID derived from the inode as in step 1, which needs write permission only on
+the parent, and which is not a fingerprint and is never served. The parent is writable by other
+users only when the `container` mode makes it so (§3.2, §9). The same fence applies. `collect` removes `q-` names when it can and logs the owner when
 it cannot. If the parent is not writable either, the entry stays, the read raises `CorruptEntry` with
 the path and its owner, and the job runs and keeps its outputs as `stored=False` (§5.4).
 
@@ -1026,10 +1037,11 @@ migrates before them migrates into a root that the next release cannot open (§4
 3. **What travels with a job** (carried: RFC 0002 §3.4, §3.5). Besides the checksum and the context,
    under a `PortableStore` the job carries `attempt` and `verify` (§7.1), and its context is the
    identity's lookup context (§4).
-4. **Lookups in `ready()`** (carried: RFC 0002 §3.1). Through `read_succeeded` and under `lookup_before_dispatch`, a runner over
-   a store that has `find` calls `find(job)`, settles a `Hit`, dispatches a `Miss`, and dispatches a
+4. **Lookups in `ready()`** (carried: RFC 0002 §3.1). Through `read_succeeded` and under
+   `lookup_before_dispatch`, a runner over a store that has `find` calls `find(job)`, settles a `Hit`, dispatches a `Miss`, and dispatches a
    `Verify` with `job.verify` set (§5.2, §7.1).
-5. **Result reads** (carried: RFC 0002 §3.3, §3.1). The Slurm and SGE adapter (RFC 0002 §3.3), `runner.result()` (RFC 0002 §3.1) and
+5. **Result reads** (carried: RFC 0002 §3.3, §3.1). The Slurm and SGE adapter (RFC 0002 §3.3),
+   `runner.result()` (RFC 0002 §3.1) and
    `Submitter.__call__`'s final read (`engine/submitter.py:503-513`) read through `Job.result()`, which
    under a `PortableStore` reads `_committed.json`, so a job whose outputs were not stored reports
    its `Result` and its readers run (§5.4, §7.2). The visibility retry applies to `_committed.json`.
