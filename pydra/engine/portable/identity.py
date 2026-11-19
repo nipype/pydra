@@ -10,11 +10,18 @@ import attrs
 
 from pydra.engine.context import job_context
 from pydra.utils.digest import jcs
+from pydra.utils.identity import IDENTITY_SCHEME, job_record, record_checksum
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
-__all__ = ["Context", "KeyRecord", "StoreIdentity", "PydraIdentityV1"]
+__all__ = [
+    "Context",
+    "KeyRecord",
+    "StoreIdentity",
+    "PydraIdentityV1",
+    "PydraIdentityV2",
+]
 
 Context = ty.Mapping[str, ty.Any]
 KeyRecord = ty.Optional[ty.Mapping[str, ty.Any]]
@@ -94,3 +101,25 @@ class PydraIdentityV1:
     def fingerprint(self, context: Context) -> str:
         slotted = {k: v for k, v in context.items() if k not in self.recorded_only}
         return hashlib.sha256(jcs(slotted)).hexdigest()
+
+
+@attrs.frozen
+class PydraIdentityV2(PydraIdentityV1):
+    """``pydra-identity@2`` (RFC 0004 section 3.1): the checksum is the digest of the job's
+    identity record, which is the key. The context and the fingerprint are
+    `PydraIdentityV1`'s."""
+
+    name: ty.ClassVar[str] = IDENTITY_SCHEME
+
+    def key(self, job: "Job") -> KeyRecord:
+        return job_record(job)
+
+    def check_key(self, checksum: str, key: KeyRecord) -> bool:
+        """Whether ``key`` is a ``pydra-identity@2`` record that digests to ``checksum``,
+        or a supplied record whose ``supplied`` is ``checksum``."""
+        if not isinstance(key, ty.Mapping) or key.get("scheme") != IDENTITY_SCHEME:
+            return False
+        try:
+            return record_checksum(key) == checksum
+        except (KeyError, TypeError, ValueError):
+            return False

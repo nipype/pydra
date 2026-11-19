@@ -476,36 +476,47 @@ class Task(ty.Generic[OutputsType]):
 
     @property
     def _hash(self):
-        hsh, self._hashes = self._compute_hashes()
-        return hsh
+        """The sha256 of the RFC 8785 form of the task's identity record (see
+        `pydra.utils.identity.task_record`), or of its inputs and the task type for a
+        task whose checksum is supplied"""
+        from pydra.utils.identity import record_checksum, task_record
+
+        if hasattr(self, "__checksum__"):
+            return self._compute_hashes()[0]
+        record = task_record(self)
+        return record_checksum(record).removeprefix(f"{record['kind']}-")
 
     @property
     def _checksum(self):
-        """The job checksum: the value returned by the class's
-        ``__checksum__(self, inputs) -> str`` if it defines one (or is given one by
-        ``define(checksum=...)``), when no input is hashed, otherwise the task type and
-        the hash of the inputs. A supplied value must identify the task as well as its
-        inputs, as jobs with equal checksums share one result and run only once."""
-        if hasattr(self, "__checksum__"):
-            checksum = self.__checksum__(self._checksum_inputs(hashed=False))
-            if not isinstance(checksum, str):
-                raise TypeError(
-                    f"__checksum__ of {type(self).__name__} must return a str, "
-                    f"not {checksum!r}"
-                )
-            if (
-                checksum in ("", ".", "..")
-                or "\0" in checksum
-                or any(
-                    sep and sep in checksum for sep in ("/", "\\", os.sep, os.altsep)
-                )
-            ):
-                raise ValueError(
-                    f"__checksum__ of {type(self).__name__} must return a single path "
-                    f"component, not {checksum!r}"
-                )
-            return checksum
-        return f"{self._task_type()}-{self._hash}"
+        """The task's checksum: the digest of its identity record, which is
+        ``"<kind>-<sha256>"`` (see `pydra.utils.identity.record_checksum`), or the value
+        returned by the class's ``__checksum__(self, inputs) -> str`` if it defines one
+        (or is given one by ``define(checksum=...)``). A supplied value must identify
+        the task as well as its inputs, as jobs with equal checksums share one result
+        and run only once."""
+        from pydra.utils.identity import record_checksum, task_record
+
+        return record_checksum(task_record(self))
+
+    def _supplied_checksum(self) -> str:
+        """The checksum returned by ``__checksum__``, which must be a single path
+        component"""
+        checksum = self.__checksum__(self._checksum_inputs(hashed=False))
+        if not isinstance(checksum, str):
+            raise TypeError(
+                f"__checksum__ of {type(self).__name__} must return a str, "
+                f"not {checksum!r}"
+            )
+        if (
+            checksum in ("", ".", "..")
+            or "\0" in checksum
+            or any(sep and sep in checksum for sep in ("/", "\\", os.sep, os.altsep))
+        ):
+            raise ValueError(
+                f"__checksum__ of {type(self).__name__} must return a single path "
+                f"component, not {checksum!r}"
+            )
+        return checksum
 
     def _hashed_value(self, name: str) -> ty.Any:
         """The value of field ``name`` as it enters the hash: the code of the executor
@@ -566,23 +577,17 @@ class Task(ty.Generic[OutputsType]):
         return inputs
 
     def _compute_hashes(
-        self, exclude: str | None = None
-    ) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
-        """Compute a basic hash for any given set of fields, leaving out `exclude`"""
-        inp_dict = self._checksum_inputs()
-        inp_dict.pop(exclude, None)
-        # Include the outputs class, just in case any names or types have changed
-        inp_dict["Outputs"] = self.Outputs
-        hash_cache = Cache(code_hash=self._code_hash)
-        field_hashes = {
-            k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
-        }
+        self, exclude: str | None = None, collect: bool = False
+    ) -> ty.Tuple[bytes, ty.Dict[str, str]]:
+        """Compute the digests of the fields of the identity record, leaving out
+        `exclude`. With `collect` the library modules and declared code the walk reaches
+        are kept (see `pydra.utils.identity.field_digests`)"""
+        from pydra.utils.identity import field_digests
+
+        digests = field_digests(self, exclude, collect=collect or exclude is None)
         if exclude is None:
-            self._code_modules = frozenset(hash_cache.modules)
-            self._declared_code = {
-                k: ",".join(sorted(v)) for k, v in sorted(hash_cache.declared.items())
-            }
-        return hash_function(sorted(field_hashes.items())), field_hashes
+            self._hashes = digests
+        return hash_function(sorted(digests.items())), digests
 
     def _rule_violations(self) -> list[str]:
         """Check rules and returns a list of errors."""
