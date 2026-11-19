@@ -131,8 +131,29 @@ that is not a failure. This section answers from the code which of these pydra h
   nested fan-out, such as segments within each record, through `other_states`. The runner cannot
   release it per element: a node whose splitter reads an upstream output is started only when every
   upstream node is done (`_splits_upstream_output`, `submitter.py:1214-1221`, used at
-  `:1244-1256`). This is the barrier that 0001 §3.1 step 2 (E2, the partial-`State` refactor)
-  removes.
+  `:1244-1256`). 0001 §3.1 step 2 (E2, the partial-`State` refactor) removes this barrier for
+  every shape except six, which keep it (below and the E2 row of §4.3).
+- **E2 as implemented (pydra #949).** A node whose splitter reads an upstream output is partial:
+  each upstream element's sub-state expands as a block when that element succeeds, and its elements
+  are released then. Each element carries `state_key`, a flat tuple of field coordinates such as
+  `(k, a, j)`, assigned when its block expands and never changed. `state_index` is the flat rank,
+  filled only when the node seals; a node with a failed block never seals and its elements keep
+  `state_index=None`. Every report on a partial node (error entries, error strings such as
+  `Job 'B[1,0]'`, `Unrunnable`, `stuck()`) names the key, so names do not depend on timing. Element
+  order and checksums equal today's over every rectangular split. Six shapes keep the barrier:
+  (1) `.` between an inner axis and a static axis or an axis from another source; (2) `.` over two
+  partial upstream states; (3) a user-supplied `container_ndim > 1` on an inner input; (4) a
+  combiner that removes a block coordinate but keeps that block's inner coordinate; (5) an inner
+  split beside a non-split input from the same source, or from a stateful upstream not reached
+  through an upstream-state term; (6) a combiner name that matches no path, or more than one. A
+  barrier node that would mispair ragged or combined inner inputs records a node-level resolution
+  error instead of a wrong result.
+- **Wrong today, corrected by E2 (pydra #945).** Five cases give wrong results or raise now, and are
+  the only ones whose outputs and checksums change: a ragged inner split (`n=[1,3]` gives
+  `[11, 31]`, not `[11, 31, 32, 33]`); a per-element empty split, which raises `IndexError`; a split
+  over a combined upstream, which mispairs elements; a `typing.Any` upstream that mixes scalars and
+  lists; and a reader that combines a static field of a partial upstream, which gets six extra
+  empty groups.
 
 ### 2.3 Proposal
 
@@ -353,8 +374,11 @@ class Settled:
 @attrs.frozen
 class Unrunnable:
     node: str                     # the node's name; its workflow path after R6
-    index: int | None             # the state index, None for the node as a whole
+    index: int | None             # flat index; None on a partial node (key set) or whole node
+    key: tuple | None             # the element's state_key on a partial node (§2.2, E2)
+    block: tuple | None           # a block that failed before expanding (index and key None)
     upstream: list[str]           # the upstream nodes whose failed or unrunnable elements it reads
+    # the whole node <=> index, key and block are all None
 
 Outcome = Result | Failed | NotRun           # Result.committed: Committed | None (RFC 0003 §7.2)
 @attrs.frozen
@@ -398,7 +422,10 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
   (`submitter.py:1327-1333`). Readers become unrunnable.
 - **Unrunnable elements are reported.** An element that reads a failed or unrunnable upstream
   element has no `Job`, no `Settled` and no error entry: entries have `phase="run"` or
-  `"resolution"` only (`submitter.py:1286`, `:1336-1348`). `NodeExecution` already records, per
+  `"resolution"` only (`submitter.py:1286`, `:1336-1348`). After E2 there is a third phase,
+  `"expansion"`, for a block that could not be expanded: its entry has `state_index` and
+  `state_key` `None` and `block` set, and its label is `B[block 1]`. `JobErrorEntry` gains
+  `state_key` and `block`, both defaulting to `None`. `NodeExecution` already records, per
   index, the upstream nodes that made it unrunnable (`unrunnable` at `:942`, set at `:1251` for a
   whole node and `:1267` per element). `ready()` reports each newly marked entry once, in
   `Round.unrunnable`, so a driver can record a descendant of a failure as blocked by it.
@@ -410,7 +437,9 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
 
 **`upstream(job)`** returns, for each lazy input, the upstream jobs and state indices it was
 resolved from (`NodeExecution._upstream`, `submitter.py:1179-1196`), so a driver need not recover
-them from values.
+them from values. It stays a 2-tuple after E2: the index is `None` when the upstream is unsealed
+or read whole, and the element's key is `job.state_key`. `Round.settled` is unchanged too;
+`Settled.job` carries `state_key`.
 
 **`stuck()`.** When `ready()` returns nothing, nothing is in flight, `retry_after` is `None` and
 `done` is false, the driver calls `stuck()`. It returns today's diagnosis (`submitter.py:634-701`)
@@ -781,7 +810,7 @@ additions behind them.
 | R6 | flattening: one runner per call; the runner leases, checks, expands and commits workflow jobs; `Lease.try_take` and `Round.retry_after`; array key gains the workflow path; the workflow-job steps take their `PortableStore` form when RFC 0003 P4 and P5 are in | R4, R5 | named changes (§4.1); tests updated for them |
 | R7 | driver model: `Round.settled`, `Round.unrunnable`, `NotRun`/`RunIncomplete`, `upstream()`, `lookup_before_dispatch`, `read_succeeded` in the protocol; `job.attempt` on handed-out jobs, and `find(job)` with `job.verify` when the store has `find` | R4 | opt-in |
 | R8 | `plan()` (subsumes J2) | R6, F2, B2 | opt-in |
-| E2 | partial `State` (0001 §3.1 step 2): per-element release of nested fan-out, including an `Absent` splitter input per element | R1 | 0001's |
+| E2 | partial `State` (0001 §3.1 step 2): per-element release of nested fan-out, `state_key`, the `"expansion"` phase and `Unrunnable.key`/`block`, including an `Absent` splitter input per element | R1 | 0001's; barrier kept for the six shapes of §2.2; corrects the ragged, empty, combined-source, mixed-scalar and static-combine cases (#945), whose checksums change; the `test_readiness` resplit and bad-input tests change expectations to keys |
 | R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the absence suffix for supplied checksums and unhashed fields; whole-node absence for a splitter input | R6, E2 | opt-in |
 | R10b | `when=`/`unless=`: node inputs, upstream states, lazy reads and edges; the precedence rule; `select(n)` | R10a | opt-in |
 | R11 | `workflow.loop` with `index=`, `rounds`, `converged` | R10b | opt-in |
@@ -796,7 +825,7 @@ workflow and outer jobs as stated there.
 
 R5 no longer depends on #929, which has merged; the first draft listed it because arrays and the
 success-record read changed the same dispatch code. Each PR has tests on `debug` and `cf`, and on
-Slurm where relevant. Only R5 and R6 change any existing test expectation, and only for the
+Slurm where relevant. Only R5, R6 and E2 change any existing test expectation, and only for the
 behaviours named.
 
 ## 5. Open questions for maintainers
