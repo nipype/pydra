@@ -513,9 +513,12 @@ class Submitter:
         for worker in self.workers.values():
             worker.loop = self.loop
 
-    def _limit(self) -> int | None:
-        """The most jobs to hand out in one round, None if unlimited"""
-        return None if self.max_concurrent == float("inf") else int(self.max_concurrent)
+    def _limit(self, in_flight: int = 0) -> int | None:
+        """The most jobs to hand out in one round given those already running, None if
+        unlimited"""
+        if self.max_concurrent == float("inf"):
+            return None
+        return max(0, int(self.max_concurrent) - in_flight)
 
     def _runner(
         self, wf_job: "Job[workflow.Task]", rerun: bool, is_async: bool
@@ -593,8 +596,7 @@ class Submitter:
         finished: set[str] = set()
         # the checksums of the jobs whose runs raised
         failed: set[str] = set()
-        limit = self._limit()
-        tasks = runner.ready(limit).dispatch
+        tasks = runner.ready(self._limit()).dispatch
         try:
             while tasks or task_futures or not runner.done:
                 if not tasks and not task_futures:
@@ -604,7 +606,7 @@ class Submitter:
                     # so try to get runnable tasks for another minute
                     ii = 0
                     while not tasks and not runner.done:
-                        tasks = runner.ready(limit).dispatch
+                        tasks = runner.ready(self._limit(len(task_futures))).dispatch
                         ii += 1
                         # don't block the event loop!
                         await asyncio.sleep(1)
@@ -653,7 +655,7 @@ class Submitter:
                         runner.complete(job, outcome)
                 if runner.errors and fail_fast:
                     break
-                tasks = runner.ready(limit).dispatch
+                tasks = runner.ready(self._limit(len(task_futures))).dispatch
                 if runner.errors and fail_fast:
                     break
         finally:
@@ -664,6 +666,40 @@ class Submitter:
                 task_future.cancel()
             if runner.errors:
                 raise workflow_error(workflow_task, runner.errors, runner.entries)
+
+    def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
+        """Deprecated: the jobs of the released nodes of an execution graph. Use
+        :meth:`GraphRunner.ready`"""
+        warnings.warn(
+            "Submitter.get_runnable_tasks is deprecated, use GraphRunner.ready",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return GraphRunner._runnable_jobs(graph)
+
+    def read_succeeded(self, jobs: list["Job[TaskType]"]) -> list["Job[TaskType]"]:
+        """Deprecated: complete the jobs with a success record and return the others.
+        Use :meth:`GraphRunner.ready`"""
+        warnings.warn(
+            "Submitter.read_succeeded is deprecated, use GraphRunner.ready",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return GraphRunner._read_succeeded_jobs(self.store, jobs)
+
+    @staticmethod
+    def pop_resolution_errors(
+        exec_graph: DiGraph["NodeExecution"],
+        entries: "list[JobErrorEntry] | None" = None,
+    ) -> list[str]:
+        """Deprecated: the errors of elements whose inputs could not be resolved, not
+        collected before. Use :attr:`GraphRunner.errors`"""
+        warnings.warn(
+            "Submitter.pop_resolution_errors is deprecated, use GraphRunner.errors",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return [e for n in exec_graph.nodes for e in n.pop_resolution_errors(entries)]
 
     async def fetch_finished(
         self, futures

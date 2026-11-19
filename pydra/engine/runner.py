@@ -556,9 +556,10 @@ class GraphRunner:
         Reserved: the hooks of each job are the ones of its node
     lookup_before_dispatch : bool
         Reserved: has no effect until the store is read for every job (R7)
-    submitter : Submitter
-        The submitter the jobs are created for (a job reads its audit, cache root and
-        store from it)
+    submitter : Submitter, optional
+        Transitional: the submitter the jobs are created for (a job reads its audit,
+        cache root and store from it). Without it a ``debug`` submitter over ``store``
+        is created. R6 and R7 remove it
     job : Job, optional
         The workflow job that the runner expands, whose :meth:`result` it reads
     """
@@ -574,7 +575,7 @@ class GraphRunner:
         environment: "Environment | None" = None,
         hooks: "TaskHooks | None" = None,
         lookup_before_dispatch: bool = False,
-        submitter: "Submitter",
+        submitter: "Submitter | None" = None,
         job: "Job | None" = None,
     ):
         self.task = task
@@ -585,6 +586,10 @@ class GraphRunner:
         self.environment = environment
         self.hooks = hooks
         self.lookup_before_dispatch = lookup_before_dispatch
+        if submitter is None:
+            from pydra.engine.submitter import Submitter
+
+            submitter = Submitter(worker="debug", store=store, telemetry=False)
         self.submitter = submitter
         self.job = job
         self.workflow: "Workflow" = task.construct()
@@ -611,11 +616,14 @@ class GraphRunner:
                 self._failed = True
 
     def _runnable(self) -> list[Job]:
+        return self._runnable_jobs(self.exec_graph)
+
+    @staticmethod
+    def _runnable_jobs(graph: "DiGraph[NodeExecution]") -> list[Job]:
         """The jobs of all the nodes that are released, in node order"""
         jobs: list[Job] = []
         not_started = set()
         node: NodeExecution
-        graph = self.exec_graph
         for node in graph.sorted_nodes:
             if node.done:
                 continue
@@ -646,11 +654,12 @@ class GraphRunner:
         if candidates and not self._inner_rerun:
             candidates = self._read_succeeded(candidates)
         if limit is not None and len(candidates) > limit:
-            logger.info(
-                "Reducing number of tasks to run concurrently from %d to %d",
-                len(candidates),
-                limit,
-            )
+            if limit > 0:
+                logger.info(
+                    "Reducing number of tasks to run concurrently from %d to %d",
+                    len(candidates),
+                    limit,
+                )
             candidates = candidates[: max(limit, 0)]
         for job in candidates:
             self._handed.add(job)
@@ -659,6 +668,12 @@ class GraphRunner:
         return Round(dispatch=candidates)
 
     def _read_succeeded(self, jobs: list[Job]) -> list[Job]:
+        dispatch = self._read_succeeded_jobs(self.store, jobs)
+        self._handed.update(j for j in jobs if j not in dispatch)
+        return dispatch
+
+    @staticmethod
+    def _read_succeeded_jobs(store: "ResultStore", jobs: list[Job]) -> list[Job]:
         """Complete, without their leases, the jobs whose slots carry a success record,
         and return the other jobs, which are to be dispatched.
 
@@ -670,7 +685,7 @@ class GraphRunner:
         returns errored or returns from another context, is dispatched and runs under its
         lease as before. A store without records dispatches every job.
         """
-        read = getattr(self.store, "read_succeeded", None)
+        read = getattr(store, "read_succeeded", None)
         if read is None:
             return jobs
         dispatch = []
@@ -682,7 +697,6 @@ class GraphRunner:
             job.hooks.pre_run(job)
             job._cached_result = result
             job._awaiting_run = False
-            self._handed.add(job)
         return dispatch
 
     def complete(self, job: Job, outcome: Outcome) -> None:
@@ -739,43 +753,13 @@ class GraphRunner:
             for t in exec_graph.sorted_nodes
         }
 
-        hashes_have_changed = False
         for job, blocked_on in outstanding.items():
             if not blocked_on:
                 continue
             msg += f"- '{job.name}' node blocked due to\n"
             for pred in blocked_on:
-                checksum = getattr(pred, "checksum", None)
-                if checksum is not None and checksum != (
-                    wf.inputs._graph_checksums[pred.name]
-                ):
-                    msg += (
-                        f"    - hash changes in '{pred.name}' node "
-                        f"inputs. Current values and hashes: "
-                        f"{pred.inputs}, {getattr(pred.inputs, '_hashes', None)}\n"
-                    )
-                    hashes_have_changed = True
-                elif pred not in outstanding:
-                    msg += (
-                        f"    - undiagnosed issues in '{pred.name}' "
-                        "node, potentially related to file-system "
-                        "access issues "
-                    )
+                msg += f"    - '{pred.name}' node is not done\n"
             msg += "\n"
-        if hashes_have_changed:
-            msg += (
-                "Set loglevel to 'debug' in order to track hash "
-                "changes throughout the execution of the workflow."
-                "\n\n These issues may have been caused by "
-                "`bytes_repr()` methods that don't return stable "
-                "hash values for specific object types across "
-                "multiple processes (see bytes_repr() "
-                '"singledispatch "function in pydra/utils/hash.py).'
-                "You may need to write specific `bytes_repr()` "
-                "implementations (see `pydra.utils.hash.register_serializer`) "
-                "or `__bytes_repr__()` dunder methods to handle one "
-                "or more types in your interface inputs."
-            )
         return msg
 
     @property
