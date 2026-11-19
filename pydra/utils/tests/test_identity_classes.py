@@ -6,6 +6,8 @@ and have no dependence on the Python minor, which the ``full-ci`` label checks o
 minor pydra supports.
 """
 
+import copy
+import dataclasses
 import enum
 import json
 import re
@@ -753,7 +755,7 @@ def test_only_an_unpickled_job_carries_digests():
     clone = cp.loads(cp.dumps(job))
     assert set(clone.task._carried) == set(job.task._hashes)
     assert {"a", "b", "Outputs", clone.task._executor_name} <= set(clone.task._carried)
-    assert clone.task._carried["Outputs"] == type_digest(job.task.Outputs)
+    assert clone.task._carried["Outputs"][1] == type_digest(job.task.Outputs)
 
 
 def test_run_through_a_worker(any_worker, tmp_path, monkeypatch):
@@ -920,7 +922,7 @@ def test_outputs_digest_is_taken_from_the_carried_ones():
     job.checksum
     clone = cp.loads(cp.dumps(job))
     marker = "type@1:" + "0" * 64
-    clone.task._carried["Outputs"] = marker
+    clone.task._carried["Outputs"] = (None, marker)
     assert clone.task._compute_hashes()[1]["Outputs"] == marker
 
 
@@ -1005,7 +1007,7 @@ def test_annotated_class_digest_ignores_comments_and_line_numbers(tmp_path):
 ANNOTATED_GOLDEN = {
     "point": "class@1:80835a0969d4de9ffa2c372ca3274f648d113b75bd368e2505d0f3ed36107ebb",
     "plain": "class@1:acb16c123d662ed93c99cac88d6aad74b941974eb54d8d75bfc1149d768cd6a8",
-    "point_type": "type@1:557e3fd71e9fb16b7fb89296b3f1467024ac0a0469b522d3fcaf87a503c65d16"
+    "point_type": "type@1:557e3fd71e9fb16b7fb89296b3f1467024ac0a0469b522d3fcaf87a503c65d16",
 }
 
 
@@ -1052,7 +1054,9 @@ def test_typevar_field_digest_has_name_bound_constraints_and_variance():
 def test_forward_ref_is_its_string():
     assert td(ty.ForwardRef("Foo")) == td(ty.ForwardRef("Foo"))
     assert td(ty.ForwardRef("Foo")) != td(ty.ForwardRef("Bar"))
-    assert _outputs_digest(ty.ForwardRef("Foo")) != _outputs_digest(ty.ForwardRef("Bar"))
+    assert _outputs_digest(ty.ForwardRef("Foo")) != _outputs_digest(
+        ty.ForwardRef("Bar")
+    )
 
 
 def test_none_argument_is_nonetype():
@@ -1081,7 +1085,7 @@ TYPE_GOLDEN_2 = {
     "callable_p": "type@1:b216773194079f0c07bc19ceac6d99059b2d9b568a2628c622c12e0f3f1b2290",
     "typevar": "type@1:6dadccec566fc278b6009ef9d8b79f341724847b35e226cb98afe81cff4cf8f1",
     "forward": "type@1:825b1802a065b69799034e1cd5022b56da737c11276fe78ea482dbe94519842a",
-    "dict_none": "type@1:baf77c7f0ebbc1de56d155ec80e8d9d4b8b1c1c1f1c44a052a619d1039949ea1"
+    "dict_none": "type@1:baf77c7f0ebbc1de56d155ec80e8d9d4b8b1c1c1f1c44a052a619d1039949ea1",
 }
 
 
@@ -1097,3 +1101,207 @@ def test_type_digest_goldens_2():
         "forward": td(ty.ForwardRef("Foo")),
         "dict_none": td(dict[str, None]),
     } == TYPE_GOLDEN_2
+
+
+# ---------------------------------------------------------------------------
+# carried digests never outlive the worker run and never survive a change
+# ---------------------------------------------------------------------------
+
+
+@python.define
+def AddXY(x: int, y: int) -> int:
+    return x + y
+
+
+def test_task_of_a_worker_result_is_not_carried(any_worker, tmp_path):
+    with Submitter(cache_root=tmp_path, worker=any_worker) as sub:
+        res = sub(AddXY(x=1, y=1))
+    assert res.outputs.out == 2
+    assert res.task._carried is None
+    res.task.x = 40
+    assert res.task(cache_root=tmp_path, worker="debug").out == 41
+    other = copy.copy(res.task)
+    other.y = 100
+    assert other(cache_root=tmp_path, worker="debug").out == 140
+
+
+def _carried_job():
+    job = Job(name="t", task=AddXY(x=1, y=1), submitter=Submitter())
+    job.checksum
+    return job
+
+
+@pytest.mark.parametrize(
+    "clone",
+    [lambda j: cp.loads(cp.dumps(j)), copy.deepcopy],
+    ids=["unpickle", "deepcopy"],
+)
+def test_assignment_after_unpickling_is_seen(clone):
+    # expected values first: unpickling a function by value can change how it is walked
+    expected = AddXY(x=40, y=1)._checksum, AddXY(x=40, y=100)._checksum
+    job = clone(_carried_job())
+    assert job.task._carried
+    job.task.x = 40
+    assert job.task._checksum == expected[0]
+    other = copy.copy(job.task)
+    other.y = 100
+    assert other._checksum == expected[1]
+    assert job.task._checksum == expected[0]
+
+
+# ---------------------------------------------------------------------------
+# one predicate: what a worker rehashes
+# ---------------------------------------------------------------------------
+
+
+class External:
+    """A value whose hash depends on state outside it"""
+
+    def __init__(self, path):
+        self.path = path
+
+    def __bytes_repr__(self, cache):
+        yield Path(self.path).read_bytes()
+
+
+@python.define
+def AnyBeside(f: File, v: ty.Any) -> int:
+    return 1
+
+
+@pytest.mark.parametrize("kind", ["bytes_repr", "file"])
+def test_value_that_depends_on_external_state_is_rechecked(kind, tmp_path):
+    inner = tmp_path / "inner.txt"
+    inner.write_text("a")
+    value = External(inner) if kind == "bytes_repr" else File(inner)
+    job = Job(
+        name="t", task=AnyBeside(f=_file(tmp_path), v=value), submitter=Submitter()
+    )
+    job.checksum
+    clone = cp.loads(cp.dumps(job))
+    assert clone.task._hash_changes() == []
+    inner.write_text("abc")
+    assert clone.task._hash_changes() == ["v"]
+
+
+def test_plain_values_are_never_recomputed_in_a_worker(monkeypatch, tmp_path):
+    job = Job(
+        name="t", task=AnyBeside(f=_file(tmp_path), v=Scaler(2)), submitter=Submitter()
+    )
+    job.checksum
+    clone = cp.loads(cp.dumps(job))
+    monkeypatch.setattr(
+        hash_module,
+        "_class_digest",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("rehashed a class")),
+    )
+    assert clone.task._hash_changes() == []
+
+
+# ---------------------------------------------------------------------------
+# no repr in a digest
+# ---------------------------------------------------------------------------
+
+SENTINEL_PACKAGE = {
+    "sentpkg/__init__.py": "",
+    "sentpkg/models.py": """
+        import dataclasses
+        import typing as ty
+
+
+        @dataclasses.dataclass
+        class Opts:
+            a: int = 0
+            _: dataclasses.KW_ONLY
+            b: int = 1
+            c: dataclasses.InitVar[int] = 2
+            d: ty.ClassVar[int] = 3
+            e: ty.Final[int] = 4
+    """,
+}
+
+SENTINEL_SCRIPT = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from sentpkg.models import Opts
+from pydra.utils.hash import Cache, _CodeWalk, class_digest, type_digest
+chunks = b"".join(_CodeWalk(Opts, Cache(), True))
+print(json.dumps({"class": class_digest(Opts), "type": type_digest(Opts), "hex": b"0x" in chunks}))
+"""
+
+
+def _sentinels(root):
+    for name, source in SENTINEL_PACKAGE.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(textwrap.dedent(source).lstrip("\n"))
+    out = subprocess.run(
+        [sys.executable, "-c", SENTINEL_SCRIPT, str(root)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return json.loads(out.strip().splitlines()[-1])
+
+
+def test_kw_only_dataclass_digest_is_stable_across_processes(tmp_path):
+    one, two = _sentinels(tmp_path / "a"), _sentinels(tmp_path / "b")
+    assert one == two
+    assert one["hex"] is False
+
+
+@pytest.mark.parametrize(
+    "tp",
+    [
+        dataclasses.KW_ONLY,
+        dataclasses.InitVar[int],
+        ty.ClassVar[int],
+        ty.Final[int],
+        ty.ClassVar,
+        ty.Final,
+    ],
+    ids=str,
+)
+def test_sentinel_types_have_no_address_in_their_bytes(tp):
+    data = b"".join(hash_module.bytes_repr_type(tp, hash_module.Cache()))
+    assert b"0x" not in data
+    assert data == b"".join(hash_module.bytes_repr_type(tp, hash_module.Cache()))
+
+
+def test_kw_only_and_initvar_are_distinct():
+    assert td(dataclasses.InitVar[int]) != td(dataclasses.InitVar[str])
+    assert td(dataclasses.KW_ONLY) != td(dataclasses.InitVar[int])
+
+
+def test_value_without_a_stable_form_raises():
+    with pytest.raises(TypeError, match="no stable"):
+        td(object())
+
+
+def test_class_annotation_without_a_stable_form_names_the_field():
+    class Odd:
+        x: object() = 1  # type: ignore[valid-type]
+
+    with pytest.raises(TypeError, match="'x'"):
+        class_digest(Odd)
+
+
+# ---------------------------------------------------------------------------
+# registrations: the serializers are bytes_repr_type itself
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "tp",
+    [
+        ty.List,
+        ty.Callable,
+        ty.ParamSpec("P"),
+        ty.TypeVar("T"),
+        list[int],
+        ty.ForwardRef("X"),
+    ],
+    ids=str,
+)
+def test_type_forms_are_dispatched_to_bytes_repr_type(tp):
+    assert hash_module.bytes_repr.dispatch(type(tp)) is hash_module.bytes_repr_type

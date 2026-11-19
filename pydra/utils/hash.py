@@ -1,6 +1,7 @@
 """Generic object hashing dispatch"""
 
 import builtins
+import dataclasses
 import sys
 import os
 import ast
@@ -569,8 +570,9 @@ def _type_location(tp: ty.Any) -> bytes:
         getattr(tp, "__qualname__", None)
         or getattr(tp, "__name__", None)
         or getattr(tp, "_name", None)
-        or repr(tp)
     )
+    if not isinstance(name, str):
+        raise TypeError(f"{type(tp).__name__} object has no stable type@1 form")
     module = getattr(tp, "__module__", None) or ""
     mod_path = ".".join(p for p in module.split(".") if not p.startswith("_"))
     return f"{mod_path}.{name}".encode()
@@ -663,6 +665,10 @@ def bytes_repr_type(klass: ty.Any, cache: Cache) -> Iterator[bytes]:
             bool(getattr(klass, "__covariant__", False)),
             bool(getattr(klass, "__contravariant__", False)),
         )
+    elif klass is dataclasses.KW_ONLY:
+        yield b"sentinel:(dataclasses.KW_ONLY)"
+    elif isinstance(klass, dataclasses.InitVar):
+        yield b"initvar:(" + _type_token(klass.type, cache) + b")"
     elif isinstance(klass, str):
         yield b"annotation:(" + klass.encode() + b")"
     elif isinstance(klass, ty.ForwardRef):
@@ -1537,7 +1543,13 @@ class _CodeWalk:
         except Exception:  # an annotation that cannot be evaluated is in the source
             annotations = {}
         for name, annotation in sorted(annotations.items()):
-            yield f"annotation:{name}", type_digest(annotation, self.cache)
+            try:
+                yield f"annotation:{name}", type_digest(annotation, self.cache)
+            except TypeError as e:
+                add_exc_note(
+                    e, f"in the annotation of {name!r} of class {klass.__qualname__!r}"
+                )
+                raise
 
     def reference(self, name: str, value: ty.Any, reader: ty.Any) -> bytes:
         try:

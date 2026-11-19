@@ -11,10 +11,11 @@ record existed, under their tags: ``code@1`` (the walk of the executor), ``type@
 ``Outputs`` class) and ``py@1`` (an input). A job's record is built once, in the
 submitting process, and carried with the job: ``Job.record``, ``Job.checksum`` and the
 store identity's ``key`` never rebuild it in a worker. ``Task._checksum`` and
-``Task._hash`` rebuild it on every call in the submitting process, but not their code
-digests: a task unpickled in a worker reads the digest of its code and of its ``Outputs``
-class from the one the submitting process computed (see ``Task._carried``, pydra issue
-#936), because a worker may not be able to read the source.
+``Task._hash`` rebuild it on every call in the submitting process. A task unpickled in a
+worker reads the digests the submitting process computed (see ``Task._carried``, pydra
+issue #936), because a worker may not be able to read the source of its function, its
+classes and its input values; it hashes again only the values that can change meanwhile
+(see ``rehashed_in_worker``).
 """
 
 from __future__ import annotations
@@ -76,15 +77,20 @@ def field_digests(
     cache = Cache(code_hash=task._code_hash)
     code_name = task._executor_name if _executor_is_code(task) else None
     carried = task._carried or {}
-    rehash = {f.name for f in get_fields(task) if _holds_files(f.type)} if carried else ()
+    fields = {f.name: f for f in get_fields(task)}
     digests = {}
     for name, value in inputs.items():
-        if name in carried and name not in rehash:
-            digests[name] = carried[name]
-            continue
+        if name in carried and carried[name][0] is getattr(task, name):
+            if not rehashed_in_worker(fields.get(name), carried[name][0]):
+                digests[name] = carried[name][1]
+                continue
         tag = "code@1" if name == code_name else "py@1"
         digests[name] = f"{tag}:{hash_function(value, cache=cache)}"
-    digests["Outputs"] = carried.get("Outputs") or type_digest(task.Outputs, cache)
+    digests["Outputs"] = (
+        carried["Outputs"][1]
+        if "Outputs" in carried
+        else type_digest(task.Outputs, cache)
+    )
     if collect and not carried:
         task._code_modules = frozenset(cache.modules)
         task._code_refs = sorted(cache.refs)
@@ -94,12 +100,21 @@ def field_digests(
     return digests
 
 
-def _holds_files(tp: ty.Any) -> bool:
+def rehashed_in_worker(field: ty.Any, value: ty.Any) -> bool:
+    """Whether a worker hashes ``value`` of ``field`` again instead of using the digest
+    the submitting process carried: a value whose hash depends on state outside it, which
+    can change between the submission and the run (a file, however it is typed, or a
+    value with ``__bytes_repr__``). Functions, classes and instances of user classes
+    are never hashed again, as a worker may not be able to read their source."""
     from fileformats.core.fileset import FileSet
 
     from pydra.utils.typing import TypeParser
 
-    return TypeParser.contains_type(FileSet, tp)
+    return (
+        (field is not None and TypeParser.contains_type(FileSet, field.type))
+        or isinstance(value, FileSet)
+        or hasattr(value, "__bytes_repr__")
+    )
 
 
 def _executor_is_code(task: "Task") -> bool:

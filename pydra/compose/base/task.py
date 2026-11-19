@@ -187,9 +187,10 @@ class Task(ty.Generic[OutputsType]):
     _declared_code = attrs.field(default=None, init=False, eq=False, repr=False)
 
     # The digests of the fields and of the ``Outputs`` class computed by the process that
-    # submitted the job, set by `_carry_digests` when the job is unpickled (a worker may
-    # not be able to read the source) and None in the submitting process (pydra issue
-    # #936)
+    # submitted the job, each with the value it was computed from, set by
+    # `_carry_digests` when the job is unpickled (a worker may not be able to read the
+    # source) and None in the submitting process (pydra issue #936). A digest is used
+    # only while its field still holds that value, and a ``Result`` does not pickle them.
     _carried = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
@@ -513,7 +514,10 @@ class Task(ty.Generic[OutputsType]):
         `pydra.utils.identity.field_digests`): their content can change between the
         submission and the run."""
         if self._hashes:
-            self._carried = dict(self._hashes)
+            self._carried = {
+                name: (None if name == "Outputs" else getattr(self, name, None), digest)
+                for name, digest in self._hashes.items()
+            }
 
     def _supplied_checksum(self) -> str:
         """The checksum returned by ``__checksum__``, which must be a single path
