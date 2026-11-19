@@ -317,7 +317,9 @@ class PydraEntryV1:
             raise
         except OSError as err:
             raise StoreUnavailable(f"{entry.path}: {err}") from err
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as err:
+        except (
+            ValueError
+        ) as err:  # decoding and format errors; a defect (TypeError, ...) propagates
             raise CorruptEntry(f"{entry.path} is malformed: {err!r}") from err
 
     def _read(
@@ -652,7 +654,7 @@ def _declared(
     from pydra.utils.general import get_fields
     from pydra.utils.typing import TypeParser
 
-    base = os.path.join(os.path.normpath(entry_path), "files") + os.sep
+    base = os.path.join(os.path.abspath(entry_path), "files") + os.sep
     fields = {f.name: f for f in get_fields(getattr(task, "Outputs", task))}
     out = {}
     for name, value in outputs.items():
@@ -676,7 +678,7 @@ def _declared(
             out[name] = value
         for leaf in _fileset_leaves(out[name]):
             for p in leaf.fspaths:
-                if not os.path.normpath(os.fspath(p)).startswith(base):
+                if not os.path.abspath(os.fspath(p)).startswith(base):
                     raise CorruptEntry(
                         f"output {name!r} would be handed the path {p}, which is outside the entry"
                     )

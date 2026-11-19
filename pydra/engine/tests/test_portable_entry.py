@@ -1653,3 +1653,83 @@ def test_a_listed_member_no_output_claims_is_corrupt(root):
     edit_entry(root, lambda d: d["outputs"].update(b=1))
     with pytest.raises(CorruptEntry):
         read(root)
+
+
+# -- fix round 2 -------------------------------------------------------------------------
+
+
+@python.define(outputs={"f": Tagged, "d": Directory})
+def FileAndDir(x: int) -> ty.Tuple[Tagged, Directory]:
+    raise NotImplementedError
+
+
+@pytest.mark.parametrize("relative", [False, True])
+def test_declared_file_and_directory_read_back_through_a_task(
+    tmp_path, tags, monkeypatch, relative
+):
+    (tmp_path / "src" / "tree").mkdir(parents=True)
+    (tmp_path / "src" / "one.dat").write_bytes(b"abc")
+    (tmp_path / "src" / "tree" / "x.txt").write_bytes(b"x")
+    (tmp_path / "r").mkdir()
+    monkeypatch.chdir(tmp_path)
+    path = "r" if relative else str(tmp_path / "r")
+    with StorageDir.open_root(path, StorePolicy(), trust=TRUST) as r:
+        publish(
+            r,
+            {
+                "f": Tagged(tmp_path / "src" / "one.dat"),
+                "d": Directory(tmp_path / "src" / "tree"),
+            },
+        )
+        got = read(r, task=FileAndDir(x=1)).outputs
+        base = os.path.abspath(entry_path(r))
+        for key in ("f", "d"):
+            for p in got[key].fspaths:
+                assert os.path.abspath(p).startswith(
+                    os.path.join(base, "files") + os.sep
+                )
+        assert _names(got["f"]) == {"one.dat"} and _keys(got["d"]) == ["x.txt"]
+        # and a path outside is still refused on the same relative root
+        publish(
+            r,
+            {"f": str(tmp_path / "src" / "one.dat"), "d": "x"},
+            checksum="python-other",
+        )
+        with pytest.raises(CorruptEntry):
+            read(r, task=FileAndDir(x=1), checksum="python-other")
+
+
+def test_a_reader_defect_is_not_a_corrupt_entry(root, monkeypatch):
+    from pydra.engine.portable import entry as entry_mod
+
+    publish(root, {"a": 1})
+
+    def boom(_encoded):
+        raise AttributeError("a bug in the reader")
+
+    monkeypatch.setattr(entry_mod, "output_digest", boom)
+    with pytest.raises(AttributeError):
+        read(root)
+    monkeypatch.setattr(
+        entry_mod, "output_digest", lambda e: (_ for _ in ()).throw(TypeError("bug"))
+    )
+    with pytest.raises(TypeError):
+        read(root)
+    monkeypatch.setattr(
+        entry_mod, "output_digest", lambda e: (_ for _ in ()).throw(ValueError("bad"))
+    )
+    with pytest.raises(CorruptEntry):
+        read(root)
+
+
+def test_a_codec_defect_does_not_quarantine(root):
+    class Boxed:
+        pass
+
+    register_codec(Boxed, "test.entry.Boxed", lambda b: 1, lambda v: v.nope)
+    publish(root, {"b": Boxed()})
+    with pytest.raises(EntryFormatUnknown):
+        read(root)
+    register_codec(Boxed, "test.entry.Boxed", lambda b: 1, lambda v: 1 + "x")
+    with pytest.raises(EntryFormatUnknown):
+        read(root)
