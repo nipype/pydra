@@ -632,3 +632,562 @@ def test_publish_and_read(any_worker, tmp_path):
     store = PortableStore(root, trust=TRUST)
     got = store.read(EntryRef(str(root), cdir, fingerprint), None)
     assert got.outputs == {"v": 7}
+
+
+# -- fix round 1 ---------------------------------------------------------------------------------------
+
+
+def corrupt(entry: Path) -> None:
+    """Make the entry at ``entry`` unreadable JSON, whatever mode it is sealed in."""
+    mode = stat.S_IMODE(entry.stat().st_mode)
+    os.chmod(entry, 0o755)
+    os.chmod(entry / "entry.json", 0o644)
+    (entry / "entry.json").write_text("not json")
+    os.chmod(entry, mode)
+
+
+def quarantined(root) -> list:
+    return list((Path(root) / "quarantine").iterdir())
+
+
+def recording_rename(monkeypatch, calls, fail=None):
+    real = StorageDir.rename
+
+    def rename(self, name, target, new_name):
+        calls.append((self.path, name, target.path, new_name))
+        if fail is not None:
+            fail(self, name, target, new_name)
+        real(self, name, target, new_name)
+
+    monkeypatch.setattr(StorageDir, "rename", rename)
+
+
+def at_address(call) -> bool:
+    return len(call[3]) == 64
+
+
+def test_contention_exhaustion_keeps_the_outputs(tmp_path, monkeypatch):
+    """B1: an address that stays contended is not an error and does not discard the job's
+    outputs."""
+    import pydra.engine.portable.store as mod
+
+    store = make(tmp_path)
+    monkeypatch.setattr(mod, "VISIBILITY_TIMEOUT", 0.3)
+    monkeypatch.setattr(store, "visibility_timeout", 0.3, raising=False)
+
+    def fail(self, name, target, new_name):
+        if at_address((None, None, None, new_name)):
+            raise OSError(errno.ENOENT, "the container was replaced")
+
+    recording_rename(monkeypatch, [], fail)
+    c = publish(store)
+    assert (c.won, c.stored, c.committed_digest) == (False, False, None)
+    assert c.kept is not None and os.path.isfile(os.path.join(c.kept, "entry.json"))
+
+
+@posix_only
+def test_corrupt_occupant_that_cannot_be_cleared_keeps_the_outputs(
+    tmp_path, monkeypatch
+):
+    store = make(tmp_path)
+    c = publish(store)
+    corrupt(entry_path(tmp_path / "root", c))
+    import pydra.engine.portable.store as mod
+
+    monkeypatch.setattr(mod.PortableStore, "_quarantine", lambda *a, **k: None)
+    again = publish(store)
+    assert (again.won, again.stored, again.committed_digest) == (False, False, None)
+    assert again.kept is not None and os.path.isdir(again.kept)
+
+
+def test_an_occupant_that_vanishes_after_a_failed_rename_is_a_retry(
+    tmp_path, monkeypatch
+):
+    """I1: ENOTEMPTY, then the occupant is gone: the next attempt wins."""
+    store = make(tmp_path)
+    seen = []
+
+    def fail(self, name, target, new_name):
+        if at_address((None, None, None, new_name)) and not seen:
+            seen.append(1)
+            raise OSError(errno.ENOTEMPTY, "occupied, they say")
+
+    recording_rename(monkeypatch, [], fail)
+    c = publish(store)
+    assert (c.won, c.stored) == (True, True)
+
+
+@posix_only
+def test_clearing_an_occupant_someone_else_moved_is_a_retry(tmp_path, monkeypatch):
+    """I2: the occupant was quarantined by another party between the check and the move."""
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    corrupt(entry)
+    real = PydraEntryV1.read
+    moved = []
+
+    def read(self, *a, **k):
+        try:
+            return real(self, *a, **k)
+        except CorruptEntry:
+            if not moved:
+                moved.append(1)
+                os.rename(entry, tmp_path / "taken")  # another reader got there first
+            raise
+
+    monkeypatch.setattr(PydraEntryV1, "read", read)
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+    assert store.read(again.entry, None).outputs == OUT
+
+
+@posix_only
+def test_replaced_occupant_is_not_quarantined(tmp_path, monkeypatch):
+    """The inode check: an entry that replaced the corrupt one is never moved."""
+    import shutil
+
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    backup = tmp_path / "backup"
+    shutil.copytree(entry, backup)
+    corrupt(entry)
+    real = PydraEntryV1.read
+    swapped = []
+
+    def read(self, *a, **k):
+        try:
+            return real(self, *a, **k)
+        except CorruptEntry:
+            if not swapped:
+                swapped.append(1)
+                shutil.rmtree(entry)
+                shutil.copytree(backup, entry)  # a valid entry now, a new inode
+            raise
+
+    monkeypatch.setattr(PydraEntryV1, "read", read)
+    calls: list = []
+    recording_rename(monkeypatch, calls)
+    again = publish(store)
+    assert (again.won, again.stored) == (False, True)
+    assert not [c for c in calls if "quarantine" in c[2]]
+    assert quarantined(tmp_path / "root") == []
+
+
+@posix_only
+def test_quarantine_restores_a_valid_entry_it_moved(tmp_path, monkeypatch):
+    """The fence (RFC 0003 6.3): the moved copy is re-verified and, valid, put back."""
+    import pydra.engine.portable.store as mod
+
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    with store._open() as root:
+        with (
+            root.child("results@1") as e,
+            e.child(entry.parent.parent.name) as s,
+            s.child(entry.parent.name) as d,
+        ):
+            assert (
+                store._quarantine(root, d, c.entry.fingerprint, c.entry.cdir, None)
+                is False
+            )
+    assert entry.is_dir() and quarantined(tmp_path / "root") == []
+    assert store.read(c.entry, None).outputs == OUT
+
+
+@posix_only
+def test_quarantine_stamps_and_keeps_a_corrupt_entry(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    corrupt(entry)
+    old = 1_000_000_000
+    os.utime(entry, (old, old))
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    (moved,) = quarantined(tmp_path / "root")
+    assert moved.stat().st_mtime > old + 1000  # aged from the move
+
+
+@posix_only
+@pytest.mark.skipif(IS_WINDOWS or os.geteuid() == 0, reason="root ignores modes")
+@pytest.mark.parametrize("sealed", [0o555, 0o2550])
+def test_owner_quarantines_its_own_sealed_entry(tmp_path, sealed):
+    policy = StorePolicy(sealed_mode=sealed)
+    store = make(tmp_path, policy=policy)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    assert stat.S_IMODE(entry.stat().st_mode) & 0o200 == 0
+    try:
+        corrupt(entry)
+        with pytest.raises(CorruptEntry):
+            store.read(c.entry, None)
+        assert len(quarantined(tmp_path / "root")) == 1
+        again = publish(store)
+        assert (again.won, again.stored) == (True, True)
+        assert store.read(again.entry, None).outputs == OUT
+    finally:
+        for p in (tmp_path / "root").rglob("*"):
+            if p.is_dir():
+                os.chmod(p, 0o755)
+
+
+@posix_only
+def test_non_owner_moves_a_corrupt_entry_to_a_q_name(tmp_path, monkeypatch):
+    """Cannot move across parents (no write on the entry): rename within the parent."""
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    corrupt(entry)
+
+    def fail(self, name, target, new_name):
+        if "quarantine" in target.path:
+            raise PermissionError(errno.EACCES, "not the owner")
+
+    recording_rename(monkeypatch, [], fail)
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    names = [p.name for p in entry.parent.iterdir()]
+    assert len(names) == 1 and names[0].startswith("q-")
+    assert quarantined(tmp_path / "root") == []
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="a shared store is not supported")
+def test_wrong_kind_regular_file_at_the_address(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    import shutil
+
+    shutil.rmtree(entry)
+    entry.write_text("not a directory")
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+    assert len(quarantined(tmp_path / "root")) == 1  # renamed, not deleted
+
+
+def test_wrong_kind_regular_file_at_the_address_any_platform(tmp_path):
+    store = make(tmp_path, trust=TRUST)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    import shutil
+
+    for p in entry.rglob("*"):
+        os.chmod(p, 0o666)
+    shutil.rmtree(entry)
+    entry.write_text("not a directory")
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+    assert len(quarantined(tmp_path / "root")) == 1
+
+
+def test_wrong_kind_symlink_at_the_address_any_platform(tmp_path):
+    store = make(tmp_path, trust=TRUST)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    real = tmp_path / "elsewhere"
+    entry.rename(real)
+    try:
+        entry.symlink_to(real, target_is_directory=True)
+    except OSError:
+        pytest.skip("no symlinks here")
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+    assert real.is_dir() and any(
+        real.iterdir()
+    )  # the target is never followed or removed
+    # a symlink is unlinked where the path backend cannot rename one, and moved elsewhere
+    assert len(quarantined(tmp_path / "root")) == (0 if IS_WINDOWS else 1)
+
+
+def test_set_aside_unlinks_only_links_on_windows(tmp_path, monkeypatch):
+    """The Windows branch, run everywhere: a regular file is renamed, a link unlinked."""
+    import pydra.engine.portable.store as mod
+
+    store = make(tmp_path, trust=TRUST)
+    publish(store)
+    monkeypatch.setattr(mod, "IS_WINDOWS", True)
+    unlinked = []
+    real_unlink = StorageDir.unlink
+
+    def unlink(self, name):
+        unlinked.append(name)
+        real_unlink(self, name)
+
+    monkeypatch.setattr(StorageDir, "unlink", unlink)
+    with store._open() as root:
+        with root.child("staging") as stg:
+            (tmp_path / "root" / "staging" / "plain").write_text("x")
+            store._set_aside(root, stg, "plain")
+            assert unlinked == []
+            try:
+                os.symlink(tmp_path, tmp_path / "root" / "staging" / "link")
+            except OSError:
+                pytest.skip("no symlinks here")
+            store._set_aside(root, stg, "link")
+            assert unlinked == ["link"]
+    assert len(quarantined(tmp_path / "root")) == 1
+
+
+def test_estale_on_the_entry_rename_walks_again(tmp_path, monkeypatch):
+    """I4: ESTALE is a re-walk from the root, not an error."""
+    store = make(tmp_path)
+    seen = []
+
+    def fail(self, name, target, new_name):
+        if at_address((None, None, None, new_name)) and not seen:
+            seen.append(1)
+            raise OSError(errno.ESTALE, "stale")
+
+    recording_rename(monkeypatch, [], fail)
+    c = publish(store)
+    assert (c.won, c.stored) == (True, True)
+    assert staging_names(tmp_path / "root") == []
+
+
+def test_estale_on_a_container_rename_walks_again_from_the_root(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    calls: list = []
+    seen = []
+
+    def fail(self, name, target, new_name):
+        if not at_address((None, None, None, new_name)) and not seen:
+            seen.append(1)
+            raise OSError(errno.ESTALE, "stale")
+
+    recording_rename(monkeypatch, calls, fail)
+    c = publish(store)
+    assert (c.won, c.stored) == (True, True)
+    # the stale parent was dropped: the container was made again, not retried on the same handle
+    assert len([x for x in calls if not at_address(x)]) >= 2
+
+
+def test_container_denied_is_store_not_writable_naming_the_parent(
+    tmp_path, monkeypatch
+):
+    store = make(tmp_path)
+
+    def fail(self, name, target, new_name):
+        if not at_address((None, None, None, new_name)):
+            raise PermissionError(errno.EACCES, "denied")
+
+    recording_rename(monkeypatch, [], fail)
+    with pytest.raises(StoreNotWritable) as info:
+        publish(store)
+    assert "results@1" in str(info.value)
+
+
+def test_refusal_with_no_occupant_is_raised_at_once(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    calls: list = []
+
+    def fail(self, name, target, new_name):
+        if at_address((None, None, None, new_name)):
+            raise PermissionError(errno.EACCES, "denied")
+
+    recording_rename(monkeypatch, calls, fail)
+    with pytest.raises(StoreNotWritable):
+        publish(store)
+    assert len([c for c in calls if at_address(c)]) == 1
+
+
+def test_a_failed_entry_rename_is_attempted_once(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    calls: list = []
+
+    def fail(self, name, target, new_name):
+        if at_address((None, None, None, new_name)):
+            raise OSError(errno.EIO, "disk")
+
+    recording_rename(monkeypatch, calls, fail)
+    with pytest.raises(StoreUnavailable):
+        publish(store)
+    assert len([c for c in calls if at_address(c)]) == 1
+
+
+@posix_only
+@pytest.mark.skipif(IS_WINDOWS or os.geteuid() == 0, reason="root ignores modes")
+@pytest.mark.parametrize("what", ["dir", "entry.json"])
+def test_unreadable_occupant_is_kept_not_raised(tmp_path, what):
+    """I5: a loser that cannot read the occupant keeps its outputs (RFC 5.1 step 8)."""
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    target = entry if what == "dir" else entry / "entry.json"
+    os.chmod(target, 0)
+    try:
+        again = publish(store, {"a": 2})
+    finally:
+        os.chmod(target, 0o755 if what == "dir" else 0o444)
+    assert (again.won, again.stored, again.committed_digest) == (False, False, None)
+    assert again.kept is not None and os.path.isdir(again.kept)
+    assert quarantined(tmp_path / "root") == []
+
+
+def test_unreadable_occupant_identify_error_is_kept(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    publish(store)
+
+    def identify(self, entry):
+        raise OSError(errno.EIO, "disk")
+
+    monkeypatch.setattr(PydraEntryV1, "identify", identify)
+    again = publish(store, {"a": 2})
+    assert (again.won, again.stored, again.committed_digest) == (False, False, None)
+    assert again.kept is not None
+
+
+def test_loser_binds_the_occupant_to_the_address_it_lost(tmp_path):
+    import json
+
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    meta = entry / "entry.json"
+    os.chmod(meta, 0o644)
+    doc = json.loads(meta.read_text())
+    doc["checksum"] = "python-someone-else"
+    meta.write_text(json.dumps(doc))
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+    assert len(quarantined(tmp_path / "root")) == 1
+
+
+def test_hashed_cdir_misfiling_is_refused(tmp_path):
+    store = make(tmp_path)
+    a = publish(store, {"v": 1}, checksum="ABC")
+    other = cdir_for("Abc")
+    src = entry_path(tmp_path / "root", a)
+    from pydra.engine.portable.layout import shard_for
+
+    dest = tmp_path / "root" / "results@1" / shard_for(other, "Abc", "sha256-2") / other
+    dest.mkdir(parents=True)
+    src.rename(dest / a.entry.fingerprint)
+    from pydra.engine.portable.entry import MisfiledEntry
+
+    with pytest.raises(MisfiledEntry):
+        store.read(EntryRef(str(tmp_path / "root"), other, a.entry.fingerprint), None)
+    assert len(quarantined(tmp_path / "root")) == 1
+
+
+@posix_only
+def test_read_of_a_wrong_kind_entry_sets_it_aside(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    real = tmp_path / "elsewhere"
+    entry.rename(real)
+    entry.symlink_to(real)
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    assert not entry.exists() and real.is_dir()
+    assert len(quarantined(tmp_path / "root")) == 1
+
+
+@posix_only
+def test_a_replaced_loser_container_missing_from_the_tree_is_walked_again(
+    tmp_path, monkeypatch
+):
+    store = make(tmp_path)
+    real = StorageDir.rename
+    done = []
+
+    def rename(self, name, target, new_name):
+        if len(new_name) == 64 and not done:
+            done.append(1)
+            live = Path(target.path)
+            os.rename(
+                live, live.with_name("orphan")
+            )  # gone from the tree, not replaced
+        real(self, name, target, new_name)
+
+    monkeypatch.setattr(StorageDir, "rename", rename)
+    c = publish(store)
+    assert (c.won, c.stored) == (True, True)
+    assert store.read(c.entry, None).outputs == OUT
+    assert staging_names(tmp_path / "root") == []
+
+
+@posix_only
+def test_loser_reseals_a_valid_unsealed_occupant(tmp_path):
+    store = killed(tmp_path, "seal")
+    ref = EntryRef(str(tmp_path / "root"), "python-abc", IDENT.fingerprint(CTX))
+    entry = entry_path(tmp_path / "root", Committed(ref, True, "", None, True, None))
+    try:
+        assert stat.S_IMODE(entry.stat().st_mode) == 0o755
+        again = publish(store)
+        assert (again.won, again.stored) == (False, True)
+        assert stat.S_IMODE(entry.stat().st_mode) == 0o555
+    finally:
+        os.chmod(entry, 0o755)
+
+
+@posix_only
+def test_staging_mode_while_writing_and_syncs(tmp_path, monkeypatch):
+    modes = []
+    real_stage = PydraEntryV1.stage
+
+    def stage(self, staging, *a, **k):
+        modes.append(stat.S_IMODE(os.stat(staging.path).st_mode))
+        return real_stage(self, staging, *a, **k)
+
+    monkeypatch.setattr(PydraEntryV1, "stage", stage)
+    synced: list = []
+    real_sync = StorageDir.sync
+
+    def sync(self):
+        synced.append(self.path)
+        return real_sync(self)
+
+    monkeypatch.setattr(StorageDir, "sync", sync)
+    store = make(tmp_path)
+    synced.clear()
+    c = publish(store)
+    assert modes == [0o700]
+    entry = entry_path(tmp_path / "root", c)
+    assert str(entry.parent) in synced  # the parent, after the rename
+    assert any(os.path.dirname(p) == str(tmp_path / "root" / "staging") for p in synced)
+
+    none = make(tmp_path, "none", policy=StorePolicy(durability="none"))
+    synced.clear()
+    publish(none)
+    assert synced == []
+    syncs = []
+    monkeypatch.setattr(os, "sync", lambda: syncs.append(1), raising=False)
+    entry_store = make(tmp_path, "entry", policy=StorePolicy(durability="entry"))
+    publish(entry_store)
+    assert syncs == [1]
+
+
+def test_commit_of_an_errored_result_with_outputs_publishes_nothing(tmp_path):
+    store = make(tmp_path)
+    with Submitter(worker="debug", cache_root=tmp_path / "pc") as sub:
+        job = Job(task=_Inc(a=1), name="j", submitter=sub)
+        result = _result(job, _Inc.Outputs(out=2), errored=True)
+        store.commit(_Lost(), result, job)
+    assert result.committed is None
+    assert not list((tmp_path / "root" / "results@1").iterdir())
+
+
+def test_commit_uses_the_execute_context(tmp_path):
+    phases = []
+
+    class Recording(PydraIdentityV1):
+        def context(self, job, phase):
+            phases.append(phase)
+            return super().context(job, phase)
+
+    store = make(tmp_path, identity=Recording())
+    with Submitter(worker="debug", cache_root=tmp_path / "pc") as sub:
+        job = Job(task=_Inc(a=1), name="j", submitter=sub)
+        store.commit(_Lost(), _result(job, _Inc.Outputs(out=2)), job)
+    assert phases == ["execute"]
+
+
+def test_result_defaults_to_stored(tmp_path):
+    assert Result(cache_dir=tmp_path).stored is True
+    assert Result(cache_dir=tmp_path).committed is None

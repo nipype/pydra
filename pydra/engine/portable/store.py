@@ -12,8 +12,10 @@ import contextlib
 import errno
 import logging
 import os
+import random
 import re
 import stat
+import time
 import typing as ty
 import uuid
 from pathlib import Path
@@ -63,6 +65,14 @@ logger = logging.getLogger("pydra")
 
 _DENIED = (errno.EACCES, errno.EPERM, errno.EROFS)
 _ATTEMPTS = 4
+VISIBILITY_TIMEOUT = 11.0
+"""Seconds a publish backs off while other writers settle the directories above its address."""
+_STALE = getattr(errno, "ESTALE", errno.ENOENT)
+_CONTENDED = (
+    object()
+)  # another writer's progress changed what this one saw: walk down again
+_CLEARED = object()  # a corrupt occupant was set aside: place again
+_OURS = object()  # the occupant carries this writer's token
 _HASHED_CDIR = re.compile(r"h-[0-9a-f]{64}")
 _REPARSE = 0x400
 
@@ -122,6 +132,12 @@ def _wrong_kind_error(path: str) -> WrongKindError:
     )
 
 
+def _is_link(st: os.stat_result) -> bool:
+    return stat.S_ISLNK(st.st_mode) or bool(
+        getattr(st, "st_file_attributes", 0) & _REPARSE
+    )
+
+
 def _is_wrong_kind(st: os.stat_result) -> bool:
     return (
         stat.S_ISLNK(st.st_mode)
@@ -149,6 +165,16 @@ def _discard(parent: StorageDir, name: str) -> None:
 class _Replaced(Exception):
     """A directory this writer holds was replaced by another writer's and is no longer in the
     tree; the walk from the root starts again."""
+
+
+class _Contended(Exception):
+    """The visibility timeout passed while other writers kept changing the directories."""
+
+
+def _backoff(n: int, deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise _Contended
+    time.sleep(random.uniform(0, min(0.002 * 2**n, 0.25)))
 
 
 def _rebuild(args: dict[str, ty.Any]) -> "PortableStore":
@@ -222,6 +248,7 @@ class PortableStore:
         self.work_dir = work_dir
         self.reuse = reuse
         self.on_commit = on_commit
+        self.visibility_timeout = VISIBILITY_TIMEOUT
         self._make_root()
         expected = LayoutHeader.for_store(
             identity,
@@ -331,37 +358,166 @@ class PortableStore:
 
     # -- directories --------------------------------------------------------------------------
 
+    def _quarantine_dir(self, root: StorageDir) -> StorageDir:
+        return root.child(
+            self.header.dirs["quarantine"], create=True, mode=self.policy.side_mode
+        )
+
     def _set_aside(self, root: StorageDir, parent: StorageDir, name: str) -> None:
-        """Move ``name`` (an entry, or an object of the wrong kind) out of ``parent`` to
-        ``quarantine/<uuid>``. On Windows a wrong-kind member is unlinked, because the path
-        backend refuses to rename a symlink."""
+        """Move an object of the wrong kind (a symlink, a file) out of ``parent`` to
+        ``quarantine/<uuid>``. Where the path backend cannot rename a symlink (Windows) a
+        symlink or reparse point is unlinked; anything else is renamed.
+
+        Raises
+        ------
+        WrongKindError
+            It cannot be moved.
+        """
         where = os.path.join(parent.path, name)
         try:
             st = parent.lstat(name)
         except FileNotFoundError:
             return
         try:
-            if IS_WINDOWS and _is_wrong_kind(st):
+            if IS_WINDOWS and _is_link(st):
                 parent.unlink(name)
-                return
-            with root.child(
-                self.header.dirs["quarantine"], create=True, mode=self.policy.side_mode
-            ) as q:
-                parent.rename(name, q, uuid.uuid4().hex)
+            else:
+                with self._quarantine_dir(root) as q:
+                    parent.rename(name, q, uuid.uuid4().hex)
         except FileNotFoundError:
             return
         except OSError as err:
-            if _is_wrong_kind(st):
-                raise _wrong_kind_error(where) from err
-            raise
-        logger.warning("%s was moved to quarantine", where)
+            raise _wrong_kind_error(where) from err
+        logger.warning(
+            "%s is not an entry or a directory and was moved to quarantine", where
+        )
+
+    def _checksum_of(self, entry: StorageDir, cdir: str) -> str:
+        """The checksum that ``cdir`` stands for: itself, or for a hashed name the checksum the
+        entry records if that gives this directory (otherwise ``cdir``, which the read then
+        finds misfiled)."""
+        if _HASHED_CDIR.fullmatch(cdir):
+            recorded = self.format.identify(entry)[0]
+            if cdir_for(recorded) == cdir:
+                return recorded
+        return cdir
+
+    def _quarantine(
+        self,
+        root: StorageDir,
+        parent: StorageDir,
+        name: str,
+        cdir: str,
+        identity: os.stat_result | None,
+    ) -> bool | None:
+        """Move the entry ``name`` of ``parent`` aside and check what was moved (RFC 0003
+        section 6.3): rename it to ``quarantine/<uuid>`` (within ``parent`` as ``q-<uuid>`` when
+        this user cannot move it across directories), re-verify the moved copy against its
+        address, and put it back if it verifies, because another writer committed a valid entry
+        between the caller's check and the rename. A corrupt copy is stamped, so that
+        ``collect`` ages it from the move.
+
+        The owner of an entry sealed without owner write gives itself write first, which moving
+        a directory needs. ``identity`` is the ``fstat`` of the entry the caller found corrupt:
+        an entry with another inode replaced it and is left alone.
+
+        Returns
+        -------
+        True
+            The address is clear (the entry was moved and is corrupt, or was already gone).
+        False
+            It was replaced, or the moved copy verified and was restored.
+        None
+            It cannot be moved.
+        """
+        where = os.path.join(parent.path, name)
+        try:
+            entry = parent.child(name)
+        except FileNotFoundError:
+            return True
+        except WrongKindError:
+            self._set_aside(root, parent, name)
+            return True
+        with entry:
+            held = entry.fstat()
+            if identity is not None and (held.st_dev, held.st_ino) != (
+                identity.st_dev,
+                identity.st_ino,
+            ):
+                return False
+            if (
+                not IS_WINDOWS
+                and held.st_uid == os.geteuid()
+                and not held.st_mode & 0o200
+            ):
+                with contextlib.suppress(OSError):
+                    entry.set_mode(stat.S_IMODE(held.st_mode) | 0o200)
+        try:
+            now = parent.lstat(name)
+        except FileNotFoundError:
+            return True
+        if (now.st_dev, now.st_ino) != (held.st_dev, held.st_ino):
+            return False
+        moved = uuid.uuid4().hex
+        try:
+            with self._quarantine_dir(root) as q:
+                try:
+                    parent.rename(name, q, moved)
+                except PermissionError:
+                    moved = "q-" + moved
+                    parent.rename(name, parent, moved)
+                    holder = parent
+                else:
+                    holder = None
+                return self._after_move(root, parent, name, cdir, moved, holder or q)
+        except FileNotFoundError:
+            return True
+        except OSError as err:
+            logger.warning("could not move %s aside: %s", where, err)
+            return None
+
+    def _after_move(
+        self,
+        root: StorageDir,
+        parent: StorageDir,
+        name: str,
+        cdir: str,
+        moved: str,
+        holder: StorageDir,
+    ) -> bool:
+        where = os.path.join(parent.path, name)
+        with holder.child(moved) as copy:
+            try:
+                checksum = self._checksum_of(copy, cdir)
+                self.format.read(copy, checksum, name, None, self.trust, root=root)
+            except CorruptEntry as err:
+                stamp = copy._fd if copy._fd is not None else copy.path
+                with contextlib.suppress(OSError):
+                    os.utime(stamp, None)
+                logger.warning("%s was moved to quarantine: %s", where, err)
+                return True
+            except Exception:  # verifies or cannot be judged: it is not shown corrupt
+                pass
+        with contextlib.suppress(OSError):
+            holder.rename(
+                moved, parent, name
+            )  # without replacement of a non-empty entry
+            self._narrow(parent, name)
+            logger.warning("%s verified after it was moved and was put back", where)
+        return False
 
     def _container(
         self, root: StorageDir, staging: StorageDir, parent: StorageDir, name: str
     ) -> StorageDir:
         """Open the container directory ``name`` of ``parent``, making it if absent: it is
         made in ``staging`` with the container mode and renamed into place, so a kill never
-        leaves it private; a loser of that rename uses the existing directory."""
+        leaves it private; a loser of that rename uses the existing directory.
+
+        Raises
+        ------
+        _Replaced
+            ``parent`` is no longer in the tree (``ENOENT`` or ``ESTALE``): walk down again.
+        """
         for _ in range(_ATTEMPTS):
             try:
                 return parent.child(name)
@@ -370,6 +526,10 @@ class PortableStore:
             except WrongKindError:
                 self._set_aside(root, parent, name)
                 continue
+            except OSError as err:
+                if err.errno == _STALE:
+                    raise _Replaced(parent.path) from err
+                raise
             tmp = uuid.uuid4().hex
             with self._denied(parent.path):
                 staging.child(tmp, create=True, mode=self.policy.container_mode).close()
@@ -377,21 +537,28 @@ class PortableStore:
                     staging.rename(tmp, parent, name)
                 except OSError as err:
                     _discard(staging, tmp)
-                    if err.errno in _DENIED and not self._occupied(parent, name):
-                        raise
-                    if err.errno == errno.ENOENT and not self._occupied(parent, name):
+                    if self._occupied(parent, name):
+                        continue  # a lost race: use the container that is there
+                    if err.errno in (errno.ENOENT, _STALE):
                         raise _Replaced(parent.path) from err
-                    continue  # a lost race, or a failure that the next attempt shows again
+                    raise
                 if self.policy.durability == "member":
                     parent.sync()
-        raise StoreUnavailable(f"could not make {os.path.join(parent.path, name)}")
+        raise _Replaced(parent.path)
 
     def _cdir_dir(
-        self, root: StorageDir, staging: StorageDir, shard: str, cdir: str
+        self,
+        root: StorageDir,
+        staging: StorageDir,
+        shard: str,
+        cdir: str,
+        deadline: float,
     ) -> list[StorageDir]:
         """The handles of ``<entries>``, ``<shard>`` and ``<cdir>``, made if absent. The caller
-        closes them."""
-        for _ in range(_ATTEMPTS * 4):
+        closes them. A container replaced by another writer's, or gone stale, starts the walk
+        again from the root after a jittered pause, until ``deadline``."""
+        n = 0
+        while True:
             handles: list[StorageDir] = []
             try:
                 handles.append(
@@ -408,7 +575,8 @@ class PortableStore:
                 raise
             for h in handles:
                 h.close()
-        raise StoreUnavailable(f"could not make the directories of {shard}/{cdir}")
+            n += 1
+            _backoff(n, deadline)
 
     @staticmethod
     def _attached(root: StorageDir, handles: list[StorageDir]) -> bool:
@@ -550,42 +718,91 @@ class PortableStore:
         writer: str,
         digest: str,
     ) -> Committed:
-        kept = os.path.join(staging.path, name)
-        for _ in range(_ATTEMPTS):
-            handles = self._cdir_dir(root, staging, shard, ref.cdir)
-            try:
-                cdir_dir = handles[-1]
-                try:
-                    with self._denied(cdir_dir.path):
-                        staging.rename(name, cdir_dir, ref.fingerprint)
-                except StoreUnavailable as err:
-                    if not self._occupied(cdir_dir, ref.fingerprint):
-                        if err.errno == errno.ENOENT:
-                            continue  # a container above was replaced: walk down again
-                        raise  # a refusal to write is not a lost race
-                else:
-                    if self._settled(root, staging, name, handles, ref):
-                        return Committed(ref, True, digest, digest, True, None)
-                    continue
-                verdict = self._lost(
-                    root, cdir_dir, ref, checksum, task, writer, digest
-                )
-                if verdict == "retry":
-                    continue
-                if verdict == "ours":
-                    if self._settled(root, staging, name, handles, ref):
-                        return Committed(ref, True, digest, digest, True, None)
-                    continue
-                stored = verdict == digest
-                return Committed(
-                    ref, False, digest, verdict, stored, None if stored else kept
-                )
-            finally:
-                for h in handles:
-                    h.close()
-        raise StoreUnavailable(
-            f"could not settle the address {ref.cdir}/{ref.fingerprint} after {_ATTEMPTS} tries"
+        """Rename the staged entry to its address, settling a lost race (RFC 0003 section 5.1
+        steps 6 to 8). Contention (another writer replaced a container, or the occupant came or
+        went) is retried with jittered backoff until the visibility timeout; a corrupt occupant
+        is set aside a bounded number of times. Exhausting either keeps the outputs:
+        ``stored=False``, ``kept`` the staged entry."""
+        kept = Committed(
+            ref, False, digest, None, False, os.path.join(staging.path, name)
         )
+        deadline = time.monotonic() + self.visibility_timeout
+        corrupt = _ATTEMPTS
+        n = 0
+        while True:
+            try:
+                try:
+                    result = self._attempt(
+                        root, staging, name, ref, shard, checksum, task, writer, digest,
+                        deadline,
+                    )  # fmt: skip
+                except OSError as err:
+                    if err.errno != _STALE:
+                        raise
+                    result = _CONTENDED
+                if result is _CONTENDED:
+                    n += 1
+                    _backoff(n, deadline)
+                    continue
+            except _Contended:
+                return kept
+            if result is _CLEARED:
+                corrupt -= 1
+                if corrupt <= 0:
+                    return kept
+                continue
+            return ty.cast(Committed, result)
+
+    def _attempt(
+        self,
+        root: StorageDir,
+        staging: StorageDir,
+        name: str,
+        ref: EntryRef,
+        shard: str,
+        checksum: str,
+        task: "Task | None",
+        writer: str,
+        digest: str,
+        deadline: float,
+    ) -> "Committed | object":
+        handles = self._cdir_dir(root, staging, shard, ref.cdir, deadline)
+        try:
+            cdir_dir = handles[-1]
+            try:
+                with self._denied(cdir_dir.path):
+                    staging.rename(name, cdir_dir, ref.fingerprint)
+            except StoreUnavailable as err:
+                if not self._occupied(cdir_dir, ref.fingerprint):
+                    if err.errno in (
+                        errno.ENOENT,
+                        _STALE,
+                        errno.EEXIST,
+                        errno.ENOTEMPTY,
+                    ):
+                        return (
+                            _CONTENDED  # a container was replaced, or the occupant went
+                        )
+                    raise  # a refusal to write, or a failure, is not a lost race
+            else:
+                return self._settled(root, staging, name, handles, ref, digest)
+            verdict = self._lost(root, cdir_dir, ref, checksum, task, writer)
+            if verdict is _OURS:
+                return self._settled(root, staging, name, handles, ref, digest)
+            if verdict is _CONTENDED or verdict is _CLEARED:
+                return verdict
+            stored = verdict == digest
+            return Committed(
+                ref,
+                False,
+                digest,
+                ty.cast("str | None", verdict),
+                stored,
+                None if stored else os.path.join(staging.path, name),
+            )
+        finally:
+            for h in handles:
+                h.close()
 
     def _settled(
         self,
@@ -594,15 +811,15 @@ class PortableStore:
         name: str,
         handles: list[StorageDir],
         ref: EntryRef,
-    ) -> bool:
+        digest: str,
+    ) -> "Committed | object":
         """Seal the entry just placed, unless a container above it was replaced meanwhile, in
-        which case it is moved back to ``staging`` and False is returned: the caller places it
-        again."""
+        which case it is moved back to ``staging`` and the caller places it again."""
         if not self._attached(root, handles):
             handles[-1].rename(ref.fingerprint, staging, name)
-            return False
+            return _CONTENDED
         self._seal(handles[-1], ref.fingerprint)
-        return True
+        return Committed(ref, True, digest, digest, True, None)
 
     @staticmethod
     def _occupied(cdir_dir: StorageDir, fingerprint: str) -> bool:
@@ -612,18 +829,19 @@ class PortableStore:
             return False
         return True
 
+    def _narrow(self, parent: StorageDir, name: str) -> None:
+        if self.policy.sealed_mode is not None:
+            parent.set_mode(self.policy.sealed_mode, name)
+
     def _seal(self, cdir_dir: StorageDir, fingerprint: str) -> None:
         """Narrow the committed entry to the sealed mode and flush its parent; a failure to
         seal leaves a readable entry that its owner's next read seals."""
-        if self.policy.sealed_mode is not None:
-            try:
-                cdir_dir.set_mode(self.policy.sealed_mode, fingerprint)
-            except OSError as err:
-                logger.warning(
-                    "could not seal %s: %s",
-                    os.path.join(cdir_dir.path, fingerprint),
-                    err,
-                )
+        try:
+            self._narrow(cdir_dir, fingerprint)
+        except OSError as err:
+            logger.warning(
+                "could not seal %s: %s", os.path.join(cdir_dir.path, fingerprint), err
+            )
         if self.policy.durability == "member":
             with contextlib.suppress(OSError):
                 cdir_dir.sync()
@@ -636,63 +854,55 @@ class PortableStore:
         checksum: str,
         task: "Task | None",
         writer: str,
-        digest: str,
-    ) -> "str | None":
-        """The occupant of the address after a rename that did not take: ``"ours"`` when it
-        carries this writer's token (the rename succeeded and its reply was lost), ``"retry"``
-        after it was set aside or vanished, otherwise its digest or None if it cannot be read
-        by this store."""
+    ) -> "str | None | object":
+        """The occupant of the address after a rename that did not take: ``_OURS`` when it
+        carries this writer's token (the rename succeeded and its reply was lost),
+        ``_CONTENDED`` when it vanished or was replaced meanwhile, ``_CLEARED`` after a corrupt
+        one was set aside, otherwise its digest, or None if this store cannot read it.
+        """
         try:
             entry = cdir_dir.child(ref.fingerprint)
         except FileNotFoundError:
-            return "retry"
+            return _CONTENDED
         except WrongKindError:
-            return self._clear(root, cdir_dir, ref)
+            try:
+                self._set_aside(root, cdir_dir, ref.fingerprint)
+            except WrongKindError as err:
+                logger.warning("%s", err)
+                return None
+            return _CLEARED
+        except OSError as err:
+            if err.errno == _STALE:
+                raise
+            return None
         with entry:
+            identity = entry.fstat()
             try:
                 try:
                     if self.format.identify(entry)[1] == writer:
-                        return "ours"
+                        return _OURS
                 except CorruptEntry:
                     pass
                 stored = self.format.read(
                     entry, checksum, ref.fingerprint, None, self.trust, root=root
                 )
-            except (CorruptEntry, MisfiledEntry):
+            except CorruptEntry:
                 pass
             except FileNotFoundError:
-                return "retry"
-            except (EntryFormatUnknown, EntryNotTrusted, StoreUnavailable):
+                return _CONTENDED
+            except OSError as err:  # unreadable, not trusted, or of another format
+                if err.errno == _STALE:
+                    raise
+                return None
+            except (EntryFormatUnknown, EntryNotTrusted):
                 return None
             else:
                 self._reseal(entry)
                 return stored.digest
-            identity = os.fstat(entry._fd) if entry._fd is not None else None
-        return self._clear(root, cdir_dir, ref, identity)
-
-    def _clear(
-        self,
-        root: StorageDir,
-        cdir_dir: StorageDir,
-        ref: EntryRef,
-        identity: os.stat_result | None = None,
-    ) -> "str | None":
-        """Set the occupant aside so the commit can be retried; None if it cannot be moved.
-        An entry replaced since it was read (a different inode) is left alone."""
-        try:
-            if identity is not None:
-                now = cdir_dir.lstat(ref.fingerprint)
-                if (now.st_dev, now.st_ino) != (identity.st_dev, identity.st_ino):
-                    return "retry"
-            self._set_aside(root, cdir_dir, ref.fingerprint)
-        except OSError as err:
-            logger.warning(
-                "could not move %s aside: %s",
-                os.path.join(cdir_dir.path, ref.fingerprint),
-                err,
-            )
+        cleared = self._quarantine(root, cdir_dir, ref.fingerprint, ref.cdir, identity)
+        if cleared is None:
             return None
-        return "retry"
+        return _CLEARED if cleared else _CONTENDED
 
     def _reseal(self, entry: StorageDir) -> None:
         """Give an entry that this user owns the mode the header expects, as an entry whose
@@ -776,12 +986,9 @@ class PortableStore:
                     self._set_aside(root, cdir_dir, ref.fingerprint)
                     raise CorruptEntry(str(err)) from err
                 with entry:
+                    identity = entry.fstat()
                     try:
-                        checksum = ref.cdir
-                        if _HASHED_CDIR.fullmatch(ref.cdir):
-                            recorded = self.format.identify(entry)[0]
-                            if cdir_for(recorded) == ref.cdir:
-                                checksum = recorded
+                        checksum = self._checksum_of(entry, ref.cdir)
                         stored = self.format.read(
                             entry,
                             checksum,
@@ -791,8 +998,9 @@ class PortableStore:
                             root=root,
                         )
                     except CorruptEntry:
-                        identity = entry.fstat()
-                        self._clear(root, cdir_dir, ref, identity)
+                        self._quarantine(
+                            root, cdir_dir, ref.fingerprint, ref.cdir, identity
+                        )
                         raise
                     self._reseal(entry)
                     return self._result(stored, entry, task)
