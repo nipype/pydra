@@ -12,6 +12,12 @@ marked, and §4.3 orders them after it.
 Revision 2 answers the review of the first draft (PR #930). Where this revision disagrees with a
 finding, the disagreement is stated in place.
 
+RFC 0003 (PR #931, `PortableStore`) needs six additions here, which its §13 lists. Each is stated
+where it belongs and marked "Under a `PortableStore`": `job.attempt` (§3.1), `Result.committed`
+(§3.1), what travels with a job (§3.4), `find(job)` in `ready()` (§3.1), result reads through
+`_committed.json` (§3.3) and the workflow-job steps (§3.1). With a `PickleStore` none of them
+changes anything.
+
 ## 1. Motivation
 
 `Submitter` does two jobs. It works out which jobs can run: it constructs workflows, prepares
@@ -333,7 +339,7 @@ class GraphRunner:
 
 @attrs.frozen
 class Round:
-    dispatch: list[Job]           # each handed out once; job.rerun already set
+    dispatch: list[Job]           # each handed out once; job.rerun and job.attempt already set
     settled: list[Settled]        # completed inside this call, never dispatched
     unrunnable: list[Unrunnable]  # marked unrunnable inside this call
     retry_after: float | None     # seconds until a waiting workflow lease is tried again
@@ -350,7 +356,7 @@ class Unrunnable:
     index: int | None             # the state index, None for the node as a whole
     upstream: list[str]           # the upstream nodes whose failed or unrunnable elements it reads
 
-Outcome = Result | Failed | NotRun
+Outcome = Result | Failed | NotRun           # Result.committed: Committed | None (RFC 0003 §7.2)
 @attrs.frozen
 class Failed:  error: BaseException
 @attrs.frozen
@@ -363,9 +369,27 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
 `rerun` and `propagate_rerun`: the outer job gets `rerun`, inner jobs get
 `rerun and propagate_rerun` (today's `:575`, `:702`).
 
+- **Under a `PortableStore`: `job.attempt`.** `ready()` gives each job in `Round.dispatch` an
+  `attempt` id, a UUID, when it hands the job out; a task with `can_resume` gets `"resume"`. A job
+  that is settled, propagated or marked unrunnable is never handed out and has none. The store
+  derives the job's work directory from `job.checksum`, the lookup context's fingerprint and
+  `job.attempt` (RFC 0003 §5.4), so the checksum there is the suffixed one of §2.3(a). A
+  `PickleStore` ignores `attempt`.
+- **Under a `PortableStore`: `find(job)` in `ready()`.** Where `ready()` reads a store, through
+  `read_succeeded` or for every job under `lookup_before_dispatch`, a runner over a store that has
+  `find` (found with `getattr`, as `read_succeeded` is at `submitter.py:774`) calls `find(job)`
+  instead. A `Hit` settles the job as `stored`; a `Miss` dispatches it; a `Verify` dispatches it
+  with `job.verify` set to the candidate, so the executing process compares its fresh outputs with the
+  stored entry before publishing (RFC 0003 §5.2, §7.1). `read_succeeded` returns `Result | None`
+  and cannot carry the verify mark, which is why `find` replaces it there. The lookup comes after
+  the gate and absence steps of §2.3(b), as every store read does.
+
 **`complete(job, outcome)`:**
 - A `Result` (errored or not) is the job's result. It is held on the job, so lazy reads by readers
-  use it without a store read.
+  use it without a store read. Under a `PortableStore` the `Result` carries `committed`, the
+  `Committed` that `publish` returned (RFC 0003 §7.2), and `complete()` keeps it with the `Result`.
+  `Outcome` is unchanged. A `Result` with `stored=False` (outputs computed but not committed, RFC
+  0003 §7.3) is a success: its readers run, and it is not reported in `Round.unrunnable`.
 - `Failed` is a job that could not be run, recorded as `record_job_error` does now
   (`submitter.py:1327-1333`). Readers become unrunnable.
 - **Unrunnable elements are reported.** An element that reads a failed or unrunnable upstream
@@ -447,11 +471,25 @@ are written by the runner. For each workflow job the runner does what `Job.run_a
 - **`LeaseLost`.** If the lease was taken over, `commit` raises `LeaseLost` (`store.py:591`). The
   runner records it as an error entry of the workflow job with `phase="commit"`, visible in
   `entries` and in the raised `WorkflowError`. `ready()` and `complete()` do not raise it.
+- **Under a `PortableStore`** the four steps take this form (RFC 0003 §13 item 6):
+  - *Lease:* `try_take` on what `store.acquire` returns (`store.py:579-585` for `PickleStore`).
+    That lease is always held, so `try_take` returns `None` at once, unless `dedupe` is on, the task
+    is resumable or the job is a rerun (RFC 0003 §5.3, §10).
+  - *Store check:* `find(job)`, before or under the lease. A `Hit` completes the job as
+    `workflow-stored` and its nodes are not expanded; a `Verify` sets `job.verify` and the workflow
+    is expanded.
+  - *Expansion:* no success record is withdrawn, because there is none (RFC 0003 §5.2).
+  - *Commit:* `publish` of the `WorkflowOutputs` under the workflow job's `job.checksum`, suffix
+    included, and its execute context, returning `Committed`. `publish` never raises `LeaseLost`, so
+    the `phase="commit"` entry does not arise; a `LeaseTimeout` from a `dedupe` lease is still
+    recorded with `phase="lease"`. An error in a node publishes nothing, writes `_error.json` to the
+    workflow job's work directory and records the error entry as today (RFC 0003 §11).
 
 The outer job of a `Submitter` call is a workflow job whenever the task is a workflow or is split
 (`submitter.py:443-465`), so its result is committed by the runner, and `runner.result()` and
 `Submitter.__call__`'s check (`:503-513`) read it from the store as today. An outer leaf job is
-handed out by `ready()` and committed by its executor.
+handed out by `ready()` and committed by its executor. Both reads go through `Job.result()`, so
+under a `PortableStore` they read as §3.3 describes for the Slurm adapter.
 
 **Resume.** The runner has no durable state of its own; the store is the durable state. A resumed
 run is a new `GraphRunner` over the same task and store. What it skips, precisely:
@@ -470,6 +508,8 @@ run is a new `GraphRunner` over the same task and store. What it skips, precisel
   it out, so such an executor is given only jobs with no acceptable result. `plan()` counts hits
   from records, and from lookups when that option is set.
 - A gate reads its predicate's stored result and takes the same branch.
+- Under a `PortableStore`, `read_succeeded` and `lookup` give way to `find(job)` (above), and a
+  `Verify` is dispatched, not skipped.
 
 ### 3.2 The `Executor` protocol
 
@@ -601,6 +641,13 @@ implicit split workflow (`:443-465`). The router keeps its signature (`utils/rou
     caching. The adapter then retries with backoff up to `visibility_timeout`, by default today's
     eleven seconds (`submitter.py:628-634`). Only after that does it report `Failed` with today's
     diagnosis text. The tolerance moves here because only a store-reading adapter needs it.
+  - **Under a `PortableStore`** `job.result()` (`job.py:612-624` reads through `lookup` today)
+    reads by `job.committed` when set, otherwise by `<work dir>/_committed.json`, and when that is
+    absent after the visibility retry, by `store.read` of the entry at the job's own address. Only
+    when that also finds nothing does the adapter report `Failed`, naming the work directory (RFC
+    0003 §5.4, §7.2). A job whose outputs were not stored (`stored=False`) is reported as its
+    `Result` and its readers run. The same `Job.result()` serves `runner.result()` (§3.1) and the
+    final read of `Submitter.__call__` (`submitter.py:503-513`).
   - `batches = False`, except as below.
 - **`slurm`** gains `submit_many(jobs)`; `WorkerExecutor` sets `batches = True` for a worker that
   has it. The tick-based grouping (`workers/slurm.py:329-367`) is replaced by the round it is given.
@@ -621,9 +668,9 @@ are released together the two are the same set.
 
 | Concern | Runner | Executor |
 |---|---|---|
-| Identity | computes `job.checksum` once in the submitting process (`job.py:237-246`), through `__checksum__` or `checksum=` (K2, `compose/base/task.py:483-508`) or the declared `version` (K1), and the context once (`job.py:249-262`) | never rehashes: checksum and context travel with the job (`job.py:192-206`) |
+| Identity | computes `job.checksum` once in the submitting process (`job.py:237-246`), through `__checksum__` or `checksum=` (K2, `compose/base/task.py:483-508`) or the declared `version` (K1), and the context once (`job.py:249-262`) | never rehashes: checksum and context travel with the job (`job.py:192-206`); under a `PortableStore` so do `attempt` and `verify`, and the context is the identity's lookup context (RFC 0003 §4, §7.1) |
 | Gate and absence | evaluated first, never keyed, never committed (§2.3(b)) | never sees a gated-off or propagated-absent job |
-| Hit before dispatch | `ready()`, through `read_succeeded` (`store.py:547-568`), and through `lookup` when `lookup_before_dispatch` | — |
+| Hit before dispatch | `ready()`, through `read_succeeded` (`store.py:547-568`), and through `lookup` when `lookup_before_dispatch`; `find(job)` in their place when the store has it (§3.1) | — |
 | Hit under the lease | — | `Job.run` checks the store after taking the lease (`job.py:415-424`) |
 | Lease | workflow jobs (§3.1) | leaf jobs, inside `Job.run` (#924 `DirectoryLease`, #928) |
 | Commit and success record | workflow jobs: `store.commit`, record written last and only while the lease is held (`store.py:587-620`); withdrawn before re-expansion (`job.py:499`) | leaf jobs: the same calls inside `Job.run` (`job.py:427`, `:459`) |
@@ -685,6 +732,9 @@ What such a driver must and need not supply:
 - **Its store** is a `ResultStore` adapter over the driver's own store. The runner commits workflow
   jobs to it (§3.1). If the adapter is not durable, workflow results last only for the run, and a
   resumed run re-expands them.
+- **What it forwards with a job.** If its store is a `PortableStore`, `send` carries `job.attempt`
+  and `job.verify` with the checksum and context, and the `Result` it reports carries `committed`
+  (RFC 0003 §5.4, §7.1, §7.2). A job settled by `find` in `ready()` is never sent.
 
 ## 4. Migration
 
@@ -722,15 +772,20 @@ additions behind them.
 | R1 | extract `GraphRunner` (`ready`, `complete`, `done`, `stuck`) from `expand_workflow_async` and `NodeExecution`, one runner per workflow job, driven by `Job.run_async` as now | — | none; existing suite unchanged |
 | R2 | the two drivers over one runner: synchronous for all-inline runs, asynchronous otherwise; `InlineExecutor` for `debug`; `expand_workflow` becomes a wrapper | R1 | none; `debug` keeps the caller's thread, no running loop, and `fail_fast` order |
 | R3 | `Executor` protocol (`bind`, `submit`, `cancel`, `close`), `WorkerExecutor` with the store read and visibility retry for workers that return `True`; the router dispatches to executors | R2 | none |
-| R4 | reported completion: `complete()` holds the result on the job; `update_status` stops polling dispatched jobs; the visibility retry leaves the loop for the adapter | R3 | none |
+| R4 | reported completion: `complete()` holds the result on the job, with `Result.committed` when present; `update_status` stops polling dispatched jobs; the visibility retry leaves the loop for the adapter | R3 | none |
 | R5 | `submit_many` for Slurm and SGE; tick and sleep grouping removed | R3 | array composition per round (§3.3) |
-| R6 | flattening: one runner per call; the runner leases, checks, expands and commits workflow jobs; `Lease.try_take` and `Round.retry_after`; array key gains the workflow path | R4, R5 | named changes (§4.1); tests updated for them |
-| R7 | driver model: `Round.settled`, `Round.unrunnable`, `NotRun`/`RunIncomplete`, `upstream()`, `lookup_before_dispatch`, `read_succeeded` in the protocol | R4 | opt-in |
+| R6 | flattening: one runner per call; the runner leases, checks, expands and commits workflow jobs; `Lease.try_take` and `Round.retry_after`; array key gains the workflow path; the workflow-job steps take their `PortableStore` form when RFC 0003 P4 and P5 are in | R4, R5 | named changes (§4.1); tests updated for them |
+| R7 | driver model: `Round.settled`, `Round.unrunnable`, `NotRun`/`RunIncomplete`, `upstream()`, `lookup_before_dispatch`, `read_succeeded` in the protocol; `job.attempt` on handed-out jobs, and `find(job)` with `job.verify` when the store has `find` | R4 | opt-in |
 | R8 | `plan()` (subsumes J2) | R6, F2, B2 | opt-in |
 | E2 | partial `State` (0001 §3.1 step 2): per-element release of nested fan-out, including an `Absent` splitter input per element | R1 | 0001's |
 | R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the absence suffix for supplied checksums and unhashed fields; whole-node absence for a splitter input | R6, E2 | opt-in |
 | R10b | `when=`/`unless=`: node inputs, upstream states, lazy reads and edges; the precedence rule; `select(n)` | R10a | opt-in |
 | R11 | `workflow.loop` with `index=`, `rounds`, `converged` | R10b | opt-in |
+
+RFC 0003's P8 depends on R4, which passes `Result.committed` through. Its P4 changes how
+`Job.result()` reads (§3.3), which the R3 adapter uses unchanged. The `find` and `attempt` parts of
+R7 and the `PortableStore` form in R6 can land with or after RFC 0003 P5 and P4; with a
+`PickleStore` they are inert.
 
 R5 no longer depends on #929, which has merged; the first draft listed it because arrays and the
 success-record read changed the same dispatch code. Each PR has tests on `debug` and `cf`, and on
