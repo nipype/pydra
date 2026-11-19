@@ -28,6 +28,7 @@ from pydra.utils.storage import PlatformUnsupported
 __all__ = [
     "DESCRIPTORS_SUPPORTED",
     "StorageDir",
+    "StorageEntry",
     "StoreAges",
     "StorePolicy",
     "StoreUnavailable",
@@ -41,7 +42,7 @@ _DARWIN = sys.platform == "darwin"
 DESCRIPTORS_SUPPORTED = (
     hasattr(os, "O_NOFOLLOW")
     and hasattr(os, "O_DIRECTORY")
-    and {os.open, os.mkdir, os.rename, os.link, os.stat, os.unlink}
+    and {os.open, os.mkdir, os.rename, os.link, os.stat, os.unlink, os.rmdir}
     <= os.supports_dir_fd
     and os.scandir in os.supports_fd
 )
@@ -151,7 +152,7 @@ class StorePolicy:
 
     Modes are set through descriptors, never from the umask. ``file_mode``, ``entry_mode`` and
     ``sealed_mode`` must not include group or other write, which keeps a committed entry
-    unchangeable by anyone but its owner; ``entry_mode`` must include owner write and search,
+    unchangeable by anyone but its owner; ``entry_mode`` must give the owner read, write and search,
     because a directory without them cannot be renamed into another parent. ``container_mode``
     and ``side_mode`` may be group-writable, and must be for a root that several users write.
 
@@ -198,9 +199,15 @@ class StorePolicy:
                     f"{name}={mode:#o} includes group or other write, which would let someone "
                     "but the owner change a committed entry"
                 )
-        if self.entry_mode & 0o300 != 0o300:
+        if self.file_mode & 0o400 != 0o400:
+            raise ValueError(f"file_mode={self.file_mode:#o} must include owner read")
+        if self.entry_mode & 0o700 != 0o700:
             raise ValueError(
-                f"entry_mode={self.entry_mode:#o} must include owner write and search"
+                f"entry_mode={self.entry_mode:#o} must give the owner read, write and search"
+            )
+        if self.sealed_mode is not None and self.sealed_mode & 0o500 != 0o500:
+            raise ValueError(
+                f"sealed_mode={self.sealed_mode:#o} must include owner read and search"
             )
         if self.staging_mode & 0o700 != 0o700:
             raise ValueError(
@@ -222,6 +229,13 @@ class StorePolicy:
             raise ValueError("ages must be a StoreAges")
 
 
+_DEVICE_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+
+
 def _check_name(name: str, strict: bool = False) -> None:
     """``name`` is one path component. ``strict`` (the path backend) also refuses what Windows
     reads as a drive, an alternate data stream, or a name it silently trims."""
@@ -232,13 +246,42 @@ def _check_name(name: str, strict: bool = False) -> None:
         or "\\" in name
         or "\0" in name
         or (os.altsep and os.altsep in name)
-        or (strict and (":" in name or name[-1] in ". "))
+        or (
+            strict
+            and (
+                ":" in name
+                or name[-1] in ". "
+                or name.split(".")[0].upper() in _DEVICE_NAMES
+            )
+        )
     ):
         raise ValueError(f"{name!r} is not a single path component")
 
 
 def _is_reparse(st: os.stat_result) -> bool:
     return bool(getattr(st, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+@attrs.frozen
+class StorageEntry:
+    """A name in a listing with the ``lstat`` taken when it was listed. Nothing follows a symlink."""
+
+    name: str
+    path: str
+    _lstat: os.stat_result
+
+    def stat(self) -> os.stat_result:
+        """The ``lstat`` of the entry (the link itself, for a symlink)."""
+        return self._lstat
+
+    def is_dir(self) -> bool:
+        return stat.S_ISDIR(self._lstat.st_mode)
+
+    def is_file(self) -> bool:
+        return stat.S_ISREG(self._lstat.st_mode)
+
+    def is_symlink(self) -> bool:
+        return stat.S_ISLNK(self._lstat.st_mode)
 
 
 class StorageDir:
@@ -318,7 +361,7 @@ class StorageDir:
                     if not os.path.lexists(path)
                     else NotADirectoryError
                 )(errno.ENOENT, "not a directory", path)
-            root = cls(path, None, policy, trust)
+            root = cls(os.path.abspath(path), None, policy, trust)
             if trust == "private":
                 root._check_private()
             return root
@@ -335,10 +378,7 @@ class StorageDir:
     def _check_private(self) -> None:
         if IS_WINDOWS:
             local = os.environ.get("LOCALAPPDATA")
-            here = os.path.normcase(os.path.realpath(self.path))
-            if not local or os.path.commonpath(
-                [here, os.path.normcase(os.path.realpath(local))]
-            ) != (os.path.normcase(os.path.realpath(local))):
+            if not local or not self._is_under(local):
                 raise StoreUnavailable(
                     errno.EACCES,
                     "a private root on Windows must be under the user's local application data "
@@ -355,6 +395,14 @@ class StorageDir:
                 "no one else can write it",
                 self.path,
             )
+
+    def _is_under(self, base: str) -> bool:
+        here = os.path.normcase(os.path.realpath(self.path))
+        base = os.path.normcase(os.path.realpath(base))
+        try:
+            return os.path.commonpath([here, base]) == base
+        except ValueError:  # another drive
+            return False
 
     def _live(self) -> None:
         if self._closed:
@@ -576,6 +624,18 @@ class StorageDir:
             return
         os.unlink(name, dir_fd=self._fd)
 
+    def rmdir(self, name: str) -> None:
+        """Remove the empty directory ``name`` from this directory; a symlink is refused, never
+        followed."""
+        self._live()
+        self._name(name)
+        if self._path_mode:
+            self._guard()
+            self._member(name)
+            os.rmdir(self._sub(name))
+            return
+        os.rmdir(name, dir_fd=self._fd)
+
     def lstat(self, name: str) -> os.stat_result:
         """``lstat`` of ``name`` in this directory."""
         self._live()
@@ -585,22 +645,35 @@ class StorageDir:
             return os.lstat(self._sub(name))
         return os.stat(name, dir_fd=self._fd, follow_symlinks=False)
 
-    def scandir(self) -> ty.Iterator[os.DirEntry]:
-        """List this directory. Each listing has its own directory offset, so listings may be
-        nested or interleaved. The entries are `os.DirEntry` objects: their ``is_dir()`` and
-        ``stat()`` follow symlinks unless told not to."""
+    def scandir(self) -> ty.Iterator["StorageEntry"]:
+        """List this directory. Each listing opens its own directory offset on first use, so
+        listings may be nested or interleaved, and closing a listing early releases it. Every
+        entry carries an ``lstat`` taken as it is yielded, so it stays valid after the listing
+        ends; a name removed meanwhile is skipped."""
         self._live()
+        return self._entries()
+
+    def _entries(self) -> ty.Iterator["StorageEntry"]:
         if self._path_mode:
             self._guard()
-            return os.scandir(self.path)
+            with os.scandir(self.path) as listing:
+                for entry in listing:
+                    try:
+                        st = entry.stat(follow_symlinks=False)
+                    except FileNotFoundError:
+                        continue
+                    yield StorageEntry(entry.name, entry.path, st)
+            return
         fd = os.open(".", os.O_RDONLY | _DIRECTORY | _CLOEXEC, dir_fd=self._fd)
-        return self._listing(fd)
-
-    @staticmethod
-    def _listing(fd: int) -> ty.Iterator[os.DirEntry]:
         try:
-            with os.scandir(fd) as entries:
-                yield from entries
+            with os.scandir(fd) as listing:
+                names = (entry.name for entry in listing)
+                for name in names:
+                    try:
+                        st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                    except FileNotFoundError:
+                        continue
+                    yield StorageEntry(name, self._sub(name), st)
         finally:
             os.close(fd)
 
@@ -729,14 +802,18 @@ def _reflink(src: ty.BinaryIO, dst: StorageDir, name: str) -> bool:
 
 
 def _clear_flags(fd: int) -> None:
-    """Remove BSD file flags (``uchg``, ``schg``, ...) that a clone carries over from its source,
-    so that nothing immutable is left in staging."""
-    if getattr(os.fstat(fd), "st_flags", 0):
-        if _libc().fchflags(fd, 0) != 0:
-            import ctypes
+    """Remove the BSD file flags that make a clone unusable in staging, ``UF_IMMUTABLE`` and
+    ``UF_APPEND``, which it carries over from its source. Every other flag stays: clearing
+    ``UF_COMPRESSED`` would drop a compressed file's content."""
+    flags = getattr(os.fstat(fd), "st_flags", 0)
+    blocking = flags & (
+        getattr(stat, "UF_IMMUTABLE", 0) | getattr(stat, "UF_APPEND", 0)
+    )
+    if blocking and _libc().fchflags(fd, flags & ~blocking) != 0:
+        import ctypes
 
-            err = ctypes.get_errno()
-            raise OSError(err, os.strerror(err))
+        err = ctypes.get_errno()
+        raise OSError(err, os.strerror(err))
 
 
 def _open_source(src: Path) -> ty.BinaryIO:
@@ -773,8 +850,11 @@ def copy_hashed(src: Path, dst: StorageDir, name: str, mode: int) -> tuple[str, 
     digest = hashlib.sha256()
     size = 0
     with _open_source(src) as source:
-        if _reflink(source, dst, name):
-            try:
+        expected = os.fstat(source.fileno()).st_size
+        created = False
+        try:
+            if _reflink(source, dst, name):
+                created = True
                 with dst.open_read(name) as clone:
                     _clear_flags(clone.fileno())
                     if not IS_WINDOWS:
@@ -784,19 +864,28 @@ def copy_hashed(src: Path, dst: StorageDir, name: str, mode: int) -> tuple[str, 
                         size += len(block)
                     if dst.policy.durability == "member":
                         os.fsync(clone.fileno())
-            except BaseException:
+            else:
+                with dst.open_new(name, mode) as out:
+                    created = True
+                    for block in iter(lambda: source.read(_COPY_BLOCK), b""):
+                        digest.update(block)
+                        out.write(block)
+                        size += len(block)
+                    out.flush()
+                    if dst.policy.durability == "member":
+                        os.fsync(out.fileno())
+            if size != expected:
+                raise StoreUnavailable(
+                    errno.EIO,
+                    f"copied {size} bytes of a source of size {expected}: the size changed "
+                    "during the copy or the copy lost content",
+                    os.fspath(src),
+                )
+        except BaseException:
+            if created:
                 try:
                     dst.unlink(name)
                 except OSError:
                     pass
-                raise
-            return digest.hexdigest(), size
-        with dst.open_new(name, mode) as out:
-            for block in iter(lambda: source.read(_COPY_BLOCK), b""):
-                digest.update(block)
-                out.write(block)
-                size += len(block)
-            out.flush()
-            if dst.policy.durability == "member":
-                os.fsync(out.fileno())
+            raise
     return digest.hexdigest(), size

@@ -720,3 +720,227 @@ def test_windows_read_only_attribute(root):
     assert os.access(real / "d", os.W_OK)
     root.unlink("m")
     assert not (real / "m").exists()
+
+
+@POSIX_ONLY
+@pytest.mark.skipif(sys.platform != "darwin", reason="HFS/APFS transparent compression")
+def test_copy_of_a_compressed_source_keeps_its_bytes(root, tmp_path):
+    plain = tmp_path / "plain"
+    plain.write_bytes(b"compressible " * 20000)
+    comp = tmp_path / "comp"
+    done = subprocess.run(
+        ["ditto", "--hfsCompression", str(plain), str(comp)], capture_output=True
+    )
+    if done.returncode != 0 or not os.lstat(comp).st_flags & stat.UF_COMPRESSED:
+        pytest.skip("this volume does not compress")
+    digest, size = copy_hashed(comp, root, "m", 0o444)
+    assert size == len(plain.read_bytes())
+    assert digest == hashlib.sha256(plain.read_bytes()).hexdigest()
+    assert (Path(root.path) / "m").read_bytes() == plain.read_bytes()
+
+
+@POSIX_ONLY
+@pytest.mark.skipif(sys.platform != "darwin", reason="BSD file flags")
+def test_only_immutable_and_append_flags_are_cleared(tmp_path):
+    f = tmp_path / "f"
+    f.write_bytes(b"x")
+    os.chflags(f, stat.UF_IMMUTABLE | stat.UF_HIDDEN)
+    try:
+        with open(f, "rb") as h:
+            storagedir._clear_flags(h.fileno())
+        assert os.lstat(f).st_flags == stat.UF_HIDDEN
+    finally:
+        os.chflags(f, 0)
+
+
+def test_a_source_that_changes_size_during_the_copy_is_refused(
+    root, tmp_path, monkeypatch
+):
+    src = tmp_path / "s"
+    src.write_bytes(b"abcdef")
+    real = storagedir._open_source
+
+    class Growing:
+        def __init__(self, f):
+            self.f = f
+            self.grown = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self.f.close()
+
+        def fileno(self):
+            return self.f.fileno()
+
+        def read(self, n):
+            if not self.grown:
+                self.grown = True
+                with open(src, "ab") as w:
+                    w.write(b"more")
+            return self.f.read(n)
+
+    monkeypatch.setattr(storagedir, "_open_source", lambda path: Growing(real(path)))
+    monkeypatch.setattr(storagedir, "_reflink", lambda *a, **k: False)
+    with pytest.raises(StoreUnavailable, match="size"):
+        copy_hashed(src, root, "o", 0o444)
+    assert not os.path.lexists(Path(root.path) / "o")
+
+
+def test_a_failed_copy_leaves_no_partial_member(root, tmp_path, monkeypatch):
+    src = tmp_path / "s"
+    src.write_bytes(os.urandom(3 * 1024 * 1024))
+    monkeypatch.setattr(storagedir, "_reflink", lambda *a, **k: False)
+    calls = []
+
+    def broken(fd):
+        calls.append(fd)
+        raise OSError(errno.EIO, "disk")
+
+    monkeypatch.setattr(os, "fsync", broken)
+    with pytest.raises(OSError):
+        copy_hashed(src, root, "o", 0o444)
+    assert not os.path.lexists(Path(root.path) / "o")
+    monkeypatch.undo()
+    assert copy_hashed(src, root, "o", 0o444)[1] == 3 * 1024 * 1024
+
+
+def test_a_failed_copy_does_not_remove_an_existing_member(root, tmp_path, monkeypatch):
+    src = tmp_path / "s"
+    src.write_bytes(b"new")
+    monkeypatch.setattr(storagedir, "_reflink", lambda *a, **k: False)
+    with root.open_new("o", 0o444) as f:
+        f.write(b"old")
+    with pytest.raises(FileExistsError):
+        copy_hashed(src, root, "o", 0o444)
+    assert (Path(root.path) / "o").read_bytes() == b"old"
+
+
+def test_scandir_entries_stay_valid_after_the_listing_ends(root):
+    sub = root.child("a", create=True)
+    with root.open_new("x", 0o444) as f:
+        f.write(b"x" * 22)
+    with sub.open_new("x", 0o444) as f:
+        f.write(b"y" * 5)
+    entries = {e.name: e for e in root.scandir()}
+    again = root.child("a")  # may take the listing's old descriptor number
+    assert entries["x"].stat().st_size == 22
+    assert (
+        entries["x"].is_file()
+        and not entries["x"].is_dir()
+        and not entries["x"].is_symlink()
+    )
+    assert entries["a"].is_dir()
+    assert again.lstat("x").st_size == 5
+
+
+@POSIX_ONLY
+def test_scandir_entries_do_not_follow_symlinks(root, tmp_path):
+    (Path(root.path) / "l").symlink_to(tmp_path, target_is_directory=True)
+    (entry,) = list(root.scandir())
+    assert entry.is_symlink() and not entry.is_dir()
+    assert stat.S_ISLNK(entry.stat().st_mode)
+
+
+@POSIX_ONLY
+def test_scandir_never_started_leaks_no_descriptor(root):
+    if not os.path.isdir("/dev/fd"):
+        pytest.skip("no /dev/fd")
+    before = len(os.listdir("/dev/fd"))
+    for _ in range(50):
+        root.scandir()
+    assert len(os.listdir("/dev/fd")) <= before + 1
+    it = root.scandir()
+    list(it)
+    it.close()
+
+
+@POSIX_ONLY
+def test_scandir_supports_closing_early(root):
+    for i in range(3):
+        with root.open_new(f"f{i}", 0o444):
+            pass
+    it = root.scandir()
+    next(it)
+    it.close()
+    assert len(list(root.scandir())) == 3
+
+
+def test_relative_root_survives_chdir(tmp_path, monkeypatch):
+    monkeypatch.setattr(storagedir, "DESCRIPTORS_SUPPORTED", False)
+    (tmp_path / "store").mkdir()
+    (tmp_path / "job").mkdir()
+    monkeypatch.chdir(tmp_path)
+    root = StorageDir.open_root("store", StorePolicy(), trust="trusted")
+    sub = root.child("c", create=True)
+    os.chdir(tmp_path / "job")
+    with sub.open_new("m", 0o444):
+        pass
+    root.child("d", create=True)
+    assert (tmp_path / "store" / "c" / "m").exists()
+    assert (tmp_path / "store" / "d").is_dir()
+    assert not (tmp_path / "job" / "c").exists()
+
+
+def test_windows_private_root_on_another_drive_is_refused_not_a_valueerror(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(storagedir, "DESCRIPTORS_SUPPORTED", False)
+    monkeypatch.setattr(storagedir, "IS_WINDOWS", True)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    def other_drive(paths):
+        raise ValueError("Paths don't have the same drive")
+
+    monkeypatch.setattr(os.path, "commonpath", other_drive)
+    with pytest.raises(StoreUnavailable, match="trusted"):
+        StorageDir.open_root(tmp_path, StorePolicy(), trust="private")
+
+
+@pytest.mark.parametrize(
+    "name", ["NUL", "nul", "CON", "con.txt", "PRN", "AUX.x.y", "COM1", "lpt9.log"]
+)
+def test_windows_device_names_are_refused_in_path_mode(tmp_path, monkeypatch, name):
+    monkeypatch.setattr(storagedir, "DESCRIPTORS_SUPPORTED", False)
+    root = StorageDir.open_root(tmp_path, StorePolicy(), trust="trusted")
+    with pytest.raises(ValueError):
+        root.open_new(name, 0o444)
+    for ok in ("null", "console", "com10", "COM0", "a.con"):
+        root.open_new(ok, 0o444).close()
+
+
+def test_rmdir(root):
+    root.child("d", create=True)
+    with root.child("d").open_new("m", 0o444):
+        pass
+    with pytest.raises(OSError):
+        root.rmdir("d")
+    root.child("d").unlink("m")
+    root.rmdir("d")
+    with pytest.raises(FileNotFoundError):
+        root.lstat("d")
+    with pytest.raises(ValueError):
+        root.rmdir("a/b")
+
+
+@POSIX_ONLY
+def test_rmdir_does_not_follow_a_symlink(root, tmp_path):
+    (Path(root.path) / "l").symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(OSError):
+        root.rmdir("l")
+    assert tmp_path.is_dir()
+
+
+def test_policy_requires_owner_read_and_search():
+    for kw in (
+        {"file_mode": 0o040},
+        {"file_mode": 0o200},
+        {"entry_mode": 0o300},
+        {"entry_mode": 0o500},
+        {"sealed_mode": 0o100},
+        {"sealed_mode": 0o300},
+    ):
+        with pytest.raises(ValueError, match="owner"):
+            StorePolicy(**kw)
+    StorePolicy(file_mode=0o400, entry_mode=0o700, sealed_mode=0o500)
