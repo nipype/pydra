@@ -265,12 +265,12 @@ class NodeExecution(ty.Generic[TaskType]):
     def _reported_status(job: "Job") -> str | None:
         """``"done"`` or ``"errored"`` for a job whose outcome is known, ``"pending"``
         for one that is not handed out, ``None`` for one still awaiting its report"""
-        held = getattr(job, "_held", None)
+        held = job._held
         if held is not None:
             return "errored" if held.errored else "done"
         if job.errored:
             return "errored"
-        if getattr(job, "_awaiting_run", False):
+        if job._awaiting_run:
             return None
         try:
             return "done" if job.done else "pending"
@@ -470,6 +470,21 @@ def job_error(job: "Job", exc: BaseException) -> str:
     return f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
 
 
+def result_error(job: "Job", result: "Result") -> BaseException:
+    """The error of an errored result: the one its worker recorded beside it
+    (``_error.pklz``), or a description of its absence"""
+    recorded = getattr(result, "errors", None)
+    if recorded:
+        error = recorded.get("error message")
+        if isinstance(error, BaseException):
+            return error
+        if error:
+            return RuntimeError(str(error))
+    return RuntimeError(
+        f"Job {job.name!r} errored and left no error record in {str(job.cache_dir)!r}"
+    )
+
+
 def error_entry(
     job_name: str, state_index: int | None, exc: BaseException, phase: str = "run"
 ) -> JobErrorEntry:
@@ -622,13 +637,31 @@ class GraphRunner:
                 self._failed = True
 
     def _runnable(self) -> list[Job]:
-        """The released jobs, once unrunnable marks have spread to every element that
-        reads a failed or unrunnable one (each pass spreads them one node further)"""
-        while True:
-            marked = sum(len(n.unrunnable) for n in self.exec_graph.nodes)
-            jobs = self._runnable_jobs(self.exec_graph)
-            if sum(len(n.unrunnable) for n in self.exec_graph.nodes) == marked:
-                return jobs
+        return self._runnable_jobs(self.exec_graph)
+
+    def _progress(self) -> tuple:
+        """The state of the graph that one pass of :meth:`ready` can advance
+
+        A pass releases at most one more node along a chain, and it can advance without
+        releasing a job: a node starts with no elements, a job is settled from the store
+        or an element is marked unrunnable. ``ready`` repeats its pass until a pass hands
+        out a job or leaves this value unchanged, so that an empty round means nothing
+        can progress. Every kind of progress a pass can make must be part of the value.
+        """
+        return (
+            len(self._handed),
+            tuple(
+                (
+                    bool(n.started),
+                    len(n.successful),
+                    len(n.errored),
+                    len(n.unrunnable),
+                    len(n.queued),
+                    len(n.blocked or ()),
+                )
+                for n in self.exec_graph.nodes
+            ),
+        )
 
     @staticmethod
     def _runnable_jobs(graph: "DiGraph[NodeExecution]") -> list[Job]:
@@ -662,9 +695,13 @@ class GraphRunner:
         Round
             The jobs to dispatch, each handed out once, with ``job.rerun`` set
         """
-        candidates = [j for j in self._runnable() if j not in self._handed]
-        if candidates and not self._inner_rerun:
-            candidates = self._read_succeeded(candidates)
+        while True:
+            before = self._progress()
+            candidates = [j for j in self._runnable() if j not in self._handed]
+            if candidates and not self._inner_rerun:
+                candidates = self._read_succeeded(candidates)
+            if candidates or self._progress() == before:
+                break
         if limit is not None and len(candidates) > limit:
             if limit > 0:
                 logger.info(
@@ -736,9 +773,7 @@ class GraphRunner:
         else:
             job._held = outcome
             if getattr(outcome, "errored", False):
-                exc = RuntimeError(
-                    f"Job {job.name!r} errored, see its error record in {str(job.cache_dir)!r}"
-                )
+                exc = result_error(job, outcome)
                 job._errored = True
                 self._failed = True
                 self._errors.append(job_error(job, exc))

@@ -145,9 +145,11 @@ async def drive(
     def share(job: "Job", outcome: "Outcome") -> None:
         """Complete a job that was not run because another with its checksum was, with
         that job's outcome; the failure itself is recorded for the job that ran"""
-        if isinstance(outcome, Failed):
+        if isinstance(outcome, Failed) or outcome.errored:
             job._awaiting_run = False
             job._errored = True
+            if not isinstance(outcome, Failed):
+                job._held = outcome
         else:
             runner.complete(job, outcome)
 

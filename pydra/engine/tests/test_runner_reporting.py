@@ -4,6 +4,7 @@ import asyncio
 import time
 from types import SimpleNamespace
 import pytest
+from pydra.compose import python, workflow
 from pydra.engine.drivers import drive
 from pydra.engine.executor import InlineExecutor
 from pydra.engine.job import Job
@@ -140,20 +141,108 @@ def test_cf_worker_runs_on_the_running_loop(tmp_path):
 def test_unrunnable_spreads_in_one_round(submitter):
     """One ``ready()`` after a failure marks every transitive reader, so the driver
     needs no waiting round to see that the graph is done"""
-    from pydra.compose import workflow
     from pydra.engine.runner import Failed
     from pydra.engine.tests.utils import FunAddVar
 
     @workflow.define
-    def Three(x):
-        a = workflow.add(FunAddVar(a=x, b=1), name="A")
-        b = workflow.add(FunAddVar(a=a.out, b=1), name="B")
-        c = workflow.add(FunAddVar(a=b.out, b=1), name="C")
-        return c.out
+    def Deep(x):
+        prev = workflow.add(FunAddVar(a=x, b=1), name="n0")
+        for i in range(1, 7):
+            prev = workflow.add(FunAddVar(a=prev.out, b=1), name=f"n{i}")
+        return prev.out
 
-    runner = runner_for(submitter, Three(x=1))
+    runner = runner_for(submitter, Deep(x=1))
     (a,) = runner.ready().dispatch
     runner.complete(a, Failed(RuntimeError("no")))
     assert runner.ready().dispatch == []
     assert runner.done
     assert runner.stuck() is None
+
+
+@python.define
+def Inc(x: int) -> int:
+    return x + 1
+
+
+@python.define
+def Total(xs: list[int]) -> int:
+    return sum(xs)
+
+
+@workflow.define
+def Long(x: int, tag: str = "") -> int:
+    prev = workflow.add(Inc(x=x), name="n0")
+    for i in range(1, 5):
+        prev = workflow.add(Inc(x=prev.out), name=f"n{i}")
+    return prev.out
+
+
+@workflow.define
+def EmptySplit(xs: list[int]) -> int:
+    a = workflow.add(Inc().split(x=xs).combine("x"), name="a")
+    b = workflow.add(Total(xs=a.out), name="b")
+    return b.out
+
+
+def test_cached_chain_rerun_finishes(tmp_path, any_worker):
+    """Every inner job of a five-node chain is cached on the second run, which settles
+    through ``ready()`` alone; the driver must not take that for stuck"""
+    for tag in ("1", "2"):
+        with Submitter(worker=any_worker, cache_root=tmp_path) as sub:
+            result = sub(Long(x=1, tag=tag), raise_errors=True)
+        assert result.outputs.out == 6
+
+
+def test_empty_split_reader_finishes(tmp_path, any_worker):
+    """A node with no elements starts without a job; its reader still runs"""
+    with Submitter(worker=any_worker, cache_root=tmp_path) as sub:
+        result = sub(EmptySplit(xs=[]), raise_errors=True)
+    assert result.outputs.out == 0
+
+
+def test_cached_chain_drive_inline(tmp_path):
+    """The synchronous driver settles a fully cached chain too"""
+    from pydra.engine.drivers import drive_inline
+
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        sub(Long(x=1, tag="1"), raise_errors=True)
+        runner = GraphRunner(
+            Long(x=1, tag="2"), sub.store, on_error="raise_at_end", submitter=sub
+        )
+        drive_inline(
+            runner,
+            InlineExecutor(DebugWorker()),
+            on_error="raise_at_end",
+            audit=sub.audit,
+        )
+        assert runner.done and not runner.failed
+
+
+def test_errored_result_entry_carries_the_recorded_error(submitter, tmp_path):
+    """The entry of an errored Result is built from the error file the worker left"""
+    from pydra.engine.result import record_error
+
+    runner = runner_for(submitter, Chain(x=1))
+    (a,) = runner.ready().dispatch
+    cache_dir = tmp_path / "slurm-like"
+    cache_dir.mkdir()
+    record_error(cache_dir, ValueError("remote boom"))
+    runner.complete(
+        a, Result(cache_dir=cache_dir, outputs=None, errored=True, task=a.task)
+    )
+    (entry,) = runner.entries
+    assert entry.exception_type == "builtins.ValueError"
+    assert "remote boom" in entry.message
+    assert "remote boom" in runner.errors[0]
+
+
+def test_errored_result_without_error_file(submitter, tmp_path):
+    """With no error file the entry says so rather than naming an invented cause"""
+    runner = runner_for(submitter, Chain(x=1))
+    (a,) = runner.ready().dispatch
+    runner.complete(
+        a, Result(cache_dir=tmp_path / "none", outputs=None, errored=True, task=a.task)
+    )
+    (entry,) = runner.entries
+    assert entry.job_name == "A"
+    assert "no error record" in entry.message
