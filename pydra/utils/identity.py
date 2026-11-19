@@ -76,7 +76,9 @@ def field_digests(
     cache = Cache(code_hash=task._code_hash)
     code_name = task._executor_name if _executor_is_code(task) else None
     carried = task._carried or {}
-    rehash = {f.name for f in get_fields(task) if _holds_files(f.type)} if carried else ()
+    rehash = (
+        {f.name for f in get_fields(task) if _holds_files(f.type)} if carried else ()
+    )
     digests = {}
     for name, value in inputs.items():
         if name in carried and name not in rehash:

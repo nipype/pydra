@@ -1005,7 +1005,7 @@ def test_annotated_class_digest_ignores_comments_and_line_numbers(tmp_path):
 ANNOTATED_GOLDEN = {
     "point": "class@1:80835a0969d4de9ffa2c372ca3274f648d113b75bd368e2505d0f3ed36107ebb",
     "plain": "class@1:acb16c123d662ed93c99cac88d6aad74b941974eb54d8d75bfc1149d768cd6a8",
-    "point_type": "type@1:557e3fd71e9fb16b7fb89296b3f1467024ac0a0469b522d3fcaf87a503c65d16"
+    "point_type": "type@1:557e3fd71e9fb16b7fb89296b3f1467024ac0a0469b522d3fcaf87a503c65d16",
 }
 
 
@@ -1052,7 +1052,9 @@ def test_typevar_field_digest_has_name_bound_constraints_and_variance():
 def test_forward_ref_is_its_string():
     assert td(ty.ForwardRef("Foo")) == td(ty.ForwardRef("Foo"))
     assert td(ty.ForwardRef("Foo")) != td(ty.ForwardRef("Bar"))
-    assert _outputs_digest(ty.ForwardRef("Foo")) != _outputs_digest(ty.ForwardRef("Bar"))
+    assert _outputs_digest(ty.ForwardRef("Foo")) != _outputs_digest(
+        ty.ForwardRef("Bar")
+    )
 
 
 def test_none_argument_is_nonetype():
@@ -1081,7 +1083,7 @@ TYPE_GOLDEN_2 = {
     "callable_p": "type@1:b216773194079f0c07bc19ceac6d99059b2d9b568a2628c622c12e0f3f1b2290",
     "typevar": "type@1:6dadccec566fc278b6009ef9d8b79f341724847b35e226cb98afe81cff4cf8f1",
     "forward": "type@1:825b1802a065b69799034e1cd5022b56da737c11276fe78ea482dbe94519842a",
-    "dict_none": "type@1:baf77c7f0ebbc1de56d155ec80e8d9d4b8b1c1c1f1c44a052a619d1039949ea1"
+    "dict_none": "type@1:baf77c7f0ebbc1de56d155ec80e8d9d4b8b1c1c1f1c44a052a619d1039949ea1",
 }
 
 
