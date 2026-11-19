@@ -4507,4 +4507,3 @@ def test_wf_ndst_combine_two_upstreams(worker: str, tmp_path: Path):
     outputs = worky(worker=worker, cache_root=tmp_path)
 
     assert outputs.out == [2, 4, 6]
-
