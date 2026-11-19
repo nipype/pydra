@@ -36,11 +36,13 @@ __all__ = [
 ]
 
 IS_WINDOWS = sys.platform == "win32"
+_DARWIN = sys.platform == "darwin"
 
 DESCRIPTORS_SUPPORTED = (
     hasattr(os, "O_NOFOLLOW")
     and hasattr(os, "O_DIRECTORY")
-    and {os.open, os.mkdir, os.rename, os.link, os.stat, os.chmod} <= os.supports_dir_fd
+    and {os.open, os.mkdir, os.rename, os.link, os.stat, os.unlink}
+    <= os.supports_dir_fd
     and os.scandir in os.supports_fd
 )
 """Whether the descriptor-relative primitives of RFC 0003 section 9 exist here."""
@@ -61,6 +63,8 @@ _WRONG_KIND_ERRNOS = frozenset(
         errno.ENOTDIR,
         getattr(errno, "EFTYPE", None),
         getattr(errno, "EMLINK", None),
+        getattr(errno, "EOPNOTSUPP", None),  # a socket, on macOS
+        getattr(errno, "ENXIO", None),  # a socket, on Linux
     )
     if e
 )
@@ -73,8 +77,7 @@ class StoreUnavailable(OSError):
 
 class WrongKindError(StoreUnavailable):
     """A symlink, or an object of another kind, was found where the store expects a
-    directory or a regular file, and it could not be moved aside. The message names the
-    path and its owner."""
+    directory or a regular file. The message names the path and its owner."""
 
 
 def _owner(path: str) -> str:
@@ -162,8 +165,8 @@ class StorePolicy:
         ``"member"``: every member, the directory and its parent are ``fsync``ed;
         ``"entry"``: one flush before the rename.
     verify_files : {"digest", "size"}
-        How a read checks a file member. ``"size"`` is accepted only for a ``private`` root
-        with ``durability="member"``, which `StorageDir.open_root` enforces.
+        How a read checks a file member. ``"size"`` is accepted only with
+        ``durability="member"`` and, enforced by `StorageDir.open_root`, for a ``private`` root.
     ages : StoreAges
     """
 
@@ -211,11 +214,17 @@ class StorePolicy:
             raise ValueError(
                 f"verify_files must be 'digest' or 'size', got {self.verify_files!r}"
             )
+        if self.verify_files == "size" and self.durability != "member":
+            raise ValueError(
+                "verify_files='size' is accepted only with durability='member'"
+            )
         if not isinstance(self.ages, StoreAges):
             raise ValueError("ages must be a StoreAges")
 
 
-def _check_name(name: str) -> None:
+def _check_name(name: str, strict: bool = False) -> None:
+    """``name`` is one path component. ``strict`` (the path backend) also refuses what Windows
+    reads as a drive, an alternate data stream, or a name it silently trims."""
     if (
         not isinstance(name, str)
         or name in ("", ".", "..")
@@ -223,6 +232,7 @@ def _check_name(name: str) -> None:
         or "\\" in name
         or "\0" in name
         or (os.altsep and os.altsep in name)
+        or (strict and (":" in name or name[-1] in ". "))
     ):
         raise ValueError(f"{name!r} is not a single path component")
 
@@ -232,7 +242,11 @@ def _is_reparse(st: os.stat_result) -> bool:
 
 
 class StorageDir:
-    """An open directory under a store root. Make one with `open_root` and `child`."""
+    """An open directory under a store root. Make one with `open_root` and `child`.
+
+    A handle is a descriptor (POSIX) or a path with checks (the path backend, chosen once when the
+    root is opened). After `close` every operation raises `ValueError`.
+    """
 
     def __init__(
         self,
@@ -241,13 +255,17 @@ class StorageDir:
         policy: StorePolicy,
         trust: Trust,
         chain: tuple[str, ...] = (),
+        is_root: bool = True,
     ) -> None:
         self.path = path
         self.policy = policy
         self.trust = trust
         self._fd = fd
+        self._path_mode = fd is None
+        self._closed = False
+        self._is_root = is_root
         self._chain = (
-            chain  # path mode: the paths below the root, to recheck before each step
+            chain  # path backend: the components below the root above this one
         )
 
     # -- opening -----------------------------------------------------------------------
@@ -264,26 +282,26 @@ class StorageDir:
             The root directory; it must exist.
         policy : StorePolicy
         trust : {"shared", "private", "trusted"}
-            Who can write the root (RFC 0003 section 6.4). Where there are no descriptor-relative
-            calls (Windows) ``"shared"`` raises `PlatformUnsupported`.
+            Who can write the root (RFC 0003 section 6.4). ``"private"`` is checked here: the root's
+            descriptor must be owned by the effective user with no group or other write; on Windows
+            the root must be under ``%LOCALAPPDATA%``. ``"shared"`` raises `PlatformUnsupported`
+            where there are no descriptor-relative calls (Windows).
 
         Raises
         ------
         PlatformUnsupported
             ``trust="shared"`` on a platform without descriptor-relative calls.
+        StoreUnavailable
+            ``trust="private"`` and the root fails the check.
         ValueError
-            ``verify_files="size"`` without ``trust="private"`` and ``durability="member"``.
+            ``verify_files="size"`` without ``trust="private"``.
         """
         if trust not in ("shared", "private", "trusted"):
             raise ValueError(
                 f"trust must be 'shared', 'private' or 'trusted', got {trust!r}"
             )
-        if policy.verify_files == "size" and (
-            trust != "private" or policy.durability != "member"
-        ):
-            raise ValueError(
-                "verify_files='size' is accepted only for a private root with durability='member'"
-            )
+        if policy.verify_files == "size" and trust != "private":
+            raise ValueError("verify_files='size' is accepted only for a private root")
         path = os.fspath(path)
         if trust == "shared" and (IS_WINDOWS or not DESCRIPTORS_SUPPORTED):
             raise PlatformUnsupported(
@@ -300,28 +318,74 @@ class StorageDir:
                     if not os.path.lexists(path)
                     else NotADirectoryError
                 )(errno.ENOENT, "not a directory", path)
-            return cls(path, None, policy, trust)
+            root = cls(path, None, policy, trust)
+            if trust == "private":
+                root._check_private()
+            return root
         fd = os.open(path, os.O_RDONLY | _DIRECTORY | _CLOEXEC)
-        return cls(path, fd, policy, trust)
+        root = cls(path, fd, policy, trust)
+        if trust == "private":
+            try:
+                root._check_private()
+            except BaseException:
+                root.close()
+                raise
+        return root
+
+    def _check_private(self) -> None:
+        if IS_WINDOWS:
+            local = os.environ.get("LOCALAPPDATA")
+            here = os.path.normcase(os.path.realpath(self.path))
+            if not local or os.path.commonpath(
+                [here, os.path.normcase(os.path.realpath(local))]
+            ) != (os.path.normcase(os.path.realpath(local))):
+                raise StoreUnavailable(
+                    errno.EACCES,
+                    "a private root on Windows must be under the user's local application data "
+                    "directory; declare it trusted or shared",
+                    self.path,
+                )
+            return
+        st = self.fstat()
+        if st.st_uid != os.geteuid() or st.st_mode & 0o022:
+            raise StoreUnavailable(
+                errno.EACCES,
+                f"not a private root: its owner is {_owner(self.path)} and its mode is "
+                f"{stat.S_IMODE(st.st_mode):#o}; a private root belongs to the effective user and "
+                "no one else can write it",
+                self.path,
+            )
+
+    def _live(self) -> None:
+        if self._closed:
+            raise ValueError(f"StorageDir {self.path!r} is closed")
+
+    def _name(self, name: str) -> None:
+        _check_name(name, strict=self._path_mode)
 
     def _sub(self, name: str) -> str:
         return os.path.join(self.path, name)
 
-    def _guard(self, name: str | None = None) -> None:
-        """Path mode: the chain from the root to here, and ``name``, are plain objects."""
-        if self._fd is not None:
+    def _guard(self) -> None:
+        """Path backend: every component below the root, down to this directory, is a plain
+        directory. The root itself is as given and is not checked."""
+        if not self._path_mode:
             return
         for p in self._chain:
             self._plain(p, "directory")
-        if self._chain:
+        if not self._is_root:
             self._plain(self.path, "directory")
-        if name is not None:
-            try:
-                st = os.lstat(self._sub(name))
-            except FileNotFoundError:
-                return
-            if stat.S_ISLNK(st.st_mode) or _is_reparse(st):
-                raise _wrong_kind(self._sub(name), "regular file or directory")
+
+    def _member(self, name: str) -> os.stat_result | None:
+        """Path backend: ``lstat`` of ``name`` (None if absent), refusing a symlink or reparse
+        point, which is never followed."""
+        try:
+            st = os.lstat(self._sub(name))
+        except FileNotFoundError:
+            return None
+        if stat.S_ISLNK(st.st_mode) or _is_reparse(st):
+            raise _wrong_kind(self._sub(name), "regular file or directory")
+        return st
 
     @staticmethod
     def _plain(path: str, expected: str) -> os.stat_result:
@@ -362,12 +426,14 @@ class StorageDir:
         FileNotFoundError
             It does not exist and ``create`` is false.
         """
-        _check_name(name)
+        self._live()
+        self._name(name)
         mode = self.policy.container_mode if mode is None else mode
         _check_mode("mode", mode)
         sub = self._sub(name)
-        if self._fd is None:
-            self._guard(name)
+        if self._path_mode:
+            self._guard()
+            self._member(name)
             if create:
                 try:
                     os.mkdir(sub, mode)
@@ -377,9 +443,8 @@ class StorageDir:
                     if not IS_WINDOWS:
                         os.chmod(sub, mode)
             self._plain(sub, "directory")
-            return StorageDir(
-                sub, None, self.policy, self.trust, (*self._chain, self.path)
-            )
+            chain = self._chain if self._is_root else (*self._chain, self.path)
+            return StorageDir(sub, None, self.policy, self.trust, chain, is_root=False)
         made = False
         if create:
             try:
@@ -394,7 +459,7 @@ class StorageDir:
             except BaseException:
                 os.close(fd)
                 raise
-        return StorageDir(sub, fd, self.policy, self.trust)
+        return StorageDir(sub, fd, self.policy, self.trust, is_root=False)
 
     # -- members -----------------------------------------------------------------------
 
@@ -407,10 +472,11 @@ class StorageDir:
         FileExistsError
             ``name`` exists, as a symlink or anything else.
         """
-        _check_name(name)
+        self._live()
+        self._name(name)
         _check_mode("mode", mode)
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW | _BINARY | _CLOEXEC
-        if self._fd is None:
+        if self._path_mode:
             self._guard()
             fd = os.open(self._sub(name), flags, mode)
         else:
@@ -431,17 +497,21 @@ class StorageDir:
         WrongKindError
             ``name`` is a symlink or not a regular file.
         """
-        _check_name(name)
-        flags = os.O_RDONLY | _NOFOLLOW | _BINARY | _CLOEXEC
-        if self._fd is None:
-            self._guard(name)
+        self._live()
+        self._name(name)
+        flags = os.O_RDONLY | _NOFOLLOW | _BINARY | _CLOEXEC | _NONBLOCK
+        if self._path_mode:
+            self._guard()
+            st = self._member(name)
+            if st is not None and not stat.S_ISREG(st.st_mode):
+                raise _wrong_kind(self._sub(name), "regular file")
         try:
-            if self._fd is None:
-                fd = os.open(self._sub(name), flags | _NONBLOCK)
+            if self._path_mode:
+                fd = os.open(self._sub(name), flags)
             else:
-                fd = os.open(name, flags | _NONBLOCK, dir_fd=self._fd)
+                fd = os.open(name, flags, dir_fd=self._fd)
         except OSError as err:
-            if err.errno in _WRONG_KIND_ERRNOS or (err.errno == errno.EISDIR):
+            if err.errno in _WRONG_KIND_ERRNOS or err.errno == errno.EISDIR:
                 raise _wrong_kind(self._sub(name), "regular file") from err
             raise
         try:
@@ -456,22 +526,28 @@ class StorageDir:
 
     def rename(self, name: str, target: "StorageDir", new_name: str) -> None:
         """Rename ``name`` here to ``new_name`` in ``target`` (atomic within one filesystem).
-        A directory is not renamed over one that is not empty."""
-        _check_name(name)
-        _check_name(new_name)
-        if self._fd is None or target._fd is None:
-            self._guard(name)
+        A directory is not renamed over one that is not empty; a file replaces silently on POSIX
+        and fails on Windows."""
+        self._live()
+        target._live()
+        self._name(name)
+        target._name(new_name)
+        if self._path_mode or target._path_mode:
+            self._guard()
             target._guard()
+            self._member(name)
             os.rename(self._sub(name), target._sub(new_name))
             return
         os.rename(name, new_name, src_dir_fd=self._fd, dst_dir_fd=target._fd)
 
     def link(self, name: str, new_name: str) -> None:
         """Hard-link ``name`` to ``new_name`` in this directory; fails if ``new_name`` exists."""
-        _check_name(name)
-        _check_name(new_name)
-        if self._fd is None:
-            self._guard(name)
+        self._live()
+        self._name(name)
+        self._name(new_name)
+        if self._path_mode:
+            self._guard()
+            self._member(name)
             os.link(self._sub(name), self._sub(new_name), follow_symlinks=False)
             return
         os.link(
@@ -482,20 +558,51 @@ class StorageDir:
             follow_symlinks=False,
         )
 
+    def unlink(self, name: str) -> None:
+        """Remove the file or symlink ``name`` from this directory; a symlink is removed, never
+        followed. On Windows a read-only file is made writable first."""
+        self._live()
+        self._name(name)
+        if self._path_mode:
+            self._guard()
+            path = self._sub(name)
+            try:
+                os.unlink(path)
+            except PermissionError:
+                if not IS_WINDOWS:
+                    raise
+                os.chmod(path, stat.S_IWRITE)
+                os.unlink(path)
+            return
+        os.unlink(name, dir_fd=self._fd)
+
     def lstat(self, name: str) -> os.stat_result:
         """``lstat`` of ``name`` in this directory."""
-        _check_name(name)
-        if self._fd is None:
+        self._live()
+        self._name(name)
+        if self._path_mode:
             self._guard()
             return os.lstat(self._sub(name))
         return os.stat(name, dir_fd=self._fd, follow_symlinks=False)
 
     def scandir(self) -> ty.Iterator[os.DirEntry]:
-        """List this directory."""
-        if self._fd is None:
+        """List this directory. Each listing has its own directory offset, so listings may be
+        nested or interleaved. The entries are `os.DirEntry` objects: their ``is_dir()`` and
+        ``stat()`` follow symlinks unless told not to."""
+        self._live()
+        if self._path_mode:
             self._guard()
             return os.scandir(self.path)
-        return os.scandir(self._fd)
+        fd = os.open(".", os.O_RDONLY | _DIRECTORY | _CLOEXEC, dir_fd=self._fd)
+        return self._listing(fd)
+
+    @staticmethod
+    def _listing(fd: int) -> ty.Iterator[os.DirEntry]:
+        try:
+            with os.scandir(fd) as entries:
+                yield from entries
+        finally:
+            os.close(fd)
 
     def set_mode(self, mode: int, name: str | None = None) -> None:
         """Set the mode of this directory, or of ``name`` in it, through a descriptor.
@@ -503,20 +610,22 @@ class StorageDir:
         A name that is a symlink is refused (`WrongKindError`), never followed. On Windows only
         a file's read-only attribute is applied, from the owner write bit.
         """
+        self._live()
         _check_mode("mode", mode)
         if name is None:
-            if self._fd is None:
+            if self._path_mode:
                 self._guard()
                 if not IS_WINDOWS:
                     os.chmod(self.path, mode)
                 return
             os.fchmod(self._fd, mode)
             return
-        _check_name(name)
-        if self._fd is None:
-            self._guard(name)
+        self._name(name)
+        if self._path_mode:
+            self._guard()
+            st = self._member(name)
             if IS_WINDOWS:
-                if not stat.S_ISDIR(os.lstat(self._sub(name)).st_mode):
+                if st is not None and not stat.S_ISDIR(st.st_mode):
                     os.chmod(
                         self._sub(name), stat.S_IWRITE if mode & 0o200 else stat.S_IREAD
                     )
@@ -537,22 +646,25 @@ class StorageDir:
             os.close(fd)
 
     def fstat(self) -> os.stat_result:
-        """``fstat`` of this directory."""
-        if self._fd is None:
+        """``fstat`` of this directory (of the root's target, for a root that is a symlink)."""
+        self._live()
+        if self._path_mode:
             self._guard()
-            return os.lstat(self.path)
+            return os.stat(self.path) if self._is_root else os.lstat(self.path)
         return os.fstat(self._fd)
 
     def sync(self) -> None:
         """Flush this directory's entries to storage, where the platform can."""
+        self._live()
         if self._fd is not None:
             os.fsync(self._fd)
 
     # -- lifetime ----------------------------------------------------------------------
 
     def close(self) -> None:
-        """Close the descriptor. A handle is not used afterwards."""
+        """Close the descriptor. Further use raises `ValueError`; closing again is allowed."""
         fd, self._fd = self._fd, None
+        self._closed = True
         if fd is not None:
             os.close(fd)
 
@@ -573,31 +685,29 @@ class StorageDir:
         return f"StorageDir({self.path!r})"
 
 
+def _libc() -> ty.Any:
+    import ctypes
+    import ctypes.util
+
+    return ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+
+
 def _reflink(src: ty.BinaryIO, dst: StorageDir, name: str) -> bool:
-    """Make ``name`` in ``dst`` a copy-on-write clone of the open file ``src``. False if the
-    filesystem or platform cannot, in which case nothing was made."""
+    """Make ``name`` in ``dst`` a copy-on-write clone of the open file ``src`` (the descriptor
+    that was checked, not its path). False if the filesystem or platform cannot, in which case
+    nothing was made."""
     if dst._fd is None:
         return False
-    if sys.platform == "darwin":
-        try:
-            import ctypes
-            import ctypes.util
+    if _DARWIN:
+        import ctypes
 
-            libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
-            clone = libc.clonefileat
+        try:
+            libc = _libc()
+            clone = libc.fclonefileat
         except (OSError, AttributeError, TypeError):
             return False
-        clone.argtypes = [
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint32,
-        ]
-        at_fdcwd = -2
-        # src's path: the clone is of the file as it is now, not of whatever the path becomes
-        done = clone(at_fdcwd, os.fsencode(src.name), dst._fd, os.fsencode(name), 0)
-        if done == 0:
+        clone.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+        if clone(src.fileno(), dst._fd, os.fsencode(name), 0) == 0:
             return True
         err = ctypes.get_errno()
         if err == errno.EEXIST:
@@ -605,28 +715,50 @@ def _reflink(src: ty.BinaryIO, dst: StorageDir, name: str) -> bool:
         return False
     try:
         import fcntl
-
-        ficlone = 0x40049409
-        out = dst.open_new(name, 0o600)
     except ImportError:
         return False
+    out = dst.open_new(name, 0o600)
     try:
-        fcntl.ioctl(out.fileno(), ficlone, src.fileno())
+        fcntl.ioctl(out.fileno(), getattr(fcntl, "FICLONE", 0x40049409), src.fileno())
     except OSError:
         out.close()
-        os.unlink(name, dir_fd=dst._fd)
+        dst.unlink(name)
         return False
     out.close()
     return True
 
 
+def _clear_flags(fd: int) -> None:
+    """Remove BSD file flags (``uchg``, ``schg``, ...) that a clone carries over from its source,
+    so that nothing immutable is left in staging."""
+    if getattr(os.fstat(fd), "st_flags", 0):
+        if _libc().fchflags(fd, 0) != 0:
+            import ctypes
+
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+
+
+def _open_source(src: Path) -> ty.BinaryIO:
+    """Open ``src`` without blocking (a FIFO opens at once) and require a regular file."""
+    fd = os.open(src, os.O_RDONLY | _NONBLOCK | _BINARY | _CLOEXEC)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise _wrong_kind(os.fspath(src), "regular file")
+        return os.fdopen(fd, "rb")
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def copy_hashed(src: Path, dst: StorageDir, name: str, mode: int) -> tuple[str, int]:
     """Copy the file ``src`` to ``name`` in ``dst`` and return its sha256 hex digest and size.
 
-    The copy is a reflink (``FICLONE`` on Linux, ``clonefileat`` on macOS) where the filesystem
+    The copy is a reflink (``FICLONE`` on Linux, ``fclonefileat`` on macOS) where the filesystem
     supports one, else a block copy hashed as it is written; never a hard link. ``name`` is a new
     file given ``mode`` through its descriptor, so ``src``, which may itself be a hard link to a
-    user's dataset file, keeps its mode and content.
+    user's dataset file, keeps its mode and content. With ``durability="member"`` the member is
+    ``fsync``ed and an error from that is raised.
 
     Raises
     ------
@@ -635,21 +767,29 @@ def copy_hashed(src: Path, dst: StorageDir, name: str, mode: int) -> tuple[str, 
     WrongKindError
         ``src`` is not a regular file.
     """
-    _check_name(name)
+    dst._live()
+    dst._name(name)
     _check_mode("mode", mode)
     digest = hashlib.sha256()
     size = 0
-    with open(src, "rb") as source:
-        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-            raise _wrong_kind(os.fspath(src), "regular file")
+    with _open_source(src) as source:
         if _reflink(source, dst, name):
-            dst.set_mode(mode, name)
-            with dst.open_read(name) as clone:
-                for block in iter(lambda: clone.read(_COPY_BLOCK), b""):
-                    digest.update(block)
-                    size += len(block)
-            if dst.policy.durability == "member":
-                _fsync_member(dst, name)
+            try:
+                with dst.open_read(name) as clone:
+                    _clear_flags(clone.fileno())
+                    if not IS_WINDOWS:
+                        os.fchmod(clone.fileno(), mode)
+                    for block in iter(lambda: clone.read(_COPY_BLOCK), b""):
+                        digest.update(block)
+                        size += len(block)
+                    if dst.policy.durability == "member":
+                        os.fsync(clone.fileno())
+            except BaseException:
+                try:
+                    dst.unlink(name)
+                except OSError:
+                    pass
+                raise
             return digest.hexdigest(), size
         with dst.open_new(name, mode) as out:
             for block in iter(lambda: source.read(_COPY_BLOCK), b""):
@@ -660,11 +800,3 @@ def copy_hashed(src: Path, dst: StorageDir, name: str, mode: int) -> tuple[str, 
             if dst.policy.durability == "member":
                 os.fsync(out.fileno())
     return digest.hexdigest(), size
-
-
-def _fsync_member(dst: StorageDir, name: str) -> None:
-    with dst.open_read(name) as f:
-        try:
-            os.fsync(f.fileno())
-        except OSError:
-            pass

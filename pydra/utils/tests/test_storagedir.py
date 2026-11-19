@@ -1,5 +1,6 @@
 """Tests for `pydra.utils.storagedir` (RFC 0003 section 9)."""
 
+import errno
 import hashlib
 import os
 import stat
@@ -21,6 +22,7 @@ from pydra.utils.storagedir import (
 )
 
 IS_WINDOWS = sys.platform == "win32"
+TRUST = "trusted" if IS_WINDOWS else "private"
 POSIX_ONLY = pytest.mark.skipif(IS_WINDOWS, reason="needs symlinks and POSIX modes")
 
 
@@ -46,8 +48,8 @@ def policy():
 def root(tmp_path, policy, backend):
     d = tmp_path / "root"
     d.mkdir()
-    # a store's roots are the operator's; on Windows only private/trusted open
-    return StorageDir.open_root(d, policy, trust="private")
+    # on Windows a private root must sit under LOCALAPPDATA, which a temp directory may not
+    return StorageDir.open_root(d, policy, trust=TRUST)
 
 
 @pytest.fixture
@@ -206,7 +208,8 @@ def test_child_create_mode_defaults_to_policy_container_mode(
 ):
     r = tmp_path / "r"
     r.mkdir()
-    root = StorageDir.open_root(r, StorePolicy(container_mode=0o2770), trust="private")
+    os.chmod(r, 0o755)
+    root = StorageDir.open_root(r, StorePolicy(container_mode=0o2770), trust=TRUST)
     root.child("c", create=True)
     assert _mode(r / "c") == 0o2770
 
@@ -295,19 +298,61 @@ def test_ages_are_validated():
             StoreAges(**bad)
 
 
-def test_size_verification_needs_a_private_root_and_member_durability(
-    tmp_path, backend
-):
+def test_size_verification_needs_member_durability():
+    with pytest.raises(ValueError, match="member"):
+        StorePolicy(verify_files="size", durability="none")
+    with pytest.raises(ValueError, match="member"):
+        StorePolicy(verify_files="size", durability="entry")
+    assert StorePolicy(verify_files="size").durability == "member"
+
+
+@POSIX_ONLY
+def test_size_verification_needs_a_private_root(tmp_path, backend):
     sized = StorePolicy(verify_files="size")
     with pytest.raises(ValueError, match="private"):
         StorageDir.open_root(tmp_path, sized, trust="trusted")
-    with pytest.raises(ValueError, match="member"):
-        StorageDir.open_root(
-            tmp_path,
-            StorePolicy(verify_files="size", durability="entry"),
-            trust="private",
-        )
     assert StorageDir.open_root(tmp_path, sized, trust="private") is not None
+
+
+@POSIX_ONLY
+def test_private_root_is_checked_on_open(tmp_path, backend):
+    mine = tmp_path / "mine"
+    mine.mkdir()
+    os.chmod(mine, 0o755)
+    assert StorageDir.open_root(mine, StorePolicy(), trust="private") is not None
+    for bad in (0o775, 0o757, 0o777):
+        os.chmod(mine, bad)
+        with pytest.raises(StoreUnavailable, match="private"):
+            StorageDir.open_root(mine, StorePolicy(), trust="private")
+        # the declaration alone does not unlock size verification
+        with pytest.raises(StoreUnavailable):
+            StorageDir.open_root(
+                mine, StorePolicy(verify_files="size"), trust="private"
+            )
+        # shared and trusted do not check
+        assert StorageDir.open_root(mine, StorePolicy(), trust="trusted") is not None
+
+
+@POSIX_ONLY
+def test_private_root_owned_by_someone_else_refused(tmp_path, monkeypatch, backend):
+    monkeypatch.setattr(os, "geteuid", lambda: os.stat(tmp_path).st_uid + 1)
+    with pytest.raises(StoreUnavailable, match="owner"):
+        StorageDir.open_root(tmp_path, StorePolicy(), trust="private")
+
+
+def test_windows_private_root_only_under_local_app_data(tmp_path, monkeypatch):
+    monkeypatch.setattr(storagedir, "DESCRIPTORS_SUPPORTED", False)
+    monkeypatch.setattr(storagedir, "IS_WINDOWS", True)
+    home = tmp_path / "local"
+    (home / "pydra").mkdir(parents=True)
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(home))
+    assert (
+        StorageDir.open_root(home / "pydra", StorePolicy(), trust="private") is not None
+    )
+    with pytest.raises(StoreUnavailable, match="trusted"):
+        StorageDir.open_root(other, StorePolicy(), trust="private")
 
 
 def test_windows_shared_platform_unsupported(tmp_path, monkeypatch):
@@ -316,13 +361,12 @@ def test_windows_shared_platform_unsupported(tmp_path, monkeypatch):
     with pytest.raises(PlatformUnsupported) as e:
         StorageDir.open_root(tmp_path, StorePolicy(), trust="shared")
     assert isinstance(e.value, StorageUnsupported)
-    msg = str(e.value)
-    assert "platform" in msg and str(tmp_path) in msg
+    assert "platform" in str(e.value)
+    assert e.value.filename == str(tmp_path)
     # the default trust is shared
     with pytest.raises(PlatformUnsupported):
         StorageDir.open_root(tmp_path, StorePolicy())
     # private and trusted open
-    assert StorageDir.open_root(tmp_path, StorePolicy(), trust="private") is not None
     assert StorageDir.open_root(tmp_path, StorePolicy(), trust="trusted") is not None
 
 
@@ -394,8 +438,124 @@ def test_copy_hashed_without_reflink(root, tmp_path, monkeypatch):
 
 def test_copy_hashed_refuses_a_directory_source(root, tmp_path):
     (tmp_path / "dir").mkdir()
-    with pytest.raises((WrongKindError, IsADirectoryError, PermissionError)):
+    with pytest.raises(
+        (WrongKindError, PermissionError) if IS_WINDOWS else WrongKindError
+    ):
         copy_hashed(tmp_path / "dir", root, "o", 0o444)
+    assert not (Path(root.path) / "o").exists()
+
+
+@POSIX_ONLY
+def test_copy_hashed_refuses_a_fifo_without_blocking(root, tmp_path):
+    os.mkfifo(tmp_path / "pipe")
+    with pytest.raises(WrongKindError):
+        copy_hashed(tmp_path / "pipe", root, "o", 0o444)
+    assert not (Path(root.path) / "o").exists()
+
+
+@POSIX_ONLY
+@pytest.mark.skipif(sys.platform != "darwin", reason="BSD file flags")
+def test_copy_of_an_immutable_source_leaves_a_removable_member(root, tmp_path):
+    src = tmp_path / "locked"
+    src.write_bytes(b"data")
+    os.chflags(src, stat.UF_IMMUTABLE)
+    try:
+        digest, size = copy_hashed(src, root, "m", 0o444)
+        assert (digest, size) == (hashlib.sha256(b"data").hexdigest(), 4)
+        assert os.lstat(Path(root.path) / "m").st_flags & stat.UF_IMMUTABLE == 0
+        root.unlink("m")
+    finally:
+        os.chflags(src, 0)
+    assert not (Path(root.path) / "m").exists()
+
+
+@POSIX_ONLY
+def test_reflink_clones_the_checked_descriptor_not_the_path(root, tmp_path):
+    src = tmp_path / "src"
+    src.write_bytes(b"the checked file")
+    other = tmp_path / "other"
+    other.write_bytes(b"something else")
+    with open(src, "rb") as f:
+        src.rename(tmp_path / "moved")
+        src.symlink_to(other)
+        if not storagedir._reflink(f, root, "c"):
+            pytest.skip("no reflink on this filesystem")
+    assert (Path(root.path) / "c").read_bytes() == b"the checked file"
+
+
+@POSIX_ONLY
+def test_ficlone_success_path(root, tmp_path, monkeypatch, backend):
+    if backend != "descriptor":
+        pytest.skip("the descriptor backend clones")
+    fcntl = pytest.importorskip("fcntl")
+    seen = []
+
+    def fake_ioctl(fd, request, arg):
+        seen.append(request)
+        os.write(fd, os.pread(arg, 1 << 20, 0))
+        return 0
+
+    monkeypatch.setattr(storagedir, "_DARWIN", False)
+    monkeypatch.setattr(fcntl, "ioctl", fake_ioctl)
+    data = b"cloned bytes" * 100
+    src = tmp_path / "s"
+    src.write_bytes(data)
+    digest, size = copy_hashed(src, root, "o", 0o440)
+    assert seen == [getattr(fcntl, "FICLONE", 0x40049409)]
+    assert (digest, size) == (hashlib.sha256(data).hexdigest(), len(data))
+    assert _mode(Path(root.path) / "o") == 0o440
+
+
+@POSIX_ONLY
+def test_ficlone_refused_falls_back_and_leaves_no_partial(
+    root, tmp_path, monkeypatch, backend
+):
+    if backend != "descriptor":
+        pytest.skip("the descriptor backend clones")
+    fcntl = pytest.importorskip("fcntl")
+
+    def refuse(fd, request, arg):
+        raise OSError(errno.EOPNOTSUPP, "no reflink")
+
+    monkeypatch.setattr(storagedir, "_DARWIN", False)
+    monkeypatch.setattr(fcntl, "ioctl", refuse)
+    src = tmp_path / "s"
+    src.write_bytes(b"abc")
+    assert copy_hashed(src, root, "o", 0o444)[1] == 3
+    assert (Path(root.path) / "o").read_bytes() == b"abc"
+
+
+@POSIX_ONLY
+def test_fsync_failure_after_a_clone_propagates(root, tmp_path, monkeypatch, backend):
+    if backend != "descriptor":
+        pytest.skip("the descriptor backend clones")
+    fcntl = pytest.importorskip("fcntl")
+    monkeypatch.setattr(storagedir, "_DARWIN", False)
+    monkeypatch.setattr(
+        fcntl, "ioctl", lambda fd, r, a: os.write(fd, os.pread(a, 100, 0)) and 0
+    )
+
+    def broken(fd):
+        raise OSError(errno.EIO, "disk")
+
+    monkeypatch.setattr(os, "fsync", broken)
+    src = tmp_path / "s"
+    src.write_bytes(b"abc")
+    with pytest.raises(OSError) as e:
+        copy_hashed(src, root, "o", 0o444)
+    assert e.value.errno == errno.EIO
+
+
+def test_reflink_on_this_filesystem(tmp_path):
+    """Passes only where the filesystem has reflinks (btrfs, xfs reflink=1, APFS); run with
+    --basetemp on one to record the proof. Elsewhere it skips with the reason."""
+    root = StorageDir.open_root(tmp_path, StorePolicy(), trust=TRUST)
+    src = tmp_path / "s"
+    src.write_bytes(os.urandom(1 << 20))
+    with open(src, "rb") as f:
+        if not storagedir._reflink(f, root, "c"):
+            pytest.skip("the filesystem refused a reflink")
+    assert (tmp_path / "c").read_bytes() == src.read_bytes()
 
 
 @POSIX_ONLY
@@ -424,3 +584,139 @@ def test_copy_of_hardlinked_input_leaves_original_mode(
     dataset.write_bytes(b"changed!")
     with root.open_read("member") as f:
         assert f.read() == b"precious"
+
+
+def test_use_after_close_raises(root):
+    held = root.child("d", create=True)
+    held.close()
+    held.close()
+    real = Path(root.path)
+    for call in (
+        lambda: held.open_new("m", 0o444),
+        lambda: held.open_read("m"),
+        lambda: held.child("x"),
+        lambda: held.lstat("m"),
+        lambda: held.fstat(),
+        lambda: held.unlink("m"),
+        lambda: held.set_mode(0o700),
+        lambda: held.scandir(),
+    ):
+        with pytest.raises(ValueError, match="closed"):
+            call()
+    assert not (real / "d" / "m").exists()
+
+
+@POSIX_ONLY
+def test_closed_handle_never_follows_a_swapped_symlink(root, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret").write_text("s")
+    held = root.child("d", create=True)
+    held.close()
+    (Path(root.path) / "d").rename(Path(root.path) / "d-aside")
+    (Path(root.path) / "d").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError):
+        held.open_new("m", 0o444)
+    with pytest.raises(ValueError):
+        held.open_read("secret")
+    assert not (outside / "m").exists()
+
+
+@POSIX_ONLY
+def test_root_that_is_a_symlink_opens_and_works(tmp_path, backend):
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    root = StorageDir.open_root(link, StorePolicy(), trust=TRUST)
+    sub = root.child("t", create=True)
+    with sub.open_new("m", 0o444) as f:
+        f.write(b"x")
+    with sub.open_read("m") as f:
+        assert f.read() == b"x"
+    assert (real / "t" / "m").exists()
+    assert stat.S_ISDIR(root.fstat().st_mode)
+
+
+def test_path_below_a_root_that_is_swapped_is_still_refused(root, tmp_path):
+    (Path(root.path) / "d").mkdir()
+    held = root.child("d")
+    if IS_WINDOWS:
+        pytest.skip("symlink needs privilege; the junction test covers Windows")
+    (Path(root.path) / "d").rename(Path(root.path) / "d-aside")
+    (Path(root.path) / "d").symlink_to(tmp_path, target_is_directory=True)
+    if storagedir.DESCRIPTORS_SUPPORTED:
+        with held.open_new("m", 0o444):
+            pass
+        assert (Path(root.path) / "d-aside" / "m").exists()
+    else:
+        with pytest.raises(WrongKindError):
+            held.open_new("m", 0o444)
+
+
+@POSIX_ONLY
+def test_scandir_listings_are_independent(root):
+    for i in range(5):
+        with root.open_new(f"f{i}", 0o444):
+            pass
+    first = root.scandir()
+    next(first)
+    assert sorted(e.name for e in root.scandir()) == [f"f{i}" for i in range(5)]
+    nested = []
+    for e in root.scandir():
+        nested.append(sorted(x.name for x in root.scandir()))
+    assert nested == [[f"f{i}" for i in range(5)]] * 5
+    assert len(list(first)) == 4
+
+
+def test_names_that_escape_on_windows_are_refused_in_path_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr(storagedir, "DESCRIPTORS_SUPPORTED", False)
+    root = StorageDir.open_root(tmp_path, StorePolicy(), trust="trusted")
+    for name in ("D:x", "f:stream", "trailing.", "trailing "):
+        with pytest.raises(ValueError):
+            root.child(name, create=True)
+        with pytest.raises(ValueError):
+            root.open_new(name, 0o444)
+
+
+def test_unlink(root):
+    with root.open_new("m", 0o444) as f:
+        f.write(b"x")
+    root.unlink("m")
+    with pytest.raises(FileNotFoundError):
+        root.lstat("m")
+    with pytest.raises(FileNotFoundError):
+        root.unlink("m")
+    with pytest.raises(ValueError):
+        root.unlink("a/b")
+
+
+@POSIX_ONLY
+def test_unlink_removes_a_symlink_not_its_target(root, tmp_path):
+    target = tmp_path / "t"
+    target.write_text("keep")
+    (Path(root.path) / "l").symlink_to(target)
+    root.unlink("l")
+    assert target.read_text() == "keep"
+    assert not os.path.lexists(Path(root.path) / "l")
+
+
+def test_wrong_kind_directory_where_a_member_is_expected_never_permission_error(root):
+    (Path(root.path) / "adir").mkdir()
+    with pytest.raises(WrongKindError):
+        root.open_read("adir")
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows read-only attribute")
+def test_windows_read_only_attribute(root):
+    real = Path(root.path)
+    with root.open_new("m", 0o444) as f:
+        f.write(b"x")
+    assert not os.access(real / "m", os.W_OK)
+    root.set_mode(0o644, "m")
+    assert os.access(real / "m", os.W_OK)
+    root.child("d", create=True)
+    root.set_mode(0o555, "d")
+    assert os.access(real / "d", os.W_OK)
+    root.unlink("m")
+    assert not (real / "m").exists()
