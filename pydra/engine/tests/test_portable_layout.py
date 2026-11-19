@@ -570,3 +570,39 @@ def test_empty_read_only_root_create_is_store_unavailable(tmp_path, expected):
         assert not isinstance(info.value, PermissionError)
     finally:
         os.chmod(path, 0o755)
+
+
+def test_transient_permission_error_is_retried_on_windows(root, expected, monkeypatch):
+    from pydra.engine.portable import layout
+
+    open_layout(root, expected)
+    monkeypatch.setattr(layout, "IS_WINDOWS", True)
+    monkeypatch.setattr(layout.time, "sleep", lambda s: None)
+    real = root.open_read
+    calls = []
+
+    def flaky(name):
+        calls.append(name)
+        if len(calls) < 3:
+            raise PermissionError(errno.EACCES, "sharing violation")
+        return real(name)
+
+    monkeypatch.setattr(root, "open_read", flaky)
+    assert open_layout(root, expected) == expected
+    assert len(calls) == 3
+
+
+def test_persistent_permission_error_on_windows_is_store_unavailable(
+    root, expected, monkeypatch
+):
+    from pydra.engine.portable import layout
+
+    monkeypatch.setattr(layout, "IS_WINDOWS", True)
+    monkeypatch.setattr(layout, "READ_RETRY_SECONDS", 0.05)
+
+    def deny(name):
+        raise PermissionError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(root, "open_read", deny)
+    with pytest.raises(StoreUnavailable):
+        open_layout(root, expected)
