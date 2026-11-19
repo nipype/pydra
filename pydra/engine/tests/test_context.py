@@ -308,7 +308,7 @@ def test_editable_identity_is_of_the_code(installed, tmp_path, monkeypatch):
     clean = identity(source)
     assert clean.startswith("dir:") and "1.0" not in clean
     assert identity(source, version="1.0.dev3+gabc") == clean
-    (source / "fakelib" / "NOTES.txt").write_text("a note")
+    (source / "NOTES.txt").write_text("a note beside the package")
     assert identity(source) == clean
     monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
     assert identity(source) == clean

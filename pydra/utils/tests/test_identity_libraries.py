@@ -38,8 +38,14 @@ class FakeDist:
         self.version = version
         self.direct = direct
         self.base = Path(base)
-        self.files = list(files)
+        # "path#hash" gives a file the hash its RECORD row carries, "#-" none
+        self.hashes = dict(f.partition("#")[::2] for f in files)
+        self.files = [f.partition("#")[0] for f in files]
         self.requires = list(requires)
+
+    def _row_hash(self, path):
+        hash_ = self.hashes[path]
+        return "" if hash_ == "-" else f"sha256={hash_ or path}"
 
     def locate_file(self, path):
         return self.base / path
@@ -50,7 +56,7 @@ class FakeDist:
                 self.direct if isinstance(self.direct, str) else json.dumps(self.direct)
             )
         if name == "RECORD":
-            return "\n".join(f"{f},sha256={f},1" for f in self.files)
+            return "\n".join(f"{f},{self._row_hash(f)},1" for f in self.files)
         return None
 
 
@@ -355,23 +361,63 @@ def test_transitive_not_keyed(libs):
     assert _hash(libs.user.f) == before
 
 
+def _local_ref(libs, *files):
+    libs.install(direct={"url": "file:///src", "dir_info": {}}, files=files)
+    return _encoded(libs.user.f)
+
+
 def test_record_digest_ignores_install_metadata(libs):
-    """The identity of a local-directory install is that of the code it installed, not
-    of the metadata of how: two installs of the same files from different places are
-    one key, and an edited file is another"""
-    here = {"url": "file:///home/a/src", "dir_info": {}}
-    there = {"url": "file:///home/b/src", "dir_info": {}}
-    libs.install(
-        direct=here,
-        files=("fakelib/__init__.py", "fakelib-1.0.dist-info/direct_url.json"),
+    """Two installs of the same files from different places are one key: the
+    ``direct_url.json``, ``INSTALLER`` and console-script rows, which say how and where
+    it was installed, are not in the digest"""
+    init = "fakelib/__init__.py"
+    first = _local_ref(libs, init, "fakelib-1.0.dist-info/direct_url.json#a")
+    assert _local_ref(libs, init, "fakelib-1.0.dist-info/direct_url.json#b") == first
+    assert _local_ref(libs, init, "fakelib-1.0.dist-info/INSTALLER#c") == first
+    assert _local_ref(libs, init, "../../bin/tool#a") == _local_ref(
+        libs, init, "../../bin/tool#b"
     )
-    first = _encoded(libs.user.f)
-    libs.install(
-        direct=there, files=("fakelib/__init__.py", "fakelib-1.0.dist-info/INSTALLER")
+    assert _local_ref(libs, init, "../../bin/tool#a") == first
+
+
+def test_record_digest_covers_every_installed_file(libs):
+    """An edited installed file, whatever its type, and an added one change the key: a
+    task that reads ``fakelib/factor.txt`` must not reuse a result computed from
+    another one"""
+    init = "fakelib/__init__.py"
+    data = _local_ref(libs, init, "fakelib/factor.txt#2")
+    assert _local_ref(libs, init, "fakelib/factor.txt#2") == data
+    assert _local_ref(libs, init, "fakelib/factor.txt#3") != data
+    assert _local_ref(libs, init, "fakelib/factor.txt#2", "fakelib/more.dat#1") != data
+    assert _local_ref(libs, "fakelib/__init__.py#x") != _local_ref(
+        libs, "fakelib/__init__.py#y"
     )
-    assert _encoded(libs.user.f) == first
-    libs.install(direct=here, files=("fakelib/__init__.py", "fakelib/more.py"))
-    assert _encoded(libs.user.f) != first
+    # a row without a hash (byte-code) is not part of it
+    assert _local_ref(libs, init, "fakelib/factor.txt#2", "fakelib/x.pyc#-") == data
+
+
+def test_editable_library_digest_covers_package_data(libs, tmp_path, monkeypatch):
+    """An editable install named library code is keyed by every file of its package,
+    data included, and not by notes beside it"""
+    source = tmp_path / "src"
+    (source / "fakelib").mkdir(parents=True)
+    (source / "fakelib" / "__init__.py").write_text(FAKELIB)
+    factor = source / "fakelib" / "factor.txt"
+    factor.write_text("2")
+    sys.modules["fakelib"].__file__ = str(source / "fakelib" / "__init__.py")
+    monkeypatch.setenv("PYDRA_USER_PACKAGES", "-fakelib")
+    direct = {"url": source.as_uri(), "dir_info": {"editable": True}}
+
+    def ref():
+        libs.install(direct=direct, files=("fakelib.pth",), top_level={})
+        return _encoded(libs.user.f)
+
+    first = ref()
+    assert b"lib:fakelib==dir:" in first
+    (source / "NOTES.txt").write_text("a note")
+    assert ref() == first
+    factor.write_text("3")
+    assert ref() != first
 
 
 def test_real_installed_numpy_owner():

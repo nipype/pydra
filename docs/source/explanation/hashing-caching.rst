@@ -57,10 +57,10 @@ public version of an index install (the local label such as ``+cu121`` names a b
 a platform and is recorded in the context, not keyed), ``version@commit`` of a VCS
 install, ``version@hash`` of an archive. An install from a local directory, editable
 (library code when named with ``-mypkg``) or not, has no version in its identity: it is
-``dir:<digest of its importable files>`` (``.py``, ``.so``, ``.pyd``), so the same code
-has one key whatever git, the install commit or the untracked notes beside it; for a
-non-editable install the digest is of the ``path,hash`` entries of its ``RECORD`` outside
-``*.dist-info``. The engine itself (``pydra.compose``, ``pydra.engine``,
+``dir:<digest of its files>``, so the same code has one key whatever git, the install
+commit or the install path: every file of the packages of an editable install (data
+included), and the hashed ``RECORD`` entries outside ``*.dist-info`` that stay inside a
+non-editable one. The engine itself (``pydra.compose``, ``pydra.engine``,
 ``pydra.environments``, ``pydra.utils``, ``pydra.workers``, ``pydra.scripts``) is
 referenced by qualified name with no identity, like the standard library; the context
 records pydra's identity. ``pydra.tasks.*`` is keyed by the distribution that owns it. The
@@ -189,11 +189,13 @@ recorded in different contexts never overwrite each other:
 
 A distribution is identified by its version and, when it was not installed from an
 index, by what it was installed from, which is read only for the distributions a task
-reaches: the commit or archive hash it records; for an editable install, the commit
-of its git checkout and a digest of the files modified or untracked there, or outside
-git a digest of all its files, in both cases only those of its own packages and up to
-``IDENTITY_MAX_FILES`` files and ``IDENTITY_MAX_BYTES`` bytes; for another install
-from a local directory, a digest of the files it installed (its ``RECORD``). What
+reaches: the commit or archive hash it records; for an install from a local directory,
+editable or not, ``dir:`` and a digest of its files, with no version (so the same code
+has one identity whatever git, the install commit or the install path). For an editable
+install the digest covers every file of its own packages, data included, and notes
+beside the packages do not count; it is read up to ``IDENTITY_MAX_FILES`` files and
+``IDENTITY_MAX_BYTES`` bytes. For another install from a local directory it covers the
+hashed ``RECORD`` entries outside ``*.dist-info`` that stay inside the install. What
 still cannot be identified (a module no distribution installed, an editable install
 whose source is gone or that is over those limits) is unknown, and is logged with the
 reason. A result
