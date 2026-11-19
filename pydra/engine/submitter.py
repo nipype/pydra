@@ -8,7 +8,6 @@ from pathlib import Path
 from tempfile import mkdtemp
 from copy import deepcopy
 from datetime import datetime
-from collections import defaultdict
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pydra.engine.graph import DiGraph  # noqa: F401
@@ -18,8 +17,8 @@ from pydra.utils.general import (
 )
 from pydra.utils.hash import PersistentCache
 from pydra.engine.audit import Audit
-from pydra.engine.drivers import drive_inline
-from pydra.engine.executor import InlineExecutor
+from pydra.engine.drivers import drive, drive_inline
+from pydra.engine.executor import InlineExecutor, WorkerExecutor
 from pydra.engine.job import Job
 from pydra.engine.runner import (  # noqa: F401
     Failed,
@@ -350,24 +349,27 @@ class Submitter:
             return self._on_error_arg
         return "raise_at_end" if is_async else "fail_fast"
 
-    def worker_for(self, job: "Job[TaskType]") -> Worker:
-        """The worker a job runs on.
+    def route_name(self, job: "Job[TaskType]") -> str:
+        """The name of the worker a job runs on.
 
         Only leaf jobs are routed: a workflow job is expanded by the submitter's own
         ``worker``, whatever its resources, and its nodes are placed individually.
         """
         if is_workflow(job.task):
-            return self.workers[DEFAULT_WORKER]
+            return DEFAULT_WORKER
         name = self.router(job)
         if name is None:
             name = DEFAULT_WORKER
-        try:
-            return self.workers[name]
-        except KeyError:
+        if name not in self.workers:
             raise ValueError(
                 f"The router sent job {job.name!r} to {name!r}, which is not one of "
                 f"the submitter's workers: {sorted(self.workers)}"
-            ) from None
+            )
+        return name
+
+    def worker_for(self, job: "Job[TaskType]") -> Worker:
+        """The worker a job runs on, see :meth:`route_name`"""
+        return self.workers[self.route_name(job)]
 
     def __call__(
         self,
@@ -554,7 +556,7 @@ class Submitter:
     def _expand(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
         """Expand and execute a workflow job synchronously, in the calling thread"""
         runner = self._runner(wf_job, rerun, is_async=False)
-        if len(self.workers) == 1 and not self.worker.is_async:
+        if not any(w.is_async for w in self.workers.values()):
             drive_inline(
                 runner,
                 InlineExecutor(self.worker, self.worker_for),
@@ -562,37 +564,12 @@ class Submitter:
                 audit=self.audit,
                 limit=self._limit(),
             )
-        else:  # TEMPORARY: removed in R3, where drive takes the non-inline runs
-            # jobs are routed to workers of another kind
-            self._expand_routed(runner)
+        else:  # some job may run on a worker that is not inline
+            self.loop.run_until_complete(self._drive(runner))
+            if runner.on_error == "fail_fast" and runner.first_error is not None:
+                raise runner.first_error
         if runner.errors:
             raise workflow_error(wf_job, runner.errors, runner.entries)
-
-    def _expand_routed(self, runner: GraphRunner) -> None:
-        """Temporary, removed in R3: the synchronous loop for a submitter whose router
-        may place a job on a worker the inline executor cannot run"""
-        fail_fast = runner.on_error == "fail_fast"
-        limit = self._limit()
-        dispatch = runner.ready(limit).dispatch
-        while (dispatch or not runner.done) and not (runner.errors and fail_fast):
-            for job in dispatch:
-                try:
-                    if is_workflow(job.task):  # expanded here, not placed by the router
-                        outcome = job.run(rerun=job.rerun)
-                    else:
-                        outcome = self.submit(job, rerun=job.rerun)
-                except Exception as exc:
-                    if fail_fast:
-                        raise
-                    # The job may have failed before it could save a result
-                    runner.complete(job, Failed(exc))
-                else:
-                    runner.complete(job, outcome)
-                finally:
-                    job._awaiting_run = False
-            dispatch = runner.ready(limit).dispatch
-            if runner.errors and fail_fast:
-                break
 
     async def expand_workflow_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
@@ -618,86 +595,30 @@ class Submitter:
             Workflow Job object
         """
         runner = self._runner(workflow_task, rerun, is_async=True)
-        fail_fast = runner.on_error == "fail_fast"
-        # keep track of pending futures
-        task_futures = set()
-        futured: dict[str, Job[TaskType]] = {}
-        # the jobs not run because a job with the same checksum is being run, by checksum
-        sharing: dict[str, set[Job[TaskType]]] = defaultdict(set)
-        # the checksums of the jobs whose runs have finished
-        finished: set[str] = set()
-        # the checksums of the jobs whose runs raised
-        failed: set[str] = set()
-        tasks = runner.ready(self._limit()).dispatch
         try:
-            while tasks or task_futures or not runner.done:
-                if not tasks and not task_futures:
-                    # it's possible that task_futures is empty, but not able to get any
-                    # tasks from the graph (using runner.ready)
-                    # this might be related to some delays saving the files
-                    # so try to get runnable tasks for another minute
-                    ii = 0
-                    while not tasks and not runner.done:
-                        tasks = runner.ready(self._limit(len(task_futures))).dispatch
-                        ii += 1
-                        # don't block the event loop!
-                        await asyncio.sleep(1)
-                        if ii > 10:
-                            raise RuntimeError(runner.stuck())
-                fresh = []
-                for job in tasks:
-                    if job.checksum in finished:
-                        job._awaiting_run = False
-                        if job.checksum in failed:
-                            job._errored = True
-                    elif job.checksum in futured:
-                        if job is not futured[job.checksum]:
-                            sharing[job.checksum].add(job)
-                    else:
-                        fresh.append(job)
-                for job in fresh:
-                    if job.checksum in futured:  # an earlier job of this round
-                        sharing[job.checksum].add(job)
-                    else:
-                        if is_workflow(job.task):
-                            # expanded in this loop, not placed by the router
-                            coroutine = job.run_async(rerun=job.rerun)
-                        elif (worker := self.worker_for(job)).is_async:
-                            coroutine = worker.run(job, rerun=job.rerun)
-                        else:  # a synchronous worker, run in this loop
-                            coroutine = self._run_blocking(worker, job, job.rerun)
-                        asyncio_task = asyncio.Task(coroutine, name=job.checksum)
-                        task_futures.add(asyncio_task)
-                        futured[job.checksum] = job
-                task_futures, completed = await self.fetch_finished(task_futures)
-                for task_future in completed:
-                    job = futured[task_future.get_name()]
-                    finished.add(job.checksum)
-                    for ran in [job, *sharing.pop(job.checksum, ())]:
-                        ran._awaiting_run = False
-                    try:
-                        outcome = task_future.result()
-                    except Exception as exc:
-                        # The job may have failed before it could save a result (e.g. if
-                        # the worker was unable to run it), in which case it would
-                        # otherwise remain queued indefinitely
-                        failed.add(job.checksum)
-                        runner.complete(job, Failed(exc))
-                    else:
-                        runner.complete(job, outcome)
-                if runner.errors and fail_fast:
-                    break
-                tasks = runner.ready(self._limit(len(task_futures))).dispatch
-                if runner.errors and fail_fast:
-                    break
+            await self._drive(runner)
         finally:
-            # Cancel any outstanding jobs if exiting early (e.g. due to an exception)
-            # so they aren't left running unattended on the event loop, which may be
-            # shared with other code (e.g. in Jupyter notebooks)
-            for task_future in task_futures:
-                task_future.cancel()
             if runner.errors:
                 raise workflow_error(workflow_task, runner.errors, runner.entries)
+
+    async def _drive(self, runner: GraphRunner) -> None:
+        """Run the runner's jobs on executors for the submitter's workers, on the
+        running loop"""
+        executors = {
+            name: WorkerExecutor(
+                worker,
+                blocking=None if worker.is_async else self._run_blocking,
+            )
+            for name, worker in self.workers.items()
+        }
+        await drive(
+            runner,
+            executors,
+            self.route_name,
+            max_concurrent=self.max_concurrent,
+            on_error=runner.on_error,
+            audit=self.audit,
+        )
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """Deprecated: the jobs of the released nodes of an execution graph. Use
@@ -732,36 +653,6 @@ class Submitter:
             stacklevel=2,
         )
         return [e for n in exec_graph.nodes for e in n.pop_resolution_errors(entries)]
-
-    async def fetch_finished(
-        self, futures
-    ) -> tuple[set[asyncio.Task], set[asyncio.Task]]:
-        """
-        Awaits asyncio's :class:`asyncio.Task` until one is finished.
-
-        Parameters
-        ----------
-        futures : set of asyncio awaitables
-            Job execution coroutines or asyncio :class:`asyncio.Task`
-
-        Returns
-        -------
-        pending : set
-            Pending asyncio :class:`asyncio.Task`.
-        done: set
-            Completed asyncio :class:`asyncio.Task`
-
-        """
-        done = set()
-        try:
-            done, pending = await asyncio.wait(
-                futures, return_when=asyncio.FIRST_COMPLETED
-            )
-        except ValueError:
-            # nothing pending!
-            pending = set()
-        logger.debug(f"Tasks finished: {len(done)}")
-        return pending, done
 
     def __enter__(self):
         return self
@@ -804,7 +695,7 @@ class Submitter:
             self._sync_pool = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="pydra-sync-worker"
             )
-        return await self.loop.run_in_executor(
+        return await asyncio.get_running_loop().run_in_executor(
             self._sync_pool, lambda: worker.run(job, rerun=rerun)
         )
 
