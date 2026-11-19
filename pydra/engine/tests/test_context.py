@@ -267,7 +267,7 @@ def test_editable_source_is_identified_by_content(
         tmp_path, installed, {"fakelib": fakelib}, "consistent"
     )
     identity = first.context["packages"]["fakelib"]
-    assert identity.startswith("git:" if git else "dir:")
+    assert identity.startswith("dir:")
     assert unchanged == 1 and second.context == first.context
     module.write_text("def scale(a):\n    return 2 * a  # edited\n")
     with Submitter(cache_root=tmp_path / "cache") as sub:
@@ -288,16 +288,16 @@ def _git_repo(source):
 
 
 def test_editable_identity_is_of_the_code(installed, tmp_path, monkeypatch):
-    """An editable identity has no version in it. It is ``git:<commit>`` for a clean
-    checkout, whatever untracked notes lie beside the code, and the same in a clone;
-    otherwise ``dir:`` of the importable files, which git does not change"""
-    if shutil.which("git") is None:
-        pytest.skip("no git")
+    """An editable identity is ``dir:`` of the importable files, with no version: the
+    same with and without git, in a clone, whatever the install version and whatever
+    untracked notes lie beside the code; an edited importable file changes it"""
     source = tmp_path / "src"
     (source / "fakelib").mkdir(parents=True)
     module = source / "fakelib" / "__init__.py"
     module.write_text("def scale(a):\n    return 2 * a\n")
-    _git_repo(source)
+    has_git = shutil.which("git") is not None
+    if has_git:
+        _git_repo(source)
 
     def identity(directory, version="1.0"):
         url = {"url": directory.as_uri(), "dir_info": {"editable": True}}
@@ -306,18 +306,19 @@ def test_editable_identity_is_of_the_code(installed, tmp_path, monkeypatch):
         return context._distributions()["fakelib"].identity
 
     clean = identity(source)
-    assert clean.startswith("git:") and "1.0" not in clean
+    assert clean.startswith("dir:") and "1.0" not in clean
     assert identity(source, version="1.0.dev3+gabc") == clean
     (source / "fakelib" / "NOTES.txt").write_text("a note")
     assert identity(source) == clean
-    clone = tmp_path / "clone"
-    subprocess.run(["git", "clone", "-q", str(source), str(clone)], check=True)
-    assert identity(clone) == clean
-    module.write_text("def scale(a):\n    return 3 * a\n")
-    dirty = identity(source)
-    assert dirty.startswith("dir:") and dirty != clean
     monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
-    assert identity(source) == dirty
+    assert identity(source) == clean
+    monkeypatch.undo()
+    if has_git:
+        clone = tmp_path / "clone"
+        subprocess.run(["git", "clone", "-q", str(source), str(clone)], check=True)
+        assert identity(clone) == clean
+    module.write_text("def scale(a):\n    return 3 * a\n")
+    assert identity(source) != clean
 
 
 def test_identity_of_direct_installs(installed):
@@ -334,7 +335,7 @@ def test_identity_of_direct_installs(installed):
     local = _fakelib("1.0", {"url": "file:///x", "dir_info": {}})
     installed(fakelib=local)
     first = context.package_versions({"fakelib"})["fakelib"]
-    assert first.startswith("1.0@record:")
+    assert first.startswith("dir:")
     installed(fakelib=_fakelib("1.0", {"url": "file:///x", "dir_info": {}}, ["a"]))
     assert context.package_versions({"fakelib"})["fakelib"] != first
 

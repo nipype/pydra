@@ -150,9 +150,9 @@ def test_vcs_archive_localdir_identities(libs):
     assert b"lib:fakelib==1.0@sha256=ff:fakelib.scale" in ref(direct=archive)
     directory = {"url": "file:///src", "dir_info": {}}
     first = ref(direct=directory)
-    assert b"lib:fakelib==1.0@record:" in first
+    assert b"lib:fakelib==dir:" in first
     second = ref(direct=directory, files=("fakelib/__init__.py", "fakelib/extra.py"))
-    assert second != first and b"lib:fakelib==1.0@record:" in second
+    assert second != first and b"lib:fakelib==dir:" in second
 
 
 def test_stdlib_unversioned(libs):
@@ -288,7 +288,7 @@ def test_editable_root_owns_a_module(libs, tmp_path):
     libs.install(direct=direct, files=("fakelib.pth",), top_level={})
     owner = owner_of("fakelib")
     assert owner is not None and owner[0] == "fakelib"
-    assert owner[1].startswith(("git:", "dir:"))
+    assert owner[1].startswith("dir:")
 
 
 def test_refs_in_record(libs):

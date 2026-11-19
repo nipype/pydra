@@ -12,7 +12,6 @@ import logging
 import os
 import platform
 import re
-import subprocess
 import sys
 import types
 import typing as ty
@@ -43,9 +42,6 @@ logger = logging.getLogger("pydra")
 RECORD = 3
 """The version of the record's layout, stored under ``"record"``. Records of other
 versions are never reused under ``"consistent"`` or ``"exact"``."""
-
-GIT_TIMEOUT = 30
-"""Seconds a ``git`` call identifying an editable install may take."""
 
 
 def _platform() -> str:
@@ -90,19 +86,6 @@ def _file_bytes(path: Path) -> bytes:
         return b"<missing>"
 
 
-def _git(directory: Path, *args: str) -> str | None:
-    try:
-        done = subprocess.run(
-            ["git", "-C", str(directory), *args],
-            capture_output=True,
-            timeout=GIT_TIMEOUT,
-            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return done.stdout.decode(errors="surrogateescape") if not done.returncode else None
-
-
 IDENTITY_MAX_FILES = 10_000
 """Most files a local install's identity reads; above it the identity is unknown."""
 
@@ -134,29 +117,6 @@ def _capped_digest(root: Path, files: list[Path]) -> str:
 
 IMPORTABLE_SUFFIXES = (".py", ".so", ".pyd")
 """The files of a package that identify its code; notes, data and byte-code do not."""
-
-
-def _git_identity(root: Path, paths: list[Path]) -> str | None:
-    """``git:<commit>`` if `root` is in a git checkout and none of the importable files
-    in `paths` is modified, untracked (and not ignored) or deleted, otherwise None"""
-    commit = _git(root, "rev-parse", "HEAD")
-    status = _git(
-        root,
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--",
-        *(str(p) for p in paths),
-    )
-    if not commit or status is None:
-        return None
-    entries = status.split("\0")
-    for i, entry in enumerate(entries):
-        if len(entry) > 3 and not (i and entries[i - 1][:1] == "R"):
-            if entry[3:].endswith(IMPORTABLE_SUFFIXES):
-                return None
-    return f"git:{commit.strip()}"
 
 
 def _package_files(paths: list[Path]) -> list[Path]:
@@ -261,11 +221,11 @@ class _Installed:
 
 def _identify(installed: _Installed) -> tuple[str | None, str | None]:
     """The identity of an installed distribution, or why it is unknown. The identity
-    is its version, followed by the commit or archive hash it was installed from, or
-    for an install from a local directory by ``version@record:<digest of its RECORD
-    entries outside *.dist-info>``. An editable install has no version in it: it is
-    ``git:<commit>`` in a clean git checkout, else ``dir:<digest of the importable
-    files of its packages>``. An editable install's packages are read up to
+    is its version, followed by the commit or archive hash it was installed from. An
+    install from a local directory, editable or not, has no version in it: it is
+    ``dir:<digest of its importable files>`` (``.py``, ``.so``, ``.pyd``), read from the
+    source for an editable install and from its ``RECORD`` entries outside
+    ``*.dist-info`` otherwise. An editable install's packages are read up to
     `IDENTITY_MAX_FILES` and `IDENTITY_MAX_BYTES`."""
     version, direct = installed.version, installed.direct
     if not version:
@@ -292,16 +252,13 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
         if not paths:
             return None, f"no package of it was found under {root!r}"
         try:
-            identity = _git_identity(Path(root), paths) or (
-                "dir:"
-                + _capped_digest(
-                    Path(root),
-                    [
-                        f
-                        for f in _package_files(paths)
-                        if f.name.endswith(IMPORTABLE_SUFFIXES)
-                    ],
-                )
+            identity = "dir:" + _capped_digest(
+                Path(root),
+                [
+                    f
+                    for f in _package_files(paths)
+                    if f.name.endswith(IMPORTABLE_SUFFIXES)
+                ],
             )
         except _TooLarge as e:
             return None, str(e)
@@ -309,16 +266,22 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
     record = installed.dist.read_text("RECORD")
     if not record:
         return None, "it was installed from a local source without a RECORD"
-    return f"{version}@record:{_record_digest(record)}", None
+    return f"dir:{_record_digest(record)}", None
 
 
 def _record_digest(record: str) -> str:
-    """A digest of the ``path,hash`` entries of a ``RECORD`` outside ``*.dist-info/``,
+    """A digest of the ``path,hash`` entries of the importable files of a ``RECORD``
+    outside ``*.dist-info/``,
     which name the code installed and not how: ``direct_url.json``, ``INSTALLER``
     and an installer's own files differ between two installs of the same code"""
     entries = set()
     for row in csv.reader(record.splitlines()):
-        if len(row) >= 2 and row[1] and ".dist-info/" not in row[0]:
+        if (
+            len(row) >= 2
+            and row[1]
+            and ".dist-info/" not in row[0]
+            and row[0].endswith(IMPORTABLE_SUFFIXES)
+        ):
             entries.add((row[0], row[1]))
     return _digest(f"{path},{hash_}".encode() for path, hash_ in sorted(entries))
 

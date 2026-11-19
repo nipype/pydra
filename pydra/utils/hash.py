@@ -1098,7 +1098,7 @@ def owner_of(module: str) -> tuple[str, str] | None:
     """The distribution that owns `module` and the identity it is keyed by, ``("numpy",
     "2.1.0")``, or None if no single distribution does. The identity is the public
     version of an index install, and ``version@commit``, ``version@hash`` or
-    ``version@record:hash`` of another (`pydra.engine.context._Installed.keyed`);
+    ``dir:digest`` of a local directory or editable one (`pydra.engine.context._Installed.keyed`);
     ``"?"`` if it cannot be computed. Memoised per module, forgotten by
     `pydra.engine.context.clear_caches`."""
     from pydra.engine.context import _distributions

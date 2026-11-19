@@ -55,12 +55,12 @@ A function or class of an installed distribution is identified by its qualified 
 and the distribution that owns it and its identity (``lib:numpy==2.1.0:numpy.add``): the
 public version of an index install (the local label such as ``+cu121`` names a build for
 a platform and is recorded in the context, not keyed), ``version@commit`` of a VCS
-install, ``version@hash`` of an archive and ``version@record:hash`` of a local directory
-install, which is a digest of the ``path,hash`` entries of its ``RECORD`` outside
-``*.dist-info`` (what was installed, not how). An editable install, which is library code
-when named with ``-mypkg``, has no version in its identity: ``git:<commit>`` in a clean
-git checkout, otherwise ``dir:<digest of the importable files>`` (untracked notes and data
-are ignored). The engine itself (``pydra.compose``, ``pydra.engine``,
+install, ``version@hash`` of an archive. An install from a local directory, editable
+(library code when named with ``-mypkg``) or not, has no version in its identity: it is
+``dir:<digest of its importable files>`` (``.py``, ``.so``, ``.pyd``), so the same code
+has one key whatever git, the install commit or the untracked notes beside it; for a
+non-editable install the digest is of the ``path,hash`` entries of its ``RECORD`` outside
+``*.dist-info``. The engine itself (``pydra.compose``, ``pydra.engine``,
 ``pydra.environments``, ``pydra.utils``, ``pydra.workers``, ``pydra.scripts``) is
 referenced by qualified name with no identity, like the standard library; the context
 records pydra's identity. ``pydra.tasks.*`` is keyed by the distribution that owns it. The
