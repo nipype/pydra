@@ -367,18 +367,19 @@ def test_on_error_unresolvable_input_fail_fast(worker, tmp_path):
 
 
 def test_on_error_debug_loop_wraps_submit(tmp_path, monkeypatch):
-    """The debug loop catches errors from ``Submitter.submit``, where jobs are placed,
-    so that ``raise_at_end`` collects them wherever the job was routed"""
+    """The debug driver reports an exception the worker raises as the job's failure, so
+    that ``raise_at_end`` collects it and goes on"""
     from pydra.engine import WorkflowError
+    from pydra.workers.debug import DebugWorker
 
-    submit = Submitter.submit
+    run = DebugWorker.run
 
     def failing(self, job, *args, **kwargs):
         if job.name == "S":
             raise ValueError("could not be placed")
-        return submit(self, job, *args, **kwargs)
+        return run(self, job, *args, **kwargs)
 
-    monkeypatch.setattr(Submitter, "submit", failing)
+    monkeypatch.setattr(DebugWorker, "run", failing)
     task = Propagate(x=[2, 3], y=[10, 20])
     with Submitter(worker="debug", on_error="raise_at_end", cache_root=tmp_path) as sub:
         with pytest.raises(WorkflowError) as excinfo:
