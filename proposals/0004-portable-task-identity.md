@@ -132,9 +132,11 @@ A shell job's record adds what it runs in, and a workflow's record what its node
   "supplied": "<checksum>"}`, and the checksum is the supplied string, as today (`task.py:482-508`).
 - **The record is RFC 0003's key record.** This proposal adds a `StoreIdentity` (0003 §4) named
   `pydra-identity@2`. Its `key(job)` returns the record. Its `check_key(checksum, key)` is true when
-  `key["scheme"]` is `pydra-identity@2` and either `key["supplied"] == checksum` or the record
-  digests to the checksum as above. Its context and fingerprint are 0003's defaults. A
-  `PortableStore` root created under it writes the header key that 0003 §3.2 defines:
+  `key["scheme"]` is `pydra-identity@2` and the checksum equals the record's base checksum, followed
+  by the absence suffix when the record has one. The base checksum is `key["supplied"]` for a
+  supplied record and the record's digest as above otherwise. Its context and fingerprint are
+  0003's defaults. A `PortableStore` root created under it writes the header key that 0003 §3.2
+  defines:
 
   ```json
   "identity": {"name": "pydra-identity@2", "fingerprint": "pydra-context@1", "recorded_only": []}
@@ -142,6 +144,18 @@ A shell job's record adds what it runs in, and a workflow's record what its node
 
   `entry.json` then holds the record (0003 §6.1) and every read checks it (0003 §6.2), and
   `pydracli explain <job>` shows the fields where two records differ.
+- **The absence suffix of RFC 0002 §2.3(a).** For a task whose checksum cannot see an accepted or
+  dropped `Absent` (a supplied checksum, or a field the checksum skips such as `container_path`),
+  RFC 0002's runner appends `-absent-<hex>` to `job.checksum`, where `<hex>` is the digest of the
+  sorted `(field, element index, cause)` triples of those `Absent`s, and keeps the unsuffixed
+  checksum beside it. Without a rule for it, `check_key` would reject every such entry and 0003
+  §6.2 would quarantine it on every read. So `key(job)` is built from the unsuffixed record and,
+  when the job carries a suffix, adds the triples as `"absent": [[field, index, cause], …]`, sorted
+  as RFC 0002 sorts them. `check_key` recomputes the suffix from `key["absent"]`, with the one
+  function the runner uses to make it, and compares the whole checksum. It never parses the suffix
+  out of the checksum string. A record with no `"absent"` has no suffix, so a checksum carrying one
+  under such a record is misfiled. The triples are what the suffix stands for, so they also show in
+  `pydracli explain`.
 - **Why `@2`.** RFC 0003 already names today's checksum, with no key record, `pydra-identity@1`
   (0003 §4). Reusing the name would make a root created under it open without error under this
   scheme and serve nothing, silently; a new name makes 0003's header check raise
@@ -872,6 +886,7 @@ Revision 4 answers the second re-review of #932 at `e98634c6`, made jointly with
 | R2-I1 `$class` leaves out the walk's references | One definition, `class@1`: `_class_code` plus the walk's class references (bases, the functions and globals methods reach), used for gap 1, `type@1`, `$class` and `py@1`; I4 tests a base-class method and a helper (§4.2, §5.1, §6.2, §10) |
 | R2-I2 0004 describes an RFC 0003 that no longer exists | Re-pinned to `547f7b1d`; the file-set passage rewritten on 0003's key-preserving `files/<set>/<path>` layout: the digest is read from the entry, and recomputing it in a worker agrees (§6.2); §9.2 reworded to what 0003 carries, by section |
 
+| RFC 0002 review, round 4, nit j: entries under an absence-suffixed checksum fail `check_key` | The record carries the `"absent"` triples, and `check_key` compares the checksum with the base checksum plus the recomputed suffix of RFC 0002 §2.3(a) (§3.1) |
 | R3-I1 a split nested workflow builds one branch | A nested workflow node with a splitter is `"deferred"`; per-element `nodes` named as future work (§4.3). With it, three nits: `"deferred"` at any depth is a miss, the per-job error isolation of constructor errors at keying (§4.3, §10 I5), the status line |
 
 Nits of rounds 1 and 2 are not addressed in this revision.
