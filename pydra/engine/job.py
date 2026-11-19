@@ -155,6 +155,8 @@ class Job(ty.Generic[TaskType]):
         # was just written by run(). Not included in __getstate__ so it is
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
+        # The result reported by ``GraphRunner.complete``, as given
+        self._held = None
         # Set while the job is queued to run in this process's submitter and its run
         # has not finished
         self._awaiting_run = False
@@ -201,6 +203,7 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
+        state.pop("_held", None)
         state.pop("_awaiting_run", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
@@ -216,6 +219,7 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
+        self.__dict__.setdefault("_held", None)
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
@@ -606,6 +610,8 @@ class Job(ty.Generic[TaskType]):
         result : Result
             the result of the job
         """
+        if self._held is not None and not return_inputs:
+            return self._held
         if self.errored:
             return Result(
                 outputs=None,
