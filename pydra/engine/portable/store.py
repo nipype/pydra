@@ -28,7 +28,6 @@ from pydra.engine.portable.entry import (
     EntryFormatUnknown,
     EntryNotTrusted,
     EntryRef,
-    MisfiledEntry,
     PydraEntryV1,
     StoredEntry,
 )
