@@ -131,7 +131,8 @@ A shell job's record adds what it runs in, and a workflow's record what its node
 - A supplied `checksum=` (K2) replaces the whole record by `{"scheme": "pydra-identity@2",
   "supplied": "<checksum>"}`, and the checksum is the supplied string, as today (`task.py:482-508`).
 - **The record is RFC 0003's key record.** This proposal adds a `StoreIdentity` (0003 §4) named
-  `pydra-identity@2`. Its `key(job)` returns the record. Its `check_key(checksum, key)` is true when
+  `pydra-identity@2`. Its `key(job)` returns the record carried with the job, which is computed
+  once, in the submitting process, with the checksum; a worker never recomputes it (#936). Its `check_key(checksum, key)` is true when
   `key["scheme"]` is `pydra-identity@2` and the checksum equals the record's base checksum, followed
   by the absence suffix when the record has one. The base checksum is `key["supplied"]` for a
   supplied record and the record's digest as above otherwise. Its context and fingerprint are
@@ -151,7 +152,9 @@ A shell job's record adds what it runs in, and a workflow's record what its node
   checksum beside it. Without a rule for it, `check_key` would reject every such entry and 0003
   §6.2 would quarantine it on every read. So `key(job)` is built from the unsuffixed record and,
   when the job carries a suffix, adds the triples as `"absent": [[field, index, cause], …]`, sorted
-  as RFC 0002 sorts them. `check_key` recomputes the suffix from `key["absent"]`, with the one
+  as RFC 0002 sorts them. The element index is the typed number form `{"$int": "<decimal>"}`, like
+  every other integer in a record, so the record still holds no JSON numbers (§6.2, §9.2 item 9),
+  and RFC 0002's suffix digest is computed over the same encoding of the triples. `check_key` recomputes the suffix from `key["absent"]`, with the one
   function the runner uses to make it, and compares the whole checksum. It never parses the suffix
   out of the checksum string. A record with no `"absent"` has no suffix, so a checksum carrying one
   under such a record is misfiled. The triples are what the suffix stands for, so they also show in
