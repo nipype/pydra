@@ -3,7 +3,7 @@
 Status: proposed, for maintainer discussion; revision 3. Branch `rfc/portable-store`, off
 `enh/execution-extensions` at `3f734f9a` (the merge of #929). This is the design of D2
 (`PortableStore`), which proposal 0001 §3.3 step 3 names in one paragraph. Line references are to
-`3f734f9a` unless another commit is named. RFC 0002 is #930 at `2ac1ba18`. Revision 2 answers the
+`3f734f9a` unless another commit is named. RFC 0002 is #930 at `bdce243d`. Revision 2 answers the
 review of #931 and revision 3 its first re-review; §12 maps each finding to the text that resolves it.
 
 ## 1. Motivation
@@ -1000,7 +1000,7 @@ either order, then P3, with no cycle. P7 waits for RFC 0004's I1 and I8, which m
 migrates before them migrates into a root that the next release cannot open (§4, §8.1).
 
 **What RFC 0002 needs.** None of these contradicts RFC 0002. All six are carried by RFC 0002 at
-`d017fdcf` (#930); the references below are to that revision.
+`bdce243d` (#930); the references below are to that revision.
 
 1. **`attempt`** (carried: RFC 0002 §3.1). `ready()` gives each job in `Round.dispatch` an `attempt`
    id (§5.4). A workflow job gets one when the runner starts to expand it and the outer job when it
