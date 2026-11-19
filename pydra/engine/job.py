@@ -88,7 +88,11 @@ class Job(ty.Generic[TaskType]):
     task: TaskType
     submitter: "Submitter | None"
     environment: "Environment | None"
-    state_index: int
+    # The flat index of the job's element within its split, None without a split, and
+    # None on a partial node until the node is sealed
+    state_index: int | None
+    # The key of the job's element on a partial node (see ``NodeExecution``), else None
+    state_key: tuple | None = None
     rerun: bool = False  # Set by the graph runner when it hands the job out
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
@@ -104,6 +108,7 @@ class Job(ty.Generic[TaskType]):
         state_index: int | None = None,
         hooks: TaskHooks | None = None,
         resources: ComputeResources | None = None,
+        state_key: tuple | None = None,
     ):
         """
         Initialize a job.
@@ -136,6 +141,7 @@ class Job(ty.Generic[TaskType]):
         )
         self.name = name
         self.state_index = state_index
+        self.state_key = state_key
         self.resources = resources if resources is not None else task._resources
 
         self.return_values = {}
