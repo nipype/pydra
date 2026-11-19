@@ -6,7 +6,7 @@ import pytest
 
 from pydra.utils import digest as dg
 from pydra.utils.digest import digest
-from pydra.utils.hash import hash_function
+from pydra.utils.hash import Cache, hash_function, hash_object
 
 STRING_DTYPE = getattr(getattr(np, "dtypes", None), "StringDType", None)
 needs_stringdtype = pytest.mark.skipif(
@@ -91,3 +91,37 @@ def test_nested_reference_array_golden():
 
 
 GOLDEN_STRUCTURED = "py@1:2bdc44d3397c54c72b944ddff87662c6"
+
+
+def test_shared_cache_keeps_the_element_temporaries_alive():
+    """One ``Cache`` serves every input of a task; it is keyed by ``id``, so the element
+    lists made while hashing an array must outlive the call"""
+    dt = np.dtype([("x", object), ("n", "<i4")])
+    cache = Cache()
+    arrays = [  # held, so that only the element temporaries can lose their ``id``
+        np.array([(_fresh(f"value-{i}"), i)], dtype=dt) for i in range(3000)
+    ]
+    hashes = {hash_object(a, cache=cache) for a in arrays}
+    assert len(hashes) == 3000
+
+
+@pytest.mark.parametrize("wrap", [lambda a: a] + WRAPS)
+def test_masked_reference_array_digests_its_mask(wrap):
+    hidden = np.ma.array(["x", "a"], mask=[True, False], dtype=object)
+    shown_none = np.ma.array([None, "a"], mask=[False, False], dtype=object)
+    shown = np.ma.array(["x", "a"], mask=[False, False], dtype=object)
+    assert digest(wrap(hidden)) != digest(wrap(shown_none))
+    assert digest(wrap(hidden)) != digest(wrap(shown))
+    assert digest(wrap(hidden)) == digest(
+        wrap(np.ma.array(["x", "a"], mask=[True, False], dtype=object))
+    )
+
+
+def test_masked_plain_array_digests_its_mask():
+    masked = np.ma.array([999999, 2], mask=[True, False])
+    other = np.ma.array([5, 2], mask=[True, False])
+    unmasked = np.ma.array([999999, 2])
+    assert digest([masked]) != digest([unmasked])
+    assert hash_function(masked) != hash_function(unmasked)
+    assert hash_function(masked) != hash_function(np.ma.array([5, 2]))
+    assert hash_function(other) != hash_function(np.ma.array([5, 2]))

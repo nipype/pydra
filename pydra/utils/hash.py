@@ -504,7 +504,7 @@ def bytes_repr_slice(obj: slice, cache: Cache) -> Iterator[bytes]:
 def bytes_repr_pathlike(obj: os.PathLike, cache: Cache) -> Iterator[bytes]:
     # a path is its string, whatever class holds it: neither its content nor its module
     text = os.fsdecode(obj)
-    text.encode()  # a lone surrogate has no digest form
+    # a lone surrogate has no digest form: ``encode`` raises
     yield b'{"$path":' + json.dumps(text, ensure_ascii=False).encode() + b"}"
 
 
@@ -1855,6 +1855,10 @@ if HAVE_NUMPY:
     @register_serializer(numpy.ndarray)
     def bytes_repr_numpy(obj: numpy.ndarray, cache: Cache) -> Iterator[bytes]:
         yield f"{obj.__class__.__module__}{obj.__class__.__name__}:{obj.size}:".encode()
+        if isinstance(obj, numpy.ma.MaskedArray):
+            # the data under a mask is not the value: the mask is
+            yield b"mask:"
+            yield numpy.ma.getmaskarray(obj).tobytes(order="C")
         if holds_references(obj.dtype):
             # the bytes of such an array are pointers: digest the elements, at any depth
             yield f"{obj.dtype}:{obj.shape}:".encode()
