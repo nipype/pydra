@@ -1,0 +1,370 @@
+"""The portable store's layout: the header, ``<cdir>`` and ``<shard>`` (RFC 0003 section 3)."""
+
+from __future__ import annotations
+
+import errno
+import hashlib
+import json
+import os
+import re
+import time
+import typing as ty
+import uuid
+
+import attrs
+
+from pydra.engine.portable.identity import StoreIdentity
+from pydra.utils.storagedir import (
+    IS_WINDOWS,
+    StorageDir,
+    StorePolicy,
+    StoreUnavailable,
+)
+
+__all__ = [
+    "HEADER_NAME",
+    "FORMAT_MAJOR",
+    "StoreLayoutUnknown",
+    "StoreLayoutMismatch",
+    "LegacyLayout",
+    "LayoutHeader",
+    "open_layout",
+    "cdir_for",
+    "shard_for",
+]
+
+HEADER_NAME = "pydra-store.json"
+FORMAT = "pydra-store@1.0"
+FORMAT_MAJOR = 1
+TEMP_PREFIX = ".pydra-store."
+TEMP_SUFFIX = ".tmp"
+MAX_HEADER_BYTES = 1 << 16
+
+_CDIR_RAW = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}")
+_FORMAT_RE = re.compile(r"pydra-store@(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
+_HEX2 = re.compile(r"[0-9a-f]{2}")
+_TEMP_RE = re.compile(
+    r"\.pydra-store\.[0-9a-f]{32}\.tmp|\.pydra-store\.[0-9a-f]{16}\.tmp"
+)
+
+
+class StoreLayoutUnknown(StoreUnavailable):
+    """The root's header is of a format major this code does not know, or cannot be read."""
+
+
+class StoreLayoutMismatch(StoreUnavailable):
+    """The root's header differs from the store's configuration in ``key``."""
+
+    def __init__(self, key: str, message: str) -> None:
+        super().__init__(message)
+        self.key = key
+
+
+class LegacyLayout(StoreUnavailable):
+    """The root holds entries but no header: a ``PickleStore`` cache or another tool's directory."""
+
+
+def _mode(mode: int | None) -> str | None:
+    return None if mode is None else f"0o{mode:o}"
+
+
+@attrs.frozen
+class LayoutHeader:
+    """The content of ``<root>/pydra-store.json`` (RFC 0003 section 3.2).
+
+    Attributes
+    ----------
+    format : str
+        ``pydra-store@<major>.<minor>``.
+    entries : str
+        The entry format's version directory.
+    entry_format : str
+    identity : dict
+        ``name``, ``fingerprint`` and ``recorded_only`` (a sorted list).
+    shard : {"sha256-2", "prefix2"}
+    dirs : dict
+        ``staging``, ``quarantine`` and ``sidecars`` (a mapping of names).
+    modes : dict
+        ``file``, ``entry``, ``sealed``, ``container``, ``side`` and ``staging``, each an
+        ``"0o..."`` string or None.
+    pickle : bool
+        Whether writers to this root may write pickle members.
+    """
+
+    format: str
+    entries: str
+    entry_format: str
+    identity: dict
+    shard: str
+    dirs: dict
+    modes: dict
+    pickle: bool
+
+    @classmethod
+    def for_store(
+        cls,
+        identity: StoreIdentity,
+        policy: StorePolicy | None = None,
+        *,
+        shard: ty.Literal["sha256-2", "prefix2"] = "sha256-2",
+        pickle: bool = False,
+        entries: str = "results@1",
+        entry_format: str = "pydra-entry@1",
+        dirs: ty.Mapping[str, ty.Any] | None = None,
+    ) -> "LayoutHeader":
+        """The header a store with ``identity`` and ``policy`` expects."""
+        policy = StorePolicy() if policy is None else policy
+        return cls(
+            format=FORMAT,
+            entries=entries,
+            entry_format=entry_format,
+            identity={
+                "name": identity.name,
+                "fingerprint": identity.fingerprint_name,
+                "recorded_only": sorted(identity.recorded_only),
+            },
+            shard=shard,
+            dirs=dict(
+                dirs
+                if dirs is not None
+                else {"staging": "staging", "quarantine": "quarantine", "sidecars": {}}
+            ),
+            modes={
+                "file": _mode(policy.file_mode),
+                "entry": _mode(policy.entry_mode),
+                "sealed": _mode(policy.sealed_mode),
+                "container": _mode(policy.container_mode),
+                "side": _mode(policy.side_mode),
+                "staging": _mode(policy.staging_mode),
+            },
+            pickle=pickle,
+        )
+
+    def to_json(self) -> bytes:
+        return (
+            json.dumps(attrs.asdict(self), indent=2, sort_keys=False, ensure_ascii=True)
+            + "\n"
+        ).encode("ascii")
+
+    @classmethod
+    def from_json(cls, data: bytes) -> "LayoutHeader":
+        """Parse a stored header; keys this version does not know are ignored.
+
+        Raises
+        ------
+        StoreLayoutUnknown
+            The document is not JSON, lacks a key, or names a format major other than 1.
+        """
+        try:
+            doc = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as err:
+            raise StoreLayoutUnknown(
+                f"{HEADER_NAME} is not readable JSON: {err}"
+            ) from None
+        if not isinstance(doc, dict):
+            raise StoreLayoutUnknown(f"{HEADER_NAME} does not hold a JSON object")
+        fmt = doc.get("format")
+        found = _FORMAT_RE.fullmatch(fmt) if isinstance(fmt, str) else None
+        if found is None or int(found.group(1)) != FORMAT_MAJOR:
+            raise StoreLayoutUnknown(
+                f"{HEADER_NAME} has format {fmt!r}; this version reads pydra-store@{FORMAT_MAJOR}.x"
+            )
+        names = [f.name for f in attrs.fields(cls)]
+        missing = [n for n in names if n not in doc]
+        if missing:
+            raise StoreLayoutUnknown(f"{HEADER_NAME} lacks {', '.join(missing)}")
+        ident = doc["identity"]
+        if not isinstance(ident, dict) or not all(
+            k in ident for k in ("name", "fingerprint", "recorded_only")
+        ):
+            raise StoreLayoutUnknown(f"{HEADER_NAME} has a malformed identity")
+        for name in ("dirs", "modes"):
+            if not isinstance(doc[name], dict):
+                raise StoreLayoutUnknown(f"{HEADER_NAME} has a malformed {name}")
+        return cls(**{n: doc[n] for n in names})
+
+
+def _recorded(header: LayoutHeader) -> list:
+    only = header.identity.get("recorded_only")
+    return sorted(only) if isinstance(only, list) else only
+
+
+def _differing_key(stored: LayoutHeader, expected: LayoutHeader) -> str | None:
+    """The first header key at which ``stored`` differs from ``expected``, in the order the RFC
+    lists them; ``recorded_only`` is told apart from the rest of ``identity``."""
+    for key in ("entries", "entry_format"):
+        if getattr(stored, key) != getattr(expected, key):
+            return key
+    for part in ("name", "fingerprint"):
+        if stored.identity.get(part) != expected.identity.get(part):
+            return "identity"
+    if _recorded(stored) != _recorded(expected):
+        return "recorded_only"
+    for key in ("shard", "dirs", "modes", "pickle"):
+        if getattr(stored, key) != getattr(expected, key):
+            return key
+    return None
+
+
+def _read(root: StorageDir) -> bytes | None:
+    try:
+        f = root.open_read(HEADER_NAME)
+    except FileNotFoundError:
+        return None
+    with f:
+        data = f.read(MAX_HEADER_BYTES + 1)
+    if len(data) > MAX_HEADER_BYTES:
+        raise StoreLayoutUnknown(
+            f"{HEADER_NAME} is larger than {MAX_HEADER_BYTES} bytes"
+        )
+    return data
+
+
+def _check(stored: LayoutHeader, expected: LayoutHeader) -> LayoutHeader:
+    key = _differing_key(stored, expected)
+    if key is not None:
+        raise StoreLayoutMismatch(
+            key,
+            f"the store at this root differs from this configuration in {key!r}: "
+            f"stored {_shown(stored, key)}, configured {_shown(expected, key)}",
+        )
+    return stored
+
+
+def _shown(header: LayoutHeader, key: str) -> str:
+    if key == "recorded_only":
+        return repr(_recorded(header))
+    if key == "identity":
+        return repr((header.identity.get("name"), header.identity.get("fingerprint")))
+    return repr(getattr(header, key))
+
+
+def _sweep_and_scan(root: StorageDir, expected: LayoutHeader) -> list[str]:
+    """Remove header temporaries older than the staging age; return the other names present."""
+    age = root.policy.ages.staging
+    now = time.time()
+    others = []
+    for entry in list(root.scandir()):
+        if entry.name == HEADER_NAME:
+            continue
+        if _TEMP_RE.fullmatch(entry.name) and entry.is_file():
+            if now - entry.stat().st_mtime > age:
+                try:
+                    root.unlink(entry.name)
+                except FileNotFoundError:
+                    pass
+            continue
+        others.append(entry.name)
+    return others
+
+
+def _publish(root: StorageDir, tmp: str) -> bool:
+    """Make ``tmp`` the header unless one exists. True if this call made it."""
+    try:
+        if IS_WINDOWS:
+            root.rename(tmp, root, HEADER_NAME)
+        else:
+            root.link(tmp, HEADER_NAME)
+    except FileExistsError:
+        return False
+    except PermissionError:
+        if IS_WINDOWS and (
+            root.path and os.path.exists(os.path.join(root.path, HEADER_NAME))
+        ):
+            return False
+        raise
+    except OSError as err:
+        if err.errno in (
+            errno.EPERM,
+            errno.ENOTSUP,
+            errno.EOPNOTSUPP,
+            errno.ENOSYS,
+            errno.EMLINK,
+        ):
+            raise StoreUnavailable(
+                "this filesystem cannot link a file without replacing, so "
+                f"{HEADER_NAME} cannot be created: {err}"
+            ) from None
+        raise
+    return True
+
+
+def open_layout(root: StorageDir, expected: LayoutHeader) -> LayoutHeader:
+    """Check ``root``'s header against ``expected``, creating it if the root is empty.
+
+    The header is written to a private temporary, ``fsync``ed, and linked to its name, which
+    fails if the name exists, so a concurrent opener sees none or a complete one. Header
+    temporaries older than the staging age are removed.
+
+    Returns
+    -------
+    LayoutHeader
+        The header as stored (a minor version above ``expected``'s is kept).
+
+    Raises
+    ------
+    StoreLayoutUnknown
+        The stored format major is not 1, or the header cannot be read.
+    StoreLayoutMismatch
+        A stored key differs from ``expected``; ``key`` names it.
+    LegacyLayout
+        The root holds names but no header.
+    """
+    for _ in range(8):
+        data = _read(root)
+        if data is not None:
+            return _check(LayoutHeader.from_json(data), expected)
+        others = _sweep_and_scan(root, expected)
+        if others:
+            raise LegacyLayout(
+                f"{root.path} has entries ({', '.join(sorted(others)[:3])}"
+                f"{', ...' if len(others) > 3 else ''}) but no {HEADER_NAME}: it is a PickleStore "
+                "cache or another tool's directory; migrate it (RFC 0003 section 8) or use an empty root"
+            )
+        tmp = f"{TEMP_PREFIX}{uuid.uuid4().hex}{TEMP_SUFFIX}"
+        with root.open_new(tmp, 0o600) as f:
+            f.write(expected.to_json())
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            made = _publish(root, tmp)
+        finally:
+            try:
+                root.unlink(tmp)
+            except FileNotFoundError:
+                pass
+        if made:
+            return expected
+    raise StoreUnavailable(f"could not settle the header of {root.path}")
+
+
+def cdir_for(checksum: str) -> str:
+    """The checksum as a directory name: itself if it matches ``[a-z0-9][a-z0-9_-]{0,199}``,
+    else ``h-<sha256 of the checksum>``."""
+    if _CDIR_RAW.fullmatch(checksum):
+        return checksum
+    return "h-" + hashlib.sha256(checksum.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def shard_for(cdir: str, checksum: str, rule: ty.Literal["sha256-2", "prefix2"]) -> str:
+    """The two-hex-character shard directory of an entry.
+
+    ``sha256-2`` is the first two characters of the sha256 of the checksum; ``prefix2`` the
+    first two of ``cdir``.
+
+    Raises
+    ------
+    ValueError
+        ``rule`` is unknown, or ``prefix2`` and ``cdir`` does not start with two lower-case hex
+        characters.
+    """
+    if rule == "sha256-2":
+        return hashlib.sha256(checksum.encode("utf-8", "surrogatepass")).hexdigest()[:2]
+    if rule == "prefix2":
+        shard = cdir[:2]
+        if not _HEX2.fullmatch(shard):
+            raise ValueError(
+                f"shard rule 'prefix2' needs a checksum starting with two hex characters, got {cdir!r}"
+            )
+        return shard
+    raise ValueError(f"unknown shard rule {rule!r}")
