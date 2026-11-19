@@ -239,37 +239,43 @@ class NodeExecution(ty.Generic[TaskType]):
         """Updates the status of the tasks in the node."""
         if not self.started:
             return
-        # Check to see if any previously queued tasks have completed
+        # A job handed to an executor is not polled: it is classified when its outcome
+        # is reported to ``GraphRunner.complete``, which holds the result on the job
         for index, job in list(self.queued.items()):
-            try:
-                is_done = job.done
-            except ValueError:
-                errored = True
-                is_done = False
-            else:
-                errored = False
-            if is_done:
+            status = self._reported_status(job)
+            if status is None:
+                continue
+            if status == "done":
                 self.successful[job.state_index] = self.queued.pop(index)
-            elif job.errored or errored:
+            elif status == "errored":
                 self.errored[job.state_index] = self.queued.pop(index)
-            elif not job._awaiting_run and job.run_start_time:
+            elif job.run_start_time:
                 self.running[job.state_index] = (
                     self.queued.pop(index),
                     job.run_start_time,
                 )
-        # Check to see if any previously running tasks have completed
         for index, (job, _) in list(self.running.items()):
-            try:
-                is_done = job.done
-            except ValueError:  # raised by Job.done if the job has errored
-                errored = True
-                is_done = False
-            else:
-                errored = False
-            if is_done:
+            status = self._reported_status(job)
+            if status == "done":
                 self.successful[job.state_index] = self.running.pop(index)[0]
-            elif job.errored or errored:
+            elif status == "errored":
                 self.errored[job.state_index] = self.running.pop(index)[0]
+
+    @staticmethod
+    def _reported_status(job: "Job") -> str | None:
+        """``"done"`` or ``"errored"`` for a job whose outcome is known, ``"pending"``
+        for one that is not handed out, ``None`` for one still awaiting its report"""
+        held = getattr(job, "_held", None)
+        if held is not None:
+            return "errored" if held.errored else "done"
+        if job.errored:
+            return "errored"
+        if getattr(job, "_awaiting_run", False):
+            return None
+        try:
+            return "done" if job.done else "pending"
+        except ValueError:  # raised by Job.done if the job has errored
+            return "errored"
 
     @property
     def all_failed(self) -> bool:
@@ -616,7 +622,13 @@ class GraphRunner:
                 self._failed = True
 
     def _runnable(self) -> list[Job]:
-        return self._runnable_jobs(self.exec_graph)
+        """The released jobs, once unrunnable marks have spread to every element that
+        reads a failed or unrunnable one (each pass spreads them one node further)"""
+        while True:
+            marked = sum(len(n.unrunnable) for n in self.exec_graph.nodes)
+            jobs = self._runnable_jobs(self.exec_graph)
+            if sum(len(n.unrunnable) for n in self.exec_graph.nodes) == marked:
+                return jobs
 
     @staticmethod
     def _runnable_jobs(graph: "DiGraph[NodeExecution]") -> list[Job]:
@@ -708,7 +720,9 @@ class GraphRunner:
             A job from :meth:`ready`
         outcome : Result | Failed
             What came of running it. A :class:`Failed` is recorded as the job's error and
-            the elements that read the job become unrunnable
+            the elements that read the job become unrunnable. A ``Result`` is held on the
+            job as given (whatever attributes it carries stay on it), so readers use it
+            without a store read; an errored one is a failure of the run
         """
         job._awaiting_run = False
         if isinstance(outcome, Failed):
@@ -719,8 +733,16 @@ class GraphRunner:
                 self._first_error = exc
             self._errors.append(job_error(job, exc))
             self._entries.append(error_entry(job.name, job.state_index, exc))
-        elif getattr(outcome, "errored", False):
-            self._failed = True
+        else:
+            job._held = outcome
+            if getattr(outcome, "errored", False):
+                exc = RuntimeError(
+                    f"Job {job.name!r} errored, see its error record in {str(job.cache_dir)!r}"
+                )
+                job._errored = True
+                self._failed = True
+                self._errors.append(job_error(job, exc))
+                self._entries.append(error_entry(job.name, job.state_index, exc))
         self._collect_resolution_errors()
 
     def stuck(self) -> str | None:
