@@ -320,7 +320,15 @@ def _posix_key(key: str, sep: str = os.sep) -> str:
     return key.replace(sep, "/") if sep != "/" else key
 
 
-def _fileset_members(value: FileSet) -> list[tuple[str, str]]:
+def _fileset_members(value: FileSet, cache: ty.Any = None) -> list[tuple[str, str]]:
+    """The ``(key, sha256)`` members of ``value``, through the stat-to-digest caches of
+    ``pydra.utils.hash`` (``cache`` is a ``hash.Cache``)."""
+    from pydra.utils.hash import fileset_members
+
+    return fileset_members(value, _read_fileset_members, cache)
+
+
+def _read_fileset_members(value: FileSet) -> list[tuple[str, str]]:
     members = []
     for key, chunks in value.byte_chunks(
         ignore_hidden_files=False, ignore_hidden_dirs=False
@@ -358,10 +366,11 @@ def _npscalar(value: "np.generic") -> JSON:
     return {"$npscalar": [little.str, text]}
 
 
-def digest_form(value: ty.Any) -> JSON:
+def digest_form(value: ty.Any, cache: ty.Any = None) -> JSON:
     """RFC 0003's output encoding with typed numbers and tagged tuples (RFC 0004 §6.2).
 
     Raises an ``Exception`` for a value that has none, which ``digest`` turns into ``py@1``.
+    ``cache`` is the ``pydra.utils.hash.Cache`` that file sets are hashed through.
     """
     if value is None or isinstance(value, bool):
         return value
@@ -370,11 +379,11 @@ def digest_form(value: ty.Any) -> JSON:
         return {"$digest": _registered_digest(entry, value)}
     if entry is not None and entry.tag is not None and not entry.fileset:
         assert entry.encode is not None
-        return {"$codec": entry.tag, "value": digest_form(entry.encode(value))}
+        return {"$codec": entry.tag, "value": digest_form(entry.encode(value), cache)}
     if entry is not None and entry.fileset and isinstance(value, FileSet):
         return {
             "$fileset": entry.tag,
-            "files": [[k, s] for k, s in sorted(_fileset_members(value))],
+            "files": [[k, s] for k, s in sorted(_fileset_members(value, cache))],
         }
     tp = type(value)
     if tp is int:
@@ -384,22 +393,26 @@ def digest_form(value: ty.Any) -> JSON:
     if tp is str:
         return value
     if tp is complex:
-        return {"$complex": [digest_form(value.real), digest_form(value.imag)]}
+        return {
+            "$complex": [digest_form(value.real, cache), digest_form(value.imag, cache)]
+        }
     if tp is bytes:
         return {"$bytes": _sha256(value)}
     if tp is list:
-        return [digest_form(v) for v in value]
+        return [digest_form(v, cache) for v in value]
     if tp is tuple:
-        return {"$tuple": [digest_form(v) for v in value]}
+        return {"$tuple": [digest_form(v, cache) for v in value]}
     if tp in (set, frozenset):
-        return {"$set": sorted((digest_form(v) for v in value), key=jcs)}
+        return {"$set": sorted((digest_form(v, cache) for v in value), key=jcs)}
     if tp is dict:
         if all(type(k) is str for k in value):
             return {
-                ("$" + k if k.startswith("$") else k): digest_form(v)
+                ("$" + k if k.startswith("$") else k): digest_form(v, cache)
                 for k, v in value.items()
             }
-        pairs = [[digest_form(k), digest_form(v)] for k, v in value.items()]
+        pairs = [
+            [digest_form(k, cache), digest_form(v, cache)] for k, v in value.items()
+        ]
         return {"$dict": sorted(pairs, key=lambda p: jcs(p[0]))}
     if tp in (datetime.datetime, datetime.date):
         return {"$datetime": value.isoformat()}
@@ -418,8 +431,11 @@ def _py_digest(value: ty.Any, cache: ty.Any = None) -> str:
     return "py@1:" + hash_object(value, cache=cache).hex()
 
 
-def digest(value: ty.Any) -> str:
-    """The typed digest ``"<tag>@<n>:<hex>"`` of ``value``; the first §6.2 row that applies."""
+def digest(value: ty.Any, cache: ty.Any = None) -> str:
+    """The typed digest ``"<tag>@<n>:<hex>"`` of ``value``; the first §6.2 row that applies.
+
+    ``cache`` is a ``pydra.utils.hash.Cache``, shared by the ``py@1`` fallback and the
+    file sets, which are read through its persistent stat-to-digest cache."""
     entry = _BY_TYPE.get(type(value))
     if entry is not None and entry.digest is not None:
         return _registered_digest(entry, value)
@@ -427,9 +443,9 @@ def digest(value: ty.Any) -> str:
         return "npy@1:" + _sha256(canonical_npy(value))
     if _is_tagged_fileset(value):
         entry = _BY_TYPE[type(value)]
-        return fileset_digest(str(entry.tag), _fileset_members(value))
+        return fileset_digest(str(entry.tag), _fileset_members(value, cache))
     try:
-        form = digest_form(value)
+        form = digest_form(value, cache)
     except _NoDigestForm:
-        return _py_digest(value)
+        return _py_digest(value, cache)
     return "json@1:" + _sha256(jcs(form))

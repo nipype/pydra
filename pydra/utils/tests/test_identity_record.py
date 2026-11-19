@@ -289,7 +289,7 @@ def test_python_record_shape():
     assert record["kind"] == "python"
     assert list(record["task"]) == ["code"]
     assert set(record["inputs"]) == {"a", "b"}
-    assert record["inputs"]["a"].startswith("py@1:")
+    assert record["inputs"]["a"].startswith("json@1:")
     # the outputs digest follows the Outputs class
     assert task_record(StrFields(a=1))["outputs"] != record["outputs"]
 
@@ -299,8 +299,8 @@ def test_shell_record_shape():
     assert record["kind"] == "shell"
     assert record["task"] == {}
     assert "executable" in record["inputs"]
-    assert record["inputs"]["executable"].startswith("py@1:")
-    assert record["inputs"]["text"].startswith("py@1:")
+    assert record["inputs"]["executable"].startswith("json@1:")
+    assert record["inputs"]["text"].startswith("json@1:")
     assert record["outputs"].startswith("type@1:")
     assert record_checksum(record).startswith("shell-")
 

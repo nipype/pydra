@@ -653,6 +653,11 @@ class Decoder:
             raise CorruptEntry(
                 f"files/{set_hex} has keys {found}, the entry records {keys}"
             )
+        # the members are sealed read-only and were just checked against the entry: a
+        # downstream input takes its digest from here, with no settle window
+        from pydra.utils.hash import prime_fileset_members
+
+        prime_fileset_members(value, list(zip(keys, shas)))
         return value
 
 
