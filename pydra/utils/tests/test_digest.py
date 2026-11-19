@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from pydra.utils import digest as dg
+from pydra.utils.hash import class_digest
 from pydra.utils.digest import (
     canonical_npy,
     digest,
@@ -165,6 +166,7 @@ def test_lookup_tag_never_imports():
     assert digest_form(P(1)) == {
         "$codec": "test.lookup.P",
         "value": {"v": {"$int": "1"}},
+        "$class": class_digest(P),
     }
     with pytest.raises(ValueError):
         register_codec(int, "test.lookup.P", str, int)

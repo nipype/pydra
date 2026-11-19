@@ -11,8 +11,10 @@ record existed, under their tags: ``code@1`` (the walk of the executor), ``type@
 ``Outputs`` class) and ``py@1`` (an input). A job's record is built once, in the
 submitting process, and carried with the job: ``Job.record``, ``Job.checksum`` and the
 store identity's ``key`` never rebuild it in a worker. ``Task._checksum`` and
-``Task._hash`` rebuild it on every call, as the checksum always was (pydra issue #936,
-fixed with the walk in RFC 0004 I4).
+``Task._hash`` rebuild it on every call in the submitting process, but not their code
+digests: a task unpickled in a worker reads the digest of its code and of its ``Outputs``
+class from the one the submitting process computed (see ``Task._carried``, pydra issue
+#936), because a worker may not be able to read the source.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from pydra.utils.hash import (
     check_code_hash,
     code_hash_default,
     hash_function,
+    type_digest,
 )
 
 if ty.TYPE_CHECKING:
@@ -68,12 +71,16 @@ def field_digests(
     inputs.pop(exclude, None)
     cache = Cache(code_hash=task._code_hash)
     code_name = task._executor_name if _executor_is_code(task) else None
+    carried = task._carried or {}
     digests = {}
     for name, value in inputs.items():
+        if name in carried:
+            digests[name] = carried[name]
+            continue
         tag = "code@1" if name == code_name else "py@1"
         digests[name] = f"{tag}:{hash_function(value, cache=cache)}"
-    digests["Outputs"] = f"type@1:{hash_function(task.Outputs, cache=cache)}"
-    if collect:
+    digests["Outputs"] = carried.get("Outputs") or type_digest(task.Outputs, cache)
+    if collect and not carried:
         task._code_modules = frozenset(cache.modules)
         task._declared_code = {
             k: ",".join(sorted(v)) for k, v in sorted(cache.declared.items())

@@ -213,6 +213,8 @@ class Job(ty.Generic[TaskType]):
         ):  # a job pickled before the task was inlined
             state["task"] = cp.loads(state["task"])
         self.__dict__.update(state)
+        # the digests the submitting process computed are not computed again here
+        self.task._carry_digests()
         # _cached_result is excluded from __getstate__; ensure it always exists
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
@@ -685,8 +687,12 @@ class Job(ty.Generic[TaskType]):
             return
         hash_changes = self.task._hash_changes()
         details = ""
+        fields = attr.fields_dict(type(self.task))
         for changed in hash_changes:
-            field = getattr(attr.fields(type(self.task)), changed)
+            if changed not in fields:  # the digest of the Outputs class
+                details += f"- {changed}: the digest changed\n"
+                continue
+            field = fields[changed]
             hash_function(getattr(self.task, changed))
             val = getattr(self.task, changed)
             field_type = type(val)
