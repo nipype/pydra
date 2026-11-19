@@ -848,3 +848,66 @@ def test_rerun_after_sigkill_takes_over(tmp_path):
     assert "Took over the lease" in err
     assert len((tmp_path / "runs.log").read_text().splitlines()) == 2
     assert not any(p.suffix == ".lock" for p in (tmp_path / "cache").iterdir())
+
+
+# try_take: one attempt at a time, for a caller that must not block
+
+
+def test_try_take_returns_none_when_free(tmp_path):
+    lease = DirectoryLease("abc", tmp_path, tmp_path / "abc.lock", settings=FAST)
+    assert lease.try_take() is None
+    assert lease.held
+    lease.__exit__(None, None, None)
+    assert not lease.lockfile.exists()
+
+
+def test_try_take_returns_the_delay_while_held_then_takes_it(tmp_path):
+    lockfile = tmp_path / "abc.lock"
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    with holder:
+        first = waiter.try_take()
+        assert first is not None and first > 0
+        second = waiter.try_take()
+        assert second is not None and second >= first  # backs off between attempts
+        assert not waiter.held
+    assert waiter.try_take() is None
+    assert waiter.held
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_keeps_its_bounds_between_attempts(tmp_path):
+    """The first call starts the wait's clock; later calls do not restart it, so the
+    wait ends in ``LeaseTimeout`` however often it is retried"""
+    lockfile = tmp_path / "abc.lock"
+    settings = LeaseSettings(
+        stale_after=10, timeout=15, attribute_delay=0, max_wait=0.2
+    )
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    with holder:
+        assert waiter.try_take() is not None
+        time.sleep(0.3)
+        with pytest.raises(LeaseTimeout):
+            waiter.try_take()
+        assert not waiter.held
+    # a new wait starts afresh
+    assert waiter.try_take() is None
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_takes_over_a_stale_lease(tmp_path):
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile)
+    settings = LeaseSettings(stale_after=0.3, timeout=10, attribute_delay=0)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    deadline = time.monotonic() + 20
+    while (delay := waiter.try_take()) is not None:
+        assert time.monotonic() < deadline
+        time.sleep(delay)
+    assert waiter.held
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_is_part_of_the_lease_protocol():
+    assert "try_take" in dir(Lease)

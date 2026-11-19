@@ -10,11 +10,15 @@ import re
 from collections import defaultdict
 from datetime import datetime
 import logging
+import time
+from uuid import uuid4
 import attrs
 from pydra.engine.graph import DiGraph
 from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.job import Job
+from pydra.engine.lease import LeaseLost
+from pydra.utils.general import is_workflow
 
 logger = logging.getLogger("pydra.submitter")
 
@@ -96,6 +100,8 @@ class NodeExecution(ty.Generic[TaskType]):
     _tasks: dict[int | None, "Job[TaskType] | None"] | None
 
     workflow: "Workflow"
+    # The nested workflows that hold the node, outermost first
+    path: tuple[str, ...]
 
     graph: DiGraph["NodeExecution"] | None
 
@@ -110,8 +116,10 @@ class NodeExecution(ty.Generic[TaskType]):
         node: "Node",
         submitter: "Submitter",
         workflow: "Workflow",
+        path: tuple[str, ...] = (),
     ):
         self.name = node.name
+        self.path = path
         self.node = node
         self.submitter = submitter
         # Initialize the state dictionaries
@@ -175,6 +183,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 resources=self.node._resources,
                 state_index=index,
             )
+            job.workflow_path = self.path
         return job
 
     def start(self) -> None:
@@ -561,7 +570,7 @@ class Round:
     unrunnable : list[Unrunnable]
         The elements marked unrunnable inside the call (empty until R7)
     retry_after : float | None
-        Seconds until a waiting workflow lease is tried again (``None`` until R6)
+        Seconds until a waiting workflow lease is tried again, ``None`` if none waits
     """
 
     dispatch: list[Job] = attrs.field(factory=list)
@@ -570,13 +579,45 @@ class Round:
     retry_after: float | None = None
 
 
+class _Frame:
+    """The expansion of one workflow job: its lease, its execution graph and the errors
+    of its nodes. The root frame is the runner's own task, with a job only when the
+    runner is given one."""
+
+    def __init__(self, job, parent, path, owned):
+        self.job: Job | None = job
+        self.parent: "_Frame | None" = parent
+        self.path: tuple[str, ...] = path
+        # whether the runner leases, checks and commits ``job``
+        self.owned: bool = owned
+        self.state: str = "leasing" if owned else "expanding"
+        self.lease: ty.Any = None
+        self.result: "Result | None" = None
+        self.workflow: "Workflow | None" = None
+        self.graph: "DiGraph[NodeExecution] | None" = None
+        self.retry_at: float | None = None
+        self.errors: list[str] = []
+        self.entries: list[JobErrorEntry] = []
+
+    @property
+    def nodes_done(self) -> bool:
+        return all(n.done for n in self.graph.nodes)
+
+
 class GraphRunner:
     """The execution state of one workflow job, and the rule by which its jobs are
     released.
 
     A driver calls :meth:`ready` for the jobs to run, runs them however it chooses,
     reports each with :meth:`complete`, and repeats until :attr:`done`. The runner reads
-    the store, but never runs a job.
+    the store, but never runs a leaf job.
+
+    The runner expands nested workflows itself, so :meth:`ready` returns the leaf jobs of
+    every level. For each workflow job it takes the lease one attempt at a time (a job
+    whose lease another process holds is waited for: :attr:`Round.retry_after`), checks
+    the store, expands the workflow and, when its nodes are done, commits its result.
+    A driver ends with :meth:`close`, which releases the leases of unfinished workflow
+    jobs.
 
     Parameters
     ----------
@@ -600,9 +641,12 @@ class GraphRunner:
     submitter : Submitter, optional
         Transitional: the submitter the jobs are created for (a job reads its audit,
         cache root and store from it). Without it a ``debug`` submitter over ``store``
-        is created. R6 and R7 remove it
+        is created
     job : Job, optional
         The workflow job that the runner expands, whose :meth:`result` it reads
+    own_job : bool
+        Whether the runner leases, checks and commits ``job`` (the default); False
+        if the caller holds its lease and commits it, as :meth:`Job.run` does
     """
 
     def __init__(
@@ -618,6 +662,7 @@ class GraphRunner:
         lookup_before_dispatch: bool = False,
         submitter: "Submitter | None" = None,
         job: "Job | None" = None,
+        own_job: bool = True,
     ):
         self.task = task
         self.store = store
@@ -633,44 +678,233 @@ class GraphRunner:
             submitter = Submitter(worker="debug", store=store, telemetry=False)
         self.submitter = submitter
         self.job = job
-        self.workflow: "Workflow" = task.construct()
-        self.exec_graph: DiGraph[NodeExecution] = self.workflow.execution_graph(
-            submitter=submitter
-        )
         self._handed: set[Job] = set()
-        self._errors: list[str] = []
-        self._entries: list[JobErrorEntry] = []
         self._failed = False
         self._first_error: BaseException | None = None
-        self._collect_resolution_errors()
+        self._root_error: BaseException | None = None
+        self._root = _Frame(job, None, (), owned=job is not None and own_job)
+        self._frames: list[_Frame] = [self._root]
+        # the frame each job belongs to, and the frame of each workflow job
+        self._frame_of: dict[Job, _Frame] = {}
+        self._child: dict[Job, _Frame] = {}
+        if self._root.owned:
+            job.rerun = rerun
+            self._prepare(self._root)
+        else:
+            self._expand(self._root, task)
+
+    @property
+    def workflow(self) -> "Workflow | None":
+        return self._root.workflow
+
+    @property
+    def exec_graph(self) -> "DiGraph[NodeExecution] | None":
+        return self._root.graph
+
+    @property
+    def _errors(self) -> list[str]:
+        return self._root.errors
+
+    @property
+    def _entries(self) -> "list[JobErrorEntry]":
+        return self._root.entries
 
     @property
     def _inner_rerun(self) -> bool:
         return self.rerun and self.propagate_rerun
 
-    def _collect_resolution_errors(self) -> None:
-        for node in self.exec_graph.nodes:
-            records: list[JobErrorEntry] = []
-            self._errors.extend(node.pop_resolution_errors(records))
-            self._entries.extend(records)
-            if records:
-                self._failed = True
+    # Workflow jobs
+
+    def _prepare(self, frame: _Frame) -> None:
+        """Run the ``pre_run`` hook of a workflow job and make its lease"""
+        job = frame.job
+        job.hooks.pre_run(job)
+        frame.lease = self.store.acquire(job.checksum, job.context)
+
+    def _expand(self, frame: _Frame, task: "Task") -> None:
+        frame.workflow = task.construct()
+        frame.graph = frame.workflow.execution_graph(
+            submitter=self.submitter, path=frame.path
+        )
+        frame.state = "expanding"
+        if frame.job is not None:
+            frame.job.return_values = {
+                "workflow": frame.workflow,
+                "exec_graph": frame.graph,
+            }
+        self._collect_resolution_errors(frame)
+
+    def _enter(self, job: Job, parent: _Frame) -> None:
+        """Start the handling of a released workflow job, once"""
+        if job in self._child or job in self._handed:
+            return
+        job.rerun = self._inner_rerun
+        if not job.rerun and self._read_succeeded([job]) == []:
+            return  # stored with a success record: complete without a lease
+        label = (
+            job.name if job.state_index is None else f"{job.name}[{job.state_index}]"
+        )
+        frame = _Frame(job, parent, parent.path + (label,), owned=True)
+        self._child[job] = frame
+        self._frames.append(frame)
+        self._prepare(frame)
+
+    def _try_lease(self, frame: _Frame) -> None:
+        now = time.monotonic()
+        if frame.retry_at is not None and now < frame.retry_at:
+            return
+        try:
+            delay = frame.lease.try_take()
+        except Exception as exc:  # LeaseTimeout, StorageUnsupported
+            self._fail(frame, exc, "lease")
+            return
+        if delay is not None:
+            frame.retry_at = now + delay
+            return
+        job = frame.job
+        rerun = self.rerun if frame.parent is None else job.rerun
+        if not rerun:
+            result = job.result()
+            if result is not None and not result.errored:
+                job._cached_result = result
+                job._held = result
+                self._release_lease(frame)
+                self._succeeded(frame)
+                return
+        job.attempt = "resume" if job.can_resume else uuid4().hex
+        try:
+            frame.result = job._start_workflow(frame.lease)
+            self._expand(frame, job.task)
+        except Exception as exc:
+            self._finish(frame, exc)
+
+    def _release_lease(self, frame: _Frame) -> None:
+        lease, frame.lease = frame.lease, None
+        if lease is not None:
+            lease.__exit__(None, None, None)
+        for other in self._frames:  # a lease waited for here may be free now
+            if other.state == "leasing":
+                other.retry_at = None
+
+    def _succeeded(self, frame: _Frame) -> None:
+        frame.state = "finished"
+        frame.job._awaiting_run = False
+
+    def _fail(self, frame: _Frame, exc: BaseException, phase: str) -> None:
+        """Record the error of a workflow job that stops it (never raised) and release
+        its lease; its readers become unrunnable"""
+        job = frame.job
+        frame.state = "finished"
+        job._errored = True
+        job._awaiting_run = False
+        self._release_lease(frame)
+        owner = frame.parent or frame
+        self._failed = True
+        if self._first_error is None:
+            self._first_error = exc
+        owner.errors.append(job_error(job, exc))
+        owner.entries.append(error_entry(job.name, job.state_index, exc, phase=phase))
+
+    def _finish(self, frame: _Frame, error: BaseException | None = None) -> None:
+        """Commit the result of a workflow job whose nodes are done (or that failed
+        while expanding)"""
+        job = frame.job
+        if error is None and frame.errors:
+            from pydra.engine.submitter import workflow_error
+
+            error = workflow_error(job, frame.errors, frame.entries)
+        try:
+            error = job._finish_workflow(frame.lease, frame.result, error)
+        except LeaseLost as exc:
+            self._fail(frame, exc, "commit")
+            return
+        except Exception as exc:
+            self._fail(frame, exc, "run")
+            return
+        if error is None:
+            job._held = frame.result
+            self._release_lease(frame)
+            job._complete_workflow(frame.result)
+            self._succeeded(frame)
+        elif frame.parent is None:
+            frame.state = "finished"
+            self._release_lease(frame)
+            if not frame.errors:  # the workflow itself could not be built
+                self._root_error = error
+                self._fail_root(frame, error)
+        else:
+            self._fail(frame, error, "run")
+
+    def _fail_root(self, frame: _Frame, exc: BaseException) -> None:
+        self._failed = True
+        if self._first_error is None:
+            self._first_error = exc
+        frame.errors.append(job_error(frame.job, exc))
+        frame.entries.append(error_entry(frame.job.name, frame.job.state_index, exc))
+
+    def _settle_frames(self) -> None:
+        for frame in reversed(list(self._frames)):
+            if frame.state == "expanding" and frame.owned and frame.nodes_done:
+                self._finish(frame)
+
+    def close(self) -> None:
+        """Release what the runner holds: the workflow jobs that have errors are
+        committed as errored, the others give up their leases uncommitted. Idempotent;
+        a driver calls it however the run ends"""
+        for frame in reversed(list(self._frames)):
+            if frame.state == "finished" or not frame.owned:
+                continue
+            if frame.state == "expanding" and (frame.errors or self._failed):
+                self._finish(frame)
+            else:
+                frame.state = "finished"
+                self._release_lease(frame)
+
+    # Rounds
+
+    def _collect_resolution_errors(self, frame: _Frame | None = None) -> None:
+        for fr in [frame] if frame is not None else list(self._frames):
+            if fr.graph is None:
+                continue
+            for node in fr.graph.nodes:
+                records: list[JobErrorEntry] = []
+                fr.errors.extend(node.pop_resolution_errors(records))
+                fr.entries.extend(records)
+                if records:
+                    self._failed = True
 
     def _runnable(self) -> list[Job]:
-        return self._runnable_jobs(self.exec_graph)
+        leaves: list[Job] = []
+        i = 0
+        while i < len(self._frames):  # frames made meanwhile are visited too
+            frame = self._frames[i]
+            i += 1
+            if frame.state == "leasing":
+                self._try_lease(frame)
+            if frame.state != "expanding":
+                continue
+            for job in self._runnable_jobs(frame.graph):
+                if is_workflow(job.task):
+                    self._enter(job, frame)
+                else:
+                    self._frame_of[job] = frame
+                    leaves.append(job)
+        return leaves
 
     def _progress(self) -> tuple:
         """The state of the graph that one pass of :meth:`ready` can advance
 
         A pass releases at most one more node along a chain, and it can advance without
         releasing a job: a node starts with no elements, a job is settled from the store
-        or an element is marked unrunnable. ``ready`` repeats its pass until a pass hands
-        out a job or leaves this value unchanged, so that an empty round means nothing
-        can progress. Every kind of progress a pass can make must be part of the value.
+        or an element is marked unrunnable, a workflow job takes its lease, is expanded
+        or committed. ``ready`` repeats its pass until a pass hands out a job or leaves
+        this value unchanged, so that an empty round means nothing can progress. Every
+        kind of progress a pass can make must be part of the value.
         """
         return (
             # settling a job from the store hands it out without changing any node
             len(self._handed),
+            tuple(f.state for f in self._frames),
             tuple(
                 (
                     bool(n.started),
@@ -680,7 +914,9 @@ class GraphRunner:
                     len(n.queued),
                     len(n.blocked or ()),
                 )
-                for n in self.exec_graph.nodes
+                for f in self._frames
+                if f.graph is not None
+                for n in f.graph.nodes
             ),
         )
 
@@ -703,6 +939,15 @@ class GraphRunner:
             jobs.extend(node.get_runnable_tasks(graph))
         return jobs
 
+    def _retry_after(self) -> float | None:
+        now = time.monotonic()
+        waits = [
+            max(0.0, (f.retry_at if f.retry_at is not None else now) - now)
+            for f in self._frames
+            if f.state == "leasing"
+        ]
+        return min(waits) if waits else None
+
     def ready(self, limit: int | None = None) -> Round:
         """Release the jobs whose upstream jobs have completed
 
@@ -714,10 +959,12 @@ class GraphRunner:
         Returns
         -------
         Round
-            The jobs to dispatch, each handed out once, with ``job.rerun`` set
+            The leaf jobs to dispatch, each handed out once, with ``job.rerun`` set, and
+            the seconds until a waiting workflow lease is tried again
         """
         while True:
             before = self._progress()
+            self._settle_frames()
             candidates = [j for j in self._runnable() if j not in self._handed]
             if candidates and not self._inner_rerun:
                 candidates = self._read_succeeded(candidates)
@@ -735,7 +982,7 @@ class GraphRunner:
             self._handed.add(job)
             job.rerun = self._inner_rerun
         self._collect_resolution_errors()
-        return Round(dispatch=candidates)
+        return Round(dispatch=candidates, retry_after=self._retry_after())
 
     def _read_succeeded(self, jobs: list[Job]) -> list[Job]:
         dispatch = self._read_succeeded_jobs(self.store, jobs)
@@ -783,30 +1030,40 @@ class GraphRunner:
             without a store read; an errored one is a failure of the run
         """
         job._awaiting_run = False
+        frame = self._frame_of.get(job, self._root)
         if isinstance(outcome, Failed):
             exc = outcome.error
             job._errored = True
             self._failed = True
             if self._first_error is None:
                 self._first_error = exc
-            self._errors.append(job_error(job, exc))
-            self._entries.append(error_entry(job.name, job.state_index, exc))
+            frame.errors.append(job_error(job, exc))
+            frame.entries.append(error_entry(job.name, job.state_index, exc))
         else:
             job._held = outcome
             if getattr(outcome, "errored", False):
                 exc = result_error(job, outcome)
                 job._errored = True
                 self._failed = True
-                self._errors.append(job_error(job, exc))
-                self._entries.append(error_entry(job.name, job.state_index, exc))
+                frame.errors.append(job_error(job, exc))
+                frame.entries.append(error_entry(job.name, job.state_index, exc))
         self._collect_resolution_errors()
 
     def stuck(self) -> str | None:
-        """A diagnosis of why nothing can progress, or None if the graph is done"""
-        if self.done:
+        """A diagnosis of why nothing can progress, or None if the graph is done or a
+        workflow job is waiting for its lease"""
+        if self.done or any(f.state == "leasing" for f in self._frames):
             return None
-        wf = self.workflow
-        exec_graph = self.exec_graph
+        msg = ""
+        for frame in self._frames:
+            if frame.state == "expanding" and not frame.nodes_done:
+                msg += self._diagnose(frame)
+        return msg or "Nothing can progress, but the run is not done"
+
+    @staticmethod
+    def _diagnose(frame: _Frame) -> str:
+        wf = frame.workflow
+        exec_graph = frame.graph
         not_done = "\n".join(
             (
                 f"{n.name}: started={bool(n.started)}, "
@@ -842,29 +1099,39 @@ class GraphRunner:
 
     @property
     def done(self) -> bool:
-        """Whether every node of the graph has completed"""
-        return all(n.done for n in self.exec_graph.nodes)
+        """Whether every node of the graph has completed (and, if the runner owns the
+        workflow job, it is committed)"""
+        root = self._root
+        if root.owned:
+            return root.state == "finished"
+        return all(n.done for n in root.graph.nodes)
 
     @property
     def entries(self) -> list[JobErrorEntry]:
         """The record of each errored job and of each element whose inputs could not be
         resolved, in the order of failure"""
-        return self._entries
+        return self._root.entries
 
     @property
     def errors(self) -> list[str]:
         """A description of each entry"""
-        return self._errors
+        return self._root.errors
 
     @property
     def failed(self) -> bool:
-        """Whether any job has failed so far"""
+        """Whether any job has failed so far, at any level"""
         return self._failed
 
     @property
     def first_error(self) -> BaseException | None:
         """The first exception reported by a :class:`Failed`, as raised"""
         return self._first_error
+
+    @property
+    def root_error(self) -> BaseException | None:
+        """The exception that stopped the runner's own workflow job (building the
+        workflow), as raised; its nodes' errors are in :attr:`errors`"""
+        return self._root_error
 
     def result(self) -> "Result":
         """The result of the workflow job, read from the store"""
