@@ -131,6 +131,8 @@ class WorkerExecutor:
     ``True`` instead of a result (slurm, sge) is read back with ``job.result()``,
     retried with backoff for up to ``visibility_timeout`` seconds, then reported
     :class:`~pydra.engine.runner.Failed`. A synchronous worker runs on a helper thread.
+    A worker with ``submit_many`` (slurm, sge) is given the jobs of a ``submit`` call
+    together, so it can place them in arrays; ``batches`` is then true.
 
     Parameters
     ----------
@@ -163,8 +165,11 @@ class WorkerExecutor:
         self.worker = worker
         self.visibility_timeout = visibility_timeout
         self.blocking = blocking
+        self.batches = hasattr(worker, "submit_many")
         self._report: "ty.Callable[[Job, Outcome], None] | None" = None
         self._tasks: "dict[Job, asyncio.Task]" = {}
+        self._submissions: "dict[Handle, asyncio.Task]" = {}
+        self._pending: "dict[Job, asyncio.Future]" = {}
 
     def bind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
         """Set the callable that receives the outcome of each job"""
@@ -176,17 +181,51 @@ class WorkerExecutor:
             raise RuntimeError("bind() a report callable before submitting jobs")
         handle = Handle(self, tuple(jobs), set(jobs))
         loop = asyncio.get_running_loop()
+        if self.batches:
+            placed = [j for j in handle.jobs if not is_workflow(j.task)]
+            for job in placed:
+                self._pending[job] = loop.create_future()
+            if placed:
+                self._submissions[handle] = loop.create_task(
+                    self._submit_many(placed, handle)
+                )
         for job in handle.jobs:
             task = loop.create_task(self._run(job, handle), name=job.checksum)
             self._tasks[job] = task
         return handle
 
+    async def _submit_many(self, jobs: "list[Job]", handle: Handle) -> None:
+        """Give the worker the round; each job's future is set as the job ends"""
+
+        def ended(job: "Job", outcome: "bool | Exception") -> None:
+            future = self._pending.get(job)
+            if future is not None and not future.done():
+                if isinstance(outcome, Exception):
+                    future.set_exception(outcome)
+                else:
+                    future.set_result(outcome)
+
+        try:
+            outcomes = await self.worker.submit_many(jobs, done=ended)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            outcomes = [exc] * len(jobs)
+        finally:
+            self._submissions.pop(handle, None)
+        for job, outcome in zip(jobs, outcomes):
+            ended(job, outcome)
+
     def cancel(self, handle: Handle) -> None:
         """Cancel the jobs of the handle that are still running; they are not reported"""
+        submission = self._submissions.pop(handle, None)
+        if submission is not None:
+            submission.cancel()
         for job in list(handle.open):
             task = self._tasks.pop(job, None)
             if task is not None:
                 task.cancel()
+            self._pending.pop(job, None)
         handle.open.clear()
 
     def close(self) -> None:
@@ -200,6 +239,7 @@ class WorkerExecutor:
         except Exception as exc:
             outcome = Failed(exc)
         self._tasks.pop(job, None)
+        self._pending.pop(job, None)
         if job not in handle.open:  # cancelled while the outcome was being read
             return
         handle.open.discard(job)
@@ -208,6 +248,8 @@ class WorkerExecutor:
     async def _execute(self, job: "Job") -> "Outcome":
         if is_workflow(job.task):  # expanded on this loop, not placed on the worker
             outcome = await job.run_async(rerun=job.rerun)
+        elif job in self._pending:  # the worker has the whole round
+            outcome = await self._pending[job]
         elif self.worker.is_async:
             outcome = await self.worker.run(job, rerun=job.rerun)
         elif self.blocking is not None:
