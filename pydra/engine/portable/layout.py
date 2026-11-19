@@ -229,6 +229,8 @@ def _read(root: StorageDir) -> bytes | None:
         f = root.open_read(HEADER_NAME)
     except FileNotFoundError:
         return None
+    except PermissionError as err:
+        raise StoreUnavailable(f"{HEADER_NAME} cannot be read: {err}") from None
     with f:
         data = f.read(MAX_HEADER_BYTES + 1)
     if len(data) > MAX_HEADER_BYTES:
@@ -257,7 +259,7 @@ def _shown(header: LayoutHeader, key: str) -> str:
     return repr(getattr(header, key))
 
 
-def _sweep_and_scan(root: StorageDir) -> list[str]:
+def _sweep_and_scan(root: StorageDir, sweep: bool = True) -> list[str]:
     """Remove header temporaries older than the staging age (best effort); return the first
     other names present."""
     age = root.policy.ages.staging
@@ -267,7 +269,7 @@ def _sweep_and_scan(root: StorageDir) -> list[str]:
         if entry.name == HEADER_NAME:
             continue
         if _TEMP_RE.fullmatch(entry.name) and entry.is_file():
-            if now - entry.stat().st_mtime > age:
+            if sweep and now - entry.stat().st_mtime > age:
                 try:
                     root.unlink(entry.name)
                 except OSError:
@@ -354,7 +356,7 @@ def open_layout(
         data = _read(root)
         if data is not None:
             return _check(LayoutHeader.from_json(data), expected)
-        others = _sweep_and_scan(root)
+        others = _sweep_and_scan(root, sweep=create)
         if others:
             data = _read(root)  # another opener may have linked it since the first read
             if data is not None:
@@ -366,7 +368,13 @@ def open_layout(
             )
         tmp = f"{TEMP_PREFIX}{uuid.uuid4().hex}{TEMP_SUFFIX}"
         try:
-            with root.open_new(tmp, root.policy.file_mode) as f:
+            try:
+                f = root.open_new(tmp, root.policy.file_mode)
+            except PermissionError as err:
+                raise StoreUnavailable(
+                    f"{root.path} is not writable, so {HEADER_NAME} cannot be created: {err}"
+                ) from None
+            with f:
                 f.write(expected.to_json())
                 f.flush()
                 os.fsync(f.fileno())

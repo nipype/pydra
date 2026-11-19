@@ -4,6 +4,7 @@ import errno
 import os
 import pickle
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -44,7 +45,8 @@ def _open(path):
 
 
 def _rewrite(root_path, doc) -> None:
-    (root_path / HEADER_NAME).unlink()  # a committed header is read-only
+    os.chmod(root_path / HEADER_NAME, stat.S_IWRITE | stat.S_IREAD)  # Windows read-only
+    (root_path / HEADER_NAME).unlink()
     (root_path / HEADER_NAME).write_text(json.dumps(doc))
 
 
@@ -513,3 +515,58 @@ def test_no_create_on_read_only_root(tmp_path, expected):
     finally:
         os.chmod(path, 0o755)
         os.chmod(empty, 0o755)
+
+
+def _stale(path):
+    stale = path / ".pydra-store.0123456789abcdef0123456789abcdef.tmp"
+    stale.write_text("{")
+    old = time.time() - StorePolicy().ages.staging - 60
+    os.utime(stale, (old, old))
+    return stale
+
+
+def test_no_create_does_not_sweep(root, expected, tmp_path):
+    stale = _stale(tmp_path / "root")
+    with pytest.raises(StoreLayoutAbsent):
+        open_layout(root, expected, create=False)
+    assert stale.exists()
+
+
+def test_sweep_is_best_effort(root, expected, tmp_path, monkeypatch):
+    stale = _stale(tmp_path / "root")
+    real = root.unlink
+
+    def refuse(name):
+        if name == stale.name:
+            raise PermissionError(errno.EPERM, "not yours")
+        real(name)
+
+    monkeypatch.setattr(root, "unlink", refuse)
+    assert open_layout(root, expected) == expected
+    assert stale.exists()
+
+
+@pytest.mark.skipif(IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX permissions")
+def test_unreadable_header_is_store_unavailable(root, expected, tmp_path):
+    open_layout(root, expected)
+    os.chmod(tmp_path / "root" / HEADER_NAME, 0)
+    try:
+        with pytest.raises(StoreUnavailable) as info:
+            open_layout(root, expected)
+        assert not isinstance(info.value, PermissionError)
+    finally:
+        os.chmod(tmp_path / "root" / HEADER_NAME, 0o444)
+
+
+@pytest.mark.skipif(IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX permissions")
+def test_empty_read_only_root_create_is_store_unavailable(tmp_path, expected):
+    path = tmp_path / "empty"
+    path.mkdir()
+    os.chmod(path, 0o555)
+    try:
+        with _open(path) as r:
+            with pytest.raises(StoreUnavailable) as info:
+                open_layout(r, expected)
+        assert not isinstance(info.value, PermissionError)
+    finally:
+        os.chmod(path, 0o755)
