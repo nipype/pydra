@@ -775,7 +775,6 @@ def test_replaced_occupant_is_not_quarantined(tmp_path, monkeypatch):
     assert quarantined(tmp_path / "root") == []
 
 
-@posix_only
 def test_quarantine_restores_a_valid_entry_it_moved(tmp_path, monkeypatch):
     """The fence (RFC 0003 6.3): the moved copy is re-verified and, valid, put back."""
     import pydra.engine.portable.store as mod
@@ -797,7 +796,6 @@ def test_quarantine_restores_a_valid_entry_it_moved(tmp_path, monkeypatch):
     assert store.read(c.entry, None).outputs == OUT
 
 
-@posix_only
 def test_quarantine_stamps_and_keeps_a_corrupt_entry(tmp_path):
     store = make(tmp_path)
     c = publish(store)
@@ -834,7 +832,6 @@ def test_owner_quarantines_its_own_sealed_entry(tmp_path, sealed):
                 os.chmod(p, 0o755)
 
 
-@posix_only
 def test_non_owner_moves_a_corrupt_entry_to_a_q_name(tmp_path, monkeypatch):
     """Cannot move across parents (no write on the entry): rename within the parent."""
     store = make(tmp_path)
@@ -1193,43 +1190,431 @@ def test_result_defaults_to_stored(tmp_path):
     assert Result(cache_dir=tmp_path).committed is None
 
 
-@posix_only
-def test_clearing_lock_serialises_quarantine(tmp_path):
+# -- fix round 2: compare-and-move ----------------------------------------------------------------------
+
+
+def rmtree(path) -> None:
+    import shutil
+
+    def fix(func, p, _exc):
+        os.chmod(p, 0o777)
+        func(p)
+
+    shutil.rmtree(path, onerror=fix)
+
+
+def inode_name(path) -> str:
+    import uuid
+
+    return uuid.UUID(int=os.stat(path).st_ino).hex
+
+
+def open_parent(store, c):
+    """The handles of the directory holding the entry of ``c``."""
+    root = store._open()
+    entries = root.child("results@1")
+    shard = [
+        d
+        for d in (Path(store.path) / "results@1").iterdir()
+        if (d / c.entry.cdir).exists()
+    ]
+    s = entries.child(shard[0].name)
+    d = s.child(c.entry.cdir)
+    return root, [entries, s, d]
+
+
+def test_quarantine_target_is_named_from_the_inode(tmp_path):
     store = make(tmp_path)
     c = publish(store)
     entry = entry_path(tmp_path / "root", c)
     corrupt(entry)
-    with store._open() as root:
-        with (
-            root.child("results@1") as e,
-            e.child(entry.parent.parent.name) as s,
-            s.child(entry.parent.name) as d,
+    name = inode_name(entry)
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    assert [p.name for p in quarantined(tmp_path / "root")] == [name]
+    assert len(name) == 32
+
+
+def test_q_name_is_derived_from_the_inode_too(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    corrupt(entry)
+    name = inode_name(entry)
+
+    def fail(self, name, target, new_name):
+        if "quarantine" in target.path:
+            raise PermissionError(errno.EACCES, "not the owner")
+
+    recording_rename(monkeypatch, [], fail)
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    assert [p.name for p in entry.parent.iterdir()] == ["q-" + name]
+
+
+def test_a_late_mover_cannot_take_a_valid_entry(tmp_path, monkeypatch):
+    """The rename is the compare-and-move: a mover that verified the corrupt entry, and finds a
+    valid one at the name by the time it renames, moves nothing."""
+    store = make(tmp_path)
+    other = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    corrupt(entry)
+    name = inode_name(entry)
+    real = StorageDir.rename
+    done = []
+
+    def rename(self, n, target, new_name):
+        if "quarantine" in target.path and not done:
+            done.append(1)
+            real(self, n, target, new_name)  # a rival moved the corrupt entry first ...
+            again = other.publish(
+                "python-abc", None, CTX, OUT, None, None
+            )  # ... a writer won
+            assert again.won
+            # and now this late mover renames: the name is taken, whatever is at the address
+            with pytest.raises(OSError):
+                real(self, n, target, new_name)
+            raise OSError(errno.ENOTEMPTY, "taken")
+        real(self, n, target, new_name)
+
+    monkeypatch.setattr(StorageDir, "rename", rename)
+    root, handles = open_parent(store, c)
+    try:
+        r = store._quarantine(
+            root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+        )
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert r is False
+    assert entry.is_dir() and store.read(c.entry, None).outputs == OUT
+    assert [p.name for p in quarantined(tmp_path / "root")] == [name]
+
+
+def test_restore_onto_an_occupied_address_is_not_a_failure(tmp_path, monkeypatch):
+    """A moved entry that was another's valid one, and an address filled again meanwhile:
+    False, never None (which a publisher reports as stored=False with no digest)."""
+    import shutil
+
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    backup, backup2 = tmp_path / "b1", tmp_path / "b2"
+    shutil.copytree(entry, backup)
+    shutil.copytree(entry, backup2)
+    corrupt(entry)
+    real_rename, real_lstat = StorageDir.rename, StorageDir.lstat
+    state = {"swapped": False, "filled": False}
+
+    def rename(self, n, target, new_name):
+        if "quarantine" in target.path and not state["swapped"]:
+            state["swapped"] = True
+            os.rename(
+                entry, tmp_path / "evicted"
+            )  # an outside mover took the corrupt entry
+            shutil.copytree(backup, entry)  # a valid entry now has the name
+        return real_rename(self, n, target, new_name)
+
+    def lstat(self, n):
+        if state["swapped"] and not state["filled"] and "quarantine" in self.path:
+            state["filled"] = True
+            shutil.copytree(
+                backup2, entry
+            )  # the mover took a valid entry; the address is filled
+        return real_lstat(self, n)
+
+    monkeypatch.setattr(StorageDir, "rename", rename)
+    monkeypatch.setattr(StorageDir, "lstat", lstat)
+    root, handles = open_parent(store, c)
+    try:
+        r = store._quarantine(
+            root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+        )
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert r is False
+    assert entry.is_dir()
+
+
+def test_mismatch_after_the_move_restores_without_reading(tmp_path, monkeypatch):
+    import shutil
+
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    backup = tmp_path / "b1"
+    shutil.copytree(entry, backup)
+    corrupt(entry)
+    real = StorageDir.rename
+    swapped = []
+
+    def rename(self, n, target, new_name):
+        if "quarantine" in target.path and not swapped:
+            swapped.append(1)
+            os.rename(entry, tmp_path / "evicted")
+            shutil.copytree(backup, entry)
+        return real(self, n, target, new_name)
+
+    monkeypatch.setattr(StorageDir, "rename", rename)
+    reads = []
+    real_read = PydraEntryV1.read
+
+    def read(self, *a, **k):
+        reads.append(1)
+        return real_read(self, *a, **k)
+
+    monkeypatch.setattr(PydraEntryV1, "read", read)
+    root, handles = open_parent(store, c)
+    try:
+        r = store._quarantine(
+            root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+        )
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert r is False
+    assert reads == []  # a different inode: put back at once, nothing verified
+    assert entry.is_dir() and quarantined(tmp_path / "root") == []
+    assert store.read(c.entry, None).outputs == OUT
+
+
+def test_entry_replaced_before_the_move_is_left_alone(tmp_path, monkeypatch):
+    import shutil
+
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    backup = tmp_path / "b1"
+    shutil.copytree(entry, backup)
+    corrupt(entry)
+    real = StorageDir.lstat
+    swapped = []
+
+    def lstat(self, n):
+        if (
+            n == c.entry.fingerprint
+            and not swapped
+            and self.path.endswith(c.entry.cdir)
         ):
-            with store._clearing(root, c.entry.cdir, c.entry.fingerprint) as held:
-                assert held is True
-                assert len(list((tmp_path / "root" / "leases").iterdir())) == 1
-                # another party finds it held and does not move the entry
-                assert (
-                    store._quarantine(root, d, c.entry.fingerprint, c.entry.cdir, None)
-                    is False
-                )
-                assert entry.is_dir()
-            assert list((tmp_path / "root" / "leases").iterdir()) == []
-            assert (
-                store._quarantine(root, d, c.entry.fingerprint, c.entry.cdir, None)
-                is True
-            )
-    assert not entry.exists() and len(quarantined(tmp_path / "root")) == 1
+            swapped.append(1)
+            os.rename(entry, tmp_path / "evicted")
+            shutil.copytree(backup, entry)
+        return real(self, n)
+
+    calls: list = []
+    recording_rename(monkeypatch, calls)
+    monkeypatch.setattr(StorageDir, "lstat", lstat)
+    root, handles = open_parent(store, c)
+    try:
+        r = store._quarantine(
+            root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+        )
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert r is False
+    assert not [x for x in calls if "quarantine" in x[2]]
+
+
+def test_a_copy_that_cannot_be_judged_is_restored(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    real_read = PydraEntryV1.read
+
+    def read(self, *a, **k):
+        raise OSError(errno.EIO, "disk")
+
+    monkeypatch.setattr(PydraEntryV1, "read", read)
+    root, handles = open_parent(store, c)
+    try:
+        r = store._quarantine(
+            root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+        )
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    monkeypatch.setattr(PydraEntryV1, "read", real_read)
+    assert r is False and entry.is_dir() and quarantined(tmp_path / "root") == []
 
 
 @posix_only
-def test_stale_clearing_lock_is_broken(tmp_path):
+@pytest.mark.skipif(IS_WINDOWS or os.geteuid() == 0, reason="root ignores modes")
+def test_a_restored_entry_is_sealed_again(tmp_path):
+    store = make(tmp_path, policy=StorePolicy(sealed_mode=0o555))
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    try:
+        root, handles = open_parent(store, c)
+        try:
+            r = store._quarantine(
+                root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+            )
+        finally:
+            for h in [root, *handles]:
+                h.close()
+        assert r is False  # valid: put back
+        assert stat.S_IMODE(entry.stat().st_mode) == 0o555
+    finally:
+        os.chmod(entry, 0o755)
+
+
+def test_corrupt_budget_is_bounded(tmp_path, monkeypatch):
+    import pydra.engine.portable.store as mod
+
     store = make(tmp_path)
     c = publish(store)
-    with store._open() as root:
-        with store._clearing(root, c.entry.cdir, c.entry.fingerprint):
-            (lock,) = (tmp_path / "root" / "leases").iterdir()
-            old = 1_000_000_000
-            os.utime(lock, (old, old))
-            with store._clearing(root, c.entry.cdir, c.entry.fingerprint) as held:
-                assert held is True
+    corrupt(entry_path(tmp_path / "root", c))
+    store.visibility_timeout = 30
+    n = []
+
+    def quarantine(self, *a, **k):
+        n.append(1)
+        return True  # "cleared", but the address stays corrupt
+
+    monkeypatch.setattr(mod.PortableStore, "_quarantine", quarantine)
+    again = publish(store)
+    assert (again.won, again.stored) == (False, False)
+    assert again.kept is not None
+    assert len(n) == 4
+
+
+def test_contention_is_not_charged_to_the_corrupt_budget(tmp_path, monkeypatch):
+    import pydra.engine.portable.store as mod
+
+    store = make(tmp_path)
+    c = publish(store)
+    corrupt(entry_path(tmp_path / "root", c))
+    real = mod.PortableStore._quarantine
+    n = []
+
+    def quarantine(self, *a, **k):
+        n.append(1)
+        return False if len(n) <= 8 else real(self, *a, **k)
+
+    monkeypatch.setattr(mod.PortableStore, "_quarantine", quarantine)
+    again = publish(store)
+    assert (again.won, again.stored) == (True, True)
+    assert len(n) == 9
+
+
+def test_read_does_not_quarantine_an_entry_that_replaced_the_corrupt_one(
+    tmp_path, monkeypatch
+):
+    import shutil
+
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    backup = tmp_path / "b1"
+    shutil.copytree(entry, backup)
+    corrupt(entry)
+    real = PydraEntryV1.read
+    swapped = []
+
+    def read(self, *a, **k):
+        try:
+            return real(self, *a, **k)
+        except CorruptEntry:
+            if not swapped:
+                swapped.append(1)
+                rmtree(entry)
+                shutil.copytree(backup, entry)
+            raise
+
+    monkeypatch.setattr(PydraEntryV1, "read", read)
+    calls: list = []
+    recording_rename(monkeypatch, calls)
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    assert not [x for x in calls if "quarantine" in x[2]]
+    assert entry.is_dir()
+
+
+def test_set_aside_leaves_a_directory_that_replaced_the_object(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    root, handles = open_parent(store, c)
+    try:
+        store._set_aside(root, handles[-1], c.entry.fingerprint)
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert entry.is_dir() and quarantined(tmp_path / "root") == []
+
+
+def test_set_aside_names_the_target_from_the_inode(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    rmtree(entry)
+    entry.write_text("x")
+    name = inode_name(entry)
+    root, handles = open_parent(store, c)
+    try:
+        store._set_aside(root, handles[-1], c.entry.fingerprint)
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert [p.name for p in quarantined(tmp_path / "root")] == [name]
+
+
+def test_enotdir_with_no_occupant_is_contention(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    seen = []
+
+    def fail(self, name, target, new_name):
+        if at_address((None, None, None, new_name)) and not seen:
+            seen.append(1)
+            raise OSError(errno.ENOTDIR, "the file that was there has gone")
+
+    recording_rename(monkeypatch, [], fail)
+    c = publish(store)
+    assert (c.won, c.stored) == (True, True)
+
+
+def test_a_paused_mover_cannot_take_the_entry_a_writer_committed(tmp_path, monkeypatch):
+    """A reader paused between its check and its rename (a stopped process, a hung NFS call)
+    while a writer clears the corrupt entry and commits: the reader resumes and moves nothing,
+    and the address is never empty."""
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    corrupt(entry)
+    real = StorageDir.rename
+    paused, resume = threading.Event(), threading.Event()
+    me = {}
+
+    def rename(self, n, target, new_name):
+        if threading.current_thread() is me.get("t") and "quarantine" in target.path:
+            paused.set()
+            assert resume.wait(20)
+        return real(self, n, target, new_name)
+
+    monkeypatch.setattr(StorageDir, "rename", rename)
+    out = {}
+
+    def reader():
+        try:
+            store.read(c.entry, None)
+        except CorruptEntry as err:
+            out["err"] = err
+
+    t = threading.Thread(target=reader)
+    me["t"] = t
+    t.start()
+    assert paused.wait(20)
+    won = publish(store)  # clears the corrupt entry and commits a valid one
+    assert (won.won, won.stored) == (True, True)
+    gone = []
+    resume.set()
+    while t.is_alive():
+        if not entry.exists():
+            gone.append(1)
+    t.join()
+    assert gone == []
+    assert entry.is_dir() and store.read(c.entry, None).outputs == OUT
+    assert len(quarantined(tmp_path / "root")) == 1
