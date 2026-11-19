@@ -1773,8 +1773,11 @@ def test_a_required_key_removed_is_corrupt_not_a_keyerror(root, tmp_path, tags):
 
 
 def shutil_rm(path: Path) -> None:
+    """Remove an entry tree whose members are read-only (on Windows that blocks removal)."""
     import shutil
 
-    for p in [path, *path.rglob("*")]:
-        os.chmod(p, 0o755 if p.is_dir() else 0o644) if not IS_WINDOWS else None
-    shutil.rmtree(path)
+    def writable(func, name, _exc):
+        os.chmod(name, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        func(name)
+
+    shutil.rmtree(path, onerror=writable)
