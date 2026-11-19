@@ -10,7 +10,8 @@ DEFAULT_WORKER = "default"
 
 Router = ty.Callable[["Job"], "str | None"]
 """A router is called with each job at dispatch and returns the name of a worker, or
-``None`` for the submitter's ``worker``."""
+``None`` for the submitter's ``worker``. The submitter runs each worker through its own
+executor, so the name also selects the executor."""
 
 
 def default_router(job: "Job") -> str:
