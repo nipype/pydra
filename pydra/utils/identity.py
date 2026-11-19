@@ -26,11 +26,15 @@ from pydra.utils.hash import (
     LIBRARY_PACKAGES,
     USER_PACKAGES_ENV_VAR,
     Cache,
+    _is_stdlib,
+    _module_is_library,
     _package_overrides,
     check_code_hash,
     code_hash_default,
     hash_function,
+    owner_of,
 )
+from pydra.utils.general import get_fields
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
@@ -87,13 +91,37 @@ def _executor_is_code(task: "Task") -> bool:
     return task._executor_name is not None and task._task_type() != "shell"
 
 
+def library_values(task: "Task") -> list[str]:
+    """The distributions that own the library types of the input values of ``task``, as
+    sorted ``dist:{dist}=={identity}`` strings (RFC 0004 section 4.1). The walk of the
+    code sees only the library code a function names, so ``def f(x): return x.mean()``
+    would not be re-keyed by an upgrade of the library of ``x`` without them. A type of
+    the standard library, of user code or of no single distribution is left out."""
+    from pydra.engine.context import _value_modules
+
+    modules: set[str] = set()
+    for field in get_fields(task):
+        if field.name != task._executor_name:
+            _value_modules(getattr(task, field.name), modules)
+    owners = {
+        o
+        for m in modules
+        if isinstance(m, str)
+        and m != "__main__"
+        and not _is_stdlib(m)
+        and _module_is_library(m)
+        and (o := owner_of(m)) is not None
+    }
+    return sorted(f"dist:{dist}=={identity}" for dist, identity in owners)
+
+
 def task_record(task: "Task") -> Record:
     """The identity record of ``task`` without the fields of the job that runs it."""
     if hasattr(task, "__checksum__"):
         return {"scheme": IDENTITY_SCHEME, "supplied": task._supplied_checksum()}
     digests = dict(task._compute_hashes()[1])
     outputs = digests.pop("Outputs")
-    code = {}
+    code: dict[str, ty.Any] = {"values": library_values(task)}
     if _executor_is_code(task) and task._executor_name in digests:
         code["code"] = digests.pop(task._executor_name)
     return {

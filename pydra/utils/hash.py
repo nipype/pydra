@@ -1039,6 +1039,85 @@ def is_library(obj: object) -> bool:
     return isinstance(module, str) and _module_is_library(module)
 
 
+def _is_stdlib(module: str) -> bool:
+    top = module.partition(".")[0]
+    return top == "builtins" or top in STDLIB_MODULES
+
+
+def _owners(module: str) -> list[str] | None:
+    """The distributions that installed `module`: the one whose files include the
+    module's file, or whose editable source holds it, or the one that
+    ``packages_distributions()`` names for its top-level package, or for a module
+    without a file (a namespace package) those providing its top-level name; None if
+    there is none"""
+    from pydra.engine.context import _distributions, _norm, _package_distributions
+
+    distributions = _distributions()
+    candidates = [
+        c
+        for c in _package_distributions().get(module.partition(".")[0], [])
+        if c in distributions
+    ]
+    file = getattr(sys.modules.get(module), "__file__", None)
+    if not file:
+        return candidates or None
+    path = _norm(file)
+    for name in candidates:
+        if path in distributions[name].files:
+            return [name]
+    roots = [
+        (len(d.editable_root), d.name)
+        for d in distributions.values()
+        if d.editable_root and d.holds(path)
+    ]
+    if roots:
+        return [max(roots)[1]]
+    return candidates if len(candidates) == 1 else None
+
+
+@functools.cache
+def owner_of(module: str) -> tuple[str, str] | None:
+    """The distribution that owns `module` and the identity it is keyed by, ``("numpy",
+    "2.1.0")``, or None if no single distribution does. The identity is the public
+    version of an index install, and ``version@commit``, ``version@hash`` or
+    ``version@record:hash`` of another (`pydra.engine.context._Installed.keyed`);
+    ``"?"`` if it cannot be computed. Memoised per module, forgotten by
+    `pydra.engine.context.clear_caches`."""
+    from pydra.engine.context import _distributions
+
+    owners = _owners(module)
+    if owners is None or len(owners) != 1:
+        return None
+    dist = _distributions()[owners[0]]
+    return dist.name, dist.keyed or "?"
+
+
+def forget_owners() -> None:
+    """Forget the owners of modules and the memoised walks that carry them, so they are
+    read again after a distribution is installed into the running interpreter"""
+    owner_of.cache_clear()
+    with _walk_memo_lock:
+        _walk_memo.clear()
+
+
+def library_owner(module: str) -> str:
+    """The prefix a reference to library code of `module` carries: ``{dist}=={identity}:``,
+    ``?:`` if no distribution owns it, and nothing for the standard library"""
+    if _is_stdlib(module):
+        return ""
+    owner = owner_of(module)
+    return "?:" if owner is None else f"{owner[0]}=={owner[1]}:"
+
+
+def _is_unowned_python(module: str) -> bool:
+    """Whether `module` is a pure-Python library module that no distribution owns, which
+    is walked as user code, not referenced by name"""
+    if _is_stdlib(module) or owner_of(module) is not None:
+        return False
+    file = getattr(sys.modules.get(module), "__file__", None)
+    return bool(file) and file.endswith(".py")
+
+
 def _qualified_name(obj: object) -> str:
     name = getattr(obj, "__qualname__", None) or getattr(obj, "__name__", "")
     return f"{getattr(obj, '__module__', None)}.{name}"
@@ -1293,9 +1372,11 @@ class _CodeWalk:
         self.modules: set[str] = set()
         self.found: set[str] = set()  # the modules of the reference being serialized
 
-    def library(self, module: str, ref: str) -> bytes:
+    def library(self, module: str, kind: str, name: str) -> bytes:
+        """The reference ``{kind}:{owner}:{name}`` to library code of `module`, where
+        the owner is `library_owner` (RFC 0004 section 4.1)"""
         self.found.add(module)
-        return ref.encode()
+        return f"{kind}:{library_owner(module)}{name}".encode()
 
     def in_scope(self, obj: ty.Any) -> bool:
         if self.code_hash == "user":
@@ -1365,7 +1446,7 @@ class _CodeWalk:
             return b"<empty>"
         if isinstance(value, types.ModuleType):
             if is_library(value):
-                self.found.add(value.__name__)
+                return self.library(value.__name__, "module", value.__name__)
             return f"module:{value.__name__}".encode()
         if isinstance(value, logging.Logger):
             return f"logger:{value.name}".encode()
@@ -1379,13 +1460,13 @@ class _CodeWalk:
                 and is_library(executor)
                 and (owner := _owner_name(executor, holder=value))
             ):
-                return self.library(executor.__module__, f"lib-task:{owner}")
+                return self.library(executor.__module__, "lib-task", owner)
             self.dynamic = True
             return b"task:" + bytes(hash_single(value, self.cache))
         if isinstance(value, (types.FunctionType, type)):
-            library = is_library(value)
+            library = is_library(value) and not _is_unowned_python(value.__module__)
             if library and (owner := _owner_name(value)):
-                ref = self.library(value.__module__, f"lib:{owner}")
+                ref = self.library(value.__module__, "lib", owner)
                 wrapped = vars(value).get("__wrapped__")
                 if isinstance(value, types.FunctionType) and wrapped is not None:
                     self.dynamic = True
@@ -1408,7 +1489,7 @@ class _CodeWalk:
             owner = value.__self__
             if owner is None or isinstance(owner, types.ModuleType):
                 module = getattr(value, "__module__", None) or owner.__name__
-                return self.library(module, f"lib:{module}.{value.__qualname__}")
+                return self.library(module, "lib", f"{module}.{value.__qualname__}")
             self.dynamic = True
             return (
                 f"method:({value.__name__},".encode()
@@ -1427,7 +1508,8 @@ class _CodeWalk:
         ):
             return self.library(
                 value.__objclass__.__module__,
-                f"lib:{_qualified_name(value.__objclass__)}.{value.__name__}",
+                "lib",
+                f"{_qualified_name(value.__objclass__)}.{value.__name__}",
             )
         if isinstance(value, functools.partial):
             self.dynamic = True
@@ -1444,7 +1526,7 @@ class _CodeWalk:
                 + b"))"
             )
         if (owner := _library_instance_name(value, name)) is not None:
-            return self.library(owner[0], f"lib:{owner[0]}.{owner[1]}")
+            return self.library(owner[0], "lib", f"{owner[0]}.{owner[1]}")
         tp = type(value)
         wrapped = getattr(value, "__dict__", {}).get("__wrapped__")
         self.dynamic = True

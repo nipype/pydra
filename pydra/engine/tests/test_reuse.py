@@ -31,6 +31,7 @@ from pydra.engine.store import (
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
 from pydra.utils.general import get_fields
+from pydra.utils import hash as hash_module
 from pydra.utils.hash import hash_function
 
 # Worker processes cannot import the test modules, so they receive their classes by value
@@ -420,11 +421,11 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
     for task, checksum in [
         (
             python.define(inc_one, version="1")(a=1),
-            "python-91edb5e2d2191124f45fe74aad4ea709696c2da38cfb8f2a4868e1667b792168",
+            "python-2a1a935e57f520a8583e8d40e20cddcc6f578bedc2f6c55ff329ccd861a4c2c8",
         ),
         (
             shell.define("echo <text:str>")(text="hi"),
-            "shell-4ff5573110d302212f87b85b0bc0f31b05c102712ae2f557d493e32e86501599",
+            "shell-60d71388c443ba3eab0f528da4f438a8b700fd9475967a9fb3c0b038a100b4fd",
         ),
     ]:
         assert not hasattr(task, "__checksum__")
@@ -444,9 +445,18 @@ def test_code_hashed_tasks_keep_checksums(monkeypatch):
     module = types.ModuleType("pydra.engine.tests.test_reuse")
     module.AddOne = AddOne
     monkeypatch.setitem(sys.modules, module.__name__, module)
+    # pydra is keyed by its identity, which an editable checkout takes from its git state
+    owner_of = hash_module.owner_of
+    monkeypatch.setattr(
+        hash_module,
+        "owner_of",
+        lambda name: (
+            ("pydra", "1.0") if name.partition(".")[0] == "pydra" else owner_of(name)
+        ),
+    )
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == (
-        "python-c8931026c836d9acea3ac1888dbed7457ec2b0020996b215cec9fc25a97b583e",
-        "workflow-a79cb7670bf8dcdd4a041adf5cbce58e8b011192bdabbe32b9f8e0fa2329cef9",
+        "python-df2f5a56a155401ed2b11b4154cc99b52304d146e328e1fce8b3d811c0118f89",
+        "workflow-64b8746279eaafce52a811d1d17751ddcea65ed44ab51b21b5e19beab604993c",
     )
 
 

@@ -181,7 +181,8 @@ def test_native_checksum_ignores_versions(installed):
     "change, reuse, runs",
     [
         ({"fakelib": "2.0"}, "consistent", 2),
-        ({"fakelib": "2.0"}, "any", 1),
+        # a distribution the code reaches is keyed (RFC 0004 I3): a new key, so no reuse
+        ({"fakelib": "2.0"}, "any", 2),
         ({"other": "2.0"}, "consistent", 1),
         ({"other": "2.0"}, "exact", 2),
         ({"python": "3.14.0"}, "consistent", 2),
@@ -190,7 +191,7 @@ def test_native_checksum_ignores_versions(installed):
         ({"libc": ("glibc", "2.39")}, "consistent", 2),
         ({"base": "2.0"}, "consistent", 2),
         ({"base": "2.0"}, "any", 1),
-        ({"fakelib": _fakelib("1.0", {"url": "file:///x", "dir_info": {}})}, "any", 1),
+        ({"fakelib": _fakelib("1.0", {"url": "file:///x", "dir_info": {}})}, "any", 2),
     ],
 )
 def test_reuse_policies(installed, tmp_path, change, reuse, runs):
@@ -207,9 +208,10 @@ def test_reuse_policies(installed, tmp_path, change, reuse, runs):
 
 
 def test_any_records_both_contexts(installed, tmp_path):
-    _, first, second = _run_twice(tmp_path, installed, {"fakelib": "2.0"}, "any")
-    assert second.context["packages"]["fakelib"] == "1.0"
-    assert second.reused_in["packages"]["fakelib"] == "2.0"
+    # base is required by fakelib, not reached: in the context, not in the key
+    _, first, second = _run_twice(tmp_path, installed, {"base": "2.0"}, "any")
+    assert second.context["packages"]["base"] == "1.0"
+    assert second.reused_in["packages"]["base"] == "2.0"
 
 
 @pytest.mark.parametrize("reuse", ["consistent", "exact"])

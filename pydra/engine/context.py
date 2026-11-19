@@ -21,9 +21,12 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 import attrs
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
 from pydra.utils.general import STDLIB_MODULES, get_fields
 from pydra.utils.hash import (
     _module_is_library,
+    _owners,
+    forget_owners,
     check_code_hash,
     code_hash_default,
     library_modules,
@@ -242,6 +245,20 @@ class _Installed:
     def reason(self) -> str | None:
         return self.identified[1]
 
+    @property
+    def keyed(self) -> str | None:
+        """The identity a checksum is keyed by: `identity`, except that an install from
+        an index is keyed by its public version, leaving out the local segment
+        (``+cu121``), which names a build for a platform and is recorded, not keyed
+        (RFC 0004 section 4.1)"""
+        identity = self.identity
+        if identity is None or self.direct:
+            return identity
+        try:
+            return Version(identity).public
+        except InvalidVersion:
+            return identity
+
 
 def _identify(installed: _Installed) -> tuple[str | None, str | None]:
     """The identity of an installed distribution, or why it is unknown. The identity
@@ -423,27 +440,6 @@ def reached_modules(task: "Task") -> set[str] | None:
     }
 
 
-def _owners(module: str) -> list[str] | None:
-    """The distributions that installed `module`: the one whose files include the
-    module's file, or whose editable source holds it, or for a module without a file
-    (a namespace package) those providing its top-level name; None if there is none"""
-    distributions = _distributions()
-    candidates = _package_distributions().get(module.partition(".")[0], [])
-    file = getattr(sys.modules.get(module), "__file__", None)
-    if not file:
-        return [c for c in candidates if c in distributions] or None
-    path = _norm(file)
-    for name in candidates:
-        if name in distributions and path in distributions[name].files:
-            return [name]
-    roots = [
-        (len(d.editable_root), d.name)
-        for d in distributions.values()
-        if d.editable_root and d.holds(path)
-    ]
-    return [max(roots)[1]] if roots else None
-
-
 @functools.cache
 def _requirements(name: str) -> frozenset[str]:
     """The installed distributions `name` requires, transitively, under the markers of
@@ -535,4 +531,5 @@ def clear_caches() -> None:
         process_context,
     ):
         cached.cache_clear()
+    forget_owners()
     _warned.clear()
