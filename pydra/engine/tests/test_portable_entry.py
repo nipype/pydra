@@ -1733,3 +1733,48 @@ def test_a_codec_defect_does_not_quarantine(root):
     register_codec(Boxed, "test.entry.Boxed", lambda b: 1, lambda v: 1 + "x")
     with pytest.raises(EntryFormatUnknown):
         read(root)
+
+
+# -- fix round 3 -------------------------------------------------------------------------
+
+
+def test_data_errors_in_a_tampered_entry_are_corrupt(root, monkeypatch):
+    from pydra.engine.portable import entry as entry_mod
+
+    publish(root, {"a": 1})
+    # a KeyError and an IndexError met while reading are data errors
+    for exc in (KeyError("missing"), IndexError("short")):
+        monkeypatch.setattr(
+            entry_mod, "output_digest", lambda e, exc=exc: (_ for _ in ()).throw(exc)
+        )
+        with pytest.raises(CorruptEntry):
+            read(root)
+    monkeypatch.undo()
+
+
+def test_a_required_key_removed_is_corrupt_not_a_keyerror(root, tmp_path, tags):
+    f = tmp_path / "one.dat"
+    f.write_bytes(b"abc")
+    publish(root, {"c": complex(1, 2), "f": Tagged(f), "p": {"$set": 1}})
+    for edit in (
+        lambda d: d["outputs"]["c"]["$complex"].pop(),
+        lambda d: d["outputs"]["c"].__setitem__("$complex", []),
+        lambda d: d["outputs"]["f"]["files"].__setitem__(0, ["."]),
+        lambda d: d["outputs"]["f"].pop("files"),
+        lambda d: d["members"].__getitem__(next(iter(d["members"]))).pop("size"),
+        lambda d: d.pop("outputs"),
+        lambda d: d.pop("members"),
+    ):
+        publish(root, {"c": complex(1, 2), "f": Tagged(f)}, checksum="python-x")
+        edit_entry(root, edit, redigest=False, checksum="python-x")
+        with pytest.raises(CorruptEntry):
+            read(root, checksum="python-x")
+        shutil_rm(entry_path(root, "python-x"))
+
+
+def shutil_rm(path: Path) -> None:
+    import shutil
+
+    for p in [path, *path.rglob("*")]:
+        os.chmod(p, 0o755 if p.is_dir() else 0o644) if not IS_WINDOWS else None
+    shutil.rmtree(path)

@@ -317,9 +317,8 @@ class PydraEntryV1:
             raise
         except OSError as err:
             raise StoreUnavailable(f"{entry.path}: {err}") from err
-        except (
-            ValueError
-        ) as err:  # decoding and format errors; a defect (TypeError, ...) propagates
+        except (ValueError, KeyError, IndexError) as err:
+            # data errors; TypeError and AttributeError are defects and propagate
             raise CorruptEntry(f"{entry.path} is malformed: {err!r}") from err
 
     def _read(
