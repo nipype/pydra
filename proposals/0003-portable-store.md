@@ -359,9 +359,13 @@ The job no longer runs in its slot. `ResultStore.cache_dir(checksum, context)`
 returns a work directory. It is called many times and in several processes (`engine/job.py:287-289`,
 `engine/store.py:302`), so it has to be a pure function of values the job carries.
 
-- **The attempt.** The runner gives each job an `attempt` id (a UUID) when it hands the job out, and
-  the job carries it to the executing process with its checksum and context (RFC 0002 §3.4). A job
-  looked up but never handed out has none.
+- **The attempt.** The runner gives each leaf job an `attempt` id (a UUID) when it hands the job out,
+  and the job carries it to the executing process with its checksum and context (RFC 0002 §3.4). A
+  workflow job is never handed out: it gets its attempt when the runner starts to expand it, and the
+  outer job of a `Submitter` call when it is created (`engine/submitter.py:476-481`), so a workflow's
+  `_error.json`, kept entry and `_committed.json` have a directory of their own. A job looked up but
+  never handed out or expanded has none; a `workflow-stored` job, settled without expansion, has
+  none.
 - **The contract.** `work_dir(checksum: str, fingerprint: str, attempt: str) -> Path` is pure: the
   same arguments give the same path in every process. `fingerprint` is that of the job's lookup
   context (§4), which the runner and the executing process both hold; the execute context is not known
@@ -995,25 +999,27 @@ either order, then P3, with no cycle. P7 waits for RFC 0004's I1 and I8, which m
 `pydra-identity@2` the default; this assumes RFC 0004 ships I8 with I1. Otherwise a user who
 migrates before them migrates into a root that the next release cannot open (§4, §8.1).
 
-**What RFC 0002 (#930 at `2ac1ba18`) needs.** None of these contradicts RFC 0002; each is an
-addition its text has to state:
+**What RFC 0002 needs.** None of these contradicts RFC 0002. All six are carried by RFC 0002 at
+`d017fdcf` (#930); the references below are to that revision.
 
-1. **`attempt` on handed-out jobs.** `ready()` gives each job in `Round.dispatch` an `attempt` id
-   (§5.4). RFC 0002 has none.
-2. **`Committed` in the outcome.** RFC 0002 §3.1 has `Outcome = Result | Failed | NotRun`, with no
-   place for it. This proposal carries it as `Result.committed`, so the union is unchanged;
-   `complete()` keeps it with the `Result` it holds, and R4's reporting passes it through.
-3. **What travels with a job.** RFC 0002 §3.4 lists the checksum and the context. Under a
-   `PortableStore` the job also carries `attempt` and `verify` (§7.1), and its context is the
+1. **`attempt`** (carried: RFC 0002 §3.1). `ready()` gives each job in `Round.dispatch` an `attempt`
+   id (§5.4). A workflow job gets one when the runner starts to expand it and the outer job when it
+   is created; a `workflow-stored` job has none.
+2. **`Committed` in the outcome** (carried: RFC 0002 §3.1, `complete()`, and R4). `Outcome = Result |
+   Failed | NotRun` is unchanged; the `Committed` is carried as `Result.committed`, `complete()`
+   keeps it with the `Result` it holds, and R4's reporting passes it through.
+3. **What travels with a job** (carried: RFC 0002 §3.4, §3.5). Besides the checksum and the context,
+   under a `PortableStore` the job carries `attempt` and `verify` (§7.1), and its context is the
    identity's lookup context (§4).
-4. **Lookups in `ready()`.** Through `read_succeeded` and under `lookup_before_dispatch`, a runner over
+4. **Lookups in `ready()`** (carried: RFC 0002 §3.1). Through `read_succeeded` and under `lookup_before_dispatch`, a runner over
    a store that has `find` calls `find(job)`, settles a `Hit`, dispatches a `Miss`, and dispatches a
    `Verify` with `job.verify` set (§5.2, §7.1).
-5. **Result reads.** The Slurm and SGE adapter (RFC 0002 §3.3), `runner.result()` (RFC 0002 §3.1) and
+5. **Result reads** (carried: RFC 0002 §3.3, §3.1). The Slurm and SGE adapter (RFC 0002 §3.3), `runner.result()` (RFC 0002 §3.1) and
    `Submitter.__call__`'s final read (`engine/submitter.py:503-513`) read through `Job.result()`, which
    under a `PortableStore` reads `_committed.json`, so a job whose outputs were not stored reports
    its `Result` and its readers run (§5.4, §7.2). The visibility retry applies to `_committed.json`.
-6. **Workflow jobs.** The steps RFC 0002 §3.1 gives the runner for a workflow job take this form:
+6. **Workflow jobs** (carried: RFC 0002 §3.1). The steps RFC 0002 §3.1 gives the runner for a
+   workflow job take this form:
    - *Lease:* `try_take` on what `acquire` returns, which is always held unless `dedupe` is on, the
      task is resumable or the job is a rerun (§5.3, §10);
    - *Store check:* `find(job)`, before or under the lease; a `Hit` is `workflow-stored` and its
