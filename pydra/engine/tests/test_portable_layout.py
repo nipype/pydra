@@ -402,11 +402,11 @@ def test_legacy_rechecks_header_after_scan(root, expected, tmp_path, monkeypatch
 
     real = layout._sweep_and_scan
 
-    def interleaved(r, *a):
+    def interleaved(r, *a, **kw):
         # another opener links the header and makes its first directory after our read
         (tmp_path / "root" / HEADER_NAME).write_bytes(expected.to_json())
         (tmp_path / "root" / "staging").mkdir()
-        return real(r, *a)
+        return real(r, *a, **kw)
 
     monkeypatch.setattr(layout, "_sweep_and_scan", interleaved)
     assert open_layout(root, expected) == expected
