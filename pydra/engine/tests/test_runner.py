@@ -154,6 +154,8 @@ def test_max_concurrent_caps_running_jobs(any_worker, tmp_path):
     assert len(spans) == 8
     peak = max(sum(a2 <= a < b2 for a2, b2 in spans) for a, _ in spans)
     assert peak <= 2
+    if any_worker == "cf":
+        assert peak == 2
 
 
 def test_deprecated_submitter_wrappers(submitter):
