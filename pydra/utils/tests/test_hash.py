@@ -792,7 +792,7 @@ _HASH_IN_SUBPROCESS = (
         "cloudpickle 3.1.3 sets co_filename to '<dynamic-code>' on a function it pickles "
         "by value, so a process without the source hashes its bytecode (pydra issue "
         "#936). A worker does not hash it: it takes the digests carried from the "
-        "submitting process, and rehashes only File fields "
+        "submitting process, and rehashes only files and values with __bytes_repr__ "
         "(test_identity_classes.py::test_worker_without_source_uses_the_carried_digests)"
     ),
 )

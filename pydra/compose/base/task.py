@@ -190,7 +190,8 @@ class Task(ty.Generic[OutputsType]):
     # submitted the job, each with the value it was computed from, set by
     # `_carry_digests` when the job is unpickled (a worker may not be able to read the
     # source) and None in the submitting process (pydra issue #936). A digest is used
-    # only while its field still holds that value, and a ``Result`` does not pickle them.
+    # only while its field still holds that same object, and a ``Result`` does not
+    # pickle them.
     _carried = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")

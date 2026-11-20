@@ -1260,7 +1260,7 @@ def test_kw_only_dataclass_digest_is_stable_across_processes(tmp_path):
         ty.ClassVar,
         ty.Final,
     ],
-    ids=str,
+    ids=["KW_ONLY", "InitVar", "ClassVar[int]", "Final[int]", "ClassVar", "Final"],
 )
 def test_sentinel_types_have_no_address_in_their_bytes(tp):
     data = b"".join(hash_module.bytes_repr_type(tp, hash_module.Cache()))
@@ -1301,7 +1301,7 @@ def test_class_annotation_without_a_stable_form_names_the_field():
         list[int],
         ty.ForwardRef("X"),
     ],
-    ids=str,
+    ids=["List", "Callable", "ParamSpec", "TypeVar", "list[int]", "ForwardRef"],
 )
 def test_type_forms_are_dispatched_to_bytes_repr_type(tp):
     assert hash_module.bytes_repr.dispatch(type(tp)) is hash_module.bytes_repr_type
