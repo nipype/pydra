@@ -36,9 +36,11 @@ class PlanNode:
         fails on gives None. A real job the router fails on raises, as the run would
     expected_hits : int
         How many of the node's unfinished elements have a stored result to reuse. The store
-        may answer with an ``expected_hits(jobs)`` method; otherwise the records are
-        counted, and the results ``lookup`` returns when the runner has
-        ``lookup_before_dispatch``. A store with neither (an adapter) reports 0. Only
+        may answer with an ``expected_hits(jobs)`` method, which then counts everything
+        ``ready`` would settle; otherwise the records are counted, and the results
+        ``lookup`` returns when the runner has ``lookup_before_dispatch``. A store with a
+        ``recorded(jobs)`` method (``PickleStore``) is asked for its recorded jobs and the
+        others are looked up under that option. A store with neither (an adapter) reports 0. Only
         elements whose inputs are resolvable now have a checksum and are counted.
     state : "pending" | "waiting" | "deferred"
         ``pending``: its elements are released or can be. ``waiting``: a workflow job
@@ -140,10 +142,22 @@ def _elements(view: "NodeExecution") -> "tuple[list[Job], int]":
     return jobs, unformed
 
 
-def _hits(runner: "GraphRunner", jobs: "list[Job]") -> int:
+def _hits(runner: "GraphRunner", jobs: "list[Job]", listed: dict) -> int:
+    """How many of the jobs ``ready`` would settle from the store: those with a success
+    record and, under ``lookup_before_dispatch``, those ``lookup`` returns a result for.
+    A store's own ``expected_hits(jobs)`` answers for all of them, unless it has the finer
+    ``recorded`` (``PickleStore``), which names the recorded jobs so the rest can be looked
+    up."""
     if runner._inner_rerun or not jobs:  # ``ready`` skips the store on a rerun
         return 0
     store = runner.store
+    recorded = getattr(store, "recorded", None)
+    if recorded is not None:
+        have = recorded(jobs, listed)
+        rest = (
+            [j for j in jobs if j not in have] if runner.lookup_before_dispatch else []
+        )
+        return len(have) + sum(runner._lookup(j) is not None for j in rest)
     hook = getattr(store, "expected_hits", None)
     if hook is not None:
         return int(hook(jobs))
@@ -171,12 +185,13 @@ def build_plan(
     if executors is None:
         executors = runner.submitter.workers
     nodes: list[PlanNode] = []
+    listed: dict = {}  # record directories listed so far, once per plan
     for frame in runner._frames:
         if frame.state == "leasing":
             nodes.append(_leasing(frame))
         elif frame.state == "expanding" and frame.graph is not None:
             for node in frame.graph.sorted_nodes:
-                entry = _node(runner, frame, node, executors)
+                entry = _node(runner, frame, node, executors, listed)
                 if entry is not None:
                     nodes.append(entry)
     return Plan(tuple(nodes))
@@ -200,6 +215,7 @@ def _node(
     frame: "_Frame",
     node: "NodeExecution",
     executors: "ty.Mapping[str, ty.Any]",
+    listed: dict,
 ) -> PlanNode | None:
     if node.done:
         return None
@@ -240,7 +256,7 @@ def _node(
         elements=elements,
         resources=resources,
         worker=worker,
-        expected_hits=_hits(runner, unhanded),
+        expected_hits=_hits(runner, unhanded, listed),
         state="deferred" if deferred else "pending",
         placement=placement,
         provisional=provisional,

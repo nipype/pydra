@@ -496,3 +496,53 @@ def test_plan_defaults_executors_to_the_submitters_workers(tmp_path):
     with Submitter(worker=PlacingDebug(), cache_root=tmp_path / "c") as sub:
         nodes = by_path(runner_for(sub, Fan(xs=[1, 2])).plan())
     assert nodes["A"].placement == 2 and nodes["C"].placement == 1
+
+
+# -- expected_hits against what ready() would settle ----------------------------------------------------
+
+
+def test_plan_counts_lookups_on_a_pickle_store_with_read_only_caches(tmp_path):
+    with Submitter(worker="debug", cache_root=tmp_path / "old") as sub:
+        sub(Chain(x=1))
+    store = PickleStore(tmp_path / "new", readonly_caches=[tmp_path / "old"])
+    with Submitter(worker="debug", store=store) as sub:
+        for lbd, expected in ((False, 0), (True, 1)):
+            runner = GraphRunner(
+                Chain(x=1),
+                store,
+                on_error="raise_at_end",
+                submitter=sub,
+                lookup_before_dispatch=lbd,
+            )
+            assert by_path(runner.plan())["A"].expected_hits == expected
+            rnd = runner.ready()
+            assert len([s for s in rnd.settled if s.how == "stored"]) == expected * 2
+            assert len(rnd.dispatch) == (0 if lbd else 1)
+
+
+def test_plan_lists_the_record_directory_once(submitter, monkeypatch):
+    submitter(Siblings(xs=[1, 2]))
+    runner = runner_for(submitter, Siblings(xs=[1, 2]))
+    scans = []
+    real = os.scandir
+    monkeypatch.setattr(os, "scandir", lambda *a, **k: scans.append(a) or real(*a, **k))
+    nodes = by_path(runner.plan())
+    assert nodes["A"].expected_hits == 2 and nodes["C"].expected_hits == 2
+    assert len(scans) == 1
+
+
+def test_plan_counts_records_per_job_for_a_store_without_the_hook(submitter, tmp_path):
+    submitter(Chain(x=1))
+
+    class Recording(MemoryStore):
+        success_record = submitter.store.success_record
+
+    store = Recording(tmp_path / "mem")
+    store.cache_root = submitter.store.cache_root
+    runner = GraphRunner(
+        Chain(x=1), store, on_error="raise_at_end", submitter=submitter
+    )
+    assert not hasattr(store, "expected_hits")
+    assert by_path(runner.plan())["A"].expected_hits == 1
+    other = GraphRunner(Chain(x=3), store, on_error="raise_at_end", submitter=submitter)
+    assert by_path(other.plan())["A"].expected_hits == 0
