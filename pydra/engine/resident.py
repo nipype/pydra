@@ -33,6 +33,13 @@ __all__ = [
     "UnregisteredProvider",
     "provided_fields",
     "residency_digest",
+    "close_process_set",
+    "existing_process_set",
+    "find_provider",
+    "process_device",
+    "process_set",
+    "set_process_device",
+    "spec_key",
 ]
 
 logger = logging.getLogger("pydra.resident")
@@ -173,6 +180,22 @@ class ResidentSet:
     def __contains__(self, key: ResidentKey) -> bool:
         return key in self._entries
 
+    def items(self) -> list[tuple[ResidentKey, ty.Any]]:
+        """``(key, object)`` for each resident entry, least recently used first"""
+        with self._lock:
+            return [(k, e.obj) for k, e in self._entries.items()]
+
+    def evict(self, key: ResidentKey) -> bool:
+        """Remove ``key`` and close its state, busy or not (state that can no longer be
+        trusted, such as a stopped process); a use still running ends with a
+        :meth:`release` that finds nothing. Returns whether ``key`` was resident"""
+        with self._lock:
+            entry = self._entries.pop(key, None)
+        if entry is None:
+            return False
+        self._close_all([entry])
+        return True
+
     def _totals(self) -> tuple[int, int]:
         host = sum(e.footprint.host or 0 for e in self._entries.values())
         device = sum(e.footprint.device or 0 for e in self._entries.values())
@@ -272,6 +295,30 @@ class ResidentSet:
 
 
 _PROCESS_SET: ResidentSet | None = None
+_PROCESS_DEVICE: Device = Device()
+
+
+def set_process_device(device: Device | None) -> None:
+    """Set the device this process's providers load on (a pool worker sets its granted
+    device); ``None`` restores the CPU"""
+    global _PROCESS_DEVICE
+    _PROCESS_DEVICE = device if device is not None else Device()
+
+
+def process_device() -> Device:
+    """The device this process's providers load on (see :func:`set_process_device`)"""
+    return _PROCESS_DEVICE
+
+
+def existing_process_set() -> ResidentSet | None:
+    """The process's set if one was created, without creating it"""
+    return _PROCESS_SET
+
+
+def close_process_set() -> None:
+    """Close the process's set, if any, logging rather than raising errors; the next
+    :func:`process_set` creates a fresh one"""
+    _close_process_set()
 
 
 def process_set() -> ResidentSet:
@@ -310,6 +357,22 @@ def provided_fields(task: ty.Any) -> list[tuple[str, str]]:
         for f in get_fields(task)
         if getattr(f, "provided", None) is not None
     ]
+
+
+def find_provider(job: "Job", name: str) -> Provider:
+    """The provider ``name`` for ``job``: its submitter's, else the entry point's
+
+    Raises
+    ------
+    UnregisteredProvider
+        Neither has it
+    """
+    return _find_provider(job, name)
+
+
+def spec_key(task: ty.Any, field: str, provider: str) -> ResidentKey:
+    """The resident key of the provided ``field`` of ``task``"""
+    return _spec_key(task, field, provider)
 
 
 def _find_provider(job: "Job", name: str) -> Provider:
@@ -399,7 +462,7 @@ def bound(job: "Job") -> ty.Iterator[dict[str, ty.Any]]:
             provider = _find_provider(job, name)
             spec = getattr(job.task, field)
             key = _spec_key(job.task, field, name)
-            device = Device()
+            device = process_device()
             values[field] = stack.enter_context(
                 resident.use(
                     key,
