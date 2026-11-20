@@ -2,6 +2,7 @@
 runner's graph and the store without running a job, taking a lease or writing a result.
 """
 
+import copy
 import typing as ty
 
 import attrs
@@ -29,8 +30,10 @@ class PlanNode:
     resources : ComputeResources, optional
         What the node asks of its worker
     worker : str, optional
-        The name of the worker the submitter's router sends the node's first element to
-        (None if it cannot be told yet)
+        The name of the worker the submitter's router sends the node's first element to.
+        An element whose job cannot be formed yet is routed as a stand-in (name, task with
+        lazy inputs, resources), and the answer is ``provisional``; a stand-in the router
+        fails on gives None. A real job the router fails on raises, as the run would
     expected_hits : int
         How many of the node's unfinished elements have a stored result to reuse. The store
         may answer with an ``expected_hits(jobs)`` method; otherwise the records are
@@ -45,7 +48,12 @@ class PlanNode:
         Elements a gate switches off; always 0 until gates exist
     placement : object, optional
         What the worker's executor's ``place(jobs)`` returned for the node's elements,
-        when it has one (RFC 0005 section 7.4)
+        when it has one (RFC 0005 section 7.4). Elements whose jobs cannot be formed yet are
+        shown to ``place`` as the same stand-ins the router sees, so the answer is then
+        ``provisional``
+    provisional : bool
+        Whether ``worker`` or ``placement`` was derived from a stand-in rather than from
+        the jobs the run will dispatch, so a later plan may differ
     """
 
     path: str
@@ -56,6 +64,7 @@ class PlanNode:
     state: ty.Literal["pending", "waiting", "deferred"]
     gated: int = 0
     placement: object | None = None
+    provisional: bool = False
 
 
 @attrs.frozen
@@ -66,7 +75,8 @@ class Plan:
 
 
 class _Stand:
-    """What a router is shown for a node whose jobs cannot be formed yet"""
+    """What a router or ``place`` is shown for an element whose job cannot be formed yet:
+    the node's name, its task (inputs still lazy), resources and no state index"""
 
     def __init__(self, node: "NodeExecution"):
         self.name = node.name
@@ -75,45 +85,64 @@ class _Stand:
         self.state_index = None
 
 
-def _probe(node: "NodeExecution", graph) -> "NodeExecution | None":
-    """The node itself if it has started, else a copy whose elements can be formed now (no
-    upstream output unread), else None. A copy leaves the runner's graph as it was."""
+def _view(node: "NodeExecution", graph) -> "NodeExecution | None":
+    """The node itself if it has started, else a copy that can say what its elements are
+    (None if that waits on upstream elements). The copy has its own ``State``, so the live
+    node, its ``State`` and its tables are never written."""
     if node._tasks is not None:
         return node
     preds = graph.predecessors[node.name]
     # the runner starts a node once its predecessors have started, or are done if its
     # splitter splits over an upstream output (``get_runnable_tasks``)
-    if not all(p.done if node._splits_upstream_output else p.started for p in preds):
+    if node._splits_upstream_output:
+        if not all(p.done and not (p.errored or p.unrunnable) for p in preds):
+            return None
+    elif not all(p.started for p in preds):
         return None
     from pydra.engine.runner import NodeExecution
 
-    copy = NodeExecution(node.node, node.submitter, node.workflow, node.path)
-    copy.graph = node.graph
+    twin = copy.copy(node.node)
+    twin._state = copy.deepcopy(node.node._state)
+    view = NodeExecution(twin, node.submitter, node.workflow, node.path)
+    view.graph = node.graph
     try:
-        copy.start()
+        view.start()
     except Exception:  # not resolvable yet: the element count is unknown
         return None
-    return copy
+    return view
 
 
-def _jobs(probe: "NodeExecution", runner: "GraphRunner") -> "list[Job]":
-    """The jobs of the elements of a node that are unfinished and not yet handed out, as
-    far as their inputs can be resolved"""
-    done = set(probe.successful) | set(probe.errored) | set(probe.unrunnable)
-    jobs = []
-    for index in probe._tasks:
-        if index in done:
+def _elements(view: "NodeExecution") -> "tuple[list[Job], int]":
+    """The jobs of the unfinished elements of a node that exist or can be formed from
+    upstream elements the runner has accepted, and the number of unfinished elements
+    that cannot be formed yet. A job is formed only when every upstream element it reads
+    is in the upstream node's ``successful``: a job handed out and not yet reported is
+    never read, and nothing is kept on a live node."""
+    from pydra.engine.runner import _has_succeeded
+
+    finished = set(view.successful) | set(view.errored) | set(view.unrunnable)
+    jobs: list = []
+    unformed = 0
+    for index, job in view._tasks.items():
+        if index in finished:
             continue
-        try:
-            job = probe.job(index)
-        except Exception:  # an upstream element it reads has not completed
-            continue
-        if job not in runner._handed:
+        if job is None:
+            upstream = (view.blocked or {}).get(index)
+            if upstream is not None and all(_has_succeeded(p, i) for p, i in upstream):
+                try:
+                    job = view._new_job(index)
+                except Exception:  # its inputs cannot be resolved: the run will say so
+                    job = None
+        if job is None:
+            unformed += 1
+        else:
             jobs.append(job)
-    return jobs
+    return jobs, unformed
 
 
 def _hits(runner: "GraphRunner", jobs: "list[Job]") -> int:
+    if runner._inner_rerun or not jobs:  # ``ready`` skips the store on a rerun
+        return 0
     store = runner.store
     hook = getattr(store, "expected_hits", None)
     if hook is not None:
@@ -121,25 +150,17 @@ def _hits(runner: "GraphRunner", jobs: "list[Job]") -> int:
     record = getattr(store, "success_record", None)
     count = 0
     for job in jobs:
-        if record is not None:
-            from pydra.engine import store as store_module
-
-            try:
-                if store_module._record_exists(record(job.checksum, job.context)):
-                    count += 1
-                    continue
-            except Exception:
-                pass
-        if runner.lookup_before_dispatch and runner._lookup(job) is not None:
+        if record is not None and _record_exists(record(job.checksum, job.context)):
+            count += 1
+        elif runner.lookup_before_dispatch and runner._lookup(job) is not None:
             count += 1
     return count
 
 
-def _route(runner: "GraphRunner", rep) -> str | None:
-    try:
-        return runner.submitter.route_name(rep)
-    except Exception:
-        return None
+def _record_exists(path) -> bool:
+    from pydra.engine import store
+
+    return store._record_exists(path)
 
 
 def build_plan(
@@ -147,6 +168,8 @@ def build_plan(
     executors: "ty.Mapping[str, ty.Any] | None" = None,
 ) -> Plan:
     """The plan of a runner; see :meth:`GraphRunner.plan`"""
+    if executors is None:
+        executors = runner.submitter.workers
     nodes: list[PlanNode] = []
     for frame in runner._frames:
         if frame.state == "leasing":
@@ -168,6 +191,7 @@ def _leasing(frame: "_Frame") -> PlanNode:
         worker=None,
         expected_hits=0,
         state="waiting" if frame.retry_at is not None else "deferred",
+        provisional=True,
     )
 
 
@@ -175,42 +199,49 @@ def _node(
     runner: "GraphRunner",
     frame: "_Frame",
     node: "NodeExecution",
-    executors: "ty.Mapping[str, ty.Any] | None",
+    executors: "ty.Mapping[str, ty.Any]",
 ) -> PlanNode | None:
     if node.done:
         return None
-    probe = _probe(node, frame.graph)
-    jobs = _jobs(probe, runner) if probe is not None else []
+    view = _view(node, frame.graph)
+    jobs, unformed = _elements(view) if view is not None else ([], 0)
     workflow_node = is_workflow(node.node._task)
-    if workflow_node and any(
-        j in runner._child or j in runner._handed
-        for j in (probe._tasks.values() if probe else ())
-        if j is not None
-    ):
-        return None  # entered: its own nodes are planned, or it is settled
-    if probe is not None:
-        elements: int | None = len(probe._tasks)
-    else:
-        elements = None if node.state else 1
+    if workflow_node and view is not None:
+        if any(
+            j in runner._child or j in runner._handed for j in view._tasks.values() if j
+        ):
+            return None  # entered: its own nodes are planned, or it is settled
+    elements = len(view._tasks) if view is not None else (None if node.state else 1)
     resources = node.node._resources or node.node._task._resources
-    rep = (
-        jobs[0]
-        if jobs
-        else (next((j for j in (probe._tasks.values() if probe else ()) if j), None))
-    )
-    worker = None if workflow_node else _route(runner, rep or _Stand(node))
+    unhanded = [j for j in jobs if j not in runner._handed]
+    stand = _Stand(node)
+    worker = None
+    provisional = False
+    if not workflow_node:
+        real = jobs[0] if jobs else None
+        provisional = real is None
+        try:
+            worker = runner.submitter.route_name(real or stand)
+        except Exception:
+            if real is not None:  # a misrouted job is the run's failure too
+                raise
     placement = None
-    executor = (executors or {}).get(worker) if worker is not None else None
-    place = getattr(executor, "place", None)
-    if place is not None and jobs:
-        placement = place(jobs)
+    place = getattr(
+        executors.get(worker) if worker is not None else None, "place", None
+    )
+    if place is not None:
+        shown: list = unhanded + [stand] * (unformed or (0 if view is not None else 1))
+        if shown:
+            placement = place(shown)
+            provisional = provisional or len(shown) > len(unhanded)
     deferred = elements is None or workflow_node
     return PlanNode(
         path="/".join((*node.path, node.name)),
         elements=elements,
         resources=resources,
         worker=worker,
-        expected_hits=_hits(runner, jobs) if jobs else 0,
+        expected_hits=_hits(runner, unhanded),
         state="deferred" if deferred else "pending",
         placement=placement,
+        provisional=provisional,
     )

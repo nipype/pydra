@@ -182,16 +182,21 @@ class NodeExecution(ty.Generic[TaskType]):
             The state index of the element, None if the node has no state
         """
         if (job := self._tasks[index]) is None:
-            job = self._tasks[index] = Job(
-                task=self._split_task(index),
-                submitter=self.submitter,
-                environment=self.node._environment,
-                name=self.node.name,
-                hooks=self.node._hooks,
-                resources=self.node._resources,
-                state_index=index,
-            )
-            job.workflow_path = self.path
+            job = self._tasks[index] = self._new_job(index)
+        return job
+
+    def _new_job(self, index: int | None) -> "Job[TaskType]":
+        """The job of an element, formed without being kept (:meth:`job` keeps it)"""
+        job = Job(
+            task=self._split_task(index),
+            submitter=self.submitter,
+            environment=self.node._environment,
+            name=self.node.name,
+            hooks=self.node._hooks,
+            resources=self.node._resources,
+            state_index=index,
+        )
+        job.workflow_path = self.path
         return job
 
     def start(self) -> None:
@@ -1446,16 +1451,26 @@ class GraphRunner:
     def plan(self, executors: "ty.Mapping[str, ty.Any] | None" = None) -> "Plan":
         """What the run would do now, without running, leasing or writing anything
 
-        The runner is left as it was: no job is released, handed out or settled, and no
-        lease is taken (a workflow job waiting for its lease is ``waiting``, one not yet
-        tried is ``deferred``). Nodes that are done are not listed.
+        No job is released, handed out or settled, no lease is taken and no live node or
+        its ``State`` is written, so a planned run ends as an unplanned one (up to the
+        classification of finished jobs that :attr:`NodeExecution.done` performs). A workflow
+        job waiting for its lease is ``waiting``, one not yet tried is ``deferred``. Nodes
+        that are done are not listed.
+
+        A job is formed only from upstream elements the runner has already accepted, never
+        from one in flight, so a node behind a running one is counted from its element
+        count and not from stored results. Cost: one checksum per formable element, and
+        for the store's records one ``expected_hits(jobs)`` call (``PickleStore``: a single
+        listing of its record directory) or one existence check per element. The submitter's
+        router is called once per node, with a real job when one can be formed, so a
+        stateful router sees these calls.
 
         Parameters
         ----------
         executors : Mapping[str, Executor], optional
-            The executors by the names the router returns; one with a ``place(jobs)``
-            method is asked where the node's unfinished elements would run, and its answer
-            is carried as :attr:`PlanNode.placement`
+            The executors by the names the router returns, by default the submitter's
+            workers; one with a ``place(jobs)`` method is asked where the node's unfinished
+            elements would run, and its answer is carried as :attr:`PlanNode.placement`
 
         Returns
         -------

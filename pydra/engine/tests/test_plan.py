@@ -2,6 +2,7 @@
 read from the runner's graph and the store without running, leasing or writing anything
 """
 
+import os
 import time
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 
 from pydra.compose import python, workflow
 from pydra.engine.job import Job
+from pydra.engine.result import Result, save
 from pydra.engine.plan import Plan, PlanNode
 from pydra.engine.runner import GraphRunner
 from pydra.engine.store import PickleStore
@@ -17,6 +19,7 @@ from pydra.engine.tests.test_runner_driver_model import (
     Chain,
     Outer,
     MemoryStore,
+    Siblings,
     compute,
     drive_by_hand,
     runner_for,
@@ -246,3 +249,250 @@ def test_plan_carries_executor_placement(tmp_path):
         assert nodes["A"].placement == [("slot", "A"), ("slot", "A")]
         assert nodes["B"].placement is None and nodes["C"].placement is None
         assert placed == [["A", "A"]]
+
+
+# -- plan() leaves the run as it was ---------------------------------------------------------------------
+
+
+def outcome(job, value=None):
+    t = job.task
+    out = t.a + t.b if value is None else value
+    return Result(cache_dir=job.cache_dir, outputs=t.Outputs(out=out), task=t)
+
+
+def stale_run(tmp_path, do_plan, *, errored_slot, rerun):
+    """Siblings(xs=[1, 2]) stored; A[1] is handed out and held while the run goes on; plan()
+    is (or is not) called; A[1] then completes. Returns what B read and how the run ended.
+    """
+    with Submitter(worker="debug", cache_root=tmp_path / f"c{do_plan}") as sub:
+        sub(Siblings(xs=[1, 2]))
+        runner = runner_for(sub, Siblings(xs=[1, 2]), rerun=rerun)
+        if errored_slot:  # an earlier attempt at A[1] failed
+            for j in runner_for(sub, Siblings(xs=[1, 2]), rerun=True).ready().dispatch:
+                if j.name == "A" and j.state_index == 1:
+                    d = sub.store.cache_dir(j.checksum, j.context)
+                    save(
+                        d, Result(cache_dir=d, outputs=None, task=j.task, errored=True)
+                    )
+                    os.unlink(sub.store.success_record(j.checksum, j.context))
+        held, seen = [], []
+        for j in runner.ready().dispatch:
+            if j.name == "A" and j.state_index == 1:
+                held.append(j)
+            else:
+                runner.complete(j, outcome(j))
+        for j in runner.ready().dispatch:
+            seen.append((j.name, j.state_index, j.task.a))
+            runner.complete(j, outcome(j))
+        if do_plan:
+            runner.plan()
+        (a1,) = held
+        errored = a1.errored
+        runner.complete(a1, outcome(a1, 50 if rerun else None))
+        for _ in range(20):
+            if runner.done:
+                break
+            for j in runner.ready().dispatch:
+                seen.append((j.name, j.state_index, j.task.a))
+                runner.complete(j, outcome(j))
+        return (
+            errored,
+            sorted(x for x in seen if x[0] == "B"),
+            runner.failed,
+            runner.entries,
+        )
+
+
+def test_plan_does_not_mark_an_in_flight_upstream_errored(tmp_path):
+    kwargs = dict(errored_slot=True, rerun=False)
+    plain = stale_run(tmp_path, False, **kwargs)
+    planned = stale_run(tmp_path, True, **kwargs)
+    assert planned[0] is False and planned[2] is False and planned[3] == []
+    assert planned == plain
+
+
+def test_plan_does_not_cache_a_stale_input_in_a_live_node(tmp_path):
+    kwargs = dict(errored_slot=False, rerun=True)
+    plain = stale_run(tmp_path, False, **kwargs)
+    planned = stale_run(tmp_path, True, **kwargs)
+    assert dict(((n, i), a) for n, i, a in plain[1])[("B", 1)] == 50
+    assert planned == plain
+
+
+def test_plan_leaves_node_tables_and_state_alone(submitter):
+    runner = runner_for(submitter, Siblings(xs=[1, 2, 3]))
+    runner.ready()  # A and C released; B and D not started
+    graph = runner._frames[0].graph
+    tables = lambda: {  # noqa: E731
+        n.name: (
+            dict(n._tasks or {}),
+            dict(n.queued),
+            dict(n.blocked or {}),
+            bool(n.started),
+        )
+        for n in graph.nodes
+    }
+    state = vars(graph.node("B").node.state)
+    ids = {k: id(v) for k, v in state.items()}
+    before = tables()
+    plan = runner.plan()
+    assert sorted(n.path for n in plan.nodes) == ["A", "B", "C", "D"]
+    assert tables() == before
+    assert {k: id(v) for k, v in vars(graph.node("B").node.state).items()} == ids
+
+
+class CountingLease:
+    lost = None
+    takes = 0
+
+    def try_take(self):
+        type(self).takes += 1
+        return 60.0
+
+    def __exit__(self, *exc):
+        pass
+
+
+class CountingStore(PickleStore):
+    def acquire(self, checksum, context, **kwargs):
+        return CountingLease()
+
+
+def test_plan_takes_no_lease(tmp_path, monkeypatch):
+    monkeypatch.setattr(CountingLease, "takes", 0)
+    store = CountingStore(tmp_path / "cache")
+    sub = Submitter(worker="debug", store=store)
+    task = Chain(x=1)
+    job = Job(task, submitter=sub, name="main")
+    runner = GraphRunner(task, store, on_error="raise_at_end", submitter=sub, job=job)
+    runner.plan()
+    runner.ready()
+    assert CountingLease.takes == 1
+    runner.plan()
+    runner.plan()
+    assert CountingLease.takes == 1
+
+
+def test_plan_settles_no_frame(submitter):
+    runner = runner_for(submitter, Outer(x=1))
+    states = lambda: [f.state for f in runner._frames]  # noqa: E731
+    seen = set()
+    for _ in range(10):
+        for j in runner.ready().dispatch:
+            runner.complete(j, outcome(j))
+        before = states()  # the nested frame's nodes are done, not yet committed
+        runner.plan()
+        assert states() == before
+        seen.add(tuple(before))
+    assert runner.done
+    assert ("expanding", "expanding") in seen
+
+
+def test_plan_forms_no_job_in_a_live_node(submitter):
+    runner = runner_for(submitter, Chain(x=1))
+    (a,) = runner.ready().dispatch
+    runner.ready()  # B starts, blocked on A
+    runner.complete(a, outcome(a))  # A accepted, B not yet released
+    b = runner._frames[0].graph.node("B")
+    assert b._tasks == {None: None} and set(b.blocked) == {None}
+    plan = runner.plan()
+    assert by_path(plan)["B"].expected_hits == 0
+    assert b._tasks == {None: None} and set(b.blocked) == {None} and not b.queued
+
+
+def test_plan_does_not_count_handed_out_jobs(submitter):
+    submitter(Fan(xs=[4, 5, 6]))  # a record for each element of A
+    fresh = runner_for(submitter, Fan(xs=[4, 5, 6]))
+    assert by_path(fresh.plan())["A"].expected_hits == 3
+    # A[0]'s slot is errored under its record: read_succeeded refuses it, so it is
+    # dispatched, while A[1] and A[2] settle from the store
+    probe = runner_for(submitter, Fan(xs=[4, 5, 6]), rerun=True)
+    job = next(
+        j for j in probe.ready().dispatch if j.name == "A" and j.state_index == 0
+    )
+    d = submitter.store.cache_dir(job.checksum, job.context)
+    save(d, Result(cache_dir=d, outputs=None, task=job.task, errored=True))
+    rnd = fresh.ready()
+    assert [j.state_index for j in rnd.dispatch if j.name == "A"] == [0]
+    assert len([s for s in rnd.settled if s.job.name == "A"]) == 2
+    node = by_path(fresh.plan())["A"]
+    assert node.elements == 3 and node.expected_hits == 0  # all three are handed out
+
+
+def test_plan_expected_hits_honours_rerun(submitter):
+    submitter(Chain(x=1))
+    assert by_path(runner_for(submitter, Chain(x=1)).plan())["A"].expected_hits == 1
+    rerun = runner_for(submitter, Chain(x=1), rerun=True)
+    assert [n.expected_hits for n in rerun.plan().nodes] == [0, 0]
+    no_propagate = runner_for(submitter, Chain(x=1), rerun=True, propagate_rerun=False)
+    assert by_path(no_propagate.plan())["A"].expected_hits == 1
+
+
+def test_pickle_store_expected_hits_is_one_listing(submitter, monkeypatch):
+    submitter(Chain(x=1))
+    store = submitter.store
+    jobs = [
+        Job(FunAddVar(a=1, b=1), submitter=submitter, name="A"),
+        Job(FunAddVar(a=9, b=9), submitter=submitter, name="A"),
+    ]
+    scans = []
+    real = os.scandir
+    monkeypatch.setattr(os, "scandir", lambda *a, **k: scans.append(a) or real(*a, **k))
+    assert store.expected_hits(jobs) == 1
+    assert len(scans) == 1
+
+
+# -- routing and placement -------------------------------------------------------------------------------
+
+
+def test_plan_propagates_a_router_error_for_a_real_job(tmp_path):
+    with Submitter(
+        worker="debug", router=lambda j: "gpu", cache_root=tmp_path / "c"
+    ) as sub:
+        runner = runner_for(sub, Chain(x=1))
+        with pytest.raises(ValueError, match="gpu"):
+            runner.plan()
+
+
+def test_plan_router_error_for_a_stand_in_is_provisional_none(tmp_path):
+    def router(job):
+        if job.task.a != 1 and not isinstance(job.task.a, int):
+            raise RuntimeError("reads the input")
+        return None
+
+    with Submitter(worker="debug", router=router, cache_root=tmp_path / "c") as sub:
+        nodes = by_path(runner_for(sub, Chain(x=1)).plan())
+    assert nodes["A"].worker == "default" and not nodes["A"].provisional
+    assert nodes["B"].worker is None and nodes["B"].provisional
+
+
+def test_plan_placement_for_unformable_nodes_is_provisional(tmp_path):
+    seen = []
+
+    class Placer:
+        batches = False
+
+        def place(self, jobs):
+            seen.append([(type(j).__name__, j.name) for j in jobs])
+            return "placed"
+
+    with Submitter(worker="debug", cache_root=tmp_path / "c") as sub:
+        runner = runner_for(sub, Chain(x=1))
+        nodes = by_path(runner.plan(executors={"default": Placer()}))
+    assert nodes["A"].placement == "placed" and not nodes["A"].provisional
+    assert nodes["B"].placement == "placed" and nodes["B"].provisional
+    assert seen[0][0][0] == "Job" and seen[1][0][0] != "Job"
+
+
+def test_plan_defaults_executors_to_the_submitters_workers(tmp_path):
+    from pydra.workers import debug
+
+    class PlacingDebug(debug.Worker):
+        _plugin_name = "debug"
+
+        def place(self, jobs):
+            return len(jobs)
+
+    with Submitter(worker=PlacingDebug(), cache_root=tmp_path / "c") as sub:
+        nodes = by_path(runner_for(sub, Fan(xs=[1, 2])).plan())
+    assert nodes["A"].placement == 2 and nodes["C"].placement == 1

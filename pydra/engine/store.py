@@ -587,6 +587,20 @@ class PickleStore:
             return None
         return result
 
+    def expected_hits(self, jobs: "ty.Sequence[Job]") -> int:
+        """How many of ``jobs`` have a success record, from one listing of the record
+        directory (the answer ``GraphRunner.plan`` uses). Records only: a result that
+        ``lookup`` would refuse or that only ``lookup`` finds is not counted."""
+        records = [self.success_record(j.checksum, j.context) for j in jobs]
+        if not records:
+            return 0
+        try:
+            with os.scandir(records[0].parent) as entries:
+                present = {e.name for e in entries}
+        except OSError:
+            return 0
+        return sum(r.name in present for r in records)
+
     def withdraw_success(self, lease: DirectoryLease) -> None:
         """Remove the success record of the job held under ``lease``, before its slot
         is rewritten; called with the lease held."""
