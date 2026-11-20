@@ -26,7 +26,8 @@ class PlanNode:
         a workflow job whose lease is not yet held is named by its own path
     elements : int, optional
         How many elements the node releases, whatever a concurrency cap would hand out at
-        once; None if that depends on an upstream output that has not been read
+        once; None if that depends on an upstream output that has not been read (a
+        partial node whose blocks are not all expanded: see ``known_elements``)
     resources : ComputeResources, optional
         What the node asks of its worker
     worker : str, optional
@@ -45,7 +46,8 @@ class PlanNode:
     state : "pending" | "waiting" | "deferred"
         ``pending``: its elements are released or can be. ``waiting``: a workflow job
         whose lease another process holds. ``deferred``: what it holds is not known yet (a
-        workflow job not yet expanded, a split over an upstream output)
+        workflow job not yet expanded, a split over an upstream output none of whose
+        elements has been read)
     gated : int
         Elements a gate switches off; always 0 until gates exist
     placement : object, optional
@@ -56,6 +58,11 @@ class PlanNode:
     provisional : bool
         Whether ``worker`` or ``placement`` was derived from a stand-in rather than from
         the jobs the run will dispatch, so a later plan may differ
+    known_elements : int, optional
+        How many elements are known now: ``elements`` when that is known; on a partial
+        node (one that splits over an upstream output and is expanded one block per
+        upstream element), the elements of the blocks whose upstream elements the
+        runner has accepted; None when nothing about the node can be read yet
     """
 
     path: str
@@ -67,6 +74,7 @@ class PlanNode:
     gated: int = 0
     placement: object | None = None
     provisional: bool = False
+    known_elements: int | None = None
 
 
 @attrs.frozen
@@ -88,18 +96,29 @@ class _Stand:
 
 
 def _view(node: "NodeExecution", graph) -> "NodeExecution | None":
-    """The node itself if it has started, else a copy that can say what its elements are
-    (None if that waits on upstream elements). The copy has its own ``State``, so the live
-    node, its ``State`` and its tables are never written."""
-    if node._tasks is not None:
+    """The node itself if it has started and is not partial, else a copy that can say
+    what its elements are (None if that waits on upstream elements). The copy has its own
+    ``State`` and, for a partial node, its own blocks. A copy of a partial node expands
+    every block whose upstream elements are in the upstream nodes' ``successful``, as the
+    next ``ready`` would, including the blocks of a live partial node that ``ready`` has
+    not expanded yet; its element keys are the live node's.
+
+    No job table of a live node is written (``_tasks``, ``blocked``, ``queued``,
+    ``successful``, ``errored``) and no in-flight result is read. Reading a live partial
+    node (its ``done``, ``settled`` or a whole read's seal check) may advance its derived
+    bookkeeping: registering blocks for source keys that exist, closing groups, sealing
+    (which assigns ``state_index`` to its jobs), and recording an inherited failed block
+    in ``unrunnable``. Each step is monotone and a function of tables ``plan()`` does not
+    write, so the next ``ready()`` would make the same change. A barrier copy may also
+    prepare the ``State`` of a sealed partial upstream, as its seal-time check does."""
+    if node._tasks is not None and not node.is_partial:
         return node
     preds = graph.predecessors[node.name]
-    # the runner starts a node once its predecessors have started, or are done if its
-    # splitter splits over an upstream output (``get_runnable_tasks``)
-    if node._splits_upstream_output:
-        if not all(p.done and not (p.errored or p.unrunnable) for p in preds):
-            return None
-    elif not all(p.started for p in preds):
+    # the runner classifies a node once its predecessors have started; a barrier node
+    # starts once they are done (``get_runnable_tasks``)
+    if not all(p.started for p in preds) or any(
+        p._node_error is not None or (p._tasks is None and p.unrunnable) for p in preds
+    ):
         return None
     from pydra.engine.runner import NodeExecution
 
@@ -108,26 +127,41 @@ def _view(node: "NodeExecution", graph) -> "NodeExecution | None":
     view = NodeExecution(twin, node.submitter, node.workflow, node.path)
     view.graph = node.graph
     try:
-        view.start()
+        mode = view._classify()
+        if mode == "error":
+            return None
+        if mode == "barrier":
+            if not all(p.done and not (p.errored or p.unrunnable) for p in preds):
+                return None
+            view.start()
+        elif mode == "partial":
+            view._partial.start()
+            view._partial.expand_ready()
+        else:
+            view.start()
     except Exception:  # not resolvable yet: the element count is unknown
         return None
     return view
 
 
-def _elements(view: "NodeExecution") -> "tuple[list[Job], int]":
+def _elements(view: "NodeExecution", live: "NodeExecution") -> "tuple[list[Job], int]":
     """The jobs of the unfinished elements of a node that exist or can be formed from
     upstream elements the runner has accepted, and the number of unfinished elements
     that cannot be formed yet. A job is formed only when every upstream element it reads
     is in the upstream node's ``successful``: a job handed out and not yet reported is
-    never read, and nothing is kept on a live node."""
+    never read, and nothing is kept on a live node. ``live`` is the node itself, whose
+    tables say which elements are finished and which jobs exist when ``view`` is a copy
+    of a started partial node."""
     from pydra.engine.runner import _has_succeeded
 
-    finished = set(view.successful) | set(view.errored) | set(view.unrunnable)
+    finished = set(live.successful) | set(live.errored) | set(live.unrunnable)
+    existing = live._tasks or {}
     jobs: list = []
     unformed = 0
     for index, job in view._tasks.items():
         if index in finished:
             continue
+        job = existing.get(index, job)
         if job is None:
             upstream = (view.blocked or {}).get(index)
             if upstream is not None and all(_has_succeeded(p, i) for p, i in upstream):
@@ -220,14 +254,20 @@ def _node(
     if node.done:
         return None
     view = _view(node, frame.graph)
-    jobs, unformed = _elements(view) if view is not None else ([], 0)
+    jobs, unformed = _elements(view, node) if view is not None else ([], 0)
     workflow_node = is_workflow(node.node._task)
     if workflow_node and view is not None:
         if any(
-            j in runner._child or j in runner._handed for j in view._tasks.values() if j
+            j in runner._child or j in runner._handed
+            for j in (node._tasks or {}).values()
+            if j
         ):
             return None  # entered: its own nodes are planned, or it is settled
-    elements = len(view._tasks) if view is not None else (None if node.state else 1)
+    if view is None:
+        elements = known = None if node.state else 1
+    else:
+        known = len(view._tasks)
+        elements = None if view.is_partial and not view.settled else known
     resources = node.node._resources or node.node._task._resources
     unhanded = [j for j in jobs if j not in runner._handed]
     stand = _Stand(node)
@@ -250,7 +290,7 @@ def _node(
         if shown:
             placement = place(shown)
             provisional = provisional or len(shown) > len(unhanded)
-    deferred = elements is None or workflow_node
+    deferred = workflow_node or (elements is None and not known)
     return PlanNode(
         path="/".join((*node.path, node.name)),
         elements=elements,
@@ -260,4 +300,5 @@ def _node(
         state="deferred" if deferred else "pending",
         placement=placement,
         provisional=provisional,
+        known_elements=known,
     )
