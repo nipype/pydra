@@ -21,9 +21,12 @@ from pydra.engine.lease import (
 # Beats every 0.05 s, stale after 0.5 s: in-process tests
 FAST = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
 
-# Beats every 0.2 s, stale after 2 s: an acknowledgement is due within 0.2 s, which
-# a loaded CI runner meets where 0.05 s is tight
-CROSS = LeaseSettings(stale_after=2, timeout=10, attribute_delay=0)
+# Beats every second, stale after 10 s: an acknowledgement is due within 1 s, which
+# a loaded CI runner meets
+CROSS = LeaseSettings(stale_after=10, timeout=20, attribute_delay=0)
+
+# Beats every 0.2 s: the acknowledgement-timeout test, whose subject is the bound
+SHORT = LeaseSettings(stale_after=2, timeout=10, attribute_delay=0)
 
 CALLBACKS = textwrap.dedent("""\
     import json, time
@@ -68,6 +71,19 @@ def newest_mtime(lockfile: Path) -> float:
 
 def heartbeat_threads() -> list[threading.Thread]:
     return [t for t in threading.enumerate() if t.name.startswith("pydra-lease-")]
+
+
+def rename_away(token_dir: Path) -> Path:
+    """Rename a holder's token directory aside, as a takeover does; Windows may
+    refuse while the beater makes or removes a beat in it."""
+    gone = token_dir.parent / f"gone-{token_dir.name}"
+    for _ in range(200):
+        try:
+            os.rename(token_dir, gone)
+            return gone
+        except PermissionError:
+            time.sleep(0.01)
+    raise AssertionError(f"could not rename {token_dir}")
 
 
 def take(lockfile: Path, settings=CROSS) -> DirectoryLease:
@@ -220,6 +236,25 @@ def test_on_expire_must_be_importable():
 
 
 @pytest.mark.timeout(120)
+@pytest.mark.parametrize("which", ["thread", "unheld"])
+def test_hold_refuses_a_lease_it_cannot_beat(tmp_path, which):
+    """``hold`` takes the lease itself: one taken with ``beat="thread"`` already has
+    a beater, and one not held has no token directory."""
+    if which == "thread":
+        lease = DirectoryLease.at(tmp_path / "x.lease", CROSS)
+        assert lease.try_take() is None
+    else:
+        lease = DirectoryLease.at(tmp_path / "x.lease", CROSS, beat="external")
+    try:
+        with BeaterClient(LeaseBeater()) as client:
+            with pytest.raises(ValueError, match="external|not held"):
+                client.hold(lease)
+            assert client.alive
+    finally:
+        lease.__exit__(None, None, None)
+
+
+@pytest.mark.timeout(120)
 def test_unimportable_on_expire_fails_the_start():
     with pytest.raises(BeaterDead, match="did not start"):
         BeaterClient(LeaseBeater(on_expire="pydra.engine.no_such_module:fn"))
@@ -233,7 +268,7 @@ def test_lease_beaten_from_another_process(tmp_path):
     with BeaterClient(LeaseBeater()) as client:
         assert client.process.pid != os.getpid()
         for lease in leases:
-            client.hold(lease.token_dir, CROSS, lease=lease)
+            client.hold(lease)
         assert heartbeat_threads() == []  # no beat thread in the holder
         first = [newest_mtime(lease.lockfile) for lease in leases]
         start = time.monotonic()
@@ -260,16 +295,9 @@ def test_beater_reports_loss(tmp_path):
     lease = take(tmp_path / "ticket.lease")
     seen = []
     with BeaterClient(LeaseBeater(), on_lost=lambda d, why: seen.append(d)) as client:
-        client.hold(lease.token_dir, CROSS, lease=lease)
+        client.hold(lease)
         token_dir = lease.token_dir
-        gone = token_dir.parent / f"gone-{token_dir.name}"
-        for _ in range(100):  # what a takeover does; Windows may refuse mid-beat
-            try:
-                os.rename(token_dir, gone)
-                break
-            except PermissionError:
-                time.sleep(0.01)
-        shutil.rmtree(gone)
+        shutil.rmtree(rename_away(token_dir))
         assert wait_for(lambda: lease.lost is not None, 5 * CROSS.renew_interval + 5)
         assert token_dir in client.lost
         assert wait_for(lambda: seen == [token_dir], 5)  # called after the mark
@@ -282,7 +310,7 @@ def test_release_is_not_a_loss(tmp_path):
     """The holder releases after the beater acknowledged: no ``lost`` follows."""
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
-        client.hold(lease.token_dir, CROSS, lease=lease)
+        client.hold(lease)
         time.sleep(2 * CROSS.renew_interval)
         token_dir = lease.token_dir
         client.release(token_dir)
@@ -316,7 +344,7 @@ def test_deadline_stops_beating(tmp_path):
     ``expired``; a third process then takes the lease over by ``try_take``."""
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
-        client.hold(lease.token_dir, CROSS, lease=lease)
+        client.hold(lease)
         client.deadline(lease.token_dir, time.time() + 0.5)
         assert client.wait_expired(lease.token_dir, 30)
         stopped = newest_mtime(lease.lockfile)
@@ -347,7 +375,7 @@ def test_deadline_stops_beating(tmp_path):
 def test_deadline_cleared_keeps_beating(tmp_path):
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
-        client.hold(lease.token_dir, CROSS, lease=lease)
+        client.hold(lease)
         client.deadline(lease.token_dir, time.time() + 0.5)
         client.deadline(lease.token_dir, None)
         assert not client.wait_expired(lease.token_dir, 1.0)
@@ -368,9 +396,10 @@ def test_deadline_payload_reaches_callback(tmp_path, callbacks):
         LeaseBeater(on_expire=f"{callbacks}:record_expiry"),
         on_expired=lambda d: when_expired.append(out.exists()),
     ) as client:
-        client.hold(lease.token_dir, CROSS, lease=lease)
+        client.hold(lease)
         client.deadline(lease.token_dir, time.time() + 0.3, payload)
         assert client.wait_expired(lease.token_dir, 30)
+        assert wait_for(lambda: when_expired, 10)  # on the callback thread
         assert when_expired == [True]
         received = json.loads(out.read_text())
         assert received == {"token_dir": str(lease.token_dir), "payload": payload}
@@ -384,13 +413,14 @@ def test_beater_eof(tmp_path):
     dead = []
     client = BeaterClient(LeaseBeater(), on_dead=lambda why: dead.append(why))
     try:
-        client.hold(lease.token_dir, CROSS, lease=lease)
+        client.hold(lease)
         client.process.kill()
         assert client.wait_dead(30)
         assert not client.alive
-        assert dead and "end of file" in dead[0]
+        assert wait_for(lambda: dead, 10)  # on_dead runs on the callback thread
+        assert "end of file" in dead[0]
         with pytest.raises(BeaterDead):
-            client.hold(lease.token_dir, CROSS)
+            client.hold(lease)
     finally:
         client.close()
         lease.__exit__(None, None, None)
@@ -400,17 +430,17 @@ def test_beater_eof(tmp_path):
 def test_ack_timeout_is_beater_death(tmp_path, callbacks):
     """A beater that stops answering (here, wedged in ``on_expire``): ``hold`` times
     out after ``renew_interval`` and the holder has lost its beater."""
-    first = take(tmp_path / "one.lease")
-    second = take(tmp_path / "two.lease")
+    first = take(tmp_path / "one.lease", SHORT)
+    second = take(tmp_path / "two.lease", SHORT)
     client = BeaterClient(LeaseBeater(on_expire=f"{callbacks}:wedge"))
     try:
-        client.hold(first.token_dir, CROSS)
+        client.hold(first)
         client.deadline(first.token_dir, time.time() - 1)  # the beater wedges
         start = time.monotonic()
         with pytest.raises(BeaterDead, match="acknowledge"):
-            client.hold(second.token_dir, CROSS)
+            client.hold(second)
         waited = time.monotonic() - start
-        assert CROSS.renew_interval * 0.9 <= waited < CROSS.renew_interval + 5
+        assert SHORT.renew_interval * 0.9 <= waited < SHORT.renew_interval + 5
         assert not client.alive
         assert wait_for(lambda: client.process.poll() is not None, 30)  # stopped
         with pytest.raises(BeaterDead):
@@ -432,7 +462,7 @@ HOLDER = textwrap.dedent("""\
     lease = DirectoryLease.at(lockfile, settings, beat="external")
     assert lease.try_take() is None
     with BeaterClient(LeaseBeater(kill_after=kill_after)) as client:
-        client.hold(lease.token_dir, settings, lease=lease)
+        client.hold(lease)
         client.deadline(lease.token_dir, time.time() + 0.2, {"call": 1})
         assert client.wait_expired(lease.token_dir, 30)
         print("expired", flush=True)
@@ -475,3 +505,187 @@ def test_kill_after_unacknowledged_expiry(tmp_path, kill_after, mode, killed):
     else:
         assert proc.returncode == 0, proc.stderr
         assert "survived" in proc.stdout
+
+
+@pytest.mark.timeout(120)
+def test_callbacks_may_call_the_client(tmp_path):
+    """``on_lost`` and ``on_expired`` run off the thread that reads the beater, so
+    a callback can release or acknowledge, and the beater stays healthy."""
+    lost, expired = take(tmp_path / "lost.lease"), take(tmp_path / "expired.lease")
+    kept = take(tmp_path / "kept.lease")
+    done, holder = [], []
+
+    def call(request, token_dir):
+        try:
+            request(token_dir)
+            done.append((request.__name__, token_dir))
+        except Exception as err:
+            done.append((repr(err), token_dir))
+
+    with BeaterClient(
+        LeaseBeater(kill_after=30),
+        on_lost=lambda d, why: call(holder[0].release, d),
+        on_expired=lambda d: call(holder[0].ack_expired, d),
+    ) as client:
+        holder.append(client)
+        for lease in (lost, expired, kept):
+            client.hold(lease)
+        token_dir = lost.token_dir
+        rename_away(token_dir)
+        client.deadline(expired.token_dir, time.time() + 0.2)
+        assert wait_for(lambda: len(done) == 2, 5 * CROSS.renew_interval + 10)
+        assert sorted(done) == sorted(
+            [("release", token_dir), ("ack_expired", expired.token_dir)]
+        )
+        assert client.alive
+        before = newest_mtime(kept.lockfile)
+        assert wait_for(lambda: newest_mtime(kept.lockfile) > before, 10)
+        assert kept.prove()
+        for lease in (expired, kept):
+            client.release(lease.token_dir)
+    for lease in (lost, expired, kept):
+        lease.__exit__(None, None, None)
+
+
+ORPHANING = textwrap.dedent("""\
+    import json, os, sys, time
+    from pathlib import Path
+    from pydra.engine.lease import BeaterClient, DirectoryLease, LeaseBeater, LeaseSettings
+    settings = LeaseSettings.from_json(json.loads(sys.argv[2]))
+    lease = DirectoryLease.at(Path(sys.argv[1]), settings, beat="external")
+    assert lease.try_take() is None
+    client = BeaterClient(LeaseBeater(kill_after=1))
+    client.hold(lease)
+    client.deadline(lease.token_dir, time.time() + 600)
+    child = None
+    if sys.argv[3] == "fork":
+        child = os.fork()
+        if child == 0:
+            time.sleep(60)
+            os._exit(0)
+    print(json.dumps({"beater": client.process.pid, "child": child}), flush=True)
+    time.sleep(600)
+    """)
+
+
+def stops_moving(lockfile: Path, quiet: float, within: float) -> bool:
+    """Whether the lease's newest mark stays put for ``quiet`` seconds, at some
+    point within ``within`` seconds."""
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        before = newest_mtime(lockfile)
+        time.sleep(quiet)
+        if newest_mtime(lockfile) == before:
+            return True
+    return False
+
+
+def pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize(
+    "fork",
+    [
+        "no-fork",
+        pytest.param(
+            "fork",
+            marks=pytest.mark.skipif(not hasattr(os, "fork"), reason="no fork"),
+        ),
+    ],
+)
+def test_holder_death_ends_beater(tmp_path, fork):
+    """The holder SIGKILLed, with or without a forked child still holding a copy of
+    its end of the pipe: the beater stops beating and exits, and the lease goes
+    stale."""
+    lockfile = tmp_path / "ticket.lease"
+    script = tmp_path / "orphaning.py"
+    script.write_text(ORPHANING)
+    proc = subprocess.Popen(
+        [sys.executable, str(script), str(lockfile), json.dumps(CROSS.to_json()), fork],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    child = None
+    try:
+        line = proc.stdout.readline()
+        assert line, proc.stderr.read()
+        pids = json.loads(line)
+        child = pids["child"]
+        proc.kill()
+        proc.wait(30)
+        assert stops_moving(lockfile, 3 * CROSS.renew_interval, 30), "still beaten"
+        if os.name == "posix":
+            assert wait_for(lambda: not pid_alive(pids["beater"]), 30)
+        if child is not None:
+            assert pid_alive(child)  # the child outlived its parent, as intended
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        if child is not None and pid_alive(child):
+            os.kill(child, 9)
+
+
+DRAINING = textwrap.dedent("""\
+    import json, signal, sys, time
+    from pathlib import Path
+    from pydra.engine.lease import BeaterClient, DirectoryLease, LeaseBeater, LeaseSettings
+    settings = LeaseSettings.from_json(json.loads(sys.argv[2]))
+    stop = []
+    signal.signal(signal.SIGTERM, lambda *a: stop.append(1))
+    leases = [
+        DirectoryLease.at(Path(sys.argv[1]) / f"{n}.lease", settings, beat="external")
+        for n in range(2)
+    ]
+    with BeaterClient(LeaseBeater()) as client:
+        for lease in leases:
+            assert lease.try_take() is None
+            client.hold(lease)
+        print("ready", flush=True)
+        deadline = time.monotonic() + 60
+        while not stop and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert stop, "no SIGTERM"
+        time.sleep(2 * settings.renew_interval)  # the drain: settle what finished
+        assert client.alive and all(lease.prove() for lease in leases)
+        for lease in leases:
+            client.release(lease.token_dir)
+            lease.__exit__(None, None, None)
+        print("released", flush=True)
+    """)
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.skipif(not hasattr(os, "killpg"), reason="no process groups")
+def test_group_sigterm_leaves_the_beater_to_the_drain(tmp_path):
+    """SIGTERM to the holder's whole process group, as Slurm and a process-group
+    stop send it: the beater survives, so the holder's releases are acknowledged."""
+    import signal
+
+    script = tmp_path / "draining.py"
+    script.write_text(DRAINING)
+    proc = subprocess.Popen(
+        [sys.executable, str(script), str(tmp_path), json.dumps(CROSS.to_json())],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        assert proc.stdout.readline().strip() == "ready", proc.stderr.read()
+        os.killpg(proc.pid, signal.SIGTERM)
+        out, err = proc.communicate(timeout=60)
+        assert proc.returncode == 0, err
+        assert "released" in out
+        assert not list(tmp_path.glob("*.lease"))
+    finally:
+        if proc.poll() is None:
+            proc.kill()

@@ -22,6 +22,7 @@ import threading
 import time
 import typing as ty
 import uuid
+import weakref
 from pathlib import Path
 import attrs
 from pydra.utils.general import atomic_write
@@ -1087,6 +1088,63 @@ class LeaseBeater:
         _BeaterLoop(config, replies).run(commands)
 
 
+PARENT_POLL = 1.0
+"""Most seconds a `LeaseBeater` runs without checking that its holder lives."""
+
+
+class _Holder:
+    """The beater's view of its holder process: whether it lives, and killing it,
+    never a process that reused its pid. On POSIX the holder is the beater's parent,
+    and its death reparents the beater; on Windows a handle to it is kept open."""
+
+    def __init__(self, pid: int):
+        self.pid = pid
+        self.handle = None
+        self.watched = True
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            self.kernel32.OpenProcess.restype = wintypes.HANDLE
+            self.kernel32.OpenProcess.argtypes = [
+                wintypes.DWORD,
+                wintypes.BOOL,
+                wintypes.DWORD,
+            ]
+            self.kernel32.WaitForSingleObject.restype = wintypes.DWORD
+            self.kernel32.WaitForSingleObject.argtypes = [
+                wintypes.HANDLE,
+                wintypes.DWORD,
+            ]
+            self.kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+            synchronize, terminate = 0x00100000, 0x0001
+            self.handle = self.kernel32.OpenProcess(synchronize | terminate, False, pid)
+            self.watched = bool(self.handle)
+        elif os.getppid() != pid:
+            self.watched = False  # started through an intermediary: end of file only
+        if not self.watched:
+            logger.warning("The lease beater cannot watch its holder, pid %s", pid)
+
+    def alive(self) -> bool:
+        if not self.watched:
+            return True
+        if self.handle is not None:
+            return self.kernel32.WaitForSingleObject(self.handle, 0) != 0
+        return os.getppid() == self.pid
+
+    def kill(self) -> None:
+        if not self.alive():
+            return
+        if self.handle is not None:
+            self.kernel32.TerminateProcess(self.handle, 1)
+            return
+        try:
+            os.kill(self.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+        except OSError:
+            pass
+
+
 class _BeaterLoop:
     def __init__(self, config: dict, replies: ty.BinaryIO):
         self.replies = replies
@@ -1095,6 +1153,7 @@ class _BeaterLoop:
         reference = config.get("on_expire")
         self.on_expire = _resolve(reference) if reference else None
         self.dirs: dict[str, _Beaten] = {}
+        self.holder = _Holder(self.holder_pid)
 
     def send(self, message: dict) -> None:
         self.replies.write(json.dumps(message).encode() + b"\n")
@@ -1115,10 +1174,13 @@ class _BeaterLoop:
         self.send({"ready": os.getpid()})
         while True:
             try:
-                message = inbox.get(timeout=self.wait())
+                message = inbox.get(timeout=min(self.wait(), PARENT_POLL))
             except queue.Empty:
                 message = {}
             if message is None:
+                return
+            if not self.holder.alive():
+                logger.warning("The lease holder, pid %s, is gone", self.holder_pid)
                 return
             if message:
                 self.handle(message)
@@ -1228,18 +1290,16 @@ class _BeaterLoop:
             self.holder_pid,
             self.kill_after,
         )
-        try:
-            os.kill(self.holder_pid, getattr(signal, "SIGKILL", signal.SIGTERM))
-        except OSError:
-            pass
+        self.holder.kill()
 
 
 def _beater_main() -> None:
     """The beater process: ``python -c`` runs this with the config as argument.
     Requests arrive on stdin; replies leave on the original stdout, which is then
     pointed at stderr so that nothing else writes to the pipe."""
-    if hasattr(signal, "SIGINT"):
-        signal.signal(signal.SIGINT, signal.SIG_IGN)  # ends when its pipe closes
+    for name in ("SIGINT", "SIGTERM"):  # it ends when its pipe closes or its
+        if hasattr(signal, name):  # holder dies, so it outlives a group's SIGTERM
+            signal.signal(getattr(signal, name), signal.SIG_IGN)
     replies = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)
     sys.stdout = sys.stderr
@@ -1258,16 +1318,53 @@ def _beater_main() -> None:
         pass
 
 
+_CLIENTS: "weakref.WeakSet[BeaterClient]" = weakref.WeakSet()
+
+
+def _after_fork_in_child() -> None:
+    """In a forked child, point every `BeaterClient`'s pipe descriptors at
+    ``os.devnull``: the child is not the holder, and a copy of the holder's end
+    kept open would keep its beater from seeing end of file."""
+    clients = list(_CLIENTS)
+    if not clients:
+        return
+    null = os.open(os.devnull, os.O_RDWR)
+    try:
+        for client in clients:
+            client._dying = True
+            client.dead = "the holder forked; a child does not hold its leases"
+            for stream in (client.process.stdin, client.process.stdout):
+                try:
+                    os.dup2(null, stream.fileno())
+                except (OSError, ValueError):
+                    pass
+    finally:
+        os.close(null)
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_after_fork_in_child)
+
+
 class BeaterClient:
     """The holder's end of a pipe to a `LeaseBeater`, which it starts as a child
     process and stops when closed (or when its holder exits, which closes the pipe).
 
-    The holder takes a lease with ``beat="external"`` and calls `hold` with its
-    `DirectoryLease.token_dir`; it runs nothing under the lease before `hold`
-    returns. It calls `release` before releasing the lease, so that a release never
-    reads as a loss. A reader thread receives the beater's events: ``lost`` marks
-    the lease given to `hold` lost (its next `DirectoryLease.prove` answers False),
-    ``expired`` reports a passed deadline.
+    The holder takes a lease with ``beat="external"`` and calls `hold` with it; it
+    runs nothing under the lease before `hold` returns. It calls `release` before
+    releasing the lease, so that a release never reads as a loss. A reader thread
+    receives the beater's events: ``lost`` marks the lease given to `hold` lost (its
+    next `DirectoryLease.prove` answers False), ``expired`` reports a passed
+    deadline.
+
+    The callbacks run in order on a thread of their own, never the reader's, so a
+    callback may make requests (``release`` from ``on_lost``, ``ack_expired`` from
+    ``on_expired``).
+
+    The beater ends when the pipe closes, or when it finds its holder dead (within
+    `PARENT_POLL` seconds), even while a forked child of the holder lives: a fork
+    points the child's copies of the pipe at ``os.devnull``. It ignores ``SIGINT``
+    and ``SIGTERM``, so it keeps beating while its holder drains after either.
 
     A request not acknowledged within the lease's ``renew_interval``, or the pipe
     reaching end of file, means the beater is dead: the request raises `BeaterDead`,
@@ -1281,9 +1378,9 @@ class BeaterClient:
     startup_timeout : float
         Seconds to wait for the beater process to start.
     on_lost : callable, optional
-        Called as ``on_lost(token_dir, reason)`` from the reader thread.
+        Called as ``on_lost(token_dir, reason)`` after the lease was marked lost.
     on_expired : callable, optional
-        Called as ``on_expired(token_dir)`` from the reader thread.
+        Called as ``on_expired(token_dir)`` after ``expired`` arrived.
     on_dead : callable, optional
         Called as ``on_dead(reason)`` once the beater is found dead.
     """
@@ -1310,6 +1407,11 @@ class BeaterClient:
         self._settings: dict[Path, LeaseSettings] = {}
         self._leases: dict[Path, DirectoryLease] = {}
         self._ready: dict | None = None
+        self._calls: "queue.Queue[tuple | None]" = queue.Queue()
+        self._caller = threading.Thread(
+            target=self._call, name="pydra-beater-callbacks", daemon=True
+        )
+        self._caller.start()
         self.process = subprocess.Popen(
             [
                 sys.executable,
@@ -1325,6 +1427,7 @@ class BeaterClient:
             target=self._read, name="pydra-beater-client", daemon=True
         )
         self._reader.start()
+        _CLIENTS.add(self)
         with self._changed:
             self._changed.wait_for(
                 lambda: self._ready is not None or self.dead is not None,
@@ -1345,21 +1448,28 @@ class BeaterClient:
 
     # Requests
 
-    def hold(
-        self,
-        token_dir: Path,
-        settings: LeaseSettings,
-        *,
-        lease: DirectoryLease | None = None,
-    ) -> None:
-        """Have the beater beat ``token_dir`` at ``settings.renew_interval``; returns
-        once it acknowledged. ``lease``, if given, is marked lost when the beater
-        reports the directory lost."""
-        token_dir = Path(token_dir)
+    def hold(self, lease: DirectoryLease) -> None:
+        """Have the beater beat ``lease.token_dir`` at its settings' renewal
+        interval; returns once it acknowledged. ``lease`` is marked lost when the
+        beater reports its directory lost.
+
+        Raises
+        ------
+        ValueError
+            ``lease`` is not held, or was taken with ``beat="thread"`` (its own
+            heartbeat beats it).
+        """
+        if lease.beat != "external":
+            raise ValueError(
+                f"{lease.lockfile} was taken with beat={lease.beat!r}; only a lease "
+                'taken with beat="external" is beaten by a LeaseBeater'
+            )
+        token_dir, settings = lease.token_dir, lease.settings
+        if token_dir is None:
+            raise ValueError(f"{lease.lockfile} is not held")
         with self._lock:
             self._settings[token_dir] = settings
-            if lease is not None:
-                self._leases[token_dir] = lease
+            self._leases[token_dir] = lease
             self.expired.discard(token_dir)
             self.lost.pop(token_dir, None)
         self._request(
@@ -1430,6 +1540,9 @@ class BeaterClient:
             self.process.wait()
         self._reader.join(10)
         self.process.stdout.close()
+        self._calls.put(None)
+        if threading.current_thread() is not self._caller:
+            self._caller.join(10)
 
     def __enter__(self) -> "BeaterClient":
         return self
@@ -1471,8 +1584,8 @@ class BeaterClient:
             raise ValueError(f"the beater refused {message['op']}: {reply['error']}")
 
     def _die(self, why: str) -> None:
-        """Record the beater dead, stop it and tell ``on_dead``, before any waiter
-        is woken."""
+        """Record the beater dead, stop it, wake every waiter and queue
+        ``on_dead``."""
         with self._lock:
             if self._dying:
                 return
@@ -1480,13 +1593,20 @@ class BeaterClient:
         logger.warning("The lease beater (pid %s) is dead: %s", self.process.pid, why)
         if self.process.poll() is None:
             self.process.kill()
-        try:
-            if self.on_dead is not None:
-                self.on_dead(why)
-        finally:
-            with self._changed:
-                self.dead = why
-                self._changed.notify_all()
+        with self._changed:
+            self.dead = why
+            self._changed.notify_all()
+        if self.on_dead is not None:
+            self._calls.put((self.on_dead, why))
+
+    def _call(self) -> None:
+        """Run the queued callbacks in order until `close`."""
+        while (item := self._calls.get()) is not None:
+            fn, *args = item
+            try:
+                fn(*args)
+            except Exception:
+                logger.exception("A lease beater callback failed")
 
     def _read(self) -> None:
         try:
@@ -1521,10 +1641,10 @@ class BeaterClient:
             if lease is not None and lease.lost is None:
                 lease._lose(reason)
             if self.on_lost is not None:
-                self.on_lost(token_dir, reason)
+                self._calls.put((self.on_lost, token_dir, reason))
         elif message.get("event") == "expired":
-            if self.on_expired is not None:
-                self.on_expired(token_dir)
             with self._changed:
                 self.expired.add(token_dir)
                 self._changed.notify_all()
+            if self.on_expired is not None:
+                self._calls.put((self.on_expired, token_dir))
