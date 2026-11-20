@@ -772,8 +772,6 @@ def test_a_directory_is_never_removed_between_a_jobs_cwd_read_and_its_hold(
     remove the directory B has read and will change back to: the read and the hold are one
     step, and so are the check and the removal. Forced interleaving: the forget runs on
     another thread at the moment B reads the directory."""
-    import inspect
-
     store = make(tmp_path)
     here = os.getcwd()
     with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
@@ -791,7 +789,7 @@ def test_a_directory_is_never_removed_between_a_jobs_cwd_read_and_its_hold(
 
         def getcwd():
             cwd = real_getcwd()
-            caller = inspect.stack()[1].function
+            caller = sys._getframe(1).f_code.co_name  # no inspect: it reads the cwd too
             if armed and caller in ("run", "capture_cwd") and cwd == str(wd):
                 armed.clear()
                 t = threading.Thread(target=forget_x)
