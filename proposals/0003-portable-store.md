@@ -595,7 +595,10 @@ PortableStore(root, trust="shared", readonly=[Root(path, trust="shared"), ...],
   `FileSet` subclass is unencodable as an output (`UnencodableOutput`, below); as an input RFC 0004
   digests it as `py@1`, so it keys as today and never reads as an entry member.
 - **Decoding never imports.** A `$fileset` type tag and a `$codec` tag are looked up only in that
-  registry as this process has filled it, never resolved as a module or class name.
+  registry as this process has filled it, never resolved as a module or class name. One exception:
+  to map a `$fileset` tag that is not yet registered to a class, the store may import the installed
+  `fileformats.*` namespace packages, and nothing outside `fileformats.*`; it never imports code that
+  the entry itself names.
 - **`$digest` is reserved.** RFC 0004 §6.2 uses `{"$digest": ...}` for a nested registered digest in
   an input's digest form; no output codec emits it, and a decoder that meets it in an entry raises
   `CorruptEntry`.
