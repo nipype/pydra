@@ -636,7 +636,7 @@ def test_drive_passes_no_limit_to_batching_executor(submitter):
 class SlowRelease:
     """Wraps a workflow job's lease; its release takes ``DELAY`` seconds"""
 
-    DELAY = 1.0
+    DELAY = 3.0
     released = 0
 
     def __init__(self, lease):
