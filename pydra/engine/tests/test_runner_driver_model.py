@@ -683,9 +683,13 @@ def test_drive_passes_no_limit_to_batching_executor(submitter):
 
 
 class SlowRelease:
-    """Wraps a workflow job's lease; its release takes ``DELAY`` seconds"""
+    """Wraps a workflow job's lease; its release blocks until the test has seen the event
+    loop run while the release waits, or gives up after ``PATIENCE`` seconds"""
 
-    DELAY = 3.0
+    PATIENCE = 20.0
+    blocked: list = []  # the releases waiting, each a threading.Event
+    threads: list = []  # the thread each release ran on
+    gave_up = 0
     released = 0
 
     def __init__(self, lease):
@@ -702,9 +706,14 @@ class SlowRelease:
         return self
 
     def __exit__(self, *exc):
-        time.sleep(self.DELAY)
+        cls = type(self)
+        cls.threads.append(threading.get_ident())
+        go = threading.Event()
+        cls.blocked.append(go)
+        if not go.wait(self.PATIENCE):  # the loop never ran while this release waited
+            cls.gave_up += 1
         self.lease.__exit__(*exc)
-        type(self).released += 1
+        cls.released += 1
 
 
 class SlowReleaseStore(PickleStore):
@@ -713,7 +722,15 @@ class SlowReleaseStore(PickleStore):
         return SlowRelease(lease) if checksum.startswith("workflow-") else lease
 
 
+@pytest.mark.timeout(120, method="thread")
 def test_async_driver_releases_leases_off_the_loop(tmp_path, monkeypatch):
+    """A workflow lease's release (which may wait up to ``RELEASE_PATIENCE`` on a refused
+    rename) runs off the event loop: each release blocks until a coroutine on the loop has
+    run three times while it waits. Released on the loop thread, it would block the loop,
+    the coroutine could not run, and the release would give up after ``PATIENCE``"""
+    monkeypatch.setattr(SlowRelease, "blocked", [])
+    monkeypatch.setattr(SlowRelease, "threads", [])
+    monkeypatch.setattr(SlowRelease, "gave_up", 0)
     monkeypatch.setattr(SlowRelease, "released", 0)
     store = SlowReleaseStore(tmp_path / "cache")
     with Submitter(worker="debug", store=store) as sub:
@@ -723,20 +740,22 @@ def test_async_driver_releases_leases_off_the_loop(tmp_path, monkeypatch):
             task, store, on_error="raise_at_end", submitter=sub, job=job
         )
         ex = Batching()
-        gaps = []
+        loop_thread = []
 
-        async def ticker(stop):
-            last = time.monotonic()
+        async def unblocker(stop):
+            seen: dict = {}
             while not stop.is_set():
-                await asyncio.sleep(0.02)
-                now = time.monotonic()
-                gaps.append(now - last)
-                last = now
+                await asyncio.sleep(0.01)
+                for go in list(SlowRelease.blocked):
+                    seen[go] = seen.get(go, 0) + 1
+                    if seen[go] >= 3:  # the loop ran while this release waited
+                        SlowRelease.blocked.remove(go)
+                        go.set()
 
         async def run():
+            loop_thread.append(threading.get_ident())
             stop = asyncio.Event()
-            tick = asyncio.ensure_future(ticker(stop))
-            await asyncio.sleep(0.05)
+            unblock = asyncio.ensure_future(unblocker(stop))
             try:
                 await asyncio.wait_for(
                     drive(
@@ -747,16 +766,17 @@ def test_async_driver_releases_leases_off_the_loop(tmp_path, monkeypatch):
                         on_error="raise_at_end",
                         audit=sub.audit,
                     ),
-                    30,
+                    4 * SlowRelease.PATIENCE,
                 )
             finally:
                 stop.set()
-                await tick
+                await unblock
 
         sub.loop.run_until_complete(run())
     assert runner.done and not runner.failed
+    assert SlowRelease.gave_up == 0  # every release waited while the loop ran
     assert SlowRelease.released == 2  # inner and outer, both done when drive returns
-    assert max(gaps) < SlowRelease.DELAY / 2, max(gaps)
+    assert loop_thread[0] not in SlowRelease.threads
     assert job.result().outputs.out == 12
 
 
