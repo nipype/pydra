@@ -181,6 +181,24 @@ def requires_converter(
         raise e
 
 
+def _strip_type(type_: ty.Any, self: "Field") -> ty.Any:
+    """Strip the metadata of an annotated type, recording a ``ProvidedBy`` marker as the
+    field's ``provided``"""
+    type_ = default_if_none(ty.Any)(type_)
+    if ty.get_origin(type_) is ty.Annotated:
+        from pydra.engine.resident import ProvidedBy
+
+        for meta in type_.__metadata__:
+            if isinstance(meta, ProvidedBy):
+                if self.provided not in (None, meta.name):
+                    raise ValueError(
+                        f"Field is provided by {self.provided!r} but its type names "
+                        f"{meta.name!r}"
+                    )
+                self.provided = meta.name
+    return strip_annotated(type_)
+
+
 @attrs.define(kw_only=True)
 class Field:
     """Base class for input and output fields to tasks
@@ -207,14 +225,20 @@ class Field:
         The validator(s) for the field passed through to the attrs.field, by default it is None
     hash_eq: bool, optional
         Whether to use the hash of the value for equality comparison, by default it is False
+    provided: str, optional
+        The name of the provider of the field's value (RFC 0005 section 3.1): the field's
+        value is the spec, hashed like any input, and the task function receives the
+        state the provider loads from it. ``Provided[T, name]`` is the same marker
     """
 
     name: str | None = None
+    provided: str | None = None
     type: ty.Type[ty.Any] = attrs.field(
         validator=is_type,
         default=ty.Any,
-        # The metadata of annotated types isn't used, see `strip_annotated`
-        converter=attrs.converters.pipe(default_if_none(ty.Any), strip_annotated),
+        # The metadata of annotated types isn't used, beyond a ``ProvidedBy`` marker,
+        # which names the field's provider, see `strip_annotated`
+        converter=attrs.Converter(_strip_type, takes_self=True),
     )
     default: ty.Any = attrs.field(
         default=NO_DEFAULT,
