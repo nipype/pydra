@@ -10,6 +10,7 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+import attrs
 import pytest
 from pydra.compose import python, workflow
 from pydra.engine.drivers import drive_inline
@@ -281,31 +282,65 @@ def test_stale_workflow_lease_taken_over(tmp_path):
 
 @pytest.mark.timeout(120)
 def test_live_holder_not_taken_over_past_stale_after(tmp_path, monkeypatch):
-    """The holder keeps its lease, renewing, for three times ``stale_after``, so the
-    second submitter keeps waiting and never expands"""
-    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+    """A holder that renews its lease is waited for past three times ``stale_after``
+    on the storage clock, so the second submitter keeps waiting and never expands.
+
+    The holder is a lease of this process whose own heartbeat is stopped: the test
+    makes its beats between polls, and the waiter's storage clock is a fake that moves
+    0.3 s per poll, so neither depends on how the OS schedules threads. The real
+    heartbeat across processes is covered by
+    ``test_lease.py::test_real_heartbeat_keeps_a_waiter_in_another_process_out``."""
+    log, root = tmp_path / "runs.log", tmp_path / "cache"
+    clock = {"t": 0.0}
+    base = [0.0]
+
+    def storage_clock() -> float:
+        return base[0] + clock["t"]
+
+    taken = []
+    acquire = PickleStore.acquire
+
+    def acquire_with_fake_clock(self, checksum, context):
+        lease = attrs.evolve(acquire(self, checksum, context), clock=storage_clock)
+        taken.append(lease)
+        return lease
+
+    # the runner makes its lease when it is built, so the fake clock goes in first
+    monkeypatch.setattr(PickleStore, "acquire", acquire_with_fake_clock)
     sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
-    holder = spawn_holder(runner.job, sub.store, ready, hold=3.0)
+    monkeypatch.setattr(PickleStore, "acquire", acquire)
+    assert len(taken) == 1
+    holder = sub.store.acquire(runner.job.checksum, runner.job.context)
+    holder.__enter__()
+    holder._heartbeat.stopped.set()  # beats are the test's, below
+    holder._heartbeat.join()
+    token_dir = holder.lockfile / holder._token
+    base[0] = max(
+        p.lstat().st_mtime for p in [holder.lockfile, *holder.lockfile.rglob("*")]
+    )
     try:
-        wait_for(ready, holder)
         expansions = count_expansions(monkeypatch)
         with sub:
-            start = time.monotonic()
             retries = 0
-            while time.monotonic() - start < 2.2:  # the holder lives for 3 s
+            while clock["t"] <= 3 * SETTINGS.stale_after:
+                for frame in runner._frames:  # judge at every poll, not each backoff
+                    frame.retry_at = None
                 rnd = runner.ready()
                 assert rnd.dispatch == [] and expansions == []
                 if rnd.retry_after is not None:
                     retries += 1
-                time.sleep(min(rnd.retry_after or 0.05, 0.2))
+                clock["t"] += 0.3
+                # the holder renews: a mark at the new storage time
+                os.utime(token_dir, (storage_clock(), storage_clock()))
             assert retries > 1
-            assert time.monotonic() - start > 2 * SETTINGS.stale_after
             assert expansions == []
-            finish(holder)
+            assert [lease.broke for lease in taken] == [[]]
+            holder.__exit__(None, None, None)
             drive(sub, runner)  # the lease is free: the waiter now expands
             assert runner.result().outputs.out == 7
     finally:
-        holder.kill()
+        if holder.held:
+            holder.__exit__(None, None, None)
     assert len(log_lines(log)) == 1
 
 
