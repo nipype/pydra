@@ -465,9 +465,13 @@ class Submitter:
         except Exception as exc:
             self.errors = exc.errors if isinstance(exc, WorkflowError) else []
             self.entries = exc.entries if isinstance(exc, WorkflowError) else []
+            try:
+                crash_file = str(job.error_file)
+            except ValueError:  # a job never handed out has no work directory
+                crash_file = "not recorded: the job was never given an attempt"
             error_msg = (
                 f"Full crash report for {type(task).__name__!r} job is here: "
-                + str(job.cache_dir / "_error.pklz")
+                + crash_file
             )
             exc.add_note(error_msg)
             if raise_errors or not job.result():

@@ -38,7 +38,7 @@ class Audit:
         self.messenger_args = messenger_args
         self._chdir = True
 
-    def start_audit(self, odir, chdir=True):
+    def start_audit(self, odir, chdir=True, record_dir=None):
         """
         Start recording provenance.
 
@@ -52,9 +52,14 @@ class Audit:
         chdir : :obj:`bool`
             Whether to make ``odir`` the working directory. If not, messages without
             an explicit ``message_dir`` are still written under ``odir``.
+        record_dir : :obj:`os.pathlike`, optional
+            Where messages without an explicit ``message_dir`` and resource logs are
+            written, if not ``odir``: for a job whose ``odir`` is emptied once it is
+            published.
 
         """
         self.odir = odir
+        self.record_dir = Path(record_dir) if record_dir is not None else None
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
 
@@ -74,7 +79,9 @@ class Audit:
         if self.audit_check(AuditFlag.RESOURCE):
             from pydra.utils.profiler import ResourceMonitor
 
-            self.resource_monitor = ResourceMonitor(os.getpid(), logdir=self.odir)
+            logdir = Path(self.odir) if self.record_dir is None else self.record_dir
+            logdir.mkdir(parents=True, exist_ok=True)
+            self.resource_monitor = ResourceMonitor(os.getpid(), logdir=logdir)
 
     def monitor(self):
         """Start resource monitoring."""
@@ -145,8 +152,11 @@ class Audit:
         """
         if self.audit_flags & flags:
             args = dict(self.messenger_args or {})
-            if not self._chdir and not args.get("message_dir"):
-                args["message_dir"] = Path(self.odir) / "messages"
+            if not args.get("message_dir") and (
+                not self._chdir or self.record_dir is not None
+            ):
+                where = self.odir if self.record_dir is None else self.record_dir
+                args["message_dir"] = Path(where) / "messages"
             send_message(make_message(message), messengers=self.messengers, **args)
 
     def audit_check(self, flag):

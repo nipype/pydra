@@ -124,6 +124,16 @@ def test_settings_differing_only_in_max_wait_equal():
     assert hash(a) == hash(b)
 
 
+def test_settings_differing_only_in_holder_equal():
+    """``holder`` chooses what one holder's record names, not staleness."""
+    named = LeaseSettings(stale_after=10, timeout=20, attribute_delay=0)
+    anonymous = LeaseSettings(
+        stale_after=10, timeout=20, attribute_delay=0, holder="anonymous"
+    )
+    assert named == anonymous
+    assert "holder" not in anonymous.to_json()
+
+
 def test_settings_json_round_trip():
     settings = LeaseSettings(
         stale_after=12.5, timeout=40, renew_fraction=0.2, attribute_delay=3
