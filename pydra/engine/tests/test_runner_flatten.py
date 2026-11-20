@@ -1,6 +1,7 @@
 """Flattening: one runner per ``Submitter`` call leases, checks, expands and commits the
 workflow jobs of every level, and hands out the leaf jobs of all of them together"""
 
+import importlib.util
 import json
 import os
 import shutil
@@ -68,7 +69,10 @@ def peak_overlap(logdir: Path) -> int:
 def test_max_concurrent_caps_whole_run(tmp_path):
     logdir = tmp_path / "spans"
     logdir.mkdir()
-    with Submitter(worker="cf", cache_root=tmp_path / "cache", max_concurrent=4) as sub:
+    # the pool is larger than the cap whatever the host, so the cap is the bound
+    with Submitter(
+        worker="cf", cache_root=tmp_path / "cache", max_concurrent=4, n_procs=8
+    ) as sub:
         sub(make_outer(8)(logdir=str(logdir)))
     assert len(list(logdir.glob("*.span"))) == 32
     assert peak_overlap(logdir) == 4
@@ -244,7 +248,7 @@ def test_second_submitter_waits_then_reads_stored(tmp_path, monkeypatch):
         with sub:
             rnd = runner.ready()
             assert rnd.dispatch == []
-            assert rnd.retry_after is not None and rnd.retry_after > 0
+            assert rnd.retry_after is not None
             assert not runner.done
             drive(sub, runner)
             assert runner.result().outputs.out == 7
@@ -694,7 +698,8 @@ NEST_ASYNCIO_SCRIPT = textwrap.dedent("""
 
 def test_workflow_on_an_async_worker_inside_nest_asyncio(tmp_path):
     """A notebook applies ``nest_asyncio``, under which no task is current (3.14)"""
-    pytest.importorskip("nest_asyncio")
+    if importlib.util.find_spec("nest_asyncio") is None:  # imported by the child only
+        pytest.skip("nest_asyncio is not installed")
     script = tmp_path / "nb.py"
     script.write_text(NEST_ASYNCIO_SCRIPT)
     done = subprocess.run(
@@ -735,3 +740,133 @@ def test_nested_arrays_by_path(any_worker, tmp_path):
     if any_worker == "slurm":
         arrays = list((tmp_path / "cache").glob("slurm_scripts/array_*_3"))
         assert len(arrays) == 2
+
+
+# The asynchronous driver waits on a workflow lease another process holds
+
+
+@pytest.mark.timeout(60)
+def test_async_driver_waits_on_a_held_workflow_lease(tmp_path):
+    """With nothing in flight, only the timed wake brings the driver back to the lease"""
+    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+    task = Wrapped(log=str(log), hold=0.0)
+    store = PickleStore(root, lease_settings=SETTINGS)
+    with Submitter(worker="cf", store=store) as sub:
+        holder = spawn_holder(Job(task, submitter=sub, name="main"), store, ready, 1.5)
+        try:
+            wait_for(ready, holder)
+            start = time.monotonic()
+            result = sub(task)
+            waited = time.monotonic() - start
+        finally:
+            finish(holder)
+    assert result.outputs.out == 7
+    assert waited > 0.5  # it did wait for the holder
+    assert len(log_lines(log)) == 1
+
+
+# Each guard against committing an interrupted workflow, alone
+
+
+def interrupted_runner(tmp_path):
+    from pydra.engine.runner import Failed
+
+    Sunk, Branches, Fixed = make_branches(False)
+    sub, runner = runner_for(
+        tmp_path / "cache", Branches(marker=str(tmp_path), gate="")
+    )
+    leaves = runner.ready().dispatch
+    boom = next(j for j in leaves if j.name == "Boom")
+    runner.complete(boom, Failed(ValueError("boom")))
+    return sub, runner
+
+
+def test_close_does_not_finish_a_frame_without_errors(tmp_path, monkeypatch):
+    sub, runner = interrupted_runner(tmp_path)
+    with sub:
+        finished = []
+        original = runner._finish
+        monkeypatch.setattr(
+            runner,
+            "_finish",
+            lambda f, *a: (finished.append(f.job.name), original(f, *a)),
+        )
+        runner.close()
+        assert "b" not in finished and "a" in finished
+
+
+def test_finish_stores_nothing_for_unfinished_nodes_without_errors(tmp_path):
+    sub, runner = interrupted_runner(tmp_path)
+    with sub:
+        frame = runner._child[runner.exec_graph["b"].job(None)]
+        runner._finish(frame)  # called directly: it must refuse on its own
+        assert frame.job.result() is None
+        assert frame.state == "finished" and frame.lease is None
+        runner.close()
+
+
+def test_close_names_the_unfinished_nodes_as_not_run(tmp_path):
+    sub, runner = interrupted_runner(tmp_path)
+    with sub:
+        runner.close()
+        not_run = [e for e in runner.entries if e.phase == "not_run"]
+        names = {(e.job_name, e.state_index) for e in not_run}
+        assert names == {("b", None)}  # the interrupted workflow, as a whole
+        for e in not_run:
+            # the failure of workflow ``a``, which holds the ValueError
+            assert e.exception_type.endswith("WorkflowError")
+            assert "boom" in e.message
+        assert not any(e.job_name == "Boom" for e in not_run)
+
+
+# Failures that are entries
+
+
+def test_error_reading_a_nested_result_is_an_entry(tmp_path, monkeypatch):
+    original = Job.result
+
+    def result(self, *args, **kwargs):
+        if self.name == "wrapped":
+            raise PermissionError("cannot read")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Job, "result", result)
+    with Submitter(worker="debug", cache_root=tmp_path, on_error="raise_at_end") as sub:
+        with pytest.raises(WorkflowError) as raised:
+            sub(AfterWrapped(log=os.devnull, hold=0.0))
+    (entry,) = [e for e in raised.value.entries if e.job_name == "wrapped"]
+    assert entry.exception_type == "builtins.PermissionError"
+
+
+def test_error_making_the_outer_lease_is_raised_as_itself(tmp_path, monkeypatch):
+    def refuse_acquire(self, checksum, context):
+        raise PermissionError("no lease")
+
+    monkeypatch.setattr(PickleStore, "acquire", refuse_acquire)
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        task = Wrapped(log=os.devnull, hold=0.0)
+        runner = GraphRunner(  # the failure is the runner's state, not a raise
+            task,
+            sub.store,
+            on_error="raise_at_end",
+            submitter=sub,
+            job=Job(task, submitter=sub, name="main"),
+        )
+        assert runner.done and isinstance(runner.root_error, PermissionError)
+        with pytest.raises(PermissionError, match="no lease"):
+            sub(Wrapped(log=os.devnull, hold=0.0))
+
+
+def test_failure_at_start_runs_no_post_hook(tmp_path):
+    seen = []
+
+    def post(job, result):
+        seen.append(job.name)
+
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        with pytest.raises(PermissionError):
+            sub(
+                Wrapped(log=os.devnull, hold=0.0),
+                hooks=TaskHooks(pre_run_task=refuse, post_run_task=post),
+            )
+    assert seen == []

@@ -415,6 +415,7 @@ class Job(ty.Generic[TaskType]):
         directory, run the ``pre_run_task`` hook and start its audit. Returns the
         result the workflow's outputs are later put in (see `_finish_workflow`)."""
         self._errored = False
+        self._audit_started = False
         self._withdraw_success(lease)
         self._populate_filesystem()
         result = Result(
@@ -427,6 +428,7 @@ class Job(ty.Generic[TaskType]):
         )
         self.hooks.pre_run_task(self)
         self.audit.start_audit(odir=self.cache_dir, chdir=False)
+        self._audit_started = True
         if self.audit.audit_check(AuditFlag.PROV):
             self.audit.audit_task(job=self)
         self.audit.monitor()
@@ -462,8 +464,9 @@ class Job(ty.Generic[TaskType]):
                 record_error(self.cache_dir, error=traceback)
             result.errored = True
             self._errored = True
-        self.hooks.post_run_task(self, result)
-        self.audit.finalize_audit(result=result)
+        if getattr(self, "_audit_started", False):  # not if it failed before the audit
+            self.hooks.post_run_task(self, result)
+            self.audit.finalize_audit(result=result)
         self.store.commit(lease, result, job=self._pickle_to_commit(result))
         self._awaiting_run = False
         self._remove_info_file()

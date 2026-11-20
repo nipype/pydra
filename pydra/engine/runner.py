@@ -863,6 +863,30 @@ class GraphRunner:
             if frame.state == "expanding" and frame.owned and frame.nodes_done:
                 self._finish(frame)
 
+    @staticmethod
+    def _name_not_run(frame: _Frame) -> None:
+        """Add an entry, naming the failure that stopped the workflow, for each element
+        of its nodes that has not run: queued, running, blocked or never started"""
+        cause = frame.entries[0] if frame.entries else None
+        for node in frame.graph.nodes:
+            if node.done:
+                continue
+            indices = [*node.queued, *(i for i in node.running), *(node.blocked or ())]
+            for index in indices or [None]:
+                label = node.name if index is None else f"{node.name}({index})"
+                message = f"not run: {cause.message}" if cause else "not run"
+                frame.entries.append(
+                    JobErrorEntry(
+                        job_name=node.name,
+                        state_index=index,
+                        exception_type=cause.exception_type if cause else "",
+                        message=message,
+                        traceback=cause.traceback if cause else "",
+                        phase="not_run",
+                    )
+                )
+                frame.errors.append(f"Job {label!r} did not run: {message}")
+
     def close(self) -> None:
         """Release what the runner holds: a workflow job with errors of its own is
         committed as errored, any other that is not finished gives up its lease and
@@ -872,6 +896,7 @@ class GraphRunner:
             if frame.state == "finished" or not frame.owned:
                 continue
             if frame.state == "expanding" and frame.errors:
+                self._name_not_run(frame)
                 self._finish(frame)
             else:
                 frame.state = "finished"

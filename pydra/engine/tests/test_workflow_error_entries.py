@@ -19,7 +19,10 @@ def test_entries_name_the_failed_job(worker, on_error, tmp_path):
         with pytest.raises(WorkflowError) as excinfo:
             sub(Propagate(x=[2, 1, 3], y=[10, 20]), raise_errors=True)
     error = excinfo.value
-    (entry,) = error.entries
+    # a run stopped by fail_fast also names the elements it did not run
+    not_run = [e for e in error.entries if e.phase == "not_run"]
+    assert all("i'm raising an exception!" in e.message for e in not_run)
+    (entry,) = [e for e in error.entries if e.phase != "not_run"]
     assert isinstance(entry, JobErrorEntry)
     assert entry.job_name == "A"
     assert entry.state_index == 1
@@ -29,8 +32,9 @@ def test_entries_name_the_failed_job(worker, on_error, tmp_path):
     assert "Traceback" in entry.traceback
     assert "i'm raising an exception!" in entry.traceback
     # errors keeps its form, one string per entry
-    assert len(error.errors) == 1
-    assert error.errors[0].startswith("Job 'A(1)'")
+    ran = [e for e in error.errors if "did not run" not in e]
+    assert len(ran) == 1
+    assert ran[0].startswith("Job 'A(1)'")
     assert sub.entries == error.entries
 
 
