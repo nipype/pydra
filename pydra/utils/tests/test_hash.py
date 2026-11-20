@@ -1535,3 +1535,24 @@ def test_code_hash_notebook_class(monkeypatch):
         run("def f(x):\n    return Helper().f(x)\n")
         hashes.append(hash_function(namespace["f"]))
     assert hashes[0] != hashes[1]
+
+
+def test_walk_memo_drop_survives_module_globals_cleared_at_teardown(monkeypatch):
+    def helper(x):
+        return x
+
+    memo = hash_module._WalkMemo(helper, ("key",))
+
+    class Referent:
+        pass
+
+    target = Referent()
+    held = memo.ref(target)  # the callback fires only while the weakref itself is alive
+    assert held is not None
+    seen = []
+    monkeypatch.setattr(sys, "unraisablehook", lambda u: seen.append(u.exc_value))
+    # finalize_modules sets the module's globals to None before late referents die
+    monkeypatch.setattr(hash_module, "_walk_memo_lock", None)
+    del target
+    gc.collect()
+    assert seen == [], f"drop raised at teardown: {seen!r}"
