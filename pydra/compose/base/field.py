@@ -232,9 +232,9 @@ class Field:
     """
 
     name: str | None = None
-    # Not compared, so not part of the hash of the field's class (which every Outputs and
-    # function field would carry); a task's checksum keys it when set, see `_compute_hashes`
-    provided: str | None = attrs.field(default=None, eq=False)
+    # Hashed with the field only when set (see `pydra.utils.hash`), so the hash of a field
+    # that is not provided is as it was
+    provided: str | None = attrs.field(default=None, metadata={"hash_if_set": True})
     type: ty.Type[ty.Any] = attrs.field(
         validator=is_type,
         default=ty.Any,

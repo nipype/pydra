@@ -422,6 +422,9 @@ class Submitter:
             )
 
         task._check_rules()
+        from pydra.engine.resident import check_task
+
+        check_task(task, self)  # a wiring error is raised before anything runs
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
             state = State(

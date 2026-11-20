@@ -298,3 +298,70 @@ def test_cf_worker_process_reuses_state_and_closes_at_exit(tmp_path):
     assert len(tokens) == 1
     assert len(list(marks.glob("load-*"))) == 1
     assert len(list(marks.glob("close-*"))) == 1
+
+
+def _variant(tp):
+    def embed(x: int, model: tp) -> str:
+        return repr(model)
+
+    return python.define(embed)
+
+
+def test_provided_is_hashed_for_split_and_workflow():
+    from pydra.compose import workflow
+    from pydra.utils.hash import hash_function
+
+    def split_sum(tp):
+        return hash_function(_variant(tp)(model={"id": "m"}).split(x=[1, 2]))
+
+    def wf_sum(tp):
+        node = _variant(tp)
+
+        @workflow.define
+        def Wf(x: int) -> str:
+            return workflow.add(node(x=x, model={"id": "m"})).out
+
+        return Wf(x=1)._checksum
+
+    for fn in (split_sum, wf_sum):
+        assert (
+            len({fn(dict), fn(Provided[dict, "toy"]), fn(Provided[dict, "other"])}) == 3
+        )
+
+
+@python.define
+def EmbedList(x: int, model: Provided[dict, "absent"]) -> int:
+    return x
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_unregistered_provider_in_split_is_wiring_error(worker, tmp_path):
+    with Submitter(cache_root=tmp_path, worker=worker) as sub:
+        with pytest.raises(UnregisteredProvider):
+            sub(EmbedList(model={"id": "m"}).split(x=[1, 2]))
+    assert not list(tmp_path.rglob("_error.pklz"))
+
+
+def test_unregistered_provider_in_workflow_is_wiring_error(tmp_path):
+    from pydra.compose import workflow
+
+    @workflow.define
+    def Wf(x: int) -> int:
+        return workflow.add(EmbedList(x=x, model={"id": "m"})).out
+
+    with Submitter(cache_root=tmp_path) as sub:
+        with pytest.raises(UnregisteredProvider):
+            sub(Wf(x=1))
+
+
+def test_failing_close_on_release_does_not_fail_release():
+    rs = ResidentSet(host_budget=1)
+
+    def bad(o):
+        raise RuntimeError("nope")
+
+    kw = dict(footprint=Footprint(host=1), close=bad)
+    rs.get(_key("x"), lambda: "x", **kw)
+    rs.get(_key("y"), lambda: "y", **kw)  # over budget while both are busy
+    rs.release(_key("x"))  # x is evicted and its close raises: logged, not raised
+    assert rs.keys() == [_key("y")]

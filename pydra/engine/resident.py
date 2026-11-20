@@ -2,11 +2,13 @@
 ``ResidentSet`` (RFC 0005 section 3.1).
 
 Residency is scheduler metadata. A provided field's value is the spec, which is hashed
-into the checksum like any input; the loaded object never is. Nothing here is imported
-by a run that declares no provided field, beyond the small marker types.
+into the checksum like any input; the loaded object never is. A run that
+declares no provided field creates no ``ResidentSet`` and loads nothing; the module
+itself is small (stdlib and attrs) and is imported by every job.
 """
 
 import atexit
+import functools
 import hashlib
 import json
 import logging
@@ -318,7 +320,12 @@ def _find_provider(job: "Job", name: str) -> Provider:
     for ep in entry_points(group=ENTRY_POINT_GROUP):
         if ep.name == name:
             loaded = ep.load()
-            return loaded() if isinstance(loaded, type) else loaded
+            provider = loaded() if isinstance(loaded, type) else loaded
+            if provider.name != name:
+                raise UnregisteredProvider(
+                    f"Entry point {name!r} loads a provider named {provider.name!r}"
+                )
+            return provider
     raise UnregisteredProvider(
         f"No provider {name!r}: pass it as Submitter(providers=[...]) or register it "
         f"under the {ENTRY_POINT_GROUP!r} entry point group"
@@ -350,11 +357,29 @@ def _resident_set_of(job: "Job") -> ResidentSet:
     return process_set()
 
 
+@functools.lru_cache(maxsize=None)
+def _entry_point_names() -> frozenset[str]:
+    from importlib.metadata import entry_points
+
+    return frozenset(ep.name for ep in entry_points(group=ENTRY_POINT_GROUP))
+
+
 def check_providers(job: "Job") -> None:
     """Raise :class:`UnregisteredProvider` if a provided field of ``job`` names a
-    provider that cannot be found; called when the job is handed out, before it runs"""
-    for _, name in provided_fields(job.task):
-        _find_provider(job, name)
+    provider that is neither passed to its submitter nor registered; a check of names
+    only, so no provider module is imported, made when the job is handed out"""
+    check_task(job.task, getattr(job, "submitter", None))
+
+
+def check_task(task: ty.Any, submitter: ty.Any) -> None:
+    """:func:`check_providers` for a task definition and a submitter"""
+    names = {p.name for p in getattr(submitter, "providers", ())}
+    for _, name in provided_fields(task):
+        if name not in names and name not in _entry_point_names():
+            raise UnregisteredProvider(
+                f"No provider {name!r}: pass it as Submitter(providers=[...]) or "
+                f"register it under the {ENTRY_POINT_GROUP!r} entry point group"
+            )
 
 
 @contextmanager

@@ -17,6 +17,7 @@ from pydra.engine.graph import DiGraph
 from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.job import Job
+from pydra.engine.resident import UnregisteredProvider
 from pydra.engine.lease import LeaseLost
 from pydra.utils.general import is_workflow
 
@@ -437,6 +438,8 @@ class NodeExecution(ty.Generic[TaskType]):
         try:
             job = self.queued[index] = self.job(index)
             job._awaiting_run = True
+        except UnregisteredProvider:
+            raise  # a wiring error, not an error of the element
         except Exception as exc:
             name = self.name if index is None else f"{self.name}({index})"
             self.errored[index] = exc

@@ -722,6 +722,8 @@ def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
             yield f"{field.name}=".encode()
             yield hash_single(obj._hashed_value(field.name), cache)
             yield b","
+            if getattr(field, "provided", None) is not None:
+                yield f"provided={field.provided!r},".encode()
     yield b"_splitter="
     yield hash_single(obj._splitter, cache)
     yield b",_combiner="
