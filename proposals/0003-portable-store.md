@@ -395,6 +395,14 @@ returns a work directory. It is called many times and in several processes (`eng
   every such node sees, not node-local scratch; a store used with an out-of-process executor checks
   at hand-out that the runner's process can see the work directory. The store creates the directory
   `0o700` if it is absent and never removes one it did not create.
+- **Attempts allocated outside the runner.** A worker pool (RFC 0005 §5.5) runs a job under the
+  attempt `<pool id>.<g>`, where `g` is the job's own generation number: unique per `(checksum,
+  fingerprint)`, not across jobs. A `work_dir` function receives such an attempt as it is and must
+  use the job's address (`checksum`, `fingerprint`) to keep two jobs' directories apart. The default
+  layout names a dotted attempt `<root>/work/<attempt>-<first 24 hex of the sha256 of
+  "<cdir>/<fingerprint>">/`. `PortableStore.work_path(checksum, fingerprint, attempt)` gives the
+  directory without a job. A pool's job payloads are not in any work directory (RFC 0005 §5.2), so
+  `collect` never removes one.
 - **The default** is `<root>/work/<attempt>/` for a `private` root. A `shared` root has no default:
   `PortableStore(work_dir=...)` is required, because a work directory holds a job's pickles and crash
   file, which other users must not read.
