@@ -299,7 +299,15 @@ def check_declared_code(
     Returns the stored contexts it read, to be passed to ``lookup`` as ``stored``, or
     None if it read none."""
     code = context.get("code")
-    if not code or (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+    if not code:
+        return None
+    entry_path = getattr(store, "entry_path", None)
+    if entry_path is not None:  # a store whose entries are not its work directories
+        if entry_path(checksum, context).is_dir():
+            return None
+    elif (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+        return None
+    if not hasattr(store, "stored_contexts"):
         return None
     stored = list(store.stored_contexts(checksum))
     moved: dict[str, set[str]] = {}

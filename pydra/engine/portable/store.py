@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import hashlib
+import io
+import json
 import logging
 import os
 import random
@@ -22,7 +25,9 @@ import uuid
 from pathlib import Path
 
 import attrs
+import cloudpickle as cp
 
+from pydra.engine.lease import DirectoryLease, LeaseSettings
 from pydra.engine.portable.entry import (
     CorruptEntry,
     EntryFormat,
@@ -32,6 +37,7 @@ from pydra.engine.portable.entry import (
     PydraEntryV1,
     StoredEntry,
 )
+from pydra.engine.portable.errors import UnencodableOutput
 from pydra.engine.portable.identity import (
     Context,
     KeyRecord,
@@ -45,8 +51,8 @@ from pydra.engine.portable.layout import (
     open_layout,
     shard_for,
 )
-from pydra.engine.portable.trust import TRUSTS, Root, Trust
-from pydra.engine.result import Result
+from pydra.engine.portable.trust import TRUSTS, Root, Trust, check_private
+from pydra.engine.result import Result, _loads, save
 from pydra.utils.storagedir import (
     IS_WINDOWS,
     StorageDir,
@@ -54,6 +60,7 @@ from pydra.utils.storagedir import (
     StorePolicy,
     StoreUnavailable,
     WrongKindError,
+    copy_hashed,
 )
 
 if ty.TYPE_CHECKING:
@@ -77,6 +84,16 @@ _CLEARED = object()  # a corrupt occupant was set aside: place again
 _OURS = object()  # the occupant carries this writer's token
 _HASHED_CDIR = re.compile(r"h-[0-9a-f]{64}")
 _REPARSE = 0x400
+_WORK = "work"
+_LEASES = "leases"
+_COMMITTED = "_committed.json"
+_ERROR = "_error.json"
+_KEPT_ENTRY = "_entry"
+_OUTPUTS = "_outputs.pklz"
+_COMMITTED_FORMAT = "pydra-committed@1"
+_ATTEMPT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
+_JSON_CAP = 1 << 20
+_BLOCK = 1 << 16
 
 
 @attrs.frozen
@@ -301,8 +318,14 @@ class PortableStore:
         Modes, durability and ages; recorded in the header, so two stores of one root must agree.
     readonly, legacy, reuse, on_commit
         Accepted and not yet used.
-    dedupe, work_dir
-        Accepted and not yet used (work directories and de-duplication leases).
+    dedupe : bool, optional
+        Whether two submitters of one job compute it once, through a lease at
+        ``<root>/leases/`` (RFC 0003 section 5.3). Default True unless ``trust`` is
+        ``"shared"``. False gives a lease that is always held.
+    work_dir : callable, optional
+        ``work_dir(checksum, fingerprint, attempt) -> Path``, a pure function giving the
+        absolute directory a job runs in (RFC 0003 section 5.4). It is required for a
+        ``"shared"`` root, whose default (``<root>/work/<attempt>``) other users could read.
     pickle : bool
         Whether writers to a new root may write pickle members; recorded when the root is
         created and read from the header after.
@@ -326,6 +349,11 @@ class PortableStore:
     ) -> None:
         if trust not in TRUSTS:
             raise ValueError(f"trust must be one of {TRUSTS}, got {trust!r}")
+        if trust == "shared" and work_dir is None:
+            raise ValueError(
+                "a shared root needs work_dir=: a work directory holds a job's pickles and crash "
+                "file, which other users of the root must not read (RFC 0003 section 5.4)"
+            )
         self._args = dict(
             root=root,
             trust=trust,
@@ -340,17 +368,19 @@ class PortableStore:
             reuse=reuse,
             on_commit=on_commit,
         )
-        self.path = os.fspath(root)
+        self.path = os.path.abspath(os.fspath(root))
         self.trust = trust
         self.identity = identity
         self.policy = policy
         self.readonly = tuple(readonly)
         self.legacy = tuple(legacy)
-        self.dedupe = dedupe
-        self.work_dir = work_dir
+        self.dedupe = trust != "shared" if dedupe is None else bool(dedupe)
+        self._work_fn = work_dir
         self.reuse = reuse
         self.on_commit = on_commit
         self.visibility_timeout = VISIBILITY_TIMEOUT
+        self._work_policy = attrs.evolve(policy, verify_files="digest")
+        self._lease_settings = LeaseSettings(holder="anonymous")
         self._make_root()
         expected = LayoutHeader.for_store(
             identity,
@@ -1236,8 +1266,11 @@ class PortableStore:
         An entry is never removed, and nothing outside those names is read or touched
         (sidecars included). An object is claimed with a rename to an inode-derived ``gc-`` name
         in its own directory before it is removed, so a mover that put it back first wins and
-        two collectors do not both remove it. Work directories are not collected yet: a store
-        does not make them.
+        two collectors do not both remove it. A default work directory (``<root>/work/<name>``,
+        never one the caller's ``work_dir`` function names) is removed once it and everything
+        directly in it, ``_committed.json`` included, is older than ``ages.work``, which must
+        exceed the longest run: a job writes nothing at the top of its directory while it runs,
+        and a runner may read ``_committed.json`` until it holds the outcome.
 
         Returns
         -------
@@ -1263,6 +1296,7 @@ class PortableStore:
                 with d:
                     for e in list(d.scandir()):
                         self._sweep(d, e, age, now, report)
+            self._collect_work(root, ages.work, now, report)
             try:
                 entries = root.child(self.header.entries)
             except (FileNotFoundError, WrongKindError):
@@ -1282,6 +1316,48 @@ class PortableStore:
                                 ):
                                     self._sweep(holder, e, ages.quarantine, now, report)
         return report
+
+    def _collect_work(
+        self, root: StorageDir, age: float, now: float, report: CollectReport
+    ) -> None:
+        try:
+            work = root.child(_WORK)
+        except (FileNotFoundError, WrongKindError):
+            return
+        with work:
+            for e in list(work.scandir()):
+                if not _ATTEMPT.fullmatch(e.name):
+                    continue
+                where = os.path.join(work.path, e.name)
+                try:
+                    newest = self._newest_in(work, e.name)
+                except FileNotFoundError:
+                    continue
+                except OSError as err:
+                    report.kept.append(
+                        (
+                            where,
+                            f"cannot be read: {err.strerror or err} (owner: {_owner(where)})",
+                        )
+                    )
+                    continue
+                if newest is not None and now - newest < age:
+                    report.kept.append((where, f"younger than {age:g} s"))
+                    continue
+                self._sweep(work, e, age, now, report)
+
+    @staticmethod
+    def _newest_in(parent: StorageDir, name: str) -> float | None:
+        """The latest change of the directory ``name`` or anything directly in it."""
+        try:
+            with parent.child(name) as d:
+                newest = _last_change(d.fstat())
+                for c in list(d.scandir()):
+                    with contextlib.suppress(FileNotFoundError):
+                        newest = max(newest, _last_change(d.lstat(c.name)))
+                return newest
+        except WrongKindError:
+            return None
 
     @staticmethod
     def _children(parent: StorageDir, name: str) -> list[StorageEntry]:
@@ -1436,9 +1512,16 @@ class PortableStore:
                     return e.name
         return shard
 
-    def _read(self, root: StorageDir, ref: EntryRef, task: "Task | None") -> Result:
+    def _read(
+        self,
+        root: StorageDir,
+        ref: EntryRef,
+        task: "Task | None",
+        shard: str | None = None,
+    ) -> Result:
         with root.child(self.header.entries) as entries:
-            shard = self._shard_of(entries, ref.cdir)
+            if shard is None:
+                shard = self._shard_of(entries, ref.cdir)
             with (
                 entries.child(shard) as shard_dir,
                 shard_dir.child(ref.cdir) as cdir_dir,
@@ -1479,19 +1562,7 @@ class PortableStore:
     def _result(
         self, stored: StoredEntry, entry: StorageDir, task: "Task | None"
     ) -> Result:
-        outputs: ty.Any = dict(stored.outputs)
-        if task is not None:
-            from pydra.utils.general import get_fields
-
-            cls = task.Outputs
-            declared = {f.name for f in get_fields(cls)}
-            if set(outputs) != declared:
-                raise StoreUnavailable(
-                    f"the entry holds outputs {sorted(outputs)} and the task declares "
-                    f"{sorted(declared)}"
-                )
-            outputs = cls(**outputs)
-            outputs._cache_dir = Path(entry.path)
+        outputs = self._outputs_of(dict(stored.outputs), task, Path(entry.path))
         return Result(
             cache_dir=Path(entry.path),
             outputs=outputs,
@@ -1502,6 +1573,551 @@ class PortableStore:
             stored=True,
         )
 
+    @staticmethod
+    def _outputs_of(outputs: ty.Any, task: "Task | None", where: Path) -> ty.Any:
+        if task is None:
+            return outputs
+        from pydra.utils.general import get_fields
+
+        cls = task.Outputs
+        declared = {f.name for f in get_fields(cls)}
+        if set(outputs) != declared:
+            raise StoreUnavailable(
+                f"the entry holds outputs {sorted(outputs)} and the task declares "
+                f"{sorted(declared)}"
+            )
+        outputs = cls(**outputs)
+        outputs._cache_dir = where
+        return outputs
+
+    # -- work directories --------------------------------------------------------------------
+
+    def _work_path(self, checksum: str, fingerprint: str, attempt: str) -> Path:
+        """The directory of ``attempt``: a pure function of its arguments (RFC 0003 section 5.4).
+        A resumable job's, ``attempt="resume"``, is named by its address, so two resumable jobs
+        never share one."""
+        if self._work_fn is not None:
+            path = Path(self._work_fn(checksum, fingerprint, attempt))
+            if not path.is_absolute():
+                raise ValueError(f"work_dir must return an absolute path, got {path}")
+            return path
+        if attempt == "resume":
+            address = f"{cdir_for(checksum)}/{fingerprint}".encode()
+            name = "resume-" + hashlib.sha256(address).hexdigest()
+        elif _ATTEMPT.fullmatch(attempt):
+            name = attempt
+        else:
+            raise ValueError(f"attempt {attempt!r} is not usable as a directory name")
+        return Path(self.path) / _WORK / name
+
+    def work_dir(self, job: "Job") -> Path:
+        """The directory ``job`` runs in and writes ``_committed.json``, ``_error.json``, its
+        kept outputs and ``_job.pklz`` to (RFC 0003 section 5.4).
+
+        Raises
+        ------
+        ValueError
+            The job has no ``attempt`` and cannot resume.
+        """
+        attempt = "resume" if job.can_resume else job.attempt
+        if attempt is None:
+            raise ValueError(
+                f"job {job.name!r} has no attempt, so it has no work directory: the runner "
+                "gives each job an attempt when it hands it out"
+            )
+        return self._work_path(
+            job.checksum, self.identity.fingerprint(job.context), attempt
+        )
+
+    def _maybe_work_dir(self, job: "Job") -> Path | None:
+        try:
+            return self.work_dir(job)
+        except ValueError:
+            return None
+
+    def _make_work_dir(self, path: Path) -> None:
+        """Make ``path`` ``0o700`` if it is absent. A default one is made by descriptor below
+        ``<root>/work``; one the caller's function names is made as a path, which is the
+        caller's storage. An existing directory is left as it is."""
+        with self._denied(str(path)):
+            if self._work_fn is None:
+                with (
+                    self._open() as root,
+                    root.child(_WORK, create=True, mode=0o700) as work,
+                ):
+                    work.child(path.name, create=True, mode=0o700).close()
+                return
+            os.makedirs(path.parent, exist_ok=True)
+            try:
+                os.mkdir(path, 0o700)
+            except FileExistsError:
+                return
+            if not IS_WINDOWS:
+                os.chmod(path, 0o700)
+
+    def _open_work(self, path: Path) -> StorageDir:
+        """The work directory as given: what is read from it is checked where it is opened
+        (`check_private`, the entry format's trust), not here."""
+        return StorageDir.open_root(path, self._work_policy, trust="trusted")
+
+    def begin_run(self, job: "Job") -> Path:
+        """Make the work directory of a run that is about to start, and remove the outcome files
+        an earlier run left there (``_committed.json``, ``_error.json``): a resumable job's
+        directory is stable across runs, and a stale outcome is never read as this run's.
+        """
+        path = self.work_dir(job)
+        self._make_work_dir(path)
+        with self._open_work(path) as handle:
+            for name in (_COMMITTED, _ERROR):
+                with contextlib.suppress(FileNotFoundError):
+                    handle.unlink(name)
+        return path
+
+    def forget_committed(self, job: "Job") -> None:
+        """Remove ``_committed.json`` once the runner holds the job's outcome (RFC 0003 section
+        5.4), and a default work directory that is then empty."""
+        path = self._maybe_work_dir(job)
+        if path is None:
+            return
+        try:
+            with self._open_work(path) as handle:
+                with contextlib.suppress(FileNotFoundError):
+                    handle.unlink(_COMMITTED)
+        except FileNotFoundError:
+            return
+        if self._work_fn is None:
+            with contextlib.suppress(OSError):
+                os.rmdir(path)
+
+    def _empty_work_dir(self, path: Path) -> None:
+        """Empty a default work directory except ``_committed.json``. What cannot be removed
+        (a Windows process whose working directory is inside) is left for `collect`."""
+        try:
+            with self._open_work(path) as handle:
+                for e in list(handle.scandir()):
+                    if e.name == _COMMITTED:
+                        continue
+                    try:
+                        if e.is_dir():
+                            _remove_tree(handle, e.name)
+                        else:
+                            _unlink(handle, e.name)
+                    except FileNotFoundError:
+                        pass
+                    except OSError as err:
+                        logger.warning(
+                            "could not empty %s: %s", os.path.join(path, e.name), err
+                        )
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def _write_file(handle: StorageDir, name: str, data: bytes, mode: int) -> None:
+        """Write ``data`` to a temporary name in ``handle`` and rename it to ``name``, so a
+        reader sees no file or a whole one."""
+        tmp = f".{name}.{uuid.uuid4().hex}.tmp"
+        try:
+            with handle.open_new(tmp, mode) as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            try:
+                handle.rename(tmp, handle, name)
+            except (FileExistsError, PermissionError):
+                if not IS_WINDOWS:
+                    raise
+                handle.unlink(name)  # Windows does not rename over a file
+                handle.rename(tmp, handle, name)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                handle.unlink(tmp)
+            raise
+
+    def _write_committed(
+        self, job: "Job", path: Path, committed: Committed, kind: str
+    ) -> None:
+        ref = committed.entry
+        doc = {
+            "format": _COMMITTED_FORMAT,
+            "kind": kind,
+            "checksum": job.checksum,
+            "attempt": "resume" if job.can_resume else job.attempt,
+            "entry": {
+                "root": ref.root,
+                "cdir": ref.cdir,
+                "fingerprint": ref.fingerprint,
+            },
+            "won": committed.won,
+            "own_digest": committed.own_digest,
+            "committed_digest": committed.committed_digest,
+            "stored": committed.stored,
+        }
+        self._make_work_dir(path)
+        with self._open_work(path) as handle:
+            self._write_file(
+                handle, _COMMITTED, json.dumps(doc, sort_keys=True).encode(), 0o600
+            )
+
+    def _keep_entry(self, path: Path, committed: Committed) -> Committed:
+        """Move the staged entry of a result that was not stored to ``<work dir>/_entry``
+        (RFC 0003 section 5.4): by rename on one filesystem, otherwise by copy with each member
+        re-hashed against ``entry.json``; the staging directory is then removed."""
+        assert committed.kept is not None
+        name = os.path.basename(committed.kept)
+        self._make_work_dir(path)
+        with self._open() as root, root.child(self.header.dirs["staging"]) as staging:
+            if os.path.dirname(committed.kept) != staging.path:
+                return committed
+            with self._open_work(path) as handle:
+                with contextlib.suppress(FileNotFoundError):
+                    _remove_tree(handle, _KEPT_ENTRY)  # an earlier run's
+                try:
+                    staging.rename(name, handle, _KEPT_ENTRY)
+                except OSError as err:
+                    if err.errno != errno.EXDEV:
+                        raise
+                    try:
+                        self._copy_kept(staging, name, handle)
+                    except BaseException:
+                        _discard(handle, _KEPT_ENTRY)
+                        raise
+                    _discard(staging, name)
+        return attrs.evolve(committed, kept=str(path / _KEPT_ENTRY))
+
+    def _copy_kept(self, staging: StorageDir, name: str, handle: StorageDir) -> None:
+        with staging.child(name) as source:
+            try:
+                with source.open_read("entry.json") as f:
+                    members = json.loads(_read_blocks(f, _JSON_CAP))["members"]
+            except (ValueError, KeyError, TypeError) as err:
+                raise CorruptEntry(f"the kept entry's entry.json is malformed: {err!r}")
+            with handle.child(
+                _KEPT_ENTRY, create=True, mode=self.policy.entry_mode
+            ) as target:
+                self._copy_tree(source, target, "", members)
+
+    def _copy_tree(
+        self,
+        source: StorageDir,
+        target: StorageDir,
+        rel: str,
+        members: ty.Mapping[str, ty.Any],
+    ) -> None:
+        for e in list(source.scandir()):
+            if e.is_dir():
+                with (
+                    source.child(e.name) as s,
+                    target.child(e.name, create=True, mode=self.policy.entry_mode) as t,
+                ):
+                    self._copy_tree(s, t, f"{rel}{e.name}/", members)
+                continue
+            digest, size = copy_hashed(
+                Path(source.path) / e.name, target, e.name, self.policy.file_mode
+            )
+            rec = members.get(f"{rel}{e.name}")
+            if rec is None and f"{rel}{e.name}" != "entry.json":
+                raise CorruptEntry(
+                    f"{rel}{e.name} is in the kept entry but not in entry.json"
+                )
+            if rec is not None and (rec.get("sha256"), rec.get("size")) != (
+                digest,
+                size,
+            ):
+                raise CorruptEntry(
+                    f"{rel}{e.name} changed while the kept entry was copied: it does not "
+                    "match entry.json"
+                )
+
+    def _keep_outputs(
+        self,
+        job: "Job",
+        path: Path,
+        outputs: ty.Mapping[str, ty.Any],
+        ref: EntryRef,
+    ) -> Committed:
+        """Pickle outputs that no codec encodes to ``<work dir>/_outputs.pklz`` (RFC 0003
+        section 5.4); they are read back only after an ownership check."""
+        data = cp.dumps(dict(outputs))
+        self._make_work_dir(path)
+        with self._open_work(path) as handle:
+            self._write_file(handle, _OUTPUTS, data, 0o600)
+        return Committed(
+            ref,
+            False,
+            hashlib.sha256(data).hexdigest(),
+            None,
+            False,
+            str(path / _OUTPUTS),
+        )
+
+    # -- reading a job's own result ------------------------------------------------------------
+
+    def entry_path(self, checksum: str, context: Context) -> Path:
+        """Where the entry of ``checksum`` under ``context`` is, or would be. Nothing is read."""
+        cdir = cdir_for(checksum)
+        shard = shard_for(cdir, checksum, self.header.shard)
+        return (
+            Path(self.path)
+            / self.header.entries
+            / shard
+            / cdir
+            / self.identity.fingerprint(context)
+        )
+
+    def read_own(self, job: "Job") -> Result | None:
+        """The result stored at the job's own address, under the lookup context's fingerprint,
+        or None if there is none, or what is there is corrupt (moved to ``quarantine/``) or
+        cannot be read here (left in place, not served)."""
+        cdir = cdir_for(job.checksum)
+        ref = EntryRef(self.path, cdir, self.identity.fingerprint(job.context))
+        try:
+            return self._read_ref(
+                ref, job.task, shard_for(cdir, job.checksum, self.header.shard)
+            )
+        except FileNotFoundError:
+            return None
+        except CorruptEntry as err:
+            logger.warning(
+                "%s is corrupt and was moved aside: %s", ref.fingerprint, err
+            )
+            return None
+        except (EntryFormatUnknown, EntryNotTrusted) as err:
+            logger.warning("not served: %s", err)
+            return None
+
+    def _read_ref(self, ref: EntryRef, task: "Task | None", shard: str) -> Result:
+        with self._open() as root:
+            try:
+                return self._read(root, ref, task, shard)
+            except OSError as err:
+                if isinstance(err, (StoreUnavailable, FileNotFoundError)):
+                    raise
+                raise StoreUnavailable(err.errno, f"{ref.cdir}: {err}") from err
+
+    def read_result(self, job: "Job", *, settled: bool = False) -> Result | None:
+        """The result of ``job`` as its readers see it (RFC 0003 section 7.2): by
+        ``job.committed`` when this process holds it, else by ``<work dir>/_committed.json``
+        (after the visibility retry when ``settled``), else by the entry at the job's own
+        address. An entry that cannot be read is a failure, not an absence.
+
+        Returns
+        -------
+        Result or None
+            None when nothing is found and the job is not ``settled``; an errored `Result`
+            (``failure`` names the work directory) when it failed, or when it is ``settled``
+            and nothing is found, or what was found cannot be read.
+        """
+        wd = self._maybe_work_dir(job)
+        try:
+            if job.committed is not None:
+                found = self._read_committed(job, wd, job.committed)
+            else:
+                found = None
+                doc = self._committed_doc(wd, settled) if wd is not None else None
+                if doc is not None:
+                    found = self._read_committed(job, wd, self._committed_of(doc, wd))
+            if found is None:
+                found = self.read_own(job)
+        except FileNotFoundError:
+            found = self.read_own(job)
+        except OSError as err:
+            return self._failed(job, wd, f"its result cannot be read: {err}")
+        if found is not None:
+            return found
+        if wd is not None and self._has(wd, _ERROR):
+            return self._failed(job, wd, f"the job failed; see {wd / _ERROR}")
+        if settled:
+            return self._failed(job, wd, "no result of the job was found")
+        return None
+
+    def read_committed(self, job: "Job", committed: Committed) -> Result | None:
+        """The result the process that ran ``job`` holds as ``committed``: its entry, or the
+        outputs kept in the job's work directory."""
+        return self._read_committed(job, self._maybe_work_dir(job), committed)
+
+    def _read_committed(
+        self, job: "Job", wd: Path | None, committed: Committed
+    ) -> Result | None:
+        if committed.stored:
+            ref = committed.entry
+            if ref.cdir != cdir_for(job.checksum) or os.path.abspath(
+                ref.root
+            ) != os.path.abspath(self.path):
+                raise CorruptEntry(
+                    f"the committed entry {ref.cdir} is not the entry of the job"
+                )
+            result = self._read_ref(
+                ref, job.task, shard_for(ref.cdir, job.checksum, self.header.shard)
+            )
+        elif wd is None or committed.kept is None:
+            return None
+        elif os.path.basename(committed.kept) == _KEPT_ENTRY:
+            result = self._read_kept(job, wd, committed)
+        elif os.path.basename(committed.kept) == _OUTPUTS:
+            result = self._read_outputs(job, wd, committed)
+        else:
+            return None
+        result.committed = committed
+        result.stored = committed.stored
+        return result
+
+    def _work_trust(self, handle: StorageDir, name: str) -> Trust:
+        """The trust to read ``name`` in a work directory with: ``private`` if it is owned by
+        this user and nobody else can write it, which a directory this user ran a job in is,
+        otherwise the store's (a pickle member is then refused for a ``shared`` store).
+        """
+        if self.trust == "trusted":
+            return "trusted"
+        try:
+            check_private(handle, [name])
+        except (EntryNotTrusted, FileNotFoundError):
+            return self.trust
+        return "private"
+
+    def _read_kept(self, job: "Job", wd: Path, committed: Committed) -> Result:
+        with self._open_work(wd) as handle:
+            trust = self._work_trust(handle, _KEPT_ENTRY)
+            with handle.child(_KEPT_ENTRY) as entry:
+                stored = self.format.read(
+                    entry,
+                    job.checksum,
+                    committed.entry.fingerprint,
+                    job.task,
+                    trust,
+                    root=handle,
+                )
+                if stored.digest != committed.own_digest:
+                    raise CorruptEntry(
+                        f"the kept entry in {wd} is not the one that was committed"
+                    )
+                return self._result(stored, entry, job.task)
+
+    def _read_outputs(self, job: "Job", wd: Path, committed: Committed) -> Result:
+        with self._open_work(wd) as handle:
+            if self.trust != "trusted":
+                check_private(handle, [_OUTPUTS])
+            with handle.open_read(_OUTPUTS) as f:
+                data = _read_blocks(f)
+        if hashlib.sha256(data).hexdigest() != committed.own_digest:
+            raise CorruptEntry(
+                f"{wd / _OUTPUTS} is not the outputs that were committed"
+            )
+        outputs = self._outputs_of(_loads(data), job.task, wd)
+        return Result(
+            cache_dir=wd,
+            outputs=outputs,
+            runtime=None,
+            errored=False,
+            task=job.task,
+            context=dict(job.context),
+            stored=False,
+        )
+
+    def _committed_doc(self, wd: Path, settled: bool) -> dict | None:
+        """``_committed.json`` of ``wd``. When ``settled``, a missing one is waited for up to
+        the visibility timeout (another client's rename can be late to show on shared storage),
+        unless the job's ``_error.json`` shows."""
+        deadline = time.monotonic() + (self.visibility_timeout if settled else 0.0)
+        n = 0
+        while True:
+            try:
+                with self._open_work(wd) as handle:
+                    doc = self._load_committed(handle, wd)
+                    if doc is not None:
+                        return doc
+                    with contextlib.suppress(FileNotFoundError):
+                        handle.lstat(_ERROR)
+                        return None
+            except FileNotFoundError:
+                pass
+            if time.monotonic() >= deadline:
+                return None
+            n += 1
+            time.sleep(min(0.005 * 2**n, 0.25))
+
+    @staticmethod
+    def _load_committed(handle: StorageDir, wd: Path) -> dict | None:
+        try:
+            with handle.open_read(_COMMITTED) as f:
+                doc = json.loads(_read_blocks(f, _JSON_CAP))
+        except FileNotFoundError:
+            return None
+        except (ValueError, WrongKindError) as err:
+            logger.warning("%s is unusable: %s", wd / _COMMITTED, err)
+            return None
+        entry = doc.get("entry") if isinstance(doc, dict) else None
+        if (
+            not isinstance(doc, dict)
+            or doc.get("format") != _COMMITTED_FORMAT
+            or doc.get("kind") not in ("entry", "kept", "outputs")
+            or not isinstance(entry, dict)
+            or not all(
+                isinstance(entry.get(k), str) for k in ("root", "cdir", "fingerprint")
+            )
+            or not isinstance(doc.get("stored"), bool)
+        ):
+            logger.warning("%s is not a committed record", wd / _COMMITTED)
+            return None
+        return doc
+
+    @staticmethod
+    def _committed_of(doc: dict, wd: Path) -> Committed:
+        e = doc["entry"]
+        kept = {"kept": _KEPT_ENTRY, "outputs": _OUTPUTS}.get(doc["kind"])
+        return Committed(
+            EntryRef(e["root"], e["cdir"], e["fingerprint"]),
+            bool(doc.get("won")),
+            str(doc.get("own_digest")),
+            doc.get("committed_digest"),
+            doc["stored"],
+            None if kept is None or doc["stored"] else str(wd / kept),
+        )
+
+    def _has(self, wd: Path, name: str) -> bool:
+        try:
+            with self._open_work(wd) as handle:
+                handle.lstat(name)
+        except FileNotFoundError:
+            return False
+        return True
+
+    def _failed(self, job: "Job", wd: Path | None, why: str) -> Result:
+        where = (
+            f"its work directory is {wd}"
+            if wd is not None
+            else "it has no work directory"
+        )
+        return Result(
+            cache_dir=wd if wd is not None else Path(self.path),
+            outputs=None,
+            runtime=None,
+            errored=True,
+            task=job.task,
+            failure=f"{why}; {where}",
+        )
+
+    # -- de-duplication leases ---------------------------------------------------------------
+
+    def acquire(
+        self, checksum: str, context: Context, *, resumable: bool = False
+    ) -> "Lease":
+        """The lease guarding the job of ``checksum`` under ``context`` (RFC 0003 section 5.3):
+        a `DirectoryLease` at ``<root>/leases/<sha256 of cdir/fingerprint>.lock`` that records
+        no user, host or pid, when the store de-duplicates or the job is ``resumable``;
+        otherwise a lease that is always held."""
+        if not (self.dedupe or resumable):
+            return _AlwaysHeld(checksum)
+        name = hashlib.sha256(
+            f"{cdir_for(checksum)}/{self.identity.fingerprint(context)}".encode()
+        ).hexdigest()
+        with self._denied(self.path):
+            with self._open() as root:
+                root.child(_LEASES, create=True, mode=self.policy.side_mode).close()
+        leases = Path(self.path) / _LEASES
+        return DirectoryLease(
+            checksum, leases, leases / f"{name}.lock", settings=self._lease_settings
+        )
+
     # -- the ResultStore adapter ---------------------------------------------------------------------
 
     def commit(self, lease: "Lease", result: Result, job: "Job | None" = None) -> None:
@@ -1509,15 +2125,22 @@ class PortableStore:
 
         An adapter over `publish`: the outputs are ``result.outputs``, the key and the execute
         context are the identity's for ``job`` (the result's context without a job), and the
-        lease's directory is where files come from. An errored result publishes nothing, and
-        the lease, held or lost, is not consulted. ``job`` is never written to an entry.
+        job's work directory is where files come from. An errored result publishes nothing,
+        and the lease, held or lost, is not consulted. With a job, the outcome is also written
+        to ``<work dir>/_committed.json``; a result that was not stored is kept there (RFC 0003
+        section 5.4), and a stored one's default work directory is emptied. ``job`` is never
+        written to an entry.
         """
         if result.errored or result.outputs is None:
+            if result.errored and job is not None:
+                self._keep_job(job)
             return
+        wd = None
         if job is not None:
             checksum = job.checksum
             key = self.identity.key(job)
             context = self.identity.context(job, "execute")
+            wd = self.work_dir(job)
         else:
             checksum = getattr(lease, "checksum")
             key = None
@@ -1529,9 +2152,76 @@ class PortableStore:
             outputs = {
                 f.name: getattr(outputs, f.name) for f in get_fields(type(outputs))
             }
-        files_from = getattr(lease, "cache_dir", None)
-        committed = self.publish(
-            checksum, key, context, outputs, result.task, files_from
-        )
+        files_from = wd if wd is not None else getattr(lease, "cache_dir", None)
+        kind = "entry"
+        try:
+            committed = self.publish(
+                checksum, key, context, outputs, result.task, files_from
+            )
+        except UnencodableOutput:
+            if job is None:
+                raise
+            ref = EntryRef(
+                self.path, cdir_for(checksum), self.identity.fingerprint(context)
+            )
+            committed = self._keep_outputs(job, ty.cast(Path, wd), outputs, ref)
+            kind = "outputs"
+        else:
+            if job is not None and not committed.stored:
+                committed = self._keep_entry(ty.cast(Path, wd), committed)
+                kind = "kept"
+        if job is not None:
+            self._write_committed(job, ty.cast(Path, wd), committed, kind)
+            if committed.stored and self._work_fn is None:
+                self._empty_work_dir(ty.cast(Path, wd))
         result.committed = committed
         result.stored = committed.stored
+
+    def _keep_job(self, job: "Job") -> None:
+        """Write the failed job's pickle to its work directory, for ``pydracli crash``."""
+        try:
+            path = self.work_dir(job)
+            self._make_work_dir(path)
+            save(path, job=job)
+        except Exception as err:
+            logger.warning("could not save the failed job %s: %s", job.name, err)
+
+
+class _AlwaysHeld:
+    """The lease of a store that does not de-duplicate: held by every taker, so concurrent
+    submitters of one job both compute it and one wins the rename (RFC 0003 section 5.3).
+    """
+
+    lost = None
+    held = True
+
+    def __init__(self, checksum: str) -> None:
+        self.checksum = checksum
+
+    def prove(self) -> bool:
+        return True
+
+    def __enter__(self) -> "_AlwaysHeld":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    async def __aenter__(self) -> "_AlwaysHeld":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    def __repr__(self) -> str:
+        return f"_AlwaysHeld({self.checksum!r})"
+
+
+def _read_blocks(f: ty.BinaryIO, cap: int | None = None) -> bytes:
+    """All of ``f``, read in blocks; ``ValueError`` past ``cap`` bytes."""
+    out = io.BytesIO()
+    for block in iter(lambda: f.read(_BLOCK), b""):
+        out.write(block)
+        if cap is not None and out.tell() > cap:
+            raise ValueError(f"longer than {cap} bytes")
+    return out.getvalue()

@@ -186,6 +186,10 @@ class LeaseSettings:
     max_wait : float | None
         Seconds after which any wait ends in `LeaseTimeout`, even behind a holder that
         keeps renewing; None (default) for no cap.
+    holder : {"named", "anonymous"}
+        What the holder record names. ``"named"`` (default) writes the owner, host and pid;
+        ``"anonymous"`` writes only the token and the start time, and messages say "another
+        process", so nothing in the lease directory names a user, a host or a job.
     """
 
     stale_after: float = STALE_AFTER
@@ -193,8 +197,13 @@ class LeaseSettings:
     renew_fraction: float = RENEW_FRACTION
     attribute_delay: float = ATTRIBUTE_DELAY
     max_wait: float | None = None
+    holder: ty.Literal["named", "anonymous"] = "named"
 
     def __attrs_post_init__(self):
+        if self.holder not in ("named", "anonymous"):
+            raise ValueError(
+                f"holder must be 'named' or 'anonymous' (got {self.holder!r})"
+            )
         if self.max_wait is not None and self.max_wait < 0:
             raise ValueError(f"max_wait must not be negative (got {self.max_wait})")
         if self.stale_after <= 0 or self.timeout < 0 or self.attribute_delay < 0:
@@ -236,8 +245,10 @@ def _owner() -> str:
         return str(os.getuid()) if hasattr(os, "getuid") else "unknown"
 
 
-def _describe(holder: dict | None, age: float | None) -> str:
-    if not holder:
+def _describe(holder: dict | None, age: float | None, anonymous: bool = False) -> str:
+    if anonymous:
+        who = "another process"
+    elif not holder:
         who = "an unknown holder"
     else:
         who = f"pid {holder.get('pid', '?')} on host {holder.get('host', '?')}" + (
@@ -431,13 +442,14 @@ class DirectoryLease:
             except OSError:
                 pass
             return False
-        record = {
-            "owner": _owner(),
-            "host": socket.gethostname(),
-            "pid": os.getpid(),
-            "started": os.stat(token_dir).st_mtime,
-            "token": token,
-        }
+        record = {"started": os.stat(token_dir).st_mtime, "token": token}
+        if self.settings.holder == "named":
+            record = {
+                "owner": _owner(),
+                "host": socket.gethostname(),
+                "pid": os.getpid(),
+                **record,
+            }
         with atomic_write(token_dir / HOLDER_FILE, "w") as f:
             json.dump(record, f)
         self._token = token
@@ -584,7 +596,7 @@ class DirectoryLease:
         logger.warning(
             "Took over the lease %s from %s (stale after %.1fs)",
             self.lockfile,
-            _describe(holder, age),
+            _describe(holder, age, self.settings.holder == "anonymous"),
             self.settings.stale_after,
         )
 
@@ -679,7 +691,10 @@ class DirectoryLease:
         holder, age = self._last_seen
         if holder is None:
             holder = self.holder()
-        held_by = f"the lease {self.lockfile}, held by {_describe(holder, age)}"
+        held_by = (
+            f"the lease {self.lockfile}, held by "
+            f"{_describe(holder, age, self.settings.holder == 'anonymous')}"
+        )
         if self._refused is not None and not capped:
             err = self._refused
             return LeaseUnavailable(
