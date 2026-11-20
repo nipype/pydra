@@ -210,3 +210,60 @@ def test_pool_not_imported_by_import_pydra():
         "[m for m in sys.modules if m.startswith('pydra.workers.pool')]\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_tags_filter_classes_by_overlap(make_job):
+    inter = WorkerClass(name="inter", device="cpu", tags=["interactive"])
+    batch = WorkerClass(name="batch", device="cpu", mem=64 * G)
+    # a job with no tags goes to any class; the smaller-memory-known class sorts first
+    assert place(make_job(), [inter, batch], DeclaredFit(), ok).worker_class == "batch"
+    assert place(make_job(), [inter], DeclaredFit(), ok).worker_class == "inter"
+    # a tagged job skips a tagged class it does not overlap, and takes an untagged class
+    got = place(make_job(tags=("other",)), [inter, batch], DeclaredFit(), ok)
+    assert got.worker_class == "batch"
+    only = place(make_job(tags=("other",)), [inter], DeclaredFit(), ok)
+    assert isinstance(only, Unplaceable)
+    assert "interactive" in only.tried[0].reason and "other" in only.tried[0].reason
+    assert (
+        place(
+            make_job(tags=("interactive", "x")), [inter], DeclaredFit(), ok
+        ).worker_class
+        == "inter"
+    )
+    assert WorkerClass(name="t", device="cpu", tags="a").tags == frozenset({"a"})
+
+
+def test_gpu_mem_requires_gpus():
+    with pytest.raises(ValueError, match="gpu_mem requires gpus"):
+        ComputeResources(gpu_mem="40G")
+
+
+def test_load_toml_and_json(tmp_path):
+    t = tmp_path / "c.toml"
+    t.write_text('[gpu]\ndevice = "cuda"\ngpus = 1\ngpu_mem = "40G"\n')
+    assert WorkerClass.load(t)[0].gpu_mem == 40 * G
+    j = tmp_path / "c.json"
+    j.write_text('{"classes": [{"name": "a", "device": "cpu"}]}')
+    assert WorkerClass.load(j)[0].name == "a"
+
+
+def test_load_yaml_without_pyyaml_names_the_package(tmp_path, monkeypatch):
+    f = tmp_path / "c.yaml"
+    f.write_text("a: {device: cpu}\n")
+    monkeypatch.setitem(sys.modules, "yaml", None)
+    with pytest.raises(ImportError, match="pyyaml"):
+        WorkerClass.load(f)
+
+
+def test_named_worker_does_not_import_pool(tmp_path):
+    code = (
+        "import sys, tempfile\n"
+        "from pydra.compose import python\n"
+        "from pydra.engine.submitter import Submitter\n"
+        "@python.define\n"
+        "def F(x: int) -> int:\n    return x + 1\n"
+        "with Submitter(worker='cf', cache_root=tempfile.mkdtemp()) as s:\n"
+        "    assert s(F(x=1)).outputs.out == 2\n"
+        "assert not [m for m in sys.modules if m.startswith('pydra.workers.pool')]\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)

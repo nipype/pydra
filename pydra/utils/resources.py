@@ -74,6 +74,8 @@ class ComputeResources:
     def __attrs_post_init__(self):
         if self.gpu_type is not None and self.gpus is None:
             raise ValueError("gpu_type requires gpus")
+        if self.gpu_mem is not None and self.gpus is None:
+            raise ValueError("gpu_mem requires gpus")
 
     def slurm_args(self) -> list[str]:
         """The ``sbatch`` arguments for these resources."""

@@ -2,6 +2,7 @@
 
 import json
 import re
+import tomllib
 import typing as ty
 from pathlib import Path
 import attrs
@@ -26,6 +27,12 @@ def parse_size(value: "int | str | None") -> "int | None":
 
 def _size(value):
     return parse_size(value)
+
+
+def _to_tags(value) -> frozenset:
+    if isinstance(value, str):
+        return frozenset((value,))
+    return frozenset(value)
 
 
 def _positive_int(_, attribute, value):
@@ -58,6 +65,7 @@ class WorkerClass:
     )
     quantum_jobs: int = attrs.field(default=64, validator=_positive_int)
     quantum_s: float = 300.0
+    tags: frozenset[str] = attrs.field(factory=frozenset, converter=_to_tags)
 
     def __attrs_post_init__(self):
         if self.device not in ("cpu", "cuda", "mps"):
@@ -74,17 +82,25 @@ class WorkerClass:
         """Classes from data.
 
         ``source`` is a mapping of class name to fields, a list of mappings each
-        with a ``name``, or the path of a YAML or JSON file holding either (under
-        an optional top-level ``classes`` key). Unknown fields are an error.
+        with a ``name``, or the path of a TOML, JSON or YAML file holding either
+        (under an optional top-level ``classes`` key). YAML needs PyYAML, which
+        pydra does not depend on. Unknown fields are an error.
         """
         if isinstance(source, (str, Path)):
             path = Path(source)
             text = path.read_text()
             if path.suffix == ".json":
                 source = json.loads(text)
+            elif path.suffix == ".toml":
+                source = tomllib.loads(text)
             else:
-                import yaml
-
+                try:
+                    import yaml
+                except ImportError as e:
+                    raise ImportError(
+                        f"reading {path.name} needs the 'pyyaml' package; install it "
+                        f"or write the classes as TOML or JSON"
+                    ) from e
                 source = yaml.safe_load(text)
         if isinstance(source, ty.Mapping) and set(source) == {"classes"}:
             source = source["classes"]

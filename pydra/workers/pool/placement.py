@@ -139,6 +139,8 @@ def _candidate_reason(res: ComputeResources, cls: WorkerClass) -> "str | None":
     else:
         if cls.device != "cpu":
             return "a request without gpus is placed on cpu classes only"
+    if cls.tags and res.tags and not cls.tags & set(res.tags):
+        return f"class tags {sorted(cls.tags)} share none of the request's {sorted(res.tags)}"
     if res.cpus is not None and cls.cpus is not None and res.cpus > cls.cpus:
         return f"cpus {res.cpus} exceeds {cls.cpus}"
     need = parse_size(res.mem)
