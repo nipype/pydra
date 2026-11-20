@@ -211,7 +211,8 @@ def test_entries_without_header_is_legacy(root, expected, tmp_path, name):
     (tmp_path / "root" / name).mkdir()
     with pytest.raises(LegacyLayout) as info:
         open_layout(root, expected)
-    assert "migrat" in str(info.value).lower()
+    message = str(info.value)
+    assert "empty directory" in message and "migrat" not in message.lower()
     assert not (tmp_path / "root" / HEADER_NAME).exists()
 
 
@@ -413,6 +414,18 @@ def test_legacy_rechecks_header_after_scan(root, expected, tmp_path, monkeypatch
 
     monkeypatch.setattr(layout, "_sweep_and_scan", interleaved)
     assert open_layout(root, expected) == expected
+
+
+@pytest.mark.parametrize(
+    "name", [".pydra-succeeded", "python-0123456789abcdef0123456789abcdef"]
+)
+def test_a_pickle_store_cache_is_named_with_the_way_on(root, expected, tmp_path, name):
+    (tmp_path / "root" / name).mkdir()
+    with pytest.raises(LegacyLayout) as info:
+        open_layout(root, expected)
+    message = str(info.value)
+    assert "PickleStore cache" in message and 'store="pickle"' in message
+    assert "empty directory" in message and "migrat" not in message.lower()
 
 
 def test_legacy_message_says_new_root_is_empty(root, expected, tmp_path):
