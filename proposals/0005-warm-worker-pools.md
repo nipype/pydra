@@ -1,6 +1,6 @@
 # Proposal 0005: warm worker pools, resident state and GPU-fit placement
 
-Status: proposed, for maintainer discussion; revision 3. Branch `rfc/warm-worker-pools`, off
+Status: proposed, for maintainer discussion; revision 4. Branch `rfc/warm-worker-pools`, off
 `enh/execution-extensions` at `529d2efa`. Line references are to `529d2efa` unless another commit is
 named; `enh/execution-extensions` has since moved to `68090364`, which still has `prove()` and no
 public `try_take()`. RFC 0002 is #930 at `6a9ececb`, RFC 0003 #931 at `36546b9f`, RFC 0004 #932 at
@@ -11,8 +11,8 @@ RFC 0004 I0–I9), proposal 0001's items carry the prefix "0001" (0001 A1, 0001 
 implementation plan's sub-tasks (P4c, P9, I6a, I6b) are marked "plan task". senselab is cited at
 `sensein/senselab` `2.x` @ `4472cfbb`; `rt/` is `packages/senselab-core/src/senselab_core/runtime/`
 and `ex/` is `rt/execution/`. Revision 2 answered the architecture review of revision 1; revision 3
-answers the verification of revision 2 (protocol gaps N1–N7, table gaps D1–D3). §13 maps each item to
-the text that resolves it.
+answered the verification of revision 2 (protocol gaps N1–N7, table gaps D1–D3); revision 4 answers the
+check of revision 3 (I1–I4, M1–M6). §13 maps each item to the text that resolves it.
 
 This proposal replaces proposal 0001's I (`pydra-workers-pool`, 0001 §3.7) and the provider and
 batching parts of H (0001 §3.6). It answers RFC 0002 §5's question about run identity: it belongs to
@@ -86,8 +86,8 @@ measurements (§9). No pydra API names senselab, audio or a model family; sensel
 
 **What the protocol guarantees.** At most one committed result per key (RFC 0003 §5.1's first writer
 wins; the claim proof before `publish` only narrows the window in which a lost holder publishes, §4.3);
-never two executions in one work directory, because every execution in a pool runs under an attempt
-allocated by an exclusive create and never reused (§5.5); no job left unclaimed while a worker of its
+never two executions in one work directory, because every execution start in a pool, reruns included,
+runs under an attempt allocated by an exclusive create and never reused (§5.5); no job left unclaimed while a worker of its
 class lives. It does not guarantee exactly-once execution: a job whose holder is lost may run again
 under a new attempt (senselab ADR-003, "Not guaranteed: exactly-once execution").
 
@@ -398,11 +398,12 @@ class WarmPool:                                   # an RFC 0002 §3.2 Executor
   that must proceed at the same time uses its own root. Two coordinators that start on a free pool at
   once both take an epoch; the epoch fence (§5.3) stops the older one, whose run ends `RunIncomplete`
   with reason `PoolFenced` and can be resubmitted.
-- **Lifecycle.** `close` writes the coordinator's `ended` mark and stops the substrate-started workers of
-  the pool that `substrate.live()` lists, including those a dead predecessor started; workers started by
-  hand (`ExternalSubstrate`) are left running. `pydracli pool collect` removes ended coordinators'
-  directories, settled tickets, and the work directories of attempts that were taken over or withdrawn
-  once no unsettled ticket names a payload in them (§5.2, §5.5).
+- **Lifecycle.** `close` writes the coordinator's `ended` mark. A coordinator that still holds the newest
+  epoch then stops the substrate-started workers of the pool that `substrate.live()` lists, including those a dead predecessor started; workers started by
+  hand (`ExternalSubstrate`) are left running. A fenced coordinator (`PoolFenced`) stops nothing, since the
+  workers serve the newer one. `pydracli pool collect` removes ended coordinators' directories, settled
+  tickets, and the work directories of attempts that were taken over or withdrawn once no unsettled ticket
+  names a payload in them (§5.2, §5.5). It never removes a job's highest follow generation (§5.1).
 
 ### 4.2 Queues, tickets and routing
 
@@ -452,9 +453,12 @@ one loop:
    it is `None`. Write the ready mark.
 2. **Claim** a ticket (§4.2) under a claim lease (§5.3), hand the claim to the beater and wait for its
    acknowledgement, then re-judge the ticket against the read hardware (§3.3). Before each job the worker
-   reads the job's newest follow generation and the ticket's outcomes for it, and skips the job, writing
-   nothing, when the generation names another ticket or another attempt, or when the job has a
-   `withdrawn` outcome (§5.5).
+   reads the job's newest follow generation. It takes the job's attempt from that generation, never from
+   the ticket file (which is never rewritten after a takeover). It skips the job, writing nothing, when that
+   generation names another ticket or the job has a `withdrawn` or `expired` outcome there (§5.5).
+   Otherwise it creates the attempt's `started` mark by exclusive create. If the mark exists, the attempt
+   has already run once (a release after a stopped call, a content retry), so the worker first writes the
+   next generation (`cause: "restart"`) naming this ticket and starts that attempt instead (§5.5).
 3. **Load** the ticket's residency through the `ResidentSet`: warm environments by `warm(roots,
    device)` (restarting one whose roots do not cover the ticket, §3.1), providers by `load(spec,
    device)`. A failure here is a load fault (§6): it never charges a job.
@@ -466,7 +470,10 @@ one loop:
    `:590`). The proof and the rename are not one atomic step, and a holder learns of a loss late
    (§5.3), so the proof narrows the window in which a lost holder publishes but does not close it; the
    guarantee of one committed result is the store's first writer wins (RFC 0003 §5.1). Before the call
-   the worker sends the call's deadline to the beater (§5.3, "Job timeout"). Python tasks run in-process with
+   the worker writes the call record `workers/<token>/calls/<seq>.json`, naming every job and attempt in
+   the call, by exclusive create, and sends it with the call's deadline to the beater (§5.3, "Job
+   timeout"). It writes `<seq>.done` when the call returns. A loss is charged as a crash only to the jobs
+   of a call that has a record and no `done` (§5.5). Python tasks run in-process with
    provided fields bound; shell tasks run through the warm environment when it `covers` the job,
    otherwise through the environment's cold `execute`.
 5. **Settle each job as it finishes**: its measurement first, then its outcome record, then the
@@ -598,7 +605,8 @@ class Substrate(Protocol):
     settled/<digest>-<count>            an O_EXCL empty file each time the ticket's outcome count reaches <count>
     held-<epoch>-<label>                a hold of a residency on this queue (§6)
   follow/<checksum>-<fingerprint>/<g>   generation g of the job: an O_EXCL regular file naming its ticket and attempt
-  workers/<token>/                      lease/, ready.json, samples.jsonl
+  follow/<checksum>-<fingerprint>/<g>.started  O_EXCL: attempt <g> was started, by which worker token
+  workers/<token>/                      lease/, ready.json, samples.jsonl, calls/<seq>.json and <seq>.done (O_EXCL)
   calibration/                          the default DirectoryCalibration
   private/                              Slurm logs; 0700
 ```
@@ -620,13 +628,17 @@ outcomes per job and attempt (§4.3 step 5), probe marks left to clients, and th
   one, whose count includes its own outcome. The last count is therefore always written.
 - **Follow generations.** The follow index is a directory per job, `follow/<checksum>-<fingerprint>/`,
   holding numbered generations. A generation is an `O_EXCL` regular file, never modified or removed while
-  the pool lives (only `collect` removes a settled job's directory): `{"ticket": <digest>, "queue":
-  <label>, "attempt": <attempt>, "cause": "put" | "replaced" | "split" | "takeover", "prior": <attempt> |
-  null, "alone": <bool>, "uuid": …}`. The newest generation names the ticket that holds the job and the
+  the pool lives (`collect` removes a settled job's generations except the highest, which stays as the durable
+  record that keeps numbering from restarting at 0): `{"ticket": <digest>, "queue":
+  <label>, "attempt": <attempt>, "cause": "put" | "replaced" | "split" | "takeover" | "restart" | "ladder",
+  "phase": "call" | "load" | null, "prior": <attempt> | null, "charged": <bool>, "uuid": …}`. The newest generation names the ticket that holds the job and the
   attempt it runs under; moving a job writes generation `g+1`, and nothing is ever removed and recreated.
   `g` is allocated as one more than the highest listed; on `EEXIST` the writer lists again and takes the
   next number. The job's attempt is `<pool id>.<g>` (§5.5), so the allocation that orders the index is
   also the one that makes attempts unique.
+- **Outcome records are exclusive creates; the first one wins.** A worker whose `done` meets an existing
+  `expired` (§5.3) writes nothing more for that job; its published result, if any, is found by the
+  taker's lookup (§5.5).
 - **Every write is synced.** Through `StorageDir` (RFC 0003 P1): descriptor-relative, `O_NOFOLLOW`,
   staged, file and directory fsynced before the link, never modified in place. senselab's adversarial
   review found unsynced exclusive writes in its own queue and run directory (R-290), and its outcome link
@@ -643,14 +655,15 @@ A ticket:
 ```json
 {"format": "pool-ticket@1", "queue": "gpu-h100#3f…", "node": "wf/embed",
  "residency": [{"kind": "provider", "name": "hf-model", "spec": "json@1:…"}],
- "batch": 16, "roots": ["/data/study-a"],
+ "batch": 16, "roots": ["/data/study-a"], "ladder": ["gpu-h100-80", "gpu-b200"],
  "jobs": [{"checksum": "…", "fingerprint": "…", "attempt": "9c41e07a5b2d.0", "runner_attempt": 0,
            "payload": {"codec": "private-pickle@1", "path": "<work dir>/_job.pklz", "sha256": "…"},
            "units": 4.6}]}
 ```
 
 A job's `attempt` is the pool attempt of the generation that put it in this ticket (§5.5);
-`runner_attempt` is the attempt the `GraphRunner` assigned (RFC 0002 R7), carried for reporting only. A
+`ladder` is the rest of the job's placement order, computed by the coordinator's `Fit` at submit (§3.3); a
+claim holder moves a job up by it without judging (§5.5). `runner_attempt` is the attempt the `GraphRunner` assigned (RFC 0002 R7), carried for reporting only. A
 fresh runner may start its attempts at 0 again, which is why the pool never uses the runner's attempt as
 a work directory's address.
 
@@ -697,21 +710,31 @@ waited until its 6 h limit (T24-9, §9). A test (W4) fails if a pool module take
     `"external"`, `try_take()` and `__enter__` take the lease without starting `_Heartbeat`, and the
     property `token_dir` gives the holder's token directory. `prove()` is unchanged: it makes and removes
     a `proof-<uuid>` directory, which never collides with a beat.
-  - `LeaseBeater`, a loop in its own process that beats any number of token directories by the same
+  - `LeaseBeater(on_expire=None, kill_after=None)`, a loop in its own process that beats any number of token directories by the same
     rule as `_Heartbeat` (`beat-<n+1>` made, `beat-<n>` removed; `ENOENT`/`ESTALE` is a loss; a failure
     lasting `stale_after` is a loss), counting `n` per directory. It is the only beater of each directory
-    it holds, so no two beaters race one `beat-<n+1>`.
-  - `BeaterClient`, the holder's end of a pipe to it, with four messages. `hold(token_dir, settings)`:
+    it holds, so no two beaters race one `beat-<n+1>`. `on_expire(token_dir, payload)` is an importable
+    callable run in the beater process when a deadline passes. `kill_after` is the holder's policy, not
+    L0's: when set, the beater sends `SIGKILL` to the holder's pid if no `ack_expired` arrives within
+    that many seconds of `expired`. L0's default is never to kill.
+  - `BeaterClient`, the holder's end of a pipe to it. `hold(token_dir, settings)`:
     the beater starts beating and acknowledges; the worker runs nothing under a claim before the
     acknowledgement. `release(token_dir)`: the beater stops beating that directory and acknowledges, and
     only then does the holder release (rename the token directory away), so a release never reads as a
-    loss. `deadline(token_dir, at | None)`: sets or clears the directory's expiry (job timeout, below).
-    From the beater: `lost(token_dir, reason)` when a beat finds the directory gone or failing, and
-    `expired(token_dir)` when a deadline passes. A reader thread in the holder turns `lost` into the
+    loss. `deadline(token_dir, at | None, payload=None)`: sets or clears the directory's expiry and the JSON
+    payload handed to `on_expire` (job timeout, below). `ack_expired(token_dir)`: the holder has stopped
+    the expired call. From the beater: `lost(token_dir, reason)` when a beat finds the directory gone or
+    failing, and `expired(token_dir)` when a deadline passes, after `on_expire` has run and beating of
+    that directory has stopped. A `hold` or `release` not acknowledged within `renew_interval` is treated
+    as the beater's death (a beater wedged on a hard mount must not block the holder while its claims go
+    stale). A reader thread in the holder turns `lost` into the
     lease's lost state, so its next `prove()` answers `False` without a storage round trip; a call that
     holds the GIL delays only that bookkeeping, since `prove()` before `publish` asks the storage anyway.
-  - A holder whose pipe reaches end of file has lost its beater: it takes no new claim and recycles
-    (§4.3 step 7).
+  - A holder whose pipe reaches end of file, or whose acknowledgement times out, has lost its beater: it
+    takes no new claim and recycles (§4.3 step 7).
+  The pool's one-shot takes (claim, cancel, move) use a fresh `DirectoryLease` per attempt, because
+  `try_take()` keeps the bounds of a wait between calls and raises `LeaseTimeout` once they pass
+  (integration `lease.py:774-790`); L0 adds no other take call.
   The worker runs no in-process beat thread while it has a beater: every lease it takes is taken with
   `beat="external"`. The coordinator, which runs no task code, beats its own lease with the thread.
 - **Settings, whole.** `pool.json` records the full `LeaseSettings` (`stale_after`, `renew_fraction`,
@@ -733,18 +756,24 @@ waited until its 6 h limit (T24-9, §9). A test (W4) fails if a pool module take
   start of about 0.5 s per worker; that cost is accepted. The worker's loop still calls `prove()` every
   renewal interval (§4.3 step 6), so a worker whose beater died or lagged learns it from the storage.
 - **Job timeout.** Because the beater keeps a wedged call's claim alive, the pool bounds a call
-  explicitly. Before each call the worker sends `deadline(claim, now + T + timeout_grace)`, where `T` is
+  explicitly. Before each call the worker sends `deadline(claim, now + T + timeout_grace, call record)`, where `T` is
   the sum of the call's jobs' `ComputeResources.time`, or `PoolSettings.call_timeout` for a job that
   declares none, and `timeout_grace` is a `PoolSettings` field (default 60 s, unmeasured); it clears the
   deadline when the call returns. With neither figure there is no deadline, and the bound is the worker's
-  own time limit. When a deadline passes, the beater stops beating that claim, writes each of the call's
-  jobs an `expired` outcome under its attempt (the pool's beater entry point carries the call's jobs with
-  the deadline), and sends `expired`. A worker that can stop the call (a subprocess, a provider's process,
-  a warm environment's command) stops it and recycles (§4.3 step 7), since in-process state after an
-  abandoned call is not trusted. A worker that does not acknowledge within `timeout_grace` (an in-process
-  call holding the GIL, or a call stuck in a driver) is sent `SIGKILL` by the beater, which then exits.
-  Either way the claim goes stale and is taken over under fresh attempts (§5.5); the taker treats an
-  `expired` prior attempt as a resource fault at a call (§6), not as a crash.
+  own time limit. The pool's beater is `LeaseBeater(on_expire=pool_expire, kill_after=timeout_grace)`.
+  When a deadline passes, the beater stops beating that claim and runs `pool_expire`, which writes each job
+  in the call record an `expired` outcome under its attempt (first writer wins against a late `done`,
+  §5.1), then sends `expired`. A worker that can stop the call (a subprocess, a provider's process, a warm
+  environment's command) stops it, sends `ack_expired` and recycles (§4.3 step 7), since in-process state
+  after an abandoned call is not trusted. A worker that does not acknowledge within `timeout_grace` (an
+  in-process call holding the GIL, or a call stuck in a driver) is killed by the beater, which then exits.
+  Either way the claim goes stale and is taken over under fresh attempts (§5.5). The taker looks the job up
+  in the store first (a committed result settles `done`) and only then treats an `expired` prior attempt
+  as a resource fault at a call (§6), never as a crash. Jobs the worker held that were not in the call are
+  re-placed uncharged. A timeout moves only to a ladder class whose `time` is larger or whose `gpu_type`
+  differs; otherwise it fails at once. A hang therefore costs at most `(resource_moves + 1) × (T + 2 ×
+  timeout_grace + stale_after)`, plus log₂ n such waits when it was a batched call of n jobs, and each wait
+  kills a warm worker.
 - **Worker lease** `workers/<token>/lease/`: held for the worker's life. The pool reads it to count live
   workers and to tell a slow worker from a dead one.
 - **Claim lease** `claims/<digest>.lease/`: one per claimed ticket. Taking a claim uses `try_take()`, so a
@@ -796,32 +825,39 @@ The pool directory never holds a result.
   follow generation (§5.1) that put it where it runs, allocated by an exclusive create and never reused;
   the pool id is a random value written once to `pool.json`, so two pools over one store cannot collide.
   Every placement writes a generation: the first put (`cause: "put"`), a re-placement (`"replaced"`), a
-  half of a split ticket (`"split"`) and a takeover (`"takeover"`). Two executions of one job may happen;
-  two in one work directory never do, because no two generations share a number. The runner's own attempt
+  half of a split ticket (`"split"`), a takeover (`"takeover"`) and a move up the ladder (`"ladder"`).
+  Every start of an attempt that already started writes one too (`"restart"`): the claimant creates the
+  attempt's `started` mark before running it, and finding the mark present it writes generation `g+1`
+  first (§4.3 step 2). That covers a release after a stopped call (SIGTERM), a content retry under
+  `content_attempts`, and any rerun of a job whose attempt has run. `collect` keeps each job's highest
+  generation, so a rerun after `collect` continues from it. Two executions of one job may happen; two in
+  one work directory never do, because no attempt is started twice. The runner's own attempt
   is carried as `runner_attempt` and never addresses a work directory, since a resubmitted run's fresh
   `GraphRunner` may number from 0 again.
-- **A job leaves a ticket only by `withdrawn`.** A `withdrawn` outcome is written for a job under the
-  ticket's attempt by a process that holds the ticket's claim lease, and carries `reason` (`"cancel"`,
+- **A job leaves a ticket only by `withdrawn`.** A `withdrawn` outcome is written for a job under its
+  current attempt (the attempt of its newest generation naming that ticket) by a process that holds the ticket's claim lease, and carries `reason` (`"cancel"`,
   `"replaced"`, `"split"` or `"refused"`) and, when the job moved, `by`: the ticket that now holds it. A
   process that does not hold the claim takes it with `try_take()`, which succeeds only on a ticket that is
   unclaimed or whose claim is stale; a ticket with a live claim is never withdrawn from under its holder.
-  A worker skips a job that has a `withdrawn` outcome, or whose newest generation names another ticket or
-  another attempt (§4.3 step 2), and writes nothing for it.
+  A worker skips a job that has a `withdrawn` outcome, or whose newest generation names another ticket
+  (§4.3 step 2), and writes nothing for it.
 - **Moving a job keeps R-273 closed.** Every move writes, in this order: (1) the new ticket file, with no
   slot yet; (2) for each moved job, generation `g+1` naming the new ticket and the job's fresh attempt;
   (3) the new ticket's slot; (4) the `withdrawn` outcomes on the old ticket; (5) the release of the old
   claim. A first put writes the ticket, then generation 0, then the slot. At every instant, then, each
   job's newest generation names a ticket that holds it: the old one until (2), the new one after it. A
   coordinator decides whether to put a job by reading that newest generation; it puts the job again only
-  when the job has no generation or the newest names a ticket in which the job has a final outcome. No
+  when the job has no generation or the newest names a ticket in which the job has a final outcome, or a
+  settled ticket `collect` has removed. No
   entry is removed or rewritten while the pool lives, so there is no window in which a live job looks
   unheld and is re-cut (R-273). A process that dies between (2) and (3) leaves a ticket without a slot,
   which no worker can claim; the next process that reaches the old ticket (a taker, or a resuming
   coordinator through `try_take()`) finds the newest generation naming a ticket without a slot and writes
   the slot. A duplicate slot is harmless: a ticket is claimed by its digest's lease.
 - **A takeover is a new attempt.** A worker that takes over a stale claim writes `losses/<digest>/<n>`.
-  For a single-job ticket it writes the job's next generation (`"takeover"`, `prior` the lost attempt,
-  `alone: true`) naming the same ticket and runs the job under that attempt in a new work directory (RFC
+  For a single-job ticket it first looks the job up in the store (a committed result settles `done`), then
+  writes the job's next generation (`"takeover"`, `prior` the lost attempt, `charged` by the rule below)
+  naming the same ticket and runs the job under that attempt in a new work directory (RFC
   0003 §5.4 addresses it by attempt), with a new outcome record naming it. A multi-job ticket is split
   instead (below). The loser's work directory is left alone and removed by `collect`. If the loser is
   still running, its next generation check skips its remaining jobs, and its next proof fails and refuses
@@ -832,12 +868,23 @@ The pool directory never holds a result.
   outcome into two half-tickets by the move order above: each job gets a fresh generation (`"split"`,
   `prior` the lost attempt), so a half's jobs never share an attempt with the loser, with the other half,
   or with any later split of a half, however deep the splitting goes. The taker then releases and claims
-  like any worker. A generation's `alone` says whether the lost ticket held only this job, so it is
-  false on a split. A job's crash count is the number of its generations with `prior` set whose `alone` is
-  true and whose prior attempt has no `expired` outcome; at `crashes_charged` (default 2, as senselab's
+  like any worker. **Crash charging follows the call record** (§4.3 step 4). The taker reads the lost
+  attempt's `started` mark for the worker token, and that worker's newest call record without `done`. A
+  generation is `charged` only when the lost attempt was the only job of that in-flight call and has no
+  `expired` outcome. A job that was in the call with others is split further, uncharged; a job the worker
+  had gathered or claimed but not yet started, or that was outside the in-flight call (a neighbour of a
+  timed-out call), is re-placed uncharged. A job's crash count is the number of its generations with
+  `charged` true; at `crashes_charged` (default 2, as senselab's
   profiles) the job is `Failed(JobCrashedWorker)`, a content fault of that job. A job that completes on a
   fresh worker is not charged; its survived losses are recorded. A prior attempt with an `expired` outcome
   was a timeout (§5.3), handled as a resource fault at a call (§6).
+- **Who moves a job up the ladder.** The process holding the job's claim: the worker after an
+  out-of-memory call or a load fault, the taker after an `expired` attempt (store lookup first). It moves
+  the job to the next class in the ticket's `ladder` by the five-step order, `cause: "ladder"` with
+  `phase` set, under a fresh generation, using no `Fit` of its own. `resource_moves` is counted from the
+  job's generations: those with `cause: "ladder"` and `phase: "call"`. Load moves are bounded by the
+  ladder's height and not charged. With the ladder or the budget spent, the holder writes `failed`
+  (`ResourceExhausted`).
 - **The coordinator dies.** Workers keep running claimed and queued tickets and publish to the store.
   Substrate-started workers exit after `orphan_after_s` with no live coordinator lease (§4.3 step 7). A
   resubmitted run is a new `GraphRunner` over the same store (RFC 0002 §3.1 "Resume"), whose coordinator
@@ -849,8 +896,11 @@ The pool directory never holds a result.
   `ExternalSubstrate`; otherwise the coordinator takes the ticket's claim by `try_take()`, moves the job to
   a ticket of a class it starts (`withdrawn`, reason `"replaced"`, under a fresh generation), and releases.
   A followed ticket of a class nobody starts therefore cannot hang a run, and a claimed ticket is never
-  withdrawn under a running holder. A followed claim that later goes stale is handled the same way when the
-  follower next sees it. senselab's resume chain (start, SIGKILL of the coordinator, resume on another host)
+  withdrawn under a running holder. A followed claim that later goes stale is handled the same way. The
+  follower judges a followed claim's staleness only for a ticket whose settled count has not moved for
+  `stale_after`, and at most once per `stale_after`, so its cost stays one listing per queue per poll. On
+  resume, before the follow rule, a job whose newest generation names a ticket where it has a `refused`
+  withdrawal is re-placed (§3.3). senselab's resume chain (start, SIGKILL of the coordinator, resume on another host)
   completed 1000 of 1000 with at most one execution per key under the follow rule (§9).
 - **A worker is preempted.** Slurm's SIGTERM is the worker's SIGTERM: finished jobs are settled, the rest
   released. A SIGKILL is a death.
@@ -867,8 +917,8 @@ senselab's profiles differ the table says so (`rt/data/profiles/laptop.yaml:111-
 
 | Fault | Typed by | Effect inside the pool | Outcome to the runner |
 |---|---|---|---|
-| content: the task raised, a command exited non-zero, an exception element of a batched call | the classifier's default for exceptions from the task's own code | retried until `content_attempts` (default 1, no retry, as pydra does today; senselab's default is 2) | errored `Result`, or `Failed` when nothing ran |
-| resource at a call: out of memory, a job timeout | name table (`MemoryError`, `torch.OutOfMemoryError` by qualified name, no import), the worker's own cgroup OOM event; a timeout is an `expired` outcome written by the beater when a call's deadline passes (§5.3), acted on by the taker | the residency is reloaded (§4.4); a batched call is bisected; a lone job moves up the ladder (§3.3) at most `resource_moves` times (default 2; senselab's field is `resource_replacements`, default 0), uncharged | `Failed(ResourceExhausted)` once the ladder or the budget ends |
+| content: the task raised, a command exited non-zero, an exception element of a batched call | the classifier's default for exceptions from the task's own code | retried until `content_attempts` (default 1, no retry, as pydra does today; senselab's default is 2), each retry under a `"restart"` generation (§5.5) | errored `Result`, or `Failed` when nothing ran |
+| resource at a call: out of memory, a job timeout | name table (`MemoryError`, `torch.OutOfMemoryError` by qualified name, no import), the worker's own cgroup OOM event; a timeout is an `expired` outcome written by the beater when a call's deadline passes (§5.3), acted on by the taker after a store lookup | the residency is reloaded (§4.4); a batched call is bisected; a lone job is moved up the ticket's `ladder` by the claim holder (§5.5) at most `resource_moves` times, counted from its `"ladder"` generations (default 2; senselab's field is `resource_replacements`, default 0), uncharged; a timeout moves only to a class with a larger `time` or another `gpu_type` | `Failed(ResourceExhausted)` once the ladder or the budget ends |
 | resource at a load | a load raising the above | an `UnfitRecord` is written for the residency and the class; the ticket's jobs move up the ladder, uncharged; a load is never an item | `Failed(Unplaceable)` when no larger class exists |
 | infrastructure: a load that failed otherwise, a broken environment, a lost service, a storage error | anything raised by the pool or an environment's start, and every unclassified exception there (flagged `gap`) | requeued on the same class, uncharged; after `infrastructure_replacements` failures of one residency in the current coordinator epoch (default 3; senselab's default is 6) the residency is held on its queue (`held-<epoch>-<label>`) | `NotRun(held=True)` for each of its jobs, reason naming the residency and the latest cause |
 | hardware below a ticket's need: a `gpu_mem=None` class whose worker reads less device memory than the ticket declares | the claiming worker's re-judgement (§3.3, `WrongHardware`) | the worker writes `withdrawn` (reason `"refused"`, the memory read) and releases unrun; the coordinator's follower re-places the jobs from the next class up under fresh attempts, uncharged; later placements use the read memory | `Failed(Unplaceable)` when no larger class exists; otherwise none |
@@ -1136,16 +1186,16 @@ exit steps 2 to 5 rerun at the pin.
 
 | PR | Contents | Depends on | senselab-needed |
 |---|---|---|---|
-| L0 | `DirectoryLease.at(lockfile, settings, beat=)` in `engine/lease.py`, with `beat="external"` taking without a heartbeat thread and exposing `token_dir`; `LeaseBeater` (a process that beats many token directories, with deadlines) and `BeaterClient` (`hold`, `release`, `deadline`; `lost`, `expired` back) (§5.3); `LeaseSettings` serialised for `pool.json` and compared on its four staleness fields, `max_wait` excluded. Tests: a named lease takes, beats, goes stale and is taken over through `try_take`; two settings differing only in `attribute_delay` compare unequal, two differing only in `max_wait` compare equal; `test_external_lease_starts_no_thread`; `test_lease_beaten_from_another_process` (taken in process A with `beat="external"`, beaten by a `LeaseBeater` in process B, proved in A beyond 3 × `stale_after` under fast settings); `test_beater_reports_loss` (the token directory removed by a taker: B sends `lost`, A's `prove()` is `False`); `test_release_is_not_a_loss` (A releases after B's acknowledgement; no `lost`); `test_deadline_stops_beating` (B stops at the deadline, sends `expired`, and a third process takes the lease over by `try_take` after `stale_after`); `test_beater_eof` (B killed: A sees end of file) | #928 (merged), RFC 0002 R6 (`try_take`) | yes |
+| L0 | `DirectoryLease.at(lockfile, settings, beat=)` in `engine/lease.py`, with `beat="external"` taking without a heartbeat thread and exposing `token_dir`; `LeaseBeater(on_expire, kill_after)` (a process that beats many token directories, with deadlines and payloads) and `BeaterClient` (`hold`, `release`, `deadline(token_dir, at, payload)`, `ack_expired`; `lost`, `expired` back; acknowledgement timeout of `renew_interval` = beater death) (§5.3); `LeaseSettings` serialised for `pool.json` and compared on its four staleness fields, `max_wait` excluded. Tests: a named lease takes, beats, goes stale and is taken over through `try_take`; two settings differing only in `attribute_delay` compare unequal, two differing only in `max_wait` compare equal; `test_external_lease_starts_no_thread`; `test_lease_beaten_from_another_process` (taken in process A with `beat="external"`, beaten by a `LeaseBeater` in process B, proved in A beyond 3 × `stale_after` under fast settings); `test_beater_reports_loss` (the token directory removed by a taker: B sends `lost`, A's `prove()` is `False`); `test_release_is_not_a_loss` (A releases after B's acknowledgement; no `lost`); `test_deadline_stops_beating` (B stops at the deadline, sends `expired`, and a third process takes the lease over by `try_take` after `stale_after`); `test_beater_eof` (B killed: A sees end of file); `test_deadline_payload_reaches_callback` (the payload sent with `deadline` is what `on_expire` receives, before `expired` is sent); `test_ack_timeout_is_beater_death` (a beater that stops answering: `hold` times out after `renew_interval` and A recycles); `test_kill_after_unacknowledged_expiry` (with `kill_after` set, no `ack_expired` kills the holder; unset, it never does) | #928 (merged), RFC 0002 R6 (`try_take`) | yes |
 | W1 | `WorkerClass` and its loader; `ComputeResources.gpu_mem`, `.residency`; `place()`, the ladder (across GPU types when unnamed), `Fit`, `DeclaredFit` with `time`, `ClassTried`, `Unplaceable`, `CanStart`. Tests: oversized job placed on the larger class; `test_ladder_crosses_gpu_type_when_unnamed`; the ladder stays on a named type; `test_time_exceeds_class_is_unfit`; `gpu_mem=None` places as unknown; fits nothing → `Unplaceable` naming every class and number; GPU request never placed on CPU; a class `can_start` refuses is skipped and recorded; placement leaves the checksum unchanged | 0001 F1 (merged) | yes |
 | W2 | `ResidentKey` over RFC 0004 §6.2 digests; `Provider`, `Provided[T, name]` as `Annotated`, `field(provided=)`; `ResidentSet` (LRU, host and device budgets, busy never evicted, `close` on evict); providers under `debug`. Tests: provided spec keyed and object not; the residency digest and the identity record use one digest; eviction order; a busy resident survives a tighter budget; `debug` loads once across two `Submitter` calls; unregistered provider is a wiring error | 0001 H0 (merged), RFC 0004 I0 | yes |
 | W2b | Process-owning providers: `load` that starts a process, `close` that stops its process group and waits, `measure` by PID, the cgroup baseline after each start. Tests: a provider whose `load` spawns a child; eviction kills the whole group and waits; a child's OOM is attributed to its call; a stopped provider's GPU memory is free before the next load | W2 | yes |
 | W3 | `Environment.warm(roots, device)` and `WarmEnvironment` for `Docker`, `Singularity`, `Lmod`; binding roots from `get_bindings`; restart once per new root up to `max_mount_roots`; isolation defaults; GPU flags at start; `max_jobs`; `setup`/`teardown` called; `bench_warm_environment` (`docker run` against `docker exec`, `apptainer exec` against an instance, 200 commands each). Tests (fakes for `docker`, `apptainer`, `lmod`): one `docker run -d`, N `docker exec`; one `module load` resolution for N commands; job A writes `$HOME/x` and `/tmp/y` and job B in the same instance sees neither; outputs owned by the submitting user; a job whose root was not mounted triggers one restart, not a cold run; beyond `max_mount_roots` the job runs cold; warm and cold outputs equal; `Native` returns `None`. Real-daemon Docker tests on the ubuntu runner behind the existing marker; Apptainer on ORCD | RFC 0004 I6 (plan tasks I6a, I6b), W2 | no |
-| W4 | Pool storage: `pool.json`, queues, tickets with roots, `O_EXCL` slot files, follow generations (`follow/<ck>-<fp>/<g>`) and pool attempts `<pool id>.<g>`, the move order (§5.5), claim leases on L0, per-job-and-attempt outcome records with uuid read-back and `withdrawn` reasons, settled marks with recount on `EEXIST`, holds, `losses/`; `PrivatePickle` with the ownership walk and digest, `JobCodec`; `pydracli pool probe`. Tests ported from senselab's `queue_test.py`; a counting fake `StorageDir` asserts every index, outcome and settle write syncs file and directory; a lost `link` reply is read back as this write's; `ESTALE` reads as absent; no symlink is made; a pickle in a group-writable directory is refused; a ticket never contains a pickle; `probe` refuses a root without `O_EXCL` create; a lint test that no pool module takes a host-bound lock; `test_settle_count_race` (two writers computing one count: both outcomes covered by a written mark); `test_generation_allocation_race` (two writers of one job's next generation: distinct numbers, distinct attempts); `test_move_never_unheld` (a move killed after each of its five steps: a coordinator reading the index always finds a ticket holding the job, and puts nothing twice); `test_split_of_split_attempts_distinct`; `test_withdraw_needs_claim` (`try_take` on a live claim fails and nothing is written) | L0, RFC 0003 P1, RFC 0003 P4 (plan task P4c) | yes |
-| W5 | The worker without warm environments: the beater subprocess over L0's `BeaterClient` (leases taken with `beat="external"`, `lost` handling, end of file recycles), call deadlines and recycling on `expired` (§5.3), the generation and `withdrawn` check before each job, claim loop (oldest first, warm preference, quantum, gather once warm), hardware check and `gpu_mem` fill, ready mark, proofs, `Job.run` with `chdir=False` under the pool attempt with the claim proved before `publish`, per-job settle after measurement, `Sample`s, SIGTERM drain, idle and orphan exit, process-group stop; `pydracli pool worker`. Tests ported from `pool_worker_test.py`; `test_gil_bound_call_keeps_claim` (a task holding the GIL for 3 × the renewal interval under fast settings keeps its claim); a settings mismatch in any of the four fields refuses to start; a mis-typed GPU grant fails the start; `test_wedged_call_times_out` (an in-process call that never returns past its deadline: `expired` outcomes, the worker killed, the job taken over under a fresh attempt and typed a resource fault); `test_worker_skips_withdrawn_and_superseded`; `test_no_heartbeat_thread_in_worker`; a `WrongHardware` re-judgement writes `withdrawn` (reason `refused`) and runs nothing | W2, W2b, W4, RFC 0003 P8 | yes |
+| W4 | Pool storage: `pool.json`, queues, tickets with roots, `O_EXCL` slot files, follow generations (`follow/<ck>-<fp>/<g>`) and pool attempts `<pool id>.<g>`, the move order (§5.5), claim leases on L0, per-job-and-attempt outcome records with uuid read-back and `withdrawn` reasons, settled marks with recount on `EEXIST`, holds, `losses/`; `PrivatePickle` with the ownership walk and digest, `JobCodec`; `pydracli pool probe`. Tests ported from senselab's `queue_test.py`; a counting fake `StorageDir` asserts every index, outcome and settle write syncs file and directory; a lost `link` reply is read back as this write's; `ESTALE` reads as absent; no symlink is made; a pickle in a group-writable directory is refused; a ticket never contains a pickle; `probe` refuses a root without `O_EXCL` create; a lint test that no pool module takes a host-bound lock; `test_settle_count_race` (two writers computing one count: both outcomes covered by a written mark); `test_generation_allocation_race` (two writers of one job's next generation: distinct numbers, distinct attempts); `test_move_never_unheld` (a move killed after each of its five steps: a coordinator reading the index always finds a ticket holding the job, and puts nothing twice); `test_split_of_split_attempts_distinct`; `test_withdraw_needs_claim` (`try_take` on a live claim fails and nothing is written); `test_outcome_first_writer_wins` (`expired` then `done` for one attempt: `expired` stands); `test_collect_keeps_highest_generation`; tickets carry `ladder` | L0, RFC 0003 P1, RFC 0003 P4 (plan task P4c) | yes |
+| W5 | The worker without warm environments: the beater subprocess over L0's `BeaterClient` (leases taken with `beat="external"`, `lost` handling, end of file recycles), call deadlines and recycling on `expired` (§5.3), the generation and `withdrawn` check before each job, claim loop (oldest first, warm preference, quantum, gather once warm), hardware check and `gpu_mem` fill, ready mark, proofs, `Job.run` with `chdir=False` under the pool attempt with the claim proved before `publish`, per-job settle after measurement, `Sample`s, SIGTERM drain, idle and orphan exit, process-group stop; `pydracli pool worker`. Tests ported from `pool_worker_test.py`; `test_gil_bound_call_keeps_claim` (a task holding the GIL for 3 × the renewal interval under fast settings keeps its claim); a settings mismatch in any of the four fields refuses to start; a mis-typed GPU grant fails the start; `test_wedged_call_times_out` (an in-process call that never returns past its deadline: `expired` outcomes, the worker killed, the job taken over under a fresh attempt and typed a resource fault); `test_worker_skips_withdrawn_and_superseded`; `test_released_started_job_gets_fresh_attempt` (SIGTERM during a subprocess call, release, reclaim: a `"restart"` generation and a new work directory); a content retry runs under a new attempt; the call record is written before the call and `done` after; `test_no_heartbeat_thread_in_worker`; a `WrongHardware` re-judgement writes `withdrawn` (reason `refused`) and runs nothing | W2, W2b, W4, RFC 0003 P8 | yes |
 | W5b | Warm environments in the worker: shell tasks through `WarmEnvironment`, restarts on new roots, the cold fallback. Tests: a shell task in a warm Docker worker equals `debug`; a ticket with a new root restarts the environment once | W3, W5 | no |
-| W6 | `WarmPool` and `LocalSubstrate`: placement at submit, tickets per queue, one live coordinator per pool (`coordinator_wait`, `PoolBusy`, `PoolFenced`), follow (live claims always; unclaimed or stale tickets only for classes this coordinator starts, otherwise moved under `try_take`), the follower over settled marks and newest generations, re-placement after a `refused` withdrawal, read-back through `Job.result()`, outcome mapping, `cancel` → `NotRun`, `max_queued_jobs`, scaling with `can_start`, one worker per GPU, failed starts, lifecycle rules; `pydracli pool {status, release-hold, collect}`; `bench_pool_overhead` (10⁴ trivial jobs on `LocalSubstrate`: per-job wall and coordinator write time per job, `PrivatePickle` against a JSON codec). Tests: a 100-element round becomes tickets of at most `quantum_jobs`; resubmission follows live tickets and runs nothing twice; an unclaimed ticket of a class the new coordinator does not start is moved to a class it starts under fresh attempts; `test_claimed_ticket_not_withdrawn` (a live claim of a class the new coordinator does not start is followed, and its holder's work directory is never shared); `test_resumed_runner_attempt_zero_no_collision` (a fresh runner numbering from 0 gets distinct work directories); a `refused` ticket is re-placed one class up; `test_job_outlives_stale_after` (a job sleeps past `stale_after` with its beater stopped: takeover under a new attempt, two distinct work directories, one entry, the loser's `publish` refused); `test_follower_cost_10k_jobs` (one listing per queue per poll, by a counting fake); a pool whose workers never start holds its jobs (`RunIncomplete`); a second coordinator on a live pool waits, and with `coordinator_wait` raises `PoolBusy`; two coordinators racing for a free pool: the older is fenced (`RunIncomplete`, `PoolFenced`) and nothing runs twice; cancel withdraws only unclaimed or stale tickets; a hand-started worker survives the absence of a coordinator; `test_plain_workflow_untouched` (`"pydra.workers.pool" not in sys.modules` after `import pydra` and a `cf` run; no new files) | W5, RFC 0002 R7 | yes |
-| W7 | Faults: `classify` and the default table, `FaultBudgets`, one bisection engine with resource and crash triggers, reload after a resource fault, ladder moves, crash counting and `JobCrashedWorker`, holds per residency and epoch, timeouts from `expired` outcomes (bisected when batched, the ladder for a lone job), half-tickets with fresh generations. Tests ported from `bisection_engine_test.py`, `fault_class_test.py`, `pool_backend_oom_test.py`; `test_resource_fault_reloads_residency`; a load OOM moves up and charges nothing; a class survives a wrapper; a sibling's OOM does not type a `scancel`; a process-owning provider restarts its process after a resource fault; an `expired` prior attempt is a resource fault, not a crash | W6, W2b | yes |
+| W6 | `WarmPool` and `LocalSubstrate`: placement at submit, tickets per queue, one live coordinator per pool (`coordinator_wait`, `PoolBusy`, `PoolFenced`), follow (live claims always; unclaimed or stale tickets only for classes this coordinator starts, otherwise moved under `try_take`), the follower over settled marks and newest generations, re-placement after a `refused` withdrawal, read-back through `Job.result()`, outcome mapping, `cancel` → `NotRun`, `max_queued_jobs`, scaling with `can_start`, one worker per GPU, failed starts, lifecycle rules; `pydracli pool {status, release-hold, collect}`; `bench_pool_overhead` (10⁴ trivial jobs on `LocalSubstrate`: per-job wall and coordinator write time per job, `PrivatePickle` against a JSON codec). Tests: a 100-element round becomes tickets of at most `quantum_jobs`; resubmission follows live tickets and runs nothing twice; an unclaimed ticket of a class the new coordinator does not start is moved to a class it starts under fresh attempts; `test_claimed_ticket_not_withdrawn` (a live claim of a class the new coordinator does not start is followed, and its holder's work directory is never shared); `test_resumed_runner_attempt_zero_no_collision` (a fresh runner numbering from 0 gets distinct work directories); `test_rerun_after_collect_fresh_attempt`; a fenced coordinator's `close` stops no worker; a `refused` job whose coordinator died is re-placed on resume; followed claims are judged only for tickets idle for `stale_after`; a `refused` ticket is re-placed one class up; `test_job_outlives_stale_after` (a job sleeps past `stale_after` with its beater stopped: takeover under a new attempt, two distinct work directories, one entry, the loser's `publish` refused); `test_follower_cost_10k_jobs` (one listing per queue per poll, by a counting fake); a pool whose workers never start holds its jobs (`RunIncomplete`); a second coordinator on a live pool waits, and with `coordinator_wait` raises `PoolBusy`; two coordinators racing for a free pool: the older is fenced (`RunIncomplete`, `PoolFenced`) and nothing runs twice; cancel withdraws only unclaimed or stale tickets; a hand-started worker survives the absence of a coordinator; `test_plain_workflow_untouched` (`"pydra.workers.pool" not in sys.modules` after `import pydra` and a `cf` run; no new files) | W5, RFC 0002 R7 | yes |
+| W7 | Faults: `classify` and the default table, `FaultBudgets`, one bisection engine with resource and crash triggers, reload after a resource fault, ladder moves, crash counting and `JobCrashedWorker`, holds per residency and epoch, timeouts from `expired` outcomes (bisected when batched, the ladder for a lone job), half-tickets with fresh generations. Tests ported from `bisection_engine_test.py`, `fault_class_test.py`, `pool_backend_oom_test.py`; `test_resource_fault_reloads_residency`; a load OOM moves up and charges nothing; a class survives a wrapper; a sibling's OOM does not type a `scancel`; a process-owning provider restarts its process after a resource fault; an `expired` prior attempt is a resource fault, not a crash; `test_timeout_kill_spares_gathered_jobs` (a worker holding three gathered claims killed by one call's timeout: only that call's job is typed, the other two are re-placed uncharged); `test_expired_with_committed_result_settles_done` (a call that publishes during the grace period: the taker's lookup settles `done`, no ladder move); `test_resource_moves_counted_from_generations` (a resumed coordinator and a second taker see the same count); a timeout does not move to a class with the same `time` and `gpu_type` | W6, W2b | yes |
 | W8 | `SlurmSubstrate`: one `sbatch` per worker with typed `--gres`, scoped names, a timed-out submission looked up before any retry, the shared `squeue` poller, logs under `private/`, `can_start` with a CPU cap default. Tests ported from `substrates_test.py` with a fake `sbatch`/`squeue`; a submission that times out and lands is not doubled; marked Slurm tests in the existing Slurm CI container | W6, RFC 0002 R5 | yes |
 | W9 | Calibration: `Sample`, `UnfitRecord`, `TimeRecord`, `ParityRecord`, `DirectoryCalibration` (default under the root), `MeasuredFit` (`judge`, `batch` by the stated rule); `recheck_fraction` through `Verify`, writing `ParityRecord`s; `place` for `plan()`. Tests ported from `fit_test.py`, `pool_unfit_test.py`; an unfit record bound to a provider version stops binding after a version change; a re-check mismatch writes a parity record and one audit message; `plan()` shows the classes tried | W7, RFC 0002 R8, RFC 0003 P5 (`Verify`) | yes |
 | W10 | Batched calls: `python.define(batched=, units=)` returning `list[T \| BaseException]`, grouping by units, bisection through W7. Tests: a batched call's results equal the unbatched ones for pydra's own test tasks; `test_content_fault_in_batched_call_fails_one_job`; one crashing item isolated in log₂ n calls; a half that completed keeps its results | W7, W2 | later |
@@ -1233,6 +1283,21 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 | `max_wait` | Excluded from the settings comparison on purpose: it caps a waiter, not staleness (§4.3, §5.3). |
 | `gpu_mem=None` | Judged `"unknown"` and sorted last in the ladder; a `WrongHardware` refusal is re-placed by the coordinator from the next class up, with its own §6 row (§3.3, §6). |
 
+**Decided in revision 4** (from the check of revision 3; the owner ruled on each):
+
+| Question | Decision |
+|---|---|
+| I1 Reruns of a started job | Every start of an attempt that already started writes a `"restart"` generation first, detected by an exclusive `started` mark per attempt: a SIGTERM release after a stopped call, a content retry, any rerun. `collect` keeps each job's highest generation, so numbering never restarts (§4.3 step 2, §5.1, §5.5). |
+| I2 Crash charging | The worker writes a call record naming the call's jobs before invoking it (and gives it to the beater). A loss charges a crash only to the job that was alone in the in-flight call; jobs gathered or claimed but idle, or outside a timed-out call, are re-placed uncharged (§4.3 step 4, §5.5). |
+| I3 `expired` against a committed result | Outcome records are exclusive creates and the first wins. The taker looks the job up in the store before any ladder move. The claim holder performs the move by the five-step order from the ticket's `ladder`, and `resource_moves` is counted from `"ladder"` generations (§5.1, §5.5, §6). |
+| I4 L0's part of a timeout | `deadline(token_dir, at, payload)`, an `on_expire(token_dir, payload)` callback in the beater, `ack_expired`, and `kill_after` as the holder's policy (L0 never kills by default). A `hold`/`release` acknowledgement timeout of `renew_interval` is beater death (§5.3, L0). |
+| M1 Attempt source | A claimant takes each job's attempt from its newest generation, never from the ticket file (§4.3 step 2, §5.5). |
+| M2 Fenced `close` | Only a coordinator holding the newest epoch stops workers (§4.1). |
+| M3 Follower cost | Followed claims are judged only for tickets idle for `stale_after`, at most once per `stale_after` (§5.5). |
+| M4 Timeout on the ladder | A timeout moves only to a class with a larger `time` or another `gpu_type`; the worst-case cost of a hang is stated (§5.3, §6). |
+| M5 `refused` on resume | Re-placed before the follow rule applies (§5.5). |
+| M6 One-shot takes | A fresh `DirectoryLease` per take; L0 adds no `take_once()` (§5.3). |
+
 **Open for maintainers:**
 - Should `Provided[T, name]` also accept a provider class instead of a name, so a task package can ship its
   provider beside the task?
@@ -1246,6 +1311,23 @@ for writing a process-owning provider, and the worker protocol as a reference pa
   placement; W6's `bench_pool_overhead` measures the latter.
 
 ## 13. Changes in revisions
+
+### Revision 4
+
+Answers the check of revision 3 (`afac5394`).
+
+| Item | How it is addressed |
+|---|---|
+| I1 Attempt per execution | §2.1; §4.3 step 2 (`started` mark, `"restart"` generation); §5.1 layout, generation `cause`, `collect` keeps the highest; §5.5 "Every execution has a fresh attempt"; §6 content row; §4.1 Lifecycle; W5 `test_released_started_job_gets_fresh_attempt`, W6 `test_rerun_after_collect_fresh_attempt`, W4 `test_collect_keeps_highest_generation` |
+| I2 Crash charging | §4.3 step 4 (call record); §5.1 `workers/<token>/calls/`; generation `charged`; §5.5 "Crash charging follows the call record"; §5.3 "Job timeout"; W7 `test_timeout_kill_spares_gathered_jobs` |
+| I3 `expired` and the ladder | §5.1 "Outcome records are exclusive creates"; ticket `ladder`; §5.3 "Job timeout" (store lookup first); §5.5 takeover and "Who moves a job up the ladder"; §6 resource row; W4 `test_outcome_first_writer_wins`, W7 tests |
+| I4 L0 timeout hook | §5.3 `LeaseBeater(on_expire, kill_after)`, `deadline(token_dir, at, payload)`, `ack_expired`, acknowledgement timeout; L0 row with `test_deadline_payload_reaches_callback`, `test_ack_timeout_is_beater_death`, `test_kill_after_unacknowledged_expiry` |
+| M1 | §4.3 step 2; §5.5 "A job leaves a ticket only by `withdrawn`" |
+| M2 | §4.1 Lifecycle; W6 test |
+| M3 | §5.5 "The coordinator dies"; W6 test |
+| M4 | §5.3 "Job timeout" (arithmetic, class condition); §6; W7 test |
+| M5 | §5.5 "The coordinator dies"; W6 test |
+| M6 | §5.3 "Cross-process beating (L0)" |
 
 ### Revision 3
 
