@@ -38,6 +38,7 @@ from pydra.engine.portable.identity import (
     StoreIdentity,
 )
 from pydra.engine.portable.layout import (
+    _TEMP_RE,
     LayoutHeader,
     cdir_for,
     open_layout,
@@ -58,7 +59,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.engine.lease import Lease
 
-__all__ = ["Committed", "PortableStore", "StoreNotWritable"]
+__all__ = ["CollectReport", "Committed", "PortableStore", "StoreNotWritable"]
 
 logger = logging.getLogger("pydra")
 
@@ -107,6 +108,23 @@ class Committed:
 class StoreNotWritable(StoreUnavailable):
     """This user cannot write a directory that a publish needs (RFC 0003 section 5.1). It is a
     configuration error, not a lost race."""
+
+
+@attrs.frozen
+class CollectReport:
+    """What `PortableStore.collect` did (RFC 0003 section 9).
+
+    Attributes
+    ----------
+    removed : list of str
+        The paths removed.
+    kept : list of (str, str)
+        The paths looked at and left, each with the reason: too young, or why it could not be
+        removed (with the owner, when that is the reason).
+    """
+
+    removed: list[str] = attrs.field(factory=list)
+    kept: list[tuple[str, str]] = attrs.field(factory=list)
 
 
 def _owner(path: str) -> str:
@@ -158,12 +176,37 @@ def _inode_name(st: os.stat_result) -> str:
 def _remove_tree(parent: StorageDir, name: str) -> None:
     """Remove the directory ``name`` and everything in it, never following a symlink."""
     with parent.child(name) as d:
+        if not IS_WINDOWS:
+            st = d.fstat()
+            if st.st_uid == os.geteuid() and st.st_mode & 0o700 != 0o700:
+                with contextlib.suppress(OSError):
+                    d.set_mode(stat.S_IMODE(st.st_mode) | 0o700)
         for e in list(d.scandir()):
             if e.is_dir():
                 _remove_tree(d, e.name)
             else:
-                d.unlink(e.name)
-    parent.rmdir(name)
+                _unlink(d, e.name)
+    _retrying(parent.rmdir, name)
+
+
+def _retrying(fn: ty.Callable[[str], None], name: str) -> None:
+    """Call ``fn(name)``; on Windows a sharing violation (an open handle, a scanner) is
+    retried briefly, as `remove_from_cache` retries it."""
+    for n in range(_ATTEMPTS):
+        try:
+            return fn(name)
+        except PermissionError:
+            if not IS_WINDOWS or n == _ATTEMPTS - 1:
+                raise
+            time.sleep(0.05 * 2**n)
+
+
+def _unlink(parent: StorageDir, name: str) -> None:
+    _retrying(parent.unlink, name)
+
+
+def _gc_name(st: os.stat_result) -> str:
+    return "gc-" + _inode_name(st)
 
 
 def _discard(parent: StorageDir, name: str) -> None:
@@ -394,7 +437,12 @@ class PortableStore:
                 parent.unlink(name)
             else:
                 with self._quarantine_dir(root) as q:
-                    parent.rename(name, q, _inode_name(st))
+                    moved = _inode_name(st)
+                    parent.rename(name, q, moved)
+                    with contextlib.suppress(OSError, NotImplementedError):
+                        os.utime(
+                            os.path.join(q.path, moved), None, follow_symlinks=False
+                        )
         except FileNotFoundError:
             return
         except OSError as err:
@@ -430,6 +478,7 @@ class PortableStore:
         name: str,
         cdir: str,
         identity: os.stat_result | None,
+        expected_digest: str | None = None,
     ) -> bool | None:
         """Move the entry ``name`` of ``parent`` aside and check what was moved (RFC 0003
         section 6.3): rename it to ``quarantine/<uuid>`` (within ``parent`` as ``q-<uuid>`` when
@@ -441,8 +490,10 @@ class PortableStore:
         inode numbers to publish at all (the checks on a container's identity depend on them);
         an inode number of 0 gets a random name. The moved copy is re-verified against its
         address and put back if it verifies, because another writer committed a valid entry
-        between the caller's check and the rename. A corrupt copy is stamped, so that
-        ``collect`` ages it from the move.
+        between the caller's check and the rename. The copy is stamped as soon as it
+        is moved, so that ``collect`` ages it from the move and spares it while it is judged.
+        With ``expected_digest`` (an `evict`) a copy that verifies is kept moved when its
+        output digest is ``expected_digest`` and put back otherwise.
 
         The owner of an entry sealed without owner write gives itself write first, which moving
         a directory needs. ``identity`` is the ``fstat`` of the entry the caller found corrupt:
@@ -520,7 +571,9 @@ class PortableStore:
                         holder.rename(moved, parent, name)
                         self._narrow(parent, name)
                     return False
-                return self._after_move(root, parent, name, cdir, moved, holder)
+                return self._after_move(
+                    root, parent, name, cdir, moved, holder, expected_digest
+                )
         except FileNotFoundError:
             return True
         except OSError as err:
@@ -537,20 +590,30 @@ class PortableStore:
         cdir: str,
         moved: str,
         holder: StorageDir,
+        expected_digest: str | None = None,
     ) -> bool:
         where = os.path.join(parent.path, name)
         with holder.child(moved) as copy:
+            stamp = copy._fd if copy._fd is not None else copy.path
+            with contextlib.suppress(OSError):
+                os.utime(stamp, None)  # aged from the move, and fresh while judged
             try:
                 checksum = self._checksum_of(copy, cdir)
-                self.format.read(copy, checksum, name, None, self.trust, root=root)
+                stored = self.format.read(
+                    copy, checksum, name, None, self.trust, root=root
+                )
             except CorruptEntry as err:
-                stamp = copy._fd if copy._fd is not None else copy.path
-                with contextlib.suppress(OSError):
-                    os.utime(stamp, None)
                 logger.warning("%s was moved to quarantine: %s", where, err)
                 return True
-            except Exception:  # verifies or cannot be judged: it is not shown corrupt
-                pass
+            except Exception:  # cannot be judged: it is not shown corrupt
+                stored = None
+            if (
+                stored is not None
+                and expected_digest is not None
+                and stored.digest == expected_digest
+            ):
+                logger.info("%s was evicted to quarantine", where)
+                return True
         with contextlib.suppress(OSError):
             holder.rename(
                 moved, parent, name
@@ -975,6 +1038,243 @@ class PortableStore:
         with contextlib.suppress(OSError):
             entry.set_mode(expected)
 
+    # -- evict and collect --------------------------------------------------------------------------
+
+    def evict(self, entry: EntryRef, expected_digest: str) -> None:
+        """Move the entry at ``entry`` to ``quarantine/`` if its output digest is
+        ``expected_digest`` (RFC 0003 sections 6.3 and 10).
+
+        The move is the compare-and-move of a quarantine, built from the inode of the entry that
+        was read, and the moved copy is checked again: an entry committed at the address after
+        the caller read the old one is put back, never removed. An absent entry, or one whose
+        digest differs, is left alone. A corrupt entry is quarantined.
+
+        Raises
+        ------
+        StoreNotWritable
+            The entry matches and this user cannot move it (it is not the owner and the parent
+            is not writable).
+        EntryFormatUnknown, EntryNotTrusted
+            The entry cannot be judged and is left in place.
+        ValueError
+            ``entry`` is in a root this store does not hold.
+        """
+        if os.path.abspath(entry.root) != os.path.abspath(self.path):
+            raise ValueError(
+                f"the entry is in the root {entry.root!r}, which this store ({self.path!r}) "
+                "does not hold"
+            )
+        with self._open() as root:
+            try:
+                self._evict(root, entry, expected_digest)
+            except FileNotFoundError:
+                return
+            except OSError as err:
+                if isinstance(err, StoreUnavailable):
+                    raise
+                raise StoreUnavailable(err.errno, f"{entry.cdir}: {err}") from err
+
+    def _evict(self, root: StorageDir, ref: EntryRef, expected: str) -> None:
+        with root.child(self.header.entries) as entries:
+            shard = self._shard_of(entries, ref.cdir)
+            with (
+                entries.child(shard) as shard_dir,
+                shard_dir.child(ref.cdir) as cdir_dir,
+            ):
+                try:
+                    held = cdir_dir.child(ref.fingerprint)
+                except WrongKindError:
+                    self._set_aside(root, cdir_dir, ref.fingerprint)
+                    return
+                with held:
+                    identity = held.fstat()
+                    try:
+                        checksum = self._checksum_of(held, ref.cdir)
+                        stored = self.format.read(
+                            held,
+                            checksum,
+                            ref.fingerprint,
+                            None,
+                            self.trust,
+                            root=root,
+                        )
+                    except CorruptEntry:
+                        expected = None  # nothing to protect: any corrupt copy goes
+                    else:
+                        if stored.digest != expected:
+                            return
+                if (
+                    self._quarantine(
+                        root,
+                        cdir_dir,
+                        ref.fingerprint,
+                        ref.cdir,
+                        identity,
+                        expected,
+                    )
+                    is None
+                ):
+                    where = os.path.join(cdir_dir.path, ref.fingerprint)
+                    raise StoreNotWritable(
+                        errno.EACCES,
+                        f"this user cannot move {where!r} aside (owner: {_owner(where)})",
+                        where,
+                    )
+
+    def collect(self) -> CollectReport:
+        """Remove what a store leaves behind once it is older than the policy's ages (RFC 0003
+        section 9): the children of ``staging/`` and header temporaries (``ages.staging``), the
+        children of ``quarantine/`` and the ``q-`` and aside names in container directories
+        (``ages.quarantine``). Age is the modification time; a quarantined object is stamped
+        when it is moved and a writer touches its staging directory, so a live one is spared.
+
+        An entry is never removed, and nothing outside those names is read or touched
+        (sidecars included). An object is claimed with a rename to an inode-derived ``gc-`` name
+        in its own directory before it is removed, so a mover that put it back first wins and
+        two collectors do not both remove it. Work directories are not collected yet: a store
+        does not make them.
+
+        Returns
+        -------
+        CollectReport
+            The paths removed, and the paths kept with the reason.
+        """
+        report = CollectReport()
+        ages = self.policy.ages
+        now = time.time()
+        aside = self.format.aside_names()
+        with self._open() as root:
+            for e in list(root.scandir()):
+                if _TEMP_RE.fullmatch(e.name):
+                    self._sweep(root, e, ages.staging, now, report)
+            for side, age in (
+                (self.header.dirs["staging"], ages.staging),
+                (self.header.dirs["quarantine"], ages.quarantine),
+            ):
+                try:
+                    d = root.child(side)
+                except (FileNotFoundError, WrongKindError):
+                    continue
+                with d:
+                    for e in list(d.scandir()):
+                        self._sweep(d, e, age, now, report)
+            try:
+                entries = root.child(self.header.entries)
+            except (FileNotFoundError, WrongKindError):
+                return report
+            with entries:
+                for shard in list(entries.scandir()):
+                    if not shard.is_dir():
+                        continue
+                    for cdir in self._children(entries, shard.name):
+                        with self._opened(entries, shard.name, cdir.name) as holder:
+                            if holder is None:
+                                continue
+                            for e in list(holder.scandir()):
+                                if e.is_dir() and (
+                                    e.name.startswith(("q-", "gc-"))
+                                    or aside.fullmatch(e.name)
+                                ):
+                                    self._sweep(holder, e, ages.quarantine, now, report)
+        return report
+
+    @staticmethod
+    def _children(parent: StorageDir, name: str) -> list:
+        try:
+            with parent.child(name) as d:
+                return [e for e in d.scandir() if e.is_dir()]
+        except (FileNotFoundError, WrongKindError):
+            return []
+
+    @contextlib.contextmanager
+    def _opened(
+        self, entries: StorageDir, shard: str, cdir: str
+    ) -> ty.Iterator[StorageDir | None]:
+        try:
+            with entries.child(shard) as s, s.child(cdir) as c:
+                yield c
+        except (FileNotFoundError, WrongKindError):
+            yield None
+
+    def _sweep(
+        self,
+        parent: StorageDir,
+        listed: ty.Any,
+        age: float,
+        now: float,
+        report: CollectReport,
+    ) -> None:
+        """Remove ``listed`` from ``parent`` if it is older than ``age``, recording the outcome."""
+        where = os.path.join(parent.path, listed.name)
+        seen = listed.stat()
+        if _is_link(seen) or not stat.S_ISDIR(seen.st_mode):
+            if now - seen.st_mtime < age:
+                report.kept.append((where, f"younger than {age:g} s"))
+                return
+            self._finish(parent, listed.name, seen, False, where, report)
+            return
+        if now - seen.st_mtime < age:
+            report.kept.append((where, f"younger than {age:g} s"))
+            return
+        try:
+            with parent.child(listed.name) as h:
+                held = h.fstat()
+        except FileNotFoundError:
+            return
+        except WrongKindError:
+            report.kept.append((where, "replaced by an object of another kind"))
+            return
+        if (held.st_dev, held.st_ino) != (seen.st_dev, seen.st_ino) or (
+            now - held.st_mtime < age
+        ):
+            report.kept.append((where, "changed since it was listed"))
+            return
+        self._finish(parent, listed.name, held, True, where, report)
+
+    def _finish(
+        self,
+        parent: StorageDir,
+        name: str,
+        st: os.stat_result,
+        is_dir: bool,
+        where: str,
+        report: CollectReport,
+    ) -> None:
+        claimed = name
+        try:
+            if is_dir:
+                if not name.startswith("gc-"):
+                    claimed = _gc_name(st)
+                    try:
+                        parent.rename(name, parent, claimed)
+                    except FileNotFoundError:
+                        return  # put back, or removed by another collector
+                    except OSError as err:
+                        if err.errno in (errno.ENOTEMPTY, errno.EEXIST):
+                            return  # another collector claimed this very object
+                        raise
+                _remove_tree(parent, claimed)
+            else:
+                now = parent.lstat(name)
+                if (now.st_dev, now.st_ino) != (st.st_dev, st.st_ino):
+                    report.kept.append((where, "changed since it was listed"))
+                    return
+                _unlink(parent, name)
+        except FileNotFoundError:
+            pass
+        except OSError as err:
+            report.kept.append(
+                (
+                    where,
+                    f"cannot remove it: {err.strerror or err} (owner: {_owner(where)})",
+                )
+            )
+            logger.warning(
+                "collect could not remove %s (owner %s): %s", where, _owner(where), err
+            )
+            return
+        report.removed.append(where)
+
     # -- read -----------------------------------------------------------------------------------
 
     def read(self, entry: EntryRef, task: "Task | None") -> Result:
@@ -1051,10 +1351,18 @@ class PortableStore:
                             self.trust,
                             root=root,
                         )
-                    except CorruptEntry:
-                        self._quarantine(
-                            root, cdir_dir, ref.fingerprint, ref.cdir, identity
-                        )
+                    except CorruptEntry as err:
+                        if (
+                            self._quarantine(
+                                root, cdir_dir, ref.fingerprint, ref.cdir, identity
+                            )
+                            is None
+                        ):
+                            where = os.path.join(cdir_dir.path, ref.fingerprint)
+                            raise CorruptEntry(
+                                f"{err}; {where!r} cannot be moved aside "
+                                f"(owner: {_owner(where)})"
+                            ) from err
                         raise
                     self._reseal(entry)
                     return self._result(stored, entry, task)
