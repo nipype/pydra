@@ -1951,7 +1951,9 @@ class PortableStore:
 
     def forget_committed(self, job: "Job") -> None:
         """Remove ``_committed.json`` once the runner holds the job's outcome (RFC 0003 section
-        5.4), and a default work directory that is then empty."""
+        5.4). The directory itself stays, empty, for `collect`: jobs on threads share one
+        process working directory, which one of them may have restored to this directory,
+        and removing it would leave the process in a directory that no longer exists."""
         path = self._maybe_work_dir(job)
         if path is None:
             return
@@ -1961,9 +1963,6 @@ class PortableStore:
                     handle.unlink(_COMMITTED)
         except FileNotFoundError:
             return
-        if self._work_fn is None:
-            with contextlib.suppress(OSError):
-                os.rmdir(path)
 
     def _empty_work_dir(self, path: Path) -> None:
         """Empty a default work directory except ``_committed.json``. What cannot be removed

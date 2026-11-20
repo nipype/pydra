@@ -5,6 +5,7 @@ process (through `_committed.json`, then the job's own address)."""
 
 import asyncio
 import functools
+import os
 import sys
 import threading
 import typing as ty
@@ -399,6 +400,26 @@ def test_complete_keeps_committed(tmp_path):
         assert not (store.work_dir(a) / "_committed.json").exists()  # forgotten
         reader = cloudpickle.loads(cloudpickle.dumps(a))  # read by its EntryRef
         assert reader.result(settled=True).outputs.out == 2
+
+
+def test_forgetting_an_outcome_keeps_the_work_directory(tmp_path):
+    """Jobs on threads change the one process working directory, so one may restore it to
+    another job's work directory; forgetting that job's outcome must not remove the
+    directory under the process (every later ``os.getcwd()`` would fail)."""
+    store = make(tmp_path)
+    here = os.getcwd()
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(Two(x=1), store, on_error="raise_at_end", submitter=sub)
+        (a,) = runner.ready().dispatch
+        result = a.run()
+        wd = store.work_dir(a)
+        try:
+            os.chdir(wd)
+            runner.complete(a, result)
+            assert os.getcwd() and wd.is_dir()
+        finally:
+            os.chdir(here)
+    assert not (wd / "_committed.json").exists() and list(wd.iterdir()) == []
 
 
 def test_stored_false_is_success_not_unrunnable(tmp_path):
