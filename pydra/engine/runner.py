@@ -3,7 +3,9 @@ its jobs are released, completed and marked unrunnable. Drivers (see
 :class:`~pydra.engine.submitter.Submitter`) loop over a :class:`GraphRunner`, taking the
 jobs it hands out, running them and reporting each outcome."""
 
+import asyncio
 import builtins
+import concurrent.futures
 import typing as ty
 from traceback import format_exc, format_exception
 import re
@@ -205,6 +207,8 @@ class NodeExecution(ty.Generic[TaskType]):
                         values[name] = value._get_value(
                             workflow=self.workflow, graph=self.graph
                         )
+                        if isinstance(value, LazyOutField):
+                            _check_splittable(self.name, name, values[name])
                     else:
                         values[name] = value
             self.state.prepare_states(values)
@@ -462,6 +466,20 @@ class NodeExecution(ty.Generic[TaskType]):
         return errors
 
 
+def _check_splittable(node: str, state_key: str, value: ty.Any) -> None:
+    """Refuse an upstream output a splitter splits over that is not a sequence, such as a
+    reference an external driver completed the upstream job with (RFC 0002 section 3.5)
+    """
+    if hasattr(value, "__len__") and hasattr(value, "__getitem__"):
+        return
+    field = state_key.rpartition(".")[2]
+    raise TypeError(
+        f"Node {node!r} splits over {field!r}, whose upstream value is a "
+        f"{type(value).__name__} ({value!r}): a value a splitter splits over must be a "
+        "real sequence, not a reference to one"
+    )
+
+
 def _has_failed(node: NodeExecution, indices: range | list[int | None]) -> bool:
     """Whether any of the elements of a node at the given indices has errored or is
     unrunnable"""
@@ -544,12 +562,43 @@ class Failed:
     error: BaseException
 
 
-Outcome = ty.Union["Result", Failed]  # NotRun joins in R7
+@attrs.frozen
+class NotRun:
+    """The outcome of a job that did not run and did not fail: cancelled, never started, or
+    held by infrastructure (``held``). The job stays pending and its readers stay blocked
+    until :meth:`GraphRunner.retry` hands it out again; no error is recorded.
+
+    Attributes
+    ----------
+    reason : str
+        Why the job did not run
+    held : bool
+        Whether the cause was infrastructure (a held queue or environment)
+    """
+
+    reason: str
+    held: bool
+
+
+Outcome = ty.Union["Result", Failed, NotRun]
 
 
 @attrs.frozen
 class Settled:
-    """A job the runner completed itself, without dispatching it"""
+    """A job the runner completed itself, without dispatching it
+
+    Attributes
+    ----------
+    job : Job
+        The job
+    how : str
+        ``"stored"`` (its result was read from the store), ``"shared"`` (it has the
+        checksum of a job that was handed out, whose outcome it takes),
+        ``"workflow-stored"`` (a workflow job whose stored result was used, so it was not
+        expanded); ``"gated"`` and ``"absent"`` are reserved for gates and absent values
+    result : Result
+        Its result
+    """
 
     job: Job
     how: ty.Literal["stored", "shared", "gated", "absent", "workflow-stored"]
@@ -558,11 +607,26 @@ class Settled:
 
 @attrs.frozen
 class Unrunnable:
-    """An element marked unrunnable because it reads a failed or unrunnable upstream"""
+    """An element marked unrunnable because it reads a failed or unrunnable upstream
+
+    Attributes
+    ----------
+    node : str
+        The node's workflow path and name, ``"/"``-joined (``"inner[0]/B"``)
+    index : int | None
+        The element's state index, None for the whole node
+    upstream : list[str]
+        The upstream nodes, named as ``node``, whose failed or unrunnable elements it reads
+    """
 
     node: str
     index: int | None
     upstream: list[str]
+
+
+def node_label(node: "NodeExecution") -> str:
+    """The name of a node with the path of the nested workflows that hold it"""
+    return "/".join((*node.path, node.name))
 
 
 @attrs.frozen
@@ -572,11 +636,12 @@ class Round:
     Attributes
     ----------
     dispatch : list[Job]
-        The jobs to run, each handed out once; ``job.rerun`` is already set
+        The jobs to run, each handed out once, grouped by node in node order (workflow
+        path, then name); ``job.rerun`` and ``job.attempt`` are already set
     settled : list[Settled]
-        The jobs completed inside the call, never dispatched (empty until R7)
+        The jobs completed by the runner since the last call, never dispatched
     unrunnable : list[Unrunnable]
-        The elements marked unrunnable inside the call (empty until R7)
+        The elements marked unrunnable since the last call, each reported once
     retry_after : float | None
         Seconds until a waiting workflow lease is tried again, ``None`` if none waits
     """
@@ -627,6 +692,17 @@ class GraphRunner:
     A driver ends with :meth:`close`, which releases the leases of unfinished workflow
     jobs.
 
+    Every job the runner completes itself is reported in :attr:`Round.settled`: read from
+    the store, shared with a job of the same checksum (the same-checksum table is the
+    runner's, so a driver never receives a twin to dispatch), or a stored workflow job.
+    Every element marked unrunnable is reported once in :attr:`Round.unrunnable`. An
+    outcome is a ``Result``, a :class:`Failed` or a :class:`NotRun`; a run whose only
+    remaining jobs are ``NotRun`` is :attr:`done`, lists them in :attr:`not_run` and is
+    incomplete, not failed.
+
+    The runner is not thread-safe: every call is made from one thread, the driver's, and
+    an executor that reports from another thread has its outcomes marshalled to it.
+
     Parameters
     ----------
     task : Task
@@ -645,7 +721,9 @@ class GraphRunner:
     hooks : TaskHooks, optional
         Reserved: the hooks of each job are the ones of its node
     lookup_before_dispatch : bool
-        Reserved: has no effect until the store is read for every job (R7)
+        Whether to look each job without a success record up in the store (``lookup``)
+        before handing it out, so that a driver that does not run jobs through
+        :meth:`Job.run` is given only jobs with no acceptable result
     submitter : Submitter, optional
         Transitional: the submitter the jobs are created for (a job reads its audit,
         cache root and store from it). Without it a ``debug`` submitter over ``store``
@@ -686,7 +764,26 @@ class GraphRunner:
             submitter = Submitter(worker="debug", store=store, telemetry=False)
         self.submitter = submitter
         self.job = job
+        # the jobs handed out or completed by the runner, never considered again
         self._handed: set[Job] = set()
+        # the jobs dispatched whose outcome has not been reported
+        self._in_flight: set[Job] = set()
+        self._not_run: dict[Job, NotRun] = {}
+        # the jobs completed by the runner and the elements marked unrunnable, not yet
+        # reported by ``ready``
+        self._settled: list[Settled] = []
+        self._reported_unrunnable: set[tuple[int, int | None]] = set()
+        # the same-checksum table: the job handed out for each checksum until its outcome
+        # is reported, the twins held behind it, and the outcome once reported
+        self._first: dict[str, Job] = {}
+        self._twins: dict[str, list[Job]] = defaultdict(list)
+        self._waiting_twins: set[Job] = set()
+        self._finished: dict[str, Outcome] = {}
+        # whether the last ``ready`` found nothing to do and nothing awaits an outcome
+        self._quiescent = False
+        # releases of workflow leases run off the driver's thread (`release_off_thread`)
+        self._release_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        self._releases: list[concurrent.futures.Future] = []
         self._failed = False
         self._first_error: BaseException | None = None
         self._root_error: BaseException | None = None
@@ -732,7 +829,7 @@ class GraphRunner:
         """Run the ``pre_run`` hook of a workflow job and make its lease"""
         job = frame.job
         job.hooks.pre_run(job)
-        frame.lease = self.store.acquire(job.checksum, job.context)
+        frame.lease = job._acquire()
 
     def _expand(self, frame: _Frame, task: "Task") -> None:
         frame.workflow = task.construct()
@@ -753,7 +850,9 @@ class GraphRunner:
             return
         job.rerun = self._inner_rerun
         if not job.rerun and self._read_succeeded([job]) == []:
-            return  # stored with a success record: complete without a lease
+            # stored with a success record: complete without a lease
+            self._settled.append(Settled(job, "workflow-stored", job._cached_result))
+            return
         label = (
             job.name if job.state_index is None else f"{job.name}[{job.state_index}]"
         )
@@ -790,8 +889,12 @@ class GraphRunner:
                 job._held = result
                 self._release_lease(frame)
                 self._succeeded(frame)
+                self._settled.append(Settled(job, "workflow-stored", result))
                 return
-        job.attempt = "resume" if job.can_resume else uuid4().hex
+        if frame.parent is not None or job.attempt is None:
+            # the outer job has its attempt from its creation (`Submitter.__call__`); a
+            # job that can resume keeps its stable work directory under a fresh attempt
+            job.attempt = uuid4().hex
         try:
             frame.result = job._start_workflow(frame.lease)
             self._expand(frame, job.task)
@@ -801,10 +904,41 @@ class GraphRunner:
     def _release_lease(self, frame: _Frame) -> None:
         lease, frame.lease = frame.lease, None
         if lease is not None:
-            lease.__exit__(None, None, None)
+            if self._release_pool is not None:
+                self._releases.append(
+                    self._release_pool.submit(lease.__exit__, None, None, None)
+                )
+            else:
+                lease.__exit__(None, None, None)
         for other in self._frames:  # a lease waited for here may be free now
             if other.state == "leasing":
                 other.retry_at = None
+
+    def release_off_thread(self) -> None:
+        """Release workflow leases on a helper thread from here on, so that a release the
+        storage refuses for a while (``RELEASE_PATIENCE``) does not block the driver's
+        event loop. The driver then awaits :meth:`released` once it has called
+        :meth:`close`."""
+        if self._release_pool is None:
+            self._release_pool = concurrent.futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="pydra-lease-release"
+            )
+
+    async def released(self) -> None:
+        """Wait, without blocking the event loop, until every lease release begun on the
+        helper thread has ended; later releases happen in the calling thread"""
+        pool, self._release_pool = self._release_pool, None
+        pending, self._releases = self._releases, []
+        try:
+            for future in pending:
+                try:
+                    await asyncio.wrap_future(future)
+                except Exception as exc:
+                    logger.warning("A workflow lease could not be released: %s", exc)
+        finally:  # interrupted meanwhile: the rest are waited for here
+            concurrent.futures.wait(pending)
+            if pool is not None:
+                pool.shutdown(wait=False)
 
     def _succeeded(self, frame: _Frame) -> None:
         frame.state = "finished"
@@ -849,6 +983,7 @@ class GraphRunner:
             job._held = frame.result
             self._release_lease(frame)
             job._complete_workflow(frame.result)
+            self._forget(job)
             self._succeeded(frame)
         elif frame.parent is None:
             frame.state = "finished"
@@ -893,6 +1028,8 @@ class GraphRunner:
             for index, job in unfinished:
                 if job not in self._handed and job not in self._child:
                     continue
+                if job in self._not_run or job in self._waiting_twins:
+                    continue  # it has its outcome, or was never dispatched
                 frame.entries.append(
                     JobErrorEntry(
                         job_name=node.name,
@@ -1010,38 +1147,157 @@ class GraphRunner:
     def ready(self, limit: int | None = None) -> Round:
         """Release the jobs whose upstream jobs have completed
 
+        Each released element is taken through the store (a success record, then
+        ``lookup`` when ``lookup_before_dispatch``) and the same-checksum table: a twin of
+        a job whose outcome is known is settled at once, a twin of a job handed out and
+        not yet reported is held and settled when that job's outcome is reported, and the
+        rest are handed out, each once, with a fresh ``job.attempt``.
+
         Parameters
         ----------
         limit : int, optional
-            The most jobs this call hands out
+            The most jobs this call hands out (``max_concurrent`` less the jobs in
+            flight), taken by whole node groups: groups are handed out in node order while
+            they fit and only the group that crosses the cap is sliced. A driver of an
+            executor with ``batches = True`` passes none, and the executor caps inside
+            itself; so does an external driver.
 
         Returns
         -------
         Round
-            The leaf jobs to dispatch, each handed out once, with ``job.rerun`` set, and
-            the seconds until a waiting workflow lease is tried again
+            The jobs to dispatch, the jobs the runner completed itself, the elements newly
+            marked unrunnable, and the seconds until a waiting workflow lease is tried again
         """
         while True:
             before = self._progress()
             self._settle_frames()
             candidates = [j for j in self._runnable() if j not in self._handed]
-            if candidates and not self._inner_rerun:
-                candidates = self._read_succeeded(candidates)
+            candidates = self._serve(candidates)
             if candidates or self._progress() == before:
                 break
-        if limit is not None and len(candidates) > limit:
-            if limit > 0:
-                logger.info(
-                    "Reducing number of tasks to run concurrently from %d to %d",
-                    len(candidates),
-                    limit,
-                )
-            candidates = candidates[: max(limit, 0)]
+        # grouped by node, in node order; the sort is stable, so elements keep their order
+        candidates.sort(key=lambda j: (j.workflow_path, j.name))
+        dispatch: list[Job] = []
+        held_back = 0
         for job in candidates:
+            first = self._first.get(job.checksum)
+            if first is not None and first is not job:
+                # a twin of a job handed out whose outcome is not reported: held
+                self._handed.add(job)
+                self._waiting_twins.add(job)
+                self._twins[job.checksum].append(job)
+                continue
+            if limit is not None and len(dispatch) >= limit:
+                held_back += 1  # released, handed out by a later call
+                continue
+            self._first[job.checksum] = job
+            dispatch.append(job)
+        if held_back and limit:
+            logger.info(
+                "Reducing number of tasks to run concurrently from %d to %d",
+                len(dispatch) + held_back,
+                limit,
+            )
+        for job in dispatch:
             self._handed.add(job)
+            self._in_flight.add(job)
             job.rerun = self._inner_rerun
+            job.attempt = uuid4().hex
         self._collect_resolution_errors()
-        return Round(dispatch=candidates, retry_after=self._retry_after())
+        settled, self._settled = self._settled, []
+        unrunnable = self._new_unrunnable()
+        retry_after = self._retry_after()
+        self._quiescent = (
+            not (dispatch or settled or unrunnable)
+            and retry_after is None
+            and not self._in_flight
+        )
+        return Round(
+            dispatch=dispatch,
+            settled=settled,
+            unrunnable=unrunnable,
+            retry_after=retry_after,
+        )
+
+    def _serve(self, jobs: list[Job]) -> list[Job]:
+        """Settle the released jobs the store holds and the twins of jobs whose outcome is
+        known; return the others"""
+        if jobs and not self._inner_rerun:
+            jobs = self._read_store(jobs)
+        rest = []
+        for job in jobs:
+            outcome = self._finished.get(job.checksum)
+            if outcome is None:
+                rest.append(job)
+            else:
+                self._handed.add(job)
+                self._share(job, outcome)
+        return rest
+
+    def _read_store(self, jobs: list[Job]) -> list[Job]:
+        """Settle as ``stored`` the jobs whose slots carry a success record, and, under
+        ``lookup_before_dispatch``, those the store's ``lookup`` returns an acceptable
+        result for; return the others"""
+        read = getattr(self.store, "read_succeeded", None)
+        rest = []
+        for job in jobs:
+            result = read(job.checksum, job.context, job.task) if read else None
+            if result is None and self.lookup_before_dispatch:
+                result = self._lookup(job)
+            if result is None:
+                rest.append(job)
+                continue
+            job.hooks.pre_run(job)
+            job._cached_result = result
+            job._awaiting_run = False
+            self._handed.add(job)
+            self._settled.append(Settled(job, "stored", result))
+        return rest
+
+    def _lookup(self, job: Job) -> "Result | None":
+        try:
+            result = self.store.lookup(job.checksum, job.context, task=job.task)
+        except Exception as exc:  # unreadable: dispatched, as a job without a record
+            logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
+            return None
+        if result is None or result.errored:
+            return None
+        return result
+
+    def _share(self, job: Job, outcome: Outcome) -> None:
+        """Complete a twin with the outcome of the job of its checksum that was handed
+        out. A failure is recorded once, for that job; the twin is errored with it."""
+        job._awaiting_run = False
+        if isinstance(outcome, Failed):
+            job._errored = True
+            result = job.result()
+        else:
+            result = outcome
+            job._held = outcome
+            if getattr(outcome, "errored", False):
+                job._errored = True
+        self._settled.append(Settled(job, "shared", result))
+
+    def _new_unrunnable(self) -> list[Unrunnable]:
+        """The elements marked unrunnable that have not been reported yet"""
+        found = []
+        for frame in self._frames:
+            if frame.graph is None:
+                continue
+            for node in frame.graph.nodes:
+                for index, upstream in list(node.unrunnable.items()):
+                    key = (id(node), index)
+                    if key in self._reported_unrunnable:
+                        continue
+                    self._reported_unrunnable.add(key)
+                    found.append(
+                        Unrunnable(
+                            node=node_label(node),
+                            index=index,
+                            upstream=[node_label(p) for p in upstream],
+                        )
+                    )
+        return found
 
     def _read_succeeded(self, jobs: list[Job]) -> list[Job]:
         dispatch = self._read_succeeded_jobs(self.store, jobs)
@@ -1082,12 +1338,20 @@ class GraphRunner:
         ----------
         job : Job
             A job from :meth:`ready`
-        outcome : Result | Failed
+        outcome : Result | Failed | NotRun
             What came of running it. A :class:`Failed` is recorded as the job's error and
             the elements that read the job become unrunnable. A ``Result`` is held on the
             job as given (whatever attributes it carries stay on it), so readers use it
-            without a store read; an errored one is a failure of the run
+            without a store read; an errored one is a failure of the run. A
+            :class:`NotRun` leaves the job pending, its readers blocked and no error
+            recorded, until :meth:`retry`. The twins held behind the job take a
+            ``Result`` or ``Failed`` as theirs.
         """
+        self._in_flight.discard(job)
+        self._quiescent = False
+        if isinstance(outcome, NotRun):
+            self._not_run[job] = outcome
+            return
         job._awaiting_run = False
         frame = self._frame_of.get(job, self._root)
         if isinstance(outcome, Failed):
@@ -1106,7 +1370,80 @@ class GraphRunner:
                 self._failed = True
                 frame.errors.append(job_error(job, exc))
                 frame.entries.append(error_entry(job.name, job.state_index, exc))
+            else:
+                self._forget(job)
+        if self._first.get(job.checksum) is job:
+            del self._first[job.checksum]
+            self._finished[job.checksum] = outcome
+            for twin in self._twins.pop(job.checksum, ()):
+                self._waiting_twins.discard(twin)
+                self._share(twin, outcome)
         self._collect_resolution_errors()
+
+    def _forget(self, job: Job) -> None:
+        """Tell a store that keeps a job's outcome in its work directory until the runner
+        holds it (``forget_committed``, RFC 0003 section 5.4) that it is held now"""
+        forget = getattr(self.store, "forget_committed", None)
+        if forget is None:
+            return
+        try:
+            forget(job)
+        except Exception as exc:  # left for the store's collection
+            logger.debug("Forgetting the outcome file of %s: %s", job.checksum, exc)
+
+    def retry(self, job: Job) -> None:
+        """Hand a job reported :class:`NotRun` out again at the next :meth:`ready`, with
+        a new attempt
+
+        Raises
+        ------
+        ValueError
+            The job's last outcome was not ``NotRun``
+        """
+        if job not in self._not_run:
+            raise ValueError(
+                f"Job {job.name!r} was not reported NotRun, so it is not handed out again"
+            )
+        del self._not_run[job]
+        self._handed.discard(job)
+        self._quiescent = False
+
+    @property
+    def not_run(self) -> list[tuple[Job, NotRun]]:
+        """The jobs whose last outcome is :class:`NotRun`, with it"""
+        return list(self._not_run.items())
+
+    def upstream(self, job: Job) -> dict[str, list[tuple[Job, int | None]]]:
+        """For each input of a job read from upstream nodes, the upstream jobs it was
+        resolved from and their state indices. The index is None for an upstream node
+        without a state and for an input that reads the upstream whole (combined, or the
+        sequence a splitter splits over).
+
+        Parameters
+        ----------
+        job : Job
+            A leaf job handed out by :meth:`ready`
+        """
+        frame = self._frame_of.get(job)
+        if frame is None:
+            frame = self._child[job].parent if job in self._child else self._root
+        node: NodeExecution = frame.graph.node(job.name)
+        index = job.state_index
+        split = node.state.states_val[index] if index is not None else {}
+        inputs_ind = node.state.inputs_ind[index] if index is not None else {}
+        found: dict[str, list[tuple[Job, int | None]]] = {}
+        for name, value in attrs_values(node.node._task).items():
+            if not isinstance(value, LazyOutField):
+                continue
+            up: NodeExecution = frame.graph.node(value._node.name)
+            state_key = f"{node.name}.{name}"
+            if state_key in split:  # the sequence the node's splitter splits over
+                indices, whole = up._read_indices(None), True
+            else:
+                indices = up._read_indices(inputs_ind.get(state_key))
+                whole = isinstance(indices, range)
+            found[name] = [(up.job(i), None if whole else i) for i in indices]
+        return found
 
     def stuck(self) -> str | None:
         """A diagnosis of why nothing can progress, or None if the graph is done or a
@@ -1159,11 +1496,14 @@ class GraphRunner:
     @property
     def done(self) -> bool:
         """Whether every node of the graph has completed (and, if the runner owns the
-        workflow job, it is committed)"""
+        workflow job, it is committed), or nothing else can progress and jobs remain
+        :class:`NotRun` (an incomplete run: see :attr:`not_run`)"""
         root = self._root
         if root.owned:
-            return root.state == "finished"
-        return all(n.done for n in root.graph.nodes)
+            finished = root.state == "finished"
+        else:
+            finished = all(n.done for n in root.graph.nodes)
+        return finished or (bool(self._not_run) and self._quiescent)
 
     @property
     def entries(self) -> list[JobErrorEntry]:

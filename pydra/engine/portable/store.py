@@ -86,6 +86,7 @@ _HASHED_CDIR = re.compile(r"h-[0-9a-f]{64}")
 _REPARSE = 0x400
 _WORK = "work"
 _LEASES = "leases"
+_RESUME = "resume-"  # a resumable job's work directory, named as its lease
 _AUDIT = "audit"
 _COMMITTED = "_committed.json"
 _ERROR = "_error.json"
@@ -1284,7 +1285,9 @@ class PortableStore:
         never one the caller's ``work_dir`` function names) is removed once it and everything
         directly in it, ``_committed.json`` included, is older than ``ages.work``, which must
         exceed the longest run: a job writes nothing at the top of its directory while it runs,
-        and a runner may read ``_committed.json`` until it holds the outcome. ``<root>/audit/``
+        and a runner may read ``_committed.json`` until it holds the outcome. A resumable job's
+        directory (``work/resume-<hash>``) is also kept while the lease of the same hash is
+        live (renewed within the lease's ``stale_after``), whatever its age. ``<root>/audit/``
         (provenance, see `audit_dir`) is removed by `evict` with its entry and is not swept here.
 
         Returns
@@ -1359,7 +1362,26 @@ class PortableStore:
                 if newest is not None and now - newest < age:
                     report.kept.append((where, f"younger than {age:g} s"))
                     continue
+                if e.name.startswith(_RESUME) and self._lease_live(
+                    root, e.name[len(_RESUME) :], now
+                ):
+                    report.kept.append((where, "its lease is held"))
+                    continue
                 self._sweep(work, e, age, now, report)
+
+    def _lease_live(self, root: StorageDir, name: str, now: float) -> bool:
+        """Whether the lease ``<root>/leases/<name>.lock`` exists and was renewed within its
+        ``stale_after``; one that cannot be read is taken as live."""
+        try:
+            with root.child(_LEASES) as leases:
+                newest = self._newest_in(leases, f"{name}.lock")
+        except (FileNotFoundError, WrongKindError):
+            return False
+        except OSError:
+            return True
+        if newest is None:  # not a directory: not a lease this store takes
+            return False
+        return now - newest < self._lease_settings.stale_after
 
     @staticmethod
     def _newest_in(parent: StorageDir, name: str) -> float | None:
@@ -1618,7 +1640,7 @@ class PortableStore:
             return path
         if attempt == "resume":
             address = f"{cdir_for(checksum)}/{fingerprint}".encode()
-            name = "resume-" + hashlib.sha256(address).hexdigest()
+            name = _RESUME + hashlib.sha256(address).hexdigest()
         elif _ATTEMPT.fullmatch(attempt):
             name = attempt
         else:

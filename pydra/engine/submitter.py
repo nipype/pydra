@@ -26,6 +26,7 @@ from pydra.engine.runner import (  # noqa: F401
     GraphRunner,
     JobErrorEntry,
     NodeExecution,
+    NotRun,
     OnError,
 )
 from pydra.engine.store import (
@@ -84,6 +85,35 @@ class WorkflowError(RuntimeError):
         return (type(self), (self.args[0], self.errors, self.entries))
 
 
+class RunIncomplete(WorkflowError):
+    """Raised when a workflow's run ended with jobs that did not run: cancelled, never
+    started or held by infrastructure (:class:`~pydra.engine.runner.NotRun`), with no
+    job failed. The run is incomplete, not failed, and a later run resumes it from the
+    store.
+
+    Attributes
+    ----------
+    not_run : list[tuple[Job, NotRun]]
+        The jobs that did not run, with their outcome
+    """
+
+    def __init__(
+        self,
+        message: str,
+        errors: list[str],
+        entries: "list[JobErrorEntry] | None" = None,
+        not_run: "list[tuple[Job, NotRun]] | None" = None,
+    ):
+        super().__init__(message, errors, entries)
+        self.not_run = list(not_run) if not_run is not None else []
+
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.args[0], self.errors, self.entries, self.not_run),
+        )
+
+
 class Submitter:
     """Send a job to the execution backend.
 
@@ -112,7 +142,12 @@ class Submitter:
         to them with code execution as the reading user: only list caches whose
         writers you trust
     max_concurrent: int | float, optional
-        Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
+        Maximum number of concurrent tasks to run, by default float("inf") (unlimited).
+        A batching worker (one with ``submit_many``, such as slurm or sge) applies it
+        inside its executor, to its own jobs only; the other workers share the cap the
+        driver applies. A run that routes jobs to several batching workers, or to a
+        batching worker beside other workers, can therefore have more than
+        ``max_concurrent`` jobs in flight in all
     audit_flags : AuditFlag, optional
         Configure provenance tracking. available flags: :class:`~pydra.utils.messenger.AuditFlag`
         Default is no provenance tracking.
@@ -466,7 +501,7 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
-        job.attempt = "resume" if job.can_resume else uuid4().hex
+        job.attempt = uuid4().hex
         self.errors = []
         self.entries = []
         try:
@@ -560,6 +595,8 @@ class Submitter:
             raise runner.root_error
         if runner.errors:
             raise workflow_error(job, runner.errors, runner.entries)
+        if runner.not_run:
+            raise run_incomplete(job, runner.not_run)
 
     def _drive_runner(self, runner: GraphRunner, raise_first: bool = True) -> None:
         if not any(w.is_async for w in self.workers.values()):
@@ -615,6 +652,8 @@ class Submitter:
         self._drive_runner(runner)
         if runner.errors:
             raise workflow_error(wf_job, runner.errors, runner.entries)
+        if runner.not_run:
+            raise run_incomplete(wf_job, runner.not_run)
 
     async def expand_workflow_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
@@ -651,6 +690,8 @@ class Submitter:
                 ):  # a nested workflow of a synchronous run raises the task's exception
                     raise runner.first_error
                 raise workflow_error(workflow_task, runner.errors, runner.entries)
+            if runner.not_run:
+                raise run_incomplete(workflow_task, runner.not_run)
 
     async def _drive(self, runner: GraphRunner) -> None:
         """Run the runner's jobs on executors for the submitter's workers, on the
@@ -659,6 +700,7 @@ class Submitter:
             name: WorkerExecutor(
                 worker,
                 blocking=None if worker.is_async else self._run_blocking,
+                max_concurrent=self.max_concurrent,
             )
             for name, worker in self.workers.items()
         }
@@ -783,6 +825,25 @@ def workflow_error(
         f"See output directory for details: {wf_job.cache_dir}",
         errors,
         entries,
+    )
+
+
+def run_incomplete(
+    wf_job: "Job[workflow.Task]", not_run: "list[tuple[Job, NotRun]]"
+) -> RunIncomplete:
+    """The error raised at the end of a workflow whose run left jobs not run"""
+    lines = []
+    for job, outcome in not_run:
+        name = job.name if job.state_index is None else f"{job.name}({job.state_index})"
+        held = ", held by infrastructure" if outcome.held else ""
+        lines.append(f"Job {name!r} did not run{held}: {outcome.reason}")
+    listed = "\n".join(lines)
+    return RunIncomplete(
+        f"Workflow job {wf_job} is incomplete: jobs did not run, and none failed. "
+        f"A later run resumes it from the store.\n\n{listed}",
+        [],
+        [],
+        not_run,
     )
 
 
