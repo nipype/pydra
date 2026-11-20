@@ -848,3 +848,146 @@ def test_rerun_after_sigkill_takes_over(tmp_path):
     assert "Took over the lease" in err
     assert len((tmp_path / "runs.log").read_text().splitlines()) == 2
     assert not any(p.suffix == ".lock" for p in (tmp_path / "cache").iterdir())
+
+
+def sharing_violation(path) -> PermissionError:
+    """What Windows raises for a path another process has open: a sharing violation
+    or access denied, both errno EACCES."""
+    return PermissionError(
+        errno.EACCES, "The process cannot access the file", str(path)
+    )
+
+
+def test_release_retries_a_rename_refused_while_a_waiter_reads(
+    tmp_path, monkeypatch, caplog
+):
+    """On Windows a directory cannot be renamed while another process has it or a
+    file in it open, as a waiter judging the lease does. Release retries the rename
+    instead of reporting the lease taken over and leaving it behind."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+    refused = []
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(dst).name.startswith("gone-") and len(refused) < 3:
+            refused.append(src)
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
+    with lease:
+        monkeypatch.setattr(os, "rename", rename)
+    assert len(refused) == 3
+    assert lease.lost is None
+    assert "taken over" not in caplog.text
+    assert not lockfile.exists()
+
+
+def test_release_refused_for_good_is_not_reported_as_taken_over(
+    tmp_path, monkeypatch, caplog
+):
+    """A release whose rename is refused for good leaves a lease that ages and is taken
+    over once stale; its holder was not taken over and is not reported so."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(dst).name.startswith("gone-"):
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    clock = FakeTime(time.time())
+    lease = clock.lease(tmp_path, lockfile, FAST)
+    with lease:
+        monkeypatch.setattr(os, "rename", rename)
+    assert lease.lost is None
+    assert "taken over while held" not in caplog.text
+    assert "could not be released" in caplog.text
+
+
+@pytest.mark.timeout(60)
+def test_waiter_takes_a_lease_released_while_it_reads_the_holder(
+    tmp_path, monkeypatch, caplog
+):
+    """Windows semantics: a directory cannot be renamed while a file in it is open. The
+    holder releases while a waiter has the holder record open; the waiter then takes
+    the lease at once, and the holder is not reported taken over (the failure of
+    test_concurrent_submissions_run_a_job_once on Windows, where the waiter instead
+    waited stale_after for a lease left behind)."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename, real_read_text = os.rename, Path.read_text
+    open_in = set()
+    reading, refused = threading.Event(), threading.Event()
+
+    def read_text(self, *args, **kwargs):
+        if self.name == HOLDER_FILE and not refused.is_set():
+            open_in.add(self.parent)
+            reading.set()
+            refused.wait(10)  # held open until the holder's rename was refused
+            open_in.discard(self.parent)
+        return real_read_text(self, *args, **kwargs)
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(src) in open_in:
+            refused.set()
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+    monkeypatch.setattr(os, "rename", rename)
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    holder.__enter__()
+    took = []
+
+    def wait():
+        with DirectoryLease("abc", tmp_path, lockfile, settings=SLOW):
+            took.append(time.monotonic())
+
+    waiter = threading.Thread(target=wait)
+    waiter.start()
+    assert reading.wait(10)
+    released = time.monotonic()
+    holder.__exit__(None, None, None)
+    waiter.join(SLOW.stale_after)
+    assert refused.is_set()
+    assert holder.lost is None
+    assert "taken over while held" not in caplog.text
+    assert took and took[0] - released < SLOW.stale_after / 2
+
+
+def test_released_remains_do_not_hold_the_lease(tmp_path):
+    """What a release could not remove (on Windows a file a waiter had open) is no
+    holder: the next taker removes it and takes the lease without waiting."""
+    lockfile = tmp_path / "abc.lock"
+    remains = lockfile / ("gone-" + "e" * 32)
+    remains.mkdir(parents=True)
+    (remains / HOLDER_FILE).write_text(json.dumps({"pid": DEAD_PID}))
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    with lease:
+        assert lease.held
+        assert clock.t == 0
+        assert not remains.exists()
+        assert lease.broke == []
+    assert not lockfile.exists()
+
+
+def test_unreadable_heartbeat_is_not_taken_for_a_stale_lease(tmp_path, monkeypatch):
+    """A holder's heartbeat marks that cannot be read for a moment (on Windows, open in
+    another process) are not absent: the lease is not judged by the older marks left."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    now = time.time()
+    os.utime(lockfile, (now - 100, now - 100))  # only the holder's marks are fresh
+    real_lstat = os.lstat
+
+    def lstat(path, *args, **kwargs):
+        if Path(path) == token_dir or Path(path).parent == token_dir:
+            raise sharing_violation(path)
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", lstat)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW, clock=lambda: now)
+    assert not lease._judge()
+    assert token_dir.is_dir()
+    assert lease.broke == []
