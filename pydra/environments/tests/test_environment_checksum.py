@@ -59,10 +59,14 @@ def _run(tmp_path, env, worker="debug"):
     return job
 
 
-def test_environment_checksum_recorded_not_in_job_checksum(tmp_path):
+def test_environment_checksum_recorded_and_in_shell_job_checksum(tmp_path):
     a = _run(tmp_path / "a", Tagged(tag="a"))
     b = _run(tmp_path / "b", Tagged(tag="b"))
-    assert a.checksum == b.checksum
+    # the job's checksum is the digest of its record, which names the environment
+    # (RFC 0004 section 3.1), where the task's checksum does not
+    assert a.checksum != b.checksum
+    assert a.task._checksum == b.task._checksum
+    assert a.record["job"]["environment"] == Tagged(tag="a").checksum()
     assert a.result().context["environment"] == Tagged(tag="a").checksum()
     assert b.result().context["environment"] == Tagged(tag="b").checksum()
     assert a.result().context["environment"] != b.result().context["environment"]
