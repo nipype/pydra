@@ -20,7 +20,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.engine.lazy import LazyOutField
     from pydra.engine.graph import DiGraph
-    from pydra.engine.submitter import NodeExecution
+    from pydra.engine.runner import NodeExecution
     from pydra.environments.base import Environment
     from pydra.engine.hooks import TaskHooks
     from pydra.utils.resources import ComputeResources
@@ -387,11 +387,11 @@ class WorkflowTask(base.Task[WorkflowOutputsType]):
 
     def _run(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow."""
-        job.submitter.expand_workflow(job, rerun)
+        job.submitter._expand(job, rerun)
 
     async def _run_async(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow asynchronously."""
-        await job.submitter.expand_workflow_async(job, rerun)
+        await job.submitter._expand_async(job, rerun)
 
     def construct(self) -> "Workflow":
         from pydra.engine.workflow import Workflow

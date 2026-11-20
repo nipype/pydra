@@ -182,6 +182,8 @@ def test_node_update_status_errored_running_job():
     class ErroredJob:
         state_index = 0
         errored = False
+        _held = None
+        _awaiting_run = False
 
         @property
         def done(self):

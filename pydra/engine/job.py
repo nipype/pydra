@@ -89,6 +89,17 @@ class Job(ty.Generic[TaskType]):
     submitter: "Submitter | None"
     environment: "Environment | None"
     state_index: int
+    rerun: bool = False  # Set by the graph runner when it hands the job out
+    # The names of the nested workflows that hold the job, outermost first, with the
+    # element's index where one is split; set by the graph runner
+    workflow_path: tuple[str, ...] = ()
+    # The id of this attempt at the job, set by the graph runner when it starts to
+    # expand a workflow job and by ``Submitter`` for its outer job; "resume" if the
+    # job can resume
+    attempt: str | None = None
+    # Whether the audit of a workflow job was started by the runner, so that it is
+    # finalised with the job
+    _audit_started: bool = False
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
     _inputs: dict[str, ty.Any] | None = None
@@ -154,6 +165,8 @@ class Job(ty.Generic[TaskType]):
         # was just written by run(). Not included in __getstate__ so it is
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
+        # The result reported by ``GraphRunner.complete``, as given
+        self._held = None
         # Set while the job is queued to run in this process's submitter and its run
         # has not finished
         self._awaiting_run = False
@@ -172,6 +185,9 @@ class Job(ty.Generic[TaskType]):
         self.cache_root = submitter.cache_root
         self.store = submitter.store
         self._run_start_time = None
+        from pydra.engine.resident import check_providers
+
+        check_providers(self)
 
     @property
     def cache_root(self):
@@ -200,6 +216,7 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
+        state.pop("_held", None)
         state.pop("_awaiting_run", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
@@ -215,6 +232,7 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
+        self.__dict__.setdefault("_held", None)
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
@@ -397,6 +415,75 @@ class Job(ty.Generic[TaskType]):
         has failed, otherwise None."""
         return self if self.persist_pickle or result.errored else None
 
+    def _start_workflow(self, lease) -> Result:
+        """Begin the expansion of a workflow job whose lease is held and whose stored
+        result, if any, is not to be used: withdraw its success record, prepare its
+        directory, run the ``pre_run_task`` hook and start its audit. Returns the
+        result the workflow's outputs are later put in (see `_finish_workflow`)."""
+        self._errored = False
+        self._audit_started = False
+        self._withdraw_success(lease)
+        self._populate_filesystem()
+        result = Result(
+            outputs=None,
+            runtime=None,
+            errored=False,
+            cache_dir=self.cache_dir,
+            task=self.task,
+            context=self.context,
+        )
+        self.hooks.pre_run_task(self)
+        self.audit.start_audit(odir=self.cache_dir, chdir=False)
+        self._audit_started = True
+        if self.audit.audit_check(AuditFlag.PROV):
+            self.audit.audit_task(job=self)
+        self.audit.monitor()
+        return result
+
+    def _finish_workflow(
+        self, lease, result: Result | None, error: BaseException | None
+    ) -> BaseException | None:
+        """Commit the result of a workflow job whose nodes are done, under its lease,
+        and run its ``post_run`` hook if it succeeded. Returns the error of the
+        workflow (``error``, or the one raised building its outputs), None if it
+        succeeded. Raises what the commit raises (`LeaseLost`), after which nothing is
+        stored."""
+        cwd = os.getcwd()
+        if result is None:  # it failed while starting
+            result = Result(
+                outputs=None,
+                runtime=None,
+                errored=False,
+                cache_dir=self.cache_dir,
+                task=self.task,
+                context=self.context,
+            )
+        if error is None:
+            try:
+                result.outputs = self.task.Outputs._from_job(self)
+                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+            except Exception as exc:
+                error = exc
+        if error is not None:
+            traceback = format_exception(type(error), error, error.__traceback__)
+            if lease_still_held(lease):
+                record_error(self.cache_dir, error=traceback)
+            result.errored = True
+            self._errored = True
+        if self._audit_started:  # not if it failed before the audit
+            self.hooks.post_run_task(self, result)
+            self.audit.finalize_audit(result=result)
+        self.store.commit(lease, result, job=self._pickle_to_commit(result))
+        self._awaiting_run = False
+        self._remove_info_file()
+        return error
+
+    def _complete_workflow(self, result: Result) -> None:
+        """What follows the release of the lease of a workflow job that succeeded"""
+        self.hooks.post_run(self, result)
+        self._check_for_hash_changes()
+        self._cached_result = result
+
     def run(self, rerun: bool = False):
         """Prepare the job working directory, execute the task, and save the
         results.
@@ -442,7 +529,7 @@ class Job(ty.Generic[TaskType]):
                 self.audit.audit_task(job=self)
             try:
                 self.audit.monitor()
-                self.task._run(self, rerun)
+                self._run_task(rerun)
                 result.outputs = self.task.Outputs._from_job(self)
                 self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
             except Exception:
@@ -537,6 +624,25 @@ class Job(ty.Generic[TaskType]):
         self._check_for_hash_changes()
         return result
 
+    def _run_task(self, rerun: bool) -> None:
+        """Run the task. The state of each provided field is bound for the duration of
+        the run and handed to the task through ``provided_values``; a task with no
+        provided field costs nothing here."""
+        from pydra.engine.resident import provided_fields
+
+        self.provided_values = {}
+        if not provided_fields(self.task):
+            self.task._run(self, rerun)
+            return
+        from pydra.engine import resident
+
+        with resident.bound(self) as values:
+            self.provided_values = values
+            try:
+                self.task._run(self, rerun)
+            finally:
+                self.provided_values = {}
+
     def _remove_info_file(self):
         """Remove the job's ``<uid>_info.json``; one that cannot be removed is logged
         and left in place."""
@@ -600,6 +706,8 @@ class Job(ty.Generic[TaskType]):
         result : Result
             the result of the job
         """
+        if self._held is not None and not return_inputs:
+            return self._held
         if self.errored:
             return Result(
                 outputs=None,
