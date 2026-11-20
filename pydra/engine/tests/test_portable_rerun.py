@@ -4,6 +4,7 @@
 import errno
 import os
 import sys
+import time
 
 import cloudpickle
 import pytest
@@ -256,3 +257,19 @@ def test_rerun_evicts_only_the_entry_it_read(tmp_path, monkeypatch):
     assert store.read_own(job).outputs.out == 99  # it was not evicted
     assert fresh.stored is False and fresh.committed.kept is not None
     assert len(quarantined(store.path)) == 1  # only the one the job read
+
+
+def test_an_unsettled_read_of_a_replaced_entry_never_sleeps(tmp_path, monkeypatch):
+    log = tmp_path / "log"
+    store = make(tmp_path)
+    first_job, _ = _run(tmp_path, store, log)
+    reader = cloudpickle.loads(cloudpickle.dumps(first_job))
+    _run(tmp_path, store, log, rerun=True)
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+    got = reader.result()  # unsettled: called from an event loop, which polls itself
+    assert got.errored and "replaced" in got.failure
+    assert sleeps == []
+    monkeypatch.setattr("pydra.engine.portable.store.VISIBILITY_TIMEOUT", 0.05)
+    got = cloudpickle.loads(cloudpickle.dumps(first_job)).result(settled=True)
+    assert got.errored and sleeps  # a settled read still retries before it fails

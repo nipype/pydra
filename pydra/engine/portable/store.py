@@ -2193,12 +2193,14 @@ class PortableStore:
         wd = self._maybe_work_dir(job)
         try:
             if job.committed is not None:
-                found = self._read_committed(job, wd, job.committed)
+                found = self._read_committed(job, wd, job.committed, settled)
             else:
                 found = None
                 doc = self._committed_doc(job, wd, settled) if wd is not None else None
                 if doc is not None:
-                    found = self._read_committed(job, wd, self._committed_of(doc, wd))
+                    found = self._read_committed(
+                        job, wd, self._committed_of(doc, wd), settled
+                    )
             if found is None:
                 found = self.read_own(job)
         except FileNotFoundError:
@@ -2219,7 +2221,11 @@ class PortableStore:
         return self._read_committed(job, self._maybe_work_dir(job), committed)
 
     def _read_committed(
-        self, job: "Job", wd: Path | None, committed: Committed
+        self,
+        job: "Job",
+        wd: Path | None,
+        committed: Committed,
+        settled: bool = False,
     ) -> Result | None:
         if committed.stored:
             ref = committed.entry
@@ -2233,7 +2239,9 @@ class PortableStore:
                 raise CorruptEntry(
                     f"the committed entry {ref.cdir} is not the entry of the job"
                 )
-            result = self._read_recorded(job, ref, shard, trust, readonly, committed)
+            result = self._read_recorded(
+                job, ref, shard, trust, readonly, committed, settled
+            )
         elif wd is None or committed.kept is None:
             return None
         elif os.path.basename(committed.kept) == _KEPT_ENTRY:
@@ -2254,12 +2262,14 @@ class PortableStore:
         trust: Trust,
         readonly: bool,
         committed: Committed,
+        settled: bool = False,
     ) -> Result:
         """The entry a record names, which must still be the one that was recorded: its output
         digest is ``committed.committed_digest``. A rerun replaces an entry at its address, so
-        an address alone no longer names its content. A mismatch is retried until the
-        visibility timeout (a stale lookup on shared storage), then raised."""
-        deadline = time.monotonic() + self.visibility_timeout
+        an address alone no longer names its content. A mismatch is raised at once, and when
+        ``settled`` retried until the visibility timeout first (a stale lookup on shared
+        storage): an unsettled reader is called from an event loop and never sleeps."""
+        deadline = time.monotonic() + (self.visibility_timeout if settled else 0.0)
         n = 0
         while True:
             with self._open_root_for(ref, trust, readonly) as root:
