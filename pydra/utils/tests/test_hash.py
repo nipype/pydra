@@ -597,3 +597,32 @@ def test_bytes_repr_annotated_type():
         ty.List[ty.Union[Json, Yaml]]
     )
     assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])
+
+
+def test_hash_function_stable_after_pickling_by_value(tmp_path: Path, monkeypatch):
+    """Functions decorated by ``python.define`` are shadowed by the task class at the
+    module level, so cloudpickle pickles them by value, which replaces their
+    ``co_filename`` with '<dynamic-code>'. The hash should still match the original."""
+    cloudpickle = pytest.importorskip("cloudpickle")
+    module_name = "pydra_test_pickle_by_value_mod"
+    (tmp_path / f"{module_name}.py").write_text(
+        "import typing as ty\n"
+        "from pydra.compose import python\n"
+        "\n"
+        "\n"
+        "@python.define(outputs=['a', 'b'])\n"
+        "def ToProcess(\n"
+        "    x: int, y: ty.Union[ty.List[str], None] = None\n"
+        ") -> ty.Tuple[ty.List[str], ty.List[str]]:\n"
+        "    # a comment\n"
+        "    return [str(x)], []\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    mod = __import__(module_name)
+    try:
+        func = mod.ToProcess(x=1).function
+        unpickled = cloudpickle.loads(cloudpickle.dumps(func))
+        assert unpickled is not func
+        assert hash_function(unpickled) == hash_function(func)
+    finally:
+        sys.modules.pop(module_name, None)

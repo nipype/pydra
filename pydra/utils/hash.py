@@ -6,6 +6,8 @@ import re
 import ast
 import struct
 import inspect
+import importlib
+import linecache
 from datetime import datetime
 import typing as ty
 import types
@@ -683,6 +685,56 @@ def _parse_function_source_bytes(src: str) -> bytes:
     return b"".join(parts)
 
 
+def _get_function_source(obj: types.FunctionType) -> tuple[str, str | None]:
+    """Get the source code of a function and the file it was defined in.
+
+    Functions that have been pickled by value (e.g. by cloudpickle when the
+    module-level name refers to a different object, as is the case for functions
+    decorated by ``python.define``) have their ``co_filename`` replaced, so
+    ``inspect.getsource`` fails in the process they are unpickled in. In that case
+    the source is recovered from the file of the module the function was defined
+    in, using the (preserved) first line number of the code object, so that the
+    hash is consistent with the one calculated before pickling.
+
+    Raises
+    ------
+    OSError
+        if the source code cannot be found
+    """
+    try:
+        src = inspect.getsource(obj)
+    except (OSError, TypeError):
+        pass
+    else:
+        try:
+            source_file = inspect.getfile(obj)
+        except TypeError:
+            source_file = None
+        return src, source_file
+    try:
+        module = sys.modules.get(obj.__module__) or importlib.import_module(
+            obj.__module__
+        )
+        source_file = inspect.getsourcefile(module)
+    except Exception:
+        source_file = None
+    if not source_file:
+        raise OSError(f"could not get source code for {obj}")
+    lines = linecache.getlines(source_file, module.__dict__)
+    start = obj.__code__.co_firstlineno - 1
+    if not lines or start >= len(lines):
+        raise OSError(f"could not get source code for {obj}")
+    try:
+        block = inspect.getblock(lines[start:])
+    except Exception as e:
+        raise OSError(f"could not get source code for {obj}") from e
+    src = "".join(block)
+    # Check that the recovered block actually defines the function in question
+    if not re.search(rf"^\s*(async\s+)?def\s+{re.escape(obj.__name__)}\b", src, re.M):
+        raise OSError(f"could not get source code for {obj}")
+    return src, source_file
+
+
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
     """Serialize a function, attempting to use the AST of the source code if available
@@ -706,13 +758,20 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
             yield _function_bytes_cache[cache_key]
         else:
             try:
-                src = inspect.getsource(obj)
+                src, source_file = _get_function_source(obj)
             except OSError:
                 # Fallback to using the bytes representation of the code object.
                 # This path is not cached because it depends on the cache arg.
                 yield from bytes_repr(obj.__code__, cache)
             else:
                 result = _parse_function_source_bytes(src)
+                if cache_key is None and source_file:
+                    try:
+                        mtime_ns = os.stat(source_file).st_mtime_ns
+                    except OSError:
+                        pass
+                    else:
+                        cache_key = (obj.__module__, obj.__qualname__, mtime_ns)
                 if cache_key is not None:
                     _function_bytes_cache[cache_key] = result
                 yield result
