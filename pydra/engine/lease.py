@@ -47,6 +47,10 @@ POLL_MAX = 2.0
 MISSED_BEATS = 1
 """Heartbeats a live holder may miss (a slow or hung write) without being taken over."""
 
+RELEASE_PATIENCE = 5.0
+"""Most seconds a release retries renaming the holder's directory aside while the
+storage refuses it; at most ``MISSED_BEATS * renew_interval`` for given settings."""
+
 HOLDER_FILE = "holder.json"
 """The holder record in a lease's token directory."""
 
@@ -130,6 +134,18 @@ class Lease(ty.Protocol):
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
         """Release the lease."""
 
+    def try_take(self) -> float | None:
+        """Make one attempt to take the lease without waiting for it.
+
+        Returns
+        -------
+        float or None
+            None if the lease is held now (release it with ``__exit__``), otherwise the
+            seconds to wait before the next call. The first call of a wait starts its
+            bounds; a later call continues the same wait, and raises `LeaseTimeout`
+            (leaving the lease untaken) once a bound has passed.
+        """
+
 
 @attrs.frozen
 class LeaseSettings:
@@ -186,6 +202,10 @@ class LeaseSettings:
     max_wait : float | None
         Seconds after which any wait ends in `LeaseTimeout`, even behind a holder that
         keeps renewing; None (default) for no cap.
+    holder : {"named", "anonymous"}
+        What the holder record names. ``"named"`` (default) writes the owner, host and pid;
+        ``"anonymous"`` writes only the token and the start time, and messages say "another
+        process", so nothing in the lease directory names a user, a host or a job.
     """
 
     stale_after: float = STALE_AFTER
@@ -193,8 +213,13 @@ class LeaseSettings:
     renew_fraction: float = RENEW_FRACTION
     attribute_delay: float = ATTRIBUTE_DELAY
     max_wait: float | None = None
+    holder: ty.Literal["named", "anonymous"] = "named"
 
     def __attrs_post_init__(self):
+        if self.holder not in ("named", "anonymous"):
+            raise ValueError(
+                f"holder must be 'named' or 'anonymous' (got {self.holder!r})"
+            )
         if self.max_wait is not None and self.max_wait < 0:
             raise ValueError(f"max_wait must not be negative (got {self.max_wait})")
         if self.stale_after <= 0 or self.timeout < 0 or self.attribute_delay < 0:
@@ -236,8 +261,10 @@ def _owner() -> str:
         return str(os.getuid()) if hasattr(os, "getuid") else "unknown"
 
 
-def _describe(holder: dict | None, age: float | None) -> str:
-    if not holder:
+def _describe(holder: dict | None, age: float | None, anonymous: bool = False) -> str:
+    if anonymous:
+        who = "another process"
+    elif not holder:
         who = "an unknown holder"
     else:
         who = f"pid {holder.get('pid', '?')} on host {holder.get('host', '?')}" + (
@@ -349,9 +376,11 @@ class DirectoryLease:
     )
     _newest_seen: float | None = attrs.field(default=None, init=False, repr=False)
     _refused: OSError | None = attrs.field(default=None, init=False, repr=False)
+    _unreadable_since: float | None = attrs.field(default=None, init=False, repr=False)
     _deadline: float = attrs.field(default=0.0, init=False, repr=False)
     _cap: float | None = attrs.field(default=None, init=False, repr=False)
     _delay: float = attrs.field(default=POLL_MIN, init=False, repr=False)
+    _waiting: bool = attrs.field(default=False, init=False, repr=False)
 
     @property
     def held(self) -> bool:
@@ -394,6 +423,7 @@ class DirectoryLease:
         require_lease_storage(self.lockfile.parent)
         self.broke, self.lost, self._last_seen = [], None, (None, None)
         self._newest_seen, self._refused, self._delay = None, None, POLL_MIN
+        self._unreadable_since = None
         now = self.monotonic()
         self._deadline = now + self.settings.timeout
         max_wait = self.settings.max_wait
@@ -431,13 +461,14 @@ class DirectoryLease:
             except OSError:
                 pass
             return False
-        record = {
-            "owner": _owner(),
-            "host": socket.gethostname(),
-            "pid": os.getpid(),
-            "started": os.stat(token_dir).st_mtime,
-            "token": token,
-        }
+        record = {"started": os.stat(token_dir).st_mtime, "token": token}
+        if self.settings.holder == "named":
+            record = {
+                "owner": _owner(),
+                "host": socket.gethostname(),
+                "pid": os.getpid(),
+                **record,
+            }
         with atomic_write(token_dir / HOLDER_FILE, "w") as f:
             json.dump(record, f)
         self._token = token
@@ -480,11 +511,15 @@ class DirectoryLease:
             record["host"] = lines[1].strip()
         return record or None
 
-    def _newest_mtime(self, entries: list[str]) -> float | None:
+    def _newest_mtime(self, entries: list[str]) -> tuple[float | None, OSError | None]:
         """The newest mtime of the lease, its entries and theirs (the holder record
         and heartbeats), so a renewal shows even where a directory's own mtime is
-        reported late."""
-        mtimes = []
+        reported late, and the error of a mark that exists but could not be read.
+        The mtime is None if the lease is gone.
+
+        A mark that is gone is skipped. The children of an entry that cannot be
+        listed are not marks; one that is listed but cannot be read is reported."""
+        mtimes, unreadable = [], None
         paths = [self.lockfile]
         for entry in entries:
             paths.append(self.lockfile / entry)
@@ -495,13 +530,16 @@ class DirectoryLease:
         for path in paths:
             try:
                 mtimes.append(os.lstat(path).st_mtime)
-            except OSError:
-                continue
+            except OSError as err:
+                if err.errno not in (errno.ENOENT, errno.ENOTDIR, _ESTALE):
+                    unreadable = err
         try:  # read again after listing, so a takeover renamed meanwhile shows
             mtimes.append(os.lstat(self.lockfile).st_mtime)
         except FileNotFoundError:
-            return None
-        return max(mtimes)
+            return None, unreadable
+        except OSError as err:
+            unreadable = err
+        return (max(mtimes) if mtimes else None), unreadable
 
     def _judge(self) -> bool:
         """Take over the lease if it is stale; whether it was removed."""
@@ -512,12 +550,17 @@ class DirectoryLease:
         if not os.path.isdir(self.lockfile) or os.path.islink(self.lockfile):
             return self._judge_legacy(st)
         holder, entries = self._read_holder()
-        newest = self._newest_mtime(entries)
+        if entries and all(e.startswith("gone-") for e in entries):
+            return self._clear_remains(entries)
+        newest, unreadable = self._newest_mtime(entries)
         if newest is None:
-            return True
+            return unreadable is None
         self._saw(newest)
-        age = self._now() - newest
+        now = self._now()
+        age = now - newest
         self._last_seen = (holder, age)
+        if not self._judgeable(unreadable, now):
+            return False
         if age <= self.settings.stale_after:
             return False
         tokens = [e for e in entries if _TOKEN.match(e)]
@@ -559,6 +602,37 @@ class DirectoryLease:
             logger.debug("Removed the remains of a takeover in %s", self.lockfile)
         return True
 
+    def _judgeable(self, unreadable: OSError | None, now: float) -> bool:
+        """Whether the lease's age can be judged by its readable marks.
+
+        A mark that cannot be read may be the holder's newest. While one is, the lease
+        is judged only once ``stale_after`` has passed on the storage clock since a
+        mark was first seen unreadable: by then a fresh mark that stayed unreadable
+        would be stale too, and the takeover's rename decides whether it is held."""
+        if unreadable is None:
+            self._unreadable_since = None
+            return True
+        if self._unreadable_since is None:
+            self._unreadable_since = now
+            logger.debug("A mark in %s cannot be read: %s", self.lockfile, unreadable)
+        return now - self._unreadable_since >= self.settings.stale_after
+
+    def _clear_remains(self, entries: list[str]) -> bool:
+        """Remove a lease holding only ``gone-`` entries, whatever their age; whether it
+        was removed. They are what a release or a takeover renamed aside and could not
+        remove yet (on Windows, while another process had a file in them open), never
+        a holder: a holder's directory is its bare token."""
+        for entry in entries:
+            shutil.rmtree(self.lockfile / entry, ignore_errors=True)
+        try:
+            os.rmdir(self.lockfile)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False  # not emptied yet, or a new holder made its token meanwhile
+        logger.debug("Removed the released remains in %s", self.lockfile)
+        return True
+
     def _judge_legacy(self, st: os.stat_result) -> bool:
         self._saw(st.st_mtime)
         age = self._now() - st.st_mtime
@@ -584,7 +658,7 @@ class DirectoryLease:
         logger.warning(
             "Took over the lease %s from %s (stale after %.1fs)",
             self.lockfile,
-            _describe(holder, age),
+            _describe(holder, age, self.settings.holder == "anonymous"),
             self.settings.stale_after,
         )
 
@@ -679,7 +753,10 @@ class DirectoryLease:
         holder, age = self._last_seen
         if holder is None:
             holder = self.holder()
-        held_by = f"the lease {self.lockfile}, held by {_describe(holder, age)}"
+        held_by = (
+            f"the lease {self.lockfile}, held by "
+            f"{_describe(holder, age, self.settings.holder == 'anonymous')}"
+        )
         if self._refused is not None and not capped:
             err = self._refused
             return LeaseUnavailable(
@@ -739,6 +816,23 @@ class DirectoryLease:
         )
 
     def _release(self) -> None:
+        for delay in self._releasing():
+            self.sleep(delay)
+
+    async def _arelease(self) -> None:
+        for delay in self._releasing():
+            await asyncio.sleep(delay)
+
+    def _releasing(self) -> ty.Iterator[float]:
+        """Release the lease, yielding the seconds to wait before each retry.
+
+        The holder's directory is renamed aside, then removed. Only a directory that is
+        gone shows the lease taken over. Any other refusal (on Windows, while another
+        process has the directory or a file in it open) is retried for
+        ``min(RELEASE_PATIENCE, MISSED_BEATS * renew_interval)`` seconds, within which
+        no waiter sees the stopped holder stale; a rename still refused then leaves the
+        lease to be taken over once stale."""
+        self._waiting = False
         heartbeat, self._heartbeat = self._heartbeat, None
         token, self._token = self._token, None
         if heartbeat is not None:
@@ -746,16 +840,52 @@ class DirectoryLease:
             heartbeat.join(self.settings.renew_interval)
         if token is None:
             return
-        gone = self.lockfile / f"gone-{token}"
-        try:
-            os.rename(self.lockfile / token, gone)
-        except OSError:
-            if self.lost is None:
-                self._lose("its holder directory was gone at release")
-            return
+        token_dir, gone = self.lockfile / token, self.lockfile / f"gone-{token}"
+        patience = min(RELEASE_PATIENCE, MISSED_BEATS * self.settings.renew_interval)
+        give_up = self.monotonic() + patience
+        delay = min(POLL_MIN / 5, patience / 4)
+        while True:
+            try:
+                os.rename(token_dir, gone)
+                break
+            except OSError as err:
+                if err.errno in (errno.ENOENT, _ESTALE):
+                    if self.lost is None:
+                        self._lose("its holder directory was gone at release")
+                    return
+                if self.monotonic() >= give_up:
+                    logger.warning(
+                        "The lease %s could not be released (%s); it is taken over "
+                        "once not renewed for %.1fs",
+                        self.lockfile,
+                        err,
+                        self.settings.stale_after,
+                    )
+                    return
+                logger.debug("Retrying the release of %s: %s", self.lockfile, err)
+            yield delay
+            delay = min(delay * 2, POLL_MAX / 4)
         self._remove(gone)
 
     # Protocol
+
+    def try_take(self) -> float | None:
+        """One pass of the wait of ``__enter__``: None once the lease is held, otherwise
+        the seconds before the next attempt. The first call of a wait runs
+        ``_prepare``, which sets its bounds; later calls keep them. `LeaseTimeout` ends
+        the wait."""
+        if not self._waiting:
+            self._prepare()
+            self._waiting = True
+        try:
+            delay = self._step()
+        except BaseException:
+            self._waiting = False
+            self._release()
+            raise
+        if delay is None:
+            self._waiting = False
+        return delay
 
     def __enter__(self) -> "DirectoryLease":
         self._prepare()
@@ -776,9 +906,9 @@ class DirectoryLease:
             while (delay := self._step()) is not None:
                 await asyncio.sleep(delay)
         except BaseException:
-            self._release()
+            await self._arelease()
             raise
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
-        self._release()
+        await self._arelease()

@@ -384,6 +384,7 @@ class PartialExpansion:
         self.block_errors: list[str] = []
         self.vals: dict[tuple, dict] = {}
         self.inputs_ind: dict[tuple, dict] = {}
+        self.block_of: dict[tuple, tuple] = {}  # element key -> the key of its block
         self.groups: dict[tuple, list[tuple]] = {}
         self.closed: set[tuple] = set()
         self.open_groups: dict[tuple, dict] = {}  # open group key -> its fields
@@ -543,12 +544,16 @@ class PartialExpansion:
                 self._expand(bkey, self.blocks[bkey])
 
     def _expand(self, bkey: tuple, block: _BlockState) -> None:
-        from pydra.engine.runner import error_entry
+        from pydra.engine.runner import _check_splittable, error_entry
 
         ex, spec = self.ex, self.spec
         entries = dict(self.static_entries)
         skeleton = dict(self.static_entries)
         positions = dict(zip(spec.sources, bkey))
+        for term, lf in spec.inner.items():
+            if positions[lf._node.name] is None:  # the whole output of a source
+                value = lf._get_value(workflow=ex.workflow, graph=self.graph)
+                _check_splittable(ex.name, term, value)
         try:
             for term in rpn_terms(spec.rpn):
                 if term in spec.inner:
@@ -594,6 +599,7 @@ class PartialExpansion:
         for entry in elements:
             key = tuple(entry.fields[p] for p in spec.elem_paths)
             ex._tasks[key] = None
+            self.block_of[key] = bkey
             self.vals[key] = entry.values
             self.inputs_ind[key] = {
                 f"{ex.name}.{field}": entry.terms[name]
@@ -609,6 +615,13 @@ class PartialExpansion:
                 self.final_log.append(key)
             ex.blocked[key] = ex._upstream(key)
         self._set_status(bkey, "expanded")
+
+    def inner_reads(self, key: tuple) -> dict[str, ty.Any]:
+        """For each inner input of an element, the final key of the upstream element
+        whose output its block split (None for a whole read of a source without a
+        state)"""
+        positions = dict(zip(self.spec.sources, self.block_of[key]))
+        return {term: positions[lf._node.name] for term, lf in self.spec.inner.items()}
 
     def _add_group(self, group: tuple) -> None:
         if group in self.groups:

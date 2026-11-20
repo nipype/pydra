@@ -19,7 +19,10 @@ def test_entries_name_the_failed_job(worker, on_error, tmp_path):
         with pytest.raises(WorkflowError) as excinfo:
             sub(Propagate(x=[2, 1, 3], y=[10, 20]), raise_errors=True)
     error = excinfo.value
-    (entry,) = error.entries
+    # a run stopped by fail_fast also names the elements it handed out and stopped
+    stopped = [e for e in error.entries if e.phase == "stopped"]
+    assert all(e.message.startswith("stopped by A(1): ") for e in stopped)
+    (entry,) = [e for e in error.entries if e.phase != "stopped"]
     assert isinstance(entry, JobErrorEntry)
     assert entry.job_name == "A"
     assert entry.state_index == 1

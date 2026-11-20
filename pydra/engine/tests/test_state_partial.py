@@ -916,3 +916,110 @@ def test_slurm_array_eligible_partial():
     assert worker._array_eligible(FakeJob(None, (0, 1)))
     assert worker._array_eligible(FakeJob(3, None))
     assert not worker._array_eligible(FakeJob(None, None))
+
+
+# ----------------------------------------------------------------------------------
+# Under R2-R8: plan(), upstream(), entries and the ready() fixpoint
+
+
+def _plan(runner):
+    return {n.path: n for n in runner.plan().nodes}
+
+
+def _live_tables(node):
+    return (dict(node._tasks or {}), dict(node.blocked or {}), dict(node.queued))
+
+
+def test_plan_counts_the_elements_of_expanded_blocks(submitter):
+    """A partial node's plan counts the elements of the blocks whose upstream elements
+    the runner has accepted, including blocks ``ready`` has not expanded yet, and
+    leaves the live node's tables alone"""
+    runner = runner_for(submitter, Records(n=[2, 3]))
+    a0, a1 = runner.ready().dispatch
+    b = _plan(runner)["B"]
+    assert (b.elements, b.known_elements, b.state) == (None, 0, "deferred")
+    finish(runner, a1)  # no ready() since: the live node has not expanded the block
+    live = runner.exec_graph.node("B")
+    before = _live_tables(live)
+    b = _plan(runner)["B"]
+    assert (b.elements, b.known_elements, b.state) == (None, 3, "pending")
+    assert _live_tables(live) == before
+    released = runner.ready().dispatch
+    assert sorted(j.task.x for j in released) == [30, 31, 32]
+    finish(runner, a0)
+    b = _plan(runner)["B"]
+    assert (b.elements, b.known_elements) == (5, 5)  # every block is expanded
+    for job in released:
+        finish(runner, job)
+    drain(runner)
+    assert runner.done and not runner.failed and outputs(runner) == [86, 192]
+
+
+def test_planned_partial_run_equals_unplanned(tmp_path):
+    def run(plan_each_round):
+        with Submitter(
+            worker="debug", cache_root=tmp_path / str(plan_each_round)
+        ) as sub:
+            runner = runner_for(sub, Records(n=[2, 3]))
+            seen = []
+            while True:
+                if plan_each_round:
+                    runner.plan()
+                jobs = runner.ready().dispatch
+                if not jobs:
+                    break
+                for job in reversed(jobs):  # complete later elements first
+                    seen.append((job.name, job.state_key or job.state_index))
+                    finish(runner, job)
+                    if plan_each_round:
+                        runner.plan()
+            return seen, outputs(runner), runner.failed
+
+    planned = run(True)
+    assert planned == run(False)
+    assert len(planned[0]) == 2 + 5 + 5 + 2
+
+
+def test_upstream_names_the_source_element_of_a_block(submitter):
+    runner = runner_for(submitter, Records(n=[2, 3]))
+    a0, a1 = runner.ready().dispatch
+    finish(runner, a1)
+    released = runner.ready().dispatch
+    assert {j.name for j in released} == {"B"}
+    for job in released:
+        assert runner.upstream(job) == {"x": [(a1, 1)]}
+
+
+def test_partial_bookkeeping_is_progress_for_the_ready_fixpoint(submitter):
+    """A partial node registers blocks, closes groups and seals without changing its
+    tables (each bumps ``version``), so ``_progress`` must see the version and the
+    seal"""
+    runner = runner_for(submitter, Records(n=[2, 3]))
+    runner.ready()
+    assert runner.ready().dispatch == []  # B starts
+    live = runner.exec_graph.node("B")
+    assert live.is_partial
+    before, tables = runner._progress(), _live_tables(live)
+    live._partial.version += 1  # what registering a block or closing a group does
+    assert _live_tables(live) == tables
+    assert runner._progress() != before
+    before = runner._progress()
+    live._partial.is_sealed = True
+    assert runner._progress() != before
+
+
+def test_partial_entries_name_the_key(submitter):
+    runner = runner_for(submitter, Records(n=[2, 3]))
+    a0, a1 = runner.ready().dispatch
+    finish(runner, a0)
+    finish(runner, a1)
+    b = runner.ready().dispatch
+    victim = next(j for j in b if j.state_key is not None)
+    runner.complete(victim, Failed(ValueError("segment failed")))
+    for job in b:
+        if job is not victim:
+            finish(runner, job)
+    drain(runner)
+    (entry,) = [e for e in runner.entries if e.job_name == "B"]
+    assert entry.state_key == victim.state_key and entry.phase == "run"
+    assert entry.state_index is None

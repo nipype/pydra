@@ -6,9 +6,9 @@ import warnings
 import os
 from pathlib import Path
 from tempfile import mkdtemp
+from uuid import uuid4
 from copy import deepcopy
 from datetime import datetime
-from collections import defaultdict
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pydra.engine.graph import DiGraph  # noqa: F401
@@ -18,13 +18,17 @@ from pydra.utils.general import (
 )
 from pydra.utils.hash import PersistentCache
 from pydra.engine.audit import Audit
+from pydra.engine.drivers import drive, drive_inline
+from pydra.engine.executor import InlineExecutor, WorkerExecutor, no_result_diagnosis
 from pydra.engine.job import Job
 from pydra.engine.runner import (  # noqa: F401
     Failed,
     GraphRunner,
     JobErrorEntry,
     NodeExecution,
+    NotRun,
     OnError,
+    element_label,
 )
 from pydra.engine.store import (
     PickleStore,
@@ -81,6 +85,35 @@ class WorkflowError(RuntimeError):
         return (type(self), (self.args[0], self.errors, self.entries))
 
 
+class RunIncomplete(WorkflowError):
+    """Raised when a workflow's run ended with jobs that did not run: cancelled, never
+    started or held by infrastructure (:class:`~pydra.engine.runner.NotRun`), with no
+    job failed. The run is incomplete, not failed, and a later run resumes it from the
+    store.
+
+    Attributes
+    ----------
+    not_run : list[tuple[Job, NotRun]]
+        The jobs that did not run, with their outcome
+    """
+
+    def __init__(
+        self,
+        message: str,
+        errors: list[str],
+        entries: "list[JobErrorEntry] | None" = None,
+        not_run: "list[tuple[Job, NotRun]] | None" = None,
+    ):
+        super().__init__(message, errors, entries)
+        self.not_run = list(not_run) if not_run is not None else []
+
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.args[0], self.errors, self.entries, self.not_run),
+        )
+
+
 class Submitter:
     """Send a job to the execution backend.
 
@@ -109,7 +142,12 @@ class Submitter:
         to them with code execution as the reading user: only list caches whose
         writers you trust
     max_concurrent: int | float, optional
-        Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
+        Maximum number of concurrent tasks to run, by default float("inf") (unlimited).
+        A batching worker (one with ``submit_many``, such as slurm or sge) applies it
+        inside its executor, to its own jobs only; the other workers share the cap the
+        driver applies. A run that routes jobs to several batching workers, or to a
+        batching worker beside other workers, can therefore have more than
+        ``max_concurrent`` jobs in flight in all
     audit_flags : AuditFlag, optional
         Configure provenance tracking. available flags: :class:`~pydra.utils.messenger.AuditFlag`
         Default is no provenance tracking.
@@ -348,24 +386,27 @@ class Submitter:
             return self._on_error_arg
         return "raise_at_end" if is_async else "fail_fast"
 
-    def worker_for(self, job: "Job[TaskType]") -> Worker:
-        """The worker a job runs on.
+    def route_name(self, job: "Job[TaskType]") -> str:
+        """The name of the worker a job runs on.
 
         Only leaf jobs are routed: a workflow job is expanded by the submitter's own
         ``worker``, whatever its resources, and its nodes are placed individually.
         """
         if is_workflow(job.task):
-            return self.workers[DEFAULT_WORKER]
+            return DEFAULT_WORKER
         name = self.router(job)
         if name is None:
             name = DEFAULT_WORKER
-        try:
-            return self.workers[name]
-        except KeyError:
+        if name not in self.workers:
             raise ValueError(
                 f"The router sent job {job.name!r} to {name!r}, which is not one of "
                 f"the submitter's workers: {sorted(self.workers)}"
-            ) from None
+            )
+        return name
+
+    def worker_for(self, job: "Job[TaskType]") -> Worker:
+        """The worker a job runs on, see :meth:`route_name`"""
+        return self.workers[self.route_name(job)]
 
     def __call__(
         self,
@@ -448,17 +489,25 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
+        job.attempt = uuid4().hex
         self.errors = []
         self.entries = []
         try:
             self.run_start_time = datetime.now()
-            self.submit(job, rerun=rerun)
+            if is_workflow(task):  # the runner leases, expands and commits it
+                self._run_workflow(job, rerun)
+            else:
+                self.submit(job, rerun=rerun)
         except Exception as exc:
             self.errors = exc.errors if isinstance(exc, WorkflowError) else []
             self.entries = exc.entries if isinstance(exc, WorkflowError) else []
+            try:
+                crash_file = str(job.error_file)
+            except ValueError:  # a job never handed out has no work directory
+                crash_file = "not recorded: the job was never given an attempt"
             error_msg = (
                 f"Full crash report for {type(task).__name__!r} job is here: "
-                + str(job.cache_dir / "_error.pklz")
+                + crash_file
             )
             exc.add_note(error_msg)
             if raise_errors or not job.result():
@@ -470,15 +519,7 @@ class Submitter:
         PersistentCache().clean_up()
         result = job.result()
         if result is None:
-            if job.lockfile.exists():
-                raise RuntimeError(
-                    f"Job {job} has a lease, but no result was found. "
-                    "This may be due to another submission that is currently running. "
-                    f"A lease left by an interrupted run ({str(job.lockfile)!r}) is "
-                    "taken over once it has not been renewed for "
-                    "LeaseSettings.stale_after; resubmit then."
-                )
-            raise RuntimeError(f"Job {job} has no result in {str(job.cache_dir)!r}")
+            raise RuntimeError(no_result_diagnosis(job))
         return result
 
     def submit(self, job: "Job[TaskType]", rerun: bool = False) -> None:
@@ -520,8 +561,42 @@ class Submitter:
             return None
         return max(0, int(self.max_concurrent) - in_flight)
 
+    def _run_workflow(self, job: "Job[workflow.Task]", rerun: bool) -> None:
+        """Run the outer workflow job: the runner takes its lease, expands it with every
+        nested workflow and commits its result"""
+        runner = self._runner(job, rerun, is_async=self.worker.is_async, own_job=True)
+        self._drive_runner(runner, raise_first=not self.worker.is_async)
+        if runner.root_error is not None:
+            raise runner.root_error
+        if runner.errors:
+            raise workflow_error(job, runner.errors, runner.entries)
+        if runner.not_run:
+            raise run_incomplete(job, runner.not_run)
+
+    def _drive_runner(self, runner: GraphRunner, raise_first: bool = True) -> None:
+        if not any(w.is_async for w in self.workers.values()):
+            drive_inline(
+                runner,
+                InlineExecutor(self.worker, self.worker_for),
+                on_error=runner.on_error,
+                audit=self.audit,
+                limit=self._limit(),
+            )
+        else:  # some job may run on a worker that is not inline
+            self.loop.run_until_complete(self._drive(runner))
+            if (
+                raise_first
+                and runner.on_error == "fail_fast"
+                and runner.first_error is not None
+            ):
+                raise runner.first_error
+
     def _runner(
-        self, wf_job: "Job[workflow.Task]", rerun: bool, is_async: bool
+        self,
+        wf_job: "Job[workflow.Task]",
+        rerun: bool,
+        is_async: bool,
+        own_job: bool = False,
     ) -> GraphRunner:
         runner = GraphRunner(
             wf_job.task,
@@ -531,50 +606,43 @@ class Submitter:
             propagate_rerun=self.propagate_rerun,
             submitter=self,
             job=wf_job,
+            own_job=own_job,
         )
-        wf_job.return_values = {
-            "workflow": runner.workflow,
-            "exec_graph": runner.exec_graph,
-        }
         return runner
 
     def expand_workflow(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
-        """Expands and executes a workflow job synchronously. Typically only used during
-        debugging and testing, as the asynchronous version is more efficient.
+        """Deprecated: expand and execute a workflow job synchronously. Use a
+        :class:`~pydra.engine.runner.GraphRunner` with
+        :func:`~pydra.engine.drivers.drive_inline`"""
+        warnings.warn(
+            "Submitter.expand_workflow is deprecated, use GraphRunner with drive_inline",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._expand(wf_job, rerun)
 
-        Parameters
-        ----------
-        job : :obj:`~pydra.engine.job.Job[workflow.Task]`
-            Workflow Job object
-
-        """
+    def _expand(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
+        """Expand and execute a workflow job synchronously, in the calling thread"""
         runner = self._runner(wf_job, rerun, is_async=False)
-        fail_fast = runner.on_error == "fail_fast"
-        limit = self._limit()
-        dispatch = runner.ready(limit).dispatch
-        while (dispatch or not runner.done) and not (runner.errors and fail_fast):
-            for job in dispatch:
-                try:
-                    if is_workflow(job.task):  # expanded here, not placed by the router
-                        outcome = job.run(rerun=job.rerun)
-                    else:
-                        outcome = self.submit(job, rerun=job.rerun)
-                except Exception as exc:
-                    if fail_fast:
-                        raise
-                    # The job may have failed before it could save a result
-                    runner.complete(job, Failed(exc))
-                else:
-                    runner.complete(job, outcome)
-                finally:
-                    job._awaiting_run = False
-            dispatch = runner.ready(limit).dispatch
-            if runner.errors and fail_fast:
-                break
+        self._drive_runner(runner)
         if runner.errors:
             raise workflow_error(wf_job, runner.errors, runner.entries)
+        if runner.not_run:
+            raise run_incomplete(wf_job, runner.not_run)
 
     async def expand_workflow_async(
+        self, workflow_task: "Job[workflow.Task]", rerun: bool
+    ) -> None:
+        """Deprecated: expand and execute a workflow job asynchronously. Use a
+        :class:`~pydra.engine.runner.GraphRunner` with the asynchronous driver"""
+        warnings.warn(
+            "Submitter.expand_workflow_async is deprecated, use GraphRunner with drive",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        await self._expand_async(workflow_task, rerun)
+
+    async def _expand_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
     ) -> None:
         """
@@ -585,87 +653,40 @@ class Submitter:
         job : :obj:`~pydra.engine.job.Job[workflow.Task]`
             Workflow Job object
         """
-        runner = self._runner(workflow_task, rerun, is_async=True)
-        fail_fast = runner.on_error == "fail_fast"
-        # keep track of pending futures
-        task_futures = set()
-        futured: dict[str, Job[TaskType]] = {}
-        # the jobs not run because a job with the same checksum is being run, by checksum
-        sharing: dict[str, set[Job[TaskType]]] = defaultdict(set)
-        # the checksums of the jobs whose runs have finished
-        finished: set[str] = set()
-        # the checksums of the jobs whose runs raised
-        failed: set[str] = set()
-        tasks = runner.ready(self._limit()).dispatch
+        runner = self._runner(workflow_task, rerun, is_async=self.worker.is_async)
         try:
-            while tasks or task_futures or not runner.done:
-                if not tasks and not task_futures:
-                    # it's possible that task_futures is empty, but not able to get any
-                    # tasks from the graph (using runner.ready)
-                    # this might be related to some delays saving the files
-                    # so try to get runnable tasks for another minute
-                    ii = 0
-                    while not tasks and not runner.done:
-                        tasks = runner.ready(self._limit(len(task_futures))).dispatch
-                        ii += 1
-                        # don't block the event loop!
-                        await asyncio.sleep(1)
-                        if ii > 10:
-                            raise RuntimeError(runner.stuck())
-                fresh = []
-                for job in tasks:
-                    if job.checksum in finished:
-                        job._awaiting_run = False
-                        if job.checksum in failed:
-                            job._errored = True
-                    elif job.checksum in futured:
-                        if job is not futured[job.checksum]:
-                            sharing[job.checksum].add(job)
-                    else:
-                        fresh.append(job)
-                for job in fresh:
-                    if job.checksum in futured:  # an earlier job of this round
-                        sharing[job.checksum].add(job)
-                    else:
-                        if is_workflow(job.task):
-                            # expanded in this loop, not placed by the router
-                            coroutine = job.run_async(rerun=job.rerun)
-                        elif (worker := self.worker_for(job)).is_async:
-                            coroutine = worker.run(job, rerun=job.rerun)
-                        else:  # a synchronous worker, run in this loop
-                            coroutine = self._run_blocking(worker, job, job.rerun)
-                        asyncio_task = asyncio.Task(coroutine, name=job.checksum)
-                        task_futures.add(asyncio_task)
-                        futured[job.checksum] = job
-                task_futures, completed = await self.fetch_finished(task_futures)
-                for task_future in completed:
-                    job = futured[task_future.get_name()]
-                    finished.add(job.checksum)
-                    for ran in [job, *sharing.pop(job.checksum, ())]:
-                        ran._awaiting_run = False
-                    try:
-                        outcome = task_future.result()
-                    except Exception as exc:
-                        # The job may have failed before it could save a result (e.g. if
-                        # the worker was unable to run it), in which case it would
-                        # otherwise remain queued indefinitely
-                        failed.add(job.checksum)
-                        runner.complete(job, Failed(exc))
-                    else:
-                        runner.complete(job, outcome)
-                if runner.errors and fail_fast:
-                    break
-                tasks = runner.ready(self._limit(len(task_futures))).dispatch
-                if runner.errors and fail_fast:
-                    break
+            await self._drive(runner)
         finally:
-            # Cancel any outstanding jobs if exiting early (e.g. due to an exception)
-            # so they aren't left running unattended on the event loop, which may be
-            # shared with other code (e.g. in Jupyter notebooks)
-            for task_future in task_futures:
-                task_future.cancel()
             if runner.errors:
+                if (
+                    not self.worker.is_async
+                    and runner.on_error == "fail_fast"
+                    and runner.first_error is not None
+                ):  # a nested workflow of a synchronous run raises the task's exception
+                    raise runner.first_error
                 raise workflow_error(workflow_task, runner.errors, runner.entries)
+            if runner.not_run:
+                raise run_incomplete(workflow_task, runner.not_run)
+
+    async def _drive(self, runner: GraphRunner) -> None:
+        """Run the runner's jobs on executors for the submitter's workers, on the
+        running loop"""
+        executors = {
+            name: WorkerExecutor(
+                worker,
+                blocking=None if worker.is_async else self._run_blocking,
+                max_concurrent=self.max_concurrent,
+            )
+            for name, worker in self.workers.items()
+        }
+        await drive(
+            runner,
+            executors,
+            self.route_name,
+            max_concurrent=self.max_concurrent,
+            on_error=runner.on_error,
+            audit=self.audit,
+        )
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """Deprecated: the jobs of the released nodes of an execution graph. Use
@@ -700,36 +721,6 @@ class Submitter:
             stacklevel=2,
         )
         return [e for n in exec_graph.nodes for e in n.pop_resolution_errors(entries)]
-
-    async def fetch_finished(
-        self, futures
-    ) -> tuple[set[asyncio.Task], set[asyncio.Task]]:
-        """
-        Awaits asyncio's :class:`asyncio.Task` until one is finished.
-
-        Parameters
-        ----------
-        futures : set of asyncio awaitables
-            Job execution coroutines or asyncio :class:`asyncio.Task`
-
-        Returns
-        -------
-        pending : set
-            Pending asyncio :class:`asyncio.Task`.
-        done: set
-            Completed asyncio :class:`asyncio.Task`
-
-        """
-        done = set()
-        try:
-            done, pending = await asyncio.wait(
-                futures, return_when=asyncio.FIRST_COMPLETED
-            )
-        except ValueError:
-            # nothing pending!
-            pending = set()
-        logger.debug(f"Tasks finished: {len(done)}")
-        return pending, done
 
     def __enter__(self):
         return self
@@ -772,7 +763,7 @@ class Submitter:
             self._sync_pool = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="pydra-sync-worker"
             )
-        return await self.loop.run_in_executor(
+        return await asyncio.get_running_loop().run_in_executor(
             self._sync_pool, lambda: worker.run(job, rerun=rerun)
         )
 
@@ -803,6 +794,25 @@ def workflow_error(
         f"See output directory for details: {wf_job.cache_dir}",
         errors,
         entries,
+    )
+
+
+def run_incomplete(
+    wf_job: "Job[workflow.Task]", not_run: "list[tuple[Job, NotRun]]"
+) -> RunIncomplete:
+    """The error raised at the end of a workflow whose run left jobs not run"""
+    lines = []
+    for job, outcome in not_run:
+        name = element_label(job.name, job.state_index, job.state_key)
+        held = ", held by infrastructure" if outcome.held else ""
+        lines.append(f"Job {name!r} did not run{held}: {outcome.reason}")
+    listed = "\n".join(lines)
+    return RunIncomplete(
+        f"Workflow job {wf_job} is incomplete: jobs did not run, and none failed. "
+        f"A later run resumes it from the store.\n\n{listed}",
+        [],
+        [],
+        not_run,
     )
 
 
