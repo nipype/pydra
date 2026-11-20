@@ -246,8 +246,8 @@ class ExactReuse:
 class ConsistentReuse:
     """Reuses results recorded under the same Python major.minor and implementation,
     the same platform and environment, the same versions of the distributions the
-    task reaches (``packages``), all of them known, and the same ``tools``. The full Python version and the other
-    installed distributions (``installed``) may differ."""
+    task reaches (``packages``), all of them known, and the same ``tools``. The full
+    Python version and the other installed distributions (``installed``) may differ."""
 
     EQUAL = (
         "record",
