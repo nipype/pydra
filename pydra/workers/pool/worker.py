@@ -1072,7 +1072,9 @@ class Worker:
             return True
         self._pinged = now
         try:
-            self.client.ping(interval)
+            self.client.ping(
+                interval
+            )  # a miss is not a death: PING_MISSES in a row are
         except BeaterDead as err:
             self.recycle = self.recycle or f"the beater died: {err}"
             return False
