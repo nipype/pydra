@@ -19,7 +19,7 @@ import typing as ty
 from decimal import Decimal
 
 import attrs
-from fileformats.core.exceptions import FormatDefinitionError
+from fileformats.core.exceptions import FormatDefinitionError, FormatRecognitionError
 from fileformats.core.fileset import FileSet, MockMixin
 
 try:
@@ -297,12 +297,14 @@ def _mime_like(type_: type) -> str | None:
 
 def _resolve_tag(tag: str) -> type | None:
     """The class ``fileformats`` resolves ``tag`` to, if its own ``mime_like`` is ``tag``.
-    This imports from the ``fileformats`` namespace only."""
-    try:
-        from fileformats.core import from_mime
+    This imports from the ``fileformats`` namespace only. Only ``fileformats``' answer
+    that no class has the tag means None; any other error, such as an installed
+    ``fileformats`` plugin that fails to import, propagates."""
+    from fileformats.core import from_mime
 
+    try:
         klass = from_mime(tag)
-    except Exception:
+    except FormatRecognitionError:
         return None
     if isinstance(klass, type) and issubclass(klass, FileSet):
         if _mime_like(klass) == tag:

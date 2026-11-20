@@ -21,7 +21,11 @@ from fileformats.text import Plain
 
 from pydra.compose import python
 from pydra.engine.portable import codecs
-from pydra.engine.portable.entry import UnencodableOutput
+from pydra.engine.portable.entry import (
+    EntryFormatUnknown,
+    PydraEntryV1,
+    UnencodableOutput,
+)
 from pydra.engine.tests.test_portable_entry import (  # noqa: F401
     Pair,
     entry_path,
@@ -527,5 +531,97 @@ def test_unresolvable_tag_is_py_and_never_written_as_a_file_set(
     with pytest.raises(UnencodableOutput, match="Image") as err:
         publish(root, {"i": Image(one)})
     assert "image/image" in str(err.value)
+    # a file set is refused where pickles are allowed too, and the message says why
+    with pytest.raises(UnencodableOutput, match="never pickled") as err:
+        publish(root, {"i": Image(one)}, fmt=PydraEntryV1(pickle=True, trust=TRUST))
+    assert "cannot pickle" not in str(err.value)
+    assert not entry_path(root).exists()
     register_fileset_tag(Image, "my/image")  # a user registration is written
     publish(root, {"i": Image(one)})
+
+
+@python.define(outputs={"w": File})
+def FileOut(x: int) -> File:
+    raise NotImplementedError
+
+
+def test_a_declared_parent_class_reads_the_subclass_entry(root, tmp_path):  # noqa: F811
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(WAV_BYTES)
+    publish(root, {"w": Wav(wav)})
+    got = read(root, task=FileOut(x=1)).outputs["w"]
+    assert type(got) is Wav
+
+
+def test_a_declared_class_given_its_own_tag_reads_its_default_tag():
+    register_fileset_tag(misc_formats.Pdf, "my/pdf")
+    codec = dg.lookup_fileset_tag("application/pdf", [misc_formats.Pdf])
+    assert codec.type is misc_formats.Pdf
+
+
+def test_a_format_mismatch_after_verified_members_is_unknown_not_corrupt(
+    root, tmp_path  # noqa: F811
+):
+    one = tmp_path / "one.bin"
+    one.write_bytes(b"payload")
+    publish(root, {"f": File(one)})  # as another process, with the default tags
+    register_fileset_tag(Directory, "generic/file")
+    with pytest.raises(EntryFormatUnknown, match="Directory"):
+        read(root)
+    assert entry_path(root).exists()
+    assert type(read(root, task=FileOutF(x=1)).outputs["f"]) is File
+
+
+@python.define(outputs={"f": File})
+def FileOutF(x: int) -> File:
+    raise NotImplementedError
+
+
+BROKEN_PLUGIN = textwrap.dedent("""
+    import sys
+    from pathlib import Path
+    from fileformats.generic import File
+    from fileformats.image import Png
+    from fileformats.text import Plain
+    from pydra.utils import digest as dg
+
+    d = Path(sys.argv[1])
+    for cls, name in ((File, "one.bin"), (Plain, "a.txt"), (Png, "a.png")):
+        try:
+            print(cls.__name__, dg.tag_of(cls), dg.digest(cls(d / name)).split(":")[0])
+        except ImportError as err:
+            print(cls.__name__, "ImportError", err)
+    """)
+
+
+def test_a_broken_fileformats_plugin_never_changes_a_digest(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "one.bin").write_bytes(b"payload")
+    (data / "a.txt").write_text("hi")
+    (data / "a.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\0" * 16)
+    plugin = tmp_path / "plugins" / "fileformats" / "broken"
+    plugin.mkdir(parents=True)
+    (plugin / "__init__.py").write_text("raise ImportError('broken plugin')\n")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(tmp_path / "plugins")] + [p for p in [env.get("PYTHONPATH")] if p]
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", BROKEN_PLUGIN, str(data)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert done.returncode == 0, done.stderr
+    rows = [ln.split(None, 2) for ln in done.stdout.splitlines()]
+    assert [r[0] for r in rows] == ["File", "Plain", "Png"]
+    for row in rows:
+        # never a silent fall back to py@1: the digest is file@1 under the class's tag,
+        # or the plugin's import error reaches the caller
+        if row[1] == "ImportError":
+            assert "broken plugin" in row[2]
+        else:
+            assert row[2] == "file@1", row
+    expected = {"File": "generic/file", "Plain": "text/plain", "Png": "image/png"}
+    assert all(r[1] in (expected[r[0]], "ImportError") for r in rows), rows

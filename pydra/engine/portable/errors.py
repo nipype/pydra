@@ -39,7 +39,8 @@ class EntryNotTrusted(StoreUnavailable):
 
 
 class UnencodableOutput(TypeError):
-    """An output has no codec and the store cannot pickle it.
+    """An output cannot be stored: it has no codec and the store cannot pickle it, or the
+    reason given says why.
 
     Attributes
     ----------
@@ -53,9 +54,10 @@ class UnencodableOutput(TypeError):
         name = getattr(type, "__qualname__", None) or repr(type)
         module = getattr(type, "__module__", "")
         shown = name if module in ("builtins", "") else f"{module}.{name}"
-        message = f"output {field!r} of type {shown} has no codec and this store cannot pickle it"
         if reason:
-            message += f": {reason}"
+            message = f"output {field!r} of type {shown} cannot be stored: {reason}"
+        else:
+            message = f"output {field!r} of type {shown} has no codec and this store cannot pickle it"
         super().__init__(message)
         self.field = field
         self.type = type

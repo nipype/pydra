@@ -22,6 +22,7 @@ import typing as ty
 import uuid
 from pathlib import Path
 
+from fileformats.core.exceptions import FormatMismatchError
 from fileformats.core.fileset import FileSet
 
 from pydra.engine.portable.errors import (
@@ -678,6 +679,11 @@ class Decoder:
                     ignore_hidden_files=False, ignore_hidden_dirs=False
                 )
             )
+        except FormatMismatchError as err:
+            # the members verified: the reader's registry, not the entry, disagrees
+            raise EntryFormatUnknown(
+                f"files/{set_hex} does not form a {codec.type.__name__} here: {err}"
+            ) from err
         except Exception as err:
             raise CorruptEntry(
                 f"files/{set_hex} does not form a {codec.type.__name__}: {err}"
