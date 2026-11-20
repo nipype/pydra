@@ -114,7 +114,11 @@ def test_docker_st_1(run_function, worker, tmp_path):
     docky = Docky().split(executable=cmd)
 
     outputs = run_function(
-        docky, tmp_path, worker, environment=docker.Environment(image="busybox")
+        docky,
+        tmp_path,
+        worker,
+        environment=docker.Environment(image="busybox"),
+        store="pickle",
     )
     # the working directory in the container is the job's slot, below its checksum
     assert PurePosixPath(outputs.stdout[0].strip()).parent == PurePosixPath(

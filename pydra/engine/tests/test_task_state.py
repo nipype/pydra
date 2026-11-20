@@ -573,7 +573,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, worker):
     state = get_state(nn)
     assert state is None
 
-    with Submitter(worker=worker, cache_root=cache_root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
