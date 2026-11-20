@@ -480,7 +480,9 @@ def vanishing_stage(monkeypatch, store, times):
 def test_a_stage_that_vanished_is_staged_again_once(tmp_path, monkeypatch):
     store = make(tmp_path)
     calls = vanishing_stage(monkeypatch, store, 1)
+    t0 = time.monotonic()
     c = publish(store)
+    assert time.monotonic() - t0 < 5  # not the visibility timeout's backoff
     assert (c.won, c.stored, c.kept) == (True, True, None)
     assert calls["n"] == 2
     assert store.read(c.entry, None).outputs == OUT
@@ -491,8 +493,33 @@ def test_a_stage_that_vanishes_twice_raises_not_a_phantom_kept(tmp_path, monkeyp
 
     store = make(tmp_path)
     vanishing_stage(monkeypatch, store, 2)
+    t0 = time.monotonic()
     with pytest.raises(StoreUnavailable, match="vanished twice"):
         publish(store)
+    assert time.monotonic() - t0 < 5
+
+
+def test_a_stage_that_vanishes_mid_encode_is_staged_again_once(tmp_path, monkeypatch):
+    import shutil
+
+    store = make(tmp_path)
+    fmt = type(store.format)
+    real = fmt.stage
+    calls = {"n": 0}
+
+    def stage(self, staging, *a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            os.chmod(staging.path, 0o700)
+            shutil.rmtree(staging.path)  # collected before the first member is written
+        return real(self, staging, *a, **k)
+
+    monkeypatch.setattr(fmt, "stage", stage)
+    t0 = time.monotonic()
+    c = publish(store)
+    assert time.monotonic() - t0 < 5
+    assert (c.won, c.stored, c.kept) == (True, True, None) and calls["n"] == 2
+    assert store.read(c.entry, None).outputs == OUT
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="a rename changes ctime on POSIX only")
@@ -512,7 +539,6 @@ def test_an_object_moved_a_moment_ago_is_young_whatever_its_mtime(tmp_path, skew
     assert str(moved) in [w for w, _ in report.kept]
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="a rename changes ctime on POSIX only")
 def test_the_fence_restores_a_valid_entry_while_a_collector_runs(tmp_path, monkeypatch):
     """I1: a collector between the move and the stamp does not take the moved copy."""
     store = aged_store(tmp_path, staging=3600, quarantine=3600)
@@ -520,7 +546,7 @@ def test_the_fence_restores_a_valid_entry_while_a_collector_runs(tmp_path, monke
     entry = entry_path(store.path, c)
     t = time.time() - 2 * 86400
     for p in [entry, *entry.rglob("*")]:
-        os.utime(p, (t, t), follow_symlinks=False)
+        os.utime(p, (t, t))  # no links inside an entry, so portable
     real = PortableStore._after_move
     removed: list[str] = []
 

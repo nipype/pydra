@@ -262,8 +262,10 @@ def _now() -> float:
 
 def _last_change(st: os.stat_result) -> float:
     """When an object was last modified or moved. A rename changes ``ctime`` and not
-    ``mtime``; on Windows ``ctime`` is the creation time, so only ``mtime`` is used there
-    and an object moved but not yet stamped is judged by its old ``mtime``."""
+    ``mtime``; on Windows ``ctime`` is the creation time, so only ``mtime`` is used there.
+    A mover stamps what it moves before the move, so a moved object is young there too; the
+    stamp is what protects it, and one user running several processes can race the gap.
+    """
     return st.st_mtime if IS_WINDOWS else max(st.st_mtime, st.st_ctime)
 
 
@@ -487,12 +489,14 @@ class PortableStore:
                 with self._quarantine_dir(root) as q:
                     moved = _inode_name(st)
                     parent.rename(name, q, moved)
-                    with contextlib.suppress(OSError):
-                        os.utime(
-                            os.path.join(q.path, moved),
-                            None,
-                            follow_symlinks=os.utime not in os.supports_follow_symlinks,
-                        )
+                    can_skip_links = os.utime in os.supports_follow_symlinks
+                    if can_skip_links or not _is_link(st):  # never a link's target
+                        with contextlib.suppress(OSError):
+                            os.utime(
+                                os.path.join(q.path, moved),
+                                None,
+                                follow_symlinks=not can_skip_links,
+                            )
         except FileNotFoundError:
             return
         except OSError as err:
@@ -868,6 +872,10 @@ class PortableStore:
         source: StorageDir | None,
         writer: str,
     ) -> Committed:
+        """Stage, place and clean up once. A thread touches the staging directory every
+        quarter of ``ages.staging`` for as long as it is being written or placed, so `collect`
+        spares it (RFC 0003 section 9). Raises `_Vanished` if the directory was collected.
+        """
         policy = self.policy
         with self._denied(staging.path):
             stage = staging.child(name, create=True, mode=policy.staging_mode)
@@ -1219,8 +1227,9 @@ class PortableStore:
         (``ages.quarantine``). Age is the later of the modification and change times (a rename
         changes the change time, not the modification time, so an object moved a moment ago is
         young), and a moved object is also stamped; on Windows, where the change time is the
-        creation time, only the stamp protects a copy between its move and its stamp, which a
-        private root's single user does not race. A writer touches its staging directory at
+        creation time, the stamp a mover gives an entry before moving it is what spares the moved
+        copy, and a set-aside object is stamped just after its move; one user running several
+        processes can race that short gap. A writer touches its staging directory at
         least once per quarter of ``ages.staging``, so a live one is spared. The walk visits
         every shard and container directory, so its cost grows with the number of entries.
 
