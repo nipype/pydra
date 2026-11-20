@@ -350,7 +350,7 @@ class GraphRunner:
     def ready(self, limit: int | None = None) -> Round: ...
     def complete(self, job: Job, outcome: Outcome) -> None: ...
     def upstream(self, job: Job) -> dict[str, list[tuple[Job, int | None]]]: ...
-    def plan(self) -> Plan: ...
+    def plan(self, executors: Mapping[str, Executor] | None = None) -> Plan: ...
     def stuck(self) -> str | None: ...        # a diagnosis when nothing can progress
     @property
     def done(self) -> bool: ...
@@ -364,6 +364,18 @@ class GraphRunner:
     def first_error(self) -> BaseException | None: ...  # as raised, for fail_fast
     def retry(self, job: Job) -> None: ...    # hand a NotRun job out again
     def result(self) -> Result: ...           # the outer job's, read from the store
+
+`plan(executors=None)` mirrors `drive(runner, executors, ...)`: the runner holds no executors, so an
+external driver passes them by the names its router returns, and the default is the submitter's
+workers. It changes nothing a run depends on: no job is released, handed out or settled, no lease is
+taken, no live node, `State` or table is written, and a job is formed only from upstream elements the
+runner has accepted (never from one in flight, whose store slot may hold an earlier attempt). Where an
+element's job cannot be formed yet, the router and `place(jobs)` are shown a stand-in (the node's name,
+task with lazy inputs, resources, no state index) and `PlanNode.provisional` is true. A router error
+on a real job raises, as the run would; on a stand-in the worker is None. `PlanNode.expected_hits` is 0
+under a rerun, as `ready()` skips the store then. The router is called once per node, so a stateful
+router sees these calls. Cost: one checksum per formable element, and one `expected_hits(jobs)` call
+(`PickleStore`: a single listing of its record directory) or one existence check per element.
 
 @attrs.frozen
 class Round:
