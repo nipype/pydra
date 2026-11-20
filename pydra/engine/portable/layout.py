@@ -40,6 +40,7 @@ FORMAT_MAJOR = 1
 TEMP_PREFIX = ".pydra-store."
 TEMP_SUFFIX = ".tmp"
 MAX_HEADER_BYTES = 1 << 16
+READ_RETRY_SECONDS = 5.0
 
 _CDIR_RAW = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}")
 _FORMAT_RE = re.compile(r"pydra-store@(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
@@ -224,22 +225,21 @@ def _differing_key(stored: LayoutHeader, expected: LayoutHeader) -> str | None:
     return None
 
 
-# how often a header that Windows will not open yet (another opener is renaming its own
-# over it: a sharing violation) is tried again
-_SHARING_RETRIES = 12
-
-
 def _read(root: StorageDir) -> bytes | None:
-    for n in range(_SHARING_RETRIES + 1):
+    deadline = time.monotonic() + READ_RETRY_SECONDS
+    delay = 0.005
+    while True:
         try:
             f = root.open_read(HEADER_NAME)
             break
         except FileNotFoundError:
             return None
         except PermissionError as err:
-            if not IS_WINDOWS or n == _SHARING_RETRIES:
+            # On Windows a file being linked or replaced transiently refuses opens
+            if not IS_WINDOWS or time.monotonic() >= deadline:
                 raise StoreUnavailable(f"{HEADER_NAME} cannot be read: {err}") from None
-            time.sleep(min(0.005 * 2**n, 0.25))
+            time.sleep(delay)
+            delay = min(delay * 2, 0.2)
     with f:
         data = f.read(MAX_HEADER_BYTES + 1)
     if len(data) > MAX_HEADER_BYTES:

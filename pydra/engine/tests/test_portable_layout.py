@@ -133,34 +133,6 @@ def test_header_written_atomically(root, expected, tmp_path, monkeypatch):
     assert _stored(tmp_path / "root")["format"] == "pydra-store@1.0"
 
 
-@pytest.mark.parametrize("windows", [True, False])
-def test_a_sharing_violation_reading_the_header(
-    root, expected, tmp_path, monkeypatch, windows
-):
-    """On Windows a header another opener is renaming over cannot be opened for a moment
-    (a sharing violation, PermissionError): the read is tried again. Elsewhere a
-    PermissionError means the header cannot be read."""
-    from pydra.engine.portable import layout
-
-    open_layout(root, expected)
-    monkeypatch.setattr(layout, "IS_WINDOWS", windows)
-    monkeypatch.setattr(layout.time, "sleep", lambda s: None)
-    real = StorageDir.open_read
-    refusals = [PermissionError(13, "sharing violation")] * 3
-
-    def open_read(self, name, *a, **kw):
-        if name == HEADER_NAME and refusals:
-            raise refusals.pop()
-        return real(self, name, *a, **kw)
-
-    monkeypatch.setattr(StorageDir, "open_read", open_read)
-    if windows:
-        assert open_layout(root, expected) == expected and refusals == []
-    else:
-        with pytest.raises(StoreUnavailable, match="cannot be read"):
-            open_layout(root, expected)
-
-
 @pytest.mark.parametrize(
     "fmt", ["pydra-store@2.0", "pydra-store@10.1", "other@1.0", "pydra-store", ""]
 )
@@ -615,3 +587,39 @@ def test_empty_read_only_root_create_is_store_unavailable(tmp_path, expected):
         assert not isinstance(info.value, PermissionError)
     finally:
         os.chmod(path, 0o755)
+
+
+def test_transient_permission_error_is_retried_on_windows(root, expected, monkeypatch):
+    from pydra.engine.portable import layout
+
+    open_layout(root, expected)
+    monkeypatch.setattr(layout, "IS_WINDOWS", True)
+    monkeypatch.setattr(layout.time, "sleep", lambda s: None)
+    real = root.open_read
+    calls = []
+
+    def flaky(name):
+        calls.append(name)
+        if len(calls) < 3:
+            raise PermissionError(errno.EACCES, "sharing violation")
+        return real(name)
+
+    monkeypatch.setattr(root, "open_read", flaky)
+    assert open_layout(root, expected) == expected
+    assert len(calls) == 3
+
+
+def test_persistent_permission_error_on_windows_is_store_unavailable(
+    root, expected, monkeypatch
+):
+    from pydra.engine.portable import layout
+
+    monkeypatch.setattr(layout, "IS_WINDOWS", True)
+    monkeypatch.setattr(layout, "READ_RETRY_SECONDS", 0.05)
+
+    def deny(name):
+        raise PermissionError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(root, "open_read", deny)
+    with pytest.raises(StoreUnavailable):
+        open_layout(root, expected)
