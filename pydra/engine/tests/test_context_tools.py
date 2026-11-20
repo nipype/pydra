@@ -13,6 +13,8 @@ from pydra.engine.submitter import Submitter
 from pydra.environments import native
 from pydra.engine.tests.test_context import installed  # noqa: F401
 
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell scripts")
+
 
 def _script(path: Path, body: str = "echo hi") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,13 +97,13 @@ def test_consistent_reuse_refuses_tools_change(installed, bindir):  # noqa: F811
     assert not policy.accept(stored, changed, task)
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell script")
 @pytest.mark.parametrize("worker", ["debug", "cf"], ids=["debug", "cf"])
 def test_tools_built_in_submitter_only(bindir, tmp_path, worker):
     """The worker uses the context carried with the job: a tool that removes itself
     while running does not change the tools the result records"""
-    _script(bindir / "selfdestruct", f'rm -f "{bindir}/selfdestruct"')
-    task = shell.define("selfdestruct")()
+    tool = _script(bindir / "selfdestruct", f'rm -f "{bindir}/selfdestruct"')
+    # by absolute path: a pooled worker started earlier does not see this test's PATH
+    task = shell.define(str(tool))()
     expected = _tools(task)
     assert expected[0]["found"] is True
     with Submitter(worker=worker, cache_root=tmp_path / "cache") as sub:
