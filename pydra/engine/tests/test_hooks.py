@@ -23,7 +23,9 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     cache_root = tmpdir / "cache"
     cache_root.mkdir()
 
-    foo = Job(task=FunAddTwo(a=1), submitter=Submitter(cache_root=tmpdir), name="foo")
+    foo = Job(
+        task=FunAddTwo(a=1), submitter=Submitter(cache_root=tmpdir / "sub"), name="foo"
+    )
     assert foo.hooks
     # ensure all hooks are defined
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):

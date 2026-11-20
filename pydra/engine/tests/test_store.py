@@ -197,8 +197,16 @@ def test_lease_excludes_across_processes(tmp_path):
 
 
 def test_submitter_default_store(tmp_path):
+    from pydra.engine.portable.store import PortableStore
+    from pydra.engine.portable.trust import Root
+
     cache_root, ro = tmp_path / "cache", tmp_path / "ro"
     sub = Submitter(cache_root=cache_root, readonly_caches=[ro])
+    assert isinstance(sub.store, PortableStore)
+    assert sub.store.path == str(cache_root.resolve()) and sub.store.trust == "private"
+    assert sub.store.readonly == (Root(ro.resolve(), trust="shared"),)
+    sub = Submitter(cache_root=tmp_path / "p", readonly_caches=[ro], store="pickle")
+    cache_root = tmp_path / "p"
     assert isinstance(sub.store, PickleStore)
     assert sub.store.cache_root == cache_root.resolve()
     assert sub.store.readonly_caches == [ro]
@@ -252,7 +260,7 @@ def test_store_call_sites_workflow(worker, tmp_path):
 
 
 def test_commit_writes_result_and_job_in_one_call(tmp_path):
-    sub = Submitter(cache_root=tmp_path)
+    sub = Submitter(store="pickle", cache_root=tmp_path)
     job = Job(task=FunAddTwo(a=1), submitter=sub, name="job")
     with sub.store.acquire(job.checksum, job.context) as lease:
         sub.store.commit(lease, Result(cache_dir=lease.cache_dir), job=job)
@@ -396,10 +404,10 @@ def test_remove_from_cache_removes_a_held_lockfile(tmp_path, held_open):
 @pytest.mark.parametrize("times", [2, store_module.REMOVE_ATTEMPTS])
 def test_rerun_clears_a_held_slot(tmp_path, held_open, times):
     task = FunAddTwo(a=1)
-    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path) as sub:
         assert sub(task).outputs.out == 3
     refused = held_open("_result.pklz", times)
-    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path) as sub:
         if times < store_module.REMOVE_ATTEMPTS:
             assert sub(task, rerun=True).outputs.out == 3
         else:

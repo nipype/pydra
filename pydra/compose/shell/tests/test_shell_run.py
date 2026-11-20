@@ -247,7 +247,7 @@ def test_wf_shell_cmd_1(worker, tmp_path):
 
     wf = Workflow(cmd1="pwd", cmd2="ls")
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert "_result.pklz" in res.outputs.out
@@ -746,7 +746,9 @@ def test_shell_cmd_inputspec_7(worker, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, arg=arg)
 
-    outputs = results_function(shelly, worker=worker, cache_root=cache_root)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=cache_root
+    )
     assert outputs.stdout == ""
     out1 = outputs.out1.fspath
     assert out1.exists()
@@ -808,7 +810,9 @@ def test_shell_cmd_inputspec_7c(worker, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, arg=arg)
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     # checking if the file is created in a good place
     assert outputs.out1.fspath.parent.parent.parent == tmp_path
@@ -926,7 +930,9 @@ def test_shell_cmd_inputspec_9(tmp_path, worker, results_function):
         file_orig=file,
     )
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "file_copy.txt"
@@ -964,7 +970,9 @@ def test_shell_cmd_inputspec_9a(tmp_path, worker, results_function):
 
     shelly = Shelly(executable=cmd, file_orig=file)
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "file_copy.txt"
@@ -1004,7 +1012,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, worker, results_function):
         file_orig=file,
     )
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(shelly, worker=worker, cache_root=tmp_path / "cache")
     assert outputs.stdout == ""
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "file_copy"
@@ -1040,7 +1048,9 @@ def test_shell_cmd_inputspec_9c(tmp_path, worker, results_function):
 
     shelly = Shelly(executable=cmd, file_orig=file)
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "file"
@@ -1081,7 +1091,9 @@ def test_shell_cmd_inputspec_9d(tmp_path, worker, results_function):
         file_copy="my_file_copy.txt",
     )
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     assert outputs.file_copy.fspath.exists()
     assert outputs.file_copy.fspath.name == "my_file_copy.txt"
@@ -1121,7 +1133,7 @@ def test_shell_cmd_inputspec_10(worker, results_function, tmp_path):
     )
 
     assert shelly.executable == cmd_exec
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(shelly, worker=worker, cache_root=tmp_path / "cache")
     assert outputs.stdout == "hello from boston"
 
 
@@ -1242,7 +1254,9 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, worker, results_function):
         number=2,
     )
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     fspath = outputs.file_copy.fspath
     assert fspath.exists()
@@ -1312,7 +1326,9 @@ def test_shell_cmd_inputspec_copyfile_1(worker, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, orig_file=str(file))
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     assert outputs.out_file.fspath.exists()
     # the file is  copied, and than it is changed in place
@@ -1354,7 +1370,9 @@ def test_shell_cmd_inputspec_copyfile_1a(worker, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd, orig_file=str(file))
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     assert outputs.stdout == ""
     assert outputs.out_file.fspath.exists()
     # the file is uses a soft link, but it creates and an extra copy before modifying
@@ -1498,7 +1516,9 @@ def test_shell_cmd_inputspec_state_2(worker, results_function, tmp_path):
 
     shelly = Shelly(executable=cmd).split(arg=args)
 
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     for i in range(len(args)):
         assert outputs.stdout[i] == ""
         assert outputs.out1[i].fspath.exists()
@@ -1535,7 +1555,7 @@ def test_shell_cmd_inputspec_state_3(worker, results_function, tmp_path):
     assert shelly.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(shelly, worker=worker, cache_root=tmp_path / "cache")
     assert outputs.stdout == ["hello from pydra", "have a nice one"]
 
 
@@ -1575,7 +1595,9 @@ def test_shell_cmd_inputspec_copyfile_state_1(worker, results_function, tmp_path
     ).split("orig_file", orig_file=files)
 
     txt_l = ["from pydra", "world"]
-    outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=tmp_path
+    )
     for i in range(len(files)):
         assert outputs.stdout[i] == ""
         assert outputs.out_file[i].fspath.exists()
@@ -1622,7 +1644,7 @@ def test_wf_shell_cmd_2(worker, tmp_path):
 
     wf = Workflow(cmd="touch", arg="newfile.txt")
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert res.outputs.stdout == ""
@@ -1725,7 +1747,7 @@ def test_wf_shell_cmd_3(worker, tmp_path):
 
     wf = Workflow(cmd1="touch", cmd2="cp", arg="newfile.txt")
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert res.outputs.out1 == ""
@@ -1855,7 +1877,7 @@ def test_wf_shell_cmd_state_1(worker, tmp_path):
 
     wf = Workflow(cmd1="touch", cmd2="cp").split(arg=["newfile_1.txt", "newfile_2.txt"])
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         res = sub(wf)
 
     for i in range(2):
@@ -2289,7 +2311,7 @@ def test_shell_cmd_outputspec_7(tmp_path, worker, results_function):
     )
 
     try:
-        outputs = results_function(shelly, worker=worker, cache_root=tmp_path)
+        outputs = results_function(shelly, worker=worker, cache_root=tmp_path / "cache")
     except Exception:
         if (
             worker == "cf"
@@ -2349,7 +2371,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, worker, results_function):
     # XXX: Figure out why this fails with "cf". Occurs in CI when using Ubuntu + Python >= 3.10
     #      (but not when using macOS + Python >= 3.10). Same error occurs in test_shell_cmd_inputspec_11
     #      see https://github.com/nipype/pydra/issues/671
-    outputs = results_function(shelly, cache_root=tmp_path)
+    outputs = results_function(shelly, cache_root=tmp_path / "cache")
     assert outputs.stdout == ""
     assert outputs.new_files.fspath.exists()
 
@@ -2480,7 +2502,9 @@ def test_shell_cmd_outputspec_8d(tmp_path, worker, results_function):
     shelly = Shelly(resultsDir="test")
     assert get_output_names(shelly) == ["resultsDir", "return_code", "stderr", "stdout"]
     cache_root = tmp_path / "cache"
-    outputs = results_function(shelly, worker=worker, cache_root=cache_root)
+    outputs = results_function(
+        shelly, worker=worker, store="pickle", cache_root=cache_root
+    )
     cache_dir = next(cache_root.glob("shell-*/*"))
     assert (cache_dir / Path("test")).exists()
     assert get_lowest_directory(outputs.resultsDir) == get_lowest_directory(
@@ -2545,7 +2569,7 @@ def test_shell_cmd_outputspec_wf_1(worker, tmp_path):
 
     wf = Workflow(cmd=cmd)
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert res.outputs.stdout == ""
@@ -3171,7 +3195,7 @@ def test_shell_cmd_optional_output_file1(tmp_path):
     file1 = tmp_path / "file1.txt"
     file1.write_text("foo")
     my_cp = Shelly(input=file1, unused=False)
-    outputs = my_cp(cache_root=tmp_path)
+    outputs = my_cp(cache_root=tmp_path / "cache")
     assert outputs.output.fspath.read_text() == "foo"
 
 
@@ -3196,7 +3220,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
     file1 = tmp_path / "file1.txt"
     file1.write_text("foo")
     my_cp = Shelly(input=file1, output=True)
-    outputs = my_cp(cache_root=tmp_path)
+    outputs = my_cp(cache_root=tmp_path / "cache")
     assert outputs.output.fspath.read_text() == "foo"
 
     file2 = tmp_path / "file2.txt"
@@ -3262,7 +3286,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
 
     shelly = Shelly(out_name="test")
     cache_root = tmp_path / "cache"
-    outputs = shelly(cache_root=cache_root)
+    outputs = shelly(store="pickle", cache_root=cache_root)
     # the first output file is created
     assert outputs.out_1.fspath == next(cache_root.glob("shell-*/*")) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
@@ -3299,7 +3323,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
     shelly = Shelly(out_name="test")
 
     cache_root = tmp_path / "cache"
-    outputs = shelly(cache_root=cache_root)
+    outputs = shelly(store="pickle", cache_root=cache_root)
     # the first output file is created
     assert outputs.out_1.fspath == next(cache_root.glob("shell-*/*")) / "test_1.nii"
     assert outputs.out_1.fspath.exists()
@@ -3337,7 +3361,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
         ValueError,
         match=r"file system path\(s\) provided to mandatory field .* does not exist",
     ):
-        shelly(cache_root=cache_root)
+        shelly(store="pickle", cache_root=cache_root)
     # checking if the first output was created
     assert (next(cache_root.glob("shell-*/*")) / "test_1.nii").exists()
 
@@ -3543,7 +3567,7 @@ def test_shellcommand_error_msg(tmp_path):
     shelly = Shelly(in1="hello")
 
     with pytest.raises(RuntimeError) as excinfo:
-        shelly(cache_root=tmp_path)
+        shelly(cache_root=tmp_path / "cache")
 
     path_str = str(script_path)
 

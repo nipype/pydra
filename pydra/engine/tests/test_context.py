@@ -394,7 +394,7 @@ def test_worker_records_the_submitters_packages(installed, tmp_path):
     """A cf worker, which sees the real installation, records the context the job
     carried from the submitting process"""
     task = _scaled_task()
-    with Submitter(worker="cf", cache_root=tmp_path) as sub:
+    with Submitter(worker="cf", store="pickle", cache_root=tmp_path / "cache") as sub:
         job = Job(task=task(a=1, log=str(tmp_path / "log")), name="j", submitter=sub)
         expected = job.context
         result = sub(task(a=1, log=str(tmp_path / "log")))

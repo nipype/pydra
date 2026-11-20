@@ -152,7 +152,7 @@ def test_concurrent_wf(any_worker, tmpdir):
     wf = Workflow(x=5, y=10, sync_dir=str(sync_dir))
 
     kwargs = {"n_procs": 2} if concurrent else {}
-    with Submitter(worker=any_worker, cache_root=tmpdir, **kwargs) as sub:
+    with Submitter(worker=any_worker, cache_root=tmpdir / "cache", **kwargs) as sub:
         results = sub(wf)
     if concurrent:
         assert len(_pids(sync_dir, "ab")) == 2
@@ -186,7 +186,7 @@ def test_concurrent_wf_nprocs(tmpdir):
     sync_dir = tmpdir / "sync"
     sync_dir.mkdir()
     wf = Workflow(x=5, y=10, sync_dir=str(sync_dir))
-    with Submitter(worker="cf", n_procs=2, cache_root=tmpdir) as sub:
+    with Submitter(worker="cf", n_procs=2, cache_root=tmpdir / "cache") as sub:
         res = sub(wf)
 
     assert not res.errored, " ".join(res.errors["error message"])
@@ -204,7 +204,7 @@ def test_split_overlap_out_of_order(tmpdir):
     sync_dir = tmpdir / "sync"
     sync_dir.mkdir()
     wf = OrderedAddOne(sync_dir=str(sync_dir)).split(x=[0, 1])
-    with Submitter(worker="cf", n_procs=2, cache_root=tmpdir) as sub:
+    with Submitter(worker="cf", n_procs=2, cache_root=tmpdir / "cache") as sub:
         res = sub(wf)
 
     assert not res.errored, " ".join(res.errors["error message"])

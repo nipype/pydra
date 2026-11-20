@@ -59,4 +59,4 @@ def test_tests_do_not_see_each_others_results(tmp_path, isolated):
         check=True,
     )
     assert len(list(log.iterdir())) == (2 if isolated else 1)
-    assert (shared_root / "run-cache").exists() is not isolated
+    assert (shared_root / "store").exists() is not isolated
