@@ -224,6 +224,14 @@ class Encoder:
                 return _npscalar(value)
             except _NoDigestForm:
                 pass
+        if isinstance(value, FileSet):
+            try:
+                tag_text = f"its tag {value.mime_like!r} does not resolve to a class"
+            except Exception:
+                tag_text = "it has no tag: its class has no mime_like"
+            raise UnencodableOutput(
+                field, tp, f"a file set is never pickled; {tag_text}; register one"
+            )
         return self._pickle(value, field)
 
     def _pickle(self, value: ty.Any, field: str) -> JSON:

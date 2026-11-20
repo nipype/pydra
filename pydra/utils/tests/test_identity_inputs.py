@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import typing as ty
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import numpy as np
@@ -19,6 +20,8 @@ from fileformats.generic import Directory, DirectoryOf, File
 from fileformats.text import Plain
 
 from pydra.compose import python
+from pydra.engine.portable import codecs
+from pydra.engine.portable.entry import UnencodableOutput
 from pydra.engine.tests.test_portable_entry import (  # noqa: F401
     Pair,
     entry_path,
@@ -354,14 +357,22 @@ def test_no_registry_walk_for_a_class_without_a_mime_like(tmp_path):
     assert dg.tag_of(Foreign) is None
 
 
+# the child imports nothing from a ``tests`` package: the wheel is built without them
 FRESH_READER = textwrap.dedent("""
     import sys
     from pathlib import Path
-    from pydra.engine.tests.test_portable_entry import read, TRUST
+    from pydra.engine.portable.entry import PydraEntryV1
     from pydra.utils.storagedir import StorageDir, StorePolicy
 
-    handle = StorageDir.open_root(Path(sys.argv[1]), StorePolicy(), trust=TRUST)
-    out = read(handle).outputs
+    path, trust, checksum, fingerprint, entry_dir = sys.argv[1:]
+    handle = StorageDir.open_root(Path(path), StorePolicy(), trust=trust)
+    entry = handle
+    for part in Path(entry_dir).relative_to(path).parts:
+        entry = entry.child(part)
+    with entry:
+        out = PydraEntryV1(pickle=False, trust=trust).read(
+            entry, checksum, fingerprint, None, trust, root=handle
+        ).outputs
     for name in sorted(out):
         t = type(out[name])
         print(name, t.__module__, t.__qualname__, t.mime_like)
@@ -373,19 +384,34 @@ def test_default_tagged_sets_decode_in_a_fresh_process(root, tmp_path):  # noqa:
     (src / "tree").mkdir(parents=True)
     (src / "one.bin").write_bytes(b"payload")
     (src / "tree" / "a.txt").write_bytes(b"a")
+    (src / "a.wav").write_bytes(WAV_BYTES)
     publish(
         root,
-        {"f": File(src / "one.bin"), "d": DirectoryOf[Plain](src / "tree")},
+        {
+            "f": File(src / "one.bin"),
+            "d": DirectoryOf[Plain](src / "tree"),
+            "w": Wav(src / "a.wav"),
+        },
     )
     done = subprocess.run(
-        [sys.executable, "-c", FRESH_READER, str(root.path)],
+        [
+            sys.executable,
+            "-c",
+            FRESH_READER,
+            str(root.path),
+            TRUST,
+            CHECKSUM,
+            FP,
+            str(entry_path(root)),
+        ],
         capture_output=True,
         text=True,
     )
     assert done.returncode == 0, done.stderr
     lines = {ln.split()[0]: ln.split() for ln in done.stdout.splitlines()}
-    assert lines["f"][3] == "generic/file"
+    assert lines["f"][1:3] == ["fileformats.generic.file", "File"]
     assert lines["d"][3] == "text/plain+directory-of"
+    assert lines["w"][1:3] == ["fileformats.audio", "Wav"]
 
 
 @python.define(outputs={"d": misc_formats.Pdf})
@@ -437,3 +463,69 @@ def test_mock_file_set_is_not_read_as_files(tmp_path):
     mock = File.mock(tmp_path / "never-written.txt")
     assert dg.tag_of(type(mock)) is None
     assert digest(mock).startswith("py@1:")
+
+
+# -- decoding order, declared types and unresolvable tags ----------------------------------
+
+
+@python.define(outputs={"d": list[misc_formats.Pdf]})
+def MiscPdfList(x: int) -> list[misc_formats.Pdf]:
+    raise NotImplementedError
+
+
+@python.define(outputs={"d": ty.Optional[misc_formats.Pdf]})
+def MiscPdfOptional(x: int) -> ty.Optional[misc_formats.Pdf]:
+    raise NotImplementedError
+
+
+def test_declared_type_arguments_are_searched(root, tmp_path):  # noqa: F811
+    src = tmp_path / "doc.pdf"
+    src.write_bytes(b"%PDF-1.4\nbody")
+    publish(root, {"d": [misc_formats.Pdf(src)]})
+    got = read(root, task=MiscPdfList(x=1)).outputs["d"]
+    assert [type(g) for g in got] == [misc_formats.Pdf]
+    codec = dg.lookup_fileset_tag(
+        "application/pdf", codecs._fileset_classes(ty.Optional[misc_formats.Pdf])
+    )
+    assert codec.type is misc_formats.Pdf
+
+
+def test_a_class_given_its_own_tag_still_reads_its_default_tag():
+    register_fileset_tag(Plain, "my/plain")
+    assert dg.tag_of(Plain) == "my/plain"
+    assert dg.lookup_fileset_tag("text/plain").type is Plain
+    assert dg.lookup_fileset_tag("text/plain", [Plain]).type is Plain
+    assert dg.lookup_fileset_tag("my/plain").type is Plain
+
+
+def test_lookup_order_is_declared_then_user_then_resolver():
+    register_fileset_tag(Directory, "generic/file")
+    # the declared type, whose own mime_like is the stored tag, wins over a registration
+    assert dg.lookup_fileset_tag("generic/file", [File]).type is File
+    # without one, the user registration wins over the resolver
+    assert dg.lookup_fileset_tag("generic/file").type is Directory
+    assert dg.lookup_fileset_tag("generic/directory").type is Directory
+
+
+def test_a_default_tag_is_not_entered_in_the_registry(tmp_path):
+    register_digest(File, lambda value: "mine@1:" + "cd" * 16)
+    assert "generic/file" not in dg._BY_TAG
+    assert dg.lookup_fileset_tag("generic/file").type is File
+
+
+def test_unresolvable_tag_is_py_and_never_written_as_a_file_set(
+    root, tmp_path  # noqa: F811
+):
+    from fileformats.image.base import Image
+
+    one = tmp_path / "pic.bin"
+    one.write_bytes(b"not really an image")
+    assert Image.mime_like == "image/image"
+    assert dg.lookup_fileset_tag("image/image") is None
+    assert dg.tag_of(Image) is None
+    assert digest(Image(one)).startswith("py@1:")
+    with pytest.raises(UnencodableOutput, match="Image") as err:
+        publish(root, {"i": Image(one)})
+    assert "image/image" in str(err.value)
+    register_fileset_tag(Image, "my/image")  # a user registration is written
+    publish(root, {"i": Image(one)})

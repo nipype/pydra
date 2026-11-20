@@ -19,6 +19,7 @@ import typing as ty
 from decimal import Decimal
 
 import attrs
+from fileformats.core.exceptions import FormatDefinitionError
 from fileformats.core.fileset import FileSet, MockMixin
 
 try:
@@ -283,36 +284,20 @@ def tag_of(type_: type) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _default_fileset_entry(type_: type) -> Codec | None:
-    """The entry of a ``FileSet`` class nobody registered: its ``mime_like`` is the tag,
-    computed here, on demand, whatever package the class comes from. A class with no
-    ``mime_like`` (defined outside the ``fileformats`` namespace) has none, and is
-    ``py@1``, as is a mock, which has no files. Not entered in the tag registry:
-    `lookup_fileset_tag` resolves a tag.
-    """
+def _mime_like(type_: type) -> str | None:
+    """``mime_like`` of a ``FileSet`` class, or None for one with none (defined outside
+    the ``fileformats`` namespace) and for a mock, which has no files."""
     if issubclass(type_, MockMixin):
         return None
     try:
-        tag = str(type_.mime_like)
-    except Exception:
+        return str(type_.mime_like)
+    except FormatDefinitionError:
         return None
-    entry = Codec(type_, tag, fileset=True, default=True)
-    _BY_TYPE[type_] = entry
-    return entry
 
 
-def lookup_fileset_tag(tag: str, declared: ty.Iterable[type] = ()) -> Codec | None:
-    """The entry that decodes the ``$fileset`` tag ``tag``: a user registration of it, else
-    a declared class whose ``mime_like`` is ``tag``, else the class ``fileformats``
-    resolves the tag to (it imports from the ``fileformats`` namespace only)."""
-    entry = _BY_TAG.get(tag)
-    if entry is not None:
-        return entry
-    for klass in declared:
-        if isinstance(klass, type) and issubclass(klass, FileSet):
-            found = _entry(klass)
-            if found is not None and found.default and found.tag == tag:
-                return found
+def _resolve_tag(tag: str) -> type | None:
+    """The class ``fileformats`` resolves ``tag`` to, if its own ``mime_like`` is ``tag``.
+    This imports from the ``fileformats`` namespace only."""
     try:
         from fileformats.core import from_mime
 
@@ -320,9 +305,44 @@ def lookup_fileset_tag(tag: str, declared: ty.Iterable[type] = ()) -> Codec | No
     except Exception:
         return None
     if isinstance(klass, type) and issubclass(klass, FileSet):
-        found = _entry(klass)
-        if found is not None and found.tag == tag:
-            return found
+        if _mime_like(klass) == tag:
+            return klass
+    return None
+
+
+def _default_fileset_entry(type_: type) -> Codec | None:
+    """The entry of a ``FileSet`` class nobody registered: its ``mime_like`` is the tag,
+    computed here, on demand, whatever package the class comes from. A class with no
+    ``mime_like``, a mock, and a class whose tag ``fileformats`` cannot resolve back to
+    a class (it could not be read) have none, and are ``py@1``. Not entered in the tag
+    registry: `lookup_fileset_tag` resolves a tag."""
+    tag = _mime_like(type_)
+    if tag is None or _resolve_tag(tag) is None:
+        return None
+    entry = Codec(type_, tag, fileset=True, default=True)
+    _BY_TYPE[type_] = entry
+    return entry
+
+
+def lookup_fileset_tag(tag: str, declared: ty.Iterable[type] = ()) -> Codec | None:
+    """The entry that decodes the ``$fileset`` tag ``tag``: a declared class whose own
+    ``mime_like`` is ``tag`` (the reader says which class it expects), else a user
+    registration of ``tag``, else the class ``fileformats`` resolves the tag to. A class
+    is accepted under its ``mime_like`` whatever tag it is registered under now."""
+    for klass in declared:
+        if (
+            isinstance(klass, type)
+            and issubclass(klass, FileSet)
+            and _mime_like(klass) == tag
+        ):
+            entry = _entry(klass) or Codec(klass, tag, fileset=True, default=True)
+            return entry
+    entry = _BY_TAG.get(tag)
+    if entry is not None:
+        return entry
+    klass = _resolve_tag(tag)
+    if klass is not None:
+        return _entry(klass) or Codec(klass, tag, fileset=True, default=True)
     return None
 
 
