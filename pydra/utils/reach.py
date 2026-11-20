@@ -36,7 +36,9 @@ def reach_report(
     Raises:
         TypeError: ``task`` is not a Python task class
         Exception: whatever building the task or the function raises"""
-    if not (isinstance(task, type) and getattr(task, "_executor_name", None) == "function"):
+    if not (
+        isinstance(task, type) and getattr(task, "_executor_name", None) == "function"
+    ):
         raise TypeError(f"{task!r} is not a Python task class")
     instance = task(**inputs)
     func = instance.function

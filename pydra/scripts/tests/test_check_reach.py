@@ -251,7 +251,9 @@ def test_unowned_python_module_is_user_code(tmp_path, monkeypatch, project):
     monkeypatch.syspath_prepend(str(site))
     module = importlib.import_module(name)
     try:
-        assert names(check_reach(project.CallsInput, {"x": 1, "f": module.hidden})) == []
+        assert (
+            names(check_reach(project.CallsInput, {"x": 1, "f": module.hidden})) == []
+        )
         mod_task = _dispatch_task(tmp_path, monkeypatch, name)
         assert names(check_reach(mod_task, {"x": 1})) == ["hidden"]
     finally:
@@ -292,7 +294,9 @@ def test_reached_definitions_include_inputs(project):
     keyed, _ = reached_definitions(project.Direct(x=1).function, {})
     assert h.direct.__code__ in keyed
     assert h.hidden.__code__ not in keyed
-    keyed, _ = reached_definitions(project.CallsInput(x=1, f=1).function, {"f": h.Obj()})
+    keyed, _ = reached_definitions(
+        project.CallsInput(x=1, f=1).function, {"f": h.Obj()}
+    )
     assert h.Obj.method.__code__ in keyed and h.hidden.__code__ in keyed
 
 
