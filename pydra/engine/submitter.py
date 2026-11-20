@@ -548,10 +548,14 @@ class Submitter:
                 + crash_file
             )
             exc.add_note(error_msg)
-            if raise_errors or not job.result():
+            if raise_errors:
                 raise exc
-            else:
-                logger.error("\nTask execution failed\n%s", error_msg)
+            # this run failed: its result is an errored one, never what an earlier run
+            # stored at the same address
+            job._errored = True
+            job._held = None
+            job._cached_result = None
+            logger.error("\nTask execution failed\n%s", error_msg)
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()
@@ -609,16 +613,21 @@ class Submitter:
             forget(job)
         except Exception as exc:  # left for the store's collection
             logger.debug("Forgetting the outcome file of %s: %s", job.checksum, exc)
+        if self._work_dirs:
+            try:
+                path = Path(self.store.work_dir(job))
+            except (AttributeError, ValueError):
+                return
+            if not path.exists():  # the store removed it: nothing left for close
+                self._work_dirs.discard(path)
 
     def _remove_work_dirs(self) -> None:
         """Remove the empty default work directories of this submitter's attempts; one the
         process is in, or that still holds files (a failure, kept outputs), stays."""
-        try:
-            here = Path(os.getcwd()).resolve()
-        except OSError:
-            here = None
+        from pydra.utils.general import dir_held
+
         for path in list(self._work_dirs):
-            if here is not None and here.is_relative_to(path.resolve()):
+            if dir_held(path):
                 continue  # tried again at the next close
             self._work_dirs.discard(path)
             try:
