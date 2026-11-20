@@ -1617,11 +1617,12 @@ class _WalkMemo:
         self.modules: set[str] = set()
         root_ref = weakref.ref(root)
         memo_ref = weakref.ref(self)
+        lock, memos_by_root = _walk_memo_lock, _walk_memo  # module globals are None at teardown
 
         def drop(_):
-            with _walk_memo_lock:
+            with lock:
                 root = root_ref()
-                memos = _walk_memo.get(root) if root is not None else None
+                memos = memos_by_root.get(root) if root is not None else None
                 memo = memo_ref()
                 if memos is not None and memo is not None and memos.get(key) is memo:
                     del memos[key]
