@@ -273,7 +273,7 @@ class Submitter:
                 f"resolve_images must be 'best-effort' or 'require', not {resolve_images!r}"
             )
         self.resolve_images = resolve_images
-        self._registry_cache: dict = {}  # what registries were asked, once per tag
+        self._resolved_refs: dict = {}  # environment references, resolved once per run
         self.chdir = chdir
         self.telemetry = telemetry
         if telemetry:

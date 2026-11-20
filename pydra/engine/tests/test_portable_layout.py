@@ -81,7 +81,7 @@ def test_default_header_values(expected):
         "identity": {
             "name": "pydra-identity@1",
             "fingerprint": "pydra-context@1",
-            "recorded_only": [],
+            "recorded_only": ["environment_repository"],
         },
         "shard": "sha256-2",
         "dirs": {"staging": "staging", "quarantine": "quarantine", "sidecars": {}},
@@ -298,7 +298,7 @@ def test_v1_names():
     ident = PydraIdentityV1()
     assert ident.name == "pydra-identity@1"
     assert ident.fingerprint_name == "pydra-context@1"
-    assert ident.recorded_only == frozenset()
+    assert ident.recorded_only == frozenset({"environment_repository"})
     assert isinstance(ident, StoreIdentity)
     assert ident.key(None) is None  # type: ignore[arg-type]
     assert ident.check_key("python-abc", None)

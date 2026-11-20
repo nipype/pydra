@@ -80,12 +80,9 @@ class Environment:
         pass
 
     def checksum(self) -> str:
-        """Identity of the environment, as a hex digest.
-
-        The job records it in ``Result.context["environment"]`` and, for a shell job,
-        in its identity record (``job.environment``), so it is part of the job's
-        checksum but not of the task's.
-        """
+        """Identity of the environment as declared, as a hex digest. A job keys the
+        reference its environment resolves (`resolve`), which for a container is not
+        this: a checksum never reaches Docker, a registry or the file system for it."""
         return hashlib.sha256(
             json.dumps(
                 [type(self).__qualname__, self._identity()],
@@ -98,13 +95,15 @@ class Environment:
         """The JSON-serialisable value the checksum is derived from."""
         return attrs.asdict(self)
 
-    def resolve(self, registry_cache: dict | None = None) -> ResolvedRef:
+    def _ref_key(self) -> ty.Hashable | None:
+        """What `resolve` depends on, or ``None`` when it should not be memoised. A
+        ``Submitter`` resolves each distinct key once per run."""
+        return None
+
+    def resolve(self) -> ResolvedRef:
         """Resolve the environment's reference, once, in the submitting process. The
         job keys ``key`` and the worker executes ``run``. By default the environment's
-        checksum is the key and there is nothing to run by reference.
-
-        ``registry_cache`` holds what a registry was asked, so it is asked once per
-        tag per ``Submitter``."""
+        checksum is the key and there is nothing to run by reference."""
         return ResolvedRef(key=self.checksum(), run="")
 
     @classmethod

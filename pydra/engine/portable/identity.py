@@ -8,7 +8,7 @@ import typing as ty
 
 import attrs
 
-from pydra.engine.context import job_context
+from pydra.engine.context import REPOSITORY_FIELD, job_context
 from pydra.utils.digest import jcs
 from pydra.utils.identity import IDENTITY_SCHEME, record_checksum
 
@@ -78,7 +78,9 @@ class PydraIdentityV1:
     (``pydra-context@1``) is the full sha256 of the RFC 8785 canonical JSON of the context
     without the ``recorded_only`` fields."""
 
-    recorded_only: frozenset[str] = attrs.field(factory=frozenset, converter=_fields)
+    recorded_only: frozenset[str] = attrs.field(
+        factory=lambda: frozenset({REPOSITORY_FIELD}), converter=_fields
+    )
     name: ty.ClassVar[str] = "pydra-identity@1"
     fingerprint_name: ty.ClassVar[str] = "pydra-context@1"
 
@@ -96,7 +98,7 @@ class PydraIdentityV1:
 
     def context(self, job: "Job", phase: ty.Literal["lookup", "execute"]) -> Context:
         job.checksum  # collects the library modules the task's code reaches
-        return job_context(job.task, job.environment, job.resolved.key)
+        return job_context(job.task, job.environment, job.resolved)
 
     def fingerprint(self, context: Context) -> str:
         slotted = {k: v for k, v in context.items() if k not in self.recorded_only}

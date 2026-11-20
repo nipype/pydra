@@ -1,9 +1,10 @@
 import json
+import cloudpickle
 import pytest
 from pydra.compose import shell
 from pydra.engine.job import Job
 from pydra.engine.submitter import Submitter
-from pydra.environments import base, docker
+from pydra.environments import base, docker, images
 from pydra.engine.tests.utils import need_docker, no_win
 from pydra.environments.base import ImageResolutionError, ResolvedRef
 
@@ -22,7 +23,7 @@ class FakeDocker:
         self.inspected = []
         self.heads = []
         monkeypatch.setattr(base, "execute", self.execute)
-        monkeypatch.setattr(docker, "_registry_digest", self.head)
+        monkeypatch.setattr(images, "registry_digest", self.head)
 
     def execute(self, cmd, strip=False, **kwargs):
         if self.docker_missing:
@@ -207,3 +208,143 @@ def test_docker_real_daemon(tmp_path):
     with Submitter(environment=env, cache_root=tmp_path, telemetry=False) as sub:
         result = sub(shell.define("echo")(executable="echo", append_args=["hi"]))
     assert result.outputs.stdout.strip() == "hi"
+
+
+def _job(tmp_path, env, supplied=False):
+    task = shell.define("whoami")
+    if supplied:
+        task.__checksum__ = lambda self, inputs: "shell-fixed"
+    sub = Submitter(environment=env, cache_root=tmp_path, telemetry=False)
+    return Job(task=task(), name="j", submitter=sub)
+
+
+def _ran(monkeypatch):
+    commands = []
+    monkeypatch.setattr(
+        base,
+        "execute",
+        lambda cmd, cwd=None, strip=False: commands.append(cmd) or (0, "", ""),
+    )
+    return commands
+
+
+def test_pickled_job_runs_the_original_reference(monkeypatch, tmp_path):
+    fake = FakeDocker(monkeypatch, local={"tool:latest": (ID, [])})
+    job = _job(tmp_path, docker.Docker(image="tool"), supplied=True)
+    blob = cloudpickle.dumps(job)
+    rebuilt = "sha256:" + "b" * 64
+    fake.local = {"tool:latest": (rebuilt, [])}
+    fake.inspected.clear()
+    worker_job = cloudpickle.loads(blob)
+    commands = _ran(monkeypatch)
+    worker_job.environment.execute(worker_job)
+    assert ID in commands[0] and rebuilt not in commands[0]
+    assert fake.inspected == []
+
+
+def test_worker_without_carried_reference_raises(monkeypatch, tmp_path):
+    fake = FakeDocker(monkeypatch, local={"tool:latest": (ID, [])})
+    job = _job(tmp_path, docker.Docker(image="tool"))
+    state = job.__getstate__()
+    state["_resolved"] = None
+    worker_job = Job.__new__(Job)
+    worker_job.__setstate__(state)
+    fake.inspected.clear()
+    commands = _ran(monkeypatch)
+    with pytest.raises(ImageResolutionError, match="without the reference"):
+        worker_job.environment.execute(worker_job)
+    assert fake.inspected == [] and commands == []
+
+
+def test_five_jobs_one_inspect(monkeypatch, tmp_path):
+    fake = FakeDocker(monkeypatch, local={"tool:latest": (ID, [])})
+    sub = Submitter(
+        environment=docker.Docker(image="tool"), cache_root=tmp_path, telemetry=False
+    )
+    for name in "abcde":
+        Job(task=shell.define("whoami")(), name=name, submitter=sub).resolved
+    assert fake.inspected == ["tool:latest"]
+
+
+def test_checksum_never_reaches_docker_or_registry(monkeypatch):
+    fake = FakeDocker(monkeypatch, registry={"org/tool:1": D1})
+    env = docker.Docker(image="org/tool", tag="1")
+    assert env.checksum() == env.checksum()
+    assert fake.inspected == [] and fake.heads == []
+
+
+def test_repository_is_recorded_only_in_the_context(monkeypatch, tmp_path):
+    from pydra.engine.portable.identity import PydraIdentityV2
+    from pydra.engine.store import ConsistentReuse, context_key
+
+    FakeDocker(monkeypatch)
+    contexts = []
+    for image in (f"org/fsl@{D1}", f"mirror.site/org/fsl@{D1}"):
+        job = _job(tmp_path, docker.Docker(image=image))
+        contexts.append(job.context)
+    assert contexts[0]["environment_repository"] == "org/fsl"
+    assert contexts[1]["environment_repository"] == "mirror.site/org/fsl"
+    assert "environment_repository" in PydraIdentityV2().recorded_only
+    ident = PydraIdentityV2()
+    assert ident.fingerprint(contexts[0]) == ident.fingerprint(contexts[1])
+    assert context_key(contexts[0]) == context_key(contexts[1])
+    assert ConsistentReuse().accept(contexts[0], contexts[1], None)
+
+
+def test_hub_names_are_normalised(monkeypatch):
+    FakeDocker(
+        monkeypatch,
+        local={"library/busybox:latest": (ID, [f"busybox@{D1}"])},
+    )
+    ref = docker.Docker(image="library/busybox").resolve()
+    assert ref.key == f"docker@1:{D1}"
+    FakeDocker(
+        monkeypatch, local={"docker.io/org/tool:latest": (ID, [f"org/tool@{D2}"])}
+    )
+    assert docker.Docker(image="docker.io/org/tool").resolve().key == f"docker@1:{D2}"
+
+
+def test_rebuilt_local_image_gets_a_new_key(monkeypatch):
+    fake = FakeDocker(monkeypatch, local={"tool:latest": (ID, [])})
+    before = docker.Docker(image="tool").resolve().key
+    fake.local = {"tool:latest": ("sha256:" + "b" * 64, [])}
+    assert docker.Docker(image="tool").resolve().key != before
+
+
+def test_replacing_the_environment_resolves_again(monkeypatch, tmp_path):
+    FakeDocker(
+        monkeypatch,
+        local={"a:latest": (ID, []), "b:latest": ("sha256:" + "c" * 64, [])},
+    )
+    job = _job(tmp_path, docker.Docker(image="a"))
+    first = job.resolved.key
+    job.environment = docker.Docker(image="b")
+    assert job.resolved.key != first
+
+
+def test_portable_identity_context_keys_the_resolved_reference(monkeypatch, tmp_path):
+    from pydra.engine.portable.identity import PydraIdentityV2
+
+    FakeDocker(monkeypatch)
+    job = _job(tmp_path, docker.Docker(image=f"org/fsl@{D1}"))
+    ctx = PydraIdentityV2().context(job, "lookup")
+    assert ctx["environment"] == f"docker@1:{D1}"
+
+
+def test_malformed_inspect_output_is_an_image_error(monkeypatch):
+    monkeypatch.setattr(
+        base, "execute", lambda cmd, strip=False, **kw: (0, "sha256:x\tnot-json", "")
+    )
+    with pytest.raises(ImageResolutionError):
+        docker.Docker(image="tool").resolve()
+
+
+def test_registry_errors_leave_the_image_unresolved(monkeypatch):
+    import http.client
+    import urllib.request
+
+    def broken(*args, **kwargs):
+        raise http.client.LineTooLong("header")
+
+    monkeypatch.setattr(urllib.request, "urlopen", broken)
+    assert images.registry_digest("org/tool", "1") is None

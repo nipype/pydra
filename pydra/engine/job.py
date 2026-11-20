@@ -193,8 +193,10 @@ class Job(ty.Generic[TaskType]):
         return self.name
 
     def __getstate__(self):
-        # Carry the checksum, so a worker never rehashes the task's code
+        # Carry the checksum, so a worker never rehashes the task's code, and the
+        # environment's resolved reference, which the worker runs and never resolves
         self.checksum
+        self.resolved
         # The task stays an object in the state, so it is serialised in the job's own
         # stream, and jobs pickled together (a workflow's node jobs) share one memo.
         # A Job therefore requires cloudpickle: the stdlib pickle cannot serialise the
@@ -214,6 +216,7 @@ class Job(ty.Generic[TaskType]):
         ):  # a job pickled before the task was inlined
             state["task"] = cp.loads(state["task"])
         self.__dict__.update(state)
+        self._received = True  # a worker: it runs the reference it was handed
         # the digests the submitting process computed are not computed again here
         self.task._carry_digests()
         # _cached_result is excluded from __getstate__; ensure it always exists
@@ -259,8 +262,19 @@ class Job(ty.Generic[TaskType]):
         ``run``. It is resolved again when the job's environment is replaced."""
         held = self._resolved
         if held is None or held[0] is not self.environment:
-            cache = getattr(self.submitter, "_registry_cache", None)
-            ref = self.environment.resolve(registry_cache=cache)
+            if self.__dict__.get("_received"):
+                raise ImageResolutionError(
+                    "This job reached a worker without the reference its submitting "
+                    "process resolved, and a worker never resolves it again"
+                )
+            memo = getattr(self.submitter, "_resolved_refs", None)
+            key = self.environment._ref_key()
+            if memo is not None and key is not None and key in memo:
+                ref = memo[key]
+            else:
+                ref = self.environment.resolve()
+                if memo is not None and key is not None:
+                    memo[key] = ref
             if (
                 ref.unresolved
                 and getattr(self.submitter, "resolve_images", None) == "require"
@@ -295,9 +309,7 @@ class Job(ty.Generic[TaskType]):
             self.checksum  # collects the library modules the task's code reaches
             identity = getattr(self.store, "identity", None)
             if identity is None:
-                self._context = job_context(
-                    self.task, self.environment, self.resolved.key
-                )
+                self._context = job_context(self.task, self.environment, self.resolved)
             else:
                 self._context = identity.context(self, "lookup")
             tool_version = self.record.get("job", {}).get("tool_version")
