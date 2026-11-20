@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -65,13 +66,43 @@ def wait_for(condition, timeout: float = 10.0, step: float = 0.01) -> bool:
     return True
 
 
+def entries(directory: Path) -> list[str]:
+    """The entries of ``directory``, none if it is gone or no directory: a beater
+    removes beats, and takers rename token directories, while a test reads them."""
+    try:
+        return os.listdir(directory)
+    except OSError:
+        return []
+
+
+def beat_count(lockfile: Path) -> int:
+    """The highest beat number in a lease's token directories, 0 if none. A beat
+    makes ``beat-<n+1>`` before it removes ``beat-<n>``, so the number grows exactly
+    while the lease is beaten, whatever the storage's mtime resolution, and a beat
+    removed during the listing cannot lower it."""
+    return max(
+        (
+            int(entry[5:])
+            for token in entries(lockfile)
+            for entry in entries(lockfile / token)
+            if re.fullmatch(r"beat-\d+", entry)
+        ),
+        default=0,
+    )
+
+
 def newest_mtime(lockfile: Path) -> float:
-    """The newest mtime in a lease, skipping a beat removed while it is listed."""
+    """The newest mtime of a lease, its entries and theirs, skipping any removed
+    while it is read. Read only where nothing beats the lease."""
+    paths = [lockfile]
+    for token in entries(lockfile):
+        paths.append(lockfile / token)
+        paths.extend(lockfile / token / entry for entry in entries(lockfile / token))
     mtimes = []
-    for path in [lockfile, *lockfile.rglob("*")]:
+    for path in paths:
         try:
             mtimes.append(path.lstat().st_mtime)
-        except FileNotFoundError:
+        except OSError:
             pass
     return max(mtimes)
 
@@ -186,8 +217,7 @@ def test_named_lease_take_beat_stale_takeover(tmp_path):
     assert lease.settings == FAST
     assert lease.try_take() is None
     assert lease.held and lease.token_dir.parent == lockfile
-    first = newest_mtime(lockfile)
-    assert wait_for(lambda: newest_mtime(lockfile) > first), "never beaten"
+    assert wait_for(lambda: beat_count(lockfile) >= 2), "never beaten"
     assert lease.prove()
 
     lease._heartbeat.stopped.set()  # the holder stops beating, as if frozen
@@ -231,9 +261,8 @@ def test_external_lease_starts_no_thread(tmp_path, enter):
         assert lease.try_take() is None
     assert lease.held and lease._heartbeat is None
     assert heartbeat_threads() == before
-    first = newest_mtime(lockfile)
     time.sleep(3 * FAST.renew_interval)
-    assert newest_mtime(lockfile) == first  # nothing beats it
+    assert beat_count(lockfile) == 0  # nothing beats it
     assert lease.prove()
     lease.__exit__(None, None, None)
     assert not lockfile.exists()
@@ -287,7 +316,7 @@ def test_lease_beaten_from_another_process(tmp_path):
         for lease in leases:
             client.hold(lease)
         assert heartbeat_threads() == []  # no beat thread in the holder
-        first = [newest_mtime(lease.lockfile) for lease in leases]
+        first = [beat_count(lease.lockfile) for lease in leases]
         start = time.monotonic()
         while time.monotonic() - start < 3 * CROSS.stale_after + 0.5:
             for lease in leases:
@@ -295,7 +324,7 @@ def test_lease_beaten_from_another_process(tmp_path):
                 assert rival.try_take() is not None, "taken over while beaten"
             time.sleep(0.25)
         for lease, was in zip(leases, first):
-            assert newest_mtime(lease.lockfile) > was
+            assert beat_count(lease.lockfile) > was
             assert lease.prove()
             assert lease.lost is None
         assert client.lost == {}
@@ -557,9 +586,9 @@ def test_callbacks_may_call_the_client(tmp_path):
             [("release", token_dir), ("ack_expired", expired.token_dir)]
         )
         assert client.alive
-        before = newest_mtime(kept.lockfile)
+        before = beat_count(kept.lockfile)
         assert wait_for(
-            lambda: newest_mtime(kept.lockfile) > before, 3 * CROSS.renew_interval
+            lambda: beat_count(kept.lockfile) > before, 3 * CROSS.renew_interval
         )
         assert kept.prove()
         for lease in (expired, kept):
@@ -589,14 +618,14 @@ ORPHANING = textwrap.dedent("""\
     """)
 
 
-def stops_moving(lockfile: Path, quiet: float, within: float) -> bool:
-    """Whether the lease's newest mark stays put for ``quiet`` seconds, at some
+def stops_beating(lockfile: Path, quiet: float, within: float) -> bool:
+    """Whether the lease's beat count stays put for ``quiet`` seconds, at some
     point within ``within`` seconds."""
     deadline = time.monotonic() + within
     while time.monotonic() < deadline:
-        before = newest_mtime(lockfile)
+        before = beat_count(lockfile)
         time.sleep(quiet)
-        if newest_mtime(lockfile) == before:
+        if beat_count(lockfile) == before:
             return True
     return False
 
@@ -643,7 +672,7 @@ def test_holder_death_ends_beater(tmp_path, fork):
         child = pids["child"]
         proc.kill()
         proc.wait(30)
-        assert stops_moving(lockfile, 2 * CROSS.renew_interval, 60), "still beaten"
+        assert stops_beating(lockfile, 2 * CROSS.renew_interval, 60), "still beaten"
         if os.name == "posix":
             assert wait_for(lambda: not pid_alive(pids["beater"]), 30)
         if child is not None:
