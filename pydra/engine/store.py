@@ -11,7 +11,7 @@ import time
 import typing as ty
 import warnings
 from pathlib import Path
-from pydra.engine.context import RECORD
+from pydra.engine.context import RECORD, REPOSITORY_FIELD
 from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
 from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
 from pydra.engine.result import Result, load_result, save
@@ -370,9 +370,8 @@ def lease_still_held(lease: Lease) -> bool:
 
 def context_key(context: Context) -> str:
     """The name of the slot holding results recorded in ``context``."""
-    return hashlib.sha256(
-        json.dumps(dict(context), sort_keys=True).encode()
-    ).hexdigest()[:16]
+    slotted = {k: v for k, v in context.items() if k != REPOSITORY_FIELD}
+    return hashlib.sha256(json.dumps(slotted, sort_keys=True).encode()).hexdigest()[:16]
 
 
 @ty.runtime_checkable

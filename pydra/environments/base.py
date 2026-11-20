@@ -19,6 +19,35 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
+class ImageResolutionError(RuntimeError):
+    """An image reference could not be resolved and ``resolve_images="require"``"""
+
+
+@attrs.frozen
+class ResolvedRef:
+    """The reference an environment resolved once, in the submitting process.
+
+    Attributes
+    ----------
+    key : str
+        What identity records: ``docker@1:sha256:<digest>``, ``docker-local@1:<Id>``, or
+        for a reference that could not be resolved ``unresolved:<kind>:<image>:<tag>``
+        (never in the form of a resolved key)
+    run : str
+        The reference the worker executes
+    carried : dict
+        What travels with the job but is not keyed, e.g. the repository to pull from
+    """
+
+    key: str
+    run: str
+    carried: dict = attrs.field(factory=dict, eq=False)
+
+    @property
+    def unresolved(self) -> bool:
+        return self.key.startswith("unresolved:")
+
+
 @attrs.define
 class Environment:
     """
@@ -51,12 +80,9 @@ class Environment:
         pass
 
     def checksum(self) -> str:
-        """Identity of the environment, as a hex digest.
-
-        The job records it in ``Result.context["environment"]`` and, for a shell job,
-        in its identity record (``job.environment``), so it is part of the job's
-        checksum but not of the task's.
-        """
+        """Identity of the environment as declared, as a hex digest. A job keys the
+        reference its environment resolves (`resolve`), which for a container is not
+        this: a checksum never reaches Docker, a registry or the file system for it."""
         return hashlib.sha256(
             json.dumps(
                 [type(self).__qualname__, self._identity()],
@@ -68,6 +94,17 @@ class Environment:
     def _identity(self) -> ty.Any:
         """The JSON-serialisable value the checksum is derived from."""
         return attrs.asdict(self)
+
+    def _ref_key(self) -> ty.Hashable | None:
+        """What `resolve` depends on, or ``None`` when it should not be memoised. A
+        ``Submitter`` resolves each distinct key once per run."""
+        return None
+
+    def resolve(self) -> ResolvedRef:
+        """Resolve the environment's reference, once, in the submitting process. The
+        job keys ``key`` and the worker executes ``run``. By default the environment's
+        checksum is the key and there is nothing to run by reference."""
+        return ResolvedRef(key=self.checksum(), run="")
 
     @classmethod
     def available_plugins(cls) -> ty.Dict[str, ty.Type["Environment"]]:
