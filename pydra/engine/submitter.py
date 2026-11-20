@@ -669,6 +669,7 @@ class Submitter:
             name: WorkerExecutor(
                 worker,
                 blocking=None if worker.is_async else self._run_blocking,
+                max_concurrent=self.max_concurrent,
             )
             for name, worker in self.workers.items()
         }

@@ -799,3 +799,47 @@ def test_read_back_reads_a_settled_result():
     ex = WorkerExecutor(DebugWorker(), visibility_timeout=0.1)
     assert asyncio.run(ex._read_back(Reported())) is found
     assert calls == [True]
+
+
+class ArrayWorker(base.Worker):
+    """A batching worker like slurm's: one ``submit_many`` per array, each job reported
+    through ``done`` as it ends; records how many jobs it holds at once"""
+
+    _plugin_name = "array-worker"
+
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+        self.holding = 0
+        self.peak = 0
+
+    async def run(self, job, rerun=False):
+        return job.run(rerun=rerun)
+
+    async def submit_many(self, jobs, done=None):
+        self.calls.append(len(jobs))
+        self.holding += len(jobs)
+        self.peak = max(self.peak, self.holding)
+
+        async def one(job):
+            await asyncio.sleep(0.05)
+            job.run(rerun=job.rerun)
+            self.holding -= 1
+            if done is not None:
+                done(job, True)
+            return True
+
+        return list(await asyncio.gather(*(one(j) for j in jobs)))
+
+
+@pytest.mark.timeout(60, method="thread")
+def test_batching_executor_caps_max_concurrent_itself(tmp_path):
+    """A batching executor is driven without a limit (RFC 0005 section 7.1) and holds
+    ``max_concurrent`` itself: a round larger than the cap is given to the worker in
+    chunks as jobs end"""
+    worker = ArrayWorker()
+    with Submitter(worker=worker, cache_root=tmp_path, max_concurrent=2) as sub:
+        result = sub(Split6(xs=list(range(6))))
+    assert not result.errored and result.outputs.out == [1, 2, 3, 4, 5, 6]
+    assert worker.peak <= 2
+    assert sum(worker.calls) == 6 and worker.calls[0] == 2
