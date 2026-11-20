@@ -599,13 +599,20 @@ PortableStore(root, trust="shared", readonly=[Root(path, trust="shared"), ...],
   to map a `$fileset` tag that is not yet registered to a class, the store may import the installed
   `fileformats.*` namespace packages, and nothing outside `fileformats.*`; it never imports code that
   the entry itself names.
-- **`$digest` is reserved.** RFC 0004 §6.2 uses `{"$digest": ...}` for a nested registered digest in
-  an input's digest form; no output codec emits it, and a decoder that meets it in an entry raises
-  `CorruptEntry`.
   An unknown tag raises `EntryFormatUnknown`; the entry is not served. This holds when `task` is
   `None`. A codec's `decode` builds a value from JSON and members only. Codecs for the standard
   library types above, `fileformats` types, `Absent`, numpy scalars, `attrs` classes and `enum`
   members are registered explicitly, by pydra for the types it defines and by packages for theirs.
+- **`$digest` is reserved.** RFC 0004 §6.2 uses `{"$digest": ...}` for a nested registered digest in
+  an input's digest form; no output codec emits it, and a decoder that meets it in an entry raises
+  `CorruptEntry`.
+- **A file set is never pickled**, even under a root that allows pickles. A pickled file set records
+  paths, not content, and would be served after its files are gone. So a `FileSet` whose tag cannot
+  be resolved back to a class and is not registered by the user, a mock file set, or one without
+  `mime_like` raises `UnencodableOutput` at publish, and its value is kept as `_outputs.pklz` with
+  `stored=False` (§5.4). On read, once every member's hash has verified, a file set whose recorded
+  class or format does not match its members raises `EntryFormatUnknown` and the entry is left in
+  place, not `CorruptEntry`: its bytes are intact and another process's registry may read it.
 - **An output with no codec, checked before the run.** When a job is handed out to a store whose
   writes cannot pickle, the runner checks each declared output field's type against the registry.
   A field whose declared type has no codec raises `UnencodableOutput` then, naming the field and the
