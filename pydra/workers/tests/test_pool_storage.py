@@ -1104,6 +1104,8 @@ def test_settled_listing_bounded_and_collected(tmp_path):
     assert list((q / "outcome").iterdir()) == []
     assert [p.name for p in (q / "slotted").iterdir()] == [live]
     claim = _pool(tmp_path).claim("cpu")
-    assert claim is not None and claim.digest == live  # the index still serves live tickets
+    assert (
+        claim is not None and claim.digest == live
+    )  # the index still serves live tickets
     claim.release()
     assert pool.collect_settled(age=3600) == 0
