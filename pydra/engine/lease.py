@@ -1226,6 +1226,8 @@ class _BeaterLoop:
             elif op == "deadline":
                 entry = self.dirs[key]
                 entry.at, entry.payload = message.get("at"), message.get("payload")
+            elif op == "ping":
+                pass
             elif op == "ack_expired":
                 if key in self.dirs:
                     self.dirs[key].kill_at = None
@@ -1524,6 +1526,13 @@ class BeaterClient:
         self._request(
             {"op": "ack_expired", "dir": str(token_dir)}, self._interval(token_dir)
         )
+
+    def ping(self, timeout: float) -> None:
+        """Ask the beater to answer; returns once it acknowledged. A beater that does not
+        answer within ``timeout`` seconds (hung, or stopped) is dead, as for any request:
+        `BeaterDead` is raised. A holder sends it while no other request is due, so that a
+        hung beater is found without waiting for the next ``hold`` or ``release``."""
+        self._request({"op": "ping"}, timeout)
 
     # Waiting
 
