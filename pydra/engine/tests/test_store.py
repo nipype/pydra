@@ -199,12 +199,14 @@ def test_lease_excludes_across_processes(tmp_path):
 def test_submitter_default_store(tmp_path):
     from pydra.engine.portable.store import PortableStore
     from pydra.engine.portable.trust import Root
+    from pydra.utils.storagedir import IS_WINDOWS
 
+    ro_trust = "private" if IS_WINDOWS else "shared"  # no shared roots on Windows
     cache_root, ro = tmp_path / "cache", tmp_path / "ro"
     sub = Submitter(cache_root=cache_root, readonly_caches=[ro])
     assert isinstance(sub.store, PortableStore)
     assert sub.store.path == str(cache_root.resolve()) and sub.store.trust == "private"
-    assert sub.store.readonly == (Root(ro.resolve(), trust="shared"),)
+    assert sub.store.readonly == (Root(ro.resolve(), trust=ro_trust),)
     sub = Submitter(cache_root=tmp_path / "p", readonly_caches=[ro], store="pickle")
     cache_root = tmp_path / "p"
     assert isinstance(sub.store, PickleStore)
