@@ -1866,3 +1866,97 @@ class PydraStateError(Exception):
 
 
 op = {".": zip, "*": itertools.product}
+
+
+# Partial expansion (proposal 0001 §3.1 step 2): the index algebra a node that splits
+# over an upstream output uses to expand one block at a time. A coordinate is held per
+# *path*, a tuple naming a splitter field through the prev-state terms that lead to it
+# (``("_A", "A.x")`` is field ``A.x`` reached through the prev-state term ``_A``), so
+# that the same upstream field reached through two terms keeps two coordinates.
+
+
+class Entry:
+    """One candidate element while a splitter is evaluated
+
+    Attributes
+    ----------
+    fields : dict
+        The coordinate of each path, in the order the splitter is evaluated
+    values : dict
+        The value of each of the node's own split inputs, keyed ``"<node>.<input>"``
+    terms : dict
+        The final key of each upstream node read through a prev-state term
+    """
+
+    __slots__ = ("fields", "values", "terms")
+
+    def __init__(self, fields: dict, values: dict, terms: dict):
+        self.fields = fields
+        self.values = values
+        self.terms = terms
+
+    def merge(self, other: "Entry") -> "Entry":
+        return Entry(
+            {**self.fields, **other.fields},
+            {**self.values, **other.values},
+            {**self.terms, **other.terms},
+        )
+
+
+def rpn_terms(rpn: ty.Sequence[str]) -> list[str]:
+    """The operands of a splitter in RPN, in order"""
+    return [t for t in rpn if t not in (".", "*")]
+
+
+def expand_rpn(rpn: ty.Sequence[str], entries: dict[str, list[Entry]]) -> list[Entry]:
+    """Evaluate a splitter in RPN over the entries of each of its terms.
+
+    ``*`` is an outer product with the left operand outer, ``.`` pairs the entries of
+    its operands, which must be equally many. The result is in the order today's
+    ``State.splits`` enumerates the same splitter.
+    """
+    if not rpn:
+        return [Entry({}, {}, {})]
+    stack: list[list[Entry]] = []
+    for token in rpn:
+        if token == "*":
+            right, left = stack.pop(), stack.pop()
+            stack.append([a.merge(b) for a in left for b in right])
+        elif token == ".":
+            right, left = stack.pop(), stack.pop()
+            if len(left) != len(right):
+                raise PydraStateError(
+                    f"Operands of a scalar splitter do not have the same length "
+                    f"({len(left)} and {len(right)})"
+                )
+            stack.append([a.merge(b) for a, b in zip(left, right)])
+        else:
+            stack.append(entries[token])
+    (result,) = stack
+    return result
+
+
+def scalar_operands(
+    rpn: ty.Sequence[str], tag: ty.Callable[[str], str]
+) -> ty.Iterator[tuple[set[str], set[str]]]:
+    """The tags of the two operands of every ``.`` of a splitter in RPN"""
+    stack: list[set[str]] = []
+    for token in rpn:
+        if token in (".", "*"):
+            right, left = stack.pop(), stack.pop()
+            if token == ".":
+                yield left, right
+            stack.append(left | right)
+        else:
+            stack.append({tag(token)})
+
+
+def compatible(fields: dict, assignment: dict) -> bool:
+    """Whether two partial coordinate assignments agree on every path they share"""
+    return all(assignment[p] == c for p, c in fields.items() if p in assignment)
+
+
+def is_sequence(value: ty.Any) -> bool:
+    """Whether an upstream value is split into its items; any other value is one
+    element"""
+    return isinstance(value, (list, tuple))
