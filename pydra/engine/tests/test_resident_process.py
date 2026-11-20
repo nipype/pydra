@@ -814,12 +814,13 @@ def test_process_table_helpers_are_not_accumulated(tmp_path, monkeypatch):
 
 
 @posix_only
-@pytest.mark.parametrize("sig", [signal.SIGKILL, signal.SIGTERM, signal.SIGSEGV])
-def test_command_killed_by_a_signal_is_relayed(sig):
+@pytest.mark.parametrize("signame", ["SIGKILL", "SIGTERM", "SIGSEGV"])
+def test_command_killed_by_a_signal_is_relayed(signame):
     """The leader exits as the command did, with no traceback (SIGKILL cannot be
     re-installed as a handler)"""
     from pydra.engine.procgroup import ProcessGroup
 
+    sig = getattr(signal, signame)
     code = f"import os; os.kill(os.getpid(), {int(sig)})"
     group = ProcessGroup.start(
         [sys.executable, "-c", code], stderr=subprocess.PIPE, text=True
