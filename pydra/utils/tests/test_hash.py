@@ -654,3 +654,30 @@ def test_hash_lambda_and_nested_function_stable_after_pickling_by_value(
             assert hash_function(unpickled) == hash_function(func)
     finally:
         sys.modules.pop(module_name, None)
+
+
+def test_hash_function_stable_after_pickling_when_module_not_loaded(
+    tmp_path: Path, monkeypatch
+):
+    """Simulates unpickling a function in a worker process that hasn't loaded (or
+    can't import) the module it was defined in (e.g. 'spawn' start method), where the
+    hash bytes stored on the function before it was pickled should be used"""
+    cloudpickle = pytest.importorskip("cloudpickle")
+    module_name = "pydra_test_pickle_by_value_unloaded_mod"
+    (tmp_path / f"{module_name}.py").write_text(
+        "def make():\n"
+        "    def nested(a, b=1):\n"
+        "        return a + b\n"
+        "\n"
+        "    return nested, lambda orig_file: orig_file\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    mod = __import__(module_name)
+    try:
+        funcs = mod.make()
+        hashes = [hash_function(f) for f in funcs]
+        pickled = [cloudpickle.dumps(f) for f in funcs]
+    finally:
+        sys.modules.pop(module_name, None)
+    for pkl, hsh in zip(pickled, hashes):
+        assert hash_function(cloudpickle.loads(pkl)) == hsh

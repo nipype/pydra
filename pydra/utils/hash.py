@@ -6,7 +6,6 @@ import re
 import ast
 import struct
 import inspect
-import importlib
 from datetime import datetime
 import typing as ty
 import types
@@ -684,48 +683,89 @@ def _parse_function_source_bytes(src: str) -> bytes:
     return b"".join(parts)
 
 
-def _get_function_source(obj: types.FunctionType) -> tuple[str, str | None]:
-    """Get the source code of a function and the file it was defined in.
+# Attribute that the serialised bytes of a function are stored in, so that they are
+# carried along with the function when it is pickled by value (e.g. by cloudpickle).
+_FUNCTION_BYTES_ATTR = "__pydra_hash_bytes__"
+
+
+def _recover_function_source(obj: types.FunctionType) -> str:
+    """Recover the source code of a function whose code object doesn't point to its
+    source file any more.
 
     Functions that have been pickled by value (e.g. by cloudpickle when the
     module-level name refers to a different object, as is the case for functions
-    decorated by ``python.define``) have their ``co_filename`` replaced, so
-    ``inspect.getsource`` fails in the process they are unpickled in. In that case
-    the source is recovered from the file of the module the function was defined
-    in. The code object (whose first line number is preserved) is pointed back at
-    that file and passed to ``inspect.getsource``, so exactly the same lookup is
-    performed as before pickling and the hashes are consistent. This also covers
-    lambdas and functions nested in other functions or classes.
+    decorated by ``python.define``, or for lambdas and nested functions) have their
+    ``co_filename`` replaced, so ``inspect.getsource`` fails on the unpickled copy. If
+    the module the function was defined in is loaded, the code object (whose first
+    line number is preserved) is pointed back at the module's file and passed to
+    ``inspect.getsource``, so exactly the same lookup is performed as on the original.
 
     Raises
     ------
     OSError
         if the source code cannot be found
     """
+    module = sys.modules.get(obj.__module__)
     try:
-        src = inspect.getsource(obj)
-    except (OSError, TypeError):
-        pass
-    else:
-        try:
-            source_file = inspect.getfile(obj)
-        except TypeError:
-            source_file = None
-        return src, source_file
-    try:
-        module = sys.modules.get(obj.__module__) or importlib.import_module(
-            obj.__module__
-        )
-        source_file = inspect.getsourcefile(module)
-    except Exception:
+        source_file = inspect.getsourcefile(module) if module else None
+    except TypeError:
         source_file = None
     if not source_file or source_file == obj.__code__.co_filename:
         raise OSError(f"could not get source code for {obj}")
     try:
-        src = inspect.getsource(obj.__code__.replace(co_filename=source_file))
+        return inspect.getsource(obj.__code__.replace(co_filename=source_file))
     except Exception as e:
         raise OSError(f"could not get source code for {obj}") from e
-    return src, source_file
+
+
+def _function_bytes(obj: types.FunctionType, cache: Cache) -> bytes:
+    """Calculate the bytes representation of a non-stdlib function, preferably from the
+    AST of its source code, otherwise from its byte-code.
+
+    The result is stored on the function object so that it is carried along with the
+    function when it is pickled by value (e.g. sent to a worker process by
+    cloudpickle), where the source code may not be accessible. This ensures the hash
+    is consistent between the process the function was hashed in and the one it is
+    unpickled in.
+    """
+    # Build a cache key from (module, qualname, source-file mtime).
+    # os.stat() is a single cheap syscall; if successful we can avoid
+    # both inspect.getsource() and ast.parse() on repeated calls.
+    cache_key: tuple[str, str, int] | None = None
+    try:
+        source_file = inspect.getfile(obj)
+        mtime_ns = os.stat(source_file).st_mtime_ns
+        cache_key = (obj.__module__, obj.__qualname__, mtime_ns)
+    except (OSError, TypeError):
+        pass
+
+    result: bytes | None = None
+    if cache_key is not None:
+        result = _function_bytes_cache.get(cache_key)
+    if result is None:
+        try:
+            src = inspect.getsource(obj)
+        except (OSError, TypeError):
+            # The source isn't accessible directly, use the bytes stored when the
+            # function was hashed before it was pickled, if present
+            result = getattr(obj, _FUNCTION_BYTES_ATTR, None)
+            if result is None:
+                try:
+                    src = _recover_function_source(obj)
+                except OSError:
+                    # Fallback to using the bytes representation of the code object.
+                    result = b"".join(bytes_repr(obj.__code__, cache))
+                else:
+                    result = _parse_function_source_bytes(src)
+        else:
+            result = _parse_function_source_bytes(src)
+            if cache_key is not None:
+                _function_bytes_cache[cache_key] = result
+    try:
+        setattr(obj, _FUNCTION_BYTES_ATTR, result)
+    except (AttributeError, TypeError):
+        pass
+    return result
 
 
 @register_serializer
@@ -736,38 +776,7 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
     if in_stdlib(obj):
         yield f"{obj.__module__}.{obj.__name__}".encode()
     else:
-        # Build a cache key from (module, qualname, source-file mtime).
-        # os.stat() is a single cheap syscall; if successful we can avoid
-        # both inspect.getsource() and ast.parse() on repeated calls.
-        cache_key: tuple[str, str, int] | None = None
-        try:
-            source_file = inspect.getfile(obj)
-            mtime_ns = os.stat(source_file).st_mtime_ns
-            cache_key = (obj.__module__, obj.__qualname__, mtime_ns)
-        except (OSError, TypeError):
-            pass
-
-        if cache_key is not None and cache_key in _function_bytes_cache:
-            yield _function_bytes_cache[cache_key]
-        else:
-            try:
-                src, source_file = _get_function_source(obj)
-            except OSError:
-                # Fallback to using the bytes representation of the code object.
-                # This path is not cached because it depends on the cache arg.
-                yield from bytes_repr(obj.__code__, cache)
-            else:
-                result = _parse_function_source_bytes(src)
-                if cache_key is None and source_file:
-                    try:
-                        mtime_ns = os.stat(source_file).st_mtime_ns
-                    except OSError:
-                        pass
-                    else:
-                        cache_key = (obj.__module__, obj.__qualname__, mtime_ns)
-                if cache_key is not None:
-                    _function_bytes_cache[cache_key] = result
-                yield result
+        yield _function_bytes(obj, cache)
     yield b")"
 
 

@@ -183,6 +183,17 @@ class Job(ty.Generic[TaskType]):
         return self.name
 
     def __getstate__(self):
+        # Calculate the checksum before pickling, so that the process the job is
+        # unpickled in uses the same cache directory. This also stores the hashes of
+        # any functions in the task on the function objects before they are pickled,
+        # so they are consistent in processes where their source code isn't
+        # accessible (see pydra.utils.hash._function_bytes)
+        try:
+            _ = self.checksum
+        except Exception as e:  # noqa: BLE001
+            logger.debug(
+                "Could not calculate checksum of %s before pickling: %s", self, e
+            )
         state = self.__dict__.copy()
         state["task"] = cp.dumps(state["task"])
         # Never serialise the in-memory result cache: subprocess workers must
