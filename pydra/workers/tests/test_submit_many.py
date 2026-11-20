@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from pathlib import Path
 import types
 import pytest
 from pydra.engine.job import Job
@@ -151,7 +152,7 @@ def sge_round(tmp_path, monkeypatch):
     )
 
     def load_job(job_pkl, ind=None):
-        cache_dir = tmp_path / "results" / job_pkl.split("/")[-2]
+        cache_dir = tmp_path / "results" / Path(job_pkl).parent.name
         cache_dir.mkdir(parents=True, exist_ok=True)
         (cache_dir / "_result.pklz").write_bytes(b"x")
         loaded = Loaded()
