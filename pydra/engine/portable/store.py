@@ -109,7 +109,7 @@ _ERROR = "_error.json"
 _KEPT_ENTRY = "_entry"
 _OUTPUTS = "_outputs.pklz"
 _COMMITTED_FORMAT = "pydra-committed@1"
-_ATTEMPT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
+_ATTEMPT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _JSON_CAP = 1 << 20
 _BLOCK = 1 << 16
 
@@ -1835,9 +1835,13 @@ class PortableStore:
             if not path.is_absolute():
                 raise ValueError(f"work_dir must return an absolute path, got {path}")
             return path
+        address = f"{cdir_for(checksum)}/{fingerprint}".encode()
         if attempt == "resume":
-            address = f"{cdir_for(checksum)}/{fingerprint}".encode()
             name = _RESUME + hashlib.sha256(address).hexdigest()
+        elif "." in attempt and _ATTEMPT.fullmatch(attempt):
+            # an attempt allocated outside the runner, such as a pool's <pool id>.<g>, is unique
+            # per job only, so its directory is qualified by the job's address
+            name = f"{attempt}-{hashlib.sha256(address).hexdigest()[:24]}"
         elif _ATTEMPT.fullmatch(attempt):
             name = attempt
         else:

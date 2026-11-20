@@ -27,6 +27,7 @@ __all__ = [
     "JOB_FILE",
     "JobCodec",
     "PayloadMismatch",
+    "payload_dir",
     "PrivatePickle",
     "read_payload",
     "write_payload",
@@ -89,6 +90,20 @@ def _make_private_dir(path: Path) -> None:
         return
     if not IS_WINDOWS:
         os.chmod(path, 0o700)
+
+
+def payload_dir(store: ty.Any, job: "Job") -> Path:
+    """Where a job's payload is written: the store's work directory of the attempt
+    ``<job.attempt>.payload``, beside the attempt's own. A run empties its work directory once it
+    publishes and writes its own ``_job.pklz`` there, so the payload, which a restart or a taker reads
+    again, is never in a directory a run uses."""
+    if job.attempt is None:
+        raise ValueError(f"job {job.name!r} has no attempt to name its payload by")
+    return store._work_path(
+        job.checksum,
+        store.identity.fingerprint(job.context),
+        f"{job.attempt}.payload",
+    )
 
 
 def write_payload(codec: JobCodec, job: "Job", work_dir: os.PathLike) -> dict:
