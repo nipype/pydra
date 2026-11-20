@@ -1617,7 +1617,10 @@ class _WalkMemo:
         self.modules: set[str] = set()
         root_ref = weakref.ref(root)
         memo_ref = weakref.ref(self)
-        lock, memos_by_root = _walk_memo_lock, _walk_memo  # module globals are None at teardown
+        lock, memos_by_root = (
+            _walk_memo_lock,
+            _walk_memo,
+        )  # module globals are None at teardown
 
         def drop(_):
             with lock:
