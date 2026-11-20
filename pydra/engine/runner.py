@@ -27,6 +27,7 @@ logger = logging.getLogger("pydra.submitter")
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task, Outputs
     from pydra.engine.node import Node
+    from pydra.engine.plan import Plan
     from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
     from pydra.engine.store import ResultStore
@@ -1441,6 +1442,30 @@ class GraphRunner:
                 whole = isinstance(indices, range)
             found[name] = [(up.job(i), None if whole else i) for i in indices]
         return found
+
+    def plan(self, executors: "ty.Mapping[str, ty.Any] | None" = None) -> "Plan":
+        """What the run would do now, without running, leasing or writing anything
+
+        The runner is left as it was: no job is released, handed out or settled, and no
+        lease is taken (a workflow job waiting for its lease is ``waiting``, one not yet
+        tried is ``deferred``). Nodes that are done are not listed.
+
+        Parameters
+        ----------
+        executors : Mapping[str, Executor], optional
+            The executors by the names the router returns; one with a ``place(jobs)``
+            method is asked where the node's unfinished elements would run, and its answer
+            is carried as :attr:`PlanNode.placement`
+
+        Returns
+        -------
+        Plan
+            One :class:`PlanNode` per node still to do, in release order, nested
+            workflows that are expanded by their own nodes
+        """
+        from pydra.engine.plan import build_plan
+
+        return build_plan(self, executors)
 
     def stuck(self) -> str | None:
         """A diagnosis of why nothing can progress, or None if the graph is done or a
