@@ -1,4 +1,4 @@
-"""One ``squeue`` per poll cycle and ``sbatch --array`` for split nodes, with Slurm faked."""
+"""One ``squeue`` per poll cycle and ``sbatch --array`` for a round of split nodes, with Slurm faked."""
 
 import asyncio
 import sys
@@ -117,8 +117,10 @@ def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwa
             uid=f"u{i}",
             cache_root=tmp_path,
             resources=None,
+            rerun=False,
             lockfile=tmp_path / f"c{i}-key.lock",
             state_index=i if split else None,
+            workflow_path=(),
         )
         for i in range(n)
     ]
@@ -126,16 +128,11 @@ def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwa
 
 
 def run_all(worker, jobs, reruns=None):
-    reruns = reruns or [False] * len(jobs)
+    for job, rerun in zip(jobs, reruns or [False] * len(jobs)):
+        job.rerun = rerun
 
     async def go():
-        return await asyncio.wait_for(
-            asyncio.gather(
-                *(worker.run(j, rerun=r) for j, r in zip(jobs, reruns)),
-                return_exceptions=True,
-            ),
-            30,
-        )
+        return await asyncio.wait_for(worker.submit_many(jobs), 30)
 
     return asyncio.run(go())
 
@@ -238,6 +235,19 @@ def test_different_shapes_are_not_mixed_in_one_array(tmp_path, monkeypatch):
     assert arrays == ["--array=0-1", "--array=0-1"]
     cpus = [("--cpus-per-task=4" in c) for c in fake.of("sbatch")]
     assert sorted(cpus) == [False, True]
+
+
+def test_array_key_has_workflow_path(tmp_path, monkeypatch):
+    """Node names repeat across nested workflows, so two jobs of equal name,
+    resources, cache root and rerun flag are one array only in one workflow"""
+    fake, worker, jobs = make(tmp_path, monkeypatch, 4)
+    for job in jobs[:2]:
+        job.workflow_path = ("a",)
+    for job in jobs[2:]:
+        job.workflow_path = ("b",)
+    assert run_all(worker, jobs) == [True] * 4
+    arrays = sorted(a for c in fake.of("sbatch") for a in c if a.startswith("--array"))
+    assert arrays == ["--array=0-1", "--array=0-1"]
 
 
 @pytest.mark.parametrize("args", ["-o /x/o-%j.out", "--error=/x/e-%j.err"])
