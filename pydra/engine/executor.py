@@ -40,9 +40,10 @@ class Executor(ty.Protocol):
     Every job submitted is reported exactly once through the callable given to
     :meth:`bind`, as a ``Result``, a :class:`~pydra.engine.runner.Failed` or a
     :class:`~pydra.engine.runner.NotRun` (a job the worker cancelled). The callable may
-    be invoked from any thread. A job of a handle the driver cancels as the run ends is
-    not reported: the run is over, and the runner records it as ``"stopped"`` if its
-    workflow failed.
+    be invoked from any thread. :meth:`cancel` is called only as the run ends, after
+    ``runner.close()``: the jobs of a cancelled handle are not reported, and are recorded
+    ``"stopped"`` where their workflow failed. Cancelling in the middle of a run is not
+    supported.
     """
 
     batches: bool
@@ -56,7 +57,8 @@ class Executor(ty.Protocol):
         """Start the jobs; an executor with ``batches = False`` gets one per call"""
 
     def cancel(self, handle: Handle) -> None:
-        """Stop the jobs of the handle that have not finished"""
+        """Stop the jobs of the handle that have not finished, as the run ends; they are
+        not reported"""
 
     def close(self) -> None:
         """Release what the executor holds"""
@@ -222,10 +224,12 @@ class WorkerExecutor:
     async def _submit_many(self, jobs: "list[Job]", handle: Handle) -> None:
         """Give the worker the round; each job's future is set as the job ends"""
 
-        def ended(job: "Job", outcome: "bool | Exception") -> None:
+        def ended(job: "Job", outcome: "bool | BaseException") -> None:
             future = self._pending.get(job)
             if future is not None and not future.done():
-                if isinstance(outcome, Exception):
+                if isinstance(outcome, asyncio.CancelledError):
+                    future.set_result(cancelled(outcome))  # the worker cancelled it
+                elif isinstance(outcome, Exception):
                     future.set_exception(outcome)
                 else:
                     future.set_result(outcome)
@@ -240,8 +244,14 @@ class WorkerExecutor:
                     f"{type(self.worker).__name__}.submit_many returned "
                     f"{len(outcomes)} outcomes for {len(jobs)} jobs"
                 )
-        except asyncio.CancelledError:
-            raise
+        except asyncio.CancelledError as exc:
+            task = asyncio.current_task()
+            if handle not in self._submissions or (
+                task is not None and task.cancelling()
+            ):
+                self._submissions.pop(handle, None)
+                raise  # cancelled by cancel() or by the loop: not reported
+            outcomes = [exc] * len(jobs)  # raised by the worker: its jobs did not run
         except Exception as exc:
             outcomes = [exc] * len(jobs)
         finally:

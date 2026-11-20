@@ -408,9 +408,45 @@ class CancelsASync(base.Worker):
         return job.run(rerun=rerun)
 
 
+class CancelsBatch(base.Worker):
+    """A batching worker whose ``submit_many`` raises ``CancelledError`` itself"""
+
+    _plugin_name = "cancels-batch"
+
+    async def run(self, job, rerun=False):
+        return job.run(rerun=rerun)
+
+    async def submit_many(self, jobs):
+        raise asyncio.CancelledError
+
+
+class CancelsFirstInBatch(CancelsBatch):
+    """A batching worker that reports ``first`` cancelled through ``done``, runs the rest"""
+
+    _plugin_name = "cancels-first-in-batch"
+
+    async def submit_many(self, jobs, done=None):
+        outcomes = []
+        for job in jobs:
+            outcome = (
+                asyncio.CancelledError() if job.name == "first" else job.run(job.rerun)
+            )
+            done(job, outcome)
+            outcomes.append(outcome)
+        return outcomes
+
+
 @pytest.mark.timeout(60, method="thread")
-@pytest.mark.parametrize("worker", [CancelsA, CancelsASync])
-def test_submitter_raises_run_incomplete(tmp_path, worker):
+@pytest.mark.parametrize(
+    "worker, not_run",
+    [
+        (CancelsA, ["first"]),
+        (CancelsASync, ["first"]),
+        (CancelsBatch, ["first", "second"]),
+        (CancelsFirstInBatch, ["first"]),
+    ],
+)
+def test_submitter_raises_run_incomplete(tmp_path, worker, not_run):
     outcome = []
 
     def call():
@@ -427,7 +463,9 @@ def test_submitter_raises_run_incomplete(tmp_path, worker):
     assert not thread.is_alive(), "the run hangs"
     (exc,) = outcome
     assert isinstance(exc, RunIncomplete) and isinstance(exc, WorkflowError)
-    assert [(job.name, nr.held) for job, nr in exc.not_run] == [("first", False)]
+    assert sorted((job.name, nr.held) for job, nr in exc.not_run) == [
+        (name, False) for name in not_run
+    ]
     assert exc.entries == []  # not a failure
     assert "first" in str(exc)
 
