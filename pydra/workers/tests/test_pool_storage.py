@@ -507,7 +507,9 @@ def test_settle_count_race(tmp_path, monkeypatch):
     monkeypatch.setattr(pool_storage, "_count_outcomes", count)
     assert claim.outcome(two, attempts[1], "done")
     marks = _files(pool.path / "queues" / queue_label("cpu") / "settled")
-    assert marks == [f"{digest}-1", f"{digest}-2"]
+    assert marks == [
+        f"{digest}-2"
+    ]  # the writer of a mark removes the ticket's previous one
     assert pool.settled("cpu") == {digest: 2}
     # both compute 3: the second finds the first's mark, which covers its own outcome
     pool.outcome("cpu", digest, three, attempts[2], {"outcome": "done"}, settle=False)
@@ -1087,15 +1089,19 @@ def test_half_done_move_repaired_after_collect(tmp_path, monkeypatch):
 
 
 def test_settled_listing_bounded_and_collected(tmp_path):
-    """``collect_settled`` removes resolved tickets with every settled mark, outcome and slotted entry
-    of theirs, so the ``settled/`` listing the follower reads each poll holds only the marks of live
-    tickets, however many outcomes the queue has had."""
+    """A queue's ``settled/`` holds one mark per ticket, the highest, however many outcomes it had, so
+    the listing the follower reads each poll is bounded by the tickets within a run;
+    ``collect_settled`` removes resolved tickets with their marks, outcomes and slotted entries, so
+    across runs it holds only live tickets."""
     pool = _pool(tmp_path)
     digests = [pool.put("cpu", _ticket(f"t{i}", jobs=3)) for i in range(4)]
     while (claim := pool.claim("cpu")) is not None:
         _finish(claim)
     q = pool.path / "queues" / queue_label("cpu")
-    assert len(list((q / "settled").iterdir())) == 4 * 3  # a mark per outcome
+    # one mark per ticket, the highest, however many outcomes it had
+    assert sorted(p.name for p in (q / "settled").iterdir()) == sorted(
+        f"{d}-3" for d in digests
+    )
     assert pool.settled("cpu") == {d: 3 for d in digests}
     live = pool.put("cpu", _ticket("live", jobs=2))
     assert pool.collect_settled(age=0) == 4
@@ -1104,6 +1110,8 @@ def test_settled_listing_bounded_and_collected(tmp_path):
     assert list((q / "outcome").iterdir()) == []
     assert [p.name for p in (q / "slotted").iterdir()] == [live]
     claim = _pool(tmp_path).claim("cpu")
-    assert claim is not None and claim.digest == live  # the index still serves live tickets
+    assert (
+        claim is not None and claim.digest == live
+    )  # the index still serves live tickets
     claim.release()
     assert pool.collect_settled(age=3600) == 0

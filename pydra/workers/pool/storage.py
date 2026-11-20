@@ -1434,6 +1434,10 @@ class PoolRoot:
             count = _count_outcomes(d)
             while count:
                 if _create(q.settled, f"{digest}-{count}", b"") != "exists":
+                    # the follower reads the highest: one mark per ticket bounds its listing
+                    if count > 1:
+                        with contextlib.suppress(OSError):
+                            q.settled.unlink(f"{digest}-{count - 1}")
                     return count
                 again = _count_outcomes(d)
                 if again <= count:
