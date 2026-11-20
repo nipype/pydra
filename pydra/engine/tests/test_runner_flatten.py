@@ -510,7 +510,9 @@ def make_branches(reads_sink: bool):
     @workflow.define
     def Branches(marker: str, gate: str) -> int:
         workflow.add(Failing(x=1), name="a")
-        return workflow.add(Sunk(marker=marker, gate=gate), name="b").out
+        b = workflow.add(Sunk(marker=marker, gate=gate), name="b")
+        workflow.add(Twin(x=b.out), name="after")  # blocked on b, never handed out
+        return b.out
 
     @workflow.define
     def Fixed(marker: str, gate: str) -> int:
@@ -805,18 +807,24 @@ def test_finish_stores_nothing_for_unfinished_nodes_without_errors(tmp_path):
         runner.close()
 
 
-def test_close_names_the_unfinished_nodes_as_not_run(tmp_path):
+def test_close_names_the_stopped_elements(tmp_path):
+    """An element handed out that did not complete is "stopped", once, naming the failure
+    that stopped it; completed elements and blocked ones that were never handed out
+    have no such entry"""
     sub, runner = interrupted_runner(tmp_path)
     with sub:
         runner.close()
-        not_run = [e for e in runner.entries if e.phase == "not_run"]
-        names = {(e.job_name, e.state_index) for e in not_run}
-        assert names == {("b", None)}  # the interrupted workflow, as a whole
-        for e in not_run:
-            # the failure of workflow ``a``, which holds the ValueError
-            assert e.exception_type.endswith("WorkflowError")
-            assert "boom" in e.message
-        assert not any(e.job_name == "Boom" for e in not_run)
+        stopped = [e for e in runner.entries if e.phase == "stopped"]
+        assert [(e.job_name, e.state_index) for e in stopped] == [("b", None)]
+        (entry,) = stopped
+        assert entry.exception_type is None
+        assert entry.message.startswith("stopped by a: ")
+        assert entry.message.count("stopped by") == 1
+        assert "\n" not in entry.message  # the failure is named, not repeated
+        # the failure is the one real entry, and the only error
+        real = [e for e in runner.entries if e.phase != "stopped"]
+        assert [(e.job_name, e.phase) for e in real] == [("a", "run")]
+        assert len(runner.errors) == 1
 
 
 # Failures that are entries

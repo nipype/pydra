@@ -49,20 +49,25 @@ class JobErrorEntry:
         The name of the job
     state_index : int | None
         The index of the job's element within its split, None if it has none
-    exception_type : str
-        The qualified name of the exception's class, ``module.Class``
+    exception_type : str or None
+        The qualified name of the exception's class, ``module.Class``; None for a
+        ``"stopped"`` entry, which records no exception
     message : str
         ``str()`` of the exception
     traceback : str
         The formatted traceback
     phase : str
         ``"run"`` if the job ran and errored, ``"resolution"`` if its inputs could
-        not be resolved from its upstream results, so it never ran
+        not be resolved from its upstream results, so it never ran, ``"lease"`` if
+        the lease of a workflow job could not be taken, ``"commit"`` if its result
+        could not be committed (the lease was lost), ``"stopped"`` if the job was
+        handed out but the run ended before it completed (its message names the
+        failure that stopped the run)
     """
 
     job_name: str
     state_index: int | None
-    exception_type: str
+    exception_type: str | None
     message: str
     traceback: str
     phase: str = "run"
@@ -864,28 +869,31 @@ class GraphRunner:
                 self._finish(frame)
 
     @staticmethod
-    def _name_not_run(frame: _Frame) -> None:
+    def _name_stopped(frame: _Frame) -> None:
         """Add an entry, naming the failure that stopped the workflow, for each element
-        of its nodes that has not run: queued, running, blocked or never started"""
+        of its nodes that was handed out and has not completed. An element that
+        completed has its own outcome, and one never handed out (blocked behind an
+        unfinished element) is not an entry: the driver reports it as unrunnable."""
         cause = frame.entries[0] if frame.entries else None
+        if cause is None:
+            return
+        who = cause.job_name
+        if cause.state_index is not None:
+            who += f"({cause.state_index})"
+        first = cause.message.strip().splitlines()[0] if cause.message.strip() else ""
         for node in frame.graph.nodes:
-            if node.done:
-                continue
-            indices = [*node.queued, *(i for i in node.running), *(node.blocked or ())]
-            for index in indices or [None]:
-                label = node.name if index is None else f"{node.name}({index})"
-                message = f"not run: {cause.message}" if cause else "not run"
+            node.update_status()
+            for index in [*node.queued, *node.running]:
                 frame.entries.append(
                     JobErrorEntry(
                         job_name=node.name,
                         state_index=index,
-                        exception_type=cause.exception_type if cause else "",
-                        message=message,
-                        traceback=cause.traceback if cause else "",
-                        phase="not_run",
+                        exception_type=None,
+                        message=f"stopped by {who}: {first}",
+                        traceback="",
+                        phase="stopped",
                     )
                 )
-                frame.errors.append(f"Job {label!r} did not run: {message}")
 
     def close(self) -> None:
         """Release what the runner holds: a workflow job with errors of its own is
@@ -896,7 +904,7 @@ class GraphRunner:
             if frame.state == "finished" or not frame.owned:
                 continue
             if frame.state == "expanding" and frame.errors:
-                self._name_not_run(frame)
+                self._name_stopped(frame)
                 self._finish(frame)
             else:
                 frame.state = "finished"

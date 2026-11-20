@@ -97,6 +97,9 @@ class Job(ty.Generic[TaskType]):
     # expand a workflow job and by ``Submitter`` for its outer job; "resume" if the
     # job can resume
     attempt: str | None = None
+    # Whether the audit of a workflow job was started by the runner, so that it is
+    # finalised with the job
+    _audit_started: bool = False
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
     _inputs: dict[str, ty.Any] | None = None
@@ -464,7 +467,7 @@ class Job(ty.Generic[TaskType]):
                 record_error(self.cache_dir, error=traceback)
             result.errored = True
             self._errored = True
-        if getattr(self, "_audit_started", False):  # not if it failed before the audit
+        if self._audit_started:  # not if it failed before the audit
             self.hooks.post_run_task(self, result)
             self.audit.finalize_audit(result=result)
         self.store.commit(lease, result, job=self._pickle_to_commit(result))
