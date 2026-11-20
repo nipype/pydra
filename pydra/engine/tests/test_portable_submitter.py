@@ -511,6 +511,90 @@ def test_a_hit_is_read_off_the_event_loop(tmp_path, monkeypatch):
     assert runner.exec_graph["B"].job(None).result().outputs.out == 3
 
 
+@workflow.define
+def Fan(xs: list[int]) -> list[int]:
+    a = workflow.add(Add1().split(x=xs), name="A")
+    return a.out
+
+
+class RaisesOnTheReadThread(Scripted):
+    """A hook that fails while the runner reads off its thread, and only there."""
+
+    def verdict(self, candidate, current, task):
+        if threading.current_thread().name.startswith("pydra-store-read"):
+            raise RuntimeError("the hook failed")
+        return super().verdict(candidate, current, task)
+
+
+@pytest.mark.parametrize("hook", ["verify", "raises"])
+def test_a_job_read_without_a_hit_is_handed_out_under_a_cap(tmp_path, hook):
+    """NB1: jobs whose off-thread read serves nothing (a Verify, a hook that raises) are
+    handed out even when ``max_concurrent`` holds some of them back for later rounds."""
+    from pydra.engine.drivers import drive
+    from pydra.workers.debug import DebugWorker
+
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        assert sub(Fan(xs=[1, 2, 3])).outputs.out == [2, 3, 4]
+    reuse = Scripted({None: Verdict.VERIFY}) if hook == "verify" else None
+    reuse = reuse or RaisesOnTheReadThread()
+    store = PortableStore(tmp_path / "cache", trust="private", pickle=True, reuse=reuse)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "cache") as sub:
+        runner = GraphRunner(
+            Fan(xs=[1, 2, 3]), store, on_error="raise_at_end", submitter=sub
+        )
+
+        async def main():
+            await drive(
+                runner,
+                {"default": WorkerExecutor(DebugWorker())},
+                lambda job: "default",
+                max_concurrent=1,
+                on_error="raise_at_end",
+                audit=sub.audit,
+            )
+
+        asyncio.run(main())
+    assert runner.done and not runner.failed
+    node = runner.exec_graph["A"]
+    assert [node.job(i).result().outputs.out for i in range(3)] == [2, 3, 4]
+
+
+@pytest.mark.parametrize("task", ["leaf", "workflow"])
+def test_a_failed_run_never_returns_an_earlier_stored_result(
+    tmp_path, monkeypatch, task
+):
+    """With ``raise_errors=False`` a call whose run failed returns an errored result, not
+    the result an earlier run stored at the same address."""
+    made = Add1(x=1) if task == "leaf" else Two(x=1)
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        assert not sub(made).errored
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("the driver broke")
+
+    monkeypatch.setattr(Submitter, "submit", broken)
+    monkeypatch.setattr(Submitter, "_run_workflow", broken)
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        result = sub(made, raise_errors=False, rerun=True)
+    assert result.errored
+
+
+@python.define
+def PathAsText() -> str:
+    path = Path("note.txt").absolute()
+    path.write_text("x")
+    return str(path)
+
+
+def test_a_str_path_into_the_work_directory_warns(tmp_path):
+    """A ``str`` output is a value; one naming a file the job wrote in its work directory
+    warns at publish, naming the field and suggesting ``Path`` or ``File``."""
+    with pytest.warns(UserWarning, match="out.*Path"):
+        with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+            result = sub(PathAsText())
+    assert result.stored and isinstance(result.outputs.out, str)
+
+
 @pytest.mark.parametrize("lookup_before_dispatch", [False, True])
 def test_ready_find_verify_dispatches_with_mark(
     tmp_path, monkeypatch, lookup_before_dispatch
@@ -643,6 +727,27 @@ def test_forgetting_an_outcome_keeps_the_work_directory(tmp_path):
         finally:
             os.chdir(here)
     assert not wd.exists()  # removed by the submitter's close, once nothing is in it
+
+
+def test_forgetting_spares_a_directory_a_running_job_returns_to(tmp_path):
+    """N8: an emptied work directory is removed when its outcome is forgotten, unless a job
+    running on another thread captured it as the directory to change back to."""
+    from pydra.utils.general import hold_dir, release_dir
+
+    store = make(tmp_path)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(Two(x=1), store, on_error="raise_at_end", submitter=sub)
+        (a,) = runner.ready().dispatch
+        result = a.run()
+        wd = store.work_dir(a)
+        hold_dir(wd)
+        try:
+            runner.complete(a, result)
+            assert wd.is_dir() and list(wd.iterdir()) == []
+        finally:
+            release_dir(wd)
+        store.forget_committed(a)
+        assert not wd.exists()
 
 
 def test_stored_false_is_success_not_unrunnable(tmp_path):

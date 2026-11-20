@@ -790,6 +790,8 @@ class GraphRunner:
         self._read_pool: concurrent.futures.ThreadPoolExecutor | None = None
         self._read_notify: "ty.Callable[[], None] | None" = None
         self._reading: "dict[Job, concurrent.futures.Future]" = {}
+        # the jobs whose store read served nothing, to be handed out without another read
+        self._checked: set[Job] = set()
         self._releases: list[concurrent.futures.Future] = []
         self._failed = False
         self._first_error: BaseException | None = None
@@ -1134,6 +1136,9 @@ class GraphRunner:
         return (
             # settling a job from the store hands it out without changing any node
             len(self._handed),
+            # a read begun off the thread, and one that ended
+            len(self._reading),
+            len(self._checked),
             tuple(f.state for f in self._frames),
             tuple(
                 (
@@ -1205,7 +1210,11 @@ class GraphRunner:
         while True:
             before = self._progress()
             self._settle_frames()
-            candidates = [j for j in self._runnable() if j not in self._handed]
+            candidates = [
+                j
+                for j in self._runnable()
+                if j not in self._handed and j not in self._reading
+            ]
             candidates = self._serve(candidates)
             if candidates or self._progress() == before:
                 break
@@ -1286,6 +1295,11 @@ class GraphRunner:
         present = getattr(self.store, "present", None)
         rest = []
         for job in jobs:
+            if (
+                job in self._checked
+            ):  # read, nothing to serve: handed out when there is room
+                rest.append(job)
+                continue
             if find is not None and self._read_pool is not None:
                 # a hit reads and verifies every member: off the driver's thread
                 if not self.lookup_before_dispatch and present is not None:
@@ -1294,7 +1308,6 @@ class GraphRunner:
                         continue
                 future = self._read_pool.submit(find, job)
                 self._reading[job] = future
-                self._handed.add(job)
                 if self._read_notify is not None:
                     future.add_done_callback(self._notify_read)
                 continue
@@ -1305,6 +1318,7 @@ class GraphRunner:
                 if result is None and self.lookup_before_dispatch:
                     result = self._lookup(job)
             if result is None:
+                self._checked.add(job)
                 rest.append(job)
                 continue
             self._settle_stored(job, result)
@@ -1334,6 +1348,7 @@ class GraphRunner:
                 found = None
             result = self._accept(job, found)
             if result is None:
+                self._checked.add(job)  # not read again if a cap holds it back
                 rest.append(job)
             else:
                 self._settle_stored(job, result)
@@ -1524,7 +1539,12 @@ class GraphRunner:
 
     def _forget(self, job: Job) -> None:
         """Tell a store that keeps a job's outcome in its work directory until the runner
-        holds it (``forget_committed``, RFC 0003 section 5.4) that it is held now"""
+        holds it (``forget_committed``, RFC 0003 section 5.4) that it is held now, through
+        the submitter when it tracks the job's work directory"""
+        forget = getattr(self.submitter, "_forget", None)
+        if forget is not None:
+            forget(job)
+            return
         forget = getattr(self.store, "forget_committed", None)
         if forget is None:
             return
