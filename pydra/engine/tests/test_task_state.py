@@ -364,7 +364,7 @@ def test_task_init_9():
 def test_task_error(tmp_path):
     func = FunDiv(a=1, b=0)
     with pytest.raises(ZeroDivisionError):
-        func(cache_root=tmp_path)
+        func(store="pickle", cache_root=tmp_path)
     assert len(list(tmp_path.glob("*/*/_error.pklz"))) == 1
 
 
@@ -486,7 +486,7 @@ def test_task_nostate_4(worker, tmp_path):
 
     nn = FunFile(filename=file1)
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path / "cache") as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -573,7 +573,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, worker):
     state = get_state(nn)
     assert state is None
 
-    with Submitter(worker=worker, cache_root=cache_root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root) as sub:
         results = sub(nn)
     assert not results.errored, "\n".join(results.errors["error message"])
 
@@ -656,10 +656,10 @@ def test_task_nostate_cachelocations_nosubmitter(tmp_path):
     cache_root2.mkdir()
 
     nn = FunAddTwo(a=3)
-    nn(cache_root=cache_root)
+    nn(store="pickle", cache_root=cache_root)
 
     nn2 = FunAddTwo(a=3)
-    outputs2 = nn2(cache_root=cache_root2, readonly_caches=cache_root)
+    outputs2 = nn2(store="pickle", cache_root=cache_root2, readonly_caches=cache_root)
 
     # checking the results
 
@@ -682,10 +682,12 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
     cache_root2.mkdir()
 
     nn = FunAddTwo(a=3)
-    nn(cache_root=cache_root)
+    nn(store="pickle", cache_root=cache_root)
 
     nn2 = FunAddTwo(a=3)
-    outputs2 = nn2(rerun=True, cache_root=cache_root2, readonly_caches=cache_root)
+    outputs2 = nn2(
+        rerun=True, store="pickle", cache_root=cache_root2, readonly_caches=cache_root
+    )
 
     # checking the results
 
@@ -724,7 +726,7 @@ def test_task_nostate_cachelocations_updated(worker, tmp_path):
 
     # updating cache location to non-existing dir
     with Submitter(
-        worker=worker, readonly_caches=cache_root1, cache_root=tmp_path
+        worker=worker, readonly_caches=cache_root1, cache_root=tmp_path / "cache"
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results.errors["error message"])

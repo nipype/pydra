@@ -403,6 +403,20 @@ class ResultStore(ty.Protocol):
     ``forget_committed(job) -> None``
         Called once the runner holds a job's outcome, so a store that keeps the outcome in
         the job's work directory until then can remove it (RFC 0003 section 5.4).
+    ``find(job, *, probe=False) -> Hit | Verify | Miss``
+        Asked instead of ``read_succeeded`` and ``lookup`` when present (RFC 0002 section
+        3.1): a ``Hit`` is settled as stored, a ``Verify`` is handed out with ``job.verify``
+        set to its candidate, a ``Miss`` is handed out. ``probe=True`` (every released job
+        without ``lookup_before_dispatch``) answers ``Miss`` at the cost of an existence
+        check when the job's own address holds nothing. The store check of a workflow job
+        under its lease asks it too. See `PortableStore.find`.
+    ``present(job) -> bool``
+        Whether the job's own address holds an entry, one existence check; a runner whose
+        driver reads off its thread (``GraphRunner.read_off_thread``) asks it of every
+        released job and reads only those that do.
+    ``expected_hits(jobs) -> int``
+        How many of ``jobs`` ``ready()`` may settle from the store, without a reuse being
+        recorded; read by ``GraphRunner.plan``.
     """
 
     def cache_dir(self, checksum: str, context: Context) -> Path:

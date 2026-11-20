@@ -49,16 +49,16 @@ def test_python_output():
     assert getattr(funky, "function") is not None
     assert set(f.name for f in get_fields(funky.Outputs)) == {"output"}
 
-    outputs = funky()
+    outputs = funky(store="pickle")
     assert hasattr(outputs, "output")
     assert outputs.output == 1.1
 
     assert list(
         (default_run_cache_root() / f"python-{funky._hash}").glob("*/_result.pklz")
     )
-    funky()  # should not recompute
+    funky(store="pickle")  # should not recompute
     funky.a = 2
-    outputs = funky()
+    outputs = funky(store="pickle")
     assert outputs.output == 2.1
 
     help = task_help(funky)
@@ -119,7 +119,7 @@ def test_python_output_multreturn():
     assert getattr(funky, "function") is not None
     assert set(f.name for f in get_fields(funky.Outputs)) == {"fractional", "integer"}
 
-    outputs = funky()
+    outputs = funky(store="pickle")
     assert list(
         (default_run_cache_root() / f"python-{funky._hash}").glob("*/_result.pklz")
     )
@@ -425,16 +425,16 @@ def test_halfpython_output(tmp_path):
     assert getattr(funky, "function") is not None
     assert set(f.name for f in get_fields(funky.Outputs)) == {"out"}
 
-    outputs = funky(cache_root=cache_root)
+    outputs = funky(store="pickle", cache_root=cache_root)
     assert hasattr(outputs, "out")
     assert outputs.out == 30
 
     assert list((cache_root / f"python-{funky._hash}").glob("*/_result.pklz"))
 
-    funky(cache_root=cache_root)  # should not recompute
+    funky(store="pickle", cache_root=cache_root)  # should not recompute
     funky.a = 11
     assert not Path(cache_root / f"python-{funky._hash}").exists()
-    outputs = funky(cache_root=cache_root)
+    outputs = funky(store="pickle", cache_root=cache_root)
     assert outputs.out == 31
     help = task_help(funky)
 
@@ -472,16 +472,16 @@ def test_halfpython_output_multreturn(tmp_path):
     assert getattr(funky, "function") is not None
     assert set(f.name for f in get_fields(funky.Outputs)) == {"out1", "out2"}
 
-    outputs = funky(cache_root=cache_root)
+    outputs = funky(store="pickle", cache_root=cache_root)
     assert hasattr(outputs, "out1")
     assert outputs.out1 == 11
 
     assert list((cache_root / f"python-{funky._hash}").glob("*/_result.pklz"))
 
-    funky(cache_root=cache_root)  # should not recompute
+    funky(store="pickle", cache_root=cache_root)  # should not recompute
     funky.a = 11
     assert not list((cache_root / f"python-{funky._hash}").glob("*/_result.pklz"))
-    outputs = funky(cache_root=cache_root)
+    outputs = funky(store="pickle", cache_root=cache_root)
     assert outputs.out1 == 12
     help = task_help(funky)
 

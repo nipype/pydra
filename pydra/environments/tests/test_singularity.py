@@ -171,7 +171,9 @@ def test_singularity_inputspec_1(worker, tmp_path):
     singu = Singu(file=filename)
 
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout.strip() == "hello from pydra"
 
@@ -204,7 +206,9 @@ def test_singularity_inputspec_1a(worker, tmp_path):
     singu = Singu(file=filename)
 
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout.strip() == "hello from pydra"
 
@@ -247,7 +251,9 @@ def test_singularity_inputspec_2(worker, tmp_path):
     singu = Singu(file1=filename_1)
 
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout == "hello from pydra\nhave a nice one"
 
@@ -291,7 +297,9 @@ def test_singularity_inputspec_2a_except(worker, tmp_path):
 
     singu = Singu(file2=filename_2)
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout == "hello from pydra\nhave a nice one"
 
@@ -337,7 +345,9 @@ def test_singularity_inputspec_2a(worker, tmp_path):
     singu = Singu(file2=filename_2)
 
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout == "hello from pydra\nhave a nice one"
 
@@ -375,7 +385,9 @@ def test_singularity_cmd_inputspec_copyfile_1(worker, tmp_path):
     singu = Singu(orig_file=file)
 
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout == ""
     assert outputs.out_file.fspath.exists()
@@ -420,7 +432,9 @@ def test_singularity_inputspec_state_1(tmp_path):
     singu = Singu().split("file", file=filename)
 
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
@@ -459,7 +473,9 @@ def test_singularity_inputspec_state_1b(worker, tmp_path):
     singu = Singu().split("file", file=filename)
 
     outputs = singu(
-        environment=singularity.Environment(image=image), cache_root=tmp_path
+        environment=singularity.Environment(image=image),
+        store="pickle",
+        cache_root=tmp_path,
     )
     assert outputs.stdout[0].strip() == "hello from pydra"
     assert outputs.stdout[1].strip() == "have a nice one"
@@ -496,7 +512,7 @@ def test_singularity_wf_inputspec_1(worker, tmp_path):
         )
         return singu.stdout
 
-    with Submitter(cache_root=tmp_path) as sub:
+    with Submitter(store="pickle", cache_root=tmp_path) as sub:
         res = sub(Workflow(cmd=cmd, file=filename))
 
     assert res.outputs.out.strip() == "hello from pydra"
@@ -539,7 +555,7 @@ def test_singularity_wf_state_inputspec_1(worker, tmp_path):
 
     wf = Workflow(cmd=cmd).split("file", file=filename)
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert [o.strip() for o in res.outputs.out] == [
@@ -585,7 +601,7 @@ def test_singularity_wf_ndst_inputspec_1(worker, tmp_path):
 
     wf = Workflow(cmd=cmd, files=filename)
 
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert [o.strip() for o in res.outputs.out] == [

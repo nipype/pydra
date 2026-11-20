@@ -67,9 +67,12 @@ def run_no_submitter(
     cache_root: Path | None = None,
     worker: str | None = None,
     environment: "Environment | None" = None,
+    store: "str | None" = None,
 ):
     """helper function to return result when running without submitter"""
-    return shell_def(worker=worker, cache_root=cache_root, environment=environment)
+    return shell_def(
+        worker=worker, cache_root=cache_root, environment=environment, store=store
+    )
 
 
 def run_submitter(
@@ -77,12 +80,13 @@ def run_submitter(
     cache_root: Path | None = None,
     worker: str | None = None,
     environment: "Environment | None" = None,
+    store: "str | None" = None,
 ):
     """helper function to return result when running with submitter
     with specific worker
     """
     with Submitter(
-        worker=worker, cache_root=cache_root, environment=environment
+        worker=worker, cache_root=cache_root, environment=environment, store=store
     ) as sub:
         results = sub(shell_def)
     if results.errored:

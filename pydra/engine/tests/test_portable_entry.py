@@ -46,7 +46,10 @@ from pydra.utils.storagedir import (
     StoreUnavailable,
 )
 
-TRUST = "trusted" if IS_WINDOWS else "private"
+# `trusted` on Windows unless CI sets PYDRA_TEST_PORTABLE_TRUST (see test_portable_store)
+TRUST = os.environ.get("PYDRA_TEST_PORTABLE_TRUST") or (
+    "trusted" if IS_WINDOWS else "private"
+)
 posix_only = pytest.mark.skipif(IS_WINDOWS, reason="needs POSIX modes and owners")
 CTX = {"python": "3.12", "platform": "test", "n": 1, "x": 1.5, "none": None}
 IDENT = PydraIdentityV1()
@@ -294,12 +297,15 @@ def test_bytes_member(root):
 def test_list_and_tuple_decode_to_declared_type(root):
     out = {"a": 1, "b": [1.0, 2.5], "c": (7, "q")}
     enc = encoded(root, out)
-    assert enc["b"] == [1.0, 2.5] and enc["c"] == [7, "q"]
+    assert enc["b"] == [1.0, 2.5] and enc["c"] == {"$tuple": [7, "q"]}
     typed = read(root, task=Typed(x=1)).outputs
     assert typed["c"] == (7, "q") and isinstance(typed["c"], tuple)
     assert typed["b"] == [1.0, 2.5]
     plain = read(root, task=None).outputs
-    assert plain["c"] == [7, "q"]
+    assert plain["c"] == (7, "q") and plain["b"] == [
+        1.0,
+        2.5,
+    ]  # no declared type: as given
 
 
 def test_set_order_is_canonical(root, tmp_path):

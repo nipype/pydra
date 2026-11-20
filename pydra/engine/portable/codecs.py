@@ -20,6 +20,7 @@ import sys
 import types
 import typing as ty
 import uuid
+import warnings
 from pathlib import Path
 
 from fileformats.core.fileset import FileSet
@@ -103,16 +104,27 @@ class Encoder:
         Whether a value with no codec may be cloudpickled into a ``.pkl`` member.
     allow_naive : bool
         Whether a naive datetime may be written (not in a ``shared`` root).
+    work_dir : str, optional
+        The directory the job ran in: a ``pathlib.Path`` output naming a file or directory
+        inside it is stored as a file set, because the work directory is emptied once the
+        entry is published (RFC 0003 sections 5.4 and 6.4).
     """
 
     def __init__(
-        self, staging: StorageDir, *, can_pickle: bool, allow_naive: bool
+        self,
+        staging: StorageDir,
+        *,
+        can_pickle: bool,
+        allow_naive: bool,
+        work_dir: str | None = None,
     ) -> None:
         self.staging = staging
+        self.work_dir = None if work_dir is None else os.path.realpath(work_dir)
         self.policy = staging.policy
         self.can_pickle = can_pickle
         self.allow_naive = allow_naive
         self.members: dict[str, dict[str, ty.Any]] = {}
+        self._warned: set[str] = set()
 
     # members
 
@@ -151,6 +163,16 @@ class Encoder:
         """
         tp = type(value)
         tag = tag_of(tp)
+        if tag is None and isinstance(value, FileSet):
+            tag = fileformats_tag(tp)
+            if tag is None:  # a file set is never pickled (RFC 0003 section 6.4)
+                raise UnencodableOutput(
+                    field,
+                    tp,
+                    "a file set is stored only under a registered tag or the MIME-like "
+                    "name of a fileformats class, and is never pickled",
+                )
+            return self._fileset(value, tag, field)
         if tag is not None:
             codec = lookup_tag(tag)
             assert codec is not None
@@ -173,6 +195,7 @@ class Encoder:
                 raise UnencodableOutput(
                     field, tp, "a string with a lone surrogate"
                 ) from None
+            self._warn_work_path(value, field)
             return value
         if tp is complex:
             return {
@@ -183,8 +206,10 @@ class Encoder:
             }
         if tp is bytes:
             return {"$bytes": self._blob(value, ".bin")}
-        if tp in (list, tuple):
+        if tp is list:
             return [self.encode(v, field) for v in value]
+        if tp is tuple:  # a JSON array is a list unless a declared type says otherwise
+            return {"$tuple": [self.encode(v, field) for v in value]}
         if tp in (set, frozenset):
             return {"$set": sorted((self.encode(v, field) for v in value), key=_canon)}
         if tp is dict:
@@ -210,7 +235,8 @@ class Encoder:
                 )
             return {"$datetime": value.isoformat()}
         if isinstance(value, Path) and tp is type(Path()):
-            return {"$path": os.fspath(value)}
+            stored = self._work_path(value, field)
+            return {"$path": os.fspath(value) if stored is None else stored}
         if is_canonical_array(value):
             return {"$array": self._blob(canonical_npy(value), ".npy")}
         if (
@@ -239,6 +265,52 @@ class Encoder:
             "cloudpickle": cloudpickle.__version__,
             "python": _PYTHON,
         }
+
+    def _warn_work_path(self, value: str, field: str) -> None:
+        """Warn, once per field, of a ``str`` output that names an existing file or directory
+        the job wrote in its work directory: a string is a value, so the file is not stored
+        and is gone once the work directory is emptied."""
+        if (
+            self.work_dir is None
+            or field in self._warned
+            or not os.path.isabs(value)
+            or len(value) > 4096
+        ):
+            return
+        try:
+            real = os.path.realpath(value)
+        except (OSError, ValueError):
+            return
+        if real.startswith(self.work_dir + os.sep) and os.path.exists(real):
+            self._warned.add(field)
+            warnings.warn(
+                f"output {field!r} is the string {value!r}, a path inside the job's work "
+                "directory: a string is stored as text and the file is removed with the "
+                "work directory; return it as a pathlib.Path or a File to store the file",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def _work_path(self, value: Path, field: str) -> JSON | None:
+        """The file set form of a path to a file or directory inside the work directory
+        (``generic/file`` or ``generic/directory``), or None for any other path, which is a
+        value whose file is not stored."""
+        if self.work_dir is None:
+            return None
+        real = os.path.realpath(value)
+        if real == self.work_dir or not real.startswith(self.work_dir + os.sep):
+            return None
+        from fileformats.generic import Directory, File
+
+        if os.path.isfile(real):
+            fileset: FileSet = File(real)
+        elif os.path.isdir(real):
+            fileset = Directory(real)
+        else:
+            return None
+        tag = fileformats_tag(type(fileset))
+        assert tag is not None
+        return self._fileset(fileset, tag, field)
 
     # file sets
 
@@ -359,6 +431,7 @@ _SINGLE = {
     "$complex",
     "$bytes",
     "$set",
+    "$tuple",
     "$dict",
     "$datetime",
     "$path",
@@ -370,6 +443,10 @@ _PAIRS = {
     "$fileset": {"$fileset", "files"},
     "$pickle": {"$pickle", "cloudpickle", "python"},
 }
+
+
+# the file sets a ``$path`` output inside the work directory is stored as
+_PATH_SETS = ("generic/file", "generic/directory")
 
 
 def _unescape(key: str) -> str:
@@ -542,7 +619,18 @@ class Decoder:
             return datetime.date.fromisoformat(body)
         return datetime.datetime.fromisoformat(body)
 
+    def _tuple(self, doc: dict, body: JSON, hashable: bool) -> tuple:
+        if not isinstance(body, list):
+            raise ValueError("a $tuple holds an array")
+        return tuple(self.decode(v, hashable) for v in body)
+
     def _path(self, doc: dict, body: JSON, hashable: bool) -> Path:
+        if isinstance(
+            body, dict
+        ):  # a file or directory the job wrote: the entry's copy
+            if set(body) != _PAIRS["$fileset"] or body["$fileset"] not in _PATH_SETS:
+                raise ValueError("a stored $path is a generic file or directory set")
+            return Path(self._fileset(body, body["$fileset"], hashable).fspath)
         if not isinstance(body, str):
             raise ValueError("not a string")
         return Path(body)
@@ -589,7 +677,10 @@ class Decoder:
 
     def _fileset(self, doc: dict, body: JSON, hashable: bool) -> ty.Any:
         codec = lookup_tag(body) if isinstance(body, str) else None
-        if codec is None or not codec.fileset:
+        cls = codec.type if codec is not None and codec.fileset else None
+        if codec is None and isinstance(body, str):
+            cls = fileformats_class(body)
+        if cls is None:
             raise EntryFormatUnknown(
                 f"file set tag {body!r} is not registered in this process"
             )
@@ -638,7 +729,7 @@ class Decoder:
         self.trees.append((set_hex, tops))
         base = os.path.join(self.entry_path, "files", set_hex)
         try:
-            value = codec.type([os.path.join(base, t) for t in tops])
+            value = cls([os.path.join(base, t) for t in tops])
             found = sorted(
                 k.replace(os.sep, "/") if os.sep != "/" else k
                 for k, _ in value.byte_chunks(
@@ -647,7 +738,7 @@ class Decoder:
             )
         except Exception as err:
             raise CorruptEntry(
-                f"files/{set_hex} does not form a {codec.type.__name__}: {err}"
+                f"files/{set_hex} does not form a {cls.__name__}: {err}"
             ) from err
         if found != keys:
             raise CorruptEntry(
@@ -689,6 +780,47 @@ _CONTAINERS = {
 _UNION_ORIGINS = (ty.Union, getattr(types, "UnionType", ty.Union))
 
 
+def fileformats_tag(tp: type) -> str | None:
+    """The ``$fileset`` tag of a `FileSet` class of the ``fileformats`` packages that is not in
+    the registry: its MIME-like name, when that name resolves back to the class itself. None
+    for any other class (one defined elsewhere, a mock, one without a MIME-like name). Nothing
+    is registered: the tag registry, which input digests read, is unchanged."""
+    if not (
+        isinstance(tp, type)
+        and issubclass(tp, FileSet)
+        and tp.__module__.split(".")[0] == "fileformats"
+    ):
+        return None
+    try:
+        mime = tp.mime_like
+    except Exception:
+        return None
+    if not isinstance(mime, str) or fileformats_class(mime) is not tp:
+        return None
+    return mime
+
+
+def fileformats_class(tag: str) -> type | None:
+    """The ``fileformats`` `FileSet` class whose MIME-like name is ``tag``, or None. Resolving it
+    may import the installed ``fileformats.*`` namespace packages and nothing else (RFC 0003
+    section 6.4); a class it finds outside them is not returned."""
+    if "/" not in tag:
+        return None
+    from fileformats.core import from_mime
+
+    try:
+        cls = from_mime(tag)
+    except Exception:
+        return None
+    if (
+        isinstance(cls, type)
+        and issubclass(cls, FileSet)
+        and cls.__module__.split(".")[0] == "fileformats"
+    ):
+        return cls
+    return None
+
+
 def type_is_encodable(tp: ty.Any) -> bool:
     """Whether values of the declared type ``tp`` have a codec: a built-in row of RFC 0003
     section 6.4 or a type registered in the tag registry. A type that says nothing about its
@@ -726,7 +858,7 @@ def type_is_encodable(tp: ty.Any) -> bool:
         return False
     if not isinstance(tp, type):
         return False
-    if tag_of(tp) is not None:
+    if tag_of(tp) is not None or fileformats_tag(tp) is not None:
         return True
     if tp in _SIMPLE or tp in _CONTAINERS:
         return True

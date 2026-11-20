@@ -75,7 +75,9 @@ def _job(cache_root, env, reuse=None):
     return Job(
         task=AddOne(a=1),
         name="j",
-        submitter=Submitter(cache_root=cache_root, environment=env, reuse=reuse),
+        submitter=Submitter(
+            store="pickle", cache_root=cache_root, environment=env, reuse=reuse
+        ),
     )
 
 
@@ -184,16 +186,25 @@ def test_any_prefers_exact_match_in_later_location(tmp_path):
 
 
 def test_reuse_argument(tmp_path):
-    assert isinstance(Submitter(cache_root=tmp_path).store.reuse, ConsistentReuse)
     assert isinstance(
-        Submitter(cache_root=tmp_path, reuse="exact").store.reuse, ExactReuse
+        Submitter(store="pickle", cache_root=tmp_path).store.reuse, ConsistentReuse
     )
-    assert isinstance(Submitter(cache_root=tmp_path, reuse="any").store.reuse, AnyReuse)
+    assert isinstance(
+        Submitter(store="pickle", cache_root=tmp_path, reuse="exact").store.reuse,
+        ExactReuse,
+    )
+    assert isinstance(
+        Submitter(store="pickle", cache_root=tmp_path, reuse="any").store.reuse,
+        AnyReuse,
+    )
     policy = Equivalent([])
-    assert Submitter(cache_root=tmp_path, reuse=policy).store.reuse is policy
+    assert (
+        Submitter(store="pickle", cache_root=tmp_path, reuse=policy).store.reuse
+        is policy
+    )
     for bad in ("nearest", object()):
         with pytest.raises(ValueError, match="reuse must be one of"):
-            Submitter(cache_root=tmp_path, reuse=bad)
+            Submitter(store="pickle", cache_root=tmp_path, reuse=bad)
     with pytest.raises(ValueError, match="'reuse' applies to the default store"):
         Submitter(cache_root=tmp_path, store=PickleStore(tmp_path), reuse="any")
 
@@ -363,10 +374,12 @@ def KeyedLogged(a: int, log: str, m: ty.Any = None) -> int:
     [(KeyedAddOne(a=1), "key-1"), (HookedAddOne(a=1), "hooked-1")],
 )
 def test_supplied_checksum_is_job_checksum(worker, tmp_path, task, checksum):
-    job = Job(task=task, name="j", submitter=Submitter(cache_root=tmp_path))
+    job = Job(
+        task=task, name="j", submitter=Submitter(store="pickle", cache_root=tmp_path)
+    )
     assert job.checksum == checksum
     assert task._hashes is None
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         result = sub(task)
     assert result.outputs.out == 2
     assert result.cache_dir.parent == tmp_path / checksum
@@ -394,7 +407,9 @@ def test_checksum_hook_must_return_str():
 def test_supplied_checksum_per_split_element(worker, tmp_path):
     log = tmp_path / "log"
     for _ in range(2):
-        with Submitter(worker=worker, cache_root=tmp_path / "cache") as sub:
+        with Submitter(
+            worker=worker, store="pickle", cache_root=tmp_path / "cache"
+        ) as sub:
             result = sub(KeyedLogged(log=str(log), m=Unhashable()).split(a=[1, 2]))
         assert result.outputs.out == [2, 3]
     assert {p.name for p in (tmp_path / "cache").iterdir() if p.is_dir()} >= {
@@ -551,7 +566,7 @@ def test_supplied_checksum_must_be_one_path_component(checksum):
 
 def test_supplied_checksum_may_name_a_directory(tmp_path):
     task = python.define(inc_one, checksum=lambda task, inputs: "key_1.v-2")(a=1)
-    with Submitter(cache_root=tmp_path) as sub:
+    with Submitter(store="pickle", cache_root=tmp_path) as sub:
         assert sub(task).cache_dir.parent == tmp_path / "key_1.v-2"
 
 
@@ -597,7 +612,7 @@ def IntKeyed(a: int) -> int:
 
 
 def test_split_hook_sees_only_elements(worker, tmp_path):
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         result = sub(IntKeyed().split(a=[1, 2]))
     assert result.outputs.out == [2, 3]
     assert {"k-001", "k-002"} <= {p.name for p in tmp_path.iterdir()}
@@ -619,7 +634,7 @@ def PairKeyed(a: int, b: int) -> int:
 )
 def test_element_checksums_match_the_jobs_run(worker, tmp_path, split):
     task = split(PairKeyed())
-    with Submitter(worker=worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
         sub(task)
     run = sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("k-"))
     assert sorted(task._element_checksums()) == run

@@ -54,7 +54,9 @@ def in_process_worker(request):
 
 def test_successful_in_process_run_leaves_no_job_pickle(in_process_worker, tmp_path):
     task = Inc(x=1)
-    with Submitter(worker=in_process_worker, cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=in_process_worker, store="pickle", cache_root=tmp_path
+    ) as sub:
         result = sub(task)
     assert result.outputs.out == 2
     (slot,) = slots(task, tmp_path)
@@ -64,7 +66,9 @@ def test_successful_in_process_run_leaves_no_job_pickle(in_process_worker, tmp_p
 
 def test_failed_in_process_run_leaves_job_pickle(in_process_worker, tmp_path):
     task = Boom(x=1)
-    with Submitter(worker=in_process_worker, cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=in_process_worker, store="pickle", cache_root=tmp_path
+    ) as sub:
         # the debug worker raises, the cf worker returns an errored result
         with contextlib.suppress(Exception):
             sub(task)
@@ -76,7 +80,9 @@ def test_failed_in_process_run_leaves_job_pickle(in_process_worker, tmp_path):
 
 def test_remote_style_worker_still_writes_job_pickle(tmp_path):
     task = Inc(x=1)
-    with Submitter(worker=RemoteLikeWorker(), cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=RemoteLikeWorker(), store="pickle", cache_root=tmp_path
+    ) as sub:
         sub(task)
     (slot,) = slots(task, tmp_path)
     assert (slot / "_job.pklz").exists()
@@ -84,7 +90,7 @@ def test_remote_style_worker_still_writes_job_pickle(tmp_path):
 
 def test_crash_rerun_uses_failure_pickle(cli_runner, tmp_path):
     task = Boom(x=1)
-    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path) as sub:
         with pytest.raises(Exception):
             sub(task)
     (slot,) = slots(task, tmp_path)
@@ -98,12 +104,14 @@ def test_crash_rerun_uses_failure_pickle(cli_runner, tmp_path):
 
 def test_cache_written_by_older_version_is_reused(tmp_path):
     task = Inc(x=1)
-    with Submitter(worker=RemoteLikeWorker(), cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=RemoteLikeWorker(), store="pickle", cache_root=tmp_path
+    ) as sub:
         sub(task)
     (slot,) = slots(task, tmp_path)
     assert (slot / "_job.pklz").exists()
     # A debug run finds the result and neither rewrites nor removes the pickle
-    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path) as sub:
         result = sub(Inc(x=1))
     assert result.outputs.out == 2
     assert (slot / "_job.pklz").exists()
@@ -111,7 +119,9 @@ def test_cache_written_by_older_version_is_reused(tmp_path):
 
 def test_job_pickled_by_older_version_loads(tmp_path):
     task = Inc(x=1)
-    with Submitter(worker=RemoteLikeWorker(), cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=RemoteLikeWorker(), store="pickle", cache_root=tmp_path
+    ) as sub:
         sub(task)
     (slot,) = slots(task, tmp_path)
     with open(slot / "_job.pklz", "rb") as f:
@@ -127,7 +137,9 @@ def test_workflow_job_keeps_job_pickle(in_process_worker, tmp_path):
     """A workflow job keeps its pickle whichever worker expands it, and the leaf jobs
     of the workflow do not"""
     task = IncTwice(x=1)
-    with Submitter(worker=in_process_worker, cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=in_process_worker, store="pickle", cache_root=tmp_path
+    ) as sub:
         result = sub(task)
     assert result.outputs.out == 3
     (slot,) = slots(task, tmp_path)
@@ -138,6 +150,8 @@ def test_workflow_job_keeps_job_pickle(in_process_worker, tmp_path):
 
 
 def test_result_job_is_none_for_in_process_leaf_success(in_process_worker, tmp_path):
-    with Submitter(worker=in_process_worker, cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=in_process_worker, store="pickle", cache_root=tmp_path
+    ) as sub:
         result = sub(Inc(x=1))
     assert result.job is None

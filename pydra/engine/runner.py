@@ -1109,6 +1109,12 @@ class GraphRunner:
         self._quiescent = False
         # releases of workflow leases run off the driver's thread (`release_off_thread`)
         self._release_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        # store reads off the driver's thread (`read_off_thread`), by job
+        self._read_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        self._read_notify: "ty.Callable[[], None] | None" = None
+        self._reading: "dict[Job, concurrent.futures.Future]" = {}
+        # the jobs whose store read served nothing, to be handed out without another read
+        self._checked: set[Job] = set()
         self._releases: list[concurrent.futures.Future] = []
         self._failed = False
         self._first_error: BaseException | None = None
@@ -1209,7 +1215,7 @@ class GraphRunner:
         rerun = self.rerun if frame.parent is None else job.rerun
         if not rerun:
             try:
-                result = job.result()
+                result = self._stored_workflow(job)
             except Exception as exc:
                 self._fail(frame, exc, "run")
                 return
@@ -1224,11 +1230,33 @@ class GraphRunner:
             # the outer job has its attempt from its creation (`Submitter.__call__`); a
             # job that can resume keeps its stable work directory under a fresh attempt
             job.attempt = uuid4().hex
+            self._note_attempt(job)
         try:
             frame.result = job._start_workflow(frame.lease)
             self._expand(frame, job.task)
         except Exception as exc:
             self._finish(frame, exc)
+
+    def _stored_workflow(self, job: Job) -> "Result | None":
+        """The stored result of a workflow job under its lease: through ``find`` when the
+        store has it (a `Verify` marks the job, which is then expanded; RFC 0003 section 13
+        item 6), otherwise what ``job.result()`` reads"""
+        find = getattr(self.store, "find", None)
+        if find is None:
+            return job.result()
+        found = find(job)
+        job.verify = getattr(found, "candidate", None)
+        result = getattr(found, "result", None)
+        if result is not None and result.committed is not None:
+            job.committed = result.committed
+        return result
+
+    def _note_attempt(self, job: Job) -> None:
+        """Tell the submitter of an attempt handed out, whose emptied work directory it
+        removes when it closes"""
+        note = getattr(self.submitter, "_note_attempt", None)
+        if note is not None:
+            note(job)
 
     def _release_lease(self, frame: _Frame) -> None:
         lease, frame.lease = frame.lease, None
@@ -1312,6 +1340,8 @@ class GraphRunner:
             job._held = frame.result
             self._release_lease(frame)
             job._complete_workflow(frame.result)
+            # as published: under a store with work directories, read from its entry
+            job._held = job._cached_result
             self._forget(job)
             self._succeeded(frame)
         elif frame.parent is None:
@@ -1374,6 +1404,9 @@ class GraphRunner:
         committed as errored, any other that is not finished gives up its lease and
         stores nothing (its unfinished nodes did not run, so no result is built).
         Idempotent; a driver calls it however the run ends"""
+        pool, self._read_pool = self._read_pool, None
+        if pool is not None:  # reads not taken up are dropped with their jobs
+            pool.shutdown(wait=False, cancel_futures=True)
         for frame in reversed(list(self._frames)):
             if frame.state == "finished" or not frame.owned:
                 continue
@@ -1428,6 +1461,9 @@ class GraphRunner:
         return (
             # settling a job from the store hands it out without changing any node
             len(self._handed),
+            # a read begun off the thread, and one that ended
+            len(self._reading),
+            len(self._checked),
             tuple(f.state for f in self._frames),
             tuple(
                 (
@@ -1504,7 +1540,11 @@ class GraphRunner:
         while True:
             before = self._progress()
             self._settle_frames()
-            candidates = [j for j in self._runnable() if j not in self._handed]
+            candidates = [
+                j
+                for j in self._runnable()
+                if j not in self._handed and j not in self._reading
+            ]
             candidates = self._serve(candidates)
             if candidates or self._progress() == before:
                 break
@@ -1536,6 +1576,7 @@ class GraphRunner:
             self._in_flight.add(job)
             job.rerun = self._inner_rerun
             job.attempt = uuid4().hex
+            self._note_attempt(job)
         self._collect_resolution_errors()
         settled, self._settled = self._settled, []
         unrunnable = self._new_unrunnable()
@@ -1544,6 +1585,7 @@ class GraphRunner:
             not (dispatch or settled or unrunnable)
             and retry_after is None
             and not self._in_flight
+            and not self._reading
         )
         return Round(
             dispatch=dispatch,
@@ -1554,9 +1596,12 @@ class GraphRunner:
 
     def _serve(self, jobs: list[Job]) -> list[Job]:
         """Settle the released jobs the store holds and the twins of jobs whose outcome is
-        known; return the others"""
+        known; return the others, and the jobs whose read off the thread has ended without a
+        result to serve"""
+        read = self._harvest()
         if jobs and not self._inner_rerun:
             jobs = self._read_store(jobs)
+        jobs = read + jobs
         rest = []
         for job in jobs:
             outcome = self._finished.get(job.checksum)
@@ -1570,22 +1615,128 @@ class GraphRunner:
     def _read_store(self, jobs: list[Job]) -> list[Job]:
         """Settle as ``stored`` the jobs whose slots carry a success record, and, under
         ``lookup_before_dispatch``, those the store's ``lookup`` returns an acceptable
-        result for; return the others"""
+        result for; return the others. A store with ``find`` (`PortableStore`) is asked
+        that instead (RFC 0002 section 3.1): a `Hit` is settled, a `Verify` is dispatched
+        with ``job.verify`` set, a `Miss` is dispatched. Without
+        ``lookup_before_dispatch`` it is asked to ``probe``: a job whose own address
+        holds no entry costs one existence check and is dispatched."""
+        find = getattr(self.store, "find", None)
         read = getattr(self.store, "read_succeeded", None)
+        present = getattr(self.store, "present", None)
         rest = []
         for job in jobs:
-            result = read(job.checksum, job.context, job.task) if read else None
-            if result is None and self.lookup_before_dispatch:
-                result = self._lookup(job)
-            if result is None:
+            if (
+                job in self._checked
+            ):  # read, nothing to serve: handed out when there is room
                 rest.append(job)
                 continue
-            job.hooks.pre_run(job)
-            job._cached_result = result
-            job._awaiting_run = False
-            self._handed.add(job)
-            self._settled.append(Settled(job, "stored", result))
+            if find is not None and self._read_pool is not None:
+                # a hit reads and verifies every member: off the driver's thread
+                if not self.lookup_before_dispatch and present is not None:
+                    if not present(job):
+                        rest.append(job)
+                        continue
+                future = self._read_pool.submit(find, job)
+                self._reading[job] = future
+                if self._read_notify is not None:
+                    future.add_done_callback(self._notify_read)
+                continue
+            if find is not None:
+                result = self._find(job, find)
+            else:
+                result = read(job.checksum, job.context, job.task) if read else None
+                if result is None and self.lookup_before_dispatch:
+                    result = self._lookup(job)
+            if result is None:
+                self._checked.add(job)
+                rest.append(job)
+                continue
+            self._settle_stored(job, result)
         return rest
+
+    def _settle_stored(self, job: Job, result: "Result") -> None:
+        job.hooks.pre_run(job)
+        job._cached_result = result
+        job._awaiting_run = False
+        self._handed.add(job)
+        self._settled.append(Settled(job, "stored", result))
+
+    def _harvest(self) -> list[Job]:
+        """Settle the jobs whose read off the thread found a result to serve; return those
+        whose read found none (a `Verify` marks the job), to be handed out"""
+        rest = []
+        for job, future in list(self._reading.items()):
+            if not future.done():
+                continue
+            del self._reading[job]
+            try:
+                found = future.result()
+            except (
+                Exception
+            ) as exc:  # unreadable: dispatched, looked up under its lease
+                logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
+                found = None
+            result = self._accept(job, found)
+            if result is None:
+                self._checked.add(job)  # not read again if a cap holds it back
+                rest.append(job)
+            else:
+                self._settle_stored(job, result)
+        return rest
+
+    def read_off_thread(self, notify: "ty.Callable[[], None] | None" = None) -> None:
+        """Read the entries a store's ``find`` serves on helper threads from here on: a hit
+        reads and verifies every member, which on shared storage takes long enough to hold
+        an event loop. A job whose own address holds an entry is not handed out until its
+        read ends; ``notify`` is called (from the helper thread) as each ends, and the
+        next :meth:`ready` settles it or hands it out. :attr:`reading` counts the reads
+        not yet taken up."""
+        if self._read_pool is None:
+            self._read_pool = concurrent.futures.ThreadPoolExecutor(
+                max_workers=4, thread_name_prefix="pydra-store-read"
+            )
+        self._read_notify = notify
+
+    def _notify_read(self, _future: concurrent.futures.Future) -> None:
+        notify = self._read_notify
+        if notify is None:
+            return
+        try:
+            notify()
+        except RuntimeError:  # the driver's loop has closed: nobody waits for it
+            pass
+
+    @property
+    def reading(self) -> int:
+        """The store reads begun off the thread whose jobs are not yet settled or handed
+        out (see :meth:`read_off_thread`)"""
+        return len(self._reading)
+
+    def _find(self, job: Job, find: ty.Callable) -> "Result | None":
+        """The result ``find`` serves the job, after marking it with the candidate of a
+        `Verify` (and clearing the mark otherwise); None if it is to be dispatched. A
+        served job keeps the `Committed` of the entry, which later reads go by."""
+        try:
+            if self.lookup_before_dispatch:
+                found = find(job)
+            else:
+                found = find(job, probe=True)
+        except Exception as exc:  # unreadable: dispatched, looked up under its lease
+            logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
+            found = None
+        return self._accept(job, found)
+
+    def _accept(self, job: Job, found: ty.Any) -> "Result | None":
+        """Mark the job with the candidate of a `Verify` (clearing the mark otherwise) and
+        return the result a `Hit` serves, keeping its `Committed`; None for anything else
+        """
+        job.verify = getattr(found, "candidate", None)
+        result = getattr(found, "result", None)
+        if result is None or result.errored:
+            return None
+        if result.committed is not None:
+            job.committed = result.committed
+        return result
 
     def _lookup(self, job: Job) -> "Result | None":
         try:
@@ -1697,6 +1848,9 @@ class GraphRunner:
             frame.entries.append(job_entry(job, exc))
         else:
             job._held = outcome
+            if getattr(outcome, "committed", None) is not None:
+                # a reader in this process or one the job is sent to reads by it
+                job.committed = outcome.committed
             if getattr(outcome, "errored", False):
                 exc = result_error(job, outcome)
                 job._errored = True
@@ -1715,7 +1869,12 @@ class GraphRunner:
 
     def _forget(self, job: Job) -> None:
         """Tell a store that keeps a job's outcome in its work directory until the runner
-        holds it (``forget_committed``, RFC 0003 section 5.4) that it is held now"""
+        holds it (``forget_committed``, RFC 0003 section 5.4) that it is held now, through
+        the submitter when it tracks the job's work directory"""
+        forget = getattr(self.submitter, "_forget", None)
+        if forget is not None:
+            forget(job)
+            return
         forget = getattr(self.store, "forget_committed", None)
         if forget is None:
             return

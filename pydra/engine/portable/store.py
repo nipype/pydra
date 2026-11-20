@@ -1951,7 +1951,11 @@ class PortableStore:
 
     def forget_committed(self, job: "Job") -> None:
         """Remove ``_committed.json`` once the runner holds the job's outcome (RFC 0003 section
-        5.4), and a default work directory that is then empty."""
+        5.4), and a default work directory that is then empty, unless the process working
+        directory is inside it: jobs on threads share that one directory, which one of them
+        may have restored to this one, and removing it would leave the process in a
+        directory that no longer exists (it is left for the submitter's close, or
+        `collect`)."""
         path = self._maybe_work_dir(job)
         if path is None:
             return
@@ -1961,9 +1965,10 @@ class PortableStore:
                     handle.unlink(_COMMITTED)
         except FileNotFoundError:
             return
-        if self._work_fn is None:
-            with contextlib.suppress(OSError):
-                os.rmdir(path)
+        if self._work_fn is None:  # not if held, or not empty (a failure, kept outputs)
+            from pydra.utils.general import remove_if_unheld
+
+            remove_if_unheld(path)
 
     def _empty_work_dir(self, path: Path) -> None:
         """Empty a default work directory except ``_committed.json``. What cannot be removed
@@ -2264,6 +2269,11 @@ class PortableStore:
             result = self._read_recorded(
                 job, ref, shard, trust, readonly, committed, settled
             )
+            if committed.served and ref.fingerprint != self.identity.fingerprint(
+                job.context
+            ):  # served from another context, as `find` reported it
+                result.cross_context = True
+                result.reused_in = dict(job.context)
         elif wd is None or committed.kept is None:
             return None
         elif os.path.basename(committed.kept) == _KEPT_ENTRY:
@@ -2570,22 +2580,45 @@ class PortableStore:
         another context or a read-only root is left to `find` under the job's lease, which
         records what it served. No metadata call but the one ``lstat`` is made on a miss.
         """
-        cdir = cdir_for(checksum)
-        fingerprint = self.identity.fingerprint(context)
-        shard = shard_for(cdir, checksum, self.header.shard)
-        try:
-            os.lstat(
-                os.path.join(self.path, self.header.entries, shard, cdir, fingerprint)
-            )
-        except OSError:  # absent, or not visible from here: dispatch it
+        if not self._present(checksum, context):
             return None
-        own = EntryRef(self.path, cdir, fingerprint)
+        own = EntryRef(
+            self.path, cdir_for(checksum), self.identity.fingerprint(context)
+        )
         try:
             found = self._find(checksum, context, task, own)
         except Exception as err:  # a broken hook or an unreadable entry: run it leased
             logger.warning("reading %s without its lease: %r", checksum, err)
             return None
         return found.result if isinstance(found, Hit) else None
+
+    def expected_hits(self, jobs: ty.Sequence["Job"]) -> int:
+        """How many of ``jobs`` a runner's ``ready()`` may settle from this store, for
+        ``GraphRunner.plan``: those whose own address holds an entry, one ``lstat`` each. The
+        reuse hook is not asked (its ``served`` records a reuse), so a ``VERIFY``, ``REFUSE``
+        or corrupt entry counts, and an entry of another context or a read-only root, which
+        ``find`` may serve, does not."""
+        return sum(self._present(job.checksum, job.context) for job in jobs)
+
+    def present(self, job: "Job") -> bool:
+        """Whether this root holds an entry at the job's own address: one ``lstat``, nothing
+        read (what a runner asks of every released job before it reads one off its
+        thread)."""
+        return self._present(job.checksum, job.context)
+
+    def _present(self, checksum: str, context: Context) -> bool:
+        """Whether this root holds an entry at the rank-0 address of ``checksum`` and
+        ``context``: one ``lstat``, and nothing else."""
+        cdir = cdir_for(checksum)
+        shard = shard_for(cdir, checksum, self.header.shard)
+        fingerprint = self.identity.fingerprint(context)
+        try:
+            os.lstat(
+                os.path.join(self.path, self.header.entries, shard, cdir, fingerprint)
+            )
+        except OSError:  # absent, or not visible from here
+            return False
+        return True
 
     def begin_rerun(self, job: "Job") -> None:
         """Mark ``job`` as a rerun that replaces the entry at its own address (RFC 0003
@@ -2615,7 +2648,7 @@ class PortableStore:
         if read is not None:
             job.replaces = read[0].digest
 
-    def find(self, job: "Job") -> Lookup:
+    def find(self, job: "Job", *, probe: bool = False) -> Lookup:
         """What ``job`` may reuse (RFC 0003 section 7.1): a `Hit` with the result to serve, a
         `Verify` whose candidate the job runs against (the caller sets ``job.verify``), or a
         `Miss`. The hook ranks the entries stored for the job's checksum in every root and is
@@ -2623,7 +2656,18 @@ class PortableStore:
         lookup. A served entry is read and verified (section 6.2) through a descriptor whose
         ``context.json`` must be the bytes that were ranked, else the store ranks again; a
         corrupt candidate is quarantined (skipped, in a read-only root) and the next taken.
-        If ``Reuse.served`` raises, the result is not served."""
+        If ``Reuse.served`` raises, the result is not served.
+
+        Parameters
+        ----------
+        probe : bool
+            Look only if this root holds an entry at the job's own address, which costs one
+            ``lstat`` (as `read_succeeded`), and otherwise answer `Miss` with nothing read:
+            what a runner's ``ready()`` asks of every released job, leaving entries of other
+            contexts and read-only roots to the lookup under the job's lease.
+        """
+        if probe and not self._present(job.checksum, job.context):
+            return Miss()
         return self._find(job.checksum, job.context, job.task)
 
     def lookup(
@@ -2999,6 +3043,10 @@ class _AlwaysHeld:
 
     def prove(self) -> bool:
         return True
+
+    def try_take(self) -> None:
+        """Held at once: a runner's one attempt at the lease of a workflow job succeeds."""
+        return None
 
     def __enter__(self) -> "_AlwaysHeld":
         return self
