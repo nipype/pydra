@@ -22,7 +22,12 @@ one loop:
 4. **Run** each job through ``Job.run`` on a thread, with ``chdir=False``, under the attempt of its
    newest follow generation (a ``restart`` generation first when that attempt already started), with
    the claim as its de-duplication lease, proved before ``publish``. The call record is written before
-   the call and its deadline sent to the beater; ``done`` is written after it.
+   the call and its deadline sent to the beater; ``done`` is written after it. Each call goes through
+   the bisection engine (`pydra.workers.pool.bisect`): a resource fault or a crash reloads the
+   residency; a lone job out of memory moves up the ladder, and one that crashes is run again under a
+   charged ``restart`` generation until ``crashes_charged``. An infrastructure fault requeues the job;
+   at ``infrastructure_replacements`` faults of the residency in the coordinator's epoch the residency
+   is held on its queue and the ticket's open jobs are settled ``held``.
 5. **Settle** each job as it finishes: its `Sample`, then its outcome record (proved), then the ticket's
    settled mark.
 6. **Prove** every held claim each renewal interval while a call runs; a lost claim is abandoned (the
@@ -58,11 +63,14 @@ from pydra.utils.storagedir import StoreUnavailable
 from pydra.workers.pool.beater import expiry_payload, pool_beater
 from pydra.workers.pool.classes import WorkerClass, parse_size
 from pydra.workers.pool.codec import JobCodec, PrivatePickle, read_payload
+from pydra.workers.pool import bisect as engine
+from pydra.workers.pool import faults as _faults
+from pydra.workers.pool.bisect import Abandon
 from pydra.workers.pool.faults import (
     Classifier,
     FaultBudgets,
     FaultRecord,
-    default_classifier,
+    fault_of,
 )
 from pydra.workers.pool.samples import (
     HardwareClass,
@@ -229,7 +237,8 @@ class Worker:
         Providers of provided fields, before the jobs' own and the entry points; references are
         imported after the beater starts.
     classify : callable
-        ``classify(exc, phase) -> FaultRecord``.
+        ``classify(exc, phase) -> FaultRecord``; a record attached to an exception or its chain
+        overrides it (`pydra.workers.pool.faults.fault_of`).
     settings : PoolSettings
     faults : FaultBudgets
     substrate : bool
@@ -248,7 +257,7 @@ class Worker:
         cls: "str | WorkerClass",
         *,
         providers: ty.Sequence["Provider | str"] = (),
-        classify: Classifier = default_classifier,
+        classify: Classifier = _faults.classify,
         settings: PoolSettings = PoolSettings(),
         faults: FaultBudgets = FaultBudgets(),
         substrate: bool = False,
@@ -297,6 +306,7 @@ class Worker:
         self._device_baseline: int | None = None
         self._device_read = False
         self._worker_lease: DirectoryLease | None = None
+        self._gaps: set[str] = set()
         self._last_live = time.monotonic()
         self._pinged = 0.0
 
@@ -332,6 +342,10 @@ class Worker:
         if cls is None:
             return EXIT_USAGE
         self._baseline_bytes = self.memory()[0]
+        from pydra.engine.procgroup import process_baseline
+
+        # OOM attribution is per worker: a kill recorded before this start is not this worker's
+        process_baseline().reset()
         self.client = pool_beater(
             self.settings.timeout_grace,
             on_lost=self._on_lost,
@@ -684,22 +698,7 @@ class Worker:
                 return
             if not self._within_crash_budget(claim, entry):
                 continue
-            tries = 0
-            while True:
-                attempt = claim.start(entry, self.token)
-                if attempt is None:
-                    break  # superseded or withdrawn: nothing is written
-                if tries:
-                    job = self._decode(claim, entry, attempt)
-                    if job is None:
-                        break
-                tries += 1
-                verdict = self._call(claim, entry, job, attempt, group)
-                if verdict == "retry" and tries < self.faults.content_attempts:
-                    continue
-                if verdict == "retry":
-                    self._fail(claim, entry, attempt, group["fault"])
-                break
+            self._run_job(claim, entry, job, group)
             if self._lost_claim(claim) or group.get("stop"):
                 if self._lost_claim(claim):
                     self._abandon(claim, "it was lost")
@@ -719,9 +718,9 @@ class Worker:
             return read_payload(self.codec, entry.payload, None)
         except Exception as exc:
             logger.error("the payload of %s is unreadable: %r", entry.checksum, exc)
-            fault = self.classify(exc, "pool")
+            fault = fault_of(exc, "pool", self.classify)
             if isinstance(exc, OSError) and not isinstance(exc, EntryNotTrusted):
-                self._infrastructure(claim, entry, fault, {"stop": False})
+                self._infrastructure(claim, [entry], fault, {"stop": False})
                 return None
             current = claim.current(entry)
             if attempt is None and current is not None:
@@ -799,66 +798,103 @@ class Worker:
                 submitter.providers = (*self.providers, *own)
 
     def _load_fault(
-        self, claim: Claim, entries: list[TicketJob], exc: Exception
+        self, claim: Claim, entries: list[TicketJob], exc: BaseException
     ) -> None:
-        fault = self.classify(exc, "load")
+        """A load failed: a resource fault moves the ticket's jobs up the ladder (`_resource`);
+        anything else is one infrastructure fault of the residency (`_infrastructure`). The claim is
+        released."""
+        fault = fault_of(exc, "load", self.classify)
         logger.error("loading the residency of %s failed: %r", claim.digest, exc)
         if fault.kind == "resource":
             self._resource(claim, entries, fault, "load")
-            return
-        # an infrastructure fault requeues the ticket's jobs, bounded per job; holding the
-        # residency instead is the policy's (W7)
-        group: dict = {"stop": False}
-        for entry in entries:
-            self._infrastructure(claim, entry, fault, group, phase="load")
+        else:
+            self._infrastructure(claim, entries, fault, {"stop": False}, phase="load")
         self._release(claim)
+
+    def _gap(self, fault: FaultRecord) -> None:
+        """Report an unclassified exception from the pool's machinery, once per type."""
+        if fault.gap and fault.type not in self._gaps:
+            self._gaps.add(fault.type)
+            logger.warning(
+                "unclassified %s at %s, typed an infrastructure fault (a gap in the "
+                "classifier): %s",
+                fault.type,
+                fault.phase,
+                fault.message,
+                extra={"event": "gap", "type": fault.type},
+            )
 
     def _infrastructure(
         self,
         claim: Claim,
-        entry: TicketJob,
+        entries: list[TicketJob],
         fault: FaultRecord,
         group: dict,
         sample: Sample | None = None,
         phase: str = "call",
     ) -> str:
-        """Requeue a job after an infrastructure fault, uncharged, under a ``restart`` generation at
-        ``phase`` (``call`` or ``load``) written now; at ``infrastructure_replacements`` such faults
-        it is ``failed`` with an ``InfrastructureFault`` naming the count and the phase (W7 replaces
-        this with a hold of its residency). The caller releases the ticket."""
-        current = claim.current(entry)
-        if current is None:
-            group["stop"] = True
-            return "stopped"
-        faults = self.pool.charges(*entry.key)["infrastructure"] + 1
-        if faults >= self.faults.infrastructure_replacements:
-            record = FaultRecord(
-                "infrastructure",
-                "InfrastructureFault",
-                f"{faults} infrastructure faults (the budget is "
-                f"{self.faults.infrastructure_replacements}); the last, at {phase}: "
-                f"{fault.type}: {fault.message}",
-                fault.phase,
-                gap=fault.gap,
-            )
-            fields = {"fault": record.to_json(), "cause": fault.to_json()}
-            if sample is not None:
-                return self._settle(
-                    claim, entry, current[1]["attempt"], "failed", sample, **fields
-                )
-            claim.outcome(entry, current[1]["attempt"], "failed", **fields)
-            return "failed"
-        claim.restart(entry, phase=phase)
-        logger.warning(
-            "infrastructure fault %d of %s at %s: %s: %s; requeued",
-            faults,
-            entry.checksum,
-            phase,
-            fault.type,
-            fault.message,
-        )
+        """One infrastructure fault of the ticket's residency, at ``phase`` (``call`` or ``load``),
+        recorded for the newest coordinator epoch. Below ``infrastructure_replacements`` such faults
+        in that epoch the jobs are requeued, uncharged, each under a ``restart`` generation written
+        now; at it the residency is held on its queue (``held-<epoch>-<label>``) and every open job of
+        the ticket is settled ``held``, its reason naming the residency and the latest cause (RFC 0005
+        section 6). The caller releases the ticket. Return ``"held"`` or ``"stopped"``.
+        """
         group["stop"] = True
-        return "stopped"
+        entries = [e for e in entries if claim.current(e) is not None]
+        if not entries:
+            return "stopped"
+        self._gap(fault)
+        epochs = self.pool.epochs()
+        epoch = epochs[-1] if epochs else 1
+        label = claim.ticket.residency_label
+        budget = self.faults.infrastructure_replacements
+        count = self.pool.infrastructure_fault(
+            claim.queue,
+            epoch,
+            label,
+            {
+                "fault": fault.to_json(),
+                "phase": phase,
+                "ticket": claim.digest,
+                "worker": self.token,
+            },
+        )
+        if count < budget:
+            for entry in entries:
+                claim.restart(entry, phase=phase)
+            logger.warning(
+                "infrastructure fault %d of residency %s on %r in epoch %d at %s: %s: %s; "
+                "requeued",
+                count,
+                label,
+                claim.queue,
+                epoch,
+                phase,
+                fault.type,
+                fault.message,
+            )
+            return "stopped"
+        self.pool.hold(claim.queue, epoch, label)
+        reason = (
+            f"residency {label} held on queue {claim.queue!r} after {count} infrastructure "
+            f"faults in coordinator epoch {epoch} (the budget is {budget}); the latest, at "
+            f"{phase}: {fault.type}: {fault.message}"
+        )
+        logger.error(reason, extra={"event": "held", "residency": label})
+        faulted = {e.key for e in entries}
+        for entry in claim.open_jobs():
+            current = claim.current(entry)
+            if current is None:
+                continue
+            fields = {"reason": reason, "fault": fault.to_json()}
+            if sample is not None and entry.key in faulted:
+                self._settle(
+                    claim, entry, current[1]["attempt"], "held", sample, **fields
+                )
+            else:
+                claim.outcome(entry, current[1]["attempt"], "held", **fields)
+        return "held"
 
     def _stored(self, entry: TicketJob) -> bool:
         """Whether the store holds a committed result for the job (RFC 0005 section 5.5: a taker
@@ -899,12 +935,99 @@ class Worker:
 
     # -- one call ------------------------------------------------------------------------------
 
-    def _call(
+    def _run_job(self, claim: Claim, entry: TicketJob, job: "Job", group: dict) -> str:
+        """Run one job as a call of one through the bisection engine (W10 batches calls), retried up
+        to ``content_attempts``, and settle it; return what became of it: ``done``, ``failed``,
+        ``moved``, ``held``, ``lost``, ``expired`` or ``stopped`` (released unsettled).
+        """
+        tries = 0
+        while True:
+            tries += 1
+            state: dict[str, ty.Any] = {
+                "fresh": tries
+                > 1,  # every attempt after the first runs a freshly decoded job
+                "attempt": None,
+                "sample": None,
+                "verdict": None,
+            }
+
+            def call(batch: list[TicketJob], state=state) -> list:
+                [item] = batch
+                attempt = claim.start(item, self.token)
+                if attempt is None:  # superseded or withdrawn: nothing is written
+                    raise Abandon("superseded")
+                current = job
+                if state["fresh"]:
+                    current = self._decode(claim, item, attempt)
+                    if current is None:
+                        raise Abandon("unreadable")
+                state["fresh"], state["attempt"] = True, attempt
+                ran = self._invoke(claim, item, current, attempt, group)
+                if isinstance(ran, str):
+                    state["verdict"] = ran
+                    raise Abandon(ran)
+                done, state["sample"] = ran
+                if done.error is not None:
+                    raise done.error
+                return [done.result]
+
+            try:
+                [settled] = engine.bisect(
+                    [entry],
+                    call,
+                    classify=self._classify_call,
+                    reload=lambda fault: self._reload(group),
+                    lost=lambda item: self._crashed(claim, item),
+                    crashes_charged=self.faults.crashes_charged,
+                )
+            except Abandon:
+                return state["verdict"] or "stopped"
+            except Exception as exc:  # a load inside the call: never split or retried
+                self._load_fault(claim, [entry], exc)
+                group["stop"] = True
+                return "stopped"
+            attempt, sample, fault = state["attempt"], state["sample"], settled.fault
+            if fault is None:
+                return self._settle(claim, entry, attempt, "done", sample)
+            if settled.charged:
+                current = claim.current(entry)
+                if current is None:
+                    return "stopped"
+                return self._settle(
+                    claim,
+                    entry,
+                    current[1]["attempt"],
+                    "failed",
+                    sample,
+                    fault=fault.to_json(),
+                )
+            if fault.kind == "content":
+                if tries < self.faults.content_attempts:
+                    continue
+                return self._settle(
+                    claim, entry, attempt, "failed", sample, fault=fault.to_json()
+                )
+            if fault.kind == "resource":
+                self._resource(claim, [entry], fault, "call")
+                return "moved"
+            if fault.kind == "infrastructure":
+                return self._infrastructure(claim, [entry], fault, group, sample)
+            return self._settle(
+                claim, entry, attempt, "failed", sample, fault=fault.to_json()
+            )
+
+    def _crashed(self, claim: Claim, entry: TicketJob) -> int:
+        """A job's call crashed with the job alone in it: write its next generation, a charged
+        ``restart``, and return its crash count (`PoolRoot.charges`)."""
+        claim.restart(entry, phase="call", charged=True)
+        return self.pool.charges(*entry.key)["crashes"]
+
+    def _invoke(
         self, claim: Claim, entry: TicketJob, job: "Job", attempt: str, group: dict
-    ) -> str:
-        """Run one job as one call under ``attempt`` and settle it; return what became of it:
-        ``done``, ``failed``, ``retry`` (a content fault with attempts left), ``moved``, ``lost``,
-        ``expired`` or ``stopped`` (released unsettled)."""
+    ) -> "tuple[_Call, Sample] | str":
+        """Run one job as one call under ``attempt``: the call record before, ``done`` after, its
+        deadline sent to the beater. Return the call and its sample, or what ended it without a
+        verdict: ``lost``, ``expired`` or ``stopped`` (released unsettled)."""
         job.attempt = attempt
         job._work_dir_memo = None
         job.chdir = False
@@ -949,7 +1072,6 @@ class Worker:
             with contextlib.suppress(BeaterDead):  # then the loop enforces it
                 self.client.deadline(token_dir, deadline, payload)
         call = self._run_call(claim, job, deadline, payload)
-        wall = call.wall
         if not call.abandoned:
             self.pool.call_done(self.token, seq)
             if deadline is not None and not call.expired:
@@ -964,26 +1086,7 @@ class Worker:
             self._lost.add(token_dir)
             return "lost"
         self._warm[claim.queue] = self._warm.get(claim.queue, 0) + 1
-        sample = self._sample(claim, entry, wall, group)
-        if call.error is None:
-            return self._settle(claim, entry, attempt, "done", sample)
-        fault = self._fault(call.error)
-        group["fault"] = fault
-        if fault.kind == "content":
-            if self.faults.content_attempts > 1:
-                return "retry"
-            return self._settle(
-                claim, entry, attempt, "failed", sample, fault=fault.to_json()
-            )
-        if fault.kind == "resource":
-            self._reload(group)
-            self._resource(claim, [entry], fault, "call")
-            return "moved"
-        if fault.kind == "infrastructure":
-            return self._infrastructure(claim, entry, fault, group, sample)
-        return self._settle(
-            claim, entry, attempt, "failed", sample, fault=fault.to_json()
-        )
+        return call, self._sample(claim, entry, call.wall, group)
 
     def _run_call(
         self,
@@ -1122,7 +1225,10 @@ class Worker:
             self._warm.clear()
         return stopped
 
-    def _fault(self, error: BaseException) -> FaultRecord:
+    def _classify_call(self, error: BaseException, phase: str) -> FaultRecord:
+        """The fault of a call that raised: the classifier's, or a resource fault when this
+        worker's cgroup recorded an OOM kill since its latest baseline (taken at start and after
+        each provider start), so a sibling's earlier kill is not this call's."""
         fault = self.classify(error, "call")
         if fault.kind != "resource" and "pydra.engine.procgroup" in sys.modules:
             from pydra.engine.procgroup import process_baseline
@@ -1200,14 +1306,6 @@ class Worker:
             self._lost.add(claim.lease.token_dir)
             return "lost"
         return kind
-
-    def _fail(
-        self, claim: Claim, entry: TicketJob, attempt: str, fault: FaultRecord
-    ) -> None:
-        current = claim.current(entry)
-        if current is not None:
-            attempt = current[1]["attempt"]
-        claim.outcome(entry, attempt, "failed", fault=fault.to_json())
 
     def _append_sample(self, record: dict) -> None:
         path = self.pool.path / "workers" / self.token / "samples.jsonl"
@@ -1370,7 +1468,7 @@ def run_worker(
     cls: "str | WorkerClass",
     *,
     providers: ty.Sequence["Provider | str"] = (),
-    classify: Classifier = default_classifier,
+    classify: Classifier = _faults.classify,
     settings: PoolSettings = PoolSettings(),
     **kwargs: ty.Any,
 ) -> int:
@@ -1405,6 +1503,11 @@ def main(argv: ty.Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--codec", help="the payload codec as module:qualname; default PrivatePickle"
     )
+    parser.add_argument("--faults", help="a JSON file of FaultBudgets")
+    parser.add_argument(
+        "--classify",
+        help="the classifier as module:qualname; default pydra.workers.pool.faults:classify",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
@@ -1416,11 +1519,27 @@ def main(argv: ty.Sequence[str] | None = None) -> int:
         args.root,
         args.cls,
         providers=args.provider,
+        classify=load_classifier(args.classify),
         settings=settings,
+        faults=load_faults(args.faults),
         substrate=args.substrate,
         token=args.token,
         codec=load_codec(args.codec),
     )
+
+
+def load_classifier(reference: str | None) -> Classifier:
+    """The classifier ``module:qualname`` names; the default classifier for None."""
+    if reference is None:
+        return _faults.classify
+    return _resolve(reference)
+
+
+def load_faults(path: str | os.PathLike | None) -> FaultBudgets:
+    """The `FaultBudgets` of the JSON file at ``path``; the defaults for None."""
+    if path is None:
+        return FaultBudgets()
+    return FaultBudgets.from_json(json.loads(Path(path).read_text()))
 
 
 def load_codec(reference: str | None) -> JobCodec | None:

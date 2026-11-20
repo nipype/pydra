@@ -107,6 +107,8 @@ class Attachment:
     settings: Path
     providers: tuple[str, ...] = ()
     codec: str | None = None
+    faults: Path | None = None
+    classify: str | None = None
 
 
 class ExternalSubstrate:
@@ -266,6 +268,10 @@ class LocalSubstrate:
             argv += ["--provider", provider]
         if at.codec is not None:
             argv += ["--codec", at.codec]
+        if at.faults is not None:
+            argv += ["--faults", str(at.faults)]
+        if at.classify is not None:
+            argv += ["--classify", at.classify]
         env = dict(os.environ)
         if cls.device == "cuda":
             env["CUDA_VISIBLE_DEVICES"] = ",".join(devices)

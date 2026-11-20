@@ -1005,14 +1005,17 @@ class PoolRoot:
     def charges(self, checksum: str, fingerprint: str) -> dict[str, int]:
         """A job's crash count (generations with ``charged``), its ``resource_moves``
         (``ladder`` generations at the ``call`` phase) and its infrastructure requeues
-        (``restart`` generations at the ``call`` or ``load`` phase, `Claim.restart`)."""
+        (uncharged ``restart`` generations at the ``call`` or ``load`` phase, `Claim.restart`).
+        """
         gens = [r for _, r in self.generations(checksum, fingerprint)]
         return {
             "crashes": sum(1 for r in gens if r.get("charged") is True),
             "infrastructure": sum(
                 1
                 for r in gens
-                if r.get("cause") == "restart" and r.get("phase") in ("call", "load")
+                if r.get("cause") == "restart"
+                and r.get("phase") in ("call", "load")
+                and r.get("charged") is not True
             ),
             "resource_moves": sum(
                 1
@@ -1571,6 +1574,26 @@ class PoolRoot:
             )
         _create(self.queue(queue).dir, f"held-{epoch}-{label}", b"")
 
+    def infrastructure_fault(
+        self, queue: str, epoch: int, label: str, record: dict
+    ) -> int:
+        """Record an infrastructure fault of the residency ``label`` on ``queue`` in coordinator
+        epoch ``epoch`` (``faults/<epoch>-<label>/<n>``, by exclusive create); return how many that
+        residency has had in that epoch, this one included (RFC 0005 section 6)."""
+        if not isinstance(epoch, int) or epoch < 1 or not _HEX64.fullmatch(label):
+            raise ValueError(
+                f"a fault names an epoch from 1 and a residency label: {epoch}, {label}"
+            )
+        with _dir(self.queue(queue).dir, "faults") as faults:
+            with _dir(faults, f"{epoch}-{label}") as d:
+                numbers = sorted(int(n) for n in _names(d) if _GEN.fullmatch(n))
+                n = numbers[-1] + 1 if numbers else 0
+                while True:
+                    data = jcs({**record, "uuid": uuid.uuid4().hex})
+                    if _create(d, str(n), data) != "exists":
+                        return n + 1
+                    n += 1
+
     def holds(self, queue: str, epoch: int | None = None) -> dict[str, int]:
         """Each residency label held on ``queue`` by ``epoch`` (default: the newest epoch) or a newer
         one, with the newest such epoch."""
@@ -1916,10 +1939,13 @@ class Claim:
                     prior=record["attempt"],
                 )
 
-    def restart(self, job: TicketJob, *, phase: str = "call") -> str:
+    def restart(
+        self, job: TicketJob, *, phase: str = "call", charged: bool = False
+    ) -> str:
         """Write the job's next generation, ``restart`` at ``phase`` naming this ticket, before an
-        infrastructure fault releases it, so the requeue is counted (`PoolRoot.charges`); return
-        the new attempt."""
+        infrastructure fault releases it, or ``charged`` before a crashed job alone is run again, so
+        the requeue or the crash is counted (`PoolRoot.charges`); return the new attempt.
+        """
         current = self.current(job)
         if current is None:
             raise ValueError(f"job {job.checksum} is not held by ticket {self.digest}")
@@ -1930,6 +1956,7 @@ class Claim:
             cause="restart",
             phase=phase,
             prior=current[1]["attempt"],
+            charged=charged,
         )
         return record["attempt"]
 
