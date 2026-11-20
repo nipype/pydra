@@ -107,29 +107,58 @@ def test_open_creates_then_checks(root, expected, tmp_path):
     assert [p.name for p in (tmp_path / "root").iterdir()] == [HEADER_NAME]
 
 
-RACE = """
-import sys
-from pydra.engine.portable.identity import PydraIdentityV1
-from pydra.engine.portable.layout import LayoutHeader, open_layout
-from pydra.utils.storagedir import StorageDir, StorePolicy
+def test_header_written_atomically(root, expected, tmp_path, monkeypatch):
+    """Two openers race to create the header: the second opens the root while the first has
+    written its temporary and not yet linked it. A reader in that window sees no header, not
+    a partial one; the first then loses the link, reads the second's header, and leaves no
+    temporary behind. The interleaving is forced, so no timing decides it."""
+    from pydra.engine.portable import layout
 
-handle = StorageDir.open_root(sys.argv[1], StorePolicy(), trust=sys.argv[2])
-header = LayoutHeader.for_store(PydraIdentityV1())
-for _ in range(40):
-    assert open_layout(handle, header) == header
-"""
+    real = layout._publish
+    seen_in_window = []
+
+    def second_opener_first(r, tmp):
+        monkeypatch.setattr(layout, "_publish", real)
+        with StorageDir.open_root(
+            tmp_path / "root", StorePolicy(), trust=TRUST
+        ) as other:
+            seen_in_window.append(layout._read(other))  # the first's temporary only
+            assert open_layout(other, expected) == expected  # the second creates it
+        return real(r, tmp)
+
+    monkeypatch.setattr(layout, "_publish", second_opener_first)
+    assert open_layout(root, expected) == expected
+    assert seen_in_window == [None]
+    assert sorted(x.name for x in (tmp_path / "root").iterdir()) == [HEADER_NAME]
+    assert _stored(tmp_path / "root")["format"] == "pydra-store@1.0"
 
 
-def test_header_written_atomically(tmp_path):
-    path = tmp_path / "root"
-    path.mkdir()
-    procs = [
-        subprocess.Popen([sys.executable, "-c", RACE, str(path), TRUST])
-        for _ in range(4)
-    ]
-    assert [p.wait(timeout=120) for p in procs] == [0] * 4
-    assert sorted(x.name for x in path.iterdir()) == [HEADER_NAME]
-    assert _stored(path)["format"] == "pydra-store@1.0"
+@pytest.mark.parametrize("windows", [True, False])
+def test_a_sharing_violation_reading_the_header(
+    root, expected, tmp_path, monkeypatch, windows
+):
+    """On Windows a header another opener is renaming over cannot be opened for a moment
+    (a sharing violation, PermissionError): the read is tried again. Elsewhere a
+    PermissionError means the header cannot be read."""
+    from pydra.engine.portable import layout
+
+    open_layout(root, expected)
+    monkeypatch.setattr(layout, "IS_WINDOWS", windows)
+    monkeypatch.setattr(layout.time, "sleep", lambda s: None)
+    real = StorageDir.open_read
+    refusals = [PermissionError(13, "sharing violation")] * 3
+
+    def open_read(self, name, *a, **kw):
+        if name == HEADER_NAME and refusals:
+            raise refusals.pop()
+        return real(self, name, *a, **kw)
+
+    monkeypatch.setattr(StorageDir, "open_read", open_read)
+    if windows:
+        assert open_layout(root, expected) == expected and refusals == []
+    else:
+        with pytest.raises(StoreUnavailable, match="cannot be read"):
+            open_layout(root, expected)
 
 
 @pytest.mark.parametrize(

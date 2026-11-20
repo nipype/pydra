@@ -224,13 +224,22 @@ def _differing_key(stored: LayoutHeader, expected: LayoutHeader) -> str | None:
     return None
 
 
+# how often a header that Windows will not open yet (another opener is renaming its own
+# over it: a sharing violation) is tried again
+_SHARING_RETRIES = 12
+
+
 def _read(root: StorageDir) -> bytes | None:
-    try:
-        f = root.open_read(HEADER_NAME)
-    except FileNotFoundError:
-        return None
-    except PermissionError as err:
-        raise StoreUnavailable(f"{HEADER_NAME} cannot be read: {err}") from None
+    for n in range(_SHARING_RETRIES + 1):
+        try:
+            f = root.open_read(HEADER_NAME)
+            break
+        except FileNotFoundError:
+            return None
+        except PermissionError as err:
+            if not IS_WINDOWS or n == _SHARING_RETRIES:
+                raise StoreUnavailable(f"{HEADER_NAME} cannot be read: {err}") from None
+            time.sleep(min(0.005 * 2**n, 0.25))
     with f:
         data = f.read(MAX_HEADER_BYTES + 1)
     if len(data) > MAX_HEADER_BYTES:
