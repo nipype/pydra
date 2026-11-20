@@ -51,6 +51,16 @@ from pydra.engine.portable.layout import (
     open_layout,
     shard_for,
 )
+from pydra.engine.portable.reuse import (
+    Candidate,
+    Hit,
+    Lookup,
+    Miss,
+    Reuse,
+    Verdict,
+    Verify,
+    as_reuse,
+)
 from pydra.engine.portable.trust import TRUSTS, Root, Trust, check_private
 from pydra.engine.result import Result, _loads, save
 from pydra.utils.storagedir import (
@@ -83,6 +93,8 @@ _CONTENDED = (
 _CLEARED = object()  # a corrupt occupant was set aside: place again
 _OURS = object()  # the occupant carries this writer's token
 _HASHED_CDIR = re.compile(r"h-[0-9a-f]{64}")
+_FINGERPRINT = re.compile(r"[0-9a-f]{64}")
+_RERANKS = 4
 _REPARSE = 0x400
 _WORK = "work"
 _LEASES = "leases"
@@ -115,6 +127,9 @@ class Committed:
         Our outputs, or outputs equal to them, are in the store.
     kept : str or None
         With ``stored=False``: the directory holding our staged entry, unpublished.
+    served : bool
+        A lost race whose occupant the reuse hook served (RFC 0003 section 7.3): the job's
+        result is the committed entry's outputs, ``stored`` is true and ``kept`` is None.
     """
 
     entry: EntryRef
@@ -123,6 +138,7 @@ class Committed:
     committed_digest: str | None
     stored: bool
     kept: str | None
+    served: bool = False
 
 
 class StoreNotWritable(StoreUnavailable):
@@ -287,6 +303,10 @@ def _last_change(st: os.stat_result) -> float:
     return st.st_mtime if IS_WINDOWS else max(st.st_mtime, st.st_ctime)
 
 
+class _Changed(Exception):
+    """The ``context.json`` of an entry is not the one that was ranked."""
+
+
 class _Contended(Exception):
     """The visibility timeout passed while other writers kept changing the directories."""
 
@@ -317,7 +337,19 @@ class PortableStore:
         header's ``pickle`` flag.
     policy : StorePolicy
         Modes, durability and ages; recorded in the header, so two stores of one root must agree.
-    readonly, legacy, reuse, on_commit
+    readonly : sequence of Root
+        Roots searched after ``root`` for entries to reuse (RFC 0003 section 7.4). Each must
+        carry this store's header, is read under its own trust, and is never written, collected
+        or quarantined into; a corrupt entry there is skipped and logged.
+    reuse : str, ReusePolicy or Reuse
+        Which stored entries a job may use (section 7.1): a policy name or `ReusePolicy`, as
+        for `PickleStore`, or a `~pydra.engine.portable.reuse.Reuse` hook. Bound to this store
+        at construction and again after unpickling.
+    on_commit : callable, optional
+        ``on_commit(staged, checksum, key, context, digest)``, called with the staging
+        directory of the entry and before its rename, after ``Reuse.compare`` (section 7.4).
+        If it raises, nothing is committed.
+    legacy
         Accepted and not yet used.
     dedupe : bool, optional
         Whether two submitters of one job compute it once, through a lease at
@@ -377,7 +409,7 @@ class PortableStore:
         self.legacy = tuple(legacy)
         self.dedupe = trust != "shared" if dedupe is None else bool(dedupe)
         self._work_fn = work_dir
-        self.reuse = reuse
+        self.reuse: Reuse = as_reuse(reuse)
         self.on_commit = on_commit
         self.visibility_timeout = VISIBILITY_TIMEOUT
         self._work_policy = attrs.evolve(policy, verify_files="digest")
@@ -401,12 +433,17 @@ class PortableStore:
                 if isinstance(entry_format, PydraEntryV1)
                 else entry_format
             )
+            self._expected = expected
             made = not header_present
             for name in (self.header.dirs["staging"], self.header.dirs["quarantine"]):
                 made |= self._side_dir(handle, name)
             made |= self._entries_dir(handle)
             if made:
                 handle.sync()
+        for ro in self.readonly:
+            with StorageDir.open_root(ro.path, policy, trust=ro.trust) as handle:
+                open_layout(handle, expected, create=False)
+        self.reuse.bind(self)
 
     def __reduce__(self) -> tuple:
         return (_rebuild, (self._args,))
@@ -826,7 +863,12 @@ class PortableStore:
         is moved to ``quarantine/`` and the commit retried. The lease is not consulted: a writer
         that lost its lease still publishes, and this never raises ``LeaseLost``.
 
-        ``verify``, ``replace`` and ``Result`` handling of a lost race are not acted on yet.
+        ``verify`` is the candidate a job marked to verify runs against (RFC 0003 section 7.1):
+        once the entry is staged, ``Reuse.compare`` is called with the stored entry and the fresh
+        outputs, then ``on_commit`` with the staging directory, both before the rename; if either
+        raises, nothing is committed. A candidate that can no longer be read is not compared.
+        ``replace`` and the `Result` of a lost race (which `commit` settles) are not acted on
+        here yet.
 
         Raises
         ------
@@ -853,11 +895,32 @@ class PortableStore:
                 with self._container_staging(root) as staging:
                     return self._publish(
                         root, staging, name, ref, shard, checksum, key, context,
-                        outputs, task, source, writer,
+                        outputs, task, source, writer, verify,
                     )  # fmt: skip
             finally:
                 if source is not None:
                     source.close()
+
+    def _compare(
+        self,
+        checksum: str,
+        candidate: Candidate,
+        outputs: ty.Mapping[str, ty.Any],
+        digest: str,
+        task: "Task | None",
+    ) -> None:
+        try:
+            read = self._serve(checksum, candidate, task)
+        except (_Changed, FileNotFoundError):
+            read = None
+        if read is None:
+            logger.warning(
+                "%s in %s can no longer be read, so it is not compared with the fresh outputs",
+                candidate.entry.fingerprint,
+                candidate.entry.root,
+            )
+            return
+        self.reuse.compare(candidate, read[0], outputs, digest, task)
 
     @contextlib.contextmanager
     def _container_staging(self, root: StorageDir) -> ty.Iterator[StorageDir]:
@@ -902,6 +965,7 @@ class PortableStore:
         task: "Task | None",
         source: StorageDir | None,
         writer: str,
+        verify: Candidate | None = None,
     ) -> Committed:
         """Stage, place and clean up once. A thread touches the staging directory every
         quarter of ``ages.staging`` for as long as it is being written or placed, so `collect`
@@ -917,6 +981,10 @@ class PortableStore:
                     digest = self.format.stage(
                         stage, checksum, key, context, outputs, task, source, writer
                     )
+                    if verify is not None:
+                        self._compare(checksum, verify, outputs, digest, task)
+                    if self.on_commit is not None:
+                        self.on_commit(Path(stage.path), checksum, key, context, digest)
                     stage.set_mode(policy.entry_mode)
                     if policy.durability == "member":
                         stage.sync()
@@ -1534,6 +1602,27 @@ class PortableStore:
         task: "Task | None",
         shard: str | None = None,
     ) -> Result:
+        stored, where = self._read_entry(root, ref, task, shard)
+        return self._result_at(stored, where, task)
+
+    def _read_entry(
+        self,
+        root: StorageDir,
+        ref: EntryRef,
+        task: "Task | None",
+        shard: str | None = None,
+        *,
+        trust: Trust | None = None,
+        readonly: bool = False,
+        digest: str | None = None,
+    ) -> tuple[StoredEntry, Path]:
+        """Open the entry at ``ref`` below ``root`` and read and verify it (RFC 0003 section 6.2).
+
+        ``readonly`` is a root this store never writes: a corrupt entry is not moved aside or
+        resealed, only raised. ``digest``, if given, is the sha256 of the ``context.json`` that
+        was ranked, which must be the bytes read through the descriptor opened here, or
+        `_Changed` is raised, so a verdict applies to the members it reads.
+        """
         with root.child(self.header.entries) as entries:
             if shard is None:
                 shard = self._shard_of(entries, ref.cdir)
@@ -1544,21 +1633,28 @@ class PortableStore:
                 try:
                     entry = cdir_dir.child(ref.fingerprint)
                 except WrongKindError as err:
-                    self._set_aside(root, cdir_dir, ref.fingerprint)
+                    if not readonly:
+                        self._set_aside(root, cdir_dir, ref.fingerprint)
                     raise CorruptEntry(str(err)) from err
                 with entry:
                     identity = entry.fstat()
                     try:
+                        if digest is not None:
+                            raw = self.format.context(entry)[1]
+                            if hashlib.sha256(raw).hexdigest() != digest:
+                                raise _Changed
                         checksum = self._checksum_of(entry, ref.cdir)
                         stored = self.format.read(
                             entry,
                             checksum,
                             ref.fingerprint,
                             task,
-                            self.trust,
+                            self.trust if trust is None else trust,
                             root=root,
                         )
                     except CorruptEntry as err:
+                        if readonly:
+                            raise
                         if (
                             self._quarantine(
                                 root, cdir_dir, ref.fingerprint, ref.cdir, identity
@@ -1571,15 +1667,21 @@ class PortableStore:
                                 f"(owner: {_owner(where)})"
                             ) from err
                         raise
-                    self._reseal(entry)
-                    return self._result(stored, entry, task)
+                    if not readonly:
+                        self._reseal(entry)
+                    return stored, Path(entry.path)
 
     def _result(
         self, stored: StoredEntry, entry: StorageDir, task: "Task | None"
     ) -> Result:
-        outputs = self._outputs_of(dict(stored.outputs), task, Path(entry.path))
+        return self._result_at(stored, Path(entry.path), task)
+
+    def _result_at(
+        self, stored: StoredEntry, where: Path, task: "Task | None"
+    ) -> Result:
+        outputs = self._outputs_of(dict(stored.outputs), task, where)
         return Result(
-            cache_dir=Path(entry.path),
+            cache_dir=where,
             outputs=outputs,
             runtime=None,
             errored=False,
@@ -1808,6 +1910,7 @@ class PortableStore:
             "own_digest": committed.own_digest,
             "committed_digest": committed.committed_digest,
             "stored": committed.stored,
+            "served": committed.served,
         }
         self._make_work_dir(path)
         with self._open_work(path) as handle:
@@ -2133,6 +2236,7 @@ class PortableStore:
             doc.get("committed_digest"),
             doc["stored"],
             None if kept is None or doc["stored"] else str(wd / kept),
+            bool(doc.get("served", False)),
         )
 
     @staticmethod
@@ -2167,6 +2271,255 @@ class PortableStore:
             task=job.task,
             failure=f"{why}; {where}",
         )
+
+    # -- reuse ----------------------------------------------------------------------------------
+
+    def _roots(self) -> list[tuple[str, Trust, bool]]:
+        """This store's root, then each read-only root: ``(path, trust, readonly)``."""
+        return [
+            (self.path, self.trust, False),
+            *(
+                (os.path.abspath(os.fspath(r.path)), r.trust, True)
+                for r in self.readonly
+            ),
+        ]
+
+    def stored(self, checksum: str) -> list[tuple[EntryRef, Context, str]]:
+        """Every entry stored for ``checksum`` in every root, own root first and each root in
+        path order, as ``(entry, context, sha256 of its context.json)``. Only ``context.json``
+        is read; an entry whose context cannot be read here is left out (the read of a chosen
+        entry reports it). A read-only root that cannot be read is logged and skipped.
+        """
+        cdir = cdir_for(checksum)
+        shard = shard_for(cdir, checksum, self.header.shard)
+        found: list[tuple[EntryRef, Context, str]] = []
+        for path, trust, readonly in self._roots():
+            try:
+                found.extend(self._stored_in(path, trust, cdir, shard))
+            except FileNotFoundError:
+                continue
+            except OSError as err:
+                if not readonly:
+                    if isinstance(err, StoreUnavailable):
+                        raise
+                    raise StoreUnavailable(err.errno, f"{cdir}: {err}") from err
+                logger.warning("the read-only root %s was skipped: %s", path, err)
+        return found
+
+    def _stored_in(
+        self, path: str, trust: Trust, cdir: str, shard: str, only: str | None = None
+    ) -> list[tuple[EntryRef, Context, str]]:
+        found = []
+        with StorageDir.open_root(path, self.policy, trust=trust) as root:
+            with contextlib.ExitStack() as stack:
+                parent = root
+                for name in (self.header.entries, shard, cdir):
+                    parent = stack.enter_context(parent.child(name))
+                names = (
+                    [only]
+                    if only is not None
+                    else sorted(
+                        e.name
+                        for e in parent.scandir()
+                        if _FINGERPRINT.fullmatch(e.name)
+                    )
+                )
+                for name in names:
+                    try:
+                        with parent.child(name) as entry:
+                            context, raw = self.format.context(entry)
+                    except (
+                        FileNotFoundError,
+                        WrongKindError,
+                        CorruptEntry,
+                        EntryFormatUnknown,
+                    ) as err:
+                        logger.debug("%s/%s is not ranked: %s", cdir, name, err)
+                        continue
+                    except OSError as err:
+                        if err.errno == _STALE:
+                            continue  # gone, or not visible yet: unknown
+                        raise
+                    found.append(
+                        (
+                            EntryRef(path, cdir, name),
+                            context,
+                            hashlib.sha256(raw).hexdigest(),
+                        )
+                    )
+        return found
+
+    def stored_contexts(self, checksum: str) -> ty.Iterator[tuple[Path, Context]]:
+        """The entry and recorded context of each result stored for ``checksum``, in every
+        root, in the order the default hook considers them."""
+        cdir = cdir_for(checksum)
+        shard = shard_for(cdir, checksum, self.header.shard)
+        for ref, context, _ in self.stored(checksum):
+            yield (
+                Path(ref.root) / self.header.entries / shard / cdir / ref.fingerprint,
+                context,
+            )
+
+    def find(self, job: "Job") -> Lookup:
+        """What ``job`` may reuse (RFC 0003 section 7.1): a `Hit` with the result to serve, a
+        `Verify` whose candidate the job runs against (the caller sets ``job.verify``), or a
+        `Miss`. The hook ranks the entries stored for the job's checksum in every root and is
+        asked for the verdict of the first; `Verdict.SKIP` takes the next, `REFUSE` ends the
+        lookup. A served entry is read and verified (section 6.2) through a descriptor whose
+        ``context.json`` must be the bytes that were ranked, else the store ranks again; a
+        corrupt candidate is quarantined (skipped, in a read-only root) and the next taken.
+        If ``Reuse.served`` raises, the result is not served."""
+        return self._find(job.checksum, job.context, job.task)
+
+    def lookup(
+        self,
+        checksum: str,
+        context: Context,
+        task: "Task | None",
+        stored: ty.Any = None,
+    ) -> Result | None:
+        """The `ResultStore` adapter of `find`: the `Hit`'s result, or None. ``stored`` (the
+        contexts `check_declared_code` read) is not used: the entries are ranked afresh,
+        from their ``context.json`` and its digest."""
+        found = self._find(checksum, context, task)
+        return found.result if isinstance(found, Hit) else None
+
+    def _find(self, checksum: str, context: Context, task: "Task | None") -> Lookup:
+        for _ in range(_RERANKS):
+            ranked = self.reuse.rank(context, self.stored(checksum), task)
+            outcome = self._consider(checksum, ranked, context, task)
+            if outcome is not _CONTENDED:
+                return ty.cast(Lookup, outcome)
+        logger.warning(
+            "the entries of %s changed while they were read %d times; not reused",
+            checksum,
+            _RERANKS,
+        )
+        return Miss()
+
+    def _kind_of(self, root: str) -> tuple[Trust, bool]:
+        for path, trust, readonly in self._roots():
+            if path == os.path.abspath(root):
+                return trust, readonly
+        raise ValueError(
+            f"the entry is in the root {root!r}, which this store does not hold"
+        )
+
+    def _consider(
+        self,
+        checksum: str,
+        ranked: ty.Sequence[Candidate],
+        context: Context,
+        task: "Task | None",
+    ) -> "Lookup | object":
+        mine = self.identity.fingerprint(context)
+        for candidate in ranked:
+            verdict = self.reuse.verdict(candidate, context, task)
+            if verdict is Verdict.REFUSE:
+                return Miss()
+            if verdict is Verdict.SKIP:
+                continue
+            if verdict is Verdict.VERIFY:
+                return Verify(candidate)
+            if verdict is not Verdict.SERVE:
+                raise ValueError(f"a reuse verdict is a Verdict, not {verdict!r}")
+            try:
+                read = self._serve(checksum, candidate, task)
+            except (_Changed, FileNotFoundError):
+                return _CONTENDED  # the entry changed after it was ranked: rank again
+            if read is None:
+                continue
+            stored, where = read
+            result = self._result_at(stored, where, task)
+            if candidate.entry.fingerprint != mine:
+                result.cross_context = True
+                result.reused_in = dict(context)
+            try:
+                self.reuse.served(candidate, context, task, stored)
+            except Exception as err:
+                logger.warning(
+                    "%s is not served: its reuse record failed: %r",
+                    candidate.entry.fingerprint,
+                    err,
+                )
+                return Miss()
+            return Hit(result)
+        return Miss()
+
+    def _serve(
+        self, checksum: str, candidate: Candidate, task: "Task | None"
+    ) -> tuple[StoredEntry, Path] | None:
+        """Read the candidate, or None if it cannot be served: corrupt (quarantined unless its
+        root is read-only), of another format, or not readable with its root's trust. Raises
+        `_Changed` when it is no longer the entry that was ranked."""
+        ref = candidate.entry
+        trust, readonly = self._kind_of(ref.root)
+        shard = shard_for(ref.cdir, checksum, self.header.shard)
+        try:
+            with StorageDir.open_root(ref.root, self.policy, trust=trust) as root:
+                return self._read_entry(
+                    root,
+                    ref,
+                    task,
+                    shard,
+                    trust=trust,
+                    readonly=readonly,
+                    digest=candidate.context_digest,
+                )
+        except CorruptEntry as err:
+            where = "skipped" if readonly else "moved aside"
+            logger.warning(
+                "%s in %s is corrupt and was %s: %s",
+                ref.fingerprint,
+                ref.root,
+                where,
+                err,
+            )
+        except (EntryFormatUnknown, EntryNotTrusted) as err:
+            logger.warning("%s in %s is not served: %s", ref.fingerprint, ref.root, err)
+        except FileNotFoundError:
+            raise
+        except OSError as err:
+            if err.errno == _STALE:
+                raise FileNotFoundError(err.errno, str(err)) from err
+            if not readonly:
+                if isinstance(err, StoreUnavailable):
+                    raise
+                raise StoreUnavailable(err.errno, f"{ref.cdir}: {err}") from err
+            logger.warning("%s in %s was skipped: %s", ref.fingerprint, ref.root, err)
+        return None
+
+    def sidecar(self, name: str) -> StorageDir:
+        """The directory of the store-level records ``name`` (RFC 0003 section 7.4):
+        ``<root>/sidecars/<name>@1/``, or the directory the header's ``sidecars`` mapping gives
+        for ``name``, made if it is missing. The caller closes it. `collect` never touches it.
+
+        Raises
+        ------
+        StoreNotWritable
+            This user cannot make it.
+        """
+        header = self.header.dirs.get("sidecars") or {}
+        relative = header.get(name, f"sidecars/{name}@1")
+        parts = [p for p in relative.split("/") if p]
+        if not parts or any(p in (".", "..") for p in parts):
+            raise ValueError(
+                f"the sidecar directory {relative!r} is not below the root"
+            )
+        handles = [self._open()]
+        try:
+            for part in parts:
+                with self._denied(os.path.join(handles[-1].path, part)):
+                    handles.append(
+                        handles[-1].child(part, create=True, mode=self.policy.side_mode)
+                    )
+        except BaseException:
+            for h in handles:
+                h.close()
+            raise
+        for h in handles[:-1]:
+            h.close()
+        return handles[-1]
 
     # -- de-duplication leases ---------------------------------------------------------------
 
@@ -2228,7 +2581,13 @@ class PortableStore:
         kind = "entry"
         try:
             committed = self.publish(
-                checksum, key, context, outputs, result.task, files_from
+                checksum,
+                key,
+                context,
+                outputs,
+                result.task,
+                files_from,
+                verify=getattr(job, "verify", None),
             )
         except UnencodableOutput:
             if job is None:
@@ -2239,7 +2598,15 @@ class PortableStore:
             committed = self._keep_outputs(job, ty.cast(Path, wd), outputs, ref)
             kind = "outputs"
         else:
-            if job is not None and not committed.stored:
+            taken = (
+                self._serve_occupant(checksum, committed, context, result.task)
+                if not committed.stored and committed.committed_digest is not None
+                else None
+            )
+            if taken is not None:
+                committed, served = taken
+                result.outputs = served.outputs
+            elif job is not None and not committed.stored:
                 committed = self._keep_entry(ty.cast(Path, wd), committed)
                 kind = "kept"
         if job is not None:
@@ -2248,6 +2615,52 @@ class PortableStore:
                 self._empty_work_dir(ty.cast(Path, wd))
         result.committed = committed
         result.stored = committed.stored
+
+    def _serve_occupant(
+        self,
+        checksum: str,
+        committed: Committed,
+        context: Context,
+        task: "Task | None",
+    ) -> tuple[Committed, Result] | None:
+        """A lost race with unequal digests (RFC 0003 section 7.3): if the hook gives ``SERVE``
+        for the committed entry as a rank-0 candidate, the job's result is that entry's outputs
+        and ``served`` is called (a reuse); the staged entry is removed. None otherwise, or if
+        the occupant cannot be read or its record cannot be written: the job keeps its own
+        outputs, uncommitted."""
+        ref = committed.entry
+        cdir = ref.cdir
+        shard = shard_for(cdir, checksum, self.header.shard)
+        try:
+            found = self._stored_in(self.path, self.trust, cdir, shard, ref.fingerprint)
+        except OSError:
+            return None
+        if not found:
+            return None
+        _, stored_context, context_digest = found[0]
+        candidate = Candidate(ref, stored_context, context_digest, 0, "exact")
+        if self.reuse.verdict(candidate, context, task) is not Verdict.SERVE:
+            return None
+        try:
+            read = self._serve(checksum, candidate, task)
+        except (_Changed, FileNotFoundError):
+            return None
+        if read is None:
+            return None
+        stored, where = read
+        result = self._result_at(stored, where, task)
+        try:
+            self.reuse.served(candidate, context, task, stored)
+        except Exception as err:
+            logger.warning(
+                "%s is not served: its reuse record failed: %r", ref.fingerprint, err
+            )
+            return None
+        if committed.kept is not None:
+            with self._open() as root, root.child(self.header.dirs["staging"]) as st:
+                if os.path.dirname(committed.kept) == st.path:
+                    _discard(st, os.path.basename(committed.kept))
+        return attrs.evolve(committed, stored=True, kept=None, served=True), result
 
     def _keep_job(self, job: "Job") -> None:
         """Write the failed job's pickle to its work directory, for ``pydracli crash``."""

@@ -36,6 +36,7 @@ from .test_portable_store import (
     CTX,
     IDENT,
     TRUST,
+    Refusing,
     _Lost,
     _result,
     _work_under,
@@ -179,9 +180,14 @@ def test_work_dir_pure_across_processes(tmp_path):
 # -- _committed.json ---------------------------------------------------------------------------------
 
 
+def refusing_submitter(tmp_path):
+    return portable_submitter(tmp_path, store=make(tmp_path, reuse=Refusing()))
+
+
 def _occupy_and_commit(store, sub, out=2, occupant=3):
     """Commit ``out`` for a job whose address holds an entry with other outputs: the result is
-    not stored, and is kept in its work directory."""
+    not stored, and is kept in its work directory (the store's hook refuses the occupant).
+    """
     first = job_in(sub, _Inc(a=1), name="first")
     store.commit(_Lost(), _result(first, _Inc.Outputs(out=occupant)), first)
     job = job_in(sub, _Inc(a=1))
@@ -191,7 +197,7 @@ def _occupy_and_commit(store, sub, out=2, occupant=3):
 
 
 def test_stored_false_read_by_other_process_via_committed_json(tmp_path):
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         job, result = _occupy_and_commit(store, sub)
     assert result.stored is False and result.committed.kept is not None
@@ -278,7 +284,7 @@ def test_a_committed_json_of_another_job_is_not_followed(tmp_path):
 
 
 def test_kept_entry_rehashed_on_read(tmp_path):
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         job, result = _occupy_and_commit(store, sub)
         wd = store.work_dir(job)
@@ -303,7 +309,7 @@ def test_kept_entry_copied_across_filesystems_is_rehashed(tmp_path, monkeypatch)
             raise OSError(errno.EXDEV, "cross-device link")
         return real(src, dst, *a, **kw)
 
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         monkeypatch.setattr(os, "rename", rename)
         job, result = _occupy_and_commit(store, sub)
@@ -328,7 +334,7 @@ def test_kept_entry_copy_that_changed_is_refused(tmp_path, monkeypatch):
         return real_rename(src, dst, *a, **kw)
 
     real_rename = os.rename
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         first = job_in(sub, _Inc(a=1), name="first")
         store.commit(_Lost(), _result(first, _Inc.Outputs(out=3)), first)
@@ -482,7 +488,7 @@ def test_check_declared_code_reads_entry_path(tmp_path):
     # an entry in the context's own slot: nothing to check, and no slot directory is asked for
     assert check_declared_code(store, "python-abc", context, None) is None
     # none stored: the store has no stored contexts to compare with
-    assert check_declared_code(store, "python-other", context, None) is None
+    assert not check_declared_code(store, "python-other", context, None)
 
 
 # -- the de-duplication lease ----------------------------------------------------------------------------
