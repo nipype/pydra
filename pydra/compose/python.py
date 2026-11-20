@@ -144,7 +144,8 @@ def define(
         ``"module"`` adds the functions and classes it reaches in its own module;
         ``"user"`` adds all reachable code that is not library code (the standard
         library, installed distributions and pydra; see ``PYDRA_USER_PACKAGES`` in
-        `pydra.utils.hash`). Library code is identified by its qualified name. By
+        `pydra.utils.hash`). Library code is identified by its qualified name and the
+        version of the distribution that owns it. By
         default the ``PYDRA_CODE_HASH`` environment variable, otherwise ``"user"``.
     checksum: callable, optional
         A function of the task and its inputs, ``checksum(task, inputs) -> str``, used

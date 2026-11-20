@@ -11,8 +11,11 @@ record existed, under their tags: ``code@1`` (the walk of the executor), ``type@
 ``Outputs`` class) and ``py@1`` (an input). A job's record is built once, in the
 submitting process, and carried with the job: ``Job.record``, ``Job.checksum`` and the
 store identity's ``key`` never rebuild it in a worker. ``Task._checksum`` and
-``Task._hash`` rebuild it on every call, as the checksum always was (pydra issue #936,
-fixed with the walk in RFC 0004 I4).
+``Task._hash`` rebuild it on every call in the submitting process. A task unpickled in a
+worker reads the digests the submitting process computed (see ``Task._carried``, pydra
+issue #936), because a worker may not be able to read the source of its function, its
+classes and its input values; it hashes again only the values that can change meanwhile
+(see ``rehashed_in_worker``).
 """
 
 from __future__ import annotations
@@ -26,11 +29,16 @@ from pydra.utils.hash import (
     LIBRARY_PACKAGES,
     USER_PACKAGES_ENV_VAR,
     Cache,
+    is_unversioned,
+    _module_is_library,
     _package_overrides,
     check_code_hash,
     code_hash_default,
     hash_function,
+    owner_of,
+    type_digest,
 )
+from pydra.utils.general import get_fields
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
@@ -68,17 +76,45 @@ def field_digests(
     inputs.pop(exclude, None)
     cache = Cache(code_hash=task._code_hash)
     code_name = task._executor_name if _executor_is_code(task) else None
+    carried = task._carried or {}
+    fields = {f.name: f for f in get_fields(task)}
     digests = {}
     for name, value in inputs.items():
+        if name in carried and carried[name][0] is getattr(task, name):
+            if not rehashed_in_worker(fields.get(name), carried[name][0]):
+                digests[name] = carried[name][1]
+                continue
         tag = "code@1" if name == code_name else "py@1"
         digests[name] = f"{tag}:{hash_function(value, cache=cache)}"
-    digests["Outputs"] = f"type@1:{hash_function(task.Outputs, cache=cache)}"
-    if collect:
+    digests["Outputs"] = (
+        carried["Outputs"][1]
+        if "Outputs" in carried
+        else type_digest(task.Outputs, cache)
+    )
+    if collect and not carried:
         task._code_modules = frozenset(cache.modules)
+        task._code_refs = sorted(cache.refs)
         task._declared_code = {
             k: ",".join(sorted(v)) for k, v in sorted(cache.declared.items())
         }
     return digests
+
+
+def rehashed_in_worker(field: ty.Any, value: ty.Any) -> bool:
+    """Whether a worker hashes ``value`` of ``field`` again instead of using the digest
+    the submitting process carried: a value whose hash depends on state outside it, which
+    can change between the submission and the run (a file, however it is typed, or a
+    value with ``__bytes_repr__``). Functions, classes and instances of user classes
+    are never hashed again, as a worker may not be able to read their source."""
+    from fileformats.core.fileset import FileSet
+
+    from pydra.utils.typing import TypeParser
+
+    return (
+        (field is not None and TypeParser.contains_type(FileSet, field.type))
+        or isinstance(value, FileSet)
+        or hasattr(value, "__bytes_repr__")
+    )
 
 
 def _executor_is_code(task: "Task") -> bool:
@@ -87,13 +123,41 @@ def _executor_is_code(task: "Task") -> bool:
     return task._executor_name is not None and task._task_type() != "shell"
 
 
+def library_values(task: "Task") -> list[str]:
+    """The distributions that own the library types of the input values of ``task``, as
+    sorted ``dist:{dist}=={identity}`` strings (RFC 0004 section 4.1). The walk of the
+    code sees only the library code a function names, so ``def f(x): return x.mean()``
+    would not be re-keyed by an upgrade of the library of ``x`` without them. A type of
+    the standard library or the engine, of user code, or of no single distribution
+    (the context records it as unknown) is left out."""
+    from pydra.engine.context import _value_modules
+
+    modules: set[str] = set()
+    for field in get_fields(task):
+        if field.name != task._executor_name:
+            _value_modules(getattr(task, field.name), modules)
+    owners = {
+        o
+        for m in modules
+        if isinstance(m, str)
+        and m != "__main__"
+        and not is_unversioned(m)
+        and _module_is_library(m)
+        and (o := owner_of(m)) is not None
+    }
+    return sorted(f"dist:{dist}=={identity}" for dist, identity in owners)
+
+
 def task_record(task: "Task") -> Record:
     """The identity record of ``task`` without the fields of the job that runs it."""
     if hasattr(task, "__checksum__"):
         return {"scheme": IDENTITY_SCHEME, "supplied": task._supplied_checksum()}
     digests = dict(task._compute_hashes()[1])
     outputs = digests.pop("Outputs")
-    code = {}
+    code: dict[str, ty.Any] = {
+        "refs": list(task._code_refs or ()),
+        "values": library_values(task),
+    }
     if _executor_is_code(task) and task._executor_name in digests:
         code["code"] = digests.pop(task._executor_name)
     return {

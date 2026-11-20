@@ -366,7 +366,13 @@ def digest_form(value: ty.Any) -> JSON:
         return {"$digest": _registered_digest(entry, value)}
     if entry is not None and entry.tag is not None and not entry.fileset:
         assert entry.encode is not None
-        return {"$codec": entry.tag, "value": digest_form(entry.encode(value))}
+        form = {"$codec": entry.tag, "value": digest_form(entry.encode(value))}
+        # a value whose type is user code carries its class (RFC 0004 section 6.2)
+        from pydra.utils.hash import class_digest, is_user_class
+
+        if is_user_class(type(value)):
+            form["$class"] = class_digest(type(value))
+        return form
     if entry is not None and entry.fileset and isinstance(value, FileSet):
         return {
             "$fileset": entry.tag,

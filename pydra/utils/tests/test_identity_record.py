@@ -287,7 +287,7 @@ StrFields = python.define(_str_fields, outputs={"out": str})
 def test_python_record_shape():
     record = task_record(Fields(a=1))
     assert record["kind"] == "python"
-    assert list(record["task"]) == ["code"]
+    assert list(record["task"]) == ["refs", "values", "code"]
     assert set(record["inputs"]) == {"a", "b"}
     assert record["inputs"]["a"].startswith("py@1:")
     # the outputs digest follows the Outputs class
@@ -297,7 +297,7 @@ def test_python_record_shape():
 def test_shell_record_shape():
     record = task_record(shell.define("echo <text:str>")(text="hi"))
     assert record["kind"] == "shell"
-    assert record["task"] == {}
+    assert record["task"] == {"refs": [], "values": []}
     assert "executable" in record["inputs"]
     assert record["inputs"]["executable"].startswith("py@1:")
     assert record["inputs"]["text"].startswith("py@1:")
@@ -312,7 +312,7 @@ def test_workflow_record_shape():
 
     record = task_record(Wf(a=1))
     assert record["kind"] == "workflow"
-    assert list(record["task"]) == ["code"]
+    assert list(record["task"]) == ["refs", "values", "code"]
     assert "constructor" not in record["inputs"]
     assert set(record["inputs"]) == {"a"}
     assert record_checksum(record).startswith("workflow-")

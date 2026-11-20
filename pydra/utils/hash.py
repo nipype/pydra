@@ -1,6 +1,7 @@
 """Generic object hashing dispatch"""
 
 import builtins
+import dataclasses
 import sys
 import os
 import ast
@@ -278,11 +279,17 @@ class Cache:
     code_hash: ty.Optional[str] = attrs.field(default=None)
     # the library modules reached by the functions hashed with this cache
     modules: ty.Set[str] = attrs.field(factory=set)
+    # the references to library code, with their identities, in those functions
+    refs: ty.Set[str] = attrs.field(factory=set)
     # the `code_digest` of each function hashed with this cache, by its id
     digests: ty.Dict[int, str] = attrs.field(factory=dict)
     # the `code_digest`s of the functions hashed with a declared version, by their
     # ``module.qualname==version``
     declared: ty.Dict[str, ty.Set[str]] = attrs.field(factory=dict)
+    # the `class_digest` of each user class hashed with this cache, and the classes
+    # being walked now (a class whose method reads an instance of the class)
+    classes: ty.Dict[type, str] = attrs.field(factory=dict)
+    _classes_open: ty.Set[type] = attrs.field(factory=set)
 
     def __getitem__(self, object_id: int) -> Hash:
         return self._hashes[object_id]
@@ -416,6 +423,9 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     """
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
+    if is_user_class(cls):
+        yield _class_digest(cls, cache).encode()
+        yield b","
     dct: Dict[str, ty.Any]
     if attrs.has(type(obj)):
         # Drop any attributes that aren't used in comparisons by default
@@ -553,31 +563,82 @@ def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
     yield b")"
 
 
+def _type_location(tp: ty.Any) -> bytes:
+    """The module and qualified name of a type, leaving out the private parts of the
+    module path (``pathlib._local`` is ``pathlib``), as an ASCII byte string"""
+    name = (
+        getattr(tp, "__qualname__", None)
+        or getattr(tp, "__name__", None)
+        or getattr(tp, "_name", None)
+    )
+    if not isinstance(name, str):
+        raise TypeError(f"{type(tp).__name__} object has no stable type@1 form")
+    module = getattr(tp, "__module__", None) or ""
+    mod_path = ".".join(p for p in module.split(".") if not p.startswith("_"))
+    return f"{mod_path}.{name}".encode()
+
+
+def _type_token(tp: ty.Any, cache: Cache) -> bytes:
+    """The digest of a type within another, as hex"""
+    return sha256(b"".join(bytes_repr_type(tp, cache))).hexdigest().encode()
+
+
+def _union_members(args: tuple) -> Iterator[ty.Any]:
+    for arg in args:
+        if ty.get_origin(arg) in _UNION_ORIGINS:
+            yield from _union_members(ty.get_args(arg))
+        else:
+            yield arg
+
+
+def _literal_token(value: ty.Any) -> bytes:
+    """The digest form (RFC 0004 section 6.2) of a ``Literal`` value, as JCS bytes"""
+    from pydra.utils.digest import digest, digest_form, jcs
+
+    try:
+        return jcs(digest_form(value))
+    except Exception:
+        return jcs(digest(value))
+
+
+_UNION_ORIGINS = (ty.Union, types.UnionType)
+
+
 @register_serializer(ty._GenericAlias)
+@register_serializer(ty._SpecialGenericAlias)
+@register_serializer(types.GenericAlias)
 @register_serializer(ty._SpecialForm)
+@register_serializer(ty.TypeVar)
+@register_serializer(ty.ParamSpec)
+@register_serializer(ty.TypeVarTuple)
+@register_serializer(ty.ForwardRef)
 @register_serializer(type)
-def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
-    from pydra.utils.general import get_fields
+def bytes_repr_type(klass: ty.Any, cache: Cache) -> Iterator[bytes]:
+    """The bytes of a type (``type@1``, RFC 0004 section 5.1), which are the same on
+    every Python minor: unions and ``Literal`` are order-free and ``Optional[X]`` is
+    ``X | None``; a user class is its name and `class_digest`"""
+    from pydra.utils.digest import digest
 
-    def type_location(tp: type) -> bytes:
-        """Return the module and name of the type in a ASCII byte string"""
-        try:
-            type_name = tp.__name__
-        except AttributeError:
-            type_name = tp._name
-        mod_path = ".".join(
-            p for p in klass.__module__.split(".") if not p.startswith("_")
-        )
-        return f"{mod_path}.{type_name}".encode()
-
-    # The metadata of annotated types isn't included in the hash as it doesn't change
-    # how values of the type are handled
-    while ty.get_origin(klass) is ty.Annotated:
-        klass = ty.get_args(klass)[0]
     yield b"type:("
+    if klass is None:
+        klass = type(None)
     origin = ty.get_origin(klass)
     args = ty.get_args(klass)
-    if origin and args:
+    if origin is ty.Annotated:
+        yield b"annotated:("
+        yield from bytes_repr_type(args[0], cache)
+        yield b"),metadata:("
+        yield b",".join(digest(m).encode() for m in klass.__metadata__)
+        yield b")"
+    elif origin in _UNION_ORIGINS:
+        yield b"union:("
+        yield b",".join(sorted({_type_token(m, cache) for m in _union_members(args)}))
+        yield b")"
+    elif origin is ty.Literal:
+        yield b"literal:("
+        yield b",".join(sorted(_literal_token(a) for a in args))
+        yield b")"
+    elif origin is not None and args:
         yield b"origin:("
         yield from bytes_repr_type(origin, cache)
         yield b"),args:("
@@ -591,49 +652,56 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
             else:
                 yield from bytes_repr_type(arg, cache)
         yield b")"
-    else:
-        if klass is Ellipsis:
-            yield b"..."
-        elif inspect.isclass(klass) and issubclass(klass, FileSet):
-            try:
-                yield b"mime-like:(" + klass.mime_like.encode() + b")"
-            except fileformats.core.exceptions.FormatDefinitionError:
-                yield type_location(klass)
-        elif get_fields(klass):
-            yield b"fields:("
-            yield from bytes_repr_sequence_contents(_versioned_fields(klass), cache)
+    elif isinstance(klass, (ty.TypeVar, ty.ParamSpec, ty.TypeVarTuple)):
+        yield b"typevar:(" + klass.__name__.encode()
+        bound = getattr(klass, "__bound__", None)
+        if bound is type(None):  # a ParamSpec's, on some minors
+            bound = None
+        yield b",bound:(" + (b"" if bound is None else _type_token(bound, cache)) + b")"
+        yield b",constraints:(" + b",".join(
+            _type_token(c, cache) for c in getattr(klass, "__constraints__", ())
+        ) + b")"
+        yield b",variance:(%d,%d)" % (
+            bool(getattr(klass, "__covariant__", False)),
+            bool(getattr(klass, "__contravariant__", False)),
+        )
+    elif klass is dataclasses.KW_ONLY:
+        yield b"sentinel:(dataclasses.KW_ONLY)"
+    elif isinstance(klass, dataclasses.InitVar):
+        yield b"initvar:(" + _type_token(klass.type, cache) + b")"
+    elif isinstance(klass, str):
+        yield b"annotation:(" + klass.encode() + b")"
+    elif isinstance(klass, ty.ForwardRef):
+        yield b"annotation:(" + klass.__forward_arg__.encode() + b")"
+    elif klass is Ellipsis:
+        yield b"..."
+    elif inspect.isclass(klass) and issubclass(klass, FileSet):
+        try:
+            yield b"mime-like:(" + klass.mime_like.encode() + b")"
+        except fileformats.core.exceptions.FormatDefinitionError:
+            yield _type_location(klass)
+    elif inspect.isclass(klass) and get_fields(klass):
+        # not its name: tasks defined in different ways have one checksum
+        yield b"fields:("
+        yield from bytes_repr_sequence_contents(_versioned_fields(klass), cache)
+        yield b")"
+        if hasattr(klass, "Outputs"):
+            yield b",outputs:("
+            yield from bytes_repr_type(klass.Outputs, cache)
             yield b")"
-            if hasattr(klass, "Outputs"):
-                yield b",outputs:("
-                yield from bytes_repr_type(klass.Outputs, cache)
-                yield b")"
-        elif in_stdlib(klass):
-            yield type_location(klass)
-        else:
-            try:
-                dct = {
-                    n: v for n, v in klass.__dict__.items() if not n.startswith("__")
-                }
-            except AttributeError:
-                yield type_location(klass)
-            else:
-                yield b"__dict__:("
-                yield from bytes_repr_mapping_contents(dct, cache)
-                yield b")"
-                # Include annotations
-                try:
-                    annotations = klass.__annotations__
-                except AttributeError:
-                    pass
-                else:
-                    yield b",annotations:("
-                    yield from bytes_repr_mapping_contents(annotations, cache)
-                    yield b")"
-                yield b",mro:("
-                yield from (
-                    b for t in klass.mro()[1:-1] for b in bytes_repr_type(t, cache)
-                )
-                yield b")"
+    elif not inspect.isclass(klass) or in_stdlib(klass):
+        yield _type_location(klass)
+    elif is_library(klass):
+        module = klass.__module__
+        owner = library_owner(module)
+        cache.modules.add(module)
+        ref = f"lib:{owner}".encode() + _type_location(klass)
+        if owner:
+            cache.refs.add(ref.decode())
+        yield ref
+    else:
+        yield _type_location(klass)
+        yield b",class:(" + _class_digest(klass, cache).encode() + b")"
     yield b")"
 
 
@@ -1039,6 +1107,104 @@ def is_library(obj: object) -> bool:
     return isinstance(module, str) and _module_is_library(module)
 
 
+ENGINE_PACKAGES = frozenset(
+    {"compose", "engine", "environments", "utils", "workers", "scripts"}
+)
+"""The subpackages of pydra that are the engine, referenced by qualified name with no
+identity, as the standard library is. ``pydra.tasks`` is not: it is keyed by its owner."""
+
+
+def _is_stdlib(module: str) -> bool:
+    top = module.partition(".")[0]
+    return top == "builtins" or top in STDLIB_MODULES
+
+
+def is_unversioned(module: str) -> bool:
+    """Whether references to `module` carry no identity: the standard library, builtins
+    and the engine (`ENGINE_PACKAGES`). The context records pydra's identity."""
+    parts = module.split(".")
+    return _is_stdlib(module) or (
+        parts[0] == "pydra" and (len(parts) == 1 or parts[1] in ENGINE_PACKAGES)
+    )
+
+
+def _owners(module: str) -> list[str] | None:
+    """The distributions that installed `module`: the one whose files include the
+    module's file, or whose editable source holds it, or the one that
+    ``packages_distributions()`` names for its top-level package, or for a module
+    without a file (a namespace package) those providing its top-level name; None if
+    there is none"""
+    from pydra.engine.context import _distributions, _norm, _package_distributions
+
+    distributions = _distributions()
+    candidates = [
+        c
+        for c in _package_distributions().get(module.partition(".")[0], [])
+        if c in distributions
+    ]
+    file = getattr(sys.modules.get(module), "__file__", None)
+    if not file:
+        return candidates or None
+    path = _norm(file)
+    for name in candidates:
+        if path in distributions[name].files:
+            return [name]
+    roots = [
+        (len(d.editable_root), d.name)
+        for d in distributions.values()
+        if d.editable_root and d.holds(path)
+    ]
+    if roots:
+        return [max(roots)[1]]
+    return candidates if len(candidates) == 1 else None
+
+
+@functools.cache
+def owner_of(module: str) -> tuple[str, str] | None:
+    """The distribution that owns `module` and the identity it is keyed by, ``("numpy",
+    "2.1.0")``, or None if no single distribution does. The identity is the public
+    version of an index install, and ``version@commit``, ``version@hash`` or
+    ``dir:digest`` of a local directory or editable one (`pydra.engine.context._Installed.keyed`);
+    ``"?"`` if it cannot be computed. Memoised per module, forgotten by
+    `pydra.engine.context.clear_caches`."""
+    from pydra.engine.context import _distributions
+
+    owners = _owners(module)
+    if owners is None or len(owners) != 1:
+        return None
+    dist = _distributions()[owners[0]]
+    return dist.name, dist.keyed or "?"
+
+
+def forget_owners() -> None:
+    """Forget the owners of modules and the memoised walks that carry them, so they are
+    read again after a distribution is installed into the running interpreter"""
+    with _walk_memo_lock:
+        owner_of.cache_clear()
+        _walk_memo.clear()
+
+
+def library_owner(module: str) -> str:
+    """The prefix a reference to library code of `module` carries: ``{dist}=={identity}:``,
+    ``?:`` if no distribution owns it, and nothing for the standard library and the
+    engine (`is_unversioned`)"""
+    if is_unversioned(module):
+        return ""
+    owner = owner_of(module)
+    return "?:" if owner is None else f"{owner[0]}=={owner[1]}:"
+
+
+def _is_unowned_python(module: str) -> bool:
+    """Whether `module` is a pure-Python library module that no distribution owns, which
+    is walked as user code, not referenced by name"""
+    if is_unversioned(module) or _package_override(module) is True:
+        return False  # or named library code by ``-pkg``
+    if owner_of(module) is not None:
+        return False
+    file = getattr(sys.modules.get(module), "__file__", None)
+    return bool(file) and file.endswith(".py")
+
+
 def _qualified_name(obj: object) -> str:
     name = getattr(obj, "__qualname__", None) or getattr(obj, "__name__", "")
     return f"{getattr(obj, '__module__', None)}.{name}"
@@ -1164,6 +1330,20 @@ def _member_functions(member: object) -> list[types.FunctionType]:
     return [member] if isinstance(member, types.FunctionType) else []
 
 
+# Attributes the compiler adds to a class body: they hold the class namespace or line
+# numbers, so they would move the digest with the class's position and the Python minor
+_COMPILER_GENERATED = frozenset(
+    {
+        "__annotate__",
+        "__annotate_func__",
+        "__annotations_cache__",
+        "__classdictcell__",
+        "__firstlineno__",
+        "__static_attributes__",
+    }
+)
+
+
 def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:
     """The functions defined in the body of `klass`, by attribute name, leaving out
     those generated by decorators such as `attrs.define` or `dataclasses.dataclass`"""
@@ -1174,6 +1354,7 @@ def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:
     return [
         (name, func)
         for name, member in sorted(vars(klass).items())
+        if name not in _COMPILER_GENERATED
         for func in _member_functions(member)
         if (
             func.__code__.co_filename == source_file
@@ -1292,9 +1473,19 @@ class _CodeWalk:
         self.dynamic = False
         self.modules: set[str] = set()
         self.found: set[str] = set()  # the modules of the reference being serialized
+        # the references to library code with an identity, and those of the reference
+        # being serialized
+        self.refs: set[str] = set()
+        self.found_refs: set[str] = set()
 
-    def library(self, module: str, ref: str) -> bytes:
+    def library(self, module: str, kind: str, name: str) -> bytes:
+        """The reference ``{kind}:{owner}:{name}`` to library code of `module`, where
+        the owner is `library_owner` (RFC 0004 section 4.1)"""
         self.found.add(module)
+        owner = library_owner(module)
+        ref = f"{kind}:{owner}{name}"
+        if owner:
+            self.found_refs.add(ref)
         return ref.encode()
 
     def in_scope(self, obj: ty.Any) -> bool:
@@ -1324,7 +1515,9 @@ class _CodeWalk:
                 continue  # a builtin, or not defined
             value, path = namespace[chain[0]], chain[0]
             for attr in chain[1:]:
-                if not isinstance(value, types.ModuleType) or is_library(value):
+                if not isinstance(value, types.ModuleType) or (
+                    is_library(value) and not _is_unowned_python(value.__name__)
+                ):
                     break
                 try:
                     value = getattr(value, attr)
@@ -1345,6 +1538,18 @@ class _CodeWalk:
             yield f"base:{i}", base
         for name, func in _class_members(klass):
             yield from self.function_references(func, prefix=f"{name}.")
+        try:
+            annotations = inspect.get_annotations(klass)
+        except Exception:  # an annotation that cannot be evaluated is in the source
+            annotations = {}
+        for name, annotation in sorted(annotations.items()):
+            try:
+                yield f"annotation:{name}", type_digest(annotation, self.cache)
+            except TypeError as e:
+                add_exc_note(
+                    e, f"in the annotation of {name!r} of class {klass.__qualname__!r}"
+                )
+                raise
 
     def reference(self, name: str, value: ty.Any, reader: ty.Any) -> bytes:
         try:
@@ -1364,8 +1569,8 @@ class _CodeWalk:
         if value is _EMPTY_CELL:
             return b"<empty>"
         if isinstance(value, types.ModuleType):
-            if is_library(value):
-                self.found.add(value.__name__)
+            if is_library(value) and not _is_unowned_python(value.__name__):
+                return self.library(value.__name__, "module", value.__name__)
             return f"module:{value.__name__}".encode()
         if isinstance(value, logging.Logger):
             return f"logger:{value.name}".encode()
@@ -1379,13 +1584,13 @@ class _CodeWalk:
                 and is_library(executor)
                 and (owner := _owner_name(executor, holder=value))
             ):
-                return self.library(executor.__module__, f"lib-task:{owner}")
+                return self.library(executor.__module__, "lib-task", owner)
             self.dynamic = True
             return b"task:" + bytes(hash_single(value, self.cache))
         if isinstance(value, (types.FunctionType, type)):
-            library = is_library(value)
+            library = is_library(value) and not _is_unowned_python(value.__module__)
             if library and (owner := _owner_name(value)):
-                ref = self.library(value.__module__, f"lib:{owner}")
+                ref = self.library(value.__module__, "lib", owner)
                 wrapped = vars(value).get("__wrapped__")
                 if isinstance(value, types.FunctionType) and wrapped is not None:
                     self.dynamic = True
@@ -1408,7 +1613,7 @@ class _CodeWalk:
             owner = value.__self__
             if owner is None or isinstance(owner, types.ModuleType):
                 module = getattr(value, "__module__", None) or owner.__name__
-                return self.library(module, f"lib:{module}.{value.__qualname__}")
+                return self.library(module, "lib", f"{module}.{value.__qualname__}")
             self.dynamic = True
             return (
                 f"method:({value.__name__},".encode()
@@ -1427,7 +1632,8 @@ class _CodeWalk:
         ):
             return self.library(
                 value.__objclass__.__module__,
-                f"lib:{_qualified_name(value.__objclass__)}.{value.__name__}",
+                "lib",
+                f"{_qualified_name(value.__objclass__)}.{value.__name__}",
             )
         if isinstance(value, functools.partial):
             self.dynamic = True
@@ -1444,7 +1650,7 @@ class _CodeWalk:
                 + b"))"
             )
         if (owner := _library_instance_name(value, name)) is not None:
-            return self.library(owner[0], f"lib:{owner[0]}.{owner[1]}")
+            return self.library(owner[0], "lib", f"{owner[0]}.{owner[1]}")
         tp = type(value)
         wrapped = getattr(value, "__dict__", {}).get("__wrapped__")
         self.dynamic = True
@@ -1489,6 +1695,7 @@ class _CodeWalk:
             with _walk_memo_lock:
                 _walk_memo.setdefault(self.root, {})[key] = memo
         self.cache.modules.update(self.modules)
+        self.cache.refs.update(self.refs)
         digest = self.cache.digests[id(self.root)] = sha256(
             b"".join(len(code).to_bytes(8, "big") + code for code, _ in entries)
         ).hexdigest()
@@ -1509,12 +1716,12 @@ class _CodeWalk:
 
     def walk(self, key: tuple) -> tuple[list[tuple[bytes, bytes]], "_WalkMemo"]:
         memo = _WalkMemo(self.root, key)
-        self.modules = set()
+        self.modules, self.refs = set(), set()
         entries = []
         n = 0
         while n < len(self.definitions):
             obj = self.definitions[n]
-            if is_library(obj):
+            if is_library(obj) and not _is_unowned_python(obj.__module__):
                 memo.modules.add(obj.__module__)
             if isinstance(obj, type):
                 code = _class_code(obj, self.cache)
@@ -1532,11 +1739,12 @@ class _CodeWalk:
                 if name == "code" or name.startswith("member:"):
                     checked.append((name, memo.ref(value)))
                     continue
-                self.dynamic, self.found = False, set()
+                self.dynamic, self.found, self.found_refs = False, set(), set()
                 ref = self.reference(name, value, obj)
                 refs.append(name.encode() + b"=" + ref)
                 held = None if self.dynamic else memo.ref(value)
                 (self.modules if held is None else memo.modules).update(self.found)
+                (self.refs if held is None else memo.refs).update(self.found_refs)
                 checked.append((name, held))
                 statics.append(None if held is None else ref)
             memo.checked.append(checked)
@@ -1548,6 +1756,7 @@ class _CodeWalk:
         if None in memo.definitions:
             memo.definitions = []  # cannot be checked, so never replayed
         self.modules.update(memo.modules)
+        self.refs.update(memo.refs)
         return entries, memo
 
     def replay(self, memo: "_WalkMemo") -> list[tuple[bytes, bytes]] | None:
@@ -1559,7 +1768,7 @@ class _CodeWalk:
             return None
         self.definitions = definitions
         self.numbers = {id(d): i for i, d in enumerate(definitions)}
-        self.modules = set(memo.modules)
+        self.modules, self.refs = set(memo.modules), set(memo.refs)
         entries = []
         for obj, checked, code, statics in zip(
             definitions, memo.checked, memo.codes, memo.parts
@@ -1573,9 +1782,10 @@ class _CodeWalk:
             parts = []
             for (name, value), static in zip(_references(current), statics):
                 if static is None:
-                    self.found = set()
+                    self.found, self.found_refs = set(), set()
                     static = self.reference(name, value, obj)
                     self.modules.update(self.found)
+                    self.refs.update(self.found_refs)
                 parts.append(name.encode() + b"=" + static)
             entries.append((code, b",".join(parts)))
         if len(self.definitions) != len(definitions):
@@ -1615,6 +1825,7 @@ class _WalkMemo:
         self.parts: list[list[bytes | None]] = []
         self.files: dict[str, int | None] = {}
         self.modules: set[str] = set()
+        self.refs: set[str] = set()
         root_ref = weakref.ref(root)
         memo_ref = weakref.ref(self)
 
@@ -1719,6 +1930,49 @@ def code_digest(obj: ty.Any, code_hash: str | None = None) -> str | None:
     for _ in _bytes_repr_code(obj, cache, defaults=False):
         pass
     return cache.digests.get(id(obj))
+
+
+def is_user_class(klass: type) -> bool:
+    """Whether `klass` is user code, which is identified by its code (see
+    `class_digest`): neither standard library nor library code (see `is_library`)"""
+    return not in_stdlib(klass) and not is_library(klass)
+
+
+def _class_digest(klass: type, cache: Cache) -> str:
+    """`class_digest` with the memo of `cache`"""
+    done = cache.classes.get(klass)
+    if done is not None:
+        return done
+    if klass in cache._classes_open:
+        # a method of the class reads an instance of it: the class is being walked
+        return f"class@1:recursive:{_qualified_name(klass)}"
+    cache._classes_open.add(klass)
+    try:
+        h = sha256()
+        for chunk in _CodeWalk(klass, cache, defaults=True):
+            h.update(chunk)
+    finally:
+        cache._classes_open.discard(klass)
+    digest = cache.classes[klass] = f"class@1:{h.hexdigest()}"
+    return digest
+
+
+def class_digest(klass: type, code_hash: str | None = None) -> str:
+    """``class@1:<sha256>``, the digest of a user class (RFC 0004 section 4.2): its
+    code, which is the ``ast@1`` encoding of its whole definition, every method
+    included (see `_class_code`), followed by the references the walk yields for it:
+    its bases, walked as classes in turn, and the closures, globals and defaults of its
+    methods, walked as functions, so a base class's method or a module-level helper a
+    method calls is in it. `code_hash` is the tier of the walk (`code_hash_default`
+    when None)."""
+    return _class_digest(klass, Cache(code_hash=code_hash))
+
+
+def type_digest(tp: ty.Any, cache: Cache | None = None) -> str:
+    """``type@1:<sha256>``, the digest of a type (RFC 0004 section 5.1). It is the same
+    on every Python minor pydra supports: a union is the sorted, de-duplicated digests
+    of its flattened members, whatever its spelling, and ``Literal`` is order-free."""
+    return "type@1:" + _type_token(tp, cache or Cache()).decode()
 
 
 def library_modules(func: types.FunctionType) -> frozenset[str]:
