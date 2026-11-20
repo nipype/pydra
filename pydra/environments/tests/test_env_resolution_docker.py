@@ -4,6 +4,7 @@ from pydra.compose import shell
 from pydra.engine.job import Job
 from pydra.engine.submitter import Submitter
 from pydra.environments import base, docker
+from pydra.engine.tests.utils import need_docker
 from pydra.environments.base import ImageResolutionError, ResolvedRef
 
 D1 = "sha256:" + "1" * 64
@@ -195,6 +196,7 @@ def test_execute_runs_local_image_by_id(monkeypatch, tmp_path):
     assert ID in commands[0] and "tool:latest" not in commands[0]
 
 
+@need_docker
 @pytest.mark.docker
 def test_docker_real_daemon(tmp_path):
     env = docker.Docker(image="busybox")
