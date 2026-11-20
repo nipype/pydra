@@ -1522,6 +1522,19 @@ class PoolRoot:
                 found[m.group(2)] = max(found.get(m.group(2), 0), int(m.group(1)))
         return found
 
+    def release_holds(self, queue: str, label: str | None = None) -> int:
+        """Lift the holds of ``queue`` (of the residency ``label`` only, when given), whatever their
+        epoch; return how many were lifted (``pydracli pool release-hold``)."""
+        q = self.queue(queue)
+        lifted = 0
+        for name in _names(q.dir):
+            m = _HELD.fullmatch(name)
+            if m and (label is None or m.group(2) == label):
+                with contextlib.suppress(FileNotFoundError):
+                    q.dir.unlink(name)
+                    lifted += 1
+        return lifted
+
     def _current(self, epoch: int | None) -> int:
         if epoch is not None:
             return epoch
