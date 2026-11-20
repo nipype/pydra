@@ -295,12 +295,13 @@ def pool_release_hold(root, queue, residency):
     help="Seconds a payload no unsettled ticket names must have aged before it is removed.",
 )
 def pool_collect(root, payload_age):
-    """Remove settled jobs' older follow generations, payloads no unsettled ticket names, and
-    ended coordinators' directories from the pool at ROOT."""
+    """Remove settled jobs' older follow generations, payloads no unsettled ticket names, tickets
+    resolved more than --payload-age seconds ago (with their marks and outcomes), and ended
+    coordinators' directories from the pool at ROOT."""
     from pydra.workers.pool.pool import collect_pool
 
     report = collect_pool(root, payload_age=payload_age)
     click.echo(
-        f"{report['files']} file(s) and {len(report['coordinators'])} ended "
-        "coordinator(s) removed"
+        f"{report['files']} file(s), {report['tickets']} settled ticket(s) and "
+        f"{len(report['coordinators'])} ended coordinator(s) removed"
     )

@@ -61,6 +61,23 @@ def Gate(where: str) -> str:
     return "later"
 
 
+@python.define
+def Fail(x: int) -> int:
+    raise RuntimeError("this task always fails")
+
+
+@workflow.define
+def Fails(xs: list) -> list:
+    return workflow.add(Fail().split(x=xs), name="F").out
+
+
+@workflow.define(outputs=["a", "b"])
+def TwoNodes(xs: list):
+    a = workflow.add(Echo().split(x=xs), name="A")
+    b = workflow.add(Mark(where="unused").split(x=xs), name="B")
+    return a.out, b.out
+
+
 @workflow.define
 def Many(xs: list) -> list:
     return workflow.add(Echo().split(x=xs), name="E").out
@@ -197,10 +214,12 @@ def _submitter(tmp_path):
     return Submitter(cache_root=tmp_path / "store", worker="debug")
 
 
-def _drive(sub, task, executor, **kwargs):
+def _drive(sub, task, executor, check=True, rerun=False, **kwargs):
     """Run ``task``'s nodes on ``executor`` through the asynchronous driver, as an external driver
     does, and raise as `Submitter` does when jobs did not run."""
-    runner = GraphRunner(task, sub.store, on_error="raise_at_end", submitter=sub)
+    runner = GraphRunner(
+        task, sub.store, on_error="raise_at_end", submitter=sub, rerun=rerun
+    )
     limits = []
     ready = runner.ready
 
@@ -232,6 +251,8 @@ def _drive(sub, task, executor, **kwargs):
         )
     )
     runner.limits, runner.reported = limits, reported
+    if not check:
+        return runner
     if runner.errors:
         raise AssertionError("\n".join(runner.errors))
     if runner.not_run:
@@ -478,16 +499,17 @@ def _digest(ticket: dict) -> str:
 # -- recovery ------------------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not POSIX, reason="stops the worker with SIGSTOP")
-def test_job_outlives_stale_after(tmp_path, tasks, pools, processes):
-    """A job runs past ``stale_after`` while its worker and the worker's beater are stopped: a second
-    worker takes the stale claim over under a new attempt, in its own work directory, and publishes;
-    once resumed, the loser's ``publish`` is refused by its failed proof, so the store holds one
-    entry and the run reports the taker's result.
+def _children(pid: int) -> list[int]:
+    out = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True)
+    return [int(p) for p in out.stdout.split()]
 
-    The worker is stopped with its beater: the worker's own proof of its claim, every renewal
-    interval while a call runs, refreshes the claim as a beat does, so a claim whose beater alone is
-    stopped does not go stale while its worker's loop runs.
+
+@pytest.mark.skipif(not POSIX, reason="stops the beater with SIGSTOP")
+def test_job_outlives_stale_after(tmp_path, tasks, pools, processes):
+    """A job runs past ``stale_after`` while its worker's beater is stopped: the worker finds its
+    beater dead and stops proving, so the claim goes stale; a second worker takes it over under a new
+    attempt, in its own work directory, and publishes; the loser's ``publish`` is refused by its
+    failed proof, so the store holds one entry and the run reports the taker's result.
     """
     import threading
 
@@ -513,20 +535,23 @@ def test_job_outlives_stale_after(tmp_path, tasks, pools, processes):
     try:
         _wait(lambda: (gate / "first").exists(), "the first execution to start")
         (loser,) = pool.substrate.live()
-        os.killpg(loser.process.pid, signal.SIGSTOP)  # the worker and its beater
+        beaters = _children(loser.process.pid)
+        assert beaters, "the worker has a beater"
+        for pid in beaters:
+            os.kill(pid, signal.SIGSTOP)
         _hand_worker(pool.root, _class(), processes, tmp_path, settings=settings)
         _wait(lambda: any(losses.glob("*/*")), "the takeover of the stale claim")
     finally:
         (gate / "go").touch()
-        if pool.substrate.handles:
-            os.killpg(pool.substrate.handles[0].process.pid, signal.SIGCONT)
         driver.join(BOUND)
     assert not driver.is_alive(), "the run did not end"
     if "error" in box:
         raise box["error"]
     runner = box["runner"]
     assert runner.done and not runner.failed
-    assert loser.process.poll() is not None  # stopped by the coordinator's close
+    assert (
+        loser.process.poll() is not None
+    )  # recycled, or stopped by the coordinator's close
 
     (ticket,) = _tickets(pool.root)
     entry = ticket["jobs"][0]
@@ -591,25 +616,27 @@ def test_follower_cost_10k_jobs(tmp_path, tasks, pools, monkeypatch):
     jobs = runner.ready().dispatch
     reported = []
     pool.bind(lambda j, outcome: reported.append((j, outcome)))
-    pool._place_and_queue(jobs, handle=None)
+    pool._queue_jobs(jobs, handle=None)
     pool._write()
     (ticket,) = _tickets(pool.root)
     digest = _digest(ticket)
 
-    listed = []
+    listed, entries = [], []
     names = storage._names
 
     def counting(d):
         listed.append(d)
-        return names(d)
+        found = names(d)
+        entries.append(len(found))
+        return found
 
     monkeypatch.setattr(storage, "_names", counting)
     for _ in range(3):
         listed.clear()
+        entries.clear()
         pool._poll()
-        assert (
-            len(listed) == 2 + 1
-        )  # settled/ of each queue, and coordinator/ for the fence
+        # settled/ of each queue, and coordinator/ for the fence; nothing is settled yet
+        assert len(listed) == 2 + 1 and sum(entries) == 1
     claim = pool.pool.take("cpu", digest)
     entry = [e for e in claim.ticket.jobs if e.checksum == jobs[0].checksum][0]
     claim.outcome(
@@ -982,3 +1009,408 @@ def test_pydracli_pool_status_release_hold_collect(tmp_path, tasks, pools):
     assert (
         len(list((first.root / "payloads").iterdir())) == 1
     )  # its ticket is unsettled
+
+
+# -- fix round 1 ---------------------------------------------------------------------------------
+
+
+class NeverStarts:
+    """A substrate whose workers never become live: every start is a failed start."""
+
+    def __init__(self):
+        self.handles = []
+        self.starts = 0
+
+    def start(self, cls, n):
+        from pydra.workers.pool.substrate import WorkerHandle
+
+        self.starts += 1
+        return [WorkerHandle(token=f"{self.starts:032x}", worker_class=cls.name)]
+
+    def live(self):
+        return []
+
+    def stop(self, workers):
+        pass
+
+    def can_start(self, cls):
+        return True
+
+
+def _round(sub, tasks, xs, task=None, **kwargs):
+    task = task or tasks.Many(xs=xs)
+    runner = GraphRunner(
+        task, sub.store, on_error="raise_at_end", submitter=sub, **kwargs
+    )
+    return runner.ready().dispatch
+
+
+def _settle_ticket(root: Path, queue: str, digest: str, kind="failed", **fields):
+    """Write ``kind`` for every job of a ticket under its current attempt, as a worker would."""
+    with _raw(root) as raw:
+        claim = raw.take(queue, digest)
+        assert claim is not None
+        for entry in claim.ticket.jobs:
+            current = claim.current(entry)
+            if current is not None:
+                claim.outcome(entry, current[1]["attempt"], kind, **fields)
+        claim.release()
+
+
+NOT_CONTENT = {"kind": "infrastructure", "type": "Probe", "message": "a probe"}
+
+
+def test_job_placed_after_its_class_broke_is_held(tmp_path, tasks, pools):
+    """Jobs submitted to a class after it broke are reported ``NotRun(held=True)`` at once, naming
+    the broken class; none is written or left unreported."""
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=NeverStarts(),
+        settings=_settings(start_failures=2),
+    )
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    pool.submit(_round(sub, tasks, [1]))
+    _wait(lambda: len(reported) == 1, "the first job held when the class broke")
+    second = _round(sub, tasks, [2])
+    pool.submit(second)
+    assert len(reported) == 2  # held by submit itself, before it returns
+    for _, outcome in reported:
+        assert outcome.held and "worker class 'cpu' is broken" in outcome.reason
+    assert reported[1][0] is second[0]
+    assert len(_tickets(pool.root)) == 1  # only the first job's ticket was written
+
+
+def test_submit_and_cancel_stay_responsive_while_a_result_read_blocks(
+    tmp_path, tasks, pools, monkeypatch
+):
+    """While the follower is blocked reading a result, ``submit`` and ``cancel`` return: the pool's
+    lock is not held across a result read."""
+    import threading
+
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub, substrate=ExternalSubstrate())
+    entered, release = threading.Event(), threading.Event()
+
+    def blocking(job, attempt, settled):
+        entered.set()
+        release.wait()  # set by the test's finally, pass or fail
+        return NotRun("read", held=False)
+
+    monkeypatch.setattr(pool, "_result", blocking)
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    (first,) = _round(sub, tasks, [1])
+    pool.submit([first])
+    _wait(lambda: len(_tickets(pool.root)) == 1, "the first ticket")
+    _settle_ticket(pool.root, "cpu", _digest(_tickets(pool.root)[0]), "done")
+    try:
+        assert entered.wait(BOUND), "the follower did not read the result"
+        returned = threading.Event()
+
+        def submit_and_cancel():
+            handle = pool.submit(_round(sub, tasks, [2]))
+            pool.cancel(handle)
+            returned.set()
+
+        threading.Thread(target=submit_and_cancel, daemon=True).start()
+        assert returned.wait(
+            BOUND / 4
+        ), "submit or cancel blocked behind the result read"
+        assert not release.is_set()
+        assert [o.reason for _, o in reported] == ["cancelled"]
+    finally:
+        release.set()
+    _wait(lambda: len(reported) == 2, "the blocked read's report")
+    assert reported[1][0] is first
+
+
+def test_max_queued_jobs_caps_the_tickets_written(tmp_path, tasks, pools):
+    """With ``max_queued_jobs=2`` five one-job tickets are written two at a time, as tickets
+    settle."""
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        [_class(quantum_jobs=1)],
+        substrate=ExternalSubstrate(),
+        settings=_settings(max_queued_jobs=2),
+    )
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    pool._queue_jobs(_round(sub, tasks, list(range(5))), handle=None)
+    pool._poll()
+    assert len(_tickets(pool.root)) == 2
+    pool._poll()
+    assert len(_tickets(pool.root)) == 2  # nothing settled: no room
+    for ticket in _tickets(pool.root):
+        _settle_ticket(pool.root, "cpu", _digest(ticket), fault=NOT_CONTENT)
+    pool._poll()  # reads the two outcomes
+    pool._poll()  # writes two more
+    assert len(reported) == 2 and len(_tickets(pool.root)) == 4
+
+
+def test_listing_behind_is_read_at_the_next_poll(tmp_path, tasks, pools, monkeypatch):
+    """A settled mark ahead of the outcomes listed (an attribute cache) does not stall the poll: the
+    follower does not wait for the listing (ruling R2), and reads the ticket again at a later poll.
+    """
+    from pydra.workers.pool import storage
+    from pydra.workers.pool.storage import queue_label
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub, substrate=ExternalSubstrate())
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    pool._queue_jobs(_round(sub, tasks, [1]), handle=None)
+    pool._poll()
+    digest = _digest(_tickets(pool.root)[0])
+    settled = pool.root / "queues" / queue_label("cpu") / "settled"
+    (settled / f"{digest}-1").touch()  # a mark whose outcome is not listed yet
+
+    def no_waiting(seconds):
+        raise AssertionError("the follower waited for a listing")
+
+    monkeypatch.setattr(storage.time, "sleep", no_waiting)
+    pool._poll()
+    assert reported == []
+    monkeypatch.undo()
+    (settled / f"{digest}-1").unlink()
+    _settle_ticket(pool.root, "cpu", digest, fault=NOT_CONTENT)
+    pool._poll()
+    assert len(reported) == 1
+
+
+def test_failed_starts_back_off(tmp_path, tasks, pools):
+    """After a failed start the class waits ``poll_s`` before the next, doubling, on the storage-free
+    clock the follower passes."""
+    sub = _submitter(tmp_path)
+    substrate = NeverStarts()
+    pool = _warm(tmp_path, pools, sub, substrate=substrate)
+    pool.bind(lambda job, outcome: None)
+    pool._queue_jobs(_round(sub, tasks, [1]), handle=None)
+    pool._write()
+    poll = pool.settings.poll_s
+    starts = []
+    for now in (100.0, 100.0, 1.5, 1.5, 3.0, 4.0):
+        pool._scale(now if now == 100.0 else 100.0 + now * poll)
+        starts.append(substrate.starts)
+    # a start, its failure; after poll_s the next, its failure; then 2 x poll_s
+    assert starts == [1, 1, 2, 2, 2, 3]
+
+
+def test_served_result_read_without_the_visibility_wait(
+    tmp_path, tasks, pools, monkeypatch
+):
+    """A ``done`` a taker settled from the store (``served``) is read without the store's visibility
+    retry, which only a run's own ``_committed.json`` needs; a plain ``done`` is read settled.
+    """
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path, pools, sub, [_class(quantum_jobs=1)], substrate=ExternalSubstrate()
+    )
+    reads = []
+
+    def recording(job, attempt, settled):
+        reads.append((job.task.x, settled))
+        return NotRun("read", held=False)
+
+    monkeypatch.setattr(pool, "_result", recording)
+    pool.bind(lambda job, outcome: None)
+    pool._queue_jobs(_round(sub, tasks, [1, 2]), handle=None)
+    pool._poll()
+    one, two = sorted(_tickets(pool.root), key=lambda t: t["jobs"][0]["checksum"])
+    _settle_ticket(pool.root, "cpu", _digest(one), "done", served=True)
+    _settle_ticket(pool.root, "cpu", _digest(two), "done")
+    pool._poll()
+    assert sorted(settled for _, settled in reads) == [False, True]
+
+
+def test_content_fault_reported_as_the_jobs_errored_result(tmp_path, tasks, pools):
+    """A task that raises is ``failed`` with a content fault; the pool reports the job's own errored
+    result (its ``_error.json``), not a bare ``Failed``."""
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub)
+    runner = _drive(sub, tasks.Fails(xs=[1]), pool, check=False)
+    ((_, outcome),) = runner.reported
+    assert getattr(outcome, "errored", False) is True
+    assert runner.errors and "always fails" in "\n".join(runner.errors)
+
+
+def test_tickets_are_cut_at_a_node_change(tmp_path, tasks, pools):
+    """Two nodes of one round on one queue become two tickets, one per node."""
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub, substrate=ExternalSubstrate())
+    pool.bind(lambda job, outcome: None)
+    jobs = _round(sub, tasks, None, task=tasks.TwoNodes(xs=[1, 2]))
+    assert len(jobs) == 4
+    pool._queue_jobs(jobs, handle=None)
+    pool._poll()
+    tickets = _tickets(pool.root)
+    assert sorted((t["node"], len(t["jobs"])) for t in tickets) == [("A", 2), ("B", 2)]
+
+
+def test_follower_follows_a_moved_job(tmp_path, tasks, pools):
+    """A job moved to another ticket while it is followed (a split, a move up the ladder) is followed
+    into that ticket by its newest generation, and reported from there."""
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub, substrate=ExternalSubstrate())
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    pool._queue_jobs(_round(sub, tasks, [1]), handle=None)
+    pool._poll()
+    (old,) = _tickets(pool.root)
+    with _raw(pool.root) as raw:
+        claim = raw.take("cpu", _digest(old))
+        (new,) = claim.move([list(claim.ticket.jobs)], "cpu", cause="replaced")
+        claim.release()
+    pool._poll()  # reads the withdrawal and follows the job into the new ticket
+    assert reported == []
+    _settle_ticket(pool.root, "cpu", new, fault=NOT_CONTENT)
+    pool._poll()
+    ((_, outcome),) = reported
+    assert outcome.error.fault["type"] == "Probe"
+
+
+def test_judges_followed_claims_only_when_idle(tmp_path, tasks, pools):
+    """A followed ticket of a class this coordinator does not start is judged (its claim tried) only
+    once its settled count has not moved for ``stale_after``, at most once per ``stale_after``; while
+    the claim is live it is followed, and once it can be taken the job moves to a class this
+    coordinator starts."""
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    first = _warm(
+        tmp_path, pools, sub, [_class("cpu-a")], substrate=ExternalSubstrate()
+    )
+    first.bind(lambda job, outcome: None)
+    jobs = _round(sub, tasks, [1])
+    first.submit(jobs)
+    _wait(lambda: len(_tickets(first.root, "cpu-a")) == 1, "the cpu-a ticket")
+    first.close()
+    digest = _digest(_tickets(first.root, "cpu-a")[0])
+    raw = _raw(first.root)
+    holder = raw.take("cpu-a", digest)  # a live claim, beaten by its thread
+    try:
+        second = _warm(tmp_path, pools, sub, [_class("cpu-b")], substrate=Recording())
+        second.bind(lambda job, outcome: None)
+        takes = []
+        take = second.pool.take
+
+        def counting(queue, digest, **kwargs):
+            takes.append(queue)
+            return take(queue, digest, **kwargs)
+
+        second.pool.take = counting
+        second._queue_jobs(_round(sub, tasks, [1]), handle=None)
+        second._poll(now=0.0)  # tries the claim once at resume, and follows
+        (followed,) = second._tickets.values()
+        assert followed.foreign and len(takes) == 1
+        stale = second.settings.lease.stale_after
+        followed.moved, followed.judged = 100.0, 0.0
+        counts = []
+        for now in (101.0, 100.0 + stale, 101.0 + stale):
+            second._poll(now=now)
+            counts.append(len(takes))
+        assert counts == [1, 2, 2]  # idle for stale_after, then not again within it
+    finally:
+        holder.release()
+        raw.close()
+    second._poll(now=100.0 + 2 * stale)
+    assert len(takes) == 3
+    (moved,) = _tickets(second.root, "cpu-b")
+    gens = _generations(second.root, sub, jobs[0])
+    assert [g["cause"] for g in gens] == ["put", "replaced"]
+    assert gens[1]["ticket"] == _digest(moved)
+
+
+@pytest.mark.skipif(not POSIX, reason="the worker is started with a new session")
+def test_claimed_ticket_not_withdrawn(tmp_path, tasks, pools, processes):
+    """A ticket of a class the resumed coordinator does not start, under a live claim (its worker is
+    running the job), is followed: it is not withdrawn or moved, the job runs once in its holder's
+    work directory, and the result is read from there."""
+    from pydra.workers.pool.substrate import ExternalSubstrate, LocalSubstrate
+
+    gate = tmp_path / "gate"
+    gate.mkdir()
+    sub = _submitter(tmp_path)
+    first = _warm(
+        tmp_path, pools, sub, [_class("cpu-a")], substrate=ExternalSubstrate()
+    )
+    first.bind(lambda job, outcome: None)
+    first.submit(_round(sub, tasks, None, task=tasks.OneGate(where=str(gate))))
+    _wait(lambda: len(_tickets(first.root, "cpu-a")) == 1, "the cpu-a ticket")
+    first.close()
+    _hand_worker(first.root, _class("cpu-a"), processes, tmp_path)
+    _wait(lambda: (gate / "first").exists(), "the holder to start the job")
+    second = _warm(tmp_path, pools, sub, [_class("cpu-b")], substrate=LocalSubstrate())
+    import threading
+
+    box = {}
+    driver = threading.Thread(
+        target=lambda: box.update(
+            runner=_drive(sub, tasks.OneGate(where=str(gate)), second)
+        )
+    )
+    driver.start()
+    try:
+        _wait(lambda: second._tickets, "the resumed coordinator to follow the ticket")
+    finally:
+        (gate / "go").touch()
+        driver.join(BOUND)
+    runner = box["runner"]
+    ((_, result),) = runner.reported
+    assert result.outputs.out == "first"  # the holder's run, not a second one
+    assert _tickets(second.root, "cpu-b") == [] and second.substrate.handles == []
+    (ticket,) = _tickets(second.root, "cpu-a")
+    with _raw(second.root) as raw:
+        outcomes = raw.outcomes("cpu-a", _digest(ticket))
+        entry = ticket["jobs"][0]
+        gens = raw.generations(entry["checksum"], entry["fingerprint"])
+    assert [o["outcome"] for o in outcomes.values()] == ["done"]
+    assert [g["cause"] for _, g in gens] == ["put"]
+
+
+def test_rerun_after_collect_fresh_attempt(tmp_path, tasks, pools):
+    """A job run, its ticket collected (``pydracli pool collect``), then run again: the rerun gets the
+    next generation and a fresh attempt, never the first one's, so the two runs never share a work
+    directory."""
+    from pydra.workers.pool.pool import collect_pool
+
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    sub = _submitter(tmp_path)
+    first = _drive(
+        sub, tasks.Marks(xs=[1], where=str(marks)), _warm(tmp_path, pools, sub)
+    )
+    assert first.done
+    (ticket,) = _tickets(tmp_path / "pool")
+    report = collect_pool(tmp_path / "pool", payload_age=0)
+    assert report["tickets"] == 1 and _tickets(tmp_path / "pool") == []
+    again = _drive(
+        sub,
+        tasks.Marks(xs=[1], where=str(marks)),
+        _warm(tmp_path, pools, sub),
+        rerun=True,
+    )
+    assert again.done and len(list(marks.iterdir())) == 2  # ran twice
+    entry = ticket["jobs"][0]
+    with _raw(tmp_path / "pool") as raw:
+        gens = [g for _, g in raw.generations(entry["checksum"], entry["fingerprint"])]
+    assert [g["cause"] for g in gens][-1] == "put"
+    attempts = {g["attempt"] for g in gens}
+    assert len(attempts) == len(gens) and gens[-1]["attempt"].endswith(".1")

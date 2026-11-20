@@ -1056,3 +1056,54 @@ def test_claim_stats_flat_on_a_large_live_segment(tmp_path, monkeypatch):
         PoolRoot, "_target", lambda self, *a: walked.append(a) or real_target(self, *a)
     )
     assert pool.claim("cpu", epoch=1) is None and walked == []
+
+
+def test_half_done_move_repaired_after_collect(tmp_path, monkeypatch):
+    """A move dies after step 3, the job finishes in its new ticket, and ``collect`` removes the
+    generation that named the old ticket; the next claimant of the old ticket still withdraws the job
+    there under the ticket's own attempt (ruling R1), so the old ticket resolves and is never claimable
+    again."""
+    pool = _pool(tmp_path)
+    old = pool.put("cpu", _ticket("a"))
+    claim = pool.claim("cpu", beat="external")
+    (job,) = claim.ticket.jobs
+
+    def die(self, at):
+        if at == 3:
+            raise KeyboardInterrupt
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Claim, "_checkpoint", die)
+        with pytest.raises(KeyboardInterrupt):
+            claim.move([[job]], "gpu", cause="replaced")
+    _finish(_pool(tmp_path).claim("gpu"))
+    assert _pool(tmp_path).collect(payload_age=0) >= 1
+    _age(_claim_dir(pool, "cpu", old))
+    assert _pool(tmp_path).claim("cpu") is None  # repaired and resolved, not handed out
+    (withdrawn,) = pool.outcomes("cpu", old).values()
+    assert (withdrawn["outcome"], withdrawn["reason"]) == ("withdrawn", "replaced")
+    assert withdrawn["attempt"] == job.attempt
+    assert _pool(tmp_path).claim("cpu") is None
+
+
+def test_settled_listing_bounded_and_collected(tmp_path):
+    """``collect_settled`` removes resolved tickets with every settled mark, outcome and slotted entry
+    of theirs, so the ``settled/`` listing the follower reads each poll holds only the marks of live
+    tickets, however many outcomes the queue has had."""
+    pool = _pool(tmp_path)
+    digests = [pool.put("cpu", _ticket(f"t{i}", jobs=3)) for i in range(4)]
+    while (claim := pool.claim("cpu")) is not None:
+        _finish(claim)
+    q = pool.path / "queues" / queue_label("cpu")
+    assert len(list((q / "settled").iterdir())) == 4 * 3  # a mark per outcome
+    assert pool.settled("cpu") == {d: 3 for d in digests}
+    live = pool.put("cpu", _ticket("live", jobs=2))
+    assert pool.collect_settled(age=0) == 4
+    assert list((q / "settled").iterdir()) == []
+    assert [p.name for p in (q / "tickets").iterdir()] == [f"{live}.json"]
+    assert list((q / "outcome").iterdir()) == []
+    assert [p.name for p in (q / "slotted").iterdir()] == [live]
+    claim = _pool(tmp_path).claim("cpu")
+    assert claim is not None and claim.digest == live  # the index still serves live tickets
+    claim.release()
+    assert pool.collect_settled(age=3600) == 0

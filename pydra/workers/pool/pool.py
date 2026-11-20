@@ -42,6 +42,7 @@ import threading
 import time
 import typing as ty
 import uuid
+import warnings
 from pathlib import Path
 
 import attrs
@@ -243,6 +244,22 @@ class WarmPool:
         probe: bool = True,
     ):
         self.batches = True
+        inert = [
+            name
+            for name, given in (
+                ("faults", faults != FaultBudgets()),
+                ("classify", classify is not default_classifier),
+                ("calibration", calibration is not None),
+            )
+            if given
+        ]
+        if inert:
+            warnings.warn(
+                f"WarmPool does not pass {', '.join(inert)} to its workers yet: workers use the "
+                "default fault budgets and classifier (RFC 0005 W7) and record no calibration (W9)",
+                UserWarning,
+                stacklevel=2,
+            )
         self.root = Path(root).absolute()
         self.classes = tuple(classes)
         names = [c.name for c in self.classes]
@@ -264,6 +281,7 @@ class WarmPool:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._waiting: dict[str, collections.deque[_Job]] = {}
+        self._unchecked: collections.deque[_Job] = collections.deque()
         self._tickets: dict[tuple[str, str], _Ticket] = {}
         self._queues: dict[str, set[tuple[str, str]]] = {}
         self._open: dict["Job", _Job] = {}
@@ -378,7 +396,7 @@ class WarmPool:
             if self._fenced is not None:
                 reports = [(j, None, NotRun(self._fenced, held=True)) for j in jobs]
             else:
-                reports = self._place_and_queue(jobs, handle)
+                reports = self._queue_jobs(jobs, handle)
         self._deliver(reports, handle)
         self._ensure_thread()
         self._wake.set()
@@ -393,9 +411,7 @@ class WarmPool:
             cancelled = [self._open[j] for j in handle.jobs if j in self._open]
             by_ticket: dict[tuple[str, str], list[_Job]] = {}
             for j in cancelled:
-                waiting = self._waiting.get(j.queue)
-                if waiting is not None and j in waiting:
-                    waiting.remove(j)
+                self._unwait(j)
                 if j.ticket is not None:
                     by_ticket.setdefault((j.ticket.queue, j.ticket.digest), []).append(
                         j
@@ -448,15 +464,26 @@ class WarmPool:
 
     def place(self, jobs: ty.Sequence["Job"]) -> list[Placement | Unplaceable]:
         """Each job's placement, as `submit` would make it, for ``plan()`` (RFC 0005 section 7.4)."""
-        return [self._placement(job)[0] for job in jobs]
+        startable = self._startable()
+        return [self._placement(job, startable=startable)[0] for job in jobs]
 
     # -- placement -----------------------------------------------------------------------------
 
-    def _can_start(self, cls: WorkerClass) -> "bool | str":
-        """For placement: a class with a live worker can start; otherwise the substrate says."""
-        if any(h.worker_class == cls.name for h in self._live()):
-            return True
-        return self.substrate.can_start(cls)
+    def _startable(self) -> ty.Callable[[WorkerClass], "bool | str"]:
+        """For placement: a class with a live worker can start; otherwise the substrate says. The
+        substrate is listed once, and asked once per class, per call of this function.
+        """
+        live = {h.worker_class for h in self._live()}
+        verdicts: dict[str, "bool | str"] = {}
+
+        def can_start(cls: WorkerClass) -> "bool | str":
+            if cls.name not in verdicts:
+                verdicts[cls.name] = (
+                    True if cls.name in live else self.substrate.can_start(cls)
+                )
+            return verdicts[cls.name]
+
+        return can_start
 
     def _live(self) -> list[WorkerHandle]:
         try:
@@ -466,18 +493,22 @@ class WarmPool:
             return []
 
     def _placement(
-        self, job: "Job", above: str | None = None
+        self,
+        job: "Job",
+        above: str | None = None,
+        startable: ty.Callable[[WorkerClass], "bool | str"] | None = None,
     ) -> tuple[Placement | Unplaceable, tuple[str, ...], tuple[dict, ...]]:
         """The job's placement, the rest of its ladder (as queue names) and its residency."""
         from pydra.engine import resident
 
+        can_start = startable or self._startable()
         classes = self.classes
         if above is not None:  # re-placed from the class after ``above``
             ordered = sorted(self.classes, key=_order)
             names = [c.name for c in ordered]
             if above in names:
                 classes = tuple(ordered[names.index(above) + 1 :])
-        placement = place(job, classes, self.fit, self._can_start)
+        placement = place(job, classes, self.fit, can_start)
         if isinstance(placement, Unplaceable):
             return placement, (), ()
         res = job.resources if job.resources is not None else ComputeResources()
@@ -494,21 +525,22 @@ class WarmPool:
         ]
         names = [c.name for c in candidates]
         rest = candidates[names.index(placement.worker_class) + 1 :]
-        ladder = tuple(c.name + suffix for c in rest if self._can_start(c) is True)
+        ladder = tuple(c.name + suffix for c in rest if can_start(c) is True)
         return (
             attrs.evolve(placement, queue=placement.worker_class + suffix),
             ladder,
             residency,
         )
 
-    def _place_and_queue(
+    def _queue_jobs(
         self, jobs: ty.Sequence["Job"], handle: Handle | None
     ) -> list[tuple["Job", _Job | None, "Outcome"]]:
-        """Place each job: follow it where a live ticket holds it (moving it when that ticket is of a
-        class this coordinator does not start and its claim can be taken), else queue it to be
-        written. Return the reports due now (jobs that cannot be placed)."""
+        """Place each job and queue it for the follower, which checks it against the pool (a live
+        ticket that holds it, a refusal) before writing it; no storage is read here. Return the
+        reports due now: jobs that cannot be placed, and jobs placed on a broken class.
+        """
         reports: list[tuple["Job", _Job | None, "Outcome"]] = []
-        moves: dict[tuple[str, str], list[_Job]] = {}
+        startable = self._startable()
         for job in jobs:
             if is_workflow(job.task):
                 reports.append(
@@ -525,7 +557,7 @@ class WarmPool:
                 )
                 continue
             try:
-                placement, ladder, residency = self._placement(job)
+                placement, ladder, residency = self._placement(job, startable=startable)
                 key = (job.checksum, _fingerprint(job))
             except Exception as exc:
                 reports.append((job, None, Failed(exc)))
@@ -534,26 +566,72 @@ class WarmPool:
                 reports.append((job, None, Failed(UnplaceableJob(placement))))
                 continue
             j = _Job(job, handle, key, placement.queue, ladder, residency)
+            broken = self._broken.get(placement.worker_class)
+            if broken is not None:
+                reports.append((job, j, NotRun(broken, held=True)))
+                continue
             self._open[job] = j
-            newest = self.pool.newest(*key)
-            holder = self.pool._holder(newest, key)
-            if holder is None:
-                refused = self._refused(key, newest)
-                if refused is not None and not self._climb(j, refused, reports):
+            self._unchecked.append(j)
+        return reports
+
+    def _check(self, j: _Job) -> tuple:
+        """What the pool says of a queued job, read without the lock: ``("put",)``, ``("follow",
+        queue, ticket)``, ``("move", queue, ticket)`` or ``("refused", ticket)``."""
+        newest = self.pool.newest(*j.key)
+        holder = self.pool._holder(newest, j.key)
+        if holder is None:
+            refused = self._refused(j.key, newest)
+            return ("put",) if refused is None else ("refused", refused)
+        q = self.pool._by_label(newest[1].get("queue", ""))
+        if q is None:
+            return ("put",)
+        return ("follow" if self._starts(q.name) else "move", q.name, holder)
+
+    def _resume(self) -> None:
+        """Check each newly queued job against the pool: follow it where a live ticket holds it (or
+        move it, when that ticket's class is not one this coordinator starts and its claim can be
+        taken), re-place it above a class that refused it, else leave it to be written.
+        """
+        with self._lock:
+            unchecked, self._unchecked = list(self._unchecked), collections.deque()
+        if not unchecked:
+            return
+        decided = []
+        for j in unchecked:
+            try:
+                decided.append((j, self._check(j)))
+            except (
+                Exception
+            ) as err:  # the storage: written as new; a held job is followed
+                logger.warning(
+                    "checking job %s against the pool failed: %s", j.key[0], err
+                )
+                decided.append((j, ("put",)))
+        reports: list = []
+        moves: dict[tuple[str, str], list[_Job]] = {}
+        with self._lock:
+            for j, verdict in decided:
+                if j.job not in self._open:
+                    continue  # cancelled meanwhile
+                if verdict[0] == "follow":
+                    self._hold(j, verdict[1], verdict[2])
+                    continue
+                if verdict[0] == "move":
+                    moves.setdefault((verdict[1], verdict[2]), []).append(j)
+                    continue
+                if verdict[0] == "refused" and not self._climb(j, verdict[1], reports):
                     continue
                 self._waiting.setdefault(j.queue, collections.deque()).append(j)
-                continue
-            q = self.pool._by_label(newest[1].get("queue", ""))
-            if q is None:
-                self._waiting.setdefault(j.queue, collections.deque()).append(j)
-                continue
-            if self._starts(q.name):
-                self._hold(j, q.name, holder)
-            else:
-                moves.setdefault((q.name, holder), []).append(j)
         for (queue, digest), group in moves.items():
             self._move_foreign(queue, digest, group)
-        return reports
+        self._deliver(reports)
+
+    def _unwait(self, j: _Job) -> None:
+        waiting = self._waiting.get(j.queue)
+        if waiting is not None and j in waiting:
+            waiting.remove(j)
+        if j in self._unchecked:
+            self._unchecked.remove(j)
 
     def _starts(self, queue: str) -> bool:
         """Whether this coordinator starts the workers of ``queue``'s class (or none at all)."""
@@ -617,6 +695,11 @@ class WarmPool:
 
     def _hold(self, j: _Job, queue: str, digest: str) -> None:
         """Follow ``j`` in ticket ``digest`` of ``queue``."""
+        if j.ticket is not None and (j.ticket.queue, j.ticket.digest) == (
+            queue,
+            digest,
+        ):
+            return  # already followed there: its record (when it last moved) stays
         if j.ticket is not None:
             self._release(j)
         t = self._ticket(queue, digest)
@@ -666,55 +749,59 @@ class WarmPool:
     def _move_foreign(self, queue: str, digest: str, group: list[_Job]) -> None:
         """Take ticket ``digest`` of ``queue`` (a class this coordinator does not start) by
         ``try_take`` and move ``group`` to their placements; follow them there when its claim is
-        live."""
+        live. Called without the lock: the storage is written outside it."""
+        held: list[tuple[_Job, str, str]] = []
         claim = None
         with contextlib.suppress(LeaseTimeout):
             claim = self.pool.take(queue, digest)
-        if claim is None:
-            for j in group:
-                self._hold(j, queue, digest)
-            return
-        try:
-            entries = {e.key: e for e in claim.ticket.jobs}
-            by_queue: dict[str, list[tuple[_Job, TicketJob]]] = {}
-            for j in group:
-                entry = entries.get(j.key)
-                if entry is None or claim.current(entry) is None:
-                    continue  # settled or moved meanwhile: the follower finds where
-                by_queue.setdefault(j.queue, []).append((j, entry))
-            for target, pairs in by_queue.items():
-                quantum = self._class[_queue_class(target)].quantum_jobs
-                groups = [pairs[i : i + quantum] for i in range(0, len(pairs), quantum)]
-                ladder = pairs[0][0].ladder
-                made = claim.move(
-                    [[e for _, e in g] for g in groups],
-                    target,
-                    cause="replaced",
-                    ladder=ladder,
-                )
-                for g, new in zip(groups, made):
-                    for j, _ in g:
-                        self._hold(j, target, new)
-                logger.info(
-                    "moved %d job(s) of ticket %s on %r to %r",
-                    len(pairs),
-                    digest,
-                    queue,
-                    target,
-                )
-        finally:
-            claim.release()
-        for j in group:
-            if j.ticket is None:
-                self._hold(j, queue, digest)
+        if claim is not None:
+            try:
+                entries = {e.key: e for e in claim.ticket.jobs}
+                by_queue: dict[str, list[tuple[_Job, TicketJob]]] = {}
+                for j in group:
+                    entry = entries.get(j.key)
+                    if entry is None or claim.current(entry) is None:
+                        continue  # settled or moved meanwhile: the follower finds where
+                    by_queue.setdefault(j.queue, []).append((j, entry))
+                for target, pairs in by_queue.items():
+                    quantum = self._class[_queue_class(target)].quantum_jobs
+                    groups = [
+                        pairs[i : i + quantum] for i in range(0, len(pairs), quantum)
+                    ]
+                    made = claim.move(
+                        [[e for _, e in g] for g in groups],
+                        target,
+                        cause="replaced",
+                        ladder=pairs[0][0].ladder,
+                    )
+                    for g, new in zip(groups, made):
+                        held.extend((j, target, new) for j, _ in g)
+                    logger.info(
+                        "moved %d job(s) of ticket %s on %r to %r",
+                        len(pairs),
+                        digest,
+                        queue,
+                        target,
+                    )
+            finally:
+                claim.release()
+        moved = {id(j) for j, _, _ in held}
+        held.extend((j, queue, digest) for j in group if id(j) not in moved)
+        with self._lock:
+            for j, where, ticket in held:
+                if j.job is None or j.job in self._open:
+                    self._hold(j, where, ticket)
 
     # -- writing tickets -----------------------------------------------------------------------
 
     def _write(self) -> None:
         """Write waiting jobs as tickets, up to ``max_queued_jobs`` unsettled jobs per queue."""
+        self._resume()
         with self._lock:
             batches = []
             for queue, waiting in self._waiting.items():
+                if _queue_class(queue) in self._broken:
+                    continue  # held by `_hold_broken`
                 room = self._max_queued(queue) - self._queued(queue)
                 taken = []
                 while waiting and room > 0:
@@ -792,18 +879,19 @@ class WarmPool:
             self._wake.wait(self.settings.poll_s)
             self._wake.clear()
 
-    def _poll(self) -> None:
-        """One pass: the fence, the waiting jobs written, each queue's settled marks listed once and
-        the outcomes of tickets whose count moved read, followed claims judged, the workers scaled.
-        """
+    def _poll(self, now: float | None = None) -> None:
+        """One pass: the fence, broken classes' jobs held, the waiting jobs written, each queue's
+        settled marks listed once and the outcomes of tickets whose count moved read, followed claims
+        judged, the workers scaled. Storage and results are read without the lock."""
         if self._fenced is not None or self.epoch is None:
             return
         if self.pool.fenced(self.epoch):
             self._fence()
             return
+        now = time.monotonic() if now is None else now
+        self._hold_broken()
         self._write()
         reports: list[tuple["Job", _Job | None, "Outcome"]] = []
-        now = time.monotonic()
         with self._lock:
             queues = list(self._queues)
         for queue in queues:
@@ -818,23 +906,25 @@ class WarmPool:
                             queue, t.digest, expect=count, within=0.0
                         )
                     except ListingBehind:
-                        continue  # read at the next poll
+                        continue  # read at the next poll (ruling R2)
                     with self._lock:
                         t.seen, t.recheck, t.moved = count, False, now
-                        self._read(t, found, reports)
+                    self._read(t, found, reports)
                 elif t.foreign:
                     self._judge(t, now)
         self._scale(now)
+        self._hold_broken()
         self._deliver(reports)
 
     def _read(self, t: _Ticket, found: dict[str, dict], reports: list) -> None:
         """Settle or retarget each followed job of ``t`` that has an outcome record in it (a job that
         moved has its withdrawal here); the others have nothing new, so their generations are not
-        read."""
+        read. Generations and results are read without the lock; what they say is applied under it,
+        to jobs still followed in ``t``."""
         recorded = {(r.get("checksum"), r.get("fingerprint")) for r in found.values()}
-        for j in list(t.jobs.values()):
-            if j.key not in recorded:
-                continue
+        with self._lock:
+            jobs = [j for j in t.jobs.values() if j.key in recorded]
+        for j in jobs:
             newest = self.pool.newest(*j.key)
             if newest is None:
                 continue
@@ -842,18 +932,34 @@ class WarmPool:
             if record.get("ticket") != t.digest:
                 q = self.pool._by_label(record.get("queue", ""))
                 if q is not None:
-                    self._hold(j, q.name, record["ticket"])
+                    with self._lock:
+                        if j.ticket is t:
+                            self._hold(j, q.name, record["ticket"])
                 continue
             outcome = found.get(_outcome_name(j.key, record["attempt"]))
-            if outcome is not None:
-                self._settle(j, t, outcome, record["attempt"], reports)
+            if outcome is None:
+                continue
+            verdict = self._verdict(t, outcome, record["attempt"], j)
+            if verdict is None:
+                continue
+            with self._lock:
+                if j.ticket is not t:
+                    continue  # cancelled or moved meanwhile
+                if verdict[0] == "climb":
+                    self._release(j)
+                    if self._climb(j, verdict[1], reports):
+                        self._waiting.setdefault(j.queue, collections.deque()).append(j)
+                    continue
+                self._forget(j)
+                reports.append((j.job, j, verdict[1]))
 
-    def _settle(
-        self, j: _Job, t: _Ticket, outcome: dict, attempt: str, reports: list
-    ) -> None:
+    def _verdict(
+        self, t: _Ticket, outcome: dict, attempt: str, j: _Job
+    ) -> tuple | None:
+        """What a job's outcome means, read without the lock: ``("report", outcome)``,
+        ``("climb", refused ticket)``, or None (an ``expired`` attempt waits for its taker; a
+        moved job is followed by its generation)."""
         kind = outcome.get("outcome")
-        if kind == "expired":
-            return  # the taker settles it
         if kind == "withdrawn":
             reason = outcome.get("reason")
             if reason == "refused":
@@ -861,38 +967,37 @@ class WarmPool:
                     ticket = self.pool.ticket(t.queue, t.digest)
                 except Exception:
                     ticket = None
-                if ticket is not None:
-                    self._release(j)
-                    if self._climb(j, ticket, reports):
-                        self._waiting.setdefault(j.queue, collections.deque()).append(j)
-                return
+                return None if ticket is None else ("climb", ticket)
             if reason != "cancel":
-                return  # moved: its newest generation names where
-            result: "Outcome" = NotRun("cancelled", held=False)
-        elif kind == "held":
+                return None
+            return ("report", NotRun("cancelled", held=False))
+        if kind == "held":
             why = outcome.get("reason") or (outcome.get("fault") or {}).get("message")
-            result = NotRun(f"held: {why}", held=True)
-        elif kind == "done":
+            return ("report", NotRun(f"held: {why}", held=True))
+        if kind == "done":
             # a result a taker found already committed is not in this attempt's work directory
             result = self._result(j.job, attempt, settled=not outcome.get("served"))
             if result is None:
                 result = self._result(j.job, attempt, settled=True)
-        elif kind == "failed":
+            return ("report", result)
+        if kind == "failed":
             fault = outcome.get("fault") or {}
             found = None
             if fault.get("kind") == "content":
                 found = self._result(j.job, attempt, settled=False)
                 if isinstance(found, Failed) or not getattr(found, "errored", False):
                     found = None
-            result = found or Failed(
-                PoolJobFailed(
-                    f"{fault.get('type', 'failed')}: {fault.get('message', '')}", fault
-                )
+            return (
+                "report",
+                found
+                or Failed(
+                    PoolJobFailed(
+                        f"{fault.get('type', 'failed')}: {fault.get('message', '')}",
+                        fault,
+                    )
+                ),
             )
-        else:
-            return
-        self._forget(j)
-        reports.append((j.job, j, result))
+        return None
 
     def _result(self, job: "Job", attempt: str, settled: bool) -> "Outcome":
         job.attempt = attempt
@@ -912,8 +1017,8 @@ class WarmPool:
         t.judged = now
         with self._lock:
             group = list(t.jobs.values())
-            if group:
-                self._move_foreign(t.queue, t.digest, group)
+        if group:
+            self._move_foreign(t.queue, t.digest, group)
 
     def _fence(self) -> None:
         epochs = self.pool.epochs()
@@ -1038,19 +1143,24 @@ class WarmPool:
         )
         logger.error(why)
         self._broken[cls.name] = why
+        self._hold_broken()
+
+    def _hold_broken(self) -> None:
+        """Report every open job placed on a broken class ``NotRun(held=True)``: queued, followed,
+        or re-placed onto it since it broke."""
+        if not self._broken:
+            return
         with self._lock:
-            held = [
-                j
-                for j in list(self._open.values())
-                if _queue_class(j.queue if j.ticket is None else j.ticket.queue)
-                == cls.name
-            ]
-            for j in held:
-                waiting = self._waiting.get(j.queue)
-                if waiting is not None and j in waiting:
-                    waiting.remove(j)
+            held = []
+            for j in list(self._open.values()):
+                queue = j.queue if j.ticket is None else j.ticket.queue
+                why = self._broken.get(_queue_class(queue))
+                if why is None:
+                    continue
+                self._unwait(j)
                 self._forget(j)
-        self._deliver([(j.job, j, NotRun(why, held=True)) for j in held])
+                held.append((j.job, j, NotRun(why, held=True)))
+        self._deliver(held)
 
 
 # -- pydracli pool status, release-hold, collect -----------------------------------------------
@@ -1111,13 +1221,15 @@ def release_hold(root: os.PathLike, queue: str, residency: str | None = None) ->
 
 
 def collect_pool(root: os.PathLike, payload_age: float = 86400.0) -> dict:
-    """`PoolRoot.collect` (settled jobs' older generations, payloads no unsettled ticket names), then
-    the directories of ended coordinators below the newest epoch, which stays so that no epoch number
-    is taken twice."""
+    """`PoolRoot.collect` (settled jobs' older generations, payloads no unsettled ticket names),
+    `PoolRoot.collect_settled` (tickets resolved more than ``payload_age`` ago, with their marks and
+    outcomes), then the directories of ended coordinators below the newest epoch, which stays
+    so that no epoch number is taken twice."""
     import shutil
 
     with _open_existing(root) as pool:
         removed = pool.collect(payload_age=payload_age)
+        tickets = pool.collect_settled(age=payload_age)
         epochs = pool.epochs()
         gone = []
         for epoch in epochs[:-1]:
@@ -1125,4 +1237,4 @@ def collect_pool(root: os.PathLike, payload_age: float = 86400.0) -> dict:
             if (where / "ended").exists():
                 shutil.rmtree(where, ignore_errors=True)
                 gone.append(epoch)
-        return {"files": removed, "coordinators": gone}
+        return {"files": removed, "tickets": tickets, "coordinators": gone}
