@@ -26,7 +26,8 @@ def drive_inline(
 
     With ``on_error="fail_fast"`` the first failure stops the run and its exception is
     raised as the task raised it; no job is started after it. Otherwise jobs that do not
-    read a failed job still run, and the failures are left on ``runner.errors``.
+    read a failed job still run, and the failures are left on ``runner.errors``. The
+    driver keeps no checksum table: the runner settles twins itself.
 
     Parameters
     ----------
@@ -37,34 +38,31 @@ def drive_inline(
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
     audit : Audit
-        Inert until R7, when the driver reports the runner's settled and unrunnable
-        elements to it; jobs report to the audit of their submitter
+        Not used: jobs report to the audit of their submitter
     limit : int, optional
         The most jobs to take from the runner per round, None if unlimited
     """
     executor.bind(runner.complete)
     fail_fast = on_error == "fail_fast"
     try:
-        rnd = runner.ready(limit)
-        dispatch = rnd.dispatch
-        while dispatch or not runner.done:
-            for job in dispatch:
+        while True:
+            rnd = runner.ready(limit)
+            for job in rnd.dispatch:
                 executor.submit([job])
                 if fail_fast and runner.first_error is not None:
                     raise runner.first_error
             if fail_fast and runner.failed:
                 break
-            rnd = runner.ready(limit)
-            dispatch = rnd.dispatch
-            if not dispatch and not runner.done:
-                if (
-                    rnd.retry_after is not None
-                ):  # a workflow lease another process holds
-                    time.sleep(rnd.retry_after)
-                    rnd = runner.ready(limit)
-                    dispatch = rnd.dispatch
-                elif diagnosis := runner.stuck():
-                    raise RuntimeError(diagnosis)
+            if rnd.dispatch or rnd.settled or rnd.unrunnable:
+                continue  # their readers may be ready now
+            if runner.done:
+                break
+            if rnd.retry_after is not None:  # a workflow lease another process holds
+                time.sleep(rnd.retry_after)
+                continue
+            raise RuntimeError(
+                runner.stuck() or "Nothing can progress, but the run is not done"
+            )
     finally:
         runner.close()
         executor.close()
@@ -81,14 +79,20 @@ async def drive(
 ) -> None:
     """Run every job of the runner on the executors, on the running event loop
 
-    Under ``fail_fast`` an executor whose ``serial`` attribute is true (a synchronous
-    worker) has one job in flight at a time, so none starts after the first failure.
-
     The jobs of each round are grouped by the executor the router names, and handed to it
     in node order, one call per job unless the executor batches. Outcomes are reported
-    onto this loop. With ``on_error="fail_fast"`` the first failure stops the run. On the
-    way out, whether complete, failed or interrupted, every open handle is cancelled and
-    the executors are closed. Failures are left on ``runner.errors``.
+    onto this loop. The driver keeps no checksum table: the runner settles twins itself.
+    With ``on_error="fail_fast"`` the first failure stops the run. On the way out, whether
+    complete, failed or interrupted, every open handle is cancelled, the runner's leases
+    are released (off the loop) and the executors are closed. Failures are left on
+    ``runner.errors``.
+
+    ``max_concurrent`` caps the jobs in flight through ``runner.ready(limit)``, unless an
+    executor batches (``batches = True``): the runner is then asked for every ready job, so
+    a node's elements stay in one array or batch, and the batching executor caps inside
+    itself. Jobs routed to the other executors then wait in the driver for the cap. Under
+    ``fail_fast`` an executor whose ``serial`` attribute is true (a synchronous worker) has
+    one job in flight at a time, so none starts after the first failure.
 
     Parameters
     ----------
@@ -104,28 +108,31 @@ async def drive(
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
     audit : Audit
-        Inert until R7
+        Not used: jobs report to the audit of their submitter
     """
     loop = asyncio.get_running_loop()
     fail_fast = on_error == "fail_fast"
     progressed = asyncio.Event()
     open_handles: "list[Handle]" = []
+    # the jobs handed out by the runner whose outcome has not been reported
     in_flight: "set[Job]" = set()
-    # the jobs not run because a job with the same checksum is being run, by checksum
-    sharing: "dict[str, set[Job]]" = defaultdict(set)
-    futured: "dict[str, Job]" = {}
     # jobs waiting for an executor that runs one at a time under fail_fast, and the
-    # number it has in flight
+    # number each executor has in flight
     waiting: "dict[str, deque[Job]]" = defaultdict(deque)
     busy: "dict[str, int]" = defaultdict(int)
     sent_to: "dict[Job, str]" = {}
-    # the outcome of each job whose run has ended, by checksum
-    finished: "dict[str, Outcome]" = {}
+    batching = any(ex.batches for ex in executors.values())
+    capped = max_concurrent != float("inf")
+    # with a batching executor, the jobs for the other executors beyond the cap
+    backlog: "deque[tuple[str, Job]]" = deque()
 
     def limit() -> int | None:
-        if max_concurrent == float("inf"):
+        if batching or not capped:
             return None
         return max(0, int(max_concurrent) - len(in_flight))
+
+    def unbatched() -> int:
+        return sum(busy[n] for n, ex in executors.items() if not ex.batches)
 
     def send(name: str, jobs: "list[Job]") -> None:
         executor = executors[name]
@@ -135,67 +142,69 @@ async def drive(
         for batch in [jobs] if executor.batches else [[j] for j in jobs]:
             open_handles.append(executor.submit(batch))
 
+    def place(name: str, jobs: "list[Job]") -> None:
+        if fail_fast and getattr(executors[name], "serial", False):
+            waiting[name].extend(jobs)
+        else:
+            send(name, jobs)
+
     def pump() -> None:
-        """Hand each one-at-a-time executor its next waiting job once it is idle"""
+        """Hand each one-at-a-time executor its next waiting job once it is idle, and
+        the jobs held for the cap as it frees"""
+        if fail_fast and runner.failed:
+            return
+        while backlog and unbatched() + sum(map(len, waiting.values())) < int(
+            max_concurrent
+        ):
+            name, job = backlog.popleft()
+            place(name, [job])
         for name, queue in waiting.items():
-            if queue and not busy[name] and not (fail_fast and runner.failed):
+            if queue and not busy[name]:
                 send(name, [queue.popleft()])
 
     def on_outcome(job: "Job", outcome: "Outcome") -> None:
         if job in sent_to:
             busy[sent_to.pop(job)] -= 1
         in_flight.discard(job)
-        finished[job.checksum] = outcome
         runner.complete(job, outcome)
-        for ran in sharing.pop(job.checksum, ()):
-            share(ran, outcome)
         open_handles[:] = [h for h in open_handles if h.open]
         pump()
         progressed.set()
-
-    def share(job: "Job", outcome: "Outcome") -> None:
-        """Complete a job that was not run because another with its checksum was, with
-        that job's outcome; the failure itself is recorded for the job that ran"""
-        if isinstance(outcome, Failed) or outcome.errored:
-            job._awaiting_run = False
-            job._errored = True
-            if not isinstance(outcome, Failed):
-                job._held = outcome
-        else:
-            runner.complete(job, outcome)
 
     def report(job: "Job", outcome: "Outcome") -> None:
         loop.call_soon_threadsafe(on_outcome, job, outcome)
 
     for executor in executors.values():
         executor.bind(report)
+    runner.release_off_thread()
     try:
-        rnd = runner.ready(limit())
-        dispatch = rnd.dispatch
-        while dispatch or in_flight or not runner.done:
-            if not dispatch and not in_flight and rnd.retry_after is None:
-                raise RuntimeError(runner.stuck())
+        while True:
+            rnd = runner.ready(limit())
+            if fail_fast and runner.failed:
+                break
             by_executor: "dict[str, list[Job]]" = defaultdict(list)
-            for job in dispatch:
-                if job.checksum in finished:
-                    share(job, finished[job.checksum])
-                elif job.checksum in futured:
-                    if job is not futured[job.checksum]:
-                        sharing[job.checksum].add(job)
-                else:
-                    futured[job.checksum] = job
-                    try:
-                        by_executor[router(job)].append(job)
-                    except Exception as exc:
-                        in_flight.add(job)
-                        on_outcome(job, Failed(exc))
+            for job in rnd.dispatch:
+                in_flight.add(job)
+                try:
+                    by_executor[router(job)].append(job)
+                except Exception as exc:
+                    on_outcome(job, Failed(exc))
             for name, jobs in by_executor.items():
-                in_flight.update(jobs)
-                if fail_fast and getattr(executors[name], "serial", False):
-                    waiting[name].extend(jobs)
+                if batching and capped and not executors[name].batches:
+                    backlog.extend((name, j) for j in jobs)
                 else:
-                    send(name, jobs)
+                    place(name, jobs)
             pump()
+            if fail_fast and runner.failed:
+                break
+            if not in_flight and runner.done:
+                break
+            if (rnd.settled or rnd.unrunnable) and not rnd.dispatch:
+                continue  # their readers may be ready now
+            if not in_flight and not rnd.dispatch and rnd.retry_after is None:
+                raise RuntimeError(
+                    runner.stuck() or "Nothing can progress, but the run is not done"
+                )
             if in_flight or rnd.retry_after is not None:
                 # the next outcome, or the next attempt at a workflow lease; no timeout
                 # context is entered, which needs a current task (none under
@@ -211,13 +220,12 @@ async def drive(
                 progressed.clear()
             if fail_fast and runner.failed:
                 break
-            rnd = runner.ready(limit())
-            dispatch = rnd.dispatch
-            if fail_fast and runner.failed:
-                break
     finally:
         runner.close()
         for handle in open_handles:
             handle.executor.cancel(handle)
-        for executor in executors.values():
-            executor.close()
+        try:
+            await runner.released()
+        finally:
+            for executor in executors.values():
+                executor.close()

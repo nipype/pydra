@@ -5,7 +5,7 @@ import inspect
 import time
 import typing as ty
 import attrs
-from pydra.engine.runner import Failed
+from pydra.engine.runner import Failed, NotRun
 from pydra.utils.general import is_workflow
 
 if ty.TYPE_CHECKING:
@@ -38,9 +38,11 @@ class Executor(ty.Protocol):
     """Where the jobs a runner releases run
 
     Every job submitted is reported exactly once through the callable given to
-    :meth:`bind`, as a ``Result`` or :class:`~pydra.engine.runner.Failed`. The callable
-    may be invoked from any thread. Until R7 a job of a cancelled handle is not reported;
-    R7 reports it ``NotRun``, as RFC 0002 §3.2 has it.
+    :meth:`bind`, as a ``Result``, a :class:`~pydra.engine.runner.Failed` or a
+    :class:`~pydra.engine.runner.NotRun` (a job the worker cancelled). The callable may
+    be invoked from any thread. A job of a handle the driver cancels as the run ends is
+    not reported: the run is over, and the runner records it as ``"stopped"`` if its
+    workflow failed.
     """
 
     batches: bool
@@ -89,7 +91,8 @@ class InlineExecutor:
 
     def submit(self, jobs: "ty.Sequence[Job]") -> Handle:
         """Run the jobs in order and report each outcome; an exception a job raises is
-        reported as :class:`~pydra.engine.runner.Failed` and does not stop the rest"""
+        reported as :class:`~pydra.engine.runner.Failed` and does not stop the rest, a
+        ``CancelledError`` the worker raises as :class:`~pydra.engine.runner.NotRun`"""
         if self._report is None:
             raise RuntimeError("bind() a report callable before submitting jobs")
         handle = Handle(self, tuple(jobs), set(jobs))
@@ -97,6 +100,8 @@ class InlineExecutor:
             try:
                 worker = self.worker_for(job) if self.worker_for else self.worker
                 outcome: "Outcome" = worker.run(job, rerun=job.rerun)
+            except asyncio.CancelledError as exc:
+                outcome = cancelled(exc)
             except Exception as exc:
                 outcome = Failed(exc)
             handle.open.discard(job)
@@ -109,6 +114,11 @@ class InlineExecutor:
 
     def close(self) -> None:
         """Nothing to release"""
+
+
+def cancelled(exc: BaseException) -> NotRun:
+    """The outcome of a job its worker cancelled: not run, and not held by infrastructure"""
+    return NotRun(reason=f"cancelled by its worker: {exc!r}", held=False)
 
 
 def no_result_diagnosis(job: "Job") -> str:
@@ -240,7 +250,8 @@ class WorkerExecutor:
             ended(job, outcome)
 
     def cancel(self, handle: Handle) -> None:
-        """Cancel the jobs of the handle that are still running; they are not reported"""
+        """Cancel the jobs of the handle that are still running; they are not reported
+        (the driver cancels only as the run ends)"""
         submission = self._submissions.pop(handle, None)
         if submission is not None:
             submission.cancel()
@@ -261,7 +272,7 @@ class WorkerExecutor:
             task = asyncio.current_task()
             if job not in handle.open or (task is not None and task.cancelling()):
                 raise  # cancelled by cancel() or by the loop: not reported
-            outcome = Failed(exc)  # raised by the worker: the job's outcome
+            outcome = cancelled(exc)  # raised by the worker: not run
         except Exception as exc:
             outcome = Failed(exc)
         self._tasks.pop(job, None)
@@ -292,7 +303,9 @@ class WorkerExecutor:
         deadline = time.monotonic() + self.visibility_timeout
         delay = 0.05
         while True:
-            result = job.result()
+            # reported complete: under a store with work directories a result not found
+            # is an errored one naming the work directory (RFC 0003 section 7.2)
+            result = job.result(settled=True)
             if result is not None:
                 return result
             remaining = deadline - time.monotonic()
