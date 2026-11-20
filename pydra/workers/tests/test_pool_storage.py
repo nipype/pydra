@@ -443,7 +443,7 @@ def test_estale_reads_absent(tmp_path, monkeypatch):
         assert pool.read_outcome("cpu", digest, job, attempt) is None
         assert pool.newest(job.checksum, job.fingerprint) is None
     with monkeypatch.context() as patch:
-        patch.setattr(StorageDir, "scandir", stale)
+        patch.setattr(StorageDir, "names", stale)
         assert pool.settled("cpu") == {}
         assert pool.generations(job.checksum, job.fingerprint) == []
     with monkeypatch.context() as patch:
@@ -854,3 +854,204 @@ def test_no_pool_module_takes_host_bound_lock():
             assert (
                 not found
             ), f"{module.name}:{node.lineno} takes a host-bound lock: {found}"
+
+
+# -- fix round 1 ---------------------------------------------------------------------------------
+
+
+def _segment(pool: PoolRoot, queue: str, seq: int = 0) -> Path:
+    return pool.path / "queues" / queue_label(queue) / "segments" / f"{seq:012d}"
+
+
+def test_stale_follow_listing_never_resolves_a_live_ticket(tmp_path, monkeypatch):
+    """A claimant whose listing of a job's follow directory is stale (it shows only generation 0,
+    which names the ticket the job moved out of) still runs the job in the ticket that now holds it:
+    a slot is resolved only on a final outcome written in its own ticket."""
+    a, b = _pool(tmp_path), _pool(tmp_path)
+    old = a.put("cpu", _ticket("a"))
+    moving = b.take("cpu", old)
+    (job,) = moving.ticket.jobs
+    (new,) = moving.move([[job]], "gpu", cause="replaced")
+    moving.release()
+    with monkeypatch.context() as patch:
+        patch.setattr(pool_storage, "_generation_numbers", lambda d: [0])
+        claim = a.claim("gpu")
+        assert claim is not None and claim.digest == new
+        attempt = claim.start(job, "w")
+        assert attempt == f"{a.pool_id}.1"
+        claim.release()
+        assert not (_segment(a, "gpu") / "res-0").exists()
+    assert a.follow(job.checksum, job.fingerprint) == new
+    again = a.claim("gpu")
+    assert again is not None and again.digest == new
+
+
+def test_estale_follow_listing_never_resolves_a_ticket(tmp_path, monkeypatch):
+    """An `ESTALE` listing of a job's follow directory reads as unknown, never as moved: the ticket
+    is claimed, the job runs, and nothing is resolved until its outcome is written."""
+    pool = _pool(tmp_path)
+    pool.put("cpu", _ticket("a"))
+    real_names, real_scandir = StorageDir.names, StorageDir.scandir
+
+    def stale(real):
+        def call(self):
+            if Path(self.path).parent.name == "follow":  # a job's generations
+                raise OSError(errno.ESTALE, "stale file handle")
+            return real(self)
+
+        return call
+
+    monkeypatch.setattr(StorageDir, "names", stale(real_names))
+    monkeypatch.setattr(StorageDir, "scandir", stale(real_scandir))
+    claim = pool.claim("cpu")
+    assert claim is not None
+    (job,) = claim.ticket.jobs
+    attempt = claim.start(job, "w")
+    assert attempt == f"{pool.pool_id}.0"
+    claim.release()
+    assert not (_segment(pool, "cpu") / "res-0").exists()
+    claim = pool.claim("cpu")
+    attempt = claim.start(job, "w")  # restart: generation 1, found by name
+    assert claim.outcome(job, attempt, "done")
+    claim.release()
+    assert (_segment(pool, "cpu") / "res-0").exists()
+
+
+def test_claimant_completes_a_half_done_move(tmp_path, monkeypatch):
+    """A move that died after its slot (step 3) and before its withdrawals (step 4): the taker of the
+    old ticket writes the `withdrawn` itself, naming the new ticket, and only then resolves it.
+    """
+    pool = _pool(tmp_path)
+    old = pool.put("cpu", _ticket("a"))
+    claim = pool.claim("cpu", beat="external")
+    (job,) = claim.ticket.jobs
+
+    def die(self, at):
+        if at == 3:
+            raise KeyboardInterrupt
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Claim, "_checkpoint", die)
+        with pytest.raises(KeyboardInterrupt):
+            claim.move([[job]], "gpu", cause="replaced")
+    new = pool.follow(job.checksum, job.fingerprint)
+    assert pool.outcomes("cpu", old) == {}
+    _age(_claim_dir(pool, "cpu", old))
+    assert _pool(tmp_path).claim("cpu") is None
+    (record,) = pool.outcomes("cpu", old).values()
+    assert (record["outcome"], record["reason"], record["by"]) == (
+        "withdrawn",
+        "replaced",
+        new,
+    )
+    assert (_segment(pool, "cpu") / "res-0").exists()
+
+
+def test_settle_repaired_after_crash(tmp_path):
+    """A writer killed between its outcome and its settled mark: the next claimant settles the
+    ticket, so the follower's count covers the outcome."""
+    pool = _pool(tmp_path)
+    digest = pool.put("cpu", _ticket("a", jobs=2))
+    claim = pool.claim("cpu", beat="external")
+    one, two = claim.ticket.jobs
+    attempt = claim.start(one, "w")
+    pool.outcome("cpu", digest, one, attempt, {"outcome": "done"}, settle=False)
+    assert pool.settled("cpu") == {}
+    _age(_claim_dir(pool, "cpu", digest))
+    taker = _pool(tmp_path).claim("cpu")
+    assert taker is not None and pool.settled("cpu") == {digest: 1}
+    taker.release()
+    # and a release settles too
+    claim = pool.claim("cpu")
+    attempt = claim.start(two, "w")
+    pool.outcome("cpu", digest, two, attempt, {"outcome": "done"}, settle=False)
+    claim.release()
+    assert pool.settled("cpu") == {digest: 2}
+
+
+def test_withdrawn_needs_the_claim_lease(tmp_path):
+    """`PoolRoot.outcome` refuses a `withdrawn` written without the ticket's claim lease."""
+    pool = _pool(tmp_path)
+    digest = pool.put("cpu", _ticket("a"))
+    (job,) = pool.ticket("cpu", digest).jobs
+    attempt = f"{pool.pool_id}.0"
+    with pytest.raises(ValueError, match="claim"):
+        pool.outcome(
+            "cpu", digest, job, attempt, {"outcome": "withdrawn", "reason": "cancel"}
+        )
+    assert pool.outcomes("cpu", digest) == {}
+    claim = pool.take("cpu", digest)
+    record = {"outcome": "withdrawn", "reason": "cancel"}
+    assert pool.outcome("cpu", digest, job, attempt, record, lease=claim.lease)
+
+
+def test_outcomes_wait_for_the_expected_count(tmp_path, monkeypatch):
+    """`outcomes(expect=n)` lists again until n records show (a listing that lags a settled mark),
+    and reports a listing still behind at its bound instead of returning fewer."""
+    pool = _pool(tmp_path)
+    digest = pool.put("cpu", _ticket("a", jobs=2))
+    claim = pool.claim("cpu")
+    for job in claim.ticket.jobs:
+        claim.outcome(job, claim.start(job, "w"), "done")
+    assert pool.settled("cpu") == {digest: 2}
+    real = StorageDir.names
+    lag = {"left": 2}
+
+    def lagging(self):
+        found = real(self)
+        if Path(self.path).name == digest and lag["left"]:
+            lag["left"] -= 1
+            return sorted(found)[:-1]
+        return found
+
+    monkeypatch.setattr(StorageDir, "names", lagging)
+    assert len(pool.outcomes("cpu", digest, expect=2)) == 2 and lag["left"] == 0
+    lag["left"] = 10**6
+    with pytest.raises(pool_storage.ListingBehind) as behind:
+        pool.outcomes("cpu", digest, expect=2, within=0.2)
+    assert len(behind.value.found) == 1 and behind.value.expected == 2
+
+
+def test_claim_stats_flat_on_a_large_live_segment(tmp_path, monkeypatch):
+    """A claim on a segment of many taken, resolved slots stats no listed name: a cold claim costs
+    the same stats at 30 and 300 slots; and a queue whose residency is held is not walked.
+    """
+
+    def stats(root: Path, tickets: int) -> int:
+        pool = PoolRoot.open(root, FAST, probe=False, segment_items=1000)
+        with monkeypatch.context() as patch:
+            patch.setattr(os, "fsync", lambda fd: None)
+            for i in range(tickets):
+                pool.put("cpu", _ticket(f"{root.name}-{i}"))
+            for _ in range(tickets - 1):
+                _finish(pool.claim("cpu", beat="external"))
+        cold = PoolRoot.open(root, FAST, probe=False)
+        counted, me = 0, threading.get_ident()
+        with monkeypatch.context() as patch:
+            for fn in ("stat", "lstat"):
+                real = getattr(os, fn)
+
+                def counting(*args, _real=real, **kwargs):
+                    nonlocal counted
+                    counted += threading.get_ident() == me
+                    return _real(*args, **kwargs)
+
+                patch.setattr(os, fn, counting)
+            claim = cold.claim("cpu", beat="external")
+        assert claim is not None
+        return counted
+
+    assert stats(tmp_path / "small", 30) == stats(tmp_path / "large", 300)
+
+    pool = _pool(tmp_path / "held", segment_items=1000)
+    ticket = _ticket("h", residency=({"kind": "provider", "name": "m"},))
+    for i in range(5):
+        pool.put("cpu", _ticket(f"h{i}", residency=ticket.residency))
+    assert pool.claim("cpu") is not None  # learns the queue's residency
+    pool.hold("cpu", 1, ticket.residency_label)
+    walked = []
+    real_target = PoolRoot._target
+    monkeypatch.setattr(
+        PoolRoot, "_target", lambda self, *a: walked.append(a) or real_target(self, *a)
+    )
+    assert pool.claim("cpu", epoch=1) is None and walked == []

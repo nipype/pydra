@@ -60,6 +60,7 @@ __all__ = [
     "PoolRoot",
     "PoolSettingsMismatch",
     "PoolStorageUnsupported",
+    "ListingBehind",
     "Ticket",
     "TicketJob",
     "job_name",
@@ -135,6 +136,22 @@ class PoolOwnerMismatch(PermissionError):
 class PoolStorageUnsupported(StoreUnavailable):
     """The storage lacks a primitive the protocol needs, or shows directory changes later than
     ``attribute_delay``; the message names what `probe` found."""
+
+
+class ListingBehind(LookupError):
+    """A listing that still shows fewer records than a settled mark counts, at the bound of its wait.
+
+    Attributes
+    ----------
+    found : dict
+        The records listed.
+    expected : int
+    """
+
+    def __init__(self, message: str, found: dict, expected: int):
+        super().__init__(message)
+        self.found = found
+        self.expected = expected
 
 
 class CorruptTicket(ValueError):
@@ -387,11 +404,13 @@ def _read(d: StorageDir, name: str) -> bytes | None:
 
 
 def _names(d: StorageDir | None) -> list[str]:
-    """The names in ``d`` other than staged files; none when it is absent or stale."""
+    """The names in ``d`` other than staged files, listed with no per-entry stat; none when ``d`` is
+    absent or stale. A caller never reads an empty listing as proof that something is absent.
+    """
     if d is None:
         return []
     try:
-        return [e.name for e in d.scandir() if not e.name.startswith(_STAGED)]
+        return [n for n in d.names() if not n.startswith(_STAGED)]
     except OSError as err:
         if _absent(err):
             return []
@@ -488,6 +507,14 @@ def _generation_numbers(d: StorageDir | None) -> list[int]:
     return sorted(int(n) for n in _names(d) if _GEN.fullmatch(n))
 
 
+def _generation_of(attempt: ty.Any) -> int | None:
+    """The generation number of a pool attempt ``<pool id>.<g>``, None for anything else."""
+    if not isinstance(attempt, str):
+        return None
+    _, dot, g = attempt.rpartition(".")
+    return int(g) if dot and _GEN.fullmatch(g) else None
+
+
 def _seq(seq: int) -> str:
     return f"{seq:012d}"
 
@@ -538,6 +565,7 @@ class _Queue:
         self.judged: dict[str, float] = {}  # tickets found under a live claim, when
         self.missing: dict[str, float] = {}  # tickets found missing or corrupt, when
         self.faults: list[tuple[str, str]] = []
+        self.residency: str | None = None  # the residency label of the queue's tickets
 
     def close(self) -> None:
         for sub in self._SUBDIRS:
@@ -898,17 +926,36 @@ class PoolRoot:
                     found.append((g, record))
             return found
 
-    def newest(self, checksum: str, fingerprint: str) -> tuple[int, dict] | None:
-        """The newest readable generation of a job: the ticket that holds it and its attempt."""
+    def newest(
+        self, checksum: str, fingerprint: str, *, hint: int | None = None
+    ) -> tuple[int, dict] | None:
+        """The newest readable generation of a job: the ticket that holds it and its attempt.
+
+        A listing may be stale (an attribute cache) or empty (``ESTALE``), so the generations above
+        the highest listed one, or above ``hint`` (a generation known to exist), are looked up by
+        name until one is absent. None means unknown: nothing was listed or readable.
+        """
         d = self._follow((checksum, fingerprint))
         if d is None:
             return None
         with d:
-            for g in reversed(_generation_numbers(d)):
+            numbers = _generation_numbers(d)
+            top = max(numbers[-1] if numbers else -1, -1 if hint is None else hint)
+            while _read(d, str(top + 1)) is not None:
+                top += 1
+            for g in range(top, -1, -1):
                 record = _read_record(d, str(g))
                 if record is not None:
                     return g, record
         return None
+
+    def _generation(self, job: JobKey, g: int) -> dict | None:
+        """Generation ``g`` of a job, read by name."""
+        d = self._follow(job)
+        if d is None:
+            return None
+        with d:
+            return _read_record(d, str(g))
 
     def started(self, checksum: str, fingerprint: str, g: int) -> dict | None:
         """The started mark of a job's attempt ``g``: which worker started it."""
@@ -1093,6 +1140,11 @@ class PoolRoot:
         kind = record.get("outcome")
         if kind not in OUTCOMES:
             raise ValueError(f"an outcome is one of {OUTCOMES}, got {kind!r}")
+        if kind == "withdrawn" and lease is None:
+            raise ValueError(
+                "a withdrawal is written only under the ticket's claim lease (RFC 0005 5.5): "
+                "take it with PoolRoot.take and withdraw through the Claim"
+            )
         if kind == "withdrawn" and record.get("reason") not in WITHDRAW_REASONS:
             raise ValueError(
                 f"a withdrawal's reason is one of {WITHDRAW_REASONS}, got "
@@ -1135,8 +1187,51 @@ class PoolRoot:
         with d:
             return _read_record(d, _outcome_name(job, attempt))
 
-    def outcomes(self, queue: str, digest: str) -> dict[str, dict]:
-        """Every readable outcome record of ticket ``digest``, by file name."""
+    def outcomes(
+        self,
+        queue: str,
+        digest: str,
+        *,
+        expect: int | None = None,
+        within: float | None = None,
+    ) -> dict[str, dict]:
+        """Every readable outcome record of ticket ``digest``, by file name.
+
+        Parameters
+        ----------
+        expect : int, optional
+            The count a settled mark showed. The directory is listed again, backing off, until that
+            many records are read, so a listing cached behind the mark is not taken for the outcomes.
+        within : float, optional
+            Seconds to keep listing; default ``attribute_delay + renew_interval``, at least 1 s.
+
+        Raises
+        ------
+        ListingBehind
+            Fewer than ``expect`` records could be read within ``within``.
+        """
+        if within is None:
+            within = max(
+                1.0, self.settings.attribute_delay + self.settings.renew_interval
+            )
+        deadline = time.monotonic() + within
+        delay = 0.05
+        while True:
+            found = self._outcomes(queue, digest)
+            if expect is None or len(found) >= expect:
+                return found
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise ListingBehind(
+                    f"ticket {digest} of {queue!r} lists {len(found)} outcomes after {within:g} s, "
+                    f"its settled mark {expect}",
+                    found,
+                    expect,
+                )
+            time.sleep(min(delay, left))
+            delay = min(delay * 2, 1.0)
+
+    def _outcomes(self, queue: str, digest: str) -> dict[str, dict]:
         q = self.queue(queue)
         d = _child(q.outcome, digest)
         if d is None:
@@ -1303,6 +1398,10 @@ class PoolRoot:
         """
         q = self.queue(queue)
         held = self.holds(queue, epoch)
+        if (
+            held and q.residency in held
+        ):  # every ticket of a queue has the queue's residency
+            return None
         now = time.monotonic()
         interval = self.settings.renew_interval
         q.judged = {d: at for d, at in q.judged.items() if now - at < interval}
@@ -1334,6 +1433,8 @@ class PoolRoot:
         if ticket is None:
             q.faults.append((digest, "missing"))
             q.missing[digest] = time.monotonic()
+        else:
+            q.residency = ticket.residency_label
         return ticket
 
     def take(
@@ -1374,10 +1475,9 @@ class PoolRoot:
         try:
             if lease.broke:
                 claim.loss = self._record_loss(q, digest, lease.broke)
+            self._settle(q, digest)  # an outcome whose writer died before its mark
             for job in ticket.jobs:
-                state, _, record = claim._state(job)
-                if state == "moved" and record is not None:
-                    self._repair(record)
+                claim._state(job, repair=True)
             if claim.resolved():
                 claim.release()
                 return None
@@ -1447,37 +1547,64 @@ class Claim:
 
     # -- reading -------------------------------------------------------------------------
 
-    def _state(self, job: TicketJob) -> tuple[str, int | None, dict | None]:
-        """``("open", g, generation)`` for a job this ticket holds with no outcome under its
-        attempt; ``("moved", g, generation)`` when its newest generation names another ticket (or
-        it has none); otherwise the outcome's kind with ``(g, outcome record)``."""
-        newest = self.pool.newest(*job.key)
+    def _state(
+        self, job: TicketJob, repair: bool = False
+    ) -> tuple[str, int | None, dict | None]:
+        """What became of a job of this ticket, on positive evidence only.
+
+        ``("open", g, generation)``: its newest generation names this ticket and it has no outcome
+        under that attempt. The outcome's kind with ``(g, outcome record)``: it has one here. When a
+        newer generation names another ticket, the job's outcome here under this ticket's attempt
+        decides; without a final one it is ``"moved"``, and with ``repair`` (a claimant) the move's
+        withdrawal here is written first, naming the new ticket, and its slot if it has none.
+        ``"unknown"``: no generation could be read; never taken as moved.
+        """
+        newest = self.pool.newest(*job.key, hint=_generation_of(job.attempt))
         if newest is None:
-            return "moved", None, None
+            return "unknown", None, None
         g, record = newest
-        if record.get("ticket") != self.digest:
-            return "moved", g, record
-        found = self.pool._read_outcome(
-            self._q, self.digest, job.key, record["attempt"]
-        )
-        if found is not None:
+        if record.get("ticket") == self.digest:
+            found = self.pool._read_outcome(
+                self._q, self.digest, job.key, record["attempt"]
+            )
+            if found is not None:
+                return str(found.get("outcome")), g, found
+            return "open", g, record
+        mine = self._own_attempt(job, g)
+        attempt = mine if mine is not None else job.attempt
+        found = None
+        if attempt is not None:
+            found = self.pool._read_outcome(self._q, self.digest, job.key, attempt)
+        if found is not None and found.get("outcome") in FINAL:
             return str(found.get("outcome")), g, found
-        return "open", g, record
+        if repair and mine is not None:
+            self.pool._repair(record)
+            reason = "split" if record.get("cause") == "split" else "replaced"
+            self._withdraw(job, mine, reason, record.get("ticket"))
+            found = self.pool._read_outcome(self._q, self.digest, job.key, mine)
+            if found is not None and found.get("outcome") in FINAL:
+                return str(found.get("outcome")), g, found
+        return "moved", g, record
+
+    def _own_attempt(self, job: TicketJob, above: int) -> str | None:
+        """The attempt of the job's newest generation below ``above`` that names this ticket, read
+        by name; None when none can be read."""
+        for g in range(above - 1, -1, -1):
+            record = self.pool._generation(job.key, g)
+            if record is not None and record.get("ticket") == self.digest:
+                return record.get("attempt")
+        return None
 
     def current(self, job: TicketJob) -> tuple[int, dict] | None:
         """The job's newest generation when it names this ticket: its attempt is the job's."""
-        newest = self.pool.newest(*job.key)
+        newest = self.pool.newest(*job.key, hint=_generation_of(job.attempt))
         if newest is None or newest[1].get("ticket") != self.digest:
             return None
         return newest
 
     def resolved(self) -> bool:
-        """Whether every job of the ticket moved away or has a final outcome under its attempt."""
-        for job in self.ticket.jobs:
-            state, _, _ = self._state(job)
-            if state != "moved" and state not in FINAL:
-                return False
-        return True
+        """Whether every job of the ticket has a final outcome written in this ticket."""
+        return all(self._state(job)[0] in FINAL for job in self.ticket.jobs)
 
     def open_jobs(self) -> list[TicketJob]:
         """The jobs this ticket holds that have no outcome under their attempt."""
@@ -1487,7 +1614,8 @@ class Claim:
 
     def start(self, job: TicketJob, worker: str) -> str | None:
         """Mark the job's attempt started and return it; None to skip the job (its newest
-        generation names another ticket, or it has an outcome under that attempt).
+        generation names another ticket, it has an outcome under that attempt, or no generation can
+        be read).
 
         The attempt is read from the newest generation, never from the ticket file. When that
         attempt's started mark exists, the attempt has run once already, so a ``restart``
@@ -1691,11 +1819,14 @@ class Claim:
     # -- releasing -----------------------------------------------------------------------
 
     def release(self) -> None:
-        """Mark the ticket's slot resolved when every job moved or has a final outcome, then release
-        the claim lease. Releasing again does nothing."""
+        """Write the ticket's settled mark for its outcome count, mark its slot resolved when every
+        job has a final outcome in this ticket, then release the claim lease. Releasing again does
+        nothing."""
         if self.lease.token_dir is None:
             return
         try:
+            if self.lease.held:
+                self.pool._settle(self._q, self.digest)
             if self.slot is not None and self.lease.held and self.resolved():
                 seq, n = self.slot
                 segment = _child(self._q.segments, _seq(seq))
