@@ -7,39 +7,45 @@ memory they held is free, so a restart does not race the dying process.
 
 Only a provider that starts a process imports this module; a plain run does not.
 
-On POSIX the leader of the group is a small shim (``python -m pydra.engine.procgroup``)
-that starts the real command in its own session and group and holds the read end of a
-pipe whose write end is the parent's. When the parent dies without running ``close``
-(SIGKILL, an OOM kill) the pipe reaches end of file and the shim stops the group and
-its descendants. (``PR_SET_PDEATHSIG`` is not used: it is scoped to the parent thread, and
-a provider may be loaded from a thread that ends while the server is still wanted.)
-On Windows the child is created with
-``CREATE_NEW_PROCESS_GROUP`` and stopped with ``taskkill /T /F``; there is no lifeline.
+On POSIX the leader of the group is a small standalone shim (``_procshim.py``, run under
+``python -I`` in a neutral directory, importing nothing from pydra) that starts the real
+command, with the provider's own environment and working directory, in its own session
+and group. It holds the read end of a pipe whose write end is the parent's: when the
+parent dies without running ``close`` (SIGKILL, an OOM kill) the pipe reaches end of file
+and the shim stops its whole tree. (``PR_SET_PDEATHSIG`` is not used: it is scoped to the
+parent thread, and a provider may be loaded from a thread that ends while the server is
+still wanted.) On Linux the shim is a child subreaper, so a server that its launcher
+daemonised (``setsid`` and exit) is adopted by the shim and stopped with the rest. On
+other POSIX systems there is no subreaper: a daemonised server whose parent has already
+exited is a known limitation (senselab's GPU servers run on Linux). On Windows the child
+is created with ``CREATE_NEW_PROCESS_GROUP`` and stopped with ``taskkill /T /F``; there
+is no lifeline.
 
 ``stop`` snapshots the descendants by parent pid before signalling, signals the group
-and each descendant that left it (``setsid``, a daemonising launcher), waits for all of
-them, and reaps the leader last, so the pid and group id cannot be reused while they are
-signalled. Limit: a descendant that is re-parented to init *before* the first snapshot
-(its parent already dead, and the snapshot never saw it through ``measure``) is not
-found; per-provider cgroups would close this and are not assumed (often unavailable on
-clusters).
+and each descendant that left it (``setsid``), waits for all of them, and reaps the
+leader last, so the pid and group id cannot be reused while they are signalled. Each
+known descendant carries a start-time token (``/proc`` on Linux, ``ps lstart`` elsewhere)
+verified before every signal, and exited ones are dropped. Per-provider cgroups are not
+assumed (often unavailable on clusters).
 
 Default timeouts: 10 s SIGTERM wait, 10 s after SIGKILL, 30 s for device memory to
 settle, so one close is bounded by about 50 s plus the ``nvidia-smi`` calls; Slurm's
 default ``KillWait`` is 30 s, after which the step's cgroup teardown reaps leftovers.
 """
 
+import json
 import logging
 import os
-import select
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import typing as ty
 from pathlib import Path
 
+from pydra.engine._procshim import _descendants, _process_table, _Row
 from pydra.engine.resident import Device, Footprint
 
 __all__ = [
@@ -56,6 +62,7 @@ logger = logging.getLogger("pydra.resident")
 _POLL = 0.02
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 _LOGGED_NO_ACCOUNTING = False
+_SHIM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_procshim.py")
 
 
 def popen_group_kwargs(platform: str = sys.platform) -> dict[str, ty.Any]:
@@ -72,77 +79,6 @@ def popen_group_kwargs(platform: str = sys.platform) -> dict[str, ty.Any]:
 def windows_kill_tree_command(pid: int) -> list[str]:
     """The command that ends ``pid`` and its descendants on Windows"""
     return ["taskkill", "/T", "/F", "/PID", str(pid)]
-
-
-# (ppid, pgid, running, start): ``running`` is False for a zombie; ``start`` is the
-# process start time where the OS gives it (Linux) and identifies a pid across reuse
-_Row = tuple[int, int, bool, ty.Optional[str]]
-
-
-def _process_table() -> dict[int, _Row]:
-    """Every process: from ``/proc`` on Linux, from ``ps`` elsewhere"""
-    table: dict[int, _Row] = {}
-    if os.path.isdir("/proc/self"):
-        try:
-            names = os.listdir("/proc")
-        except OSError:
-            names = []
-        for name in names:
-            if not name.isdigit():
-                continue
-            try:
-                with open(f"/proc/{name}/stat") as f:
-                    raw = f.read()
-            except OSError:
-                continue
-            fields = raw[raw.rindex(")") + 2 :].split()
-            try:
-                table[int(name)] = (
-                    int(fields[1]),
-                    int(fields[2]),
-                    fields[0] not in ("Z", "X"),
-                    fields[19],
-                )
-            except (IndexError, ValueError):
-                continue
-        return table
-    try:
-        proc = subprocess.run(
-            ["ps", "-axo", "pid=,ppid=,pgid=,stat="],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return table
-    for line in proc.stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 4:
-            try:
-                table[int(parts[0])] = (
-                    int(parts[1]),
-                    int(parts[2]),
-                    not parts[3].startswith("Z"),
-                    None,
-                )
-            except ValueError:
-                continue
-    return table
-
-
-def _descendants(table: dict[int, _Row], root: int) -> set[int]:
-    """``root`` and everything below it by parent pid"""
-    children: dict[int, list[int]] = {}
-    for pid, (ppid, *_rest) in table.items():
-        children.setdefault(ppid, []).append(pid)
-    found, todo = set(), [root]
-    while todo:
-        pid = todo.pop()
-        if pid in found:
-            continue
-        found.add(pid)
-        todo.extend(children.get(pid, ()))
-    return found
 
 
 class ProcessGroup:
@@ -165,17 +101,41 @@ class ProcessGroup:
     ) -> "ProcessGroup":
         """Start ``argv`` as the leader of a new process group (on POSIX, under the
         lifeline shim)"""
-        common = dict(
-            env=None if env is None else dict(env), cwd=cwd, **popen_group_kwargs()
-        )
         if sys.platform == "win32":
-            return cls(subprocess.Popen(list(argv), **common, **popen_kwargs))
+            return cls(
+                subprocess.Popen(
+                    list(argv),
+                    env=None if env is None else dict(env),
+                    cwd=cwd,
+                    **popen_group_kwargs(),
+                    **popen_kwargs,
+                )
+            )
         read_fd, write_fd = os.pipe()
+        # the command's argv, env and cwd go to the shim in an anonymous file; the shim
+        # itself runs isolated, in the parent's environment and a neutral directory
+        cfg = tempfile.TemporaryFile("w+")
+        json.dump(
+            {
+                "argv": [str(a) for a in argv],
+                "env": None if env is None else dict(env),
+                "cwd": None if cwd is None else os.fspath(cwd),
+            },
+            cfg,
+        )
+        cfg.flush()
         try:
             proc = subprocess.Popen(
-                [sys.executable, "-m", "pydra.engine.procgroup", str(read_fd), *argv],
-                pass_fds=(read_fd,),
-                **common,
+                [
+                    sys.executable,
+                    "-I",
+                    _SHIM,
+                    str(read_fd),
+                    str(cfg.fileno()),
+                ],
+                pass_fds=(read_fd, cfg.fileno()),
+                cwd=os.sep,
+                **popen_group_kwargs(),
                 **popen_kwargs,
             )
         except BaseException:
@@ -183,6 +143,7 @@ class ProcessGroup:
             raise
         finally:
             os.close(read_fd)
+            cfg.close()
         return cls(proc, lifeline=write_fd)
 
     @property
@@ -214,6 +175,8 @@ class ProcessGroup:
         table = _process_table() if table is None else table
         if sys.platform == "win32":
             return table
+        for pid in [p for p in self._known if not self._same(p, table)]:
+            del self._known[pid]  # exited, or the pid now belongs to another process
         mine = _descendants(table, self.pid)
         mine |= {p for p, row in table.items() if row[1] == self.pid}
         for pid in mine:
@@ -222,16 +185,16 @@ class ProcessGroup:
                 self._known.setdefault(pid, row[3])
         return table
 
+    def _same(self, pid: int, table: dict[int, _Row]) -> bool:
+        """``pid`` is running and is the process first seen under that pid"""
+        row = table.get(pid)
+        if row is None or not row[2]:
+            return False
+        start = self._known.get(pid)
+        return start is None or row[3] is None or row[3] == start
+
     def _live_known(self, table: dict[int, _Row]) -> list[int]:
-        live = []
-        for pid, start in self._known.items():
-            row = table.get(pid)
-            if row is None or not row[2]:
-                continue
-            if start is not None and row[3] != start:
-                continue  # the pid was reused
-            live.append(pid)
-        return live
+        return [pid for pid in self._known if self._same(pid, table)]
 
     def members(self) -> list[int]:
         """Pids of the live (not zombie) members of the group and its descendants"""
@@ -320,56 +283,6 @@ class ProcessGroup:
             self.proc.wait(timeout=kill_timeout)
         except subprocess.TimeoutExpired:
             logger.error("Process %s survived taskkill", self.pid)
-
-
-def _shim_main(args: list[str]) -> int:
-    """The group leader: run the command, and stop the group if the parent goes away"""
-    lifeline, cmd = int(args[0]), args[1:]
-    flags = {"term": False}
-    signal.signal(signal.SIGTERM, lambda *_: flags.__setitem__("term", True))
-    child = subprocess.Popen(cmd)
-    forwarded = False
-    while True:
-        rc = child.poll()
-        if rc is not None:
-            break
-        if flags["term"] and not forwarded:
-            forwarded = True
-            child.terminate()
-        ready, _, _ = select.select([lifeline], [], [], 0.1)
-        if ready and os.read(lifeline, 1) == b"":
-            _stop_own_tree(child)
-            break
-    rc = child.returncode
-    if rc is not None and rc < 0:
-        signal.signal(-rc, signal.SIG_DFL)
-        os.kill(os.getpid(), -rc)
-    return 0 if rc is None else rc
-
-
-def _stop_own_tree(child: subprocess.Popen) -> None:
-    me = os.getpid()
-    table = _process_table()
-    victims = _descendants(table, me) - {me}
-    victims |= {p for p, row in table.items() if row[1] == me and p != me}
-
-    def _all(sig: int) -> None:
-        for pid in victims:
-            try:
-                os.kill(pid, sig)
-            except OSError:
-                pass
-
-    _all(signal.SIGTERM)
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        child.poll()
-        live = [p for p, row in _process_table().items() if p in victims and row[2]]
-        if not live or all(p == child.pid and child.poll() is not None for p in live):
-            return
-        time.sleep(_POLL)
-    _all(signal.SIGKILL)
-    child.poll()
 
 
 def gpu_memory_by_pid(
@@ -612,7 +525,3 @@ class ProcessProvider:
 
     def version(self) -> str:
         return type(self).__qualname__
-
-
-if __name__ == "__main__":  # the lifeline shim
-    sys.exit(_shim_main(sys.argv[1:]))

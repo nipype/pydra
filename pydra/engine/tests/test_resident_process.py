@@ -509,14 +509,9 @@ def test_crashed_leader_then_stop_does_not_reuse_or_resignal(tmp_path, monkeypat
     from pydra.engine.procgroup import ProcessGroup
 
     record = tmp_path / "pids"
-    script = textwrap.dedent("""
-        import os, subprocess, sys
-        gc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
-        open(sys.argv[1], "w").write(f"{os.getpid()} {gc.pid}")
-        time.sleep(0)
-        """).replace("import os,", "import time, os,")
-    group = ProcessGroup.start([sys.executable, "-c", script, str(record)])
+    group = ProcessGroup.start([sys.executable, "-c", CHILD, str(record)])
     _, grandchild = _wait_for(record)
+    os.kill(group.pid, signal.SIGKILL)  # the leader crashes; its group lives on
     deadline = time.monotonic() + 20
     while group.leader_running() and time.monotonic() < deadline:
         time.sleep(0.05)
@@ -556,7 +551,7 @@ def test_child_group_is_gone_when_the_parent_is_sigkilled(tmp_path):
         pids = (shim, child, escaped)
         while any(_alive(p) for p in pids) and time.monotonic() < deadline:
             time.sleep(0.1)
-        assert not any(_alive(p) for p in pids)
+        assert not any(_alive(p) for p in pids), pids
     finally:
         parent.kill()
         parent.wait(timeout=20)
@@ -580,3 +575,165 @@ def test_provider_loaded_from_a_short_lived_thread_survives_the_thread(tmp_path)
     finally:
         provider.close(handle)
     assert not _alive(child)
+
+
+linux_only = pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="the shim is a child subreaper only on Linux; elsewhere a daemonised "
+    "server is a documented limitation",
+)
+
+DAEMONISING_LAUNCHER = textwrap.dedent("""
+    import os, subprocess, sys
+    srv = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(600)"], start_new_session=True
+    )
+    open(sys.argv[1], "w").write(f"{os.getpid()} {srv.pid}")
+    """)
+
+
+@linux_only
+def test_daemonised_server_is_stopped_and_counted_in_the_gpu_wait(
+    tmp_path, monkeypatch
+):
+    from pydra.engine.procgroup import ProcessProvider
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _fake_nvidia_smi(bindir)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    record = tmp_path / "pids"
+
+    class Server(ProcessProvider):
+        name = "server"
+
+        def argv(self, spec, device):
+            return [sys.executable, "-c", DAEMONISING_LAUNCHER, str(record)]
+
+    provider = Server(gpu_settle_timeout=20)
+    handle = provider.load({}, Device("cuda", 0))
+    launcher, server = _wait_for(record)
+    (bindir / "pids").write_text(str(server))
+    time.sleep(0.5)  # the launcher has exited; the shim adopted the server
+    assert _alive(server)
+    assert provider.measure(handle).device == 4096 * 1024 * 1024
+    provider.close(handle)
+    assert not _alive(server)
+
+
+@linux_only
+def test_daemonised_server_is_gone_when_the_parent_is_sigkilled(tmp_path):
+    record = tmp_path / "pids"
+    parent_code = textwrap.dedent(f"""
+        import sys, time
+        from pydra.engine.procgroup import ProcessGroup
+        g = ProcessGroup.start([sys.executable, "-c", {DAEMONISING_LAUNCHER!r}, {str(record)!r}])
+        time.sleep(600)
+        """)
+    parent = subprocess.Popen([sys.executable, "-c", parent_code])
+    try:
+        _, server = _wait_for(record)
+        time.sleep(0.5)
+        assert _alive(server)
+        parent.send_signal(signal.SIGKILL)
+        parent.wait(timeout=20)
+        deadline = time.monotonic() + 30
+        while _alive(server) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert not _alive(server)
+    finally:
+        parent.kill()
+        parent.wait(timeout=20)
+
+
+def test_a_reused_pid_is_not_signalled(monkeypatch):
+    """A helper seen at one snapshot exits and its pid goes to an unrelated process:
+    the start token differs, so it is dropped from what ``stop`` signals"""
+    from types import SimpleNamespace
+
+    from pydra.engine import procgroup
+
+    leader = 100
+    seen = {
+        leader: (1, leader, True, "t0"),
+        999: (leader, leader, True, "helper-start"),
+    }
+    reused = {
+        leader: (1, leader, True, "t0"),
+        999: (1, 999, True, "someone-else"),  # same pid, another process
+    }
+    group = procgroup.ProcessGroup(SimpleNamespace(pid=leader, returncode=None))
+    monkeypatch.setattr(procgroup, "_process_table", lambda: seen)
+    group._refresh()
+    assert 999 in group._known
+    assert group._live_known(reused) == [leader]
+    group._refresh(reused)
+    assert 999 not in group._known  # pruned
+    exited = {leader: seen[leader]}
+    group._refresh(exited)
+    assert list(group._known) == [leader]
+
+
+def test_ps_table_carries_a_start_time(tmp_path, monkeypatch):
+    """Outside Linux the table comes from ``ps`` and includes ``lstart``"""
+    from pydra.engine import _procshim
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    ps = bindir / "ps"
+    ps.write_text(
+        "#!/bin/sh\n"
+        "echo '  10     1    10 Ss   Mon Nov 20 07:47:20 2026'\n"
+        "echo '  11    10    10 Z    Mon Nov 20 07:47:21 2026'\n"
+    )
+    ps.chmod(ps.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(_procshim, "_USE_PROC", False)
+    table = _procshim._process_table()
+    assert table[10] == (1, 10, True, "Mon Nov 20 07:47:20 2026")
+    assert table[11][2] is False
+
+
+@posix_only
+def test_provider_env_and_cwd_reach_only_the_command(tmp_path):
+    """A provider's PYTHONPATH and cwd, each shadowing what the shim imports, do not
+    reach the shim; the command gets them"""
+    from pydra.engine.procgroup import ProcessProvider
+
+    shadow = tmp_path / "shadow"
+    (shadow / "pydra").mkdir(parents=True)
+    (shadow / "pydra" / "__init__.py").write_text("raise ImportError('shadowed')\n")
+    for name in ("json", "signal", "subprocess"):
+        (shadow / f"{name}.py").write_text("raise ImportError('shadowed')\n")
+    out = tmp_path / "out"
+    code = (
+        "import os, sys; "
+        f"open({str(out)!r}, 'w').write(os.getcwd() + '|' + os.environ['PYTHONPATH'] "
+        "+ '|' + os.environ['MARK'])"
+    )
+
+    class Server(ProcessProvider):
+        name = "server"
+
+        def argv(self, spec, device):
+            return [sys.executable, "-c", code]
+
+        def env(self, spec, device):
+            return {**os.environ, "PYTHONPATH": str(shadow), "MARK": "yes"}
+
+    from pydra.engine.procgroup import ProcessGroup
+
+    provider = Server()
+    group = ProcessGroup.start(
+        provider.argv({}, Device()), env=provider.env({}, Device()), cwd=shadow
+    )
+    try:
+        deadline = time.monotonic() + 20
+        while not out.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        cwd, pypath, mark = out.read_text().split("|")
+        assert os.path.realpath(cwd) == os.path.realpath(shadow)
+        assert pypath == str(shadow) and mark == "yes"
+        assert group.proc.wait(timeout=20) == 0  # the shim itself ran
+    finally:
+        group.stop()
