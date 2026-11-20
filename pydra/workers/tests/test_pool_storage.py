@@ -253,7 +253,7 @@ def test_lost_link_reply_read_back_as_own(tmp_path, monkeypatch):
 
 def test_claim_cost_flat_in_queue_size(tmp_path, monkeypatch):
     """Claiming and settling 100 tickets, through segment retirements, costs the same calls at 10^2
-    and 10^4 tickets in the queue."""
+    and 10^4 tickets in the queue (10^3 on Windows)."""
 
     def cost(root: Path, tickets: int) -> int:
         pool = PoolRoot.open(root, FAST, probe=False, segment_items=50)
@@ -285,7 +285,9 @@ def test_claim_cost_flat_in_queue_size(tmp_path, monkeypatch):
         return counted
 
     small = cost(tmp_path / "small", 10**2)
-    large = cost(tmp_path / "large", 10**4)
+    # Windows has no descriptor-relative calls, and its path backend makes 10^4 puts take
+    # most of the test timeout; 10^3 still holds ten segments past the hundred claimed
+    large = cost(tmp_path / "large", 10**4 if POSIX else 10**3)
     assert small == large, (small, large)
 
 
