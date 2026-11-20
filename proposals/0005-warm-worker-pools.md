@@ -402,8 +402,8 @@ class WarmPool:                                   # an RFC 0002 §3.2 Executor
   epoch then stops the substrate-started workers of the pool that `substrate.live()` lists, including those a dead predecessor started; workers started by
   hand (`ExternalSubstrate`) are left running. A fenced coordinator (`PoolFenced`) stops nothing, since the
   workers serve the newer one. `pydracli pool collect` removes ended coordinators' directories, settled
-  tickets, and the work directories of attempts that were taken over or withdrawn once no unsettled ticket
-  names a payload in them (§5.2, §5.5). It never removes a job's highest follow generation (§5.1).
+  tickets, and the payloads no unsettled ticket names (§5.2); the work directories of attempts that were
+  taken over or withdrawn are the store's `collect`'s (RFC 0003 §9). It never removes a job's highest follow generation (§5.1).
 
 ### 4.2 Queues, tickets and routing
 
@@ -607,6 +607,7 @@ class Substrate(Protocol):
   follow/<checksum>-<fingerprint>/<g>   generation g of the job: an O_EXCL regular file naming its ticket and attempt
   follow/<checksum>-<fingerprint>/<g>.started  O_EXCL: attempt <g> was started, by which worker token
   workers/<token>/                      lease/, ready.json, samples.jsonl, calls/<seq>.json and <seq>.done (O_EXCL)
+  payloads/<sha256>                     a job's payload (§5.2), read by every attempt of the job
   calibration/                          the default DirectoryCalibration
   private/                              Slurm logs; 0700
 ```
@@ -657,7 +658,7 @@ A ticket:
  "residency": [{"kind": "provider", "name": "hf-model", "spec": "json@1:…"}],
  "batch": 16, "roots": ["/data/study-a"], "ladder": ["gpu-h100-80", "gpu-b200"],
  "jobs": [{"checksum": "…", "fingerprint": "…", "attempt": "9c41e07a5b2d.0", "runner_attempt": 0,
-           "payload": {"codec": "private-pickle@1", "path": "<work dir>/_job.pklz", "sha256": "…"},
+           "payload": {"codec": "private-pickle@1", "path": "<root>/payloads/<sha256>", "sha256": "…"},
            "units": 4.6}]}
 ```
 
@@ -672,14 +673,17 @@ a work directory's address.
 A worker must never unpickle a file that another user can write (RFC 0003 §6.4; senselab ADR-007, which
 puts every substrate's pickles under a 0700 private directory).
 
-- **`PrivatePickle` (default codec).** The job is cloudpickled to `_job.pklz` in its work directory
-  (`work_dir(checksum, fingerprint, attempt)`, RFC 0003 §5.4), which the store creates 0700. The ticket
-  carries the file's sha256. The worker reads it only after the ownership walk of RFC 0003 §6.4 passes for
-  the work directory (owned by the worker's user, no component writable by others) and the digest
-  matches. This is the trust `_job.pklz` already has under the Slurm worker (`workers/slurm.py:122-125`),
-  made explicit and checked. A taker, a half-ticket or a re-placed ticket (§5.5) names the payload of
-  the attempt that first wrote it, read with the same checks, and runs it under its own attempt; `collect`
-  keeps a work directory while an unsettled ticket names a payload in it.
+- **`PrivatePickle` (default codec).** The job is cloudpickled once to `<root>/payloads/<sha256>`, under
+  the pool's 0700 root, named by the sha256 the ticket carries. The worker reads it only after the
+  ownership walk of RFC 0003 §6.4 passes for `payloads/` (owned by the worker's user, no component
+  writable by others) and the digest matches. This is the trust `_job.pklz` already has under the Slurm
+  worker (`workers/slurm.py:122-125`), made explicit and checked. The payload is outside every run's work
+  directory: a run writes its own `_job.pklz` there and the store empties the directory once it publishes
+  (RFC 0003 §5.4), so a payload there would be gone before a restart or a taker reads it. Every attempt of
+  the job (a restart, a taker, a half-ticket, a re-placed ticket, §5.5) reads the same payload and runs
+  it under its own attempt. The store's `collect` never touches `payloads/`; the pool's `collect` removes
+  a payload once no unsettled ticket names it and it is older than the newest ticket that could (a
+  payload is written before the ticket that names it).
 - **`JobCodec`** is pluggable: `encode(job) -> (bytes, media_type)`, `decode(bytes, store) -> Job`. A
   client whose jobs are import references (0001 G2) with inputs in RFC 0004 §6.2's canonical typed
   encoding can carry them as JSON in the ticket and need no pickle.
@@ -1311,6 +1315,13 @@ for writing a process-owning provider, and the worker protocol as a reference pa
   placement; W6's `bench_pool_overhead` measures the latter.
 
 ## 13. Changes in revisions
+
+### Amendment to revision 4 (implementation of W5)
+
+| Item | Change |
+|---|---|
+| Payload location | §5.2, §5.1 layout, the ticket example and §4.1 Lifecycle: payloads live at `<root>/payloads/<sha256>`, written once, read by every attempt, removed only by the pool's `collect`; a run's work directory never holds one, since the store empties it after publishing. |
+| Attempts outside the runner | `<pool id>.<g>` is unique per job only; RFC 0003 §5.4 states that a `work_dir` function receives such attempts and must use the job's address, and the default layout qualifies them by it. |
 
 ### Revision 4
 
