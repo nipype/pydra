@@ -162,6 +162,7 @@ def test_record_layout(installed):
         "environment": native.Native().checksum(),
         "packages": {"base": "1.0", "fakelib": "1.0", "pydra": "1.0"},
         "installed": record["installed"],
+        "tools": [],
     }
     installed(other="2.0")
     changed = context.job_context(task, native.Native())
