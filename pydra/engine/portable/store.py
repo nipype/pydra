@@ -887,6 +887,7 @@ class PortableStore:
         *,
         verify: ty.Any = None,
         replace: bool = False,
+        expected: str | None = None,
     ) -> Committed:
         """Publish ``outputs`` at the address of ``checksum`` and ``context`` (RFC 0003 section
         5.1).
@@ -902,8 +903,14 @@ class PortableStore:
         once the entry is staged, ``Reuse.compare`` is called with the stored entry and the fresh
         outputs, then ``on_commit`` with the staging directory, both before the rename; if either
         raises, nothing is committed. A candidate that can no longer be read is not compared.
-        ``replace`` and the `Result` of a lost race (which `commit` settles) are not acted on
-        here yet.
+
+        ``replace`` is a rerun (RFC 0003 section 10): just before the rename the entry at the
+        address is evicted if its output digest is ``expected``, the digest the caller read when
+        its job started (None: there was none, nothing is evicted). If another writer commits
+        in between, or the evict cannot move the entry (this user does not own it, or the
+        parent is not writable), the publish loses the race like any other and the occupant is
+        never served: the result is ours, stored only when the digests are equal. The reuse
+        hook is not asked.
 
         Raises
         ------
@@ -930,7 +937,7 @@ class PortableStore:
                 with self._container_staging(root) as staging:
                     return self._publish(
                         root, staging, name, ref, shard, checksum, key, context,
-                        outputs, task, source, writer, verify,
+                        outputs, task, source, writer, verify, replace, expected,
                     )  # fmt: skip
             finally:
                 if source is not None:
@@ -1032,6 +1039,8 @@ class PortableStore:
         source: StorageDir | None,
         writer: str,
         verify: Candidate | None = None,
+        replace: bool = False,
+        expected: str | None = None,
     ) -> Committed:
         """Stage, place and clean up once. A thread touches the staging directory every
         quarter of ``ages.staging`` for as long as it is being written or placed, so `collect`
@@ -1060,6 +1069,8 @@ class PortableStore:
                         os.sync()
                 finally:
                     stage.close()
+                if replace and expected is not None:
+                    self._evict_for_rerun(root, ref, expected)
                 committed = self._place(
                     root, staging, name, ref, shard, checksum, task, writer, digest
                 )
@@ -1077,6 +1088,22 @@ class PortableStore:
         if committed.stored:
             _discard(staging, name)  # renamed away, or equal to the occupant
         return committed
+
+    def _evict_for_rerun(self, root: StorageDir, ref: EntryRef, expected: str) -> None:
+        """Move the entry a rerun replaces to ``quarantine/``, if it is still the one the job
+        read (RFC 0003 section 10). An entry that cannot be moved stays, and the rename that
+        follows loses the race. The provenance under ``audit/`` is not removed with it: the
+        rerun's own attempt is recorded there, at the same address."""
+        try:
+            self._evict(root, ref, expected)
+        except (StoreNotWritable, EntryFormatUnknown, EntryNotTrusted) as err:
+            logger.warning("the rerun could not evict %s: %s", ref.fingerprint, err)
+        except FileNotFoundError:
+            pass  # gone already
+        except OSError as err:
+            logger.warning(
+                "the rerun could not evict %s: %s: %s", ref.fingerprint, ref.cdir, err
+            )
 
     @staticmethod
     def _staged(staging: StorageDir, name: str) -> bool:
@@ -2463,6 +2490,66 @@ class PortableStore:
                 context,
             )
 
+    def read_succeeded(
+        self, checksum: str, context: Context, task: "Task | None"
+    ) -> Result | None:
+        """The result stored at the rank-0 address of ``checksum`` and ``context``, read
+        without a lease (RFC 0003 section 5.2): one ``lstat`` of the entry, the cost of the
+        success record of `PickleStore`, and on a miss nothing more. A present entry goes
+        through the reuse hook like any lookup, and a result is returned only for a ``SERVE``
+        verdict; ``VERIFY``, ``REFUSE`` and an entry that does not verify return None, and the
+        job is dispatched (a runner that must carry the verify mark calls `find`). Only this
+        store's own root is probed: an entry in a read-only root, or under another
+        fingerprint, is found by `find` under the job's lease."""
+        cdir = cdir_for(checksum)
+        fingerprint = self.identity.fingerprint(context)
+        shard = shard_for(cdir, checksum, self.header.shard)
+        try:
+            with self._open() as root, contextlib.ExitStack() as stack:
+                parent = root
+                for name in (self.header.entries, shard, cdir):
+                    parent = stack.enter_context(parent.child(name))
+                parent.lstat(fingerprint)
+        except (FileNotFoundError, WrongKindError):
+            return None
+        except OSError as err:
+            logger.debug("reading %s without its lease: %s", checksum, err)
+            return None
+        try:
+            found = self._find(checksum, context, task)
+        except OSError as err:  # unreadable or removed: run it under its lease
+            logger.debug("reading %s without its lease: %s", checksum, err)
+            return None
+        return found.result if isinstance(found, Hit) else None
+
+    def begin_rerun(self, job: "Job") -> None:
+        """Mark ``job`` as a rerun that replaces the entry at its own address (RFC 0003
+        section 10), under its lease: ``job.replace`` is set, and ``job.replaces`` is the output
+        digest of the entry there now, which the publish evicts only if it is still the one at
+        the address (None if there is none or it cannot be read). The job does not verify
+        against anything: the hook is not asked."""
+        job.replace = True
+        job.verify = None
+        job.replaces = None
+        cdir = cdir_for(job.checksum)
+        fingerprint = self.identity.fingerprint(job.context)
+        shard = shard_for(cdir, job.checksum, self.header.shard)
+        try:
+            found = self._stored_in(self.path, self.trust, cdir, shard, fingerprint)
+            if not found:
+                return
+            ref, context, context_digest = found[0]
+            read = self._serve(
+                job.checksum,
+                Candidate(ref, context, context_digest, 0, "exact"),
+                job.task,
+            )
+        except (_Changed, FileNotFoundError, OSError) as err:
+            logger.debug("the entry a rerun replaces cannot be read: %s", err)
+            return
+        if read is not None:
+            job.replaces = read[0].digest
+
     def find(self, job: "Job") -> Lookup:
         """What ``job`` may reuse (RFC 0003 section 7.1): a `Hit` with the result to serve, a
         `Verify` whose candidate the job runs against (the caller sets ``job.verify``), or a
@@ -2719,6 +2806,7 @@ class PortableStore:
             }
         files_from = wd if wd is not None else getattr(lease, "cache_dir", None)
         kind = "entry"
+        replace = bool(getattr(job, "replace", False))
         try:
             committed = self.publish(
                 checksum,
@@ -2728,6 +2816,8 @@ class PortableStore:
                 result.task,
                 files_from,
                 verify=getattr(job, "verify", None),
+                replace=replace,
+                expected=getattr(job, "replaces", None),
             )
         except UnencodableOutput:
             if job is None:
@@ -2740,7 +2830,9 @@ class PortableStore:
         else:
             taken = (
                 self._serve_occupant(checksum, committed, context, result.task)
-                if not committed.stored and committed.committed_digest is not None
+                if not replace
+                and not committed.stored
+                and committed.committed_digest is not None
                 else None
             )
             if taken is not None:
