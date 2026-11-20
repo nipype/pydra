@@ -151,6 +151,16 @@ class Encoder:
         """
         tp = type(value)
         tag = tag_of(tp)
+        if tag is None and isinstance(value, FileSet):
+            tag = fileformats_tag(tp)
+            if tag is None:  # a file set is never pickled (RFC 0003 section 6.4)
+                raise UnencodableOutput(
+                    field,
+                    tp,
+                    "a file set is stored only under a registered tag or the MIME-like "
+                    "name of a fileformats class, and is never pickled",
+                )
+            return self._fileset(value, tag, field)
         if tag is not None:
             codec = lookup_tag(tag)
             assert codec is not None
@@ -589,7 +599,10 @@ class Decoder:
 
     def _fileset(self, doc: dict, body: JSON, hashable: bool) -> ty.Any:
         codec = lookup_tag(body) if isinstance(body, str) else None
-        if codec is None or not codec.fileset:
+        cls = codec.type if codec is not None and codec.fileset else None
+        if codec is None and isinstance(body, str):
+            cls = fileformats_class(body)
+        if cls is None:
             raise EntryFormatUnknown(
                 f"file set tag {body!r} is not registered in this process"
             )
@@ -638,7 +651,7 @@ class Decoder:
         self.trees.append((set_hex, tops))
         base = os.path.join(self.entry_path, "files", set_hex)
         try:
-            value = codec.type([os.path.join(base, t) for t in tops])
+            value = cls([os.path.join(base, t) for t in tops])
             found = sorted(
                 k.replace(os.sep, "/") if os.sep != "/" else k
                 for k, _ in value.byte_chunks(
@@ -647,7 +660,7 @@ class Decoder:
             )
         except Exception as err:
             raise CorruptEntry(
-                f"files/{set_hex} does not form a {codec.type.__name__}: {err}"
+                f"files/{set_hex} does not form a {cls.__name__}: {err}"
             ) from err
         if found != keys:
             raise CorruptEntry(
@@ -689,6 +702,47 @@ _CONTAINERS = {
 _UNION_ORIGINS = (ty.Union, getattr(types, "UnionType", ty.Union))
 
 
+def fileformats_tag(tp: type) -> str | None:
+    """The ``$fileset`` tag of a `FileSet` class of the ``fileformats`` packages that is not in
+    the registry: its MIME-like name, when that name resolves back to the class itself. None
+    for any other class (one defined elsewhere, a mock, one without a MIME-like name). Nothing
+    is registered: the tag registry, which input digests read, is unchanged."""
+    if not (
+        isinstance(tp, type)
+        and issubclass(tp, FileSet)
+        and tp.__module__.split(".")[0] == "fileformats"
+    ):
+        return None
+    try:
+        mime = tp.mime_like
+    except Exception:
+        return None
+    if not isinstance(mime, str) or fileformats_class(mime) is not tp:
+        return None
+    return mime
+
+
+def fileformats_class(tag: str) -> type | None:
+    """The ``fileformats`` `FileSet` class whose MIME-like name is ``tag``, or None. Resolving it
+    may import the installed ``fileformats.*`` namespace packages and nothing else (RFC 0003
+    section 6.4); a class it finds outside them is not returned."""
+    if "/" not in tag:
+        return None
+    from fileformats.core import from_mime
+
+    try:
+        cls = from_mime(tag)
+    except Exception:
+        return None
+    if (
+        isinstance(cls, type)
+        and issubclass(cls, FileSet)
+        and cls.__module__.split(".")[0] == "fileformats"
+    ):
+        return cls
+    return None
+
+
 def type_is_encodable(tp: ty.Any) -> bool:
     """Whether values of the declared type ``tp`` have a codec: a built-in row of RFC 0003
     section 6.4 or a type registered in the tag registry. A type that says nothing about its
@@ -726,7 +780,7 @@ def type_is_encodable(tp: ty.Any) -> bool:
         return False
     if not isinstance(tp, type):
         return False
-    if tag_of(tp) is not None:
+    if tag_of(tp) is not None or fileformats_tag(tp) is not None:
         return True
     if tp in _SIMPLE or tp in _CONTAINERS:
         return True
