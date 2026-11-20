@@ -96,7 +96,7 @@ class PydraIdentityV1:
 
     def context(self, job: "Job", phase: ty.Literal["lookup", "execute"]) -> Context:
         job.checksum  # collects the library modules the task's code reaches
-        return job_context(job.task, job.environment)
+        return job_context(job.task, job.environment, job.resolved.key)
 
     def fingerprint(self, context: Context) -> str:
         slotted = {k: v for k, v in context.items() if k not in self.recorded_only}

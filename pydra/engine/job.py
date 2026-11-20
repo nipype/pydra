@@ -43,7 +43,7 @@ from pydra.engine.result import save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
-from pydra.environments.base import Environment
+from pydra.environments.base import Environment, ImageResolutionError, ResolvedRef
 from pydra.utils.resources import ComputeResources
 from pydra.utils.etelemetry import check_latest_version
 
@@ -148,6 +148,7 @@ class Job(ty.Generic[TaskType]):
         self.allow_cache_override = True
         self._checksum = None
         self._record = None
+        self._resolved = None
         self._uid = uuid4().hex
         self.hooks = hooks if hooks is not None else TaskHooks()
         self._errored = False
@@ -223,6 +224,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
         self.__dict__.setdefault("_record", None)
+        self.__dict__.setdefault("_resolved", None)
         self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
 
@@ -251,6 +253,26 @@ class Job(ty.Generic[TaskType]):
         return self._checksum
 
     @property
+    def resolved(self) -> "ResolvedRef":
+        """The environment's reference, resolved once in the submitting process and
+        carried with the job: the record keys its ``key`` and the worker executes its
+        ``run``. It is resolved again when the job's environment is replaced."""
+        held = self._resolved
+        if held is None or held[0] is not self.environment:
+            cache = getattr(self.submitter, "_registry_cache", None)
+            ref = self.environment.resolve(registry_cache=cache)
+            if (
+                ref.unresolved
+                and getattr(self.submitter, "resolve_images", None) == "require"
+            ):
+                raise ImageResolutionError(
+                    f"The image of {ref.run!r} could not be resolved and "
+                    "Submitter(resolve_images='require') was given"
+                )
+            held = self._resolved = (self.environment, ref)
+        return held[1]
+
+    @property
     def record(self) -> dict[str, ty.Any]:
         """The identity record the job's checksum is the digest of (see
         `pydra.utils.identity.job_record`), built once in the submitting process and
@@ -273,11 +295,13 @@ class Job(ty.Generic[TaskType]):
             self.checksum  # collects the library modules the task's code reaches
             identity = getattr(self.store, "identity", None)
             if identity is None:
-                self._context = job_context(self.task, self.environment)
+                self._context = job_context(
+                    self.task, self.environment, self.resolved.key
+                )
             else:
                 self._context = identity.context(self, "lookup")
             tool_version = self.record.get("job", {}).get("tool_version")
-            if isinstance(tool_version, dict):
+            if isinstance(tool_version, dict) or self.resolved.unresolved:
                 # a tool not found here: the result is used by this process only
                 self._context = {**self._context, "unknown": _nonce()}
             self._stored_contexts = check_declared_code(

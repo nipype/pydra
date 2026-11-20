@@ -242,7 +242,7 @@ def job_record(job: "Job") -> Record:
         environment = job.environment
         native = environment is None or isinstance(environment, Native)
         record["job"] = {
-            "environment": None if environment is None else environment.checksum(),
+            "environment": None if environment is None else job.resolved.key,
             "tool_version": tool_version(job.task) if native else None,
         }
     return record

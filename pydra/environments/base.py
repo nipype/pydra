@@ -19,6 +19,35 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
+class ImageResolutionError(RuntimeError):
+    """An image reference could not be resolved and ``resolve_images="require"``"""
+
+
+@attrs.frozen
+class ResolvedRef:
+    """The reference an environment resolved once, in the submitting process.
+
+    Attributes
+    ----------
+    key : str
+        What identity records: ``docker@1:sha256:<digest>``, ``docker-local@1:<Id>``, or
+        for a reference that could not be resolved ``unresolved:<kind>:<image>:<tag>``
+        (never in the form of a resolved key)
+    run : str
+        The reference the worker executes
+    carried : dict
+        What travels with the job but is not keyed, e.g. the repository to pull from
+    """
+
+    key: str
+    run: str
+    carried: dict = attrs.field(factory=dict, eq=False)
+
+    @property
+    def unresolved(self) -> bool:
+        return self.key.startswith("unresolved:")
+
+
 @attrs.define
 class Environment:
     """
@@ -68,6 +97,15 @@ class Environment:
     def _identity(self) -> ty.Any:
         """The JSON-serialisable value the checksum is derived from."""
         return attrs.asdict(self)
+
+    def resolve(self, registry_cache: dict | None = None) -> ResolvedRef:
+        """Resolve the environment's reference, once, in the submitting process. The
+        job keys ``key`` and the worker executes ``run``. By default the environment's
+        checksum is the key and there is nothing to run by reference.
+
+        ``registry_cache`` holds what a registry was asked, so it is asked once per
+        tag per ``Submitter``."""
+        return ResolvedRef(key=self.checksum(), run="")
 
     @classmethod
     def available_plugins(cls) -> ty.Dict[str, ty.Type["Environment"]]:

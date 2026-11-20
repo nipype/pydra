@@ -9,13 +9,127 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 
+def _split_reference(image: str) -> tuple[str, str | None]:
+    """``(repository, digest)`` of ``image``, whose tag is dropped"""
+    name, _, digest = image.partition("@")
+    last = name.rsplit("/", 1)[-1]
+    if ":" in last:
+        name = name[: len(name) - len(last)] + last.split(":", 1)[0]
+    return name, digest or None
+
+
+def _normal(repository: str) -> str:
+    """``repository`` as Docker Hub names it, so ``library/busybox`` equals ``busybox``"""
+    for prefix in ("docker.io/", "index.docker.io/", "registry-1.docker.io/"):
+        if repository.startswith(prefix):
+            repository = repository[len(prefix) :]
+    return repository.removeprefix("library/")
+
+
+_MANIFEST_TYPES = ", ".join(
+    [
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    ]
+)
+
+
+def _registry_digest(repository: str, tag: str, timeout: float = 10) -> str | None:
+    """The digest the registry reports for ``repository:tag`` (a ``HEAD`` of its
+    manifest, after an anonymous token if asked for one); ``None`` when it cannot be
+    read. Nothing is pulled."""
+    import re
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    first, _, rest = repository.partition("/")
+    if rest and ("." in first or ":" in first or first == "localhost"):
+        host, name = first, rest
+    else:
+        host, name = "registry-1.docker.io", repository
+        if "/" not in name:
+            name = f"library/{name}"
+    url = f"https://{host}/v2/{name}/manifests/{tag}"
+
+    def head(token: str | None = None):
+        headers = {"Accept": _MANIFEST_TYPES}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        request = urllib.request.Request(url, method="HEAD", headers=headers)
+        return urllib.request.urlopen(request, timeout=timeout)
+
+    try:
+        try:
+            response = head()
+        except urllib.error.HTTPError as e:
+            if e.code != 401:
+                return None
+            challenge = e.headers.get("WWW-Authenticate", "")
+            params = dict(re.findall(r'(\w+)="([^"]*)"', challenge))
+            if "realm" not in params:
+                return None
+            query = {k: v for k, v in params.items() if k in ("service", "scope")}
+            query.setdefault("scope", f"repository:{name}:pull")
+            with urllib.request.urlopen(
+                f"{params['realm']}?{urllib.parse.urlencode(query)}", timeout=timeout
+            ) as auth:
+                body = json.load(auth)
+            response = head(body.get("token") or body.get("access_token"))
+        with response:
+            digest = response.headers.get("Docker-Content-Digest")
+    except (OSError, ValueError):
+        return None
+    return digest if digest and digest.startswith("sha256:") else None
+
+
 class Docker(base.Container):
     """Docker environment."""
 
-    def _resolve_digest(self) -> str | None:
-        """The local image ID (``docker image inspect``), or ``None`` if Docker or the
-        image is not available. It never pulls an image. It is not a registry
-        ``RepoDigest``, so it differs between architectures for the same tag."""
+    def _identity(self) -> ty.Any:
+        return {"key": self.resolve().key}
+
+    def resolve(self, registry_cache: dict | None = None) -> base.ResolvedRef:
+        """Resolve the image once: the reference given, the local image store, then
+        the registry (RFC 0004 section 5.3). The image runs by the returned ``run``."""
+        repository, digest = _split_reference(self.image)
+        carried = {"repository": repository}
+        if self.identity is not None:
+            run = self.image if digest else f"{self.image}:{self.tag}"
+            return base.ResolvedRef(f"docker@1:{self.identity}", run, carried)
+        if digest:
+            return base.ResolvedRef(f"docker@1:{digest}", self.image, carried)
+        tagged = f"{self.image}:{self.tag}"
+        local = self._inspect(tagged)
+        if local is not None:
+            image_id, repo_digests = local
+            mine = [
+                d
+                for d in repo_digests
+                if _normal(d.partition("@")[0]) == _normal(repository)
+            ]
+            if len(mine) == 1:
+                found = mine[0].partition("@")[2]
+                return base.ResolvedRef(
+                    f"docker@1:{found}", f"{repository}@{found}", carried
+                )
+            return base.ResolvedRef(f"docker-local@1:{image_id}", image_id, carried)
+        cache = registry_cache if registry_cache is not None else {}
+        if (repository, self.tag) not in cache:
+            cache[(repository, self.tag)] = _registry_digest(repository, self.tag)
+        found = cache[(repository, self.tag)]
+        if found is None:
+            return base.ResolvedRef(f"unresolved:docker:{tagged}", tagged, carried)
+        return base.ResolvedRef(f"docker@1:{found}", f"{repository}@{found}", carried)
+
+    def _inspect(self, tagged: str) -> tuple[str, list[str]] | None:
+        """``(Id, RepoDigests)`` of the image in the local store, ``None`` if Docker or
+        the image is not there. It never pulls."""
+        import json
+
         try:
             rc, out, _ = base.execute(
                 [
@@ -23,17 +137,22 @@ class Docker(base.Container):
                     "image",
                     "inspect",
                     "--format",
-                    "{{.Id}}",
-                    f"{self.image}:{self.tag}",
+                    "{{.Id}}\t{{json .RepoDigests}}",
+                    tagged,
                 ],
                 strip=True,
             )
         except OSError:
             return None
-        return out if rc == 0 and out else None
+        if rc != 0 or not out:
+            return None
+        image_id, _, digests = out.partition("\t")
+        return image_id, json.loads(digests or "null") or []
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
-        docker_img = f"{self.image}:{self.tag}"
+        # a job carries the reference its submitter resolved; called on an environment
+        # the job was not built with, the environment resolves its own
+        docker_img = (job.resolved if job.environment is self else self.resolve()).run
         # mounting all input locations
         mounts, arg_values = self.get_bindings(job=job, root=self.root)
 

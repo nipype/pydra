@@ -452,13 +452,16 @@ def package_versions(modules: ty.Iterable[str]) -> dict[str, str | None]:
     return dict(sorted(versions.items()))
 
 
-def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
+def job_context(
+    task: "Task", environment: "Environment", environment_key: str | None = None
+) -> dict[str, ty.Any]:
     """The record of the context a job of `task` runs in under `environment`:
 
     * ``record``: the layout's version (`RECORD`);
     * ``python``: the interpreter's full version, ``implementation``: its name;
     * ``platform``: the OS, machine and C library;
-    * ``environment``: the environment's checksum;
+    * ``environment``: the environment's resolved key (`Job.resolved`), or its
+      checksum when none is given;
     * ``packages``: the identities of the distributions that installed the library
       modules the task reaches (see `reached_modules`), and of those they require,
       None if the modules cannot be determined;
@@ -478,7 +481,9 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
     packages = None if modules is None else package_versions(modules)
     context = {
         **process_context(),
-        "environment": environment.checksum(),
+        "environment": (
+            environment.checksum() if environment_key is None else environment_key
+        ),
         "packages": packages,
         "installed": _installed_digest(frozenset(packages or ())),
     }
