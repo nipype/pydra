@@ -1,8 +1,4 @@
-"""The named lease and its cross-process beater (RFC 0005 §5.3, L0).
-
-This module is imported by the beater processes it starts, for the ``on_expire``
-callbacks below, so it imports nothing beyond the lease module at the top.
-"""
+"""The named lease and its cross-process beater (RFC 0005 §5.3, L0)."""
 
 import json
 import os
@@ -29,19 +25,32 @@ FAST = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
 # a loaded CI runner meets where 0.05 s is tight
 CROSS = LeaseSettings(stale_after=2, timeout=10, attribute_delay=0)
 
-ME = "pydra.engine.tests.test_named_lease"
+CALLBACKS = textwrap.dedent("""\
+    import json, time
+    from pathlib import Path
 
 
-def record_expiry(token_dir: Path, payload: dict) -> None:
-    """An ``on_expire`` callback: write what it received to ``payload["out"]``."""
-    Path(payload["out"]).write_text(
-        json.dumps({"token_dir": str(token_dir), "payload": payload})
-    )
+    def record_expiry(token_dir, payload):
+        Path(payload["out"]).write_text(
+            json.dumps({"token_dir": str(token_dir), "payload": payload})
+        )
 
 
-def wedge(token_dir: Path, payload) -> None:
-    """An ``on_expire`` callback that never returns in a test's time."""
-    time.sleep(120)
+    def wedge(token_dir, payload):
+        time.sleep(120)
+    """)
+
+
+@pytest.fixture
+def callbacks(tmp_path, monkeypatch) -> str:
+    """The name of a module of ``on_expire`` callbacks the beater can import: the
+    tests may run against an installed wheel, which carries no test modules."""
+    where = tmp_path / "callbacks"
+    where.mkdir()
+    (where / "l0_expiry_callbacks.py").write_text(CALLBACKS)
+    path = os.environ.get("PYTHONPATH")
+    monkeypatch.setenv("PYTHONPATH", str(where) + (os.pathsep + path if path else ""))
+    return "l0_expiry_callbacks"
 
 
 def wait_for(condition, timeout: float = 10.0, step: float = 0.01) -> bool:
@@ -263,7 +272,7 @@ def test_beater_reports_loss(tmp_path):
         shutil.rmtree(gone)
         assert wait_for(lambda: lease.lost is not None, 5 * CROSS.renew_interval + 5)
         assert token_dir in client.lost
-        assert seen == [token_dir]
+        assert wait_for(lambda: seen == [token_dir], 5)  # called after the mark
         assert not lease.prove()
         assert client.alive
 
@@ -348,7 +357,7 @@ def test_deadline_cleared_keeps_beating(tmp_path):
 
 
 @pytest.mark.timeout(120)
-def test_deadline_payload_reaches_callback(tmp_path):
+def test_deadline_payload_reaches_callback(tmp_path, callbacks):
     """The payload sent with ``deadline`` is what ``on_expire`` receives, in the
     beater process, before ``expired`` reaches the holder."""
     lease = take(tmp_path / "ticket.lease")
@@ -356,7 +365,7 @@ def test_deadline_payload_reaches_callback(tmp_path):
     payload = {"out": str(out), "jobs": ["a", "b"], "attempt": "9c41.3"}
     when_expired = []
     with BeaterClient(
-        LeaseBeater(on_expire=f"{ME}:record_expiry"),
+        LeaseBeater(on_expire=f"{callbacks}:record_expiry"),
         on_expired=lambda d: when_expired.append(out.exists()),
     ) as client:
         client.hold(lease.token_dir, CROSS, lease=lease)
@@ -388,12 +397,12 @@ def test_beater_eof(tmp_path):
 
 
 @pytest.mark.timeout(120)
-def test_ack_timeout_is_beater_death(tmp_path):
+def test_ack_timeout_is_beater_death(tmp_path, callbacks):
     """A beater that stops answering (here, wedged in ``on_expire``): ``hold`` times
     out after ``renew_interval`` and the holder has lost its beater."""
     first = take(tmp_path / "one.lease")
     second = take(tmp_path / "two.lease")
-    client = BeaterClient(LeaseBeater(on_expire=f"{ME}:wedge"))
+    client = BeaterClient(LeaseBeater(on_expire=f"{callbacks}:wedge"))
     try:
         client.hold(first.token_dir, CROSS)
         client.deadline(first.token_dir, time.time() - 1)  # the beater wedges
