@@ -468,8 +468,9 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
       (the task's own, those of a workflow's nodes, those of tasks passed as inputs),
       the `code_digest` of each by ``module.qualname==version``, which the version
       stands for (see `pydra.engine.store.check_declared_code`);
-    * ``unknown``: present when any of ``packages`` is unknown, set to a value unique
-      to this process, so the result is reused by no other process.
+    * ``unknown``: present when any of ``packages`` is unknown, or the job's tool version
+      is unresolved (`pydra.engine.job.Job.context`), set to a value unique to this
+      process, so the result is reused by no other process.
     """
     if task._declared_code is None and not hasattr(task, "__checksum__"):
         task._hash  # collects the modules and the code of declared versions reached

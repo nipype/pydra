@@ -1079,8 +1079,8 @@ def test_library_type_carries_its_owner():
 
 # equal on 3.11, 3.12, 3.13, 3.14 and 3.15
 TYPE_GOLDEN_2 = {
-    "list": "type@1:b2ff601d40c18f4065b2e2322ada0e90e776a8df2235093d0c658b2eec53b4ce",
-    "tlist": "type@1:b2ff601d40c18f4065b2e2322ada0e90e776a8df2235093d0c658b2eec53b4ce",
+    "list": "type@1:708f32d818ad14f99d19e487639b0ef2502b9b8f21a8efe8504434a91866ae5c",
+    "tlist": "type@1:708f32d818ad14f99d19e487639b0ef2502b9b8f21a8efe8504434a91866ae5c",
     "paramspec": "type@1:0ba0266553649af4552feb205bfd1c49e0ac724289aa6efee3afe8b3a41fcaa2",
     "callable_p": "type@1:b216773194079f0c07bc19ceac6d99059b2d9b568a2628c622c12e0f3f1b2290",
     "typevar": "type@1:6dadccec566fc278b6009ef9d8b79f341724847b35e226cb98afe81cff4cf8f1",
@@ -1305,3 +1305,46 @@ def test_class_annotation_without_a_stable_form_names_the_field():
 )
 def test_type_forms_are_dispatched_to_bytes_repr_type(tp):
     assert hash_module.bytes_repr.dispatch(type(tp)) is hash_module.bytes_repr_type
+
+
+# ---------------------------------------------------------------------------
+# the hash cache memoises by id() and keeps what it memoises alive
+# ---------------------------------------------------------------------------
+
+
+def _versioned_task_classes(n):
+    import types
+
+    module = types.ModuleType("pydra_cache_alive_probe")
+    sys.modules[module.__name__] = module
+    exec(
+        "\n".join(f"def f{i}(a: int) -> int:\n    return a + {i}\n" for i in range(n)),
+        module.__dict__,
+    )
+    classes = []
+    for i in range(n):
+        function = getattr(module, f"f{i}")
+        function.__module__ = module.__name__
+        classes.append(python.define(function, version="1"))
+    return classes
+
+
+def _consume_list(x: list) -> int:
+    return len(x)
+
+
+def test_list_of_task_values_has_one_checksum():
+    classes = _versioned_task_classes(40)
+    consumer = python.define(_consume_list)
+    checksums = {consumer(x=[cls(a=1) for cls in classes])._checksum for _ in range(20)}
+    assert len(checksums) == 1
+
+
+def test_one_cache_gives_every_versioned_task_class_its_digest():
+    from pydra.utils.hash import Cache
+
+    classes = _versioned_task_classes(40)
+    cache = Cache()
+    shared = [type_digest(cls, cache) for cls in classes]
+    assert len(set(shared)) == 40
+    assert shared == [type_digest(cls) for cls in classes]

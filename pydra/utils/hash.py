@@ -274,6 +274,9 @@ class Cache:
         converter=PersistentCache.from_path,  # type: ignore[misc]
     )
     _hashes: ty.Dict[int, Hash] = attrs.field(factory=dict)
+    # the objects memoised by ``id`` here and in ``digests``, kept so that no id is
+    # reused for another object while the cache lives
+    _alive: ty.List[ty.Any] = attrs.field(factory=list)
     # the `code_hash` tier of the functions hashed with this cache, `code_hash_default`
     # when None
     code_hash: ty.Optional[str] = attrs.field(default=None)
@@ -296,6 +299,10 @@ class Cache:
 
     def __setitem__(self, object_id: int, hsh: Hash):
         self._hashes[object_id] = hsh
+
+    def keep_alive(self, obj: ty.Any) -> None:
+        """Hold `obj` for the life of the cache, as its id is a key of a memo"""
+        self._alive.append(obj)
 
     def __contains__(self, object_id):
         return object_id in self._hashes
@@ -346,6 +353,7 @@ def hash_single(obj: object, cache: Cache) -> Hash:
     objid = id(obj)
     if objid not in cache:
         # Handle recursion by putting a dummy value in the cache
+        cache.keep_alive(obj)
         cache[objid] = Hash(b"\x00")
         bytes_it = bytes_repr(obj, cache)
         # Pop first element from the bytes_repr iterator and check whether it is a
@@ -429,7 +437,7 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     dct: Dict[str, ty.Any]
     if attrs.has(type(obj)):
         # Drop any attributes that aren't used in comparisons by default
-        dct = attrs.asdict(obj, recurse=False, filter=lambda a, _: bool(a.eq))
+        dct = attrs.asdict(obj, recurse=False, filter=hashed_attribute)
     elif hasattr(obj, "__slots__") and obj.__slots__ is not None:
         dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
     else:
@@ -1696,6 +1704,7 @@ class _CodeWalk:
                 _walk_memo.setdefault(self.root, {})[key] = memo
         self.cache.modules.update(self.modules)
         self.cache.refs.update(self.refs)
+        self.cache.keep_alive(self.root)
         digest = self.cache.digests[id(self.root)] = sha256(
             b"".join(len(code).to_bytes(8, "big") + code for code, _ in entries)
         ).hexdigest()
@@ -1878,7 +1887,7 @@ def bytes_repr_versioned_executor(
 ) -> Iterator[bytes]:
     cls = type(obj.field)
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
-    dct = attrs.asdict(obj.field, recurse=False, filter=lambda a, _: bool(a.eq))
+    dct = attrs.asdict(obj.field, recurse=False, filter=hashed_attribute)
     dct["default"] = TaskFunction(dct["default"], version=obj.version)
     yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
@@ -2001,6 +2010,15 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
 def bytes_repr_task_function(obj: TaskFunction, cache: Cache) -> Iterator[bytes]:
     yield from _bytes_repr_code(
         obj.function, cache, defaults=False, version=obj.version
+    )
+
+
+def hashed_attribute(attribute: "attrs.Attribute", _value: ty.Any = None) -> bool:
+    """Whether an attrs attribute is part of the identity of its instance: the attributes
+    that take part in comparisons, except documentation (``metadata={"pydra.documentation":
+    True}``, a field's ``help``), which attrs equality sees and an identity does not"""
+    return bool(attribute.eq) and not attribute.metadata.get(
+        "pydra.documentation", False
     )
 
 
