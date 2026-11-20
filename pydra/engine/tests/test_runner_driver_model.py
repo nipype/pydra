@@ -843,3 +843,51 @@ def test_batching_executor_caps_max_concurrent_itself(tmp_path):
     assert not result.errored and result.outputs.out == [1, 2, 3, 4, 5, 6]
     assert worker.peak <= 2
     assert sum(worker.calls) == 6 and worker.calls[0] == 2
+
+
+class HoldsJobs(base.Worker):
+    """A batching worker that keeps every job it is given until the test lets go"""
+
+    _plugin_name = "holds-jobs"
+
+    def __init__(self):
+        super().__init__()
+        self.given = []
+
+    async def run(self, job, rerun=False):
+        raise AssertionError("jobs are given through submit_many")
+
+    async def submit_many(self, jobs, done=None):
+        self.given.extend(j.state_index for j in jobs)
+        await asyncio.Event().wait()
+
+
+@pytest.mark.timeout(30, method="thread")
+def test_cancel_frees_the_slots_of_a_capped_batching_executor(submitter):
+    from pydra.engine.executor import WorkerExecutor
+
+    runner = runner_for(submitter, Split6(xs=[0, 1, 2]))
+    first, second, third = runner.ready().dispatch
+    worker = HoldsJobs()
+    ex = WorkerExecutor(worker, max_concurrent=1)
+    ex.bind(lambda job, outcome: None)
+
+    async def run():
+        held = ex.submit([first, third])  # ``third`` waits for a slot
+        ex.submit([second])  # and so does ``second``
+        await asyncio.sleep(0.05)
+        assert worker.given == [0]
+        ex.cancel(held)
+        await asyncio.sleep(0.05)
+        # the other handle's job has the slot now; the cancelled handle's queued job
+        # left the queue
+        assert worker.given == [0, 1]
+        assert not any(handle is held for _, handle in ex._queue)
+        for task in list(ex._tasks.values()):
+            task.cancel()
+        for tasks in list(ex._submissions.values()):
+            for task in tasks:
+                task.cancel()
+        await asyncio.sleep(0)
+
+    submitter.loop.run_until_complete(asyncio.wait_for(run(), 10))

@@ -90,7 +90,9 @@ async def drive(
     ``max_concurrent`` caps the jobs in flight through ``runner.ready(limit)``, unless an
     executor batches (``batches = True``): the runner is then asked for every ready job, so
     a node's elements stay in one array or batch, and the batching executor caps inside
-    itself. Jobs routed to the other executors then wait in the driver for the cap. Under
+    itself, each to its own jobs. Jobs routed to the other executors then wait in the
+    driver for the cap, which counts only theirs, so the run as a whole can have more than
+    ``max_concurrent`` jobs in flight. Under
     ``fail_fast`` an executor whose ``serial`` attribute is true (a synchronous worker) has
     one job in flight at a time, so none starts after the first failure.
 

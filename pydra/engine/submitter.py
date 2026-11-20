@@ -141,7 +141,12 @@ class Submitter:
         to them with code execution as the reading user: only list caches whose
         writers you trust
     max_concurrent: int | float, optional
-        Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
+        Maximum number of concurrent tasks to run, by default float("inf") (unlimited).
+        A batching worker (one with ``submit_many``, such as slurm or sge) applies it
+        inside its executor, to its own jobs only; the other workers share the cap the
+        driver applies. A run that routes jobs to several batching workers, or to a
+        batching worker beside other workers, can therefore have more than
+        ``max_concurrent`` jobs in flight in all
     audit_flags : AuditFlag, optional
         Configure provenance tracking. available flags: :class:`~pydra.utils.messenger.AuditFlag`
         Default is no provenance tracking.

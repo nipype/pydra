@@ -164,7 +164,9 @@ class WorkerExecutor:
     A batching executor is driven with no limit (RFC 0005 section 7.1) and caps inside
     itself: it gives the worker at most ``max_concurrent`` jobs at a time, in node order,
     and holds the rest of a round until jobs end (as each is reported through ``done``,
-    or when its ``submit_many`` call returns).
+    or when its ``submit_many`` call returns). The cap is this executor's own: a run with
+    several batching executors, or one beside executors capped by the driver, can have more
+    than ``max_concurrent`` jobs in flight in all.
 
     Parameters
     ----------
@@ -310,6 +312,7 @@ class WorkerExecutor:
         (the driver cancels only as the run ends)"""
         for submission in self._submissions.pop(handle, ()):
             submission.cancel()
+        self._queue = deque((j, h) for j, h in self._queue if h is not handle)
         for job in list(handle.open):
             self._given.discard(job)
             task = self._tasks.pop(job, None)
@@ -317,6 +320,8 @@ class WorkerExecutor:
                 task.cancel()
             self._pending.pop(job, None)
         handle.open.clear()
+        if self._queue and asyncio._get_running_loop() is not None:
+            self._launch()  # the freed slots go to the other handles' waiting jobs
 
     def close(self) -> None:
         """Nothing to release: the worker belongs to the submitter"""
