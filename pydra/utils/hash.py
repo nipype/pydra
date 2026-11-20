@@ -7,7 +7,6 @@ import ast
 import struct
 import inspect
 import importlib
-import linecache
 from datetime import datetime
 import typing as ty
 import types
@@ -693,8 +692,10 @@ def _get_function_source(obj: types.FunctionType) -> tuple[str, str | None]:
     decorated by ``python.define``) have their ``co_filename`` replaced, so
     ``inspect.getsource`` fails in the process they are unpickled in. In that case
     the source is recovered from the file of the module the function was defined
-    in, using the (preserved) first line number of the code object, so that the
-    hash is consistent with the one calculated before pickling.
+    in. The code object (whose first line number is preserved) is pointed back at
+    that file and passed to ``inspect.getsource``, so exactly the same lookup is
+    performed as before pickling and the hashes are consistent. This also covers
+    lambdas and functions nested in other functions or classes.
 
     Raises
     ------
@@ -718,20 +719,12 @@ def _get_function_source(obj: types.FunctionType) -> tuple[str, str | None]:
         source_file = inspect.getsourcefile(module)
     except Exception:
         source_file = None
-    if not source_file:
-        raise OSError(f"could not get source code for {obj}")
-    lines = linecache.getlines(source_file, module.__dict__)
-    start = obj.__code__.co_firstlineno - 1
-    if not lines or start >= len(lines):
+    if not source_file or source_file == obj.__code__.co_filename:
         raise OSError(f"could not get source code for {obj}")
     try:
-        block = inspect.getblock(lines[start:])
+        src = inspect.getsource(obj.__code__.replace(co_filename=source_file))
     except Exception as e:
         raise OSError(f"could not get source code for {obj}") from e
-    src = "".join(block)
-    # Check that the recovered block actually defines the function in question
-    if not re.search(rf"^\s*(async\s+)?def\s+{re.escape(obj.__name__)}\b", src, re.M):
-        raise OSError(f"could not get source code for {obj}")
     return src, source_file
 
 

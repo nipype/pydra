@@ -626,3 +626,31 @@ def test_hash_function_stable_after_pickling_by_value(tmp_path: Path, monkeypatc
         assert hash_function(unpickled) == hash_function(func)
     finally:
         sys.modules.pop(module_name, None)
+
+
+def test_hash_lambda_and_nested_function_stable_after_pickling_by_value(
+    tmp_path: Path, monkeypatch
+):
+    """Lambdas and nested functions (e.g. output callables of tasks defined inside
+    functions) are always pickled by value by cloudpickle"""
+    cloudpickle = pytest.importorskip("cloudpickle")
+    module_name = "pydra_test_pickle_by_value_lambda_mod"
+    (tmp_path / f"{module_name}.py").write_text(
+        "def make():\n"
+        "    def nested(a, b=1):\n"
+        "        return a + b\n"
+        "\n"
+        "    return nested, dict(\n"
+        "        callable=lambda orig_file: orig_file,\n"
+        "    )\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    mod = __import__(module_name)
+    try:
+        nested, kwargs = mod.make()
+        for func in (nested, kwargs["callable"]):
+            unpickled = cloudpickle.loads(cloudpickle.dumps(func))
+            assert unpickled.__code__.co_filename != func.__code__.co_filename
+            assert hash_function(unpickled) == hash_function(func)
+    finally:
+        sys.modules.pop(module_name, None)

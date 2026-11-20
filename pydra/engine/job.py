@@ -1,51 +1,52 @@
 """Basic processing graph elements."""
 
+import asyncio
+import inspect
 import json
 import logging
 import os
-import inspect
-import sys
-import asyncio
-from pathlib import Path
-import typing as ty
-from uuid import uuid4
 import shutil
+import sys
+import typing as ty
+from datetime import datetime
+from pathlib import Path
 from traceback import format_exception
+from uuid import uuid4
+
 import attr
 import cloudpickle as cp
-from pydra.compose.base import Task
-from pydra.utils.hash import hash_function
-from filelock import SoftFileLock, Timeout
-from datetime import datetime
 from fileformats.core import FileSet
+from filelock import SoftFileLock, Timeout
+
+from pydra.compose.base import Task
+from pydra.compose.shell.templating import template_update
 from pydra.engine.hooks import TaskHooks
 from pydra.engine.result import (
-    RuntimeSpec,
     Result,
+    RuntimeSpec,
+    load_result,
     record_error,
+    save,
 )
-from pydra.utils.general import (
-    attrs_values,
-    attrs_fields,
-    get_fields,
-    ensure_list,
-    is_workflow,
-)
-from pydra.utils.typing import is_lazy
-from pydra.engine.result import load_result, save
-from pydra.utils.typing import copy_nested_files
-from pydra.compose.shell.templating import template_update
-from pydra.utils.messenger import AuditFlag
 from pydra.environments.base import Environment
 from pydra.utils.etelemetry import check_latest_version
+from pydra.utils.general import (
+    attrs_fields,
+    attrs_values,
+    ensure_list,
+    get_fields,
+    is_workflow,
+)
+from pydra.utils.messenger import AuditFlag
+from pydra.utils.typing import copy_nested_files, is_lazy
 
 logger = logging.getLogger("pydra")
 
 develop = False
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.submitter import Submitter
     from pydra.compose.base import Arg
+    from pydra.engine.submitter import Submitter
 
 TaskType = ty.TypeVar("TaskType", bound=Task)
 
@@ -554,9 +555,18 @@ class Job(ty.Generic[TaskType]):
         hash_changes = self.task._hash_changes()
         details = ""
         for changed in hash_changes:
-            field = getattr(attr.fields(type(self.task)), changed)
-            hash_function(getattr(self.task, changed))
             val = getattr(self.task, changed)
+            field = getattr(attr.fields(type(self.task)), changed, None)
+            if field is None:
+                # Not an input field, e.g. the "Outputs" class, which is included in
+                # the hash in case the names/types of the outputs change
+                details += (
+                    f"- {changed}: the hash of {val!r} appears to be unstable. This "
+                    "could be due to a stochastic/non-thread-safe attribute(s) of it, "
+                    "or a function/lambda referenced by it (e.g. an output callable) "
+                    "that can't be consistently hashed\n"
+                )
+                continue
             field_type = type(val)
             if inspect.isclass(field.type) and issubclass(field.type, FileSet):
                 details += (
