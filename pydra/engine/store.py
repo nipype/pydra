@@ -317,13 +317,14 @@ def check_declared_code(
     if not moved:
         return stored
     reuse = getattr(store, "reuse", None)
+    accepts = getattr(reuse, "accept", None)
     first = next(
         (
             other
             for _, other in stored
-            if reuse is not None
+            if accepts is not None
             and type(reuse) is not ExactReuse
-            and reuse.accept(other, context, task)
+            and accepts(other, context, task)
         ),
         None,
     )
