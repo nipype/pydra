@@ -269,12 +269,7 @@ def test_a_committed_json_of_another_job_is_not_followed(tmp_path):
     with sub:
         job = job_in(sub, _Inc(a=1))
         store.commit(_Lost(), _result(job, _Inc.Outputs(out=2)), job)
-        other = job_in(sub, _Inc(a=5))
-        record = (store.work_dir(job) / "_committed.json").read_bytes()
-        store._make_work_dir(
-            store.work_dir(other)
-        )  # job's record, planted in another's
-        (store.work_dir(other) / "_committed.json").write_bytes(record)
+        other = job_in(sub, _Inc(a=5), attempt=job.attempt)  # reads job's record
         failed = store.read_result(other, settled=False)
     assert failed.errored and "work directory" in failed.failure
 
@@ -403,21 +398,18 @@ def _Flaky(a: int, flag: str) -> ty.Any:
 def test_resume_stale_committed_json_not_read_after_failure(tmp_path):
     flag = tmp_path / "fail"
     store, sub = portable_submitter(tmp_path)
+    store.visibility_timeout = 0.1
     with sub:
-        first = job_in(
-            sub, _Flaky(a=1, flag=str(flag)), attempt="resume", resumable=True
-        )
+        first = job_in(sub, _Flaky(a=1, flag=str(flag)), resumable=True)
         wd = store.work_dir(first)
-        assert wd.name.startswith("resume-")
+        assert wd.name.startswith("resume-") and first.attempt != "resume"
         first.run()
         committed = json.loads((wd / "_committed.json").read_text())
         assert (
             committed["stored"] is False
         )  # run 1's outputs were kept here, not stored
         flag.write_text("x")
-        second = job_in(
-            sub, _Flaky(a=1, flag=str(flag)), attempt="resume", resumable=True
-        )
+        second = job_in(sub, _Flaky(a=1, flag=str(flag)), resumable=True)
         assert store.work_dir(second) == wd
         with pytest.raises(RuntimeError, match="second run fails"):
             second.run()
@@ -425,9 +417,7 @@ def test_resume_stale_committed_json_not_read_after_failure(tmp_path):
             wd / "_committed.json"
         ).exists()  # a run's start removes the last one's
         assert (wd / "_error.json").is_file()
-        seen = job_in(
-            sub, _Flaky(a=1, flag=str(flag)), attempt="resume", resumable=True
-        )
+        seen = job_in(sub, _Flaky(a=1, flag=str(flag)), resumable=True)
         got = seen.result(
             settled=True
         )  # another process's view: no job.committed, not errored
@@ -688,3 +678,63 @@ def test_execute_phase_returns_the_carried_context(tmp_path, monkeypatch):
         )
         assert IDENT.context(job, "execute") == carried
         assert IDENT.context(job, "lookup") != carried  # lookup still builds it
+
+
+# -- provenance survives the emptying of the work directory ----------------------------------------------
+
+
+def test_audit_messages_and_runtime_survive_a_stored_publish(tmp_path):
+    from pydra.utils.messenger import AuditFlag, FileMessenger
+
+    def audited(store, root):
+        kw = dict(
+            audit_flags=AuditFlag.ALL, messengers=FileMessenger(), cache_root=root
+        )
+        with Submitter(worker="debug", store=store, **kw) as sub:
+            job = Job(task=_Inc(a=1), submitter=sub, name="j")
+            job.attempt = uuid.uuid4().hex
+            return job, job.run()
+
+    from pydra.engine.store import PickleStore
+
+    pjob, presult = audited(PickleStore(tmp_path / "pickle"), tmp_path / "pickle")
+    expected = len(list(pjob.cache_dir.rglob("*.jsonld")))
+    assert expected > 0 and presult.runtime is not None
+    store = make(tmp_path)
+    job, result = audited(store, tmp_path / "pc")
+    assert result.runtime is not None and result.stored is True
+    assert sorted(p.name for p in store.work_dir(job).iterdir()) == ["_committed.json"]
+    assert len(list(job.record_dir.rglob("*.jsonld"))) == expected
+    assert list(job.record_dir.glob("proc-*.log"))  # the resource monitor's log
+    assert not str(job.record_dir).startswith(str(store.work_dir(job)))
+
+
+def test_resume_outcome_of_an_earlier_run_is_not_read_before_the_next_run(tmp_path):
+    """A resumable job's directory is stable, its attempt is not: files record the attempt, and
+    a run that has not started finds nothing of the last one's."""
+    flag = tmp_path / "fail"
+    store, sub = portable_submitter(tmp_path)
+    with sub:
+        task = lambda: _Flaky(a=1, flag=str(flag))  # noqa: E731
+        store.visibility_timeout = 0.1
+        kept = job_in(sub, task(), resumable=True)
+        kept.run()  # kept outputs: _committed.json in the resume directory, stored False
+        wd = store.work_dir(kept)
+        assert (
+            json.loads((wd / "_committed.json").read_text())["attempt"] == kept.attempt
+        )
+        nxt = job_in(sub, task(), resumable=True)
+        assert store.work_dir(nxt) == wd and nxt.attempt != kept.attempt
+        assert nxt.result() is None and nxt.done is False
+        assert nxt.result(
+            settled=True
+        ).errored  # settled: nothing of this attempt, so Failed
+        flag.write_text("x")
+        failed = job_in(sub, task(), resumable=True)
+        with pytest.raises(RuntimeError):
+            failed.run()
+        doc = json.loads((wd / "_error.json").read_text())
+        assert doc["attempt"] == failed.attempt
+        later = job_in(sub, task(), resumable=True)
+        assert later.result() is None  # run 1's failure is not this attempt's
+        assert later.done is False

@@ -438,7 +438,7 @@ def record_error(error_path, error):
     return error_path / "_error.pklz"
 
 
-def record_error_json(error_path, error):
+def record_error_json(error_path, error, attempt=None):
     """Write ``_error.json`` into ``error_path``, the work directory of a job whose store
     commits no failure (RFC 0003 section 11). The same record as `record_error`, as JSON,
     which `pydracli crash` reads without unpickling."""
@@ -450,6 +450,7 @@ def record_error_json(error_path, error):
         "time of crash": strftime("%Y%m%d-%H%M%S"),
         "login name": login_name,
         "name with checksum": str(Path(error_path).name),
+        "attempt": attempt,
         "error message": error if isinstance(error, (list, str)) else str(error),
     }
     target = Path(error_path) / "_error.json"

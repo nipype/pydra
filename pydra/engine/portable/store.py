@@ -1741,7 +1741,7 @@ class PortableStore:
             "format": _COMMITTED_FORMAT,
             "kind": kind,
             "checksum": job.checksum,
-            "attempt": "resume" if job.can_resume else job.attempt,
+            "attempt": job.attempt,
             "entry": {
                 "root": ref.root,
                 "cdir": ref.cdir,
@@ -1913,7 +1913,7 @@ class PortableStore:
                 found = self._read_committed(job, wd, job.committed)
             else:
                 found = None
-                doc = self._committed_doc(wd, settled) if wd is not None else None
+                doc = self._committed_doc(job, wd, settled) if wd is not None else None
                 if doc is not None:
                     found = self._read_committed(job, wd, self._committed_of(doc, wd))
             if found is None:
@@ -1924,7 +1924,7 @@ class PortableStore:
             return self._failed(job, wd, f"its result cannot be read: {err}")
         if found is not None:
             return found
-        if wd is not None and self._has(wd, _ERROR):
+        if wd is not None and self._has_error(wd, job.attempt):
             return self._failed(job, wd, f"the job failed; see {wd / _ERROR}")
         if settled:
             return self._failed(job, wd, "no result of the job was found")
@@ -2013,7 +2013,7 @@ class PortableStore:
             stored=False,
         )
 
-    def _committed_doc(self, wd: Path, settled: bool) -> dict | None:
+    def _committed_doc(self, job: "Job", wd: Path, settled: bool) -> dict | None:
         """``_committed.json`` of ``wd``. When ``settled``, a missing one is waited for up to
         the visibility timeout (another client's rename can be late to show on shared storage),
         unless the job's ``_error.json`` shows."""
@@ -2022,11 +2022,10 @@ class PortableStore:
         while True:
             try:
                 with self._open_work(wd) as handle:
-                    doc = self._load_committed(handle, wd)
+                    doc = self._load_committed(handle, wd, job.attempt)
                     if doc is not None:
                         return doc
-                    with contextlib.suppress(FileNotFoundError):
-                        handle.lstat(_ERROR)
+                    if self._failed_here(handle, job.attempt):
                         return None
             except FileNotFoundError:
                 pass
@@ -2036,7 +2035,9 @@ class PortableStore:
             time.sleep(min(0.005 * 2**n, 0.25))
 
     @staticmethod
-    def _load_committed(handle: StorageDir, wd: Path) -> dict | None:
+    def _load_committed(
+        handle: StorageDir, wd: Path, attempt: str | None
+    ) -> dict | None:
         try:
             with handle.open_read(_COMMITTED) as f:
                 doc = json.loads(_read_blocks(f, _JSON_CAP))
@@ -2058,6 +2059,10 @@ class PortableStore:
         ):
             logger.warning("%s is not a committed record", wd / _COMMITTED)
             return None
+        if (
+            doc.get("attempt") != attempt
+        ):  # a stable directory holds an earlier run's record
+            return None
         return doc
 
     @staticmethod
@@ -2073,13 +2078,23 @@ class PortableStore:
             None if kept is None or doc["stored"] else str(wd / kept),
         )
 
-    def _has(self, wd: Path, name: str) -> bool:
+    @staticmethod
+    def _failed_here(handle: StorageDir, attempt: str | None) -> bool:
+        """Whether ``_error.json`` records a failure of ``attempt`` (a stable directory holds
+        the last failure of an earlier one)."""
+        try:
+            with handle.open_read(_ERROR) as f:
+                doc = json.loads(_read_blocks(f, _JSON_CAP))
+        except (OSError, ValueError):
+            return False
+        return isinstance(doc, dict) and doc.get("attempt") == attempt
+
+    def _has_error(self, wd: Path, attempt: str | None) -> bool:
         try:
             with self._open_work(wd) as handle:
-                handle.lstat(name)
+                return self._failed_here(handle, attempt)
         except FileNotFoundError:
             return False
-        return True
 
     def _failed(self, job: "Job", wd: Path | None, why: str) -> Result:
         where = (

@@ -324,6 +324,15 @@ class Job(ty.Generic[TaskType]):
         return memo[1]
 
     @property
+    def record_dir(self) -> Path | None:
+        """Where the job's audit messages and resource logs go if not its working directory:
+        under a store with work directories, which empties the work directory once the
+        result is published, ``<cache_root>/audit/<uid>``."""
+        if not self._has_work_dir:
+            return None
+        return self.cache_root / "audit" / self.uid
+
+    @property
     def error_file(self) -> Path:
         """Where a failure of the job is recorded: ``_error.json`` in its work directory
         under a store that has one, otherwise ``_error.pklz`` in its slot."""
@@ -332,7 +341,7 @@ class Job(ty.Generic[TaskType]):
     def _record_error(self, error) -> Path:
         """Record ``error`` (a formatted traceback) beside the job."""
         if self._has_work_dir:
-            return record_error_json(self.cache_dir, error=error)
+            return record_error_json(self.cache_dir, error=error, attempt=self.attempt)
         return record_error(self.cache_dir, error=error)
 
     @property
@@ -474,7 +483,10 @@ class Job(ty.Generic[TaskType]):
             return result
         self.committed = result.committed
         read = self.store.read_committed(self, result.committed)
-        return read if read is not None else result
+        if read is None:
+            return result
+        read.runtime = result.runtime  # this run's measurement; an entry stores none
+        return read
 
     def run(self, rerun: bool = False):
         """Prepare the job working directory, execute the task, and save the
@@ -516,7 +528,9 @@ class Job(ty.Generic[TaskType]):
                 context=self.context,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
+            self.audit.start_audit(
+                odir=self.cache_dir, chdir=enters, record_dir=self.record_dir
+            )
             if self.audit.audit_check(AuditFlag.PROV):
                 self.audit.audit_task(job=self)
             try:
@@ -587,7 +601,9 @@ class Job(ty.Generic[TaskType]):
                 context=self.context,
             )
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
+            self.audit.start_audit(
+                odir=self.cache_dir, chdir=enters, record_dir=self.record_dir
+            )
             try:
                 self.audit.monitor()
                 await self.task._run_async(self, rerun)
