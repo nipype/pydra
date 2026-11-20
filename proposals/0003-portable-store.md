@@ -577,12 +577,13 @@ PortableStore(root, trust="shared", readonly=[Root(path, trust="shared"), ...],
 | `float` | JSON; NaN and infinities as `{"$float": "nan" \| "inf" \| "-inf"}` |
 | `complex` | `{"$complex": [re, im]}` |
 | `bytes` | `{"$bytes": "<sha256>"}` and a `.bin` member |
-| `list`, `tuple` | JSON array; decoded to the field's declared type (`utils/typing.py:87`, `TypeParser`) |
+| `list` | JSON array; decoded to the field's declared type (`utils/typing.py:87`, `TypeParser`) |
+| `tuple` | `{"$tuple": [...]}`, so a tuple that no declared type fixes (an untyped or `Any` field, or one inside an untyped container) comes back a tuple; a declared type still decodes it |
 | `set`, `frozenset` | `{"$set": [...]}`, elements sorted by their canonical JSON |
 | `dict` with `str` keys | JSON object; a key starting with `$` is written `$$...` |
 | `dict` with other keys | `{"$dict": [[key, value], ...]}`, sorted by the canonical JSON of the key |
 | `datetime`, `date` | `{"$datetime": "<ISO 8601>"}`; a naive datetime is refused in a `shared` root |
-| `pathlib.Path` that is not a `FileSet` | `{"$path": "<str>"}`; the path is a value, its file is not stored |
+| `pathlib.Path` that is not a `FileSet` | `{"$path": "<str>"}`; the path is a value, its file is not stored. A path to an existing file or directory inside the job's work directory (§5.4), which is emptied once the entry is published, is stored instead as a file set, `{"$path": {"$fileset": "generic/file" \| "generic/directory", "files": ...}}`, and decoded to the path of the entry's copy |
 | `numpy.ndarray` exactly (not a subclass), whose dtype holds no references (not object, not `StringDType`, no such field in a structured dtype) | `{"$array": "<sha256>"}` and a canonical `.npy` member (§6.1). Subclasses (`numpy.ma.MaskedArray`, `numpy.matrix`) and reference dtypes have no default codec: they are pickled under a root that allows it and are otherwise unencodable, as in RFC 0004 they are `py@1` |
 | numpy scalars | `{"$npscalar": ["<dtype>", "<value>"]}`: the dtype's `str` in little-endian form, and the value as a string: a decimal for integers, `float.hex` for floating types up to `float64`, `[re, im]` of those for complex, `"true"`/`"false"` for `bool_`, the integer count for `datetime64` and `timedelta64`, whose unit is in the dtype. `np.float32(1)` is `["<f4", "0x1.0000000000000p+0"]` and `np.float64(1)` is `["<f8", ...]`. `longdouble` and its complex form are unencodable, because `float.hex` would round them |
 | `File`, `Directory`, any `FileSet` | `{"$fileset": "<registered type tag>", "files": [[<key>, "files/<set>/<path>"], ...]}`, sorted by key; decoded to paths inside the entry (§6.1) |
