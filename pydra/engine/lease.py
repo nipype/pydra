@@ -7,12 +7,17 @@
 import asyncio
 import errno
 import getpass
+import importlib
 import json
 import logging
 import os
+import queue
 import re
 import shutil
+import signal
 import socket
+import subprocess
+import sys
 import threading
 import time
 import typing as ty
@@ -55,6 +60,7 @@ HOLDER_FILE = "holder.json"
 """The holder record in a lease's token directory."""
 
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
+_BEATS = ("thread", "external")
 _ESTALE = getattr(errno, "ESTALE", None)
 
 
@@ -202,13 +208,18 @@ class LeaseSettings:
     max_wait : float | None
         Seconds after which any wait ends in `LeaseTimeout`, even behind a holder that
         keeps renewing; None (default) for no cap.
+
+    Two settings are equal when their four staleness fields are (``stale_after``,
+    ``renew_fraction``, ``attribute_delay``, ``timeout``); ``max_wait`` caps one
+    waiter, may differ between processes sharing leases, and is not compared.
+    `to_json` and `from_json` carry the same four fields.
     """
 
     stale_after: float = STALE_AFTER
     timeout: float = TIMEOUT
     renew_fraction: float = RENEW_FRACTION
     attribute_delay: float = ATTRIBUTE_DELAY
-    max_wait: float | None = None
+    max_wait: float | None = attrs.field(default=None, eq=False)
 
     def __attrs_post_init__(self):
         if self.max_wait is not None and self.max_wait < 0:
@@ -243,6 +254,32 @@ class LeaseSettings:
     def renew_interval(self) -> float:
         """Seconds between two heartbeats."""
         return self.renew_fraction * self.stale_after
+
+    def to_json(self) -> dict:
+        """The four staleness fields as a JSON object (``max_wait`` left out)."""
+        return {name: getattr(self, name) for name in _SETTINGS_FIELDS}
+
+    @classmethod
+    def from_json(cls, record: dict) -> "LeaseSettings":
+        """The settings `to_json` wrote; a record with other keys is refused.
+
+        Raises
+        ------
+        ValueError
+            A field is missing or unknown, or the values break an inequality.
+        """
+        keys = set(record)
+        if keys != set(_SETTINGS_FIELDS):
+            missing = sorted(set(_SETTINGS_FIELDS) - keys)
+            unknown = sorted(keys - set(_SETTINGS_FIELDS))
+            raise ValueError(
+                f"lease settings need exactly {', '.join(_SETTINGS_FIELDS)} "
+                f"(missing {missing}, unknown {unknown})"
+            )
+        return cls(**{name: record[name] for name in _SETTINGS_FIELDS})
+
+
+_SETTINGS_FIELDS = ("stale_after", "renew_fraction", "attribute_delay", "timeout")
 
 
 def _owner() -> str:
@@ -330,12 +367,15 @@ class DirectoryLease:
     still holds the lease, and `pydra.engine.store.PickleStore.commit` refuses with
     `LeaseLost` when it does not.
 
+    A lease that guards no job, such as a worker pool's claim, worker or coordinator
+    lease, is made by `DirectoryLease.at` and has no checksum.
+
     Parameters
     ----------
-    checksum : str
-        The checksum of the job the lease is for.
-    cache_dir : Path
-        The directory the job runs in.
+    checksum : str | None
+        The checksum of the job the lease is for; None for a named lease.
+    cache_dir : Path | None
+        The directory the job runs in; None for a named lease.
     lockfile : Path
         The lease directory.
     settings : LeaseSettings
@@ -347,15 +387,22 @@ class DirectoryLease:
         Returns seconds on a local monotonic clock, for the wait's bounds.
     sleep : callable, optional
         Sleeps between attempts of a synchronous wait.
+    beat : "thread" or "external"
+        Who renews the lease once taken: a heartbeat thread in this process
+        (default), or another process, a `LeaseBeater` reached through
+        `BeaterClient`, given `token_dir`; with ``"external"`` no thread is started.
     """
 
-    checksum: str
-    cache_dir: Path
+    checksum: str | None
+    cache_dir: Path | None
     lockfile: Path
     settings: LeaseSettings = attrs.field(factory=LeaseSettings)
     clock: ty.Callable[[], float] | None = attrs.field(default=None, repr=False)
     monotonic: ty.Callable[[], float] = attrs.field(default=time.monotonic, repr=False)
     sleep: ty.Callable[[float], None] = attrs.field(default=time.sleep, repr=False)
+    beat: ty.Literal["thread", "external"] = attrs.field(
+        default="thread", kw_only=True, validator=attrs.validators.in_(_BEATS)
+    )
     broke: list[dict] = attrs.field(factory=list, init=False, repr=False)
     lost: str | None = attrs.field(default=None, init=False, repr=False)
     _token: str | None = attrs.field(default=None, init=False, repr=False)
@@ -371,10 +418,53 @@ class DirectoryLease:
     _delay: float = attrs.field(default=POLL_MIN, init=False, repr=False)
     _waiting: bool = attrs.field(default=False, init=False, repr=False)
 
+    @classmethod
+    def at(
+        cls,
+        lockfile: Path,
+        settings: LeaseSettings,
+        *,
+        beat: ty.Literal["thread", "external"] = "thread",
+        clock: ty.Callable[[], float] | None = None,
+        monotonic: ty.Callable[[], float] = time.monotonic,
+        sleep: ty.Callable[[float], None] = time.sleep,
+    ) -> "DirectoryLease":
+        """A named lease: the lease directory ``lockfile``, guarding no job.
+
+        Parameters
+        ----------
+        lockfile : Path
+            The lease directory.
+        settings : LeaseSettings
+            How the lease beats, ages and waits.
+        beat : "thread" or "external"
+            See `DirectoryLease`.
+        clock, monotonic, sleep : callable, optional
+            See `DirectoryLease`.
+        """
+        return cls(
+            None,
+            None,
+            Path(lockfile),
+            settings=settings,
+            clock=clock,
+            monotonic=monotonic,
+            sleep=sleep,
+            beat=beat,
+        )
+
     @property
     def held(self) -> bool:
         """Whether this lease is entered and has not been found taken over."""
         return self._token is not None and self.lost is None
+
+    @property
+    def token_dir(self) -> Path | None:
+        """The holder's token directory while this lease is entered, else None; the
+        directory a `LeaseBeater` beats for a lease taken with ``beat="external"``."""
+        if self._token is None:
+            return None
+        return self.lockfile / self._token
 
     def holder(self) -> dict | None:
         """The record of the process holding the lease, None if none can be read."""
@@ -460,8 +550,9 @@ class DirectoryLease:
         with atomic_write(token_dir / HOLDER_FILE, "w") as f:
             json.dump(record, f)
         self._token = token
-        self._heartbeat = _Heartbeat(self, token_dir)
-        self._heartbeat.start()
+        if self.beat == "thread":
+            self._heartbeat = _Heartbeat(self, token_dir)
+            self._heartbeat.start()
         return True
 
     # Judging and taking over
@@ -897,3 +988,543 @@ class DirectoryLease:
 
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
         await self._arelease()
+
+
+# Beating from another process
+
+
+class BeaterDead(RuntimeError):
+    """The `LeaseBeater` behind a `BeaterClient` is gone: its pipe reached end of
+    file, or it did not acknowledge a request in time. Its holder takes no new lease
+    under it."""
+
+
+def _reference(fn: "ty.Callable | str") -> str:
+    """The ``module:qualname`` an importable callable is found by."""
+    if isinstance(fn, str):
+        module, _, qualname = fn.partition(":")
+    else:
+        module = getattr(fn, "__module__", None) or ""
+        qualname = getattr(fn, "__qualname__", None) or ""
+    if not module or not qualname or module == "__main__" or "<" in qualname:
+        raise ValueError(
+            f"on_expire must be importable, a module-level callable or its "
+            f"'module:qualname' (got {fn!r})"
+        )
+    return f"{module}:{qualname}"
+
+
+def _resolve(reference: str) -> ty.Callable:
+    module, _, qualname = reference.partition(":")
+    obj: ty.Any = importlib.import_module(module)
+    for part in qualname.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+@attrs.define
+class _Beaten:
+    """One token directory a `LeaseBeater` holds."""
+
+    path: Path
+    interval: float
+    stale_after: float
+    n: int
+    due: float
+    last_ok: float
+    beating: bool = True
+    at: float | None = None
+    payload: ty.Any = None
+    kill_at: float | None = None
+
+
+@attrs.frozen
+class LeaseBeater:
+    """A loop, run in a process of its own, that beats the token directories of
+    leases another process (the holder) took with ``beat="external"``.
+
+    Each directory is beaten by `_Heartbeat`'s rule at its lease's renewal interval:
+    ``beat-<n+1>`` is made and ``beat-<n>`` removed. A directory found gone
+    (``ENOENT``/``ESTALE``), or failing for longer than ``stale_after``, is lost: it
+    is no longer beaten and the holder is sent ``lost``. A directory given a deadline
+    stops being beaten when the deadline passes (``time.time()`` on this host);
+    ``on_expire(token_dir, payload)`` then runs here, and the holder is sent
+    ``expired``. The loop ends when the holder's pipe closes. Start one with
+    `BeaterClient`.
+
+    Parameters
+    ----------
+    on_expire : callable or str, optional
+        Called as ``on_expire(token_dir, payload)`` in the beater process when a
+        deadline passes; a module-level callable or its ``"module:qualname"``,
+        imported by the beater.
+    kill_after : float, optional
+        Seconds after ``expired`` within which the holder must send
+        ``ack_expired``; if it does not, the beater kills the holder's process
+        (``SIGKILL``) and exits. None (default) never kills.
+    """
+
+    on_expire: "ty.Callable | str | None" = attrs.field(default=None)
+    kill_after: float | None = None
+
+    @on_expire.validator
+    def _check_on_expire(self, attribute, value) -> None:
+        if value is not None:
+            _reference(value)
+
+    def config(self, holder_pid: int) -> dict:
+        """The JSON the beater process is started with."""
+        return {
+            "on_expire": None if self.on_expire is None else _reference(self.on_expire),
+            "kill_after": self.kill_after,
+            "holder_pid": holder_pid,
+        }
+
+    @staticmethod
+    def run(config: dict, commands: ty.BinaryIO, replies: ty.BinaryIO) -> None:
+        """The loop: read requests from ``commands``, write acknowledgements and
+        events to ``replies``, beat in between; return at end of file."""
+        _BeaterLoop(config, replies).run(commands)
+
+
+class _BeaterLoop:
+    def __init__(self, config: dict, replies: ty.BinaryIO):
+        self.replies = replies
+        self.holder_pid = config["holder_pid"]
+        self.kill_after = config.get("kill_after")
+        reference = config.get("on_expire")
+        self.on_expire = _resolve(reference) if reference else None
+        self.dirs: dict[str, _Beaten] = {}
+
+    def send(self, message: dict) -> None:
+        self.replies.write(json.dumps(message).encode() + b"\n")
+        self.replies.flush()
+
+    def run(self, commands: ty.BinaryIO) -> None:
+        inbox: "queue.Queue[dict | None]" = queue.Queue()
+
+        def read() -> None:
+            try:
+                for line in commands:
+                    if line.strip():
+                        inbox.put(json.loads(line))
+            finally:
+                inbox.put(None)
+
+        threading.Thread(target=read, name="pydra-beater-reader", daemon=True).start()
+        self.send({"ready": os.getpid()})
+        while True:
+            try:
+                message = inbox.get(timeout=self.wait())
+            except queue.Empty:
+                message = {}
+            if message is None:
+                return
+            if message:
+                self.handle(message)
+            if self.service():
+                return
+
+    def wait(self) -> float:
+        now, wall = time.monotonic(), time.time()
+        wakes = []
+        for entry in self.dirs.values():
+            if entry.beating:
+                wakes.append(entry.due - now)
+                if entry.at is not None:
+                    wakes.append(entry.at - wall)
+            if entry.kill_at is not None:
+                wakes.append(entry.kill_at - now)
+        return max(0.0, min(wakes)) if wakes else 3600.0
+
+    def handle(self, message: dict) -> None:
+        op, key = message.get("op"), message.get("dir")
+        reply: dict = {"ack": message.get("id")}
+        try:
+            if op == "hold":
+                self.hold(key, LeaseSettings.from_json(message["settings"]))
+            elif op == "release":
+                self.dirs.pop(key, None)
+            elif op == "deadline":
+                entry = self.dirs[key]
+                entry.at, entry.payload = message.get("at"), message.get("payload")
+            elif op == "ack_expired":
+                if key in self.dirs:
+                    self.dirs[key].kill_at = None
+            else:
+                raise ValueError(f"unknown request {op!r}")
+        except Exception as err:
+            reply["error"] = f"{type(err).__name__}: {err}"
+        self.send(reply)
+
+    def hold(self, key: str, settings: LeaseSettings) -> None:
+        path = Path(key)
+        try:  # continue the numbering of any beat already in the directory
+            n = max(
+                (int(e[5:]) for e in os.listdir(path) if re.match(r"^beat-\d+$", e)),
+                default=0,
+            )
+        except OSError:
+            n = 0
+        now = time.monotonic()
+        self.dirs[key] = _Beaten(
+            path, settings.renew_interval, settings.stale_after, n, now, now
+        )
+
+    def service(self) -> bool:
+        """Run what is due; whether the loop ends (it killed the holder)."""
+        now, wall = time.monotonic(), time.time()
+        for key, entry in list(self.dirs.items()):
+            if entry.beating and entry.at is not None and wall >= entry.at:
+                self.expire(key, entry)
+            elif entry.beating and now >= entry.due:
+                self.beat(key, entry)
+            if entry.kill_at is not None and time.monotonic() >= entry.kill_at:
+                self.kill()
+                return True
+        return False
+
+    def beat(self, key: str, entry: _Beaten) -> None:
+        entry.due += entry.interval
+        now = time.monotonic()
+        if entry.due < now:  # fell behind (a slow write): beat on from now
+            entry.due = now + entry.interval
+        try:
+            os.mkdir(entry.path / f"beat-{entry.n + 1}")
+        except FileExistsError:
+            entry.n += 1
+            return
+        except OSError as err:
+            if err.errno in (errno.ENOENT, _ESTALE):
+                self.lose(key, entry, "its holder directory was removed")
+            elif now - entry.last_ok > entry.stale_after:
+                self.lose(key, entry, f"it could not be renewed for too long ({err})")
+            return
+        try:
+            os.rmdir(entry.path / f"beat-{entry.n}")
+        except OSError:
+            pass
+        entry.n += 1
+        entry.last_ok = time.monotonic()
+
+    def lose(self, key: str, entry: _Beaten, reason: str) -> None:
+        entry.beating = False
+        self.send({"event": "lost", "dir": key, "reason": reason})
+
+    def expire(self, key: str, entry: _Beaten) -> None:
+        entry.beating = False
+        if self.on_expire is not None:
+            try:
+                self.on_expire(entry.path, entry.payload)
+            except Exception:
+                logger.exception("on_expire failed for %s", entry.path)
+        if self.kill_after is not None:
+            entry.kill_at = time.monotonic() + self.kill_after
+        self.send({"event": "expired", "dir": key})
+
+    def kill(self) -> None:
+        logger.warning(
+            "Killing pid %s: it did not stop an expired call within %ss",
+            self.holder_pid,
+            self.kill_after,
+        )
+        try:
+            os.kill(self.holder_pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+        except OSError:
+            pass
+
+
+def _beater_main() -> None:
+    """The beater process: ``python -c`` runs this with the config as argument.
+    Requests arrive on stdin; replies leave on the original stdout, which is then
+    pointed at stderr so that nothing else writes to the pipe."""
+    if hasattr(signal, "SIGINT"):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)  # ends when its pipe closes
+    replies = os.fdopen(os.dup(1), "wb")
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
+    config = json.loads(sys.argv[1])
+    logging.basicConfig(level=logging.WARNING)
+    try:
+        loop = _BeaterLoop(config, replies)
+    except Exception as err:
+        replies.write(json.dumps({"error": f"{type(err).__name__}: {err}"}).encode())
+        replies.write(b"\n")
+        replies.flush()
+        raise SystemExit(1)
+    try:
+        loop.run(sys.stdin.buffer)
+    except BrokenPipeError:
+        pass
+
+
+class BeaterClient:
+    """The holder's end of a pipe to a `LeaseBeater`, which it starts as a child
+    process and stops when closed (or when its holder exits, which closes the pipe).
+
+    The holder takes a lease with ``beat="external"`` and calls `hold` with its
+    `DirectoryLease.token_dir`; it runs nothing under the lease before `hold`
+    returns. It calls `release` before releasing the lease, so that a release never
+    reads as a loss. A reader thread receives the beater's events: ``lost`` marks
+    the lease given to `hold` lost (its next `DirectoryLease.prove` answers False),
+    ``expired`` reports a passed deadline.
+
+    A request not acknowledged within the lease's ``renew_interval``, or the pipe
+    reaching end of file, means the beater is dead: the request raises `BeaterDead`,
+    the beater process is stopped, and every later request raises `BeaterDead`. Its
+    holder should take no new lease and exit, since its leases are no longer beaten.
+
+    Parameters
+    ----------
+    beater : LeaseBeater, optional
+        What the beater runs; by default no callback and no kill.
+    startup_timeout : float
+        Seconds to wait for the beater process to start.
+    on_lost : callable, optional
+        Called as ``on_lost(token_dir, reason)`` from the reader thread.
+    on_expired : callable, optional
+        Called as ``on_expired(token_dir)`` from the reader thread.
+    on_dead : callable, optional
+        Called as ``on_dead(reason)`` once the beater is found dead.
+    """
+
+    def __init__(
+        self,
+        beater: LeaseBeater | None = None,
+        *,
+        startup_timeout: float = 60.0,
+        on_lost: ty.Callable[[Path, str], None] | None = None,
+        on_expired: ty.Callable[[Path], None] | None = None,
+        on_dead: ty.Callable[[str], None] | None = None,
+    ):
+        self.beater = beater if beater is not None else LeaseBeater()
+        self.on_lost, self.on_expired, self.on_dead = on_lost, on_expired, on_dead
+        self.lost: dict[Path, str] = {}
+        self.expired: set[Path] = set()
+        self.dead: str | None = None
+        self._dying = False
+        self._lock = threading.Lock()
+        self._changed = threading.Condition(self._lock)
+        self._acks: dict[int, dict] = {}
+        self._next = 0
+        self._settings: dict[Path, LeaseSettings] = {}
+        self._leases: dict[Path, DirectoryLease] = {}
+        self._ready: dict | None = None
+        self.process = subprocess.Popen(
+            [
+                sys.executable,
+                "-P",
+                "-c",
+                "from pydra.engine.lease import _beater_main; _beater_main()",
+                json.dumps(self.beater.config(os.getpid())),
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+        )
+        self._reader = threading.Thread(
+            target=self._read, name="pydra-beater-client", daemon=True
+        )
+        self._reader.start()
+        with self._changed:
+            self._changed.wait_for(
+                lambda: self._ready is not None or self.dead is not None,
+                startup_timeout,
+            )
+            ready, dead = self._ready, self.dead
+        if ready is None or "error" in ready:
+            why = (ready or {}).get("error") or dead or "it did not start in time"
+            why = f"the beater did not start: {why}"
+            self._die(why)
+            self.close()
+            raise BeaterDead(why)
+
+    @property
+    def alive(self) -> bool:
+        """Whether the beater is still answering."""
+        return self.dead is None
+
+    # Requests
+
+    def hold(
+        self,
+        token_dir: Path,
+        settings: LeaseSettings,
+        *,
+        lease: DirectoryLease | None = None,
+    ) -> None:
+        """Have the beater beat ``token_dir`` at ``settings.renew_interval``; returns
+        once it acknowledged. ``lease``, if given, is marked lost when the beater
+        reports the directory lost."""
+        token_dir = Path(token_dir)
+        with self._lock:
+            self._settings[token_dir] = settings
+            if lease is not None:
+                self._leases[token_dir] = lease
+            self.expired.discard(token_dir)
+            self.lost.pop(token_dir, None)
+        self._request(
+            {"op": "hold", "dir": str(token_dir), "settings": settings.to_json()},
+            settings.renew_interval,
+        )
+
+    def release(self, token_dir: Path) -> None:
+        """Have the beater stop beating ``token_dir``; returns once it acknowledged,
+        after which the holder releases the lease."""
+        token_dir = Path(token_dir)
+        self._request(
+            {"op": "release", "dir": str(token_dir)}, self._interval(token_dir)
+        )
+        with self._lock:
+            self._settings.pop(token_dir, None)
+            self._leases.pop(token_dir, None)
+
+    def deadline(
+        self, token_dir: Path, at: float | None, payload: ty.Any = None
+    ) -> None:
+        """Set (or, with ``at=None``, clear) the time, as ``time.time()`` on this
+        host, at which the beater stops beating ``token_dir``, runs
+        ``on_expire(token_dir, payload)`` and sends ``expired``. ``payload`` is
+        JSON."""
+        token_dir = Path(token_dir)
+        self._request(
+            {"op": "deadline", "dir": str(token_dir), "at": at, "payload": payload},
+            self._interval(token_dir),
+        )
+
+    def ack_expired(self, token_dir: Path) -> None:
+        """Tell the beater the expired call under ``token_dir`` was stopped, so that
+        a `LeaseBeater` with ``kill_after`` does not kill this process."""
+        token_dir = Path(token_dir)
+        self._request(
+            {"op": "ack_expired", "dir": str(token_dir)}, self._interval(token_dir)
+        )
+
+    # Waiting
+
+    def wait_expired(self, token_dir: Path, timeout: float | None = None) -> bool:
+        """Whether ``expired`` arrived for ``token_dir`` within ``timeout`` seconds."""
+        token_dir = Path(token_dir)
+        with self._changed:
+            return self._changed.wait_for(lambda: token_dir in self.expired, timeout)
+
+    def wait_dead(self, timeout: float | None = None) -> bool:
+        """Whether the beater was found dead within ``timeout`` seconds."""
+        with self._changed:
+            return self._changed.wait_for(lambda: self.dead is not None, timeout)
+
+    def close(self) -> None:
+        """Close the pipe, which ends the beater, and wait for it to exit."""
+        with self._changed:
+            self._dying = True
+            if self.dead is None:
+                self.dead = "it was closed"
+            self._changed.notify_all()
+        try:
+            self.process.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.process.wait(10)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+        self._reader.join(10)
+        self.process.stdout.close()
+
+    def __enter__(self) -> "BeaterClient":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
+
+    # Internals
+
+    def _interval(self, token_dir: Path) -> float:
+        with self._lock:
+            settings = self._settings.get(token_dir)
+        if settings is None:
+            raise ValueError(f"{token_dir} is not held by this beater")
+        return settings.renew_interval
+
+    def _request(self, message: dict, timeout: float) -> None:
+        with self._changed:
+            if self.dead is not None:
+                raise BeaterDead(self.dead)
+            self._next += 1
+            ident = message["id"] = self._next
+        try:
+            self.process.stdin.write(json.dumps(message).encode() + b"\n")
+            self.process.stdin.flush()
+        except OSError as err:
+            self._die(f"its pipe is closed ({err})")
+            raise BeaterDead(self.dead) from err
+        with self._changed:
+            answered = self._changed.wait_for(
+                lambda: ident in self._acks or self.dead is not None, timeout
+            )
+            reply = self._acks.pop(ident, None)
+        if reply is None:
+            if not answered:
+                self._die(f"it did not acknowledge {message['op']} within {timeout:g}s")
+            raise BeaterDead(self.dead)
+        if "error" in reply:
+            raise ValueError(f"the beater refused {message['op']}: {reply['error']}")
+
+    def _die(self, why: str) -> None:
+        """Record the beater dead, stop it and tell ``on_dead``, before any waiter
+        is woken."""
+        with self._lock:
+            if self._dying:
+                return
+            self._dying = True
+        logger.warning("The lease beater (pid %s) is dead: %s", self.process.pid, why)
+        if self.process.poll() is None:
+            self.process.kill()
+        try:
+            if self.on_dead is not None:
+                self.on_dead(why)
+        finally:
+            with self._changed:
+                self.dead = why
+                self._changed.notify_all()
+
+    def _read(self) -> None:
+        try:
+            for line in self.process.stdout:
+                try:
+                    message = json.loads(line)
+                except ValueError:
+                    continue
+                self._dispatch(message)
+        except (OSError, ValueError):
+            pass
+        self._die("its pipe reached end of file")
+
+    def _dispatch(self, message: dict) -> None:
+        if "ready" in message or ("error" in message and "ack" not in message):
+            with self._changed:
+                self._ready = message
+                self._changed.notify_all()
+            return
+        if "ack" in message:
+            with self._changed:
+                self._acks[message["ack"]] = message
+                self._changed.notify_all()
+            return
+        token_dir = Path(message.get("dir", ""))
+        if message.get("event") == "lost":
+            reason = message.get("reason", "lost")
+            with self._changed:
+                self.lost[token_dir] = reason
+                lease = self._leases.get(token_dir)
+                self._changed.notify_all()
+            if lease is not None and lease.lost is None:
+                lease._lose(reason)
+            if self.on_lost is not None:
+                self.on_lost(token_dir, reason)
+        elif message.get("event") == "expired":
+            if self.on_expired is not None:
+                self.on_expired(token_dir)
+            with self._changed:
+                self.expired.add(token_dir)
+                self._changed.notify_all()
