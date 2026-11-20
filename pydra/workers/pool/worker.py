@@ -17,7 +17,8 @@ one loop:
    whose attempt expired is looked up in the store, then typed a timeout (a resource fault).
 3. **Re-judge** the ticket against the hardware read (a class whose ``gpu_mem`` was unknown): a ticket
    needing more device memory is withdrawn, reason ``refused``, and nothing runs. **Load** its
-   residency through the process's `ResidentSet`; a failure there is a load fault, never a job's.
+   residency through the process's `ResidentSet`, on the granted device (the process device, which
+   a job's own binding uses too); a failure there is a load fault, never a job's.
 4. **Run** each job through ``Job.run`` on a thread, with ``chdir=False``, under the attempt of its
    newest follow generation (a ``restart`` generation first when that attempt already started), with
    the claim as its de-duplication lease, proved before ``publish``. The call record is written before
@@ -41,6 +42,7 @@ import importlib
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import threading
@@ -133,8 +135,17 @@ def class_from_record(record: dict) -> WorkerClass:
     return WorkerClass(**record)
 
 
-def _norm(name: str) -> str:
-    return "".join(c for c in name.lower() if c.isalnum())
+def _tokens(name: str) -> list[str]:
+    return [t for t in re.split(r"[^a-z0-9]+", name.lower()) if t]
+
+
+def _gpu_type_matches(gpu_type: str, product: str) -> bool:
+    """Whether ``gpu_type``'s tokens appear, whole and in order, among the product name's:
+    ``h100`` matches "NVIDIA H100 80GB HBM3", ``a10`` does not match "NVIDIA A100-SXM4-80GB".
+    """
+    want, have = _tokens(gpu_type), _tokens(product)
+    n = len(want)
+    return bool(want) and any(have[i : i + n] == want for i in range(len(have) - n + 1))
 
 
 def check_hardware(cls: WorkerClass, hardware: HardwareClass) -> WorkerClass:
@@ -157,7 +168,7 @@ def check_hardware(cls: WorkerClass, hardware: HardwareClass) -> WorkerClass:
     granted = hardware.gpus[:wanted]
     if cls.gpu_type is not None:
         other = [
-            g.product for g in granted if _norm(cls.gpu_type) not in _norm(g.product)
+            g.product for g in granted if not _gpu_type_matches(cls.gpu_type, g.product)
         ]
         if other:
             raise WrongHardware(
@@ -260,6 +271,12 @@ class Worker:
         self.token: str | None = None
         self.providers: tuple = ()
         self.polls = 0
+        self.live_polls = (
+            0  # loop passes on which a coordinator was judged live (substrate)
+        )
+        self.orphan_polls = (
+            0  # loop passes since then with none live, before the orphan exit
+        )
         self.served: list[tuple[str, str]] = []
         self.claims: list[int] = []
         self.stop = threading.Event()
@@ -321,7 +338,7 @@ class Worker:
             self.pool.worker_dir(self.token).close()
             lease = DirectoryLease.at(
                 self.pool.path / "workers" / self.token / "lease",
-                self.pool._lease_settings,
+                self.pool.lease_settings,
                 beat="external",
             )
             if lease.try_take() is not None:
@@ -335,6 +352,9 @@ class Worker:
                 logger.error("refusing to start: %s", err)
                 return EXIT_HARDWARE
             self._filled_gpu_mem = cls.gpu_mem is None and self.cls.gpu_mem is not None
+            from pydra.engine import resident
+
+            resident.set_process_device(self._device())
             self.pool.write_worker_record(
                 self.token,
                 "ready.json",
@@ -387,14 +407,23 @@ class Worker:
         finally:
             signal.signal(signal.SIGTERM, previous)
 
+    def _device(self):
+        """The device providers load on: the first granted GPU on a CUDA class (an index into
+        this process's ``CUDA_VISIBLE_DEVICES``), else the CPU."""
+        from pydra.engine.resident import Device
+
+        if self.cls.device == "cuda":
+            return Device("cuda", 0)
+        return Device()
+
     def _shutdown(self) -> None:
         for claim in list(self._held.values()):
             self._release(claim)
         try:
             from pydra.engine import resident
 
-            if resident._PROCESS_SET is not None:
-                resident._close_process_set()
+            resident.close_process_set()
+            resident.set_process_device(None)
         finally:
             if self._worker_lease is not None:
                 self._beater_release(self._worker_lease.token_dir)
@@ -559,8 +588,12 @@ class Worker:
     def _orphaned(self) -> bool:
         if self._coordinator_live():
             self._last_live = time.monotonic()
+            self.live_polls += 1
             return False
-        return time.monotonic() - self._last_live > self.settings.orphan_after_s
+        if time.monotonic() - self._last_live > self.settings.orphan_after_s:
+            return True
+        self.orphan_polls += 1
+        return False
 
     def _coordinator_live(self) -> bool:
         """Whether the newest coordinator epoch has not ended and its lease was beaten within
@@ -670,16 +703,25 @@ class Worker:
     def _decode(
         self, claim: Claim, entry: TicketJob, attempt: str | None = None
     ) -> "Job | None":
+        """The job a ticket entry names; None when its payload cannot be read. A storage error
+        (``ESTALE``, ``EIO``) requeues the job as an infrastructure fault, bounded; any other
+        (a digest mismatch, an untrusted directory, a payload that does not decode) is ``failed``.
+        """
+        from pydra.engine.portable.errors import EntryNotTrusted
+
         try:
             return read_payload(self.codec, entry.payload, None)
         except Exception as exc:
+            logger.error("the payload of %s is unreadable: %r", entry.checksum, exc)
             fault = self.classify(exc, "pool")
+            if isinstance(exc, OSError) and not isinstance(exc, EntryNotTrusted):
+                self._infrastructure(claim, entry, fault, {"stop": False})
+                return None
             current = claim.current(entry)
             if attempt is None and current is not None:
                 attempt = current[1]["attempt"]
             if attempt is not None:
                 claim.outcome(entry, attempt, "failed", fault=fault.to_json())
-            logger.error("the payload of %s is unreadable: %r", entry.checksum, exc)
             return None
 
     def _refuse(self, claim: Claim, jobs: list[tuple[TicketJob, "Job"]]) -> bool:
@@ -730,13 +772,13 @@ class Worker:
         rs = resident.process_set()
         began, loaded = time.monotonic(), False
         for field, name in fields:
-            provider = resident._find_provider(job, name)
+            provider = resident.find_provider(job, name)
             spec = getattr(job.task, field)
-            key = resident._spec_key(job.task, field, name)
+            key = resident.spec_key(job.task, field, name)
             loaded = loaded or key not in rs
             rs.get(
                 key,
-                lambda p=provider, s=spec: p.load(s, resident.Device()),
+                lambda p=provider, s=spec: p.load(s, resident.process_device()),
                 close=provider.close,
                 footprint=provider.footprint(spec),
             )
@@ -762,11 +804,74 @@ class Worker:
         self._release(claim)
         self.stop.wait(self.settings.poll_s)
 
+    def _infrastructure(
+        self,
+        claim: Claim,
+        entry: TicketJob,
+        fault: FaultRecord,
+        group: dict,
+        sample: Sample | None = None,
+    ) -> str:
+        """Requeue a job after an infrastructure fault, uncharged, under a ``restart`` generation at
+        the ``call`` phase written now; at ``infrastructure_replacements`` such faults it is
+        ``failed`` with an ``InfrastructureFault`` (W7 replaces this with a hold of its
+        residency). The ticket is released either way."""
+        current = claim.current(entry)
+        if current is None:
+            group["stop"] = True
+            return "stopped"
+        faults = self.pool.charges(*entry.key)["infrastructure"] + 1
+        if faults >= self.faults.infrastructure_replacements:
+            record = FaultRecord(
+                "infrastructure",
+                "InfrastructureFault",
+                f"{faults} infrastructure faults (the budget is "
+                f"{self.faults.infrastructure_replacements}); the last: {fault.type}: "
+                f"{fault.message}",
+                fault.phase,
+                gap=fault.gap,
+            )
+            fields = {"fault": record.to_json(), "cause": fault.to_json()}
+            if sample is not None:
+                return self._settle(
+                    claim, entry, current[1]["attempt"], "failed", sample, **fields
+                )
+            claim.outcome(entry, current[1]["attempt"], "failed", **fields)
+            return "failed"
+        claim.restart(entry, phase="call")
+        logger.warning(
+            "infrastructure fault %d of %s: %s: %s; requeued",
+            faults,
+            entry.checksum,
+            fault.type,
+            fault.message,
+        )
+        group["stop"] = True
+        return "stopped"
+
+    def _stored(self, entry: TicketJob) -> bool:
+        """Whether the store holds a committed result for the job (RFC 0005 section 5.5: a taker
+        looks the job up first)."""
+        job = None
+        with contextlib.suppress(Exception):
+            job = read_payload(self.codec, entry.payload, None)
+        find = getattr(getattr(job, "store", None), "find", None)
+        if job is None or find is None:
+            return False
+        try:
+            found = find(job)
+        except Exception:
+            return False
+        return getattr(found, "result", None) is not None
+
     def _within_crash_budget(self, claim: Claim, entry: TicketJob) -> bool:
         crashes = self.pool.charges(*entry.key)["crashes"]
         if crashes < self.faults.crashes_charged:
             return True
         current = claim.current(entry)
+        if current is not None and self._stored(entry):
+            claim.outcome(entry, current[1]["attempt"], "done", served=True)
+            return False
         if current is not None:
             claim.outcome(
                 entry,
@@ -868,10 +973,7 @@ class Worker:
             self._resource(claim, [entry], fault, "call")
             return "moved"
         if fault.kind == "infrastructure":
-            group["stop"] = (
-                True  # requeued uncharged: the restart generation gives a fresh attempt
-            )
-            return "stopped"
+            return self._infrastructure(claim, entry, fault, group, sample)
         return self._settle(
             claim, entry, attempt, "failed", sample, fault=fault.to_json()
         )
@@ -915,38 +1017,49 @@ class Worker:
                 call.expired = True
                 self.recycle = self.recycle or "a call passed its deadline"
                 if self._stop_call():
-                    with contextlib.suppress(BeaterDead, ValueError):
-                        self.client.ack_expired(token_dir)
+                    self._ack_expired(token_dir)
             if self.stop.is_set():
                 if drain_until is None:
                     drain_until = time.monotonic() + self.settings.drain_s
-                    self._stop_call()
                 elif time.monotonic() >= drain_until:
+                    self._stop_call()  # the drain is over: stop what can be stopped
                     call.abandoned = True
                     break
         call.wall = time.monotonic() - began
         if token_dir in self._expired:
             call.expired = True
+            if done.is_set():
+                self._ack_expired(
+                    token_dir
+                )  # the call has ended: nothing for the beater to kill
         return call
 
+    def _ack_expired(self, token_dir: Path) -> None:
+        with contextlib.suppress(BeaterDead, ValueError):
+            self.client.ack_expired(token_dir)
+
     def _stop_call(self) -> bool:
-        """Stop the processes of process-owning providers the process holds (the call in flight
-        runs there); an in-process call cannot be stopped. Return whether any was stopped.
-        """
+        """Stop the call in flight where it runs in a process-owning provider's process: stop each
+        such provider's group and evict it from the process's resident set, so the next job loads
+        afresh rather than reaching a dead process. An in-process call cannot be stopped. Return
+        whether any provider was stopped."""
         if "pydra.engine.procgroup" not in sys.modules:
             return False
         from pydra.engine import resident
         from pydra.engine.procgroup import ProcessHandle
 
-        rs = resident._PROCESS_SET
+        rs = resident.existing_process_set()
         if rs is None:
             return False
         stopped = False
-        for entry in list(rs._entries.values()):
-            if isinstance(entry.obj, ProcessHandle):
+        for key, obj in rs.items():
+            if isinstance(obj, ProcessHandle):
                 with contextlib.suppress(Exception):
-                    entry.obj.group.stop()
-                    stopped = True
+                    obj.group.stop()
+                rs.evict(key)
+                stopped = True
+        if stopped:
+            self._warm.clear()
         return stopped
 
     def _fault(self, error: BaseException) -> FaultRecord:
@@ -968,8 +1081,8 @@ class Worker:
         """After a resource fault the resident state is not trusted: close it; the next job loads."""
         from pydra.engine import resident
 
-        if resident._PROCESS_SET is not None:
-            resident._close_process_set()
+        resident.close_process_set()
+        self._warm.clear()
         group["reload"] = True
 
     # -- settling ------------------------------------------------------------------------------
@@ -1136,6 +1249,10 @@ class Worker:
             self._release(claim)
             return False
         for entry in open_entries:
+            if self._stored(entry):  # a committed result settles done, uncharged
+                attempt = claim.takeover(entry, charged=False)
+                claim.outcome(entry, attempt, "done", served=True)
+                continue
             claim.takeover(entry, charged=charged.get(entry.key, False))
         return True
 
@@ -1175,17 +1292,9 @@ class Worker:
         """A job whose attempt passed its deadline: under a fresh, uncharged ``takeover`` attempt,
         settle a result its call published, else type the timeout a resource fault."""
         attempt = claim.takeover(entry, charged=False)
-        job = None
-        with contextlib.suppress(Exception):
-            job = read_payload(self.codec, entry.payload, None)
-        find = getattr(getattr(job, "store", None), "find", None)
-        if job is not None and find is not None:
-            found = None
-            with contextlib.suppress(Exception):
-                found = find(job)
-            if getattr(found, "result", None) is not None:
-                claim.outcome(entry, attempt, "done", served=True)
-                return
+        if self._stored(entry):
+            claim.outcome(entry, attempt, "done", served=True)
+            return
         fault = FaultRecord(
             "resource",
             "Timeout",

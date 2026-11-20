@@ -1848,6 +1848,14 @@ class PortableStore:
             raise ValueError(f"attempt {attempt!r} is not usable as a directory name")
         return Path(self.path) / _WORK / name
 
+    def work_path(self, checksum: str, fingerprint: str, attempt: str) -> Path:
+        """The work directory of ``attempt`` of the job at ``(checksum, fingerprint)``: a pure
+        function of the three (RFC 0003 section 5.4). An attempt allocated outside the runner,
+        such as a pool's ``<pool id>.<g>``, is unique per job only; the default layout qualifies
+        it by the job's address, and a ``work_dir`` function must use the address too.
+        """
+        return self._work_path(checksum, fingerprint, attempt)
+
     def work_dir(self, job: "Job") -> Path:
         """The directory ``job`` runs in and writes ``_committed.json``, ``_error.json``, its
         kept outputs and ``_job.pklz`` to (RFC 0003 section 5.4).

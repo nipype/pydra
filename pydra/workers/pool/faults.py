@@ -98,14 +98,25 @@ class FaultBudgets:
         Charged crashes after which a job is ``failed`` (``JobCrashedWorker``).
     resource_moves : int
         Moves up the ticket's ladder after an out-of-memory call or a timeout.
+    infrastructure_replacements : int
+        Infrastructure faults of a job (each a requeue) after which it is ``failed``
+        (``InfrastructureFault``); W7 holds its residency instead.
     """
 
     content_attempts: int = 1
     crashes_charged: int = 2
     resource_moves: int = 2
+    infrastructure_replacements: int = 3
 
     def __attrs_post_init__(self) -> None:
-        if self.content_attempts < 1 or self.crashes_charged < 1:
-            raise ValueError("content_attempts and crashes_charged are at least 1")
+        if (
+            self.content_attempts < 1
+            or self.crashes_charged < 1
+            or self.infrastructure_replacements < 1
+        ):
+            raise ValueError(
+                "content_attempts, crashes_charged and infrastructure_replacements are at "
+                "least 1"
+            )
         if self.resource_moves < 0:
             raise ValueError("resource_moves is not negative")

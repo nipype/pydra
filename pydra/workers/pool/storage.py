@@ -21,6 +21,7 @@ A pool is a directory on storage that every worker and the submitting process se
         held-<epoch>-<label>                  a hold of a residency on this queue
       follow/<job>/<g>                        generation g of a job: the ticket that holds it
       follow/<job>/<g>.started                attempt <pool id>.<g> was started, by which worker
+      payloads/<sha256>                       a job's payload, read by every attempt of the job
 
 ``<job>`` is ``<checksum>-<fingerprint>`` when that is a plain lower-case name of at most 200
 characters, else ``h-<sha256>`` of the two.
@@ -716,6 +717,11 @@ class PoolRoot:
     def __repr__(self) -> str:
         return f"PoolRoot({str(self.path)!r}, pool_id={self.pool_id!r})"
 
+    @property
+    def lease_settings(self) -> LeaseSettings:
+        """The settings of every lease taken on this pool (anonymous holders)."""
+        return self._lease_settings
+
     # -- queues and tickets --------------------------------------------------------------
 
     def queue(self, name: str) -> _Queue:
@@ -997,11 +1003,17 @@ class PoolRoot:
             return _read_record(d, f"{g}.started")
 
     def charges(self, checksum: str, fingerprint: str) -> dict[str, int]:
-        """A job's crash count (generations with ``charged``) and its ``resource_moves``
-        (``ladder`` generations at the ``call`` phase)."""
+        """A job's crash count (generations with ``charged``), its ``resource_moves``
+        (``ladder`` generations at the ``call`` phase) and its infrastructure requeues
+        (``restart`` generations at the ``call`` phase, `Claim.restart`)."""
         gens = [r for _, r in self.generations(checksum, fingerprint)]
         return {
             "crashes": sum(1 for r in gens if r.get("charged") is True),
+            "infrastructure": sum(
+                1
+                for r in gens
+                if r.get("cause") == "restart" and r.get("phase") == "call"
+            ),
             "resource_moves": sum(
                 1
                 for r in gens
@@ -1077,11 +1089,13 @@ class PoolRoot:
         job = (checksum, fingerprint)
         return self._holder(self.newest(*job), job)
 
-    def collect(self) -> int:
+    def collect(self, payload_age: float = 86400.0) -> int:
         """Remove each settled job's generations and started marks except the highest generation
-        and its mark, which keep numbering from restarting; return how many files went.
+        and its mark, which keep numbering from restarting, and each payload no unsettled ticket
+        names that is older than ``payload_age`` seconds (a payload is written before the ticket
+        that names it); return how many files went.
         """
-        removed = 0
+        removed = self._collect_payloads(payload_age)
         with _dir(self._root, "follow") as follow:
             for name in _names(follow):
                 d = _child(follow, name)
@@ -1106,6 +1120,81 @@ class PoolRoot:
                                 d.unlink(member)
                                 removed += 1
         return removed
+
+    def _collect_payloads(self, age: float) -> int:
+        payloads = _child(self._root, "payloads")
+        if payloads is None:
+            return 0
+        with payloads:
+            names = [n for n in _names(payloads) if _HEX64.fullmatch(n)]
+            if not names:
+                return 0
+            live = self._live_payloads()
+            now = time.time()
+            removed = 0
+            for name in names:
+                if name in live:
+                    continue
+                try:
+                    if now - payloads.lstat(name).st_mtime < age:
+                        continue
+                    payloads.unlink(name)
+                    removed += 1
+                except OSError as err:
+                    if not _absent(err):
+                        raise
+            return removed
+
+    def _live_payloads(self) -> set[str]:
+        """The payload names every ticket not marked resolved names (a ticket without a slot, or
+        unreadable, keeps what it might name)."""
+        live: set[str] = set()
+        keep_all = False
+        with _dir(self._root, "queues") as queues:
+            labels = _names(queues)
+        for label in labels:
+            q = self._by_label(label)
+            if q is None:
+                continue
+            for name in _names(q.tickets):
+                digest = name[: -len(".json")] if name.endswith(".json") else ""
+                if not _HEX64.fullmatch(digest):
+                    continue
+                if self._resolved(q, digest):
+                    continue
+                try:
+                    ticket = self._ticket(q, digest)
+                except CorruptTicket:
+                    ticket = None
+                if ticket is None:
+                    keep_all = True
+                    continue
+                for job in ticket.jobs:
+                    path = job.payload.get("path")
+                    if isinstance(path, str):
+                        live.add(os.path.basename(path))
+        if keep_all:
+            live.add("*")
+            return {"*"} | live | set(self._all_payloads())
+        return live
+
+    def _all_payloads(self) -> list[str]:
+        payloads = _child(self._root, "payloads")
+        if payloads is None:
+            return []
+        with payloads:
+            return _names(payloads)
+
+    def _resolved(self, q: _Queue, digest: str) -> bool:
+        slot = self._slot_of(q, digest)
+        if slot is None:
+            return False
+        seq, n = slot
+        segment = _child(q.segments, _seq(seq))
+        if segment is None:
+            return False
+        with segment:
+            return _read(segment, f"res-{n}") is not None
 
     def _job_of(self, record: dict, name: str) -> JobKey | None:
         """The job a follow directory ``name`` is for, from the ticket its generation names."""
@@ -1753,6 +1842,23 @@ class Claim:
                     cause="restart",
                     prior=record["attempt"],
                 )
+
+    def restart(self, job: TicketJob, *, phase: str = "call") -> str:
+        """Write the job's next generation, ``restart`` at ``phase`` naming this ticket, before an
+        infrastructure fault releases it, so the requeue is counted (`PoolRoot.charges`); return
+        the new attempt."""
+        current = self.current(job)
+        if current is None:
+            raise ValueError(f"job {job.checksum} is not held by ticket {self.digest}")
+        _, record = self.pool._allocate(
+            job.key,
+            ticket=self.digest,
+            queue=self._q.label,
+            cause="restart",
+            phase=phase,
+            prior=current[1]["attempt"],
+        )
+        return record["attempt"]
 
     def outcome(
         self, job: TicketJob, attempt: str, kind: str, **fields: ty.Any

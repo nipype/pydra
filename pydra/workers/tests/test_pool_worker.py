@@ -27,7 +27,7 @@ from pydra.engine.job import Job
 from pydra.engine.lease import DirectoryLease, LeaseLost, LeaseSettings
 from pydra.engine.submitter import Submitter
 from pydra.workers.pool.classes import WorkerClass
-from pydra.workers.pool.codec import PrivatePickle, payload_dir, write_payload
+from pydra.workers.pool.codec import PrivatePickle, write_payload
 from pydra.workers.pool.storage import Claim, PoolRoot, Ticket, TicketJob, queue_label
 
 POSIX = sys.platform != "win32"
@@ -41,6 +41,8 @@ TASKS = """
 import os, sys, threading, time, subprocess
 from pathlib import Path
 from pydra.compose import python
+from pydra.engine.procgroup import ProcessProvider
+from pydra.engine.resident import Provided
 
 HOOK = {}
 
@@ -88,6 +90,60 @@ def Child(seconds: int, marker: str) -> int:
         Path(marker + ".started").touch()
         subprocess.run(["sleep", str(seconds)], check=True)
     return seconds
+
+
+@python.define
+def Fail(x: int) -> int:
+    raise RuntimeError("this task always fails")
+
+
+LOADS = []
+
+
+class SleepServer(ProcessProvider):
+    # a provider whose state is a child process that sleeps
+    name = "sleepserver"
+
+    def argv(self, spec, device):
+        return [sys.executable, "-c", "import time; time.sleep(600)"]
+
+    def load(self, spec, device):
+        LOADS.append(("sleepserver", device))
+        return super().load(spec, device)
+
+
+class Recorder:
+    # an in-process provider that records the device it loads on
+    name = "recorder"
+
+    def load(self, spec, device):
+        LOADS.append(("recorder", device))
+        return spec
+
+    def close(self, obj):
+        pass
+
+    def footprint(self, spec):
+        return None
+
+    def measure(self, obj):
+        return None
+
+    def version(self):
+        return "1"
+
+
+@python.define
+def UseServer(model: Provided[object, "sleepserver"], x: int) -> int:
+    _hook("server", model, x)
+    if model.group.proc.poll() is not None:
+        raise RuntimeError("the provider's process is dead")
+    return x
+
+
+@python.define
+def UseRecorder(model: Provided[str, "recorder"], x: int) -> int:
+    return x
 
 
 @python.define
@@ -187,7 +243,7 @@ class Pool:
         fingerprint = self.store.identity.fingerprint(job.context)
         g = self.pool._next_generation((job.checksum, fingerprint))
         job.attempt = f"{self.pool.pool_id}.{g}"
-        payload = write_payload(PrivatePickle(), job, payload_dir(self.store, job))
+        payload = write_payload(PrivatePickle(), job, self.path)
         return TicketJob(
             checksum=job.checksum,
             fingerprint=fingerprint,
@@ -1039,3 +1095,415 @@ def test_beater_death_recycles_after_settling(pool, tasks):
     tasks.HOOK["echo"] = kill_beater
     assert worker.run() == EXIT_RECYCLE
     assert pool.kinds() == ["done"] and worker.served == [("cpu", pool.tickets[0][1])]
+
+
+# -- fix round 1 -------------------------------------------------------------------------------
+
+
+def _providers(pool: Pool, tasks) -> None:
+    """Jobs made from here on name the test providers."""
+    pool.submitter.providers = (tasks.SleepServer(), tasks.Recorder())
+    tasks.LOADS.clear()
+
+
+@pytest.mark.skipif(not POSIX, reason="process-owning providers are stopped by group")
+def test_lost_claim_evicts_the_stopped_provider(pool, tasks):
+    """A claim lost while a provider's process runs the call: the worker stops that process and
+    evicts it, so the next job loads the provider afresh and succeeds."""
+    _providers(pool, tasks)
+    pool.put([pool.job(tasks.UseServer(model="m", x=1), "lost")])
+    second = pool.put([pool.job(tasks.UseServer(model="m", x=2), "next")])
+    stopped = []
+
+    def lose(model, x):
+        if x != 1:
+            return
+        for d in pool.claim_dirs():
+            _remove_tree(d)
+        deadline = time.monotonic() + BOUND
+        while model.group.proc.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        stopped.append(model.group.proc.poll() is not None)
+
+    tasks.HOOK["server"] = lose
+    _, code = _run(pool)
+    assert code == 0 and stopped == [True]
+    assert [o["outcome"] for o in pool.outcomes(digest=second)] == ["done"]
+    assert pool.kinds() == ["done"]
+    assert [kind for kind, _ in tasks.LOADS] == ["sleepserver", "sleepserver"]
+
+
+@pytest.mark.skipif(not POSIX, reason="SIGTERM to this process")
+def test_sigterm_drains_a_call_that_ends_in_time(pool, tasks):
+    """SIGTERM while a provider's call runs: the call is not stopped while ``drain_s`` lasts, so it
+    settles ``done``; the next ticket is not run."""
+    from pydra.workers.pool.worker import Worker
+
+    _providers(pool, tasks)
+    pool.put([pool.job(tasks.UseServer(model="m", x=1), "drained")])
+    rest = pool.put([pool.job(tasks.UseServer(model="m", x=2), "rest")])
+    worker = Worker(
+        pool.path, _class(), settings=_settings(), device_memory=lambda: None
+    )
+
+    def terminate(model, x):
+        os.kill(os.getpid(), signal.SIGTERM)
+        _wait(worker.stop.is_set, "the worker to see SIGTERM")
+        # give an early stop the time to happen: the provider must outlive two renewal intervals
+        end = time.monotonic() + 2 * LEASE.renew_interval
+        while model.group.proc.poll() is None and time.monotonic() < end:
+            time.sleep(0.05)
+
+    tasks.HOOK["server"] = terminate
+    assert worker.run() == 0
+    assert pool.kinds() == ["done"] and pool.outcomes(digest=rest) == []
+
+
+def _infrastructure(exc, phase):
+    from pydra.workers.pool.faults import FaultRecord
+
+    return FaultRecord("infrastructure", type(exc).__name__, str(exc), phase, gap=True)
+
+
+def test_infrastructure_faults_are_bounded_per_job(pool, tasks):
+    """Under a classifier that types every exception infrastructure, a job that always fails is
+    requeued under ``restart`` generations at the ``call`` phase and, at
+    ``infrastructure_replacements``, settles ``failed`` with an ``InfrastructureFault``.
+    """
+    job = pool.job(tasks.Fail(x=1), "infra")
+    pool.put([job])
+    _, code = _run(pool, classify=_infrastructure)
+    assert code == 0
+    gens = pool.generations(job)
+    assert [(g["cause"], g["phase"]) for g in gens] == [
+        ("put", None),
+        ("restart", "call"),
+        ("restart", "call"),
+    ]
+    [failed] = pool.outcomes()
+    assert failed["outcome"] == "failed" and failed["attempt"] == gens[-1]["attempt"]
+    assert failed["fault"]["type"] == "InfrastructureFault"
+    assert "3 infrastructure faults" in failed["fault"]["message"]
+
+
+def test_crash_budget_fails_a_job_crashed_worker(pool, tasks):
+    """A job with ``crashes_charged`` charged generations is ``failed`` (``JobCrashedWorker``)
+    without running."""
+    job = pool.job(tasks.Echo(x=1), "crashed")
+    digest = pool.put([job])
+    ran = []
+    tasks.HOOK["echo"] = ran.append
+    label = queue_label("cpu")
+    for _ in range(2):
+        prior = pool.generations(job)[-1]["attempt"]
+        pool.pool._allocate(
+            pool.key(job),
+            ticket=digest,
+            queue=label,
+            cause="takeover",
+            prior=prior,
+            charged=True,
+        )
+    _, code = _run(pool)
+    assert code == 0 and ran == []
+    [failed] = pool.outcomes()
+    assert failed["outcome"] == "failed"
+    assert failed["fault"]["type"] == "JobCrashedWorker"
+
+
+def test_takeover_settles_a_committed_result_uncharged(pool, tasks):
+    """A worker that died after publishing, before settling, alone in its call: the taker finds the
+    result in the store first, settles ``done`` and charges nothing."""
+    from pydra.workers.pool.worker import Worker
+
+    job = pool.job(tasks.Echo(x=7), "published")
+    digest = pool.put([job])
+    claim = pool.pool.take("cpu", digest, beat="external")
+    attempt = claim.start(claim.ticket.jobs[0], "d" * 32)
+    pool.pool.write_call(
+        "d" * 32,
+        1,
+        {
+            "jobs": [
+                {
+                    "checksum": job.checksum,
+                    "fingerprint": pool.key(job)[1],
+                    "attempt": attempt,
+                }
+            ]
+        },
+    )
+    job.attempt = attempt
+    job.run()  # what the dead worker published
+    _age(claim.lease.lockfile)
+    ran = []
+    tasks.HOOK["echo"] = ran.append
+    worker = Worker(
+        pool.path, _class(), settings=_settings(), device_memory=lambda: None
+    )
+    assert worker.run() == 0 and ran == []
+    gens = pool.generations(job)
+    assert [g["cause"] for g in gens] == ["put", "takeover"]
+    assert [g["charged"] for g in gens] == [False, False]
+    [done] = pool.outcomes()
+    assert done["outcome"] == "done" and done["served"] is True
+
+
+def test_providers_load_on_the_granted_device(pool, tasks):
+    """On a CUDA class a provider loads on the worker's granted device, the same device the job's
+    own binding asks for; the process default is the CPU again after the worker exits.
+    """
+    from pydra.engine.resident import Device, process_device
+
+    _providers(pool, tasks)
+    pool.put([pool.job(tasks.UseRecorder(model="m", x=1), "on-gpu")], queue="gpu")
+    _, code = _run(
+        pool,
+        _class("gpu", device="cuda", gpus=1, gpu_mem="16G"),
+        hardware=_gpu_hardware(16 << 30),
+    )
+    assert code == 0 and pool.kinds("gpu") == ["done"]
+    assert tasks.LOADS == [("recorder", Device("cuda", 0))]
+    assert process_device() == Device()
+
+
+@pytest.mark.parametrize(
+    "gpu_type,product,starts",
+    [
+        ("h100", "NVIDIA H100 80GB HBM3", True),
+        ("a100", "NVIDIA A100-SXM4-80GB", True),
+        ("a10", "NVIDIA A100-SXM4-80GB", False),
+        ("l4", "NVIDIA L40S", False),
+        ("l40s", "NVIDIA L40S", True),
+        ("a40", "NVIDIA A400", False),
+    ],
+)
+def test_gpu_type_matches_whole_tokens(pool, gpu_type, product, starts):
+    """A class's ``gpu_type`` matches the product's name as whole tokens: ``a10`` is not an A100."""
+    from pydra.workers.pool.worker import EXIT_HARDWARE
+
+    _, code = _run(
+        pool,
+        _class("gpu", device="cuda", gpus=1, gpu_type=gpu_type),
+        hardware=_gpu_hardware(16 << 30, product=product),
+    )
+    assert code == (0 if starts else EXIT_HARDWARE)
+
+
+def test_long_queued_ticket_survives_store_collect(pool, tasks):
+    """A ticket queued past every age the store's collect judges by keeps its payload: payloads live
+    under the pool root, which the store's collect never touches."""
+    from pydra.utils.storagedir import StoreAges, StorePolicy
+
+    job = pool.job(tasks.Echo(x=5), "queued")
+    pool.put([job])
+    for root in (pool.store.path, pool.path):
+        _age_tree(Path(root))
+    pool.store.policy = StorePolicy(ages=StoreAges(work=1, staging=1, quarantine=1))
+    pool.store.collect()
+    _, code = _run(pool)
+    assert code == 0 and pool.kinds() == ["done"] and pool.found(job)
+
+
+def test_pool_collect_removes_only_payloads_nothing_unsettled_names(pool, tasks):
+    """The pool's collect removes the payload of a settled ticket, keeps that of an unsettled one,
+    and keeps a young payload no ticket names yet."""
+    settled = pool.job(tasks.Echo(x=1), "settled")
+    pool.put([settled])
+    assert _run(pool)[1] == 0
+    waiting = pool.job(tasks.Echo(x=2), "waiting")
+    pool.put([waiting])
+    young = write_payload(
+        PrivatePickle(), pool.job(tasks.Echo(x=3), "young"), pool.path
+    )
+    payloads = {Path(p) for p in (pool.path / "payloads").iterdir()}
+    first = next(p for p in payloads if p.name != Path(young["path"]).name)
+    for p in payloads - {Path(young["path"])}:
+        _age_tree(p)
+    assert pool.pool.collect(payload_age=3600.0) >= 1
+    left = {p.name for p in (pool.path / "payloads").iterdir()}
+    names = {o["checksum"]: o for o in pool.outcomes()}
+    assert Path(young["path"]).name in left and len(left) == 2
+    assert names[settled.checksum]["outcome"] == "done"
+    _ = first
+    assert _run(pool)[1] == 0 and pool.kinds() == ["done", "done"]
+
+
+def test_orphan_exit_after_a_live_coordinator_goes_stale(pool):
+    """A coordinator lease beaten by nobody is live until ``stale_after``, then the substrate worker
+    waits ``orphan_after_s`` more and exits, before its idle polls run out."""
+    from pydra.workers.pool.worker import Worker
+
+    epoch = pool.pool.take_epoch()
+    lease = pool.pool.coordinator_lease(epoch, beat="external")
+    assert lease.try_take() is None
+    try:
+        worker = Worker(
+            pool.path,
+            _class(),
+            settings=_settings(idle_polls=400, orphan_after_s=1.0),
+            substrate=True,
+        )
+        assert worker.run() == 0
+        assert worker.live_polls > 0 and worker.polls < 400
+        assert (
+            worker.orphan_polls > 1
+        )  # it waited orphan_after_s from the last live judgement
+    finally:
+        lease.__exit__(None, None, None)
+
+
+def test_orphan_exit_when_the_coordinator_ended(pool):
+    """A live coordinator lease whose epoch has its ``ended`` mark is no coordinator."""
+    from pydra.workers.pool.worker import Worker
+
+    epoch = pool.pool.take_epoch()
+    with pool.pool.coordinator_lease(epoch):
+        pool.pool.end_epoch(epoch)
+        worker = Worker(
+            pool.path,
+            _class(),
+            settings=_settings(idle_polls=400, orphan_after_s=0.2),
+            substrate=True,
+        )
+        assert worker.run() == 0
+        assert worker.live_polls == 0 and worker.polls < 400
+
+
+def test_substrate_flag_through_python_m(pool, processes, tmp_path):
+    """``--substrate`` reaches the worker of ``python -m``: with no coordinator it exits orphaned."""
+    pool.pool.put_class("cpu", _record(_class()))
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(_settings(idle_polls=100, orphan_after_s=0.2).to_json()))
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pydra.workers.pool.worker",
+            "--root",
+            str(pool.path),
+            "--class",
+            "cpu",
+            "--settings",
+            str(path),
+            "--substrate",
+        ],
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=POSIX,
+    )
+    processes.append(proc)
+    _, err = proc.communicate(timeout=BOUND)
+    assert proc.returncode == 0 and "no live coordinator" in err
+
+
+def test_substrate_flag_through_pydracli(pool, tmp_path, caplog):
+    """``pydracli pool worker --substrate`` passes the flag: with no coordinator it exits orphaned."""
+    from click.testing import CliRunner
+
+    from pydra.scripts.cli import cli
+
+    pool.pool.put_class("cpu", _record(_class()))
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(_settings(idle_polls=100, orphan_after_s=0.2).to_json()))
+    caplog.set_level(logging.INFO, logger="pydra.pool")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "pool",
+            "worker",
+            "--root",
+            str(pool.path),
+            "--class",
+            "cpu",
+            "--settings",
+            str(path),
+            "--substrate",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert any("no live coordinator" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.skipif(not POSIX, reason="process-owning providers are stopped by group")
+def test_expired_provider_call_is_stopped_and_its_claim_kept(pool, tasks):
+    """A provider call past its deadline: the worker stops the provider's process, acknowledges,
+    recycles, and leaves the expired claim in place to go stale (never released)."""
+    from pydra.utils.resources import ComputeResources
+    from pydra.workers.pool.worker import EXIT_RECYCLE
+
+    _providers(pool, tasks)
+    pool.put(
+        [
+            pool.job(
+                tasks.UseServer(model="m", x=3),
+                "wedged",
+                resources=ComputeResources(time=1),
+            )
+        ]
+    )
+    stopped = []
+
+    def wait_for_stop(model, x):
+        try:
+            model.group.proc.wait(BOUND)
+        except subprocess.TimeoutExpired:
+            pass
+        stopped.append(model.group.proc.poll() is not None)
+
+    tasks.HOOK["server"] = wait_for_stop
+    _, code = _run(pool, settings=_settings(timeout_grace=5.0))
+    assert code == EXIT_RECYCLE and stopped == [True]
+    assert pool.kinds() == ["expired"]
+    assert pool.claim_dirs() != []  # the expired claim was not released
+
+
+def test_loser_stops_before_the_next_job_of_its_ticket(pool, tasks, monkeypatch):
+    """A claim lost between two jobs of a ticket: the proof before the next job fails, so it is
+    never started."""
+    a, b = pool.job(tasks.Echo(x=1), "a"), pool.job(tasks.Echo(x=2), "b")
+    pool.put([a, b])
+    write = Claim.outcome
+
+    def then_lose(self, job, attempt, kind, **fields):
+        written = write(self, job, attempt, kind, **fields)
+        if job.checksum == a.checksum:
+            for d in pool.claim_dirs():
+                _remove_tree(d)
+        return written
+
+    monkeypatch.setattr(Claim, "outcome", then_lose)
+    _, code = _run(pool)
+    assert code == 0
+    assert len(_started(pool, a)) == 1 and _started(pool, b) == []
+    assert pool.kinds() == ["done"]
+
+
+def _age_tree(path: Path) -> None:
+    old = 10**9
+    paths = [path] if path.is_file() else [*path.rglob("*"), path]
+    for p in paths:
+        try:
+            os.utime(p, (old, old), follow_symlinks=False)
+        except (FileNotFoundError, NotImplementedError):
+            os.utime(p, (old, old))
+
+
+def test_bound_loads_on_the_process_device(tmp_path, tasks):
+    """``resident.bound`` (a job's own binding) loads on the process device the worker set, the
+    device `Worker._load` uses, so either may load the state."""
+    from pydra.engine import resident
+    from pydra.engine.resident import Device
+
+    tasks.LOADS.clear()
+    resident.set_process_device(Device("cuda", 0))
+    try:
+        with Submitter(
+            cache_root=tmp_path / "store", worker="debug", providers=[tasks.Recorder()]
+        ) as sub:
+            result = sub(tasks.UseRecorder(model="bound-here", x=2))
+        assert not result.errored and result.outputs.out == 2
+    finally:
+        resident.set_process_device(None)
+        resident.close_process_set()
+    assert tasks.LOADS == [("recorder", Device("cuda", 0))]
