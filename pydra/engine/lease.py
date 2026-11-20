@@ -281,6 +281,12 @@ class _Heartbeat(threading.Thread):
                 if time.monotonic() - last_ok > settings.stale_after:
                     self.lease._lose(f"it could not be renewed for too long ({err})")
                     return
+                logger.debug(
+                    "Could not renew the lease %s (%s); trying again in %.1fs",
+                    self.token_dir.parent,
+                    err,
+                    interval,
+                )
                 continue
             try:
                 os.rmdir(self.token_dir / f"beat-{beat}")
@@ -527,11 +533,11 @@ class DirectoryLease:
         holder, entries = self._read_holder()
         if entries and all(e.startswith("gone-") for e in entries):
             return self._clear_remains(entries)
+        now = self._now()  # before the marks: a stall after this only shrinks the age
         newest, unreadable = self._newest_mtime(entries)
         if newest is None:
             return unreadable is None
         self._saw(newest)
-        now = self._now()
         age = now - newest
         self._last_seen = (holder, age)
         if not self._judgeable(unreadable, now):
