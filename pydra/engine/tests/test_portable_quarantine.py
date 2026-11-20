@@ -71,7 +71,10 @@ def skew(monkeypatch):
 def age(path, seconds):
     """Make ``path`` ``seconds`` old on the skewed clock (at most SKEW)."""
     t = time.time() + SKEW - seconds
-    os.utime(path, (t, t), follow_symlinks=False)
+    if os.utime in os.supports_follow_symlinks:
+        os.utime(path, (t, t), follow_symlinks=False)
+    else:
+        os.utime(path, (t, t))
 
 
 # -- fenced quarantine -----------------------------------------------------------------------------
@@ -462,6 +465,11 @@ def vanishing_stage(monkeypatch, store, times):
         d = real(self, staging, *a, **k)
         calls["n"] += 1
         if calls["n"] <= times:
+            for dirpath, _dirs, files in os.walk(staging.path):
+                for f in files:
+                    os.chmod(
+                        os.path.join(dirpath, f), 0o600
+                    )  # Windows: read-only files
             shutil.rmtree(staging.path)  # a collector claimed and removed it
         return d
 
