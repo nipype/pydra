@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import types
 import typing as ty
 import uuid
@@ -457,25 +458,36 @@ def package_versions(modules: ty.Iterable[str]) -> dict[str, str | None]:
 OWNER_TIMEOUT = 2.0
 """Seconds each package-manager query for a tool's owner may take"""
 
-_SHA_MEMO: dict[tuple[str, int, int], str] = {}
+_StatKey = tuple[str, int, int, int, int]
+_SHA_MEMO: dict[_StatKey, str] = {}
+_OWNER_MEMO: dict[_StatKey, dict[str, str] | None] = {}
 _CONDA_PREFIX = re.compile(r"^(?P<prefix>.+?)[/\\](?:bin|Scripts|Library[/\\]bin)[/\\]")
 
 
-def _tool_digest(path: str) -> str | None:
-    """The sha256 of the file at `path`, once per process for a file as it stands
-    (path, mtime and size)"""
+def _stat_key(path: str) -> _StatKey | None:
+    """What identifies the file at `path` as it stands: ctime and inode cannot be kept
+    by a rewrite in place or a rename, as mtime can"""
     try:
         st = os.stat(path)
-        key = (path, st.st_mtime_ns, st.st_size)
-        if key not in _SHA_MEMO:
+    except OSError:
+        return None
+    return (path, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _tool_digest(path: str, key: _StatKey | None) -> str | None:
+    """The sha256 of the file at `path`, once per process for a file as it stands"""
+    if key is None:
+        return None
+    if key not in _SHA_MEMO:
+        try:
             sha = hashlib.sha256()
             with open(path, "rb") as f:
                 for block in iter(lambda: f.read(1 << 20), b""):
                     sha.update(block)
-            _SHA_MEMO[key] = sha.hexdigest()
-        return _SHA_MEMO[key]
-    except OSError:
-        return None
+        except OSError:
+            return None
+        _SHA_MEMO[key] = sha.hexdigest()
+    return _SHA_MEMO[key]
 
 
 def _query(command: list[str]) -> str | None:
@@ -498,10 +510,21 @@ def _query(command: list[str]) -> str | None:
     return lines[0] if completed.returncode == 0 and lines else None
 
 
-def _tool_owner(path: str) -> dict[str, str] | None:
+def _tool_owner(path: str, key: _StatKey | None) -> dict[str, str] | None:
+    """The owner of the file at `path`, looked up once per process for a file as it
+    stands, a failed or timed-out lookup (None) included (see `_lookup_owner`)"""
+    if key is None:
+        return None
+    if key not in _OWNER_MEMO:
+        _OWNER_MEMO[key] = _lookup_owner(path)
+    return _OWNER_MEMO[key]
+
+
+def _lookup_owner(path: str) -> dict[str, str] | None:
     """The package that provides the file at `path`, read from the path (Homebrew
     ``Cellar/<name>/<version>``), from a conda ``conda-meta`` record, or from ``dpkg -S``
-    / ``rpm -qf``, the last two behind `OWNER_TIMEOUT`; None if it cannot be read"""
+    / ``rpm -qf``; the conda scan and each query take at most `OWNER_TIMEOUT`;
+    None if it cannot be read"""
     match = re.search(r"[/\\]Cellar[/\\]([^/\\]+)[/\\]([^/\\]+)[/\\]", path)
     if match:
         return {"manager": "homebrew", "name": match[1], "version": match[2]}
@@ -513,7 +536,10 @@ def _tool_owner(path: str) -> dict[str, str] | None:
             records = sorted(meta.glob("*.json"))
         except OSError:
             records = []
+        deadline = time.monotonic() + OWNER_TIMEOUT
         for record in records:
+            if time.monotonic() >= deadline:
+                break
             try:
                 data = json.loads(record.read_text())
             except (OSError, ValueError):
@@ -541,12 +567,13 @@ def _tool_record(executable: str) -> dict[str, ty.Any]:
     if found is None:
         return {"executable": executable, "found": False}
     path = os.path.realpath(found)
+    key = _stat_key(path)
     return {
         "executable": executable,
         "found": True,
         "path": path,
-        "sha256": _tool_digest(path),
-        "owner": _tool_owner(path),
+        "sha256": _tool_digest(path, key),
+        "owner": _tool_owner(path, key),
     }
 
 
@@ -624,4 +651,5 @@ def clear_caches() -> None:
         cached.cache_clear()
     forget_owners()
     _SHA_MEMO.clear()
+    _OWNER_MEMO.clear()
     _warned.clear()

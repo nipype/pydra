@@ -7,13 +7,15 @@ from pathlib import Path
 import pytest
 from pydra.compose import python, shell
 from pydra.engine import context
-from pydra.engine.context import job_context
+from pydra.engine.context import job_context, job_tools
+from pydra.engine.job import Job
 from pydra.engine.store import ConsistentReuse
 from pydra.engine.submitter import Submitter
 from pydra.environments import native
+from pydra.environments.docker import Docker
 from pydra.engine.tests.test_context import installed  # noqa: F401
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell scripts")
+posix = pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell scripts")
 
 
 def _script(path: Path, body: str = "echo hi") -> Path:
@@ -38,6 +40,7 @@ def _tools(task):
     return job_context(task, native.Native())["tools"]
 
 
+@posix
 def test_tools_path_sha_owner(bindir, tmp_path):
     real = _script(tmp_path / "Cellar" / "mytool" / "1.2" / "bin" / "mytool")
     (bindir / "mytool").symlink_to(real)
@@ -71,6 +74,7 @@ def test_tools_of_python_task_are_empty(bindir):
     assert _tools(f(a=1)) == []
 
 
+@posix
 def test_owner_lookup_time_limited(bindir, tmp_path, monkeypatch):
     _script(bindir / "dpkg", "exec sleep 30")
     _script(bindir / "rpm", "exec sleep 30")
@@ -84,21 +88,27 @@ def test_owner_lookup_time_limited(bindir, tmp_path, monkeypatch):
     assert tools[0]["owner"] is None
 
 
+@posix
 def test_consistent_reuse_refuses_tools_change(installed, bindir):  # noqa: F811
     tool = _script(bindir / "mytool", "echo one")
     task = shell.define("mytool")()
     stored = job_context(task, native.Native())
     policy = ConsistentReuse()
     assert policy.accept(stored, job_context(task, native.Native()), task)
+    checksum = Job(
+        task, name="j", submitter=Submitter(cache_root=bindir.parent)
+    ).checksum
     tool.write_text("#!/bin/sh\necho two\n")
-    context.clear_caches()
     changed = job_context(task, native.Native())
     assert changed["tools"] != stored["tools"]
     assert not policy.accept(stored, changed, task)
+    # tools are recorded, never keyed: the job's checksum does not follow them
+    again = Job(task, name="j", submitter=Submitter(cache_root=bindir.parent))
+    assert again.checksum == checksum
 
 
-@pytest.mark.parametrize("worker", ["debug", "cf"], ids=["debug", "cf"])
-def test_tools_built_in_submitter_only(bindir, tmp_path, worker):
+@posix
+def test_tools_built_in_submitter_only(bindir, tmp_path, any_worker):
     """The worker uses the context carried with the job: a tool that removes itself
     while running does not change the tools the result records"""
     tool = _script(bindir / "selfdestruct", f'rm -f "{bindir}/selfdestruct"')
@@ -106,7 +116,95 @@ def test_tools_built_in_submitter_only(bindir, tmp_path, worker):
     task = shell.define(str(tool))()
     expected = _tools(task)
     assert expected[0]["found"] is True
-    with Submitter(worker=worker, cache_root=tmp_path / "cache") as sub:
+    with Submitter(worker=any_worker, cache_root=tmp_path / "cache") as sub:
         result = sub(task)
     assert not (bindir / "selfdestruct").exists()
     assert result.context["tools"] == expected
+
+
+@posix
+def test_owner_lookup_memoised(bindir, tmp_path, monkeypatch):
+    _script(bindir / "dpkg", "exit 1")
+    _script(bindir / "rpm", "exit 1")
+    tool = _script(tmp_path / "opt" / "memoowner")
+    (bindir / "memoowner").symlink_to(tool)
+    queries = []
+    query = context._query
+    monkeypatch.setattr(context, "_query", lambda c: queries.append(c) or query(c))
+    task = shell.define("memoowner")()
+    for _ in range(5):
+        assert _tools(task)[0]["owner"] is None
+    assert [q[0] for q in queries] == ["dpkg", "rpm"]
+
+
+@posix
+def test_conda_owner(bindir, tmp_path):
+    env = tmp_path / "env"
+    tool = _script(env / "bin" / "ctool")
+    (env / "conda-meta").mkdir()
+    (env / "conda-meta" / "ctool-1.0-0.json").write_text(
+        '{"name": "ctool", "version": "1.0", "files": ["bin/ctool"]}'
+    )
+    (bindir / "ctool").symlink_to(tool)
+    assert _tools(shell.define("ctool")())[0]["owner"] == {
+        "manager": "conda",
+        "name": "ctool",
+        "version": "1.0",
+    }
+
+
+@posix
+def test_conda_owner_scan_time_limited(bindir, tmp_path, monkeypatch):
+    env = tmp_path / "env"
+    tool = _script(env / "bin" / "ctool")
+    (env / "conda-meta").mkdir()
+    for i in range(20):
+        (env / "conda-meta" / f"p{i}-1.0-0.json").write_text(
+            '{"name": "p", "version": "1", "files": ["bin/ctool"]}'
+        )
+    (bindir / "ctool").symlink_to(tool)
+    monkeypatch.setattr(context, "OWNER_TIMEOUT", 0.0)
+    assert _tools(shell.define("ctool")())[0]["owner"] is None
+
+
+@posix
+def test_tool_rewritten_in_place_gets_new_sha(bindir):
+    tool = _script(bindir / "mytool", "echo one")
+    task = shell.define("mytool")()
+    before = _tools(task)[0]["sha256"]
+    stat_before = tool.stat()
+    tool.write_text("#!/bin/sh\necho two\n")  # the same size
+    os.utime(tool, ns=(stat_before.st_atime_ns, stat_before.st_mtime_ns))
+    after = _tools(task)[0]["sha256"]
+    assert after != before
+    assert after == hashlib.sha256(tool.read_bytes()).hexdigest()
+
+
+@posix
+def test_tool_replaced_by_rename_gets_new_sha(bindir):
+    tool = _script(bindir / "mytool", "echo one")
+    task = shell.define("mytool")()
+    before = _tools(task)[0]["sha256"]
+    stat_before = tool.stat()
+    other = _script(bindir / "other", "echo two")
+    os.utime(other, ns=(stat_before.st_atime_ns, stat_before.st_mtime_ns))
+    os.replace(other, tool)
+    after = _tools(task)[0]["sha256"]
+    assert after != before
+
+
+@posix
+def test_version_command_program_is_a_tool(bindir):
+    _script(bindir / "vtool")
+    task = shell.define(
+        "mytool", version_command=["vtool", "--version"], version_pattern=r"(\d+)"
+    )()
+    tools = _tools(task)
+    assert [t["executable"] for t in tools] == ["mytool", "vtool"]
+    assert [t["found"] for t in tools] == [False, True]
+
+
+def test_container_environment_records_no_tools(bindir):
+    _script(bindir / "mytool")
+    task = shell.define("mytool")()
+    assert job_tools(task, Docker(image="ubuntu:22.04")) == []
