@@ -428,6 +428,7 @@ class Worker:
         quantum_jobs, quantum_s = self.cls.quantum_jobs, self.cls.quantum_s
         current: str | None = None
         spent, began, idle = 0, time.monotonic(), 0
+        self._last_live = time.monotonic()
         while not self.stop.is_set() and self.recycle is None:
             if self.substrate and self._orphaned():
                 logger.info(
