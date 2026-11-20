@@ -3,6 +3,7 @@ from pydra.engine.submitter import Submitter
 from pydra.tasks.testing import SafeDivisionWorkflow, UnsafeDivisionWorkflow
 
 
+@pytest.mark.real_worker
 def test_safe_division_workflow():
     wf = SafeDivisionWorkflow(a=10, b=5).split(denominator=[3, 2, 0])
     with Submitter(worker="cf") as sub:

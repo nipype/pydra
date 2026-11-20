@@ -12,6 +12,7 @@ if ty.TYPE_CHECKING:
     from pydra.environments.base import Environment
     from pydra.compose import base
     from pydra.engine.hooks import TaskHooks
+    from pydra.utils.resources import ComputeResources
 
 
 OutputType = ty.TypeVar("OutputType", bound="base.Outputs")
@@ -38,6 +39,7 @@ class Node(ty.Generic[OutputType]):
     _task: "base.Task[OutputType]"
     _environment: "Environment | None" = None
     _hooks: "TaskHooks | None" = None
+    _resources: "ComputeResources | None" = None
     _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False, repr=False)
     _lzout: OutputType | None = attrs.field(
         init=False, default=None, eq=False, hash=False, repr=False

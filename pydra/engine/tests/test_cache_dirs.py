@@ -1,8 +1,10 @@
 import typing as ty
+import os
 import time
 from pathlib import Path
 from fileformats.generic import File
 from pydra.compose import python
+from pydra.utils import hash as hash_module
 from pydra.engine.tests.utils import FunAddTwo, FunFile
 from pydra.engine.submitter import Submitter
 from pydra.engine.tests.utils import num_python_cache_roots
@@ -170,11 +172,16 @@ class OverriddenContentsFile(File):
         return super().raw_contents
 
 
-def test_task_files_persistentcache(tmp_path):
+def test_task_files_persistentcache(tmp_path, monkeypatch):
     """
     Two identical tasks with provided cache_root that use file as an input;
     the second task has readonly_caches and should not recompute the results
     """
+    monkeypatch.setattr(
+        hash_module,
+        "time_ns",
+        lambda: time.time_ns() + hash_module.TIMESTAMP_RESOLUTION_NS + 1,
+    )
     test_file_path = tmp_path / "test_file.txt"
     test_file_path.write_bytes(b"foo")
     cache_root = tmp_path / "cache-dir"
@@ -189,8 +196,8 @@ def test_task_files_persistentcache(tmp_path):
     test_file._contents = b"bar"
     # should return result from the first run using the persistent cache
     assert read_contents(x=test_file)(cache_root=cache_root).out == b"foo"
-    time.sleep(2)  # Windows has a 2-second resolution for mtime
-    test_file_path.touch()  # update the mtime to invalidate the persistent cache value
+    # bump the mtime to invalidate the persistent cache value
+    os.utime(test_file_path, (0, test_file_path.stat().st_mtime - 10))
     assert (
         read_contents(x=test_file)(cache_root=cache_root).out == b"bar"
     )  # returns the overridden value

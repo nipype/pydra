@@ -37,7 +37,8 @@ class Lmod(base.Environment):
         ):
             env[key] = value
         cmd_args = job.task._command_args(values=job.inputs)
-        values = base.execute(cmd_args, env=env)
+        job.cache_dir.mkdir(parents=True, exist_ok=True)
+        values = base.execute(cmd_args, env=env, cwd=job.cache_dir)
         return_code, stdout, stderr = values
         if return_code:
             msg = f"Error running '{job.name}' job with {cmd_args}:"

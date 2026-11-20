@@ -1,12 +1,22 @@
 from contextlib import redirect_stdout
+import hashlib
+import importlib.resources
 import io
+import json
+import socket
+import pyld
 import pytest
 from pydra.utils.messenger import (
     PrintMessenger,
     FileMessenger,
+    ProvenanceContextUnavailable,
     collect_messages,
+    document_loader,
     make_message,
+    pydra_context,
 )
+
+SCHEMA = importlib.resources.files("pydra") / "schema"
 
 
 def test_print_messenger():
@@ -40,8 +50,7 @@ def test_file_messenger(tmpdir):
     assert len(glob(str(tmpdir / "messages" / "*.jsonld"))) == 2
 
 
-@pytest.mark.flaky(reruns=3)
-def test_collect_messages(tmpdir):
+def test_collect_messages(tmpdir, no_network):
     tmpdir.chdir()
 
     msgr = FileMessenger()
@@ -54,7 +63,81 @@ def test_collect_messages(tmpdir):
     assert (tmpdir / "messages.jsonld").exists()
 
     msgr.send(make_message({"@context": "http://example.org", "key": "value"}))
-    import pyld
-
-    with pytest.raises(pyld.jsonld.JsonLdError):
+    with pytest.raises(ProvenanceContextUnavailable, match="http://example.org"):
         collect_messages(tmpdir, tmpdir / "messages")
+
+
+def test_messages_carry_the_packaged_context():
+    message = make_message({"key": "value"})
+    assert message["@context"] == pydra_context()["@context"]
+    assert message["key"] == "value"
+
+
+def test_packaged_contexts_match_their_record(no_network):
+    sources = json.loads((SCHEMA / "contexts.json").read_text())
+    for iri, entry in sources.items():
+        packaged = json.loads((SCHEMA / entry["file"]).read_text())
+        assert document_loader(iri)["document"] == packaged
+        if "content_sha256" in entry:
+            canonical = json.dumps(packaged, sort_keys=True, separators=(",", ":"))
+            assert (
+                hashlib.sha256(canonical.encode()).hexdigest()
+                == entry["content_sha256"]
+            )
+            assert entry["commit"] in iri
+            assert not set(entry["removed"]) & set(packaged["@context"])
+
+
+def test_packaged_context_expands_prefixed_terms(no_network):
+    message = make_message(
+        {"@id": "uid:1", "@type": "prov:Generation", "prov:wasGeneratedBy": "uid:2"}
+    )
+    (expanded,) = pyld.jsonld.expand(message, {"documentLoader": document_loader})
+    prov = "http://www.w3.org/ns/prov#"
+    assert expanded["@type"] == [prov + "Generation"]
+    assert expanded[prov + "wasGeneratedBy"] == [{"@id": "http://s.pydra.org/id/2"}]
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        None,
+        "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld",
+    ],
+)
+def test_collect_messages_offline(tmp_path, no_network, context):
+    messages = tmp_path / "messages"
+    message = make_message({"@id": "uid:1", "@type": "activity"})
+    if context is not None:
+        message["@context"] = context
+    FileMessenger().send(message, message_dir=messages)
+    collect_messages(tmp_path, messages)
+    collected = json.loads((tmp_path / "messages.jsonld").read_text())
+    assert collected["@context"] == message["@context"]
+
+
+def test_no_network_refuses_only_external_hosts(no_network):
+    for connect in (
+        lambda: socket.getaddrinfo("example.org", 80),
+        lambda: socket.create_connection(("example.org", 80)),
+        lambda: socket.socket().connect(("192.0.2.1", 80)),
+        lambda: socket.socket().connect_ex(("192.0.2.1", 80)),
+    ):
+        with pytest.raises(OSError, match="network access to .* is disabled"):
+            connect()
+    # the loopback socketpair Windows (and asyncio's Proactor loop) builds
+    pair = getattr(socket, "_fallback_socketpair", None)
+    if pair is None:
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        client = socket.socket()
+        client.connect(listener.getsockname())
+        server, _ = listener.accept()
+        listener.close()
+    else:
+        server, client = pair()
+    with server, client:
+        client.sendall(b"x")
+        assert server.recv(1) == b"x"
+    assert socket.getaddrinfo("localhost", 80)

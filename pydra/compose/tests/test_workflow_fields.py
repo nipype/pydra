@@ -9,7 +9,6 @@ import typing as ty
 from pydra.compose import shell, python, workflow
 from pydra.utils.general import get_fields
 from pydra.engine.workflow import Workflow
-from pydra.utils.hash import hash_function
 from fileformats import video, image
 
 # NB: We use PascalCase for interfaces and workflow functions as it is translated into a class
@@ -250,7 +249,7 @@ def test_workflow_lazy():
     )
 
     # Check to see that the cache is populated with the new workflow
-    workflow_cache = Workflow._constructed_cache[hash_function(MyTestShellWorkflow)]
+    workflow_cache = Workflow._constructed_cache[MyTestShellWorkflow]
     # The non-lazy keys used to construct the workflow
     key_set = frozenset(["watermark_dims", "constructor"])
     assert list(workflow_cache) == [key_set]
@@ -558,3 +557,23 @@ def test_workflow_lzout_inputs_state_change_fail(tmp_path: Path):
         RuntimeError, match="have already been accessed and therefore cannot set"
     ):
         input_access_workflow.construct()
+
+
+def test_workflow_construction_is_cached_per_class():
+    def define(offset):
+        @workflow.define
+        def Wf(x: int) -> int:
+            return workflow.add(Add(a=x, b=offset)).out
+
+        return Wf
+
+    first, second = define(1), define(2)
+    first_wf = Workflow.construct(first(x=0))
+    second_wf = Workflow.construct(second(x=0))
+    assert first_wf is not second_wf
+    assert second_wf["Add"].inputs.b == 2
+    assert Workflow.construct(first(x=0)) is first_wf
+
+    Workflow.clear_cache(task=first(x=0))
+    assert first not in Workflow._constructed_cache
+    assert second in Workflow._constructed_cache

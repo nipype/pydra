@@ -1,5 +1,5 @@
 """The core of the workflow engine."""
 
-from .submitter import Submitter
+from .submitter import Submitter, WorkflowError
 
-__all__ = ["Submitter"]
+__all__ = ["Submitter", "WorkflowError"]

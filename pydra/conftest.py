@@ -15,6 +15,74 @@ def pytest_addoption(parser):
     )
 
 
+@pytest.fixture(autouse=True)
+def isolated_user_cache(tmp_path_factory, monkeypatch):
+    """Give each test its own user-level cache root (the default run cache and the
+    persistent hash cache), so no test reads or writes another's results"""
+    from pydra.utils.general import CACHE_ROOT_ENV_VAR
+    from pydra.utils.hash import PersistentCache
+
+    root = tmp_path_factory.mktemp("user-cache")
+    monkeypatch.setenv(CACHE_ROOT_ENV_VAR, str(root))
+    monkeypatch.delenv(PersistentCache.LOCATION_ENV_VAR, raising=False)
+    return root
+
+
+def _is_loopback(host) -> bool:
+    import ipaddress
+
+    if host is None or host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(str(host).split("%")[0]).is_loopback
+    except ValueError:
+        return False
+
+
+@pytest.fixture
+def no_network(monkeypatch):
+    """Make any connection or name lookup beyond the loopback interface fail in the
+    test process; local sockets, including socketpair, keep working"""
+    import socket
+
+    def refuse(host):
+        raise OSError(f"network access to {host} is disabled in this test")
+
+    getaddrinfo = socket.getaddrinfo
+    create_connection = socket.create_connection
+    connect = socket.socket.connect
+    connect_ex = socket.socket.connect_ex
+
+    def local_getaddrinfo(host, *args, **kwargs):
+        if not _is_loopback(host):
+            refuse(host)
+        return getaddrinfo(host, *args, **kwargs)
+
+    def local_create_connection(address, *args, **kwargs):
+        if not _is_loopback(address[0]):
+            refuse(address[0])
+        return create_connection(address, *args, **kwargs)
+
+    def checked(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6) and not _is_loopback(
+            address[0]
+        ):
+            refuse(address[0])
+
+    def local_connect(sock, address):
+        checked(sock, address)
+        return connect(sock, address)
+
+    def local_connect_ex(sock, address):
+        checked(sock, address)
+        return connect_ex(sock, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", local_getaddrinfo)
+    monkeypatch.setattr(socket, "create_connection", local_create_connection)
+    monkeypatch.setattr(socket.socket, "connect", local_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", local_connect_ex)
+
+
 @pytest.fixture(scope="session", params=["debug", "cf"])
 def worker(request):
     return request.param
@@ -41,6 +109,21 @@ def pytest_generate_tests(metafunc):
         # Set the available workers as a parameter to the
         # test function
         metafunc.parametrize("any_worker", available_workers)
+
+
+def pytest_collection_modifyitems(items):
+    """Tag the parametrisations that need a real worker, so the fast tier
+    (``-m "not slow and not real_worker and not slurm"``) only runs the debug worker"""
+    for item in items:
+        callspec = getattr(item, "callspec", None)
+        if callspec is None:
+            continue
+        for name in ("worker", "any_worker"):
+            worker = callspec.params.get(name)
+            if worker == "slurm":
+                item.add_marker(pytest.mark.slurm)
+            elif worker in ("cf", "dask"):
+                item.add_marker(pytest.mark.real_worker)
 
 
 @pytest.fixture

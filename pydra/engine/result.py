@@ -3,24 +3,101 @@
 from pathlib import Path
 import typing as ty
 import attrs
+import functools
+import inspect
+import io
 import pickle
 import time
 import os
 import cloudpickle as cp
 import getpass
 from time import strftime
-from filelock import SoftFileLock
 from fileformats.generic import FileSet
 from pydra.utils.general import (
     attrs_values,
     attrs_fields,
     is_workflow,
+    atomic_write,
 )
 from pydra.utils.typing import copy_nested_files
 from pydra.compose import workflow, base
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+
+
+_SKELETONS = ("_make_skeleton_class", "_make_skeleton_enum")
+_SETSTATE = "_class_setstate"
+_TRACKER = ("_DYNAMIC_CLASS_TRACKER_BY_ID", "_DYNAMIC_CLASS_TRACKER_LOCK")
+
+
+class UnsupportedCloudpickleError(RuntimeError):
+    """The installed cloudpickle lacks the helpers pydra intercepts to load results
+    without changing the classes of the loading process"""
+
+
+@functools.cache
+def _tracker_args() -> dict[str, int]:
+    """The position of the class tracker id in the arguments of each cloudpickle
+    skeleton function, checking that every helper pydra intercepts exists"""
+    missing = [
+        n for n in (*_SKELETONS, _SETSTATE, *_TRACKER) if not hasattr(cp.cloudpickle, n)
+    ]
+    positions = {}
+    for name in _SKELETONS:
+        if name in missing:
+            continue
+        parameters = list(inspect.signature(getattr(cp.cloudpickle, name)).parameters)
+        if "class_tracker_id" in parameters:
+            positions[name] = parameters.index("class_tracker_id")
+        else:
+            missing.append(f"{name}(class_tracker_id=...)")
+    if missing:
+        raise UnsupportedCloudpickleError(
+            f"cloudpickle {cp.__version__} has no {', '.join(missing)}, which pydra "
+            "uses to load results without replacing the task classes of this process. "
+            "Install a cloudpickle release that provides them (pydra is tested with "
+            "cloudpickle 3.x), and report the incompatibility to pydra"
+        )
+    return positions
+
+
+class _ClassKeepingUnpickler(pickle.Unpickler):
+    """Unpickles objects whose classes (or enums) cloudpickle pickled by value without
+    changing those classes when this process already holds them (when it pickled
+    them): such a class is restored as it is, rather than its attributes, such as the
+    function of a task, being replaced by the pickled copies"""
+
+    def __init__(self, file: ty.BinaryIO):
+        super().__init__(file)
+        self._existing: set[int] = set()
+
+    def find_class(self, module: str, name: str) -> ty.Any:
+        if module == "cloudpickle.cloudpickle":
+            if name in _SKELETONS:
+                return functools.partial(self._make_skeleton, name)
+            if name == _SETSTATE:
+                return self._class_setstate
+        return super().find_class(module, name)
+
+    def _make_skeleton(self, name: str, *args: ty.Any) -> type:
+        tracker_id = args[_tracker_args()[name]]
+        with cp.cloudpickle._DYNAMIC_CLASS_TRACKER_LOCK:
+            existing = tracker_id in cp.cloudpickle._DYNAMIC_CLASS_TRACKER_BY_ID
+        klass = getattr(cp.cloudpickle, name)(*args)
+        if existing:
+            self._existing.add(id(klass))
+        return klass
+
+    def _class_setstate(self, obj: type, state: ty.Any) -> type:
+        if id(obj) in self._existing:
+            return obj
+        return getattr(cp.cloudpickle, _SETSTATE)(obj, state)
+
+
+def _loads(data: bytes) -> ty.Any:
+    _tracker_args()
+    return _ClassKeepingUnpickler(io.BytesIO(data)).load()
 
 
 TaskType = ty.TypeVar("TaskType", bound=base.Task)
@@ -48,6 +125,13 @@ class Result(ty.Generic[OutputsType]):
     runtime: Runtime | None = None
     errored: bool = False
     task: base.Task[OutputsType] | None = None
+    context: dict[str, ty.Any] = attrs.field(factory=dict)
+    """The execution context that produced the result, recorded beside it (see
+    `pydra.engine.context.job_context`)."""
+    cross_context: bool = False
+    """Whether the result was reused from an entry recorded in another context."""
+    reused_in: dict[str, ty.Any] | None = None
+    """The context it was reused in, when `cross_context`."""
 
     CLOUD_PICKLE_ATTRS = ("outputs", "task")
 
@@ -61,7 +145,7 @@ class Result(ty.Generic[OutputsType]):
     def __setstate__(self, state):
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
-                state[attr] = cp.loads(state[attr])
+                state[attr] = _loads(state[attr])
         for name, val in state.items():
             setattr(self, name, val)
 
@@ -189,6 +273,9 @@ def save(
     """
     Save a :class:`~pydra.compose.base.Task` object and/or results.
 
+    Each file is replaced atomically. No lock is taken: a job's own files are written
+    while its lease is held (see `pydra.engine.job.Job.run`).
+
     Parameters
     ----------
     task_path : :obj:`Path`
@@ -210,22 +297,20 @@ def save(
     if name_prefix is None:
         name_prefix = ""
 
-    lockfile = task_path.parent / (task_path.name + "_save.lock")
-    with SoftFileLock(lockfile):
-        if result:
-            if result.task and is_workflow(result.task) and result.outputs is not None:
-                # copy files to the workflow directory
-                result.outputs = copyfile_workflow(
-                    wf_path=task_path, outputs=result.outputs
-                )
-            with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
-                cp.dump(result, fp)
-        if job:
-            with (task_path / f"{name_prefix}_job.pklz").open("wb") as fp:
-                cp.dump(job, fp)
-        if return_values:
-            with (task_path / f"{name_prefix}_return_values.pklz").open("wb") as fp:
-                cp.dump(job, fp)
+    if result:
+        if result.task and is_workflow(result.task) and result.outputs is not None:
+            # copy files to the workflow directory
+            result.outputs = copyfile_workflow(
+                wf_path=task_path, outputs=result.outputs
+            )
+        with atomic_write(task_path / f"{name_prefix}_result.pklz") as fp:
+            cp.dump(result, fp)
+    if job:
+        with atomic_write(task_path / f"{name_prefix}_job.pklz") as fp:
+            cp.dump(job, fp)
+    if return_values:
+        with atomic_write(task_path / f"{name_prefix}_return_values.pklz") as fp:
+            cp.dump(job, fp)
 
 
 def copyfile_workflow(
@@ -327,7 +412,7 @@ def record_error(error_path, error):
         "error message": error,
     }
 
-    with (error_path / "_error.pklz").open("wb") as fp:
+    with atomic_write(error_path / "_error.pklz") as fp:
         cp.dump(full_error, fp)
 
     return error_path / "_error.pklz"

@@ -4,6 +4,7 @@ from __future__ import annotations
 import typing as ty
 import re
 import glob
+from pathlib import Path
 from collections import defaultdict
 import inspect
 from copy import copy
@@ -14,6 +15,7 @@ from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from pydra.utils.general import attrs_values
+from pydra.utils.resources import ComputeResources
 from pydra.compose.base import (
     Arg,
     Out,
@@ -57,6 +59,8 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    resources: "ComputeResources | None" = None,
+    checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
     """Create a task for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task or as a function that takes a
@@ -107,6 +111,13 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    resources: ComputeResources, optional
+        What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
+    checksum: callable, optional
+        A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
+        as the task's ``__checksum__``: its return value is the job checksum and
+        neither the command nor the input values are hashed. It must identify the task as
+        well as its inputs, as jobs with equal checksums share one result and run once
 
     Returns
     -------
@@ -236,6 +247,8 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
+            resources=resources,
+            checksum=checksum,
         )
         return defn
 
@@ -593,8 +606,11 @@ class GlobCallable:
     def __init__(self, pattern: str):
         self.pattern = pattern
 
-    def __call__(self) -> generic.FileSet:
-        matches = glob.glob(self.pattern)
+    def __call__(self, cache_dir) -> generic.FileSet:
+        matches = [
+            str(Path(cache_dir) / m)
+            for m in glob.glob(self.pattern, root_dir=cache_dir)
+        ]
         if not matches:
             raise FileNotFoundError(f"No files found matching pattern: {self.pattern}")
         return matches
