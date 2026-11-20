@@ -6,6 +6,7 @@ process (through `_committed.json`, then the job's own address)."""
 import asyncio
 import functools
 import os
+import stat
 import sys
 import threading
 import typing as ty
@@ -21,12 +22,12 @@ from pydra.engine.portable.reuse import Verdict
 from pydra.engine.portable.store import PortableStore
 from pydra.engine.runner import GraphRunner
 from pydra.engine.submitter import Submitter
-from pydra.utils.storagedir import IS_WINDOWS
+from pydra.utils.storagedir import IS_WINDOWS, StoreUnavailable
 from pydra.workers import base
 
 from .test_portable_quarantine import quarantined
 from .test_portable_reuse import Scripted
-from .test_portable_store import make
+from .test_portable_store import make, posix_only
 
 cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
@@ -178,6 +179,81 @@ def test_workflow_result_is_read_from_its_entry(tmp_path):
     assert result.cache_dir.is_relative_to(tmp_path / "cache" / "results@1")
 
 
+@posix_only
+def test_submitter_roots_are_private_under_umask_002(tmp_path, monkeypatch):
+    """B1: the default root and a cache_root the submitter makes are 0o700 whatever the
+    umask, so the private store opens and runs under ``umask 002``."""
+    default = tmp_path / "home" / "store"
+    monkeypatch.setattr("pydra.engine.submitter.default_store_root", lambda: default)
+    old = os.umask(0o002)
+    try:
+        with Submitter(worker="debug") as sub:
+            first = sub(MakeObj(n=1))
+        with Submitter(worker="debug", cache_root=tmp_path / "new" / "cache") as sub:
+            second = sub(Two(x=1))
+    finally:
+        os.umask(old)
+    assert first.outputs.out == Obj(1) and first.stored
+    assert second.outputs.out == 3
+    for root in (default, tmp_path / "new" / "cache"):
+        assert stat.S_IMODE(root.stat().st_mode) == 0o700
+
+
+@posix_only
+def test_a_group_writable_cache_root_names_the_way_on(tmp_path):
+    root = tmp_path / "shared-by-group"
+    root.mkdir()
+    root.chmod(0o775)
+    with pytest.raises(StoreUnavailable) as info:
+        Submitter(worker="debug", cache_root=root)
+    message = str(info.value)
+    assert f"chmod 700 {root.resolve()}" in message and 'trust="trusted"' in message
+
+
+def test_top_level_calls_leave_no_work_directories(tmp_path):
+    """I3: every call forgets its outcome and the submitter removes the emptied work
+    directories of its attempts when it closes."""
+    root = tmp_path / "cache"
+    with Submitter(worker="debug", cache_root=root) as sub:
+        for i in range(3):
+            assert sub(Add1(x=i)).outputs.out == i + 1
+        assert sub(Add1(x=0)).committed.served
+        assert sub(Two(x=5)).outputs.out == 7
+        assert sub(Add1(x=0).split(x=[7, 8])).outputs.out == [8, 9]
+    assert not list(root.rglob("_committed.json"))
+    assert not (root / "work").exists() or list((root / "work").iterdir()) == []
+
+
+def test_top_level_hit_is_served_before_its_lease(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    with Submitter(worker="debug", cache_root=root) as sub:
+        sub(Add1(x=1))
+    with Submitter(worker="debug", cache_root=root) as sub:
+        taken = []
+        acquire = sub.store.acquire
+        monkeypatch.setattr(
+            sub.store, "acquire", lambda *a, **k: taken.append(a) or acquire(*a, **k)
+        )
+        result = sub(Add1(x=1))
+    assert result.outputs.out == 2 and result.committed.served and taken == []
+
+
+def test_submitter_collect_and_the_store_collect_command(tmp_path, cli_runner):
+    from pydra.engine.portable.store import CollectReport
+    from pydra.scripts.cli import cli
+
+    root = tmp_path / "cache"
+    with Submitter(worker="debug", cache_root=root) as sub:
+        sub(Add1(x=1))
+        assert isinstance(sub.collect(), CollectReport)
+    out = cli_runner(cli, ["store", "collect", str(root)])
+    assert out.exit_code == 0, out.output
+    assert "removed" in out.output and "kept" in out.output
+    with Submitter(worker="debug", cache_root=tmp_path / "p", store="pickle") as sub:
+        with pytest.raises(TypeError, match="collect"):
+            sub.collect()
+
+
 def test_submitter_store_names(tmp_path):
     from pydra.engine.store import PickleStore
 
@@ -242,6 +318,85 @@ def test_readonly_caches_are_private_on_windows(tmp_path, monkeypatch):
         assert store.readonly == (Root(ro.resolve(), trust=trust),)
 
 
+@python.define
+def WritePath(text: str) -> Path:
+    path = Path("out.txt").absolute()
+    path.write_text(text)
+    return path
+
+
+@python.define
+def WriteDir(text: str) -> Path:
+    path = Path("outdir").absolute()
+    path.mkdir()
+    (path / "a.txt").write_text(text)
+    return path
+
+
+@python.define
+def ReadPath(p: Path) -> str:
+    return Path(p).read_text()
+
+
+@python.define
+def Elsewhere(path: str) -> Path:
+    return Path(path)
+
+
+@workflow.define
+def PathChain(text: str) -> str:
+    a = workflow.add(WritePath(text=text), name="A")
+    b = workflow.add(ReadPath(p=a.out), name="B")
+    return b.out
+
+
+def test_path_output_inside_the_work_directory_is_stored(tmp_path):
+    """A ``Path`` output naming a file or directory the job wrote in its work directory is
+    stored as a file set and read back as the entry's copy, so it outlives the emptied work
+    directory, at the top level, downstream and when served again."""
+    cache = tmp_path / "cache"
+    with Submitter(worker="debug", cache_root=cache) as sub:
+        top = sub(WritePath(text="hello"))
+        tree = sub(WriteDir(text="in a dir"))
+        chained = sub(PathChain(text="downstream"))
+    assert top.stored and isinstance(top.outputs.out, Path)
+    assert top.outputs.out.read_text() == "hello"
+    assert top.outputs.out.is_relative_to(cache / "results@1")
+    assert (tree.outputs.out / "a.txt").read_text() == "in a dir"
+    assert chained.outputs.out == "downstream"
+    with Submitter(worker="debug", cache_root=cache) as sub:
+        again = sub(WritePath(text="hello"))
+    assert again.committed.served and again.outputs.out.read_text() == "hello"
+
+
+def test_path_output_outside_the_work_directory_is_a_value(tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("kept where it is")
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        result = sub(Elsewhere(path=str(outside)))
+    assert result.stored and result.outputs.out == outside
+
+
+@python.define
+def Pair(a: int):
+    return a, a + 1
+
+
+@python.define
+def Nested(a: int) -> dict:
+    return {"k": (a, a), "l": [(a,)]}
+
+
+def test_untyped_tuples_round_trip(tmp_path):
+    """A tuple that no declared type fixes comes back a tuple (``$tuple``)."""
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        pair = sub(Pair(a=1))
+        nested = sub(Nested(a=2))
+    assert pair.outputs.out == (1, 2) and type(pair.outputs.out) is tuple
+    assert nested.outputs.out == {"k": (2, 2), "l": [(2,)]}
+    assert type(nested.outputs.out["k"]) is tuple
+
+
 # -- find(job) in ready() ------------------------------------------------------------------------------
 
 
@@ -302,6 +457,58 @@ def test_ready_find_miss_costs_no_find(tmp_path, monkeypatch):
         calls.clear()
         (a,) = runner.ready().dispatch
         assert calls == [("A", {})]
+
+
+def test_a_hit_is_read_off_the_event_loop(tmp_path, monkeypatch):
+    """I4: under the asynchronous driver a hit's read and verification run on a helper
+    thread: a read that waits for the loop to run a coroutine three times finishes, which
+    it could not if it held the loop (it gives up, bounded, and the test fails)."""
+    from pydra.engine.drivers import drive
+    from pydra.workers.debug import DebugWorker
+
+    store = make(tmp_path)
+    _populate(tmp_path, store)
+    released = threading.Event()
+    gave_up, threads = [], []
+    real = store.find
+
+    def slow_find(job, **kw):
+        threads.append(threading.current_thread())
+        if not released.wait(10):
+            gave_up.append(job.name)
+        return real(job, **kw)
+
+    monkeypatch.setattr(store, "find", slow_find)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(Two(x=1), store, on_error="raise_at_end", submitter=sub)
+
+        async def main():
+            ticks = 0
+
+            async def ticker():
+                nonlocal ticks
+                while not released.is_set():
+                    ticks += 1
+                    if ticks >= 3:
+                        released.set()
+                    await asyncio.sleep(0)
+
+            task = asyncio.ensure_future(ticker())
+            await drive(
+                runner,
+                {"default": WorkerExecutor(DebugWorker())},
+                lambda job: "default",
+                max_concurrent=float("inf"),
+                on_error="raise_at_end",
+                audit=sub.audit,
+            )
+            await task
+            return threading.current_thread()
+
+        loop_thread = asyncio.run(main())
+    assert gave_up == [] and loop_thread not in threads
+    assert runner.done and not runner.failed
+    assert runner.exec_graph["B"].job(None).result().outputs.out == 3
 
 
 @pytest.mark.parametrize("lookup_before_dispatch", [False, True])
@@ -430,9 +637,12 @@ def test_forgetting_an_outcome_keeps_the_work_directory(tmp_path):
             os.chdir(wd)
             runner.complete(a, result)
             assert os.getcwd() and wd.is_dir()
+            assert list(wd.iterdir()) == []
+            sub._remove_work_dirs()  # as on close: not the directory the process is in
+            assert wd.is_dir()
         finally:
             os.chdir(here)
-    assert not (wd / "_committed.json").exists() and list(wd.iterdir()) == []
+    assert not wd.exists()  # removed by the submitter's close, once nothing is in it
 
 
 def test_stored_false_is_success_not_unrunnable(tmp_path):

@@ -31,6 +31,10 @@ no codec encodes is stored as a pickle, which a private root is trusted to read 
 ``cache_root`` the root is ``store`` in the user cache directory
 (:func:`~pydra.utils.general.default_store_root`, under ``PYDRA_CACHE_ROOT`` when that is set).
 
+The submitter makes a root it creates ``0o700`` whatever the umask. A root that already
+exists must belong to you and be writable by no one else (``chmod 700 <root>``); otherwise
+pass ``store=PortableStore(root, trust="trusted")`` if everyone who can write it is trusted.
+
 A portable root must be an empty directory or a portable root already. A directory holding
 other names, such as a ``PickleStore`` cache, is refused with ``LegacyLayout``; give an empty
 ``cache_root``, or keep reading the old cache with ``store="pickle"``.
@@ -38,11 +42,25 @@ other names, such as a ``PickleStore`` cache, is refused with ``LegacyLayout``; 
 ``readonly_caches`` are portable roots searched after ``cache_root``. Each is read as
 ``shared`` (its pickle members are never opened) unless it is given as a
 :class:`~pydra.engine.portable.trust.Root` with another trust. Windows has no ``shared``
-roots, so there a path is read as ``private``, which holds only under ``%LOCALAPPDATA%``.
+roots, so there a path is read as ``private``, which holds only under ``%LOCALAPPDATA%``: a
+read-only cache elsewhere is skipped with a warning.
 
 Entry files are read-only: on Windows, clear their read-only attribute before deleting a
 root.
 
+
+What is stored
+--------------
+
+Outputs are stored as JSON and member files. A ``File``, ``Directory`` or other file set of
+the ``fileformats`` packages is copied into the entry and read back from it; a file set
+class defined elsewhere is stored only once it is registered (see
+:mod:`pydra.utils.digest`), and is otherwise kept for the run, not stored. A
+``pathlib.Path`` output that names a file or directory the job wrote in its work directory
+is copied into the entry too and read back as a path to the copy; any other path is stored
+as a value, and its file is not. The work directory is emptied once the entry is published,
+so a file a task writes and does not return as an output is gone after the run. A tuple
+comes back a tuple, a list a list.
 
 Shared roots
 ------------
@@ -95,3 +113,12 @@ which names the entry it published, or where its unstored outputs are kept; the 
 for that file to become visible for up to the store's ``visibility_timeout`` (11 s), then
 reads the entry at the job's own address, and otherwise reports the job failed, naming its
 work directory.
+
+
+Collection
+----------
+
+A submitter removes the emptied work directories of the jobs it ran when it closes. What a
+store keeps only for a while (old staging directories, replaced and quarantined entries,
+work directories left by interrupted runs) is removed by ``Submitter.collect()``, or from the
+shell by ``pydracli store collect <root>``, once it is older than the store policy's ages.

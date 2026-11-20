@@ -1,6 +1,8 @@
 """Handle execution backends."""
 
 import asyncio
+import errno
+import stat
 import typing as ty
 import warnings
 import os
@@ -324,7 +326,10 @@ class Submitter:
                 else default_run_cache_root()
             )
         cache_root = Path(cache_root).resolve()
-        cache_root.mkdir(parents=True, exist_ok=True)
+        if store == "portable":
+            _make_private_dir(cache_root)
+        else:
+            cache_root.mkdir(parents=True, exist_ok=True)
 
         self.cache_root = cache_root
         self.readonly_caches = readonly_caches
@@ -362,6 +367,9 @@ class Submitter:
         for name, spec in workers.items():
             self.workers[name] = self._make_worker(spec, {})
         self._sync_pool = None
+        # the default work directories of the attempts this submitter handed out, emptied
+        # once their entries are published, removed by `close`
+        self._work_dirs: set[Path] = set()
         self.run_start_time = None
         if clean_stale_locks is not None:
             warnings.warn(
@@ -516,14 +524,17 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
-        job.attempt = uuid4().hex
         self.errors = []
         self.entries = []
         try:
             self.run_start_time = datetime.now()
             if is_workflow(task):  # the runner leases, expands and commits it
+                job.attempt = uuid4().hex
+                self._note_attempt(job)
                 self._run_workflow(job, rerun)
-            else:
+            elif rerun or not self._served(job):
+                job.attempt = uuid4().hex
+                self._note_attempt(job)
                 self.submit(job, rerun=rerun)
         except Exception as exc:
             self.errors = exc.errors if isinstance(exc, WorkflowError) else []
@@ -550,7 +561,85 @@ class Submitter:
         result = job.result(settled=True)
         if result is None:
             raise RuntimeError(no_result_diagnosis(job))
+        self._forget(job)
         return result
+
+    def _served(self, job: "Job[TaskType]") -> bool:
+        """Whether the store serves the outer job of a call before it is leased, as
+        ``ready()`` serves a job (RFC 0002 section 3.1): one existence check of its own
+        address, and the entry read through the reuse hook only if there is one. A
+        `Verify` marks the job, which then runs."""
+        find = getattr(self.store, "find", None)
+        if find is None:
+            return False
+        try:
+            found = find(job, probe=True)
+        except Exception as exc:  # run it, to be looked up under its lease
+            logger.debug("Looking up %s before it is leased: %s", job.checksum, exc)
+            return False
+        job.verify = getattr(found, "candidate", None)
+        result = getattr(found, "result", None)
+        if result is None or result.errored:
+            return False
+        job.hooks.pre_run(job)
+        job.committed = result.committed
+        job._cached_result = result
+        job._awaiting_run = False
+        return True
+
+    def _note_attempt(self, job: "Job") -> None:
+        """Remember the default work directory of an attempt this submitter hands out, so
+        that `close` removes it once it is empty."""
+        work_dir = getattr(self.store, "work_dir", None)
+        if work_dir is None:
+            return
+        try:
+            path = Path(work_dir(job))
+        except ValueError:  # no attempt
+            return
+        if path.parent == Path(self.store.path) / "work":  # not one the caller named
+            self._work_dirs.add(path)
+
+    def _forget(self, job: "Job") -> None:
+        """Tell the store the outcome of ``job`` is held (``forget_committed``)."""
+        forget = getattr(self.store, "forget_committed", None)
+        if forget is None:
+            return
+        try:
+            forget(job)
+        except Exception as exc:  # left for the store's collection
+            logger.debug("Forgetting the outcome file of %s: %s", job.checksum, exc)
+
+    def _remove_work_dirs(self) -> None:
+        """Remove the empty default work directories of this submitter's attempts; one the
+        process is in, or that still holds files (a failure, kept outputs), stays."""
+        try:
+            here = Path(os.getcwd()).resolve()
+        except OSError:
+            here = None
+        for path in list(self._work_dirs):
+            if here is not None and here.is_relative_to(path.resolve()):
+                continue  # tried again at the next close
+            self._work_dirs.discard(path)
+            try:
+                os.rmdir(path)
+            except OSError:
+                pass
+
+    def collect(self) -> ty.Any:
+        """Remove what the store keeps only for a while (`PortableStore.collect`: old staging,
+        quarantined entries, default work directories past ``ages.work``); returns its
+        report.
+
+        Raises
+        ------
+        TypeError
+            The store has no ``collect``.
+        """
+        collect = getattr(self.store, "collect", None)
+        if collect is None:
+            raise TypeError(f"{type(self.store).__name__} has no collect")
+        return collect()
 
     def submit(self, job: "Job[TaskType]", rerun: bool = False) -> None:
         """Submit a job to the worker.
@@ -766,6 +855,7 @@ class Submitter:
 
         """
         errors = []
+        self._remove_work_dirs()
         if self._sync_pool is not None:
             self._sync_pool.shutdown()
             self._sync_pool = None
@@ -812,6 +902,41 @@ class Submitter:
             self._cache_root = Path(self._cache_root).resolve()
 
 
+def _make_private_dir(path: Path) -> None:
+    """Make ``path``, a portable root the submitter opens ``private``, ``0o700`` whatever the
+    umask (under ``umask 002`` a directory is otherwise group-writable, which ``private``
+    refuses). An existing directory is left as it is."""
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        return
+    if not IS_WINDOWS:
+        os.chmod(path, 0o700)
+
+
+def _check_private(root: Path) -> None:
+    """Refuse a root the current user does not own, or that others can write, with the ways
+    on (POSIX; on Windows the store checks ``%LOCALAPPDATA%``)."""
+    if IS_WINDOWS or not root.exists():  # one the store makes is its own
+        return
+    from pydra.utils.storagedir import StoreUnavailable
+
+    st = os.stat(root)
+    if st.st_uid == os.geteuid() and not st.st_mode & 0o022:
+        return
+    raise StoreUnavailable(
+        errno.EACCES,
+        f"the cache_root {str(root)!r} is not private (owner uid {st.st_uid}, mode "
+        f"{stat.S_IMODE(st.st_mode):#o}), so it may not hold pickles: if it is yours, run "
+        f"`chmod 700 {root}`; if everyone who can write it is trusted, pass "
+        f'store=PortableStore({str(root)!r}, trust="trusted"); or give a cache_root that '
+        "does not exist yet, which the submitter makes 0o700",
+    )
+
+
 def _portable_store(
     root: Path, readonly_caches: "list | None", reuse: "str | ReusePolicy"
 ) -> ResultStore:
@@ -825,6 +950,7 @@ def _portable_store(
     from pydra.engine.portable.trust import Root
     from pydra.utils.general import ensure_list
 
+    _check_private(root)
     readonly = [
         (
             ro

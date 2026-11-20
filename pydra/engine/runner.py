@@ -786,6 +786,10 @@ class GraphRunner:
         self._quiescent = False
         # releases of workflow leases run off the driver's thread (`release_off_thread`)
         self._release_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        # store reads off the driver's thread (`read_off_thread`), by job
+        self._read_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        self._read_notify: "ty.Callable[[], None] | None" = None
+        self._reading: "dict[Job, concurrent.futures.Future]" = {}
         self._releases: list[concurrent.futures.Future] = []
         self._failed = False
         self._first_error: BaseException | None = None
@@ -898,6 +902,7 @@ class GraphRunner:
             # the outer job has its attempt from its creation (`Submitter.__call__`); a
             # job that can resume keeps its stable work directory under a fresh attempt
             job.attempt = uuid4().hex
+            self._note_attempt(job)
         try:
             frame.result = job._start_workflow(frame.lease)
             self._expand(frame, job.task)
@@ -917,6 +922,13 @@ class GraphRunner:
         if result is not None and result.committed is not None:
             job.committed = result.committed
         return result
+
+    def _note_attempt(self, job: Job) -> None:
+        """Tell the submitter of an attempt handed out, whose emptied work directory it
+        removes when it closes"""
+        note = getattr(self.submitter, "_note_attempt", None)
+        if note is not None:
+            note(job)
 
     def _release_lease(self, frame: _Frame) -> None:
         lease, frame.lease = frame.lease, None
@@ -1065,6 +1077,9 @@ class GraphRunner:
         committed as errored, any other that is not finished gives up its lease and
         stores nothing (its unfinished nodes did not run, so no result is built).
         Idempotent; a driver calls it however the run ends"""
+        pool, self._read_pool = self._read_pool, None
+        if pool is not None:  # reads not taken up are dropped with their jobs
+            pool.shutdown(wait=False, cancel_futures=True)
         for frame in reversed(list(self._frames)):
             if frame.state == "finished" or not frame.owned:
                 continue
@@ -1222,6 +1237,7 @@ class GraphRunner:
             self._in_flight.add(job)
             job.rerun = self._inner_rerun
             job.attempt = uuid4().hex
+            self._note_attempt(job)
         self._collect_resolution_errors()
         settled, self._settled = self._settled, []
         unrunnable = self._new_unrunnable()
@@ -1230,6 +1246,7 @@ class GraphRunner:
             not (dispatch or settled or unrunnable)
             and retry_after is None
             and not self._in_flight
+            and not self._reading
         )
         return Round(
             dispatch=dispatch,
@@ -1240,9 +1257,12 @@ class GraphRunner:
 
     def _serve(self, jobs: list[Job]) -> list[Job]:
         """Settle the released jobs the store holds and the twins of jobs whose outcome is
-        known; return the others"""
+        known; return the others, and the jobs whose read off the thread has ended without a
+        result to serve"""
+        read = self._harvest()
         if jobs and not self._inner_rerun:
             jobs = self._read_store(jobs)
+        jobs = read + jobs
         rest = []
         for job in jobs:
             outcome = self._finished.get(job.checksum)
@@ -1263,8 +1283,21 @@ class GraphRunner:
         holds no entry costs one existence check and is dispatched."""
         find = getattr(self.store, "find", None)
         read = getattr(self.store, "read_succeeded", None)
+        present = getattr(self.store, "present", None)
         rest = []
         for job in jobs:
+            if find is not None and self._read_pool is not None:
+                # a hit reads and verifies every member: off the driver's thread
+                if not self.lookup_before_dispatch and present is not None:
+                    if not present(job):
+                        rest.append(job)
+                        continue
+                future = self._read_pool.submit(find, job)
+                self._reading[job] = future
+                self._handed.add(job)
+                if self._read_notify is not None:
+                    future.add_done_callback(self._notify_read)
+                continue
             if find is not None:
                 result = self._find(job, find)
             else:
@@ -1274,12 +1307,65 @@ class GraphRunner:
             if result is None:
                 rest.append(job)
                 continue
-            job.hooks.pre_run(job)
-            job._cached_result = result
-            job._awaiting_run = False
-            self._handed.add(job)
-            self._settled.append(Settled(job, "stored", result))
+            self._settle_stored(job, result)
         return rest
+
+    def _settle_stored(self, job: Job, result: "Result") -> None:
+        job.hooks.pre_run(job)
+        job._cached_result = result
+        job._awaiting_run = False
+        self._handed.add(job)
+        self._settled.append(Settled(job, "stored", result))
+
+    def _harvest(self) -> list[Job]:
+        """Settle the jobs whose read off the thread found a result to serve; return those
+        whose read found none (a `Verify` marks the job), to be handed out"""
+        rest = []
+        for job, future in list(self._reading.items()):
+            if not future.done():
+                continue
+            del self._reading[job]
+            try:
+                found = future.result()
+            except (
+                Exception
+            ) as exc:  # unreadable: dispatched, looked up under its lease
+                logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
+                found = None
+            result = self._accept(job, found)
+            if result is None:
+                rest.append(job)
+            else:
+                self._settle_stored(job, result)
+        return rest
+
+    def read_off_thread(self, notify: "ty.Callable[[], None] | None" = None) -> None:
+        """Read the entries a store's ``find`` serves on helper threads from here on: a hit
+        reads and verifies every member, which on shared storage takes long enough to hold
+        an event loop. A job whose own address holds an entry is not handed out until its
+        read ends; ``notify`` is called (from the helper thread) as each ends, and the
+        next :meth:`ready` settles it or hands it out. :attr:`reading` counts the reads
+        not yet taken up."""
+        if self._read_pool is None:
+            self._read_pool = concurrent.futures.ThreadPoolExecutor(
+                max_workers=4, thread_name_prefix="pydra-store-read"
+            )
+        self._read_notify = notify
+
+    def _notify_read(self, _future: concurrent.futures.Future) -> None:
+        notify = self._read_notify
+        if notify is None:
+            return
+        try:
+            notify()
+        except RuntimeError:  # the driver's loop has closed: nobody waits for it
+            pass
+
+    @property
+    def reading(self) -> int:
+        """The store reads begun off the thread whose jobs are not yet settled or handed
+        out (see :meth:`read_off_thread`)"""
+        return len(self._reading)
 
     def _find(self, job: Job, find: ty.Callable) -> "Result | None":
         """The result ``find`` serves the job, after marking it with the candidate of a
@@ -1290,12 +1376,15 @@ class GraphRunner:
                 found = find(job)
             else:
                 found = find(job, probe=True)
-        except (
-            Exception
-        ) as exc:  # unreadable: dispatched, to be looked up under its lease
+        except Exception as exc:  # unreadable: dispatched, looked up under its lease
             logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
-            job.verify = None
-            return None
+            found = None
+        return self._accept(job, found)
+
+    def _accept(self, job: Job, found: ty.Any) -> "Result | None":
+        """Mark the job with the candidate of a `Verify` (clearing the mark otherwise) and
+        return the result a `Hit` serves, keeping its `Committed`; None for anything else
+        """
         job.verify = getattr(found, "candidate", None)
         result = getattr(found, "result", None)
         if result is None or result.errored:

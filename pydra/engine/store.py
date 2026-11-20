@@ -410,6 +410,10 @@ class ResultStore(ty.Protocol):
         without ``lookup_before_dispatch``) answers ``Miss`` at the cost of an existence
         check when the job's own address holds nothing. The store check of a workflow job
         under its lease asks it too. See `PortableStore.find`.
+    ``present(job) -> bool``
+        Whether the job's own address holds an entry, one existence check; a runner whose
+        driver reads off its thread (``GraphRunner.read_off_thread``) asks it of every
+        released job and reads only those that do.
     ``expected_hits(jobs) -> int``
         How many of ``jobs`` ``ready()`` may settle from the store, without a reuse being
         recorded; read by ``GraphRunner.plan``.

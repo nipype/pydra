@@ -2594,6 +2594,12 @@ class PortableStore:
         ``find`` may serve, does not."""
         return sum(self._present(job.checksum, job.context) for job in jobs)
 
+    def present(self, job: "Job") -> bool:
+        """Whether this root holds an entry at the job's own address: one ``lstat``, nothing
+        read (what a runner asks of every released job before it reads one off its
+        thread)."""
+        return self._present(job.checksum, job.context)
+
     def _present(self, checksum: str, context: Context) -> bool:
         """Whether this root holds an entry at the rank-0 address of ``checksum`` and
         ``context``: one ``lstat``, and nothing else."""
