@@ -247,11 +247,11 @@ def test_wf_shell_cmd_1(worker, tmp_path):
 
     wf = Workflow(cmd1="pwd", cmd2="ls")
 
-    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         res = sub(wf)
 
-    assert "_result.pklz" in res.outputs.out
-    assert "_job.pklz" not in res.outputs.out
+    # the upstream work directory is emptied once its entry is published
+    assert res.outputs.out == ""
 
 
 # customised input task
@@ -1644,12 +1644,12 @@ def test_wf_shell_cmd_2(worker, tmp_path):
 
     wf = Workflow(cmd="touch", arg="newfile.txt")
 
-    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert res.outputs.stdout == ""
     assert res.outputs.out_f.fspath.exists()
-    assert res.outputs.out_f.fspath.parent.parent.parent == tmp_path
+    assert res.outputs.out_f.fspath.is_relative_to(tmp_path / "results@1")
 
 
 def test_wf_shell_cmd_2a(worker, tmp_path):
@@ -1747,15 +1747,15 @@ def test_wf_shell_cmd_3(worker, tmp_path):
 
     wf = Workflow(cmd1="touch", cmd2="cp", arg="newfile.txt")
 
-    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         res = sub(wf)
 
     assert res.outputs.out1 == ""
     assert res.outputs.touch_file.fspath.exists()
-    assert res.outputs.touch_file.fspath.parent.parent.parent == tmp_path
+    assert res.outputs.touch_file.fspath.is_relative_to(tmp_path / "results@1")
     assert res.outputs.out2 == ""
     assert res.outputs.cp_file.fspath.exists()
-    assert res.outputs.cp_file.fspath.parent.parent.parent == tmp_path
+    assert res.outputs.cp_file.fspath.is_relative_to(tmp_path / "results@1")
 
 
 def test_wf_shell_cmd_3a(worker, tmp_path):
@@ -1877,16 +1877,16 @@ def test_wf_shell_cmd_state_1(worker, tmp_path):
 
     wf = Workflow(cmd1="touch", cmd2="cp").split(arg=["newfile_1.txt", "newfile_2.txt"])
 
-    with Submitter(worker=worker, store="pickle", cache_root=tmp_path) as sub:
+    with Submitter(worker=worker, cache_root=tmp_path) as sub:
         res = sub(wf)
 
     for i in range(2):
         assert res.outputs.out1[i] == ""
         assert res.outputs.touch_file[i].fspath.exists()
-        assert res.outputs.touch_file[i].fspath.parent.parent.parent == tmp_path
+        assert res.outputs.touch_file[i].fspath.is_relative_to(tmp_path / "results@1")
         assert res.outputs.out2[i] == ""
         assert res.outputs.cp_file[i].fspath.exists()
-        assert res.outputs.cp_file[i].fspath.parent.parent.parent == tmp_path
+        assert res.outputs.cp_file[i].fspath.is_relative_to(tmp_path / "results@1")
 
 
 def test_wf_shell_cmd_ndst_1(worker, tmp_path):

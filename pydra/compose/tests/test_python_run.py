@@ -556,7 +556,7 @@ def test_notpython_output_multreturn():
     assert hasattr(no_annots, "d")
     assert hasattr(no_annots, "function")
 
-    outputs = no_annots(store="pickle")
+    outputs = no_annots()
     assert hasattr(outputs, "out")
     assert outputs.out == (20.2, 13.8)
 

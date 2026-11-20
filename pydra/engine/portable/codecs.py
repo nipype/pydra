@@ -103,12 +103,22 @@ class Encoder:
         Whether a value with no codec may be cloudpickled into a ``.pkl`` member.
     allow_naive : bool
         Whether a naive datetime may be written (not in a ``shared`` root).
+    work_dir : str, optional
+        The directory the job ran in: a ``pathlib.Path`` output naming a file or directory
+        inside it is stored as a file set, because the work directory is emptied once the
+        entry is published (RFC 0003 sections 5.4 and 6.4).
     """
 
     def __init__(
-        self, staging: StorageDir, *, can_pickle: bool, allow_naive: bool
+        self,
+        staging: StorageDir,
+        *,
+        can_pickle: bool,
+        allow_naive: bool,
+        work_dir: str | None = None,
     ) -> None:
         self.staging = staging
+        self.work_dir = None if work_dir is None else os.path.realpath(work_dir)
         self.policy = staging.policy
         self.can_pickle = can_pickle
         self.allow_naive = allow_naive
@@ -193,8 +203,10 @@ class Encoder:
             }
         if tp is bytes:
             return {"$bytes": self._blob(value, ".bin")}
-        if tp in (list, tuple):
+        if tp is list:
             return [self.encode(v, field) for v in value]
+        if tp is tuple:  # a JSON array is a list unless a declared type says otherwise
+            return {"$tuple": [self.encode(v, field) for v in value]}
         if tp in (set, frozenset):
             return {"$set": sorted((self.encode(v, field) for v in value), key=_canon)}
         if tp is dict:
@@ -220,7 +232,8 @@ class Encoder:
                 )
             return {"$datetime": value.isoformat()}
         if isinstance(value, Path) and tp is type(Path()):
-            return {"$path": os.fspath(value)}
+            stored = self._work_path(value, field)
+            return {"$path": os.fspath(value) if stored is None else stored}
         if is_canonical_array(value):
             return {"$array": self._blob(canonical_npy(value), ".npy")}
         if (
@@ -249,6 +262,27 @@ class Encoder:
             "cloudpickle": cloudpickle.__version__,
             "python": _PYTHON,
         }
+
+    def _work_path(self, value: Path, field: str) -> JSON | None:
+        """The file set form of a path to a file or directory inside the work directory
+        (``generic/file`` or ``generic/directory``), or None for any other path, which is a
+        value whose file is not stored."""
+        if self.work_dir is None:
+            return None
+        real = os.path.realpath(value)
+        if real == self.work_dir or not real.startswith(self.work_dir + os.sep):
+            return None
+        from fileformats.generic import Directory, File
+
+        if os.path.isfile(real):
+            fileset: FileSet = File(real)
+        elif os.path.isdir(real):
+            fileset = Directory(real)
+        else:
+            return None
+        tag = fileformats_tag(type(fileset))
+        assert tag is not None
+        return self._fileset(fileset, tag, field)
 
     # file sets
 
@@ -369,6 +403,7 @@ _SINGLE = {
     "$complex",
     "$bytes",
     "$set",
+    "$tuple",
     "$dict",
     "$datetime",
     "$path",
@@ -380,6 +415,10 @@ _PAIRS = {
     "$fileset": {"$fileset", "files"},
     "$pickle": {"$pickle", "cloudpickle", "python"},
 }
+
+
+# the file sets a ``$path`` output inside the work directory is stored as
+_PATH_SETS = ("generic/file", "generic/directory")
 
 
 def _unescape(key: str) -> str:
@@ -552,7 +591,18 @@ class Decoder:
             return datetime.date.fromisoformat(body)
         return datetime.datetime.fromisoformat(body)
 
+    def _tuple(self, doc: dict, body: JSON, hashable: bool) -> tuple:
+        if not isinstance(body, list):
+            raise ValueError("a $tuple holds an array")
+        return tuple(self.decode(v, hashable) for v in body)
+
     def _path(self, doc: dict, body: JSON, hashable: bool) -> Path:
+        if isinstance(
+            body, dict
+        ):  # a file or directory the job wrote: the entry's copy
+            if set(body) != _PAIRS["$fileset"] or body["$fileset"] not in _PATH_SETS:
+                raise ValueError("a stored $path is a generic file or directory set")
+            return Path(self._fileset(body, body["$fileset"], hashable).fspath)
         if not isinstance(body, str):
             raise ValueError("not a string")
         return Path(body)
