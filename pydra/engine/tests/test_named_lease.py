@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import contextlib
 import textwrap
 import threading
 import time
@@ -495,6 +496,26 @@ def test_ack_timeout_is_beater_death(tmp_path, callbacks):
         client.close()
         first.__exit__(None, None, None)
         second.__exit__(None, None, None)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="stops the beater with SIGSTOP")
+def test_ping_finds_a_hung_beater():
+    """``ping`` returns while the beater answers; a stopped beater does not answer within the
+    timeout, and the holder has lost its beater."""
+    import signal
+
+    client = BeaterClient()
+    try:
+        client.ping(10)
+        assert client.alive
+        os.kill(client.process.pid, signal.SIGSTOP)
+        with pytest.raises(BeaterDead, match="acknowledge ping"):
+            client.ping(0.5)
+        assert not client.alive
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(client.process.pid, signal.SIGCONT)
+        client.close()
 
 
 HOLDER = textwrap.dedent("""\
