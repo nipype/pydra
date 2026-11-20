@@ -232,8 +232,8 @@ class Field:
     """
 
     name: str | None = None
-    # Not compared, so not hashed: the checksum of a task that declares no provided field
-    # stays as it was, and a provided field's value is its spec, hashed like any input
+    # Not compared, so not part of the hash of the field's class (which every Outputs and
+    # function field would carry); a task's checksum keys it when set, see `_compute_hashes`
     provided: str | None = attrs.field(default=None, eq=False)
     type: ty.Type[ty.Any] = attrs.field(
         validator=is_type,

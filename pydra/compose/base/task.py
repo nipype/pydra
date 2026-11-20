@@ -573,6 +573,14 @@ class Task(ty.Generic[OutputsType]):
         inp_dict.pop(exclude, None)
         # Include the outputs class, just in case any names or types have changed
         inp_dict["Outputs"] = self.Outputs
+        # Which provider fills a field is part of the task's interface; keyed only when
+        # a field is provided, so other checksums are as they were
+        if provided := {
+            f.name: f.provided
+            for f in get_fields(self)
+            if getattr(f, "provided", None) is not None
+        }:
+            inp_dict["Provided"] = provided
         hash_cache = Cache(code_hash=self._code_hash)
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()

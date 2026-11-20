@@ -530,6 +530,8 @@ class Submitter:
         self.__dict__.update(state)
         self.__dict__.setdefault("providers", ())
         self.__dict__.setdefault("_resident_set", None)
+        # an unpickled submitter lives in a worker process, which holds one set
+        self._worker_copy = True
         # Restore the loop and workers
         self.loop = get_open_loop()
         for worker in self.workers.values():

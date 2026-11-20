@@ -6,8 +6,10 @@ into the checksum like any input; the loaded object never is. Nothing here is im
 by a run that declares no provided field, beyond the small marker types.
 """
 
+import atexit
 import hashlib
 import json
+import logging
 import threading
 import typing as ty
 from collections import OrderedDict
@@ -30,6 +32,8 @@ __all__ = [
     "provided_fields",
     "residency_digest",
 ]
+
+logger = logging.getLogger("pydra.resident")
 
 ENTRY_POINT_GROUP = "pydra.providers"
 
@@ -179,16 +183,33 @@ class ResidentSet:
             and device + (extra.device or 0) > self.device_budget
         )
 
-    def _evict(self, extra: Footprint) -> None:
+    def _take_evictable(self, extra: Footprint) -> list[_Entry]:
+        """Remove idle entries, least recent first, until ``extra`` fits; the caller
+        holds the lock and closes what is returned after releasing it"""
+        taken = []
         for key in list(self._entries):
             if not self._over(extra):
-                return
+                break
             entry = self._entries[key]
             if entry.busy:
                 continue
             del self._entries[key]
-            if entry.close is not None:
+            taken.append(entry)
+        return taken
+
+    @staticmethod
+    def _close_all(entries: list[_Entry]) -> list[Exception]:
+        """Close each entry, logging and returning the errors rather than raising"""
+        errors = []
+        for entry in entries:
+            if entry.close is None:
+                continue
+            try:
                 entry.close(entry.obj)
+            except Exception as exc:
+                logger.error("Closing resident state failed: %r", exc)
+                errors.append(exc)
+        return errors
 
     def get(
         self,
@@ -199,27 +220,34 @@ class ResidentSet:
         footprint: Footprint | None = None,
     ) -> ty.Any:
         """The object held under ``key``, loaded by ``loader()`` on a miss, marked busy
-        until :meth:`release`. Idle entries are evicted, least recent first, to make
-        room for ``footprint`` before a load"""
-        with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                footprint = footprint or Footprint()
-                self._evict(footprint)
-                entry = _Entry(loader(), close, footprint)
-                self._entries[key] = entry
-            else:
-                self._entries.move_to_end(key)
-            entry.busy += 1
-            return entry.obj
+        until :meth:`release`. Idle entries are evicted, least recent first, and closed
+        (outside the lock, their errors logged) to make room for ``footprint`` before a
+        load"""
+        footprint = footprint or Footprint()
+        while True:
+            with self._lock:
+                entry = self._entries.get(key)
+                if entry is not None:
+                    self._entries.move_to_end(key)
+                    entry.busy += 1
+                    return entry.obj
+                doomed = self._take_evictable(footprint)
+                if not doomed:
+                    entry = _Entry(loader(), close, footprint)
+                    self._entries[key] = entry
+                    entry.busy += 1
+                    return entry.obj
+            self._close_all(doomed)
 
     def release(self, key: ResidentKey) -> None:
         """End one use of ``key``; the entry becomes evictable when none remain"""
         with self._lock:
             entry = self._entries.get(key)
-            if entry is not None and entry.busy:
-                entry.busy -= 1
-                self._evict(Footprint())
+            if entry is None or not entry.busy:
+                return
+            entry.busy -= 1
+            doomed = self._take_evictable(Footprint())
+        self._close_all(doomed)
 
     @contextmanager
     def use(self, key: ResidentKey, loader, **kwargs) -> ty.Iterator[ty.Any]:
@@ -231,12 +259,12 @@ class ResidentSet:
             self.release(key)
 
     def close(self) -> None:
-        """Close every entry, busy or not"""
+        """Close every entry, busy or not, even if some closes raise; the errors are
+        raised together once all are closed"""
         with self._lock:
             entries, self._entries = list(self._entries.values()), OrderedDict()
-        for entry in entries:
-            if entry.close is not None:
-                entry.close(entry.obj)
+        if errors := self._close_all(entries):
+            raise ExceptionGroup("closing resident state failed", errors)
 
 
 _PROCESS_SET: ResidentSet | None = None
@@ -247,7 +275,26 @@ def process_set() -> ResidentSet:
     global _PROCESS_SET
     if _PROCESS_SET is None:
         _PROCESS_SET = ResidentSet()
+        # a pool worker leaves through multiprocessing's exit function, which skips
+        # atexit handlers, so register with both
+        atexit.register(_close_process_set)
+        try:
+            from multiprocessing.util import Finalize
+
+            Finalize(None, _close_process_set, exitpriority=10)
+        except Exception:  # pragma: no cover
+            pass
     return _PROCESS_SET
+
+
+def _close_process_set() -> None:
+    global _PROCESS_SET
+    rs, _PROCESS_SET = _PROCESS_SET, None
+    if rs is not None:
+        try:
+            rs.close()
+        except Exception as exc:
+            logger.error("Closing the process's resident state failed: %r", exc)
 
 
 def provided_fields(task: ty.Any) -> list[tuple[str, str]]:
@@ -298,9 +345,16 @@ def residency_digest(job: "Job") -> str | None:
 def _resident_set_of(job: "Job") -> ResidentSet:
     submitter = getattr(job, "submitter", None)
     getter = getattr(submitter, "resident_set", None)
-    if getter is not None:
+    if getter is not None and not getattr(submitter, "_worker_copy", False):
         return getter()
     return process_set()
+
+
+def check_providers(job: "Job") -> None:
+    """Raise :class:`UnregisteredProvider` if a provided field of ``job`` names a
+    provider that cannot be found; called when the job is handed out, before it runs"""
+    for _, name in provided_fields(job.task):
+        _find_provider(job, name)
 
 
 @contextmanager

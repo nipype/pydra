@@ -179,14 +179,9 @@ def test_debug_loads_once_across_two_calls(tmp_path):
 
 def test_unregistered_provider_is_wiring_error(tmp_path):
     with Submitter(cache_root=tmp_path) as sub:
-        with pytest.raises(Exception) as ei:
+        with pytest.raises(UnregisteredProvider):
             sub(Embed(x=1, model={"id": "m1"}))
-    chain = []
-    e: BaseException | None = ei.value
-    while e is not None:
-        chain.append(e)
-        e = e.__cause__ or e.__context__
-    assert any(isinstance(e, UnregisteredProvider) for e in chain), chain
+    assert not list(tmp_path.rglob("_error.pklz"))  # raised before anything ran
 
 
 def test_provided_on_any_worker(any_worker, tmp_path):
@@ -206,3 +201,100 @@ def test_field_provided_spelling():
     f = python.arg(provided="toy")
     assert f.provided == "toy"
     assert python.arg().provided is None
+
+
+def test_provided_is_hashed_when_set():
+    def make(tp):
+        def embed(x: int, model: tp) -> str:
+            return repr(model)
+
+        return python.define(embed)(x=1, model={"id": "m"})._checksum
+
+    sums = {make(dict), make(Provided[dict, "toy"]), make(Provided[dict, "other"])}
+    assert len(sums) == 3
+
+
+class ExplodingProvider(ToyProvider):
+    name = "boom"
+
+    def close(self, obj):
+        CLOSES.append(obj.spec["id"])
+        raise RuntimeError("close failed")
+
+
+def test_close_closes_every_entry_even_if_some_raise():
+    closed = []
+    rs = ResidentSet()
+
+    def closer(o):
+        closed.append(o)
+        if o == "a":
+            raise RuntimeError("a")
+
+    for n in "abc":
+        rs.get(_key(n), lambda n=n: n, close=closer)
+        rs.release(_key(n))
+    with pytest.raises(ExceptionGroup):
+        rs.close()
+    assert sorted(closed) == ["a", "b", "c"]
+    assert rs.keys() == []
+
+
+def test_failing_close_on_evict_does_not_fail_get(caplog):
+    rs = ResidentSet(host_budget=1)
+
+    def bad(o):
+        raise RuntimeError("nope")
+
+    kw = dict(footprint=Footprint(host=1))
+    rs.get(_key("x"), lambda: "x", close=bad, **kw)
+    rs.release(_key("x"))
+    assert rs.get(_key("y"), lambda: "y", close=bad, **kw) == "y"
+    rs.release(_key("y"))
+    assert rs.keys() == [_key("y")]
+
+
+def test_close_runs_outside_the_lock():
+    rs = ResidentSet(host_budget=1)
+    seen = []
+
+    def closer(o):
+        seen.append(rs._lock._is_owned())
+
+    kw = dict(footprint=Footprint(host=1), close=closer)
+    rs.get(_key("x"), lambda: "x", **kw)
+    rs.release(_key("x"))
+    rs.get(_key("y"), lambda: "y", **kw)
+    assert seen == [False]
+
+
+@python.define
+def Marked(x: int, model: Provided[dict, "marker"]) -> tuple[int, str]:
+    return x, model.token
+
+
+class MarkerProvider(ToyProvider):
+    name = "marker"
+
+    def load(self, spec, device):
+        m = super().load(spec, device)
+        with open(os.path.join(spec["dir"], f"load-{m.token}"), "w"):
+            pass
+        return m
+
+    def close(self, obj):
+        with open(os.path.join(obj.spec["dir"], f"close-{obj.token}"), "w"):
+            pass
+
+
+def test_cf_worker_process_reuses_state_and_closes_at_exit(tmp_path):
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    with Submitter(
+        cache_root=tmp_path / "c", worker="cf", n_procs=1, providers=[MarkerProvider()]
+    ) as sub:
+        res = sub(Marked(model={"id": "m", "dir": str(marks)}).split(x=[1, 2, 3, 4]))
+    tokens = {o[1] for o in res.outputs.out}
+    assert len(tokens) == 1
+    assert len(list(marks.glob("load-*"))) == 1
+    assert len(list(marks.glob("close-*"))) == 1

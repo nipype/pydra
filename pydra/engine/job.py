@@ -185,6 +185,9 @@ class Job(ty.Generic[TaskType]):
         self.cache_root = submitter.cache_root
         self.store = submitter.store
         self._run_start_time = None
+        from pydra.engine.resident import check_providers
+
+        check_providers(self)
 
     @property
     def cache_root(self):
