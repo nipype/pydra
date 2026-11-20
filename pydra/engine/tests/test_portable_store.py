@@ -8,6 +8,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+import time
 from pathlib import Path
 
 import cloudpickle
@@ -26,7 +27,13 @@ from pydra.engine.portable.layout import HEADER_NAME, StoreLayoutMismatch, cdir_
 from pydra.engine.portable.store import Committed, PortableStore, StoreNotWritable
 from pydra.engine.result import Result
 from pydra.engine.submitter import Submitter
-from pydra.utils.storagedir import IS_WINDOWS, StorageDir, StorePolicy, StoreUnavailable
+from pydra.utils.storagedir import (
+    IS_WINDOWS,
+    StorageDir,
+    StorePolicy,
+    StoreUnavailable,
+    WrongKindError,
+)
 
 TRUST = "trusted" if IS_WINDOWS else "private"
 posix_only = pytest.mark.skipif(
@@ -1467,13 +1474,11 @@ def test_corrupt_budget_is_bounded(tmp_path, monkeypatch):
     store = make(tmp_path)
     c = publish(store)
     corrupt(entry_path(tmp_path / "root", c))
-    store.visibility_timeout = (
-        2  # an unbounded budget fails the count below, not the clock
-    )
     n = []
 
     def quarantine(self, *a, **k):
         n.append(1)
+        assert len(n) <= 8, "the corrupt budget is not bounded"
         return True  # "cleared", but the address stays corrupt
 
     monkeypatch.setattr(mod.PortableStore, "_quarantine", quarantine)
@@ -1681,10 +1686,13 @@ def test_a_container_rename_that_lost_its_parent_walks_again(
 
 @pytest.mark.parametrize("writers", [8, 16])
 def test_container_herd_over_a_regular_file(tmp_path, writers):
-    store = make(tmp_path)
+    """Writers of equal outputs meeting a regular file at the cdir: one sets it aside, one
+    wins, every other stores against the winner, and none waits out the visibility timeout.
+    Durability is off: the herd is about the race, not the cost of a flush."""
+    store = make(tmp_path, policy=StorePolicy(durability="none"))
     c = publish(store)
     probe = entry_path(tmp_path / "root", c).parent
-    for rnd in range(25):
+    for rnd in range(10):
         name = f"python-herd{rnd}"
         first = publish(store, checksum=name)
         victim = entry_path(tmp_path / "root", first).parent
@@ -1695,16 +1703,20 @@ def test_container_herd_over_a_regular_file(tmp_path, writers):
 
         def go(i):
             barrier.wait()
+            start = time.monotonic()
             try:
-                out[i] = publish(store, checksum=name)
+                got = publish(store, checksum=name)
             except BaseException as err:  # noqa
-                out[i] = err
+                got = err
+            out[i] = (got, time.monotonic() - start)
 
         ts = [threading.Thread(target=go, args=(i,)) for i in range(writers)]
         [t.start() for t in ts]
         [t.join() for t in ts]
-        assert not [o for o in out if isinstance(o, BaseException)], out
-        assert [o.won for o in out].count(True) == 1
+        assert not [o for o, _ in out if isinstance(o, BaseException)], out
+        assert [(o.won, o.stored) for o, _ in out].count((True, True)) == 1, out
+        assert all(o.stored for o, _ in out), out
+        assert max(dt for _, dt in out) < store.visibility_timeout / 2, out
     assert probe.exists()
 
 
@@ -1745,3 +1757,95 @@ def test_an_empty_directory_occupant_is_removed_not_moved(tmp_path):
             h.close()
     assert r is True
     assert not entry.exists() and quarantined(tmp_path / "root") == []
+
+
+def test_the_deadline_bounds_clearing_too(tmp_path, monkeypatch):
+    """A cleared occupant goes through the deadline check like contention does."""
+    import pydra.engine.portable.store as mod
+
+    store = make(tmp_path)
+    c = publish(store)
+    corrupt(entry_path(tmp_path / "root", c))
+    store.visibility_timeout = 0.2
+    monkeypatch.setattr(mod, "_ATTEMPTS", 10**9)
+    n = []
+
+    def quarantine(self, *a, **k):
+        n.append(1)
+        assert len(n) <= 200, "clearing ignored the deadline"
+        time.sleep(0.01)
+        return True
+
+    monkeypatch.setattr(mod.PortableStore, "_quarantine", quarantine)
+    again = publish(store)
+    assert (again.won, again.stored) == (False, False)
+    assert again.kept is not None
+
+
+@pytest.mark.parametrize(
+    "err,expected",
+    [
+        (errno.ENOENT, True),  # removed by someone else: the address is clear
+        (errno.ENOTEMPTY, False),  # committed at the name since: not ours to charge
+        (errno.EEXIST, False),
+        (
+            errno.EACCES,
+            False,
+        ),  # a transient refusal (a Windows sharing violation): retry
+    ],
+)
+def test_rmdir_of_an_empty_occupant_maps_its_failure(
+    tmp_path, monkeypatch, err, expected
+):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    rmtree(entry)
+    entry.mkdir()
+
+    def rmdir(self, name):
+        raise OSError(err, "refused")
+
+    monkeypatch.setattr(StorageDir, "rmdir", rmdir)
+    root, handles = open_parent(store, c)
+    try:
+        r = store._quarantine(
+            root, handles[-1], c.entry.fingerprint, c.entry.cdir, None
+        )
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert r is expected
+    assert entry.is_dir() and quarantined(tmp_path / "root") == []
+
+
+@pytest.mark.parametrize("meanwhile", ["same", "replaced", "gone"])
+def test_set_aside_fallback_rechecks_the_object(tmp_path, monkeypatch, meanwhile):
+    """A failure of the move without a refusal errno (Windows) raises only if the object seen is
+    still at the name."""
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(tmp_path / "root", c)
+    rmtree(entry)
+    entry.write_text("x")
+
+    def fail(self, name, target, new_name):
+        if "quarantine" in target.path:
+            if meanwhile != "same":
+                entry.unlink()
+            if meanwhile == "replaced":
+                entry.mkdir()
+            raise OSError(errno.EACCES, "access denied")
+
+    recording_rename(monkeypatch, [], fail)
+    root, handles = open_parent(store, c)
+    try:
+        if meanwhile == "same":
+            with pytest.raises(WrongKindError):
+                store._set_aside(root, handles[-1], c.entry.fingerprint)
+        else:
+            store._set_aside(root, handles[-1], c.entry.fingerprint)
+    finally:
+        for h in [root, *handles]:
+            h.close()
+    assert entry.exists() == (meanwhile != "gone")

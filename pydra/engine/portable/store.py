@@ -440,7 +440,7 @@ class PortableStore:
         (a rename onto an empty directory would succeed). A store needs stable, non-zero
         inode numbers to publish at all (the checks on a container's identity depend on them);
         an inode number of 0 gets a random name. The moved copy is re-verified against its
-        address, and put it back if it verifies, because another writer committed a valid entry
+        address and put back if it verifies, because another writer committed a valid entry
         between the caller's check and the rename. A corrupt copy is stamped, so that
         ``collect`` ages it from the move.
 
@@ -453,7 +453,8 @@ class PortableStore:
         True
             The address is clear (the entry was moved and is corrupt, or was already gone).
         False
-            It was replaced, or the moved copy verified and was restored.
+            It was replaced, the moved copy verified and was restored, or an empty occupant
+            could not be removed this time.
         None
             It cannot be moved.
         """
@@ -495,10 +496,9 @@ class PortableStore:
             except FileNotFoundError:
                 return True
             except OSError as err:
-                if err.errno in (errno.ENOTEMPTY, errno.EEXIST):
-                    return False  # something was committed at the name since
-                logger.warning("could not remove %s: %s", where, err)
-                return None
+                if err.errno not in (errno.ENOTEMPTY, errno.EEXIST):
+                    logger.warning("could not remove %s: %s", where, err)
+                return False  # committed at the name since, or refused for now: retried
             return True
         moved = _inode_name(held)
         try:
@@ -774,8 +774,8 @@ class PortableStore:
         """Rename the staged entry to its address, settling a lost race (RFC 0003 section 5.1
         steps 6 to 8). Contention (another writer replaced a container, or the occupant came or
         went) is retried with jittered backoff until the visibility timeout; a corrupt occupant
-        is set aside a bounded number of times. Exhausting either keeps the outputs:
-        ``stored=False``, ``kept`` the staged entry."""
+        is set aside a bounded number of times within the same timeout. Exhausting either keeps
+        the outputs: ``stored=False``, ``kept`` the staged entry."""
         kept = Committed(
             ref, False, digest, None, False, os.path.join(staging.path, name)
         )
@@ -801,7 +801,7 @@ class PortableStore:
                 return kept
             if result is _CLEARED:
                 corrupt -= 1
-                if corrupt <= 0:
+                if corrupt <= 0 or time.monotonic() >= deadline:
                     return kept
                 continue
             return ty.cast(Committed, result)
