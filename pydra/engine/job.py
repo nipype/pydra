@@ -32,6 +32,8 @@ from pydra.engine.result import (
     record_error_json,
 )
 from pydra.utils.general import (
+    capture_cwd,
+    release_dir,
     atomic_write,
     attrs_values,
     attrs_fields,
@@ -90,14 +92,16 @@ class Job(ty.Generic[TaskType]):
     task: TaskType
     submitter: "Submitter | None"
     environment: "Environment | None"
-    state_index: int
+    # The flat index of the job's element within its split, None without a split, and
+    # None on a partial node until the node is sealed
+    state_index: int | None
+    # The key of the job's element on a partial node (see ``NodeExecution``), else None
+    state_key: tuple | None = None
     rerun: bool = False  # Set by the graph runner when it hands the job out
     # The names of the nested workflows that hold the job, outermost first, with the
     # element's index where one is split; set by the graph runner
     workflow_path: tuple[str, ...] = ()
-    # The id of this attempt at the job, set by the graph runner when it starts to
-    # expand a workflow job and by ``Submitter`` for its outer job; "resume" if the
-    # job can resume
+    # The id of this attempt at the job (see the attribute's docstring below)
     attempt: str | None = None
     # Whether the audit of a workflow job was started by the runner, so that it is
     # finalised with the job
@@ -108,9 +112,12 @@ class Job(ty.Generic[TaskType]):
     _run_start_time: datetime | None
 
     attempt: str | None = None
-    """The id the runner gives this job when it hands it out (RFC 0003 section 5.4), which
-    names its work directory under a store that has ``work_dir``. A task that can resume
-    uses ``"resume"``. Assigned by the runner; None for a job never handed out."""
+    """The id of this attempt at the job (RFC 0003 section 5.4): a fresh UUID each time the
+    runner hands it out (again after ``retry``), given to a workflow job when its expansion
+    starts and to ``Submitter``'s outer job when it is created. Under a store that has
+    ``work_dir`` it names the job's work directory, except for a task that can resume, whose
+    directory is the stable ``work/resume-<hash>`` of its address; its outcome files there
+    carry the attempt. None for a job never handed out (settled or stored)."""
     committed: "Committed | None" = None
     """What this process's `PortableStore` publish returned for the job."""
 
@@ -123,6 +130,7 @@ class Job(ty.Generic[TaskType]):
         state_index: int | None = None,
         hooks: TaskHooks | None = None,
         resources: ComputeResources | None = None,
+        state_key: tuple | None = None,
     ):
         """
         Initialize a job.
@@ -155,6 +163,7 @@ class Job(ty.Generic[TaskType]):
         )
         self.name = name
         self.state_index = state_index
+        self.state_key = state_key
         self.resources = resources if resources is not None else task._resources
 
         self.return_values = {}
@@ -204,6 +213,9 @@ class Job(ty.Generic[TaskType]):
         self.cache_root = submitter.cache_root
         self.store = submitter.store
         self._run_start_time = None
+        from pydra.engine.resident import check_providers
+
+        check_providers(self)
 
     @property
     def cache_root(self):
@@ -491,6 +503,13 @@ class Job(ty.Generic[TaskType]):
             return self
         return self if self.persist_pickle or result.errored else None
 
+    def _take_attempt(self) -> None:
+        """Give a job that is run without having been handed out by a runner (``job.run()``
+        called directly) an attempt of its own, so that under a store with work directories
+        it has one to run in."""
+        if self.attempt is None and self._has_work_dir:
+            self.attempt = uuid4().hex
+
     def _acquire(self):
         """The lease guarding the job; a resumable job's work directory is stable across
         runs, so a store with work directories guards it whatever its de-duplication."""
@@ -647,6 +666,7 @@ class Job(ty.Generic[TaskType]):
 
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
+        self._take_attempt()
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         with lease:
@@ -659,47 +679,54 @@ class Job(ty.Generic[TaskType]):
             self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
-            cwd = os.getcwd()
-            self._withdraw_success(lease)
-            self._populate_filesystem()
-            if enters:
-                os.chdir(self.cache_dir)
-            result = Result(
-                outputs=None,
-                runtime=None,
-                errored=False,
-                cache_dir=self.cache_dir,
-                task=self.task,
-                context=self.context,
-            )
-            self.hooks.pre_run_task(self)
-            self.audit.start_audit(
-                odir=self.cache_dir, chdir=enters, record_dir=self._make_record_dir()
-            )
-            if self.audit.audit_check(AuditFlag.PROV):
-                self.audit.audit_task(job=self)
+            # the directory restored to after the run, captured and held at once so that
+            # nothing removes it meanwhile (jobs on threads share the working directory)
+            cwd = capture_cwd() if enters else os.getcwd()
             try:
-                self.audit.monitor()
-                self.task._run(self, rerun)
-                result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
-            except Exception:
-                etype, eval, etr = sys.exc_info()
-                traceback = format_exception(etype, eval, etr)
-                if lease_still_held(lease):
-                    self._record_error(traceback)
-                result.errored = True
-                raise
-            finally:
+                self._withdraw_success(lease)
+                self._populate_filesystem()
+                if enters:
+                    os.chdir(self.cache_dir)
+                result = Result(
+                    outputs=None,
+                    runtime=None,
+                    errored=False,
+                    cache_dir=self.cache_dir,
+                    task=self.task,
+                    context=self.context,
+                )
+                self.hooks.pre_run_task(self)
+                self.audit.start_audit(
+                    odir=self.cache_dir,
+                    chdir=enters,
+                    record_dir=self._make_record_dir(),
+                )
+                if self.audit.audit_check(AuditFlag.PROV):
+                    self.audit.audit_task(job=self)
                 try:
+                    self.audit.monitor()
+                    self._run_task(rerun)
+                    result.outputs = self.task.Outputs._from_job(self)
+                    self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+                except Exception:
+                    etype, eval, etr = sys.exc_info()
+                    traceback = format_exception(etype, eval, etr)
+                    if lease_still_held(lease):
+                        self._record_error(traceback)
+                    result.errored = True
+                    raise
+                finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
-                finally:
-                    if enters:
+            finally:
+                if enters:
+                    try:
                         os.chdir(cwd)
+                    finally:
+                        release_dir(cwd)
         result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
@@ -723,6 +750,7 @@ class Job(ty.Generic[TaskType]):
         """
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
+        self._take_attempt()
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         async with lease:
@@ -735,44 +763,51 @@ class Job(ty.Generic[TaskType]):
             self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
-            cwd = os.getcwd()
-            self._withdraw_success(lease)
-            self._populate_filesystem()
-            result = Result(
-                outputs=None,
-                runtime=None,
-                errored=False,
-                cache_dir=self.cache_dir,
-                task=self.task,
-                context=self.context,
-            )
-            self.hooks.pre_run_task(self)
-            self.audit.start_audit(
-                odir=self.cache_dir, chdir=enters, record_dir=self._make_record_dir()
-            )
+            # the directory restored to after the run, captured and held at once so that
+            # nothing removes it meanwhile (jobs on threads share the working directory)
+            cwd = capture_cwd() if enters else os.getcwd()
             try:
-                self.audit.monitor()
-                await self.task._run_async(self, rerun)
-                result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
-            except Exception:
-                etype, eval, etr = sys.exc_info()
-                traceback = format_exception(etype, eval, etr)
-                if lease_still_held(lease):
-                    self._record_error(traceback)
-                result.errored = True
-                self._errored = True
-                raise
-            finally:
+                self._withdraw_success(lease)
+                self._populate_filesystem()
+                result = Result(
+                    outputs=None,
+                    runtime=None,
+                    errored=False,
+                    cache_dir=self.cache_dir,
+                    task=self.task,
+                    context=self.context,
+                )
+                self.hooks.pre_run_task(self)
+                self.audit.start_audit(
+                    odir=self.cache_dir,
+                    chdir=enters,
+                    record_dir=self._make_record_dir(),
+                )
                 try:
+                    self.audit.monitor()
+                    await self.task._run_async(self, rerun)
+                    result.outputs = self.task.Outputs._from_job(self)
+                    self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+                except Exception:
+                    etype, eval, etr = sys.exc_info()
+                    traceback = format_exception(etype, eval, etr)
+                    if lease_still_held(lease):
+                        self._record_error(traceback)
+                    result.errored = True
+                    self._errored = True
+                    raise
+                finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
-                finally:
-                    if enters:
+            finally:
+                if enters:
+                    try:
                         os.chdir(cwd)
+                    finally:
+                        release_dir(cwd)
         result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
@@ -781,6 +816,25 @@ class Job(ty.Generic[TaskType]):
         if self._has_work_dir:
             self._cached_result = result
         return result
+
+    def _run_task(self, rerun: bool) -> None:
+        """Run the task. The state of each provided field is bound for the duration of
+        the run and handed to the task through ``provided_values``; a task with no
+        provided field costs nothing here."""
+        from pydra.engine.resident import provided_fields
+
+        self.provided_values = {}
+        if not provided_fields(self.task):
+            self.task._run(self, rerun)
+            return
+        from pydra.engine import resident
+
+        with resident.bound(self) as values:
+            self.provided_values = values
+            try:
+                self.task._run(self, rerun)
+            finally:
+                self.provided_values = {}
 
     def _remove_info_file(self):
         """Remove the job's ``<uid>_info.json``; one that cannot be removed is logged
@@ -1012,6 +1066,7 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
         raise
 
     portable = job._has_work_dir
+    job._take_attempt()  # a job pickled before a runner handed it out
     resultfile = job.cache_dir / "_result.pklz"
     try:
         if job.is_async:

@@ -2116,7 +2116,7 @@ def test_wf_nostate_cachedir(worker: str, tmp_path: Path):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=worker, cache_root=tmp_path)
+    outputs = worky(worker=worker, cache_root=tmp_path / "cache")
 
     assert 8 == outputs.out
 
@@ -2136,7 +2136,7 @@ def test_wf_nostate_cachedir_relativepath(tmp_path, worker):
 
     worky = Worky(x=2, y=3)
 
-    outputs = worky(worker=worker, cache_root=tmp_path)
+    outputs = worky(worker=worker, cache_root=tmp_path / "cache")
 
     assert 8 == outputs.out
 
@@ -2455,7 +2455,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
         return add2.out
 
     worky1 = Worky1(x=2, y=3, run_log=run_log)
-    with Submitter(worker=worker, cache_root=cache_root1) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2471,7 +2471,10 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(
 
     worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
-        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
+        worker=worker,
+        store="pickle",
+        cache_root=cache_root2,
+        readonly_caches=cache_root1,
     ) as sub:
         results2 = sub(worky2, rerun=True)
 
@@ -2512,7 +2515,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
         return add2.out
 
     worky1 = Worky1(x=2, y=3, run_log=run_log)
-    with Submitter(worker=worker, cache_root=cache_root1) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2529,6 +2532,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(
     worky2 = Worky2(x=2, y=3, run_log=run_log)
     with Submitter(
         worker=worker,
+        store="pickle",
         cache_root=cache_root2,
         readonly_caches=cache_root1,
         propagate_rerun=False,
@@ -2631,7 +2635,7 @@ def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
 
     worky1 = Worky1(x=3)
 
-    with Submitter(worker=worker, cache_root=cache_root1) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2648,7 +2652,10 @@ def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
     worky2 = Worky2(x=2)
 
     with Submitter(
-        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
+        worker=worker,
+        store="pickle",
+        cache_root=cache_root2,
+        readonly_caches=cache_root1,
     ) as sub:
         results2 = sub(worky2)
 
@@ -2682,7 +2689,7 @@ def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
 
     worky1 = Worky1(x=3)
 
-    with Submitter(worker=worker, cache_root=cache_root1) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -2698,7 +2705,10 @@ def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     worky2 = Worky2(x=2)
 
     with Submitter(
-        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
+        worker=worker,
+        store="pickle",
+        cache_root=cache_root2,
+        readonly_caches=cache_root1,
     ) as sub:
         results2 = sub(worky2)
 
@@ -2995,7 +3005,7 @@ def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
 
     worky1 = Worky1(x=2, y=3)
 
-    with Submitter(worker=worker, cache_root=cache_root1) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3013,7 +3023,10 @@ def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
     worky2 = Worky2(x=2, y=3)
 
     with Submitter(
-        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
+        worker=worker,
+        store="pickle",
+        cache_root=cache_root2,
+        readonly_caches=cache_root1,
     ) as sub:
         results2 = sub(worky2)
 
@@ -3288,7 +3301,7 @@ def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
         return add2.out
 
     worky1 = Worky1(run_log=run_log).split(("x", "y"), x=[2, 20], y=[3, 30])
-    with Submitter(worker=worker, cache_root=cache_root1) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3304,7 +3317,7 @@ def test_wf_state_runtwice_usecache(worker: str, tmp_path: Path):
     cache_root_content = os.listdir(results1.job.cache_root)
 
     # running workflow the second time
-    with Submitter(worker=worker, cache_root=cache_root1) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root1) as sub:
         results1 = sub(worky1)
 
     assert not results1.errored, "\n".join(results1.errors["error message"])
@@ -3378,7 +3391,7 @@ def test_wf_resultfile_1(worker: str, tmp_path: Path):
         return writefile.out  #
 
     worky = Worky(x="file_1.txt")
-    outputs = worky(worker=worker, cache_root=tmp_path)
+    outputs = worky(worker=worker, store="pickle", cache_root=tmp_path)
 
     # checking if the file exists and if it is in the Worky directory
     wf_out = outputs.wf_out.fspath
@@ -3399,7 +3412,7 @@ def test_wf_resultfile_2(worker: str, tmp_path: Path):
 
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     worky = Worky(x=file_list)
-    outputs = worky(worker=worker, cache_root=tmp_path)
+    outputs = worky(worker=worker, store="pickle", cache_root=tmp_path)
 
     # checking if the file exists and if it is in the Worky directory
     for ii, file in enumerate(outputs.wf_out):
@@ -3420,7 +3433,7 @@ def test_wf_resultfile_3(worker: str, tmp_path: Path):
 
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     worky = Worky(x=file_list)
-    outputs = worky(worker=worker, cache_root=tmp_path)
+    outputs = worky(worker=worker, store="pickle", cache_root=tmp_path)
 
     # checking if the file exists and if it is in the Worky directory
     for key, val in outputs.wf_out.items():

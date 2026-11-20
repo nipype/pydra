@@ -57,7 +57,7 @@ def records(root):
 
 def slot_of(root, x):
     """The slot of the ``Triple(x=x)`` job run by a submitter on ``root``"""
-    with Submitter(worker="debug", cache_root=root) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=root) as sub:
         job = Job(task=Triple(x=x), submitter=sub, name="t")
         return job.cache_dir, sub.store.success_record(job.checksum, job.context)
 
@@ -92,7 +92,7 @@ def counted(monkeypatch):
 
 
 def run_split(root, worker, items):
-    with Submitter(worker=worker, cache_root=root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=root) as sub:
         return sub(Triple().split(x=items))
 
 
@@ -170,8 +170,8 @@ def test_errored_slot_is_rerun_under_its_lease_and_never_read_early(
     root = tmp_path / "cache"
     wf = Recoverable(x=[1, 2, 3, 4], flag=str(flag))
     with pytest.raises(Exception, match="even error"):
-        wf(worker=worker, cache_root=root)
-    with Submitter(worker="debug", cache_root=root) as sub:
+        wf(worker=worker, store="pickle", cache_root=root)
+    with Submitter(worker="debug", store="pickle", cache_root=root) as sub:
         jobs = {
             x: Job(
                 task=FailEvenUnlessFlagged(x=x, flag=str(flag)), submitter=sub, name="f"
@@ -224,7 +224,7 @@ def test_errored_slot_is_rerun_under_its_lease_and_never_read_early(
     monkeypatch.setattr(worker_cls, "run", recording_run)
 
     flag.touch()
-    assert wf(worker=worker, cache_root=root).out == [1, 2, 3, 4]
+    assert wf(worker=worker, store="pickle", cache_root=root).out == [1, 2, 3, 4]
     assert not [s for s in early if s.split("/")[0] in errored]
     assert sorted(x for x in ran if x is not None) == sorted({1, 2, 3, 4} - recorded)
     assert len(records(root)) == 5  # every element now, and the outer job
@@ -318,7 +318,7 @@ def test_readonly_cache_is_read_under_the_lease(tmp_path):
 def test_rerun_removes_the_record_before_rewriting_the_slot(
     tmp_path, monkeypatch, asynchronous
 ):
-    sub = Submitter(worker="debug", cache_root=tmp_path)
+    sub = Submitter(worker="debug", store="pickle", cache_root=tmp_path)
     task = Wrapped(x=1) if asynchronous else Triple(x=1)
     job = Job(task=task, submitter=sub, name="t")
     job.run()
@@ -345,7 +345,7 @@ def test_rerun_removes_the_record_before_rewriting_the_slot(
 def test_errored_rerun_leaves_no_record(tmp_path):
     flag = tmp_path / "flag"
     flag.touch()
-    sub = Submitter(worker="debug", cache_root=tmp_path / "cache")
+    sub = Submitter(worker="debug", store="pickle", cache_root=tmp_path / "cache")
     task = FailEvenUnlessFlagged(x=2, flag=str(flag))
     Job(task=task, submitter=sub, name="f").run()
     job = Job(task=task, submitter=sub, name="f")
@@ -433,11 +433,11 @@ def test_unwritable_record_directory_does_not_fail_a_job(
 def test_rerun_reruns_recorded_jobs_in_the_same_cache_root(tmp_path, worker, counted):
     root = tmp_path / "cache"
     task = Triple().split(x=[1, 2, 3])
-    with Submitter(worker=worker, cache_root=root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=root) as sub:
         sub(task)
     assert len(records(root)) == 4
     counted["run"].clear()
-    with Submitter(worker=worker, cache_root=root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=root) as sub:
         assert sub(task, rerun=True).outputs.out == [3, 6, 9]
     assert sorted(nodes(counted)) == ["Triple"] * 3
 

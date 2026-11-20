@@ -934,7 +934,7 @@ def test_typing_implicit_cast_from_super(tmp_path, GenericTask, SpecificTask):
 
     in_file = MyFormatX.sample()
 
-    outputs = Workflow(in_file=in_file)(cache_root=tmp_path / "cache")
+    outputs = Workflow(in_file=in_file)(store="pickle", cache_root=tmp_path / "cache")
 
     out_file: MyFormatX = outputs.out_file
     assert type(out_file) is MyFormatX
@@ -974,7 +974,7 @@ def test_typing_cast(tmp_path, SpecificTask, OtherSpecificTask):
 
     in_file = MyFormatX.sample()
 
-    outputs = Workflow(in_file=in_file)(cache_root=tmp_path / "cache")
+    outputs = Workflow(in_file=in_file)(store="pickle", cache_root=tmp_path / "cache")
 
     out_file: MyFormatX = outputs.out_file
     assert type(out_file) is MyFormatX

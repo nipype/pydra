@@ -114,7 +114,11 @@ def test_docker_st_1(run_function, worker, tmp_path):
     docky = Docky().split(executable=cmd)
 
     outputs = run_function(
-        docky, tmp_path, worker, environment=docker.Environment(image="busybox")
+        docky,
+        tmp_path,
+        worker,
+        environment=docker.Environment(image="busybox"),
+        store="pickle",
     )
     # the working directory in the container is the job's slot, below its checksum
     assert PurePosixPath(outputs.stdout[0].strip()).parent == PurePosixPath(
@@ -170,6 +174,7 @@ def test_docker_inputspec_1(tmp_path, worker):
     docky = Docky(file=filename)
 
     outputs = docky(
+        store="pickle",
         cache_root=tmp_path,
         worker=worker,
         environment=docker.Environment(image="busybox"),
@@ -206,7 +211,9 @@ def test_docker_inputspec_1a(tmp_path):
     docky = Docky()
 
     outputs = docky(
-        cache_root=tmp_path, environment=docker.Environment(image="busybox")
+        store="pickle",
+        cache_root=tmp_path,
+        environment=docker.Environment(image="busybox"),
     )
     assert outputs.stdout.strip() == "hello from pydra"
 
@@ -295,6 +302,7 @@ def test_docker_inputspec_2a_except(worker, tmp_path):
     assert docky.file2.fspath == filename_2
 
     outputs = docky(
+        store="pickle",
         cache_root=tmp_path,
         worker=worker,
         environment=docker.Environment(image="busybox"),
@@ -342,6 +350,7 @@ def test_docker_inputspec_2a(worker, tmp_path):
     docky = Docky(file2=filename_2)
 
     outputs = docky(
+        store="pickle",
         cache_root=tmp_path,
         worker=worker,
         environment=docker.Environment(image="busybox"),
@@ -412,6 +421,7 @@ def test_docker_cmd_inputspec_copyfile_1(worker, tmp_path):
     docky = Docky(orig_file=str(file))
 
     outputs = docky(
+        store="pickle",
         cache_root=tmp_path,
         worker=worker,
         environment=docker.Environment(image="busybox"),
@@ -460,6 +470,7 @@ def test_docker_inputspec_state_1(worker, tmp_path):
 
     outputs = docky(
         worker=worker,
+        store="pickle",
         cache_root=tmp_path,
         environment=docker.Environment(image="busybox"),
     )
@@ -498,6 +509,7 @@ def test_docker_inputspec_state_1b(worker, tmp_path):
     docky = Docky().split(file=[str(file_1), str(file_2)])
 
     outputs = docky(
+        store="pickle",
         cache_root=tmp_path,
         worker=worker,
         environment=docker.Environment(image="busybox"),
@@ -541,7 +553,7 @@ def test_docker_wf_inputspec_1(worker, tmp_path):
 
     wf = Workflow(file=filename)
 
-    outputs = wf(cache_root=tmp_path)
+    outputs = wf(store="pickle", cache_root=tmp_path)
     assert outputs.out.strip() == "hello from pydra"
 
 
@@ -583,7 +595,7 @@ def test_docker_wf_state_inputspec_1(worker, tmp_path):
 
     wf = Workflow().split(file=[file_1, file_2])
 
-    outputs = wf(cache_root=tmp_path)
+    outputs = wf(store="pickle", cache_root=tmp_path)
 
     assert outputs.out[0].strip() == "hello from pydra"
     assert outputs.out[1].strip() == "have a nice one"
@@ -627,7 +639,7 @@ def test_docker_wf_ndst_inputspec_1(worker, tmp_path):
 
     wf = Workflow().split(file=[str(file_1), str(file_2)])
 
-    outputs = wf(cache_root=tmp_path)
+    outputs = wf(store="pickle", cache_root=tmp_path)
     assert outputs.out == ["hello from pydra", "have a nice one"]
 
 
@@ -639,7 +651,7 @@ def test_execute_creates_the_slot_directory(tmp_path, monkeypatch):
     job = Job(
         task=shell.define("whoami")(),
         name="job",
-        submitter=Submitter(cache_root=tmp_path),
+        submitter=Submitter(store="pickle", cache_root=tmp_path),
     )
     assert not job.cache_dir.parent.exists()
     docker.Environment(image="busybox").execute(job)

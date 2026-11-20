@@ -130,3 +130,71 @@ def check_versions_command(table, update):
     for problem in problems:
         click.echo(problem, err=True)
     sys.exit(1 if problems else 0)
+
+
+@cli.group(context_settings=CONTEXT_SETTINGS)
+def store():
+    """Maintain a portable result store."""
+
+
+def _no_work_dir(checksum: str, fingerprint: str, attempt: str) -> Path:
+    raise ValueError("collect does not run jobs, so it names no work directory")
+
+
+@store.command("collect", context_settings=CONTEXT_SETTINGS)
+@click.argument(
+    "root", type=click.Path(exists=True, file_okay=False, resolve_path=True)
+)
+@click.option(
+    "--trust",
+    type=click.Choice(["private", "trusted", "shared"]),
+    default="private",
+    show_default=True,
+    help="What you assert about who can write the root (RFC 0003 section 6.4)",
+)
+def store_collect(root, trust):
+    """Remove what the portable store at ROOT keeps only for a while: staging and
+    quarantined entries, and default work directories, past their ages."""
+    from pydra.engine.portable.store import PortableStore
+
+    kw = {"work_dir": _no_work_dir} if trust == "shared" else {}
+    report = PortableStore(root, trust=trust, **kw).collect()
+    for path in report.removed:
+        click.echo(f"removed {path}")
+    for path, why in report.kept:
+        click.echo(f"kept {path}: {why}")
+    click.echo(f"{len(report.removed)} removed, {len(report.kept)} kept")
+
+
+@cli.group(context_settings=CONTEXT_SETTINGS)
+def pool():
+    """Warm worker pools (RFC 0005)."""
+
+
+@pool.command("probe", context_settings=CONTEXT_SETTINGS)
+@click.argument("root", type=click.Path(exists=True, file_okay=False))
+@click.option(
+    "--attribute-delay",
+    type=float,
+    default=None,
+    help="Seconds a client may see a directory change late; default the pool's own "
+    "(from pool.json), else the lease default.",
+)
+def pool_probe(root, attribute_delay):
+    """Check that ROOT has the primitives a worker pool needs and measure how late a
+    second process sees a directory change; print the result as JSON and exit with 1
+    if the root is refused."""
+    from pydra.engine.lease import ATTRIBUTE_DELAY
+    from pydra.workers.pool.probe import probe, refusal
+
+    if attribute_delay is None:
+        attribute_delay = ATTRIBUTE_DELAY
+        header = Path(root) / "pool.json"
+        if header.is_file():
+            attribute_delay = json.loads(header.read_bytes())["lease"][
+                "attribute_delay"
+            ]
+    result = probe(root, limit=attribute_delay + 1.0)
+    why = refusal(result, attribute_delay)
+    click.echo(json.dumps({**result.to_json(), "refused": why}, sort_keys=True))
+    sys.exit(1 if why else 0)

@@ -23,7 +23,11 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     cache_root = tmpdir / "cache"
     cache_root.mkdir()
 
-    foo = Job(task=FunAddTwo(a=1), submitter=Submitter(cache_root=tmpdir), name="foo")
+    foo = Job(
+        task=FunAddTwo(a=1),
+        submitter=Submitter(store="pickle", cache_root=tmpdir / "sub"),
+        name="foo",
+    )
     assert foo.hooks
     # ensure all hooks are defined
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
@@ -33,7 +37,9 @@ def test_taskhooks_1(tmpdir: Path, capsys):
     def myhook(task, *args):
         print("I was called")
 
-    FunAddTwo(a=1)(cache_root=cache_root, hooks=TaskHooks(pre_run=myhook))
+    FunAddTwo(a=1)(
+        store="pickle", cache_root=cache_root, hooks=TaskHooks(pre_run=myhook)
+    )
     captured = capsys.readouterr()
     assert "I was called\n" in captured.out
     del captured
@@ -54,6 +60,7 @@ def test_taskhooks_1(tmpdir: Path, capsys):
 
     # set all hooks
     FunAddTwo(a=1)(
+        store="pickle",
         cache_root=cache_root,
         hooks=TaskHooks(
             pre_run=myhook,

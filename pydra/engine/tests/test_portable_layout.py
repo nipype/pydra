@@ -37,7 +37,10 @@ from pydra.utils.storagedir import (
     StoreUnavailable,
 )
 
-TRUST = "trusted" if IS_WINDOWS else "private"
+# `trusted` on Windows unless CI sets PYDRA_TEST_PORTABLE_TRUST (see test_portable_store)
+TRUST = os.environ.get("PYDRA_TEST_PORTABLE_TRUST") or (
+    "trusted" if IS_WINDOWS else "private"
+)
 
 
 def _open(path):
@@ -104,29 +107,30 @@ def test_open_creates_then_checks(root, expected, tmp_path):
     assert [p.name for p in (tmp_path / "root").iterdir()] == [HEADER_NAME]
 
 
-RACE = """
-import sys
-from pydra.engine.portable.identity import PydraIdentityV1
-from pydra.engine.portable.layout import LayoutHeader, open_layout
-from pydra.utils.storagedir import StorageDir, StorePolicy
+def test_header_written_atomically(root, expected, tmp_path, monkeypatch):
+    """Two openers race to create the header: the second opens the root while the first has
+    written its temporary and not yet linked it. A reader in that window sees no header, not
+    a partial one; the first then loses the link, reads the second's header, and leaves no
+    temporary behind. The interleaving is forced, so no timing decides it."""
+    from pydra.engine.portable import layout
 
-handle = StorageDir.open_root(sys.argv[1], StorePolicy(), trust=sys.argv[2])
-header = LayoutHeader.for_store(PydraIdentityV1())
-for _ in range(40):
-    assert open_layout(handle, header) == header
-"""
+    real = layout._publish
+    seen_in_window = []
 
+    def second_opener_first(r, tmp):
+        monkeypatch.setattr(layout, "_publish", real)
+        with StorageDir.open_root(
+            tmp_path / "root", StorePolicy(), trust=TRUST
+        ) as other:
+            seen_in_window.append(layout._read(other))  # the first's temporary only
+            assert open_layout(other, expected) == expected  # the second creates it
+        return real(r, tmp)
 
-def test_header_written_atomically(tmp_path):
-    path = tmp_path / "root"
-    path.mkdir()
-    procs = [
-        subprocess.Popen([sys.executable, "-c", RACE, str(path), TRUST])
-        for _ in range(4)
-    ]
-    assert [p.wait(timeout=120) for p in procs] == [0] * 4
-    assert sorted(x.name for x in path.iterdir()) == [HEADER_NAME]
-    assert _stored(path)["format"] == "pydra-store@1.0"
+    monkeypatch.setattr(layout, "_publish", second_opener_first)
+    assert open_layout(root, expected) == expected
+    assert seen_in_window == [None]
+    assert sorted(x.name for x in (tmp_path / "root").iterdir()) == [HEADER_NAME]
+    assert _stored(tmp_path / "root")["format"] == "pydra-store@1.0"
 
 
 @pytest.mark.parametrize(
@@ -208,7 +212,8 @@ def test_entries_without_header_is_legacy(root, expected, tmp_path, name):
     (tmp_path / "root" / name).mkdir()
     with pytest.raises(LegacyLayout) as info:
         open_layout(root, expected)
-    assert "migrat" in str(info.value).lower()
+    message = str(info.value)
+    assert "empty directory" in message and "migrat" not in message.lower()
     assert not (tmp_path / "root" / HEADER_NAME).exists()
 
 
@@ -412,6 +417,18 @@ def test_legacy_rechecks_header_after_scan(root, expected, tmp_path, monkeypatch
     assert open_layout(root, expected) == expected
 
 
+@pytest.mark.parametrize(
+    "name", [".pydra-succeeded", "python-0123456789abcdef0123456789abcdef"]
+)
+def test_a_pickle_store_cache_is_named_with_the_way_on(root, expected, tmp_path, name):
+    (tmp_path / "root" / name).mkdir()
+    with pytest.raises(LegacyLayout) as info:
+        open_layout(root, expected)
+    message = str(info.value)
+    assert "PickleStore cache" in message and 'store="pickle"' in message
+    assert "empty directory" in message and "migrat" not in message.lower()
+
+
 def test_legacy_message_says_new_root_is_empty(root, expected, tmp_path):
     (tmp_path / "root" / "x").mkdir()
     with pytest.raises(LegacyLayout, match="empty"):
@@ -570,3 +587,39 @@ def test_empty_read_only_root_create_is_store_unavailable(tmp_path, expected):
         assert not isinstance(info.value, PermissionError)
     finally:
         os.chmod(path, 0o755)
+
+
+def test_transient_permission_error_is_retried_on_windows(root, expected, monkeypatch):
+    from pydra.engine.portable import layout
+
+    open_layout(root, expected)
+    monkeypatch.setattr(layout, "IS_WINDOWS", True)
+    monkeypatch.setattr(layout.time, "sleep", lambda s: None)
+    real = root.open_read
+    calls = []
+
+    def flaky(name):
+        calls.append(name)
+        if len(calls) < 3:
+            raise PermissionError(errno.EACCES, "sharing violation")
+        return real(name)
+
+    monkeypatch.setattr(root, "open_read", flaky)
+    assert open_layout(root, expected) == expected
+    assert len(calls) == 3
+
+
+def test_persistent_permission_error_on_windows_is_store_unavailable(
+    root, expected, monkeypatch
+):
+    from pydra.engine.portable import layout
+
+    monkeypatch.setattr(layout, "IS_WINDOWS", True)
+    monkeypatch.setattr(layout, "READ_RETRY_SECONDS", 0.05)
+
+    def deny(name):
+        raise PermissionError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(root, "open_read", deny)
+    with pytest.raises(StoreUnavailable):
+        open_layout(root, expected)

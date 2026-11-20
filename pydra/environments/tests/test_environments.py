@@ -33,21 +33,25 @@ def test_native_1(tmp_path):
 
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(cache_root=newcache("native-task")),
+        submitter=Submitter(store="pickle", cache_root=newcache("native-task")),
         name="native",
     )
     env_outputs = native.Environment().execute(shelly_job)
 
-    outputs = shelly(cache_root=newcache("native-exec"))
+    outputs = shelly(store="pickle", cache_root=newcache("native-exec"))
     assert drop_stderr(env_outputs) == drop_stderr(attrs_values(outputs))
 
     outputs = shelly(
-        environment=native.Environment(), cache_root=newcache("native-call")
+        environment=native.Environment(),
+        store="pickle",
+        cache_root=newcache("native-call"),
     )
     assert drop_stderr(env_outputs) == drop_stderr(attrs_values(outputs))
 
     with Submitter(
-        cache_root=newcache("native-submitter"), environment=native.Environment()
+        store="pickle",
+        cache_root=newcache("native-submitter"),
+        environment=native.Environment(),
     ) as sub:
         result = sub(shelly)
     assert drop_stderr(env_outputs) == drop_stderr(attrs_values(result.outputs))
@@ -69,15 +73,19 @@ def test_docker_1(tmp_path):
 
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(cache_root=newcache("docker")),
+        submitter=Submitter(store="pickle", cache_root=newcache("docker")),
         name="docker",
     )
     outputs_dict = dock.execute(shelly_job)
 
-    with Submitter(cache_root=newcache("docker_sub"), environment=dock) as sub:
+    with Submitter(
+        store="pickle", cache_root=newcache("docker_sub"), environment=dock
+    ) as sub:
         result = sub(shelly)
 
-    outputs = shelly(environment=dock, cache_root=newcache("docker_call"))
+    outputs = shelly(
+        environment=dock, store="pickle", cache_root=newcache("docker_call")
+    )
     # If busybox isn't found locally, then the stderr will have the download progress from
     # the Docker auto-pull in it
     for key in ["stdout", "return_code"]:
@@ -108,19 +116,21 @@ def test_docker_1_subm(tmp_path, dock):
     shelly = shell.define(cmd)()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(cache_root=newcache("docker")),
+        submitter=Submitter(store="pickle", cache_root=newcache("docker")),
         name="docker",
     )
     assert shelly.cmdline == cmd
     outputs_dict = dock.execute(shelly_job)
 
     with Submitter(
-        worker="cf", cache_root=newcache("docker_sub"), environment=dock
+        worker="cf", store="pickle", cache_root=newcache("docker_sub"), environment=dock
     ) as sub:
         result = sub(shelly)
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(result.outputs))
 
-    outputs = shelly(cache_root=newcache("docker_call"), environment=dock)
+    outputs = shelly(
+        store="pickle", cache_root=newcache("docker_call"), environment=dock
+    )
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
@@ -138,17 +148,21 @@ def test_singularity_1(tmp_path):
     shelly = Shelly()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(cache_root=newcache("singu")),
+        submitter=Submitter(store="pickle", cache_root=newcache("singu")),
         name="singu",
     )
     assert shelly.cmdline == cmd
     outputs_dict = sing.execute(shelly_job)
 
-    with Submitter(cache_root=newcache("singu_sub"), environment=sing) as sub:
+    with Submitter(
+        store="pickle", cache_root=newcache("singu_sub"), environment=sing
+    ) as sub:
         results = sub(shelly)
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
-    outputs = shelly(environment=sing, cache_root=newcache("singu_call"))
+    outputs = shelly(
+        environment=sing, store="pickle", cache_root=newcache("singu_call")
+    )
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
@@ -166,19 +180,24 @@ def test_singularity_1_subm(tmp_path, worker):
     shelly = Shelly()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(cache_root=newcache("singu")),
+        submitter=Submitter(store="pickle", cache_root=newcache("singu")),
         name="singu",
     )
     assert shelly.cmdline == cmd
     outputs_dict = sing.execute(shelly_job)
 
     with Submitter(
-        worker=worker, environment=sing, cache_root=newcache("singu_sub")
+        worker=worker,
+        environment=sing,
+        store="pickle",
+        cache_root=newcache("singu_sub"),
     ) as sub:
         results = sub(shelly)
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
-    outputs = shelly(environment=sing, cache_root=newcache("singu_call"))
+    outputs = shelly(
+        environment=sing, store="pickle", cache_root=newcache("singu_call")
+    )
     # singularity gives info about cashed image in stderr
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
@@ -203,7 +222,7 @@ def shelly_with_input_factory(filename, executable) -> shell.Task:
 def make_job(task: shell.Task, tempdir: Path, name: str):
     return Job(
         task=task,
-        submitter=Submitter(cache_root=makedir(tempdir, name)),
+        submitter=Submitter(store="pickle", cache_root=makedir(tempdir, name)),
         name=name,
     )
 
@@ -224,13 +243,17 @@ def test_shell_fileinp(tmp_path):
     outputs_dict = native.Environment().execute(shelly_job)
 
     with Submitter(
-        environment=native.Environment(), cache_root=newcache("native_sub")
+        environment=native.Environment(),
+        store="pickle",
+        cache_root=newcache("native_sub"),
     ) as sub:
         results = sub(shelly)
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
     outputs = shelly(
-        environment=native.Environment(), cache_root=newcache("native_call")
+        environment=native.Environment(),
+        store="pickle",
+        cache_root=newcache("native_call"),
     )
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
@@ -283,12 +306,16 @@ def test_docker_fileinp(tmp_path):
     shelly = shelly_with_input_factory(filename=filename, executable="cat")
     outputs_dict = dock.execute(make_job(shelly, tmp_path, "docker"))
 
-    with Submitter(environment=dock, cache_root=newcache("shell_sub")) as sub:
+    with Submitter(
+        environment=dock, store="pickle", cache_root=newcache("shell_sub")
+    ) as sub:
         results = sub(shelly)
 
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
-    outputs = shelly(environment=dock, cache_root=newcache("docker_call"))
+    outputs = shelly(
+        environment=dock, store="pickle", cache_root=newcache("docker_call")
+    )
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
@@ -312,14 +339,19 @@ def test_docker_fileinp_subm(tmp_path, worker):
     outputs_dict = dock.execute(shelly_job)
 
     with Submitter(
-        environment=dock, cache_root=newcache("docker_sub"), worker=worker
+        environment=dock,
+        store="pickle",
+        cache_root=newcache("docker_sub"),
+        worker=worker,
     ) as sub:
         results = sub(shelly)
     with Submitter(worker=worker) as sub:
         results = sub(shelly)
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(results.outputs))
 
-    outputs = shelly(environment=dock, cache_root=newcache("docker_call"))
+    outputs = shelly(
+        environment=dock, store="pickle", cache_root=newcache("docker_call")
+    )
     assert drop_stderr(outputs_dict) == drop_stderr(attrs_values(outputs))
 
 
@@ -405,14 +437,18 @@ def test_shell_fileout(tmp_path):
     shelly = shelly_outputfile_factory(filename=filename)
 
     with Submitter(
-        environment=native.Environment(), cache_root=newcache("native_sub")
+        environment=native.Environment(),
+        store="pickle",
+        cache_root=newcache("native_sub"),
     ) as sub:
         result = sub(shelly)
     assert Path(result.outputs.file_copy) == result.cache_dir / "file_copy.txt"
 
     call_cache = newcache("native_call")
 
-    outputs = shelly(environment=native.Environment(), cache_root=call_cache)
+    outputs = shelly(
+        environment=native.Environment(), store="pickle", cache_root=call_cache
+    )
     assert Path(outputs.file_copy).parent.parent == call_cache / shelly._checksum
     assert Path(outputs.file_copy).name == "file_copy.txt"
 
@@ -470,7 +506,9 @@ def test_docker_fileout(tmp_path):
 
     shelly = shelly_outputfile_factory(filename=filename)
 
-    with Submitter(environment=dock, cache_root=newcache("docker")) as sub:
+    with Submitter(
+        environment=dock, store="pickle", cache_root=newcache("docker")
+    ) as sub:
         results = sub(shelly)
     assert results.outputs.file_copy == File(results.cache_dir / "file_copy.txt")
 

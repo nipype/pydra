@@ -40,6 +40,7 @@ FORMAT_MAJOR = 1
 TEMP_PREFIX = ".pydra-store."
 TEMP_SUFFIX = ".tmp"
 MAX_HEADER_BYTES = 1 << 16
+READ_RETRY_SECONDS = 5.0
 
 _CDIR_RAW = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}")
 _FORMAT_RE = re.compile(r"pydra-store@(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
@@ -225,12 +226,20 @@ def _differing_key(stored: LayoutHeader, expected: LayoutHeader) -> str | None:
 
 
 def _read(root: StorageDir) -> bytes | None:
-    try:
-        f = root.open_read(HEADER_NAME)
-    except FileNotFoundError:
-        return None
-    except PermissionError as err:
-        raise StoreUnavailable(f"{HEADER_NAME} cannot be read: {err}") from None
+    deadline = time.monotonic() + READ_RETRY_SECONDS
+    delay = 0.005
+    while True:
+        try:
+            f = root.open_read(HEADER_NAME)
+            break
+        except FileNotFoundError:
+            return None
+        except PermissionError as err:
+            # On Windows a file being linked or replaced transiently refuses opens
+            if not IS_WINDOWS or time.monotonic() >= deadline:
+                raise StoreUnavailable(f"{HEADER_NAME} cannot be read: {err}") from None
+            time.sleep(delay)
+            delay = min(delay * 2, 0.2)
     with f:
         data = f.read(MAX_HEADER_BYTES + 1)
     if len(data) > MAX_HEADER_BYTES:
@@ -310,12 +319,21 @@ def _publish(root: StorageDir, tmp: str) -> bool:
     return True
 
 
+# the names a PickleStore cache holds: its success records and its ``<kind>-<checksum>`` slots
+_PICKLE_CACHE = re.compile(r"\.pydra-succeeded|[a-z][a-z0-9_]*-[0-9a-f]{32}")
+
+
 def _legacy(root: StorageDir, others: list[str]) -> StoreUnavailable:
+    listed = f"{', '.join(sorted(others)[:3])}{', ...' if len(others) > 3 else ''}"
+    if any(_PICKLE_CACHE.fullmatch(name) for name in others):
+        return LegacyLayout(
+            f"{root.path} is a PickleStore cache (it holds {listed} and no {HEADER_NAME}): "
+            'pass store="pickle" to keep using it, or give an empty directory as the '
+            "cache_root of the portable store"
+        )
     return LegacyLayout(
-        f"{root.path} has names ({', '.join(sorted(others)[:3])}"
-        f"{', ...' if len(others) > 3 else ''}) but no {HEADER_NAME}: it is a PickleStore "
-        "cache or another tool's directory; migrate it (RFC 0003 section 8). A new root "
-        "must be an empty directory"
+        f"{root.path} holds {listed} and no {HEADER_NAME}: the root of a portable store "
+        "must be an empty directory or a pydra store"
     )
 
 
