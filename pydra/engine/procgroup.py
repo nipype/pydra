@@ -12,8 +12,8 @@ that starts the real command in its own session and group and holds the read end
 pipe whose write end is the parent's. When the parent dies without running ``close``
 (SIGKILL, an OOM kill) the pipe reaches end of file and the shim stops the group and
 its descendants. (``PR_SET_PDEATHSIG`` is not used: it is scoped to the parent thread, and
-a provider may be loaded from a thread that ends while the server is still wanted.) On Windows the child is created with
-``CREATE_NEW_PROCESS_GROUP`` and stopped with ``taskkill /T /F``; there is no lifeline.
+a provider may be loaded from a thread that ends while the server is still wanted.)
+On Windows the child is created with ``CREATE_NEW_PROCESS_GROUP`` and stopped with ``taskkill /T /F``; there is no lifeline.
 
 ``stop`` snapshots the descendants by parent pid before signalling, signals the group
 and each descendant that left it (``setsid``, a daemonising launcher), waits for all of
