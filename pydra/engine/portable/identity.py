@@ -67,7 +67,8 @@ def _fields(value: ty.Iterable[str]) -> frozenset[str]:
 @attrs.frozen
 class PydraIdentityV1:
     """``pydra-identity@1``: pydra's checksum is not the digest of a stored record, the context
-    is `pydra.engine.context.job_context` in both phases, and the fingerprint
+    is `pydra.engine.context.job_context` built once in the submitting process and carried with
+    the job, so both phases return it, and the fingerprint
     (``pydra-context@1``) is the full sha256 of the RFC 8785 canonical JSON of the context
     without the ``recorded_only`` fields."""
 
@@ -88,6 +89,10 @@ class PydraIdentityV1:
         return True
 
     def context(self, job: "Job", phase: ty.Literal["lookup", "execute"]) -> Context:
+        if phase == "execute":
+            return (
+                job.context
+            )  # the one built in the submitting process and carried (section 4)
         job.checksum  # collects the library modules the task's code reaches
         return job_context(job.task, job.environment)
 

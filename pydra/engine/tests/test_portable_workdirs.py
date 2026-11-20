@@ -649,3 +649,42 @@ def test_collect_never_touches_a_caller_named_work_dir(tmp_path, skew):  # noqa:
     age(path, 200)
     store.collect()
     assert path.exists()
+
+
+# -- the execute phase carries the lookup context --------------------------------------------------------
+
+
+def test_second_run_serves_from_the_store(any_worker, tmp_path):
+    """A job run in a worker is published where the next submitter looks (RFC 0003 section 4)."""
+    log = tmp_path / "log"
+    store = make(tmp_path)
+    task = _Count(a=1, log=str(log), pause=0.0)
+    with Submitter(worker=any_worker, store=store, cache_root=tmp_path / "pc") as sub:
+        first = job_in(sub, task)
+        sub.submit(first)
+    with Submitter(worker=any_worker, store=store, cache_root=tmp_path / "pc2") as sub:
+        second = job_in(sub, _Count(a=1, log=str(log), pause=0.0))
+        sub.submit(second)
+        got = second.result(settled=True)
+    assert log.read_text() == "ran\n"  # computed once
+    assert got.outputs.out == 2 and not got.errored
+    fingerprint = IDENT.fingerprint(first.context)
+    assert [
+        p.name for p in store.entry_path(first.checksum, first.context).parent.iterdir()
+    ] == [fingerprint]
+
+
+def test_execute_phase_returns_the_carried_context(tmp_path, monkeypatch):
+    """A context that a worker process recomputes (an ``unknown`` nonce for a module it cannot
+    attribute) never splits the slot: ``@1`` returns the context the job carries."""
+    import pydra.engine.portable.identity as mod
+
+    store, sub = portable_submitter(tmp_path)
+    with sub:
+        job = job_in(sub, _Inc(a=1))
+        carried = job.context
+        monkeypatch.setattr(
+            mod, "job_context", lambda *a, **k: {"unknown": uuid.uuid4().hex}
+        )
+        assert IDENT.context(job, "execute") == carried
+        assert IDENT.context(job, "lookup") != carried  # lookup still builds it
