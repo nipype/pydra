@@ -37,7 +37,10 @@ from pydra.utils.storagedir import (
     StoreUnavailable,
 )
 
-TRUST = "trusted" if IS_WINDOWS else "private"
+# `trusted` on Windows unless CI sets PYDRA_TEST_PORTABLE_TRUST (see test_portable_store)
+TRUST = os.environ.get("PYDRA_TEST_PORTABLE_TRUST") or (
+    "trusted" if IS_WINDOWS else "private"
+)
 
 
 def _open(path):

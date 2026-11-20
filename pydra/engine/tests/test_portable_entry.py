@@ -46,7 +46,10 @@ from pydra.utils.storagedir import (
     StoreUnavailable,
 )
 
-TRUST = "trusted" if IS_WINDOWS else "private"
+# `trusted` on Windows unless CI sets PYDRA_TEST_PORTABLE_TRUST (see test_portable_store)
+TRUST = os.environ.get("PYDRA_TEST_PORTABLE_TRUST") or (
+    "trusted" if IS_WINDOWS else "private"
+)
 posix_only = pytest.mark.skipif(IS_WINDOWS, reason="needs POSIX modes and owners")
 CTX = {"python": "3.12", "platform": "test", "n": 1, "x": 1.5, "none": None}
 IDENT = PydraIdentityV1()

@@ -492,6 +492,13 @@ class Job(ty.Generic[TaskType]):
             return self
         return self if self.persist_pickle or result.errored else None
 
+    def _take_attempt(self) -> None:
+        """Give a job that is run without having been handed out by a runner (``job.run()``
+        called directly) an attempt of its own, so that under a store with work directories
+        it has one to run in."""
+        if self.attempt is None and self._has_work_dir:
+            self.attempt = uuid4().hex
+
     def _acquire(self):
         """The lease guarding the job; a resumable job's work directory is stable across
         runs, so a store with work directories guards it whatever its de-duplication."""
@@ -648,6 +655,7 @@ class Job(ty.Generic[TaskType]):
 
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
+        self._take_attempt()
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         with lease:
@@ -724,6 +732,7 @@ class Job(ty.Generic[TaskType]):
         """
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
+        self._take_attempt()
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         async with lease:
@@ -1013,6 +1022,7 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
         raise
 
     portable = job._has_work_dir
+    job._take_attempt()  # a job pickled before a runner handed it out
     resultfile = job.cache_dir / "_result.pklz"
     try:
         if job.is_async:

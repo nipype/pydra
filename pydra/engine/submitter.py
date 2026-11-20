@@ -35,7 +35,7 @@ from pydra.engine.store import (
     ReusePolicy,
 )
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.general import default_run_cache_root
+from pydra.utils.general import default_run_cache_root, default_store_root
 from pydra.compose import workflow
 from pydra.engine.state import State
 from pydra.workers.base import Worker
@@ -120,9 +120,15 @@ class Submitter:
     ----------
     cache_root : os.PathLike, optional
         Cache directory where the working directory/results for the job will be
-        stored, by default None. Loading from a cache unpickles its files, so
-        pointing Pydra at a cache trusts everyone who can write to it with code
-        execution as the reading user: only use caches whose writers you trust
+        stored. Under the default ``store="portable"`` it is the root of a
+        :class:`~pydra.engine.portable.store.PortableStore` opened as ``private``
+        (owned by the current user, writable by no one else) that may hold pickles: it
+        must be empty or such a root, and is by default ``store`` in the user cache
+        directory (see :func:`~pydra.utils.general.default_store_root`). Under
+        ``store="pickle"`` it holds :class:`~pydra.engine.store.PickleStore` slots and is
+        by default ``run-cache`` there; loading from such a cache unpickles its files, so
+        pointing Pydra at it trusts everyone who can write to it with code execution as
+        the reading user: only use caches whose writers you trust
     worker : str or Worker, optional
         The worker to use, by default "cf". It runs every job the router does not send
         elsewhere, and is available to the router under the name ``"default"``
@@ -135,11 +141,14 @@ class Submitter:
         to ``worker``. See :func:`pydra.utils.routing.tag_router`
     environment: Environment, optional
         The execution environment to use, by default None
-    readonly_caches : list[os.PathLike], optional
+    readonly_caches : list[os.PathLike | Root], optional
         Alternate cache locations to check for pre-computed results, by default None.
-        These are unpickled like ``cache_root``, so they trust everyone who can write
-        to them with code execution as the reading user: only list caches whose
-        writers you trust
+        Under ``store="portable"`` each is a portable root read as ``shared`` (its
+        pickle members are never opened) unless given as a
+        :class:`~pydra.engine.portable.trust.Root` with another trust. Under
+        ``store="pickle"`` they are unpickled like ``cache_root``, so they trust
+        everyone who can write to them with code execution as the reading user: only
+        list caches whose writers you trust
     max_concurrent: int | float, optional
         Maximum number of concurrent tasks to run, by default float("inf") (unlimited).
         A batching worker (one with ``submit_many``, such as slurm or sge) applies it
@@ -159,10 +168,14 @@ class Submitter:
         Deprecated and ignored. A lease whose holder stopped renewing it is taken over
         once it is older than ``stale_after`` (see
         :class:`~pydra.engine.lease.LeaseSettings`), whichever host left it
-    store : ResultStore, optional
-        Where jobs run and their results are kept, by default a
+    store : "portable", "pickle" or ResultStore, optional
+        Where jobs run and their results are kept: ``"portable"`` (the default) a
+        :class:`~pydra.engine.portable.store.PortableStore` over ``cache_root``, opened
+        ``private`` with ``pickle=True``, reading ``readonly_caches``; ``"pickle"`` a
         :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
-        ``readonly_caches``
+        ``readonly_caches``; or a store object, which holds its own roots (a portable
+        root on shared storage is passed this way, with ``trust="shared"`` and a
+        ``work_dir``)
     reuse : str | ReusePolicy, optional
         Which stored results the default store reuses, given the execution context
         recorded beside each (see :func:`~pydra.engine.context.job_context`):
@@ -228,6 +241,7 @@ class Submitter:
     entries: list[JobErrorEntry]
 
     ON_ERROR_MODES = ty.get_args(OnError)
+    STORE_NAMES = ("portable", "pickle")
 
     def __init__(
         self,
@@ -244,7 +258,7 @@ class Submitter:
         max_concurrent: int | float = float("inf"),
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
-        store: ResultStore | None = None,
+        store: "ResultStore | str | None" = "portable",
         reuse: str | ReusePolicy | None = None,
         on_error: OnError | None = None,
         telemetry: bool = True,
@@ -278,8 +292,15 @@ class Submitter:
             messengers=messengers,
             messenger_args=messenger_args,
         )
+        if store is None:
+            store = "portable"
+        if isinstance(store, str) and store not in self.STORE_NAMES:
+            raise ValueError(
+                f"'store' must be one of {self.STORE_NAMES} or a store object, "
+                f"not {store!r}"
+            )
         store_root = getattr(store, "cache_root", None)
-        if store is not None:
+        if not isinstance(store, str):
             if readonly_caches is not None:
                 raise ValueError(
                     "readonly_caches cannot be combined with store, "
@@ -296,16 +317,22 @@ class Submitter:
                     f"cache_root {str(store_root)!r}"
                 )
         if cache_root is None:
-            cache_root = default_run_cache_root()
+            cache_root = (
+                default_store_root()
+                if store == "portable"
+                else default_run_cache_root()
+            )
         cache_root = Path(cache_root).resolve()
         cache_root.mkdir(parents=True, exist_ok=True)
 
         self.cache_root = cache_root
         self.readonly_caches = readonly_caches
-        if store is None:
+        if store == "pickle":
             store = PickleStore(
                 cache_root, readonly_caches, reuse=reuse or "consistent"
             )
+        elif store == "portable":
+            store = _portable_store(cache_root, readonly_caches, reuse or "consistent")
         elif reuse is not None:
             raise ValueError(
                 "'reuse' applies to the default store, set it on the store passed as "
@@ -516,7 +543,10 @@ class Submitter:
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()
-        result = job.result()
+        # the job has run: under a store with work directories, a result it did not store
+        # is read from its `_committed.json`, waited for as long as the store's visibility
+        # retry allows (RFC 0003 section 7.2)
+        result = job.result(settled=True)
         if result is None:
             raise RuntimeError(no_result_diagnosis(job))
         return result
@@ -779,6 +809,26 @@ class Submitter:
         else:
             self._cache_root = mkdtemp()
             self._cache_root = Path(self._cache_root).resolve()
+
+
+def _portable_store(
+    root: Path, readonly_caches: "list | None", reuse: "str | ReusePolicy"
+) -> ResultStore:
+    """The store of ``Submitter(store="portable")``: ``root`` is the user's own cache, so it is
+    opened ``private`` and may hold pickles (RFC 0003 section 6.4); each read-only cache is a
+    portable root read ``shared`` unless given as a `~pydra.engine.portable.trust.Root`.
+    """
+    from pydra.engine.portable.store import PortableStore
+    from pydra.engine.portable.trust import Root
+    from pydra.utils.general import ensure_list
+
+    readonly = [
+        ro if isinstance(ro, Root) else Root(Path(ro).resolve(), trust="shared")
+        for ro in ensure_list(readonly_caches)
+    ]
+    return PortableStore(
+        root, trust="private", pickle=True, readonly=readonly, reuse=reuse
+    )
 
 
 def workflow_error(

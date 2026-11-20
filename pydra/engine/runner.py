@@ -883,7 +883,7 @@ class GraphRunner:
         rerun = self.rerun if frame.parent is None else job.rerun
         if not rerun:
             try:
-                result = job.result()
+                result = self._stored_workflow(job)
             except Exception as exc:
                 self._fail(frame, exc, "run")
                 return
@@ -903,6 +903,20 @@ class GraphRunner:
             self._expand(frame, job.task)
         except Exception as exc:
             self._finish(frame, exc)
+
+    def _stored_workflow(self, job: Job) -> "Result | None":
+        """The stored result of a workflow job under its lease: through ``find`` when the
+        store has it (a `Verify` marks the job, which is then expanded; RFC 0003 section 13
+        item 6), otherwise what ``job.result()`` reads"""
+        find = getattr(self.store, "find", None)
+        if find is None:
+            return job.result()
+        found = find(job)
+        job.verify = getattr(found, "candidate", None)
+        result = getattr(found, "result", None)
+        if result is not None and result.committed is not None:
+            job.committed = result.committed
+        return result
 
     def _release_lease(self, frame: _Frame) -> None:
         lease, frame.lease = frame.lease, None
@@ -986,6 +1000,8 @@ class GraphRunner:
             job._held = frame.result
             self._release_lease(frame)
             job._complete_workflow(frame.result)
+            # as published: under a store with work directories, read from its entry
+            job._held = job._cached_result
             self._forget(job)
             self._succeeded(frame)
         elif frame.parent is None:
@@ -1240,13 +1256,21 @@ class GraphRunner:
     def _read_store(self, jobs: list[Job]) -> list[Job]:
         """Settle as ``stored`` the jobs whose slots carry a success record, and, under
         ``lookup_before_dispatch``, those the store's ``lookup`` returns an acceptable
-        result for; return the others"""
+        result for; return the others. A store with ``find`` (`PortableStore`) is asked
+        that instead (RFC 0002 section 3.1): a `Hit` is settled, a `Verify` is dispatched
+        with ``job.verify`` set, a `Miss` is dispatched. Without
+        ``lookup_before_dispatch`` it is asked to ``probe``: a job whose own address
+        holds no entry costs one existence check and is dispatched."""
+        find = getattr(self.store, "find", None)
         read = getattr(self.store, "read_succeeded", None)
         rest = []
         for job in jobs:
-            result = read(job.checksum, job.context, job.task) if read else None
-            if result is None and self.lookup_before_dispatch:
-                result = self._lookup(job)
+            if find is not None:
+                result = self._find(job, find)
+            else:
+                result = read(job.checksum, job.context, job.task) if read else None
+                if result is None and self.lookup_before_dispatch:
+                    result = self._lookup(job)
             if result is None:
                 rest.append(job)
                 continue
@@ -1256,6 +1280,29 @@ class GraphRunner:
             self._handed.add(job)
             self._settled.append(Settled(job, "stored", result))
         return rest
+
+    def _find(self, job: Job, find: ty.Callable) -> "Result | None":
+        """The result ``find`` serves the job, after marking it with the candidate of a
+        `Verify` (and clearing the mark otherwise); None if it is to be dispatched. A
+        served job keeps the `Committed` of the entry, which later reads go by."""
+        try:
+            if self.lookup_before_dispatch:
+                found = find(job)
+            else:
+                found = find(job, probe=True)
+        except (
+            Exception
+        ) as exc:  # unreadable: dispatched, to be looked up under its lease
+            logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
+            job.verify = None
+            return None
+        job.verify = getattr(found, "candidate", None)
+        result = getattr(found, "result", None)
+        if result is None or result.errored:
+            return None
+        if result.committed is not None:
+            job.committed = result.committed
+        return result
 
     def _lookup(self, job: Job) -> "Result | None":
         try:
@@ -1367,6 +1414,9 @@ class GraphRunner:
             frame.entries.append(error_entry(job.name, job.state_index, exc))
         else:
             job._held = outcome
+            if getattr(outcome, "committed", None) is not None:
+                # a reader in this process or one the job is sent to reads by it
+                job.committed = outcome.committed
             if getattr(outcome, "errored", False):
                 exc = result_error(job, outcome)
                 job._errored = True

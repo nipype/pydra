@@ -1,6 +1,7 @@
 """Executors: where the jobs a :class:`~pydra.engine.runner.GraphRunner` releases run"""
 
 import asyncio
+import functools
 import inspect
 from collections import deque
 import time
@@ -126,7 +127,7 @@ def cancelled(exc: BaseException) -> NotRun:
 
 def no_result_diagnosis(job: "Job") -> str:
     """Why a job that its worker reported finished has no result in the store"""
-    if job.lockfile.exists():
+    if getattr(job.store, "lockfile", None) is not None and job.lockfile.exists():
         return (
             f"Job {job} has a lease, but no result was found. "
             "This may be due to another submission that is currently running. "
@@ -361,6 +362,14 @@ class WorkerExecutor:
         return outcome
 
     async def _read_back(self, job: "Job") -> "Outcome":
+        if getattr(job, "_has_work_dir", False):
+            # reported complete: the store reads `_committed.json`, retrying until its
+            # visibility timeout, then the job's own address, and gives a result that is
+            # not found as an errored one naming the work directory (RFC 0003 section 7.2).
+            # The retry sleeps, so it runs off the loop
+            return await asyncio.get_running_loop().run_in_executor(
+                None, functools.partial(job.result, settled=True)
+            )
         deadline = time.monotonic() + self.visibility_timeout
         delay = 0.05
         while True:
