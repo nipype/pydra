@@ -38,11 +38,13 @@ class FitRequest:
 
 
 class Fit(ty.Protocol):
-    def judge(self, request: FitRequest, cls: WorkerClass) -> ClassTried: ...
+    def judge(self, request: FitRequest, cls: WorkerClass) -> ClassTried:
+        """Judge ``request`` against ``cls``."""
 
     def batch(
         self, request: FitRequest, cls: WorkerClass, units: Sequence[float | None]
-    ) -> int: ...
+    ) -> int:
+        """The most jobs of this residency one call takes."""
 
 
 @attrs.frozen
