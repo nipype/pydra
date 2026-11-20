@@ -646,6 +646,7 @@ def test_daemonised_server_is_gone_when_the_parent_is_sigkilled(tmp_path):
         parent.wait(timeout=20)
 
 
+@posix_only
 def test_a_reused_pid_is_not_signalled(monkeypatch):
     """A helper seen at one snapshot exits and its pid goes to an unrelated process:
     the start token differs, so it is dropped from what ``stop`` signals"""
@@ -674,6 +675,7 @@ def test_a_reused_pid_is_not_signalled(monkeypatch):
     assert list(group._known) == [leader]
 
 
+@posix_only
 def test_ps_table_carries_a_start_time(tmp_path, monkeypatch):
     """Outside Linux the table comes from ``ps`` and includes ``lstart``"""
     from pydra.engine import _procshim
