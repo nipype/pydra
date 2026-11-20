@@ -622,6 +622,10 @@ def is_workflow(obj):
     return isinstance(obj, (Task, Workflow))
 
 
+# sub-packages that hold no plugins and must not be imported by discovery
+_NOT_PLUGINS = frozenset({"pydra.workers.pool"})
+
+
 def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str, type]:
     """
     Get all classes within sub-packages of namespace package with a given name, e.g.
@@ -644,6 +648,7 @@ def get_plugin_classes(namespace: types.ModuleType, class_name: str) -> dict[str
         importlib.import_module(f"{namespace.__name__}.{m.name}")
         for m in pkgutil.iter_modules(namespace.__path__)
         if not m.name.startswith("base")
+        and f"{namespace.__name__}.{m.name}" not in _NOT_PLUGINS
     ]
     return {
         pkg.__name__.split(".")[-1]: getattr(pkg, class_name)
