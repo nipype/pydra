@@ -560,3 +560,23 @@ def test_child_group_is_gone_when_the_parent_is_sigkilled(tmp_path):
     finally:
         parent.kill()
         parent.wait(timeout=20)
+
+
+@posix_only
+def test_provider_loaded_from_a_short_lived_thread_survives_the_thread(tmp_path):
+    import threading
+
+    record = tmp_path / "pids"
+    provider = _provider(tmp_path, record)
+    box = []
+    t = threading.Thread(target=lambda: box.append(provider.load({}, Device())))
+    t.start()
+    t.join()
+    handle = box[0]
+    try:
+        child, grandchild = _wait_for(record)
+        time.sleep(1)  # a thread-scoped death signal would have fired by now
+        assert _alive(handle.pid) and _alive(child) and _alive(grandchild)
+    finally:
+        provider.close(handle)
+    assert not _alive(child)

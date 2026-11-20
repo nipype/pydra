@@ -11,8 +11,8 @@ On POSIX the leader of the group is a small shim (``python -m pydra.engine.procg
 that starts the real command in its own session and group and holds the read end of a
 pipe whose write end is the parent's. When the parent dies without running ``close``
 (SIGKILL, an OOM kill) the pipe reaches end of file and the shim stops the group and
-its descendants; on Linux ``PR_SET_PDEATHSIG`` does the same when the parent *thread*
-that started the shim exits. On Windows the child is created with
+its descendants. (``PR_SET_PDEATHSIG`` is not used: it is scoped to the parent thread, and
+a provider may be loaded from a thread that ends while the server is still wanted.) On Windows the child is created with
 ``CREATE_NEW_PROCESS_GROUP`` and stopped with ``taskkill /T /F``; there is no lifeline.
 
 ``stop`` snapshots the descendants by parent pid before signalling, signals the group
@@ -324,16 +324,8 @@ class ProcessGroup:
 def _shim_main(args: list[str]) -> int:
     """The group leader: run the command, and stop the group if the parent goes away"""
     lifeline, cmd = int(args[0]), args[1:]
-    flags = {"term": False, "orphan": False}
+    flags = {"term": False}
     signal.signal(signal.SIGTERM, lambda *_: flags.__setitem__("term", True))
-    signal.signal(signal.SIGUSR1, lambda *_: flags.__setitem__("orphan", True))
-    if sys.platform.startswith("linux"):
-        try:
-            import ctypes
-
-            ctypes.CDLL(None, use_errno=True).prctl(1, int(signal.SIGUSR1))  # PDEATHSIG
-        except Exception:  # pragma: no cover
-            pass
     child = subprocess.Popen(cmd)
     forwarded = False
     while True:
@@ -344,7 +336,7 @@ def _shim_main(args: list[str]) -> int:
             forwarded = True
             child.terminate()
         ready, _, _ = select.select([lifeline], [], [], 0.1)
-        if flags["orphan"] or (ready and os.read(lifeline, 1) == b""):
+        if ready and os.read(lifeline, 1) == b"":
             _stop_own_tree(child)
             break
     rc = child.returncode
