@@ -839,22 +839,79 @@ def test_combine_source_without_inner_on_node_raises(any_worker, tmp_path):
         run_wf(CombAOnNode(x=[1, 2]), any_worker, tmp_path)
 
 
-@pytest.mark.parametrize(
-    "wf, kwargs, node",
-    [
-        (ZipStatic, dict(x=[1, 2], y=[1, 2, 3, 4, 5, 6]), "B"),  # (1)
-        (ZipPartials, dict(x=[1, 2]), "C"),  # (2)
-        (DownCombAx, dict(x=[1, 2]), "C"),  # (4)
-        (SameSrc, dict(x=[1, 2]), "B"),  # (5)
-    ],
-)
-def test_barrier_shapes(wf, kwargs, node, submitter):
-    runner = runner_for(submitter, wf(**kwargs))
-    try:
-        drain(runner)
-    except Exception:
-        pass  # (1) raises today and still does
-    assert runner.exec_graph[node].mode == "barrier"
+@python.define
+def LL(x: int) -> list[list[int]]:
+    return [[x, x + 1], [x + 2, x + 3]]
+
+
+@python.define
+def AnyId(x: ty.Any) -> ty.Any:
+    return x
+
+
+@workflow.define
+def UserNdim(x: list[int]):
+    a = workflow.add(LL().split("x", x=x), name="A")
+    b = workflow.add(AnyId().split("x", x=a.out, container_ndim={"x": 2}), name="B")
+    return b.out
+
+
+@workflow.define
+def AmbigComb(x: list[int]):
+    a = workflow.add(L().split("x", x=x), name="A")
+    b1 = workflow.add(Mul(y=1).split("x", x=a.out), name="B1")
+    b2 = workflow.add(Mul(y=1000).split("x", x=a.out), name="B2")
+    c = workflow.add(Add(x=b1.out, d=b2.out).combine("A.x"), name="C")
+    return c.out
+
+
+# the outputs of origin/feat/0002-r8 (before E2) for shapes 2-4
+BARRIER_VALUES = {
+    2: [1001, 2002, 3003, 2002, 4004, 6006],
+    3: [1, 2, 3, 4],
+    4: [[1], [2], [3], [2], [4], [6]],
+}
+
+
+BARRIER_SHAPES = {
+    # shape: (workflow, the barrier node, its output, or the error its entry names)
+    1: (ZipStatic(x=[1, 2], y=[1, 2, 3, 4, 5, 6]), "B", "do not have same shape"),
+    2: (ZipPartials(x=[1, 2]), "C", BARRIER_VALUES[2]),
+    3: (UserNdim(x=[1, 2]), "B", BARRIER_VALUES[3]),
+    4: (DownCombAx(x=[1, 2]), "C", BARRIER_VALUES[4]),
+    5: (SameSrc(x=[1, 2]), "B", "unsupported operand"),
+    6: (AmbigComb(x=[1, 2]), "C", "KeyError"),  # R8 raises it out of ready()
+}
+
+
+@pytest.mark.parametrize("shape", sorted(BARRIER_SHAPES))
+def test_barrier_shape_waits(shape, submitter):
+    """Each of the six barrier shapes waits for every upstream node: holding A's last
+    element back, the node has no job; then it gives today's output or error, recorded
+    as an entry rather than raised out of ``ready()``"""
+    task, name, expected = BARRIER_SHAPES[shape]
+    runner = runner_for(submitter, task)
+    jobs = runner.ready().dispatch
+    held = [j for j in jobs if j.name == "A"][-1]
+    while jobs:
+        for job in jobs:
+            if job is not held:
+                finish(runner, job)
+        jobs = runner.ready().dispatch
+    node = runner.exec_graph[name]
+    assert node.mode == "barrier"
+    assert not node.started and not node.queued and not node.successful
+    finish(runner, held)
+    drain(runner)
+    assert runner.done
+    if isinstance(expected, str):
+        assert runner.failed
+        assert any(
+            e.job_name == name and expected in e.message + e.traceback
+            for e in runner.entries
+        ), runner.entries
+    else:
+        assert not runner.failed and outputs(runner) == expected
 
 
 def test_barrier_shape_errors_unchanged(tmp_path):
@@ -1023,3 +1080,98 @@ def test_partial_entries_name_the_key(submitter):
     (entry,) = [e for e in runner.entries if e.job_name == "B"]
     assert entry.state_key == victim.state_key and entry.phase == "run"
     assert entry.state_index is None
+
+
+# ----------------------------------------------------------------------------------
+# Early-release guards: groups that span blocks, whole reads, failed blocks
+
+
+@workflow.define
+def AllComb(x: list[int]):
+    a = workflow.add(L().split("x", x=x), name="A")
+    b = workflow.add(Ident().split("x", x=a.out), name="B")
+    c = workflow.add(Ident(x=b.out).combine(["B.x", "A.x"]), name="C")
+    d = workflow.add(SumL(x=c.out), name="D")
+    return d.out
+
+
+@workflow.define
+def GroupByY(x: list[int], y: list[int]):
+    a = workflow.add(FailOn2().split("x", x=x), name="A")
+    b = workflow.add(
+        Mul().split(["x", "y"], x=a.out, y=y).combine(["x", "A.x"]), name="B"
+    )
+    c = workflow.add(SumL(x=b.out), name="C")
+    return c.out
+
+
+@workflow.define
+def GroupByYOk(x: list[int], y: list[int]):
+    a = workflow.add(L().split("x", x=x), name="A")
+    b = workflow.add(
+        Mul().split(["x", "y"], x=a.out, y=y).combine(["x", "A.x"]), name="B"
+    )
+    c = workflow.add(SumL(x=b.out), name="C")
+    return c.out
+
+
+def _drain_holding(runner, keep):
+    """Drain, holding back the jobs ``keep`` selects; return the names dispatched"""
+    seen, held = [], []
+    jobs = runner.ready().dispatch
+    while jobs:
+        for job in jobs:
+            seen.append(job.name)
+            if keep(job):
+                held.append(job)
+            else:
+                finish(runner, job)
+        jobs = runner.ready().dispatch
+    return seen, held
+
+
+def test_group_spanning_blocks_waits_for_every_block(submitter):
+    """B groups by y across every block of A, so C's read of a group waits for all of
+    A's elements, not only those whose blocks are expanded"""
+    runner = runner_for(submitter, GroupByYOk(x=[1, 2, 3], y=[10, 100]))
+    seen, held = _drain_holding(runner, lambda j: j.name == "A" and j.state_index == 1)
+    assert "B" in seen and "C" not in seen
+    (a1,) = held
+    finish(runner, a1)
+    drain(runner)
+    assert runner.done and not runner.failed
+    assert outputs(runner) == [360, 3600]
+
+
+def test_whole_read_waits_for_the_seal(submitter):
+    """D reads all of C, which combines every element: it waits for the seal"""
+    runner = runner_for(submitter, AllComb(x=[1, 2, 3]))
+    seen, held = _drain_holding(runner, lambda j: j.name == "A" and j.state_index != 0)
+    assert "B" in seen and "D" not in seen and not runner.failed
+    for job in held:
+        finish(runner, job)
+    drain(runner)
+    assert runner.done and not runner.failed
+    assert outputs(runner) == 6 * (1 + 2 + 3)
+
+
+def test_group_with_a_failed_block_is_unrunnable(submitter):
+    """A[1] fails, so every group of B (by y) misses its members: C never runs, and
+    each of C's two elements is reported unrunnable exactly once"""
+    runner = runner_for(submitter, GroupByY(x=[1, 2, 3], y=[10, 100]))
+    reported = []
+    jobs = runner.ready().dispatch
+    dispatched = []
+    while True:
+        dispatched += [j.name for j in jobs]
+        for job in jobs:
+            finish(runner, job)
+        rnd = runner.ready()
+        reported += [(u.node, u.index) for u in rnd.unrunnable]
+        jobs = rnd.dispatch
+        if not jobs and not rnd.unrunnable and not rnd.settled:
+            break
+    assert runner.done and runner.failed
+    assert "C" not in dispatched
+    of_c = [i for n, i in reported if n == "C"]
+    assert len(of_c) == 2 and set(of_c) == {(0,), (1,)}, of_c

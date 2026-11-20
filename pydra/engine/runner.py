@@ -300,11 +300,22 @@ class NodeExecution(ty.Generic[TaskType]):
             if self._mode == "barrier":
                 try:
                     self._check_barrier(values)
+                    self.state.prepare_states(values)
+                    self.state.prepare_inputs()
                 except PydraStateError as exc:
                     self._fail_node(exc)
                     return
-            self.state.prepare_states(values)
-            self.state.prepare_inputs()
+                except Exception as exc:  # today's State cannot prepare this shape
+                    error = PydraStateError(
+                        f"Node {self.name!r} could not prepare its state: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                    error.__cause__ = exc
+                    self._fail_node(error)
+                    return
+            else:
+                self.state.prepare_states(values)
+                self.state.prepare_inputs()
             indices = range(len(self.state.states_ind))
         else:
             indices = [None]

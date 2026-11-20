@@ -516,10 +516,23 @@ class PartialExpansion:
                     continue
                 self.inherited.add((name, ident))
                 prefixed = {("_" + name,) + p: c for p, c in fields.items()}
-                block = Block(name, ident[1:], tuple(prefixed.items()))
-                ex.unrunnable[block] = [source]
+                # a block whose fields all lie on paths the source combines away fixes
+                # no final key: the readers of the groups it fails report them, so it
+                # is not an element of its own (it still keeps groups from sealing)
+                if self._fixes_final_key(source, fields):
+                    block = Block(name, ident[1:], tuple(prefixed.items()))
+                    ex.unrunnable[block] = [source]
                 self.failed.append((("from", name, ident), prefixed))
                 self.version += 1
+
+    @staticmethod
+    def _fixes_final_key(source: "NodeExecution", fields: dict) -> bool:
+        """Whether a failed block of ``source`` fixes a coordinate of its final keys, or
+        the source has a single final key (combined whole), which then never appears"""
+        final = source._partial.spec.final_paths if source.is_partial else None
+        if not final:
+            return True
+        return any(p in fields for p in final)
 
     def expand_ready(self) -> None:
         """Expand each pending block whose inner sources have succeeded, and fail each
