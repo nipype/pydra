@@ -218,6 +218,12 @@ class Absent:
   existing cache slot moves. Example: a gather over records whose key is built from its upstreams'
   keys gets a different checksum in a run where record 7 was routed off than in a run where
   record 7 ran, although the upstream keys are the same in both.
+- **An absent-aware supplied checksum gets no suffix.** A task with a supplied checksum may declare
+  that its hook sees absence (`define(checksum=..., absent_aware=True)`, or
+  `__checksum_absent_aware__ = True` on a class that defines `__checksum__`). The runner then
+  passes the sorted `(field, element index, cause)` triples to the hook as the `absent` keyword,
+  beside the resolved inputs, and appends no suffix; the hook is responsible for folding them into
+  its value. The declaration is optional. A task without it gets the suffix as above.
 - **The checksum-change check compares the unsuffixed checksum.** After a job with
   `__checksum__` runs, `Job._check_for_hash_changes` recomputes `task._checksum` and raises if it
   differs from `job.checksum` (`job.py:642-647`, called at `:468` and `:537`). The suffix is the
@@ -230,8 +236,9 @@ class Absent:
   hash. Only a supplied checksum built from upstream keys can miss it, and such keys come from the
   system that supplies them. §3.5 therefore requires that a driver's reference for a job carry the
   whole `job.checksum` and that downstream supplied keys be built from it. Carrying the suffix
-  forward inside the runner was rejected: pydra cannot see how a hook builds its key, and the
-  driver must fold absence into its own key anyway (§3.5).
+  forward inside the runner was rejected: pydra cannot see how a hook builds its key, and a
+  driver that builds keys from upstream keys can fold absence in itself, through an absent-aware
+  hook or by building from the suffixed checksum (§3.5).
 - **Splitter inputs.** A splitter input that resolves to an `Absent` gives the node no elements.
   The node is absent as a whole, and a reader of it receives that `Absent` rather than an empty
   `StateArray`, so absence is distinguishable from an empty list. Today a splitter over an upstream
@@ -387,9 +394,28 @@ class Failed:  error: BaseException
 class NotRun:  reason: str; held: bool    # cancelled, never started, or held by infrastructure
 ```
 
+**One thread.** `GraphRunner` is not thread-safe. Every call is made from one thread, the driver's;
+an executor that reports from another thread has its outcomes marshalled to that thread
+(`call_soon_threadsafe` in the asynchronous driver of §3.2, a queue in an external driver of
+§3.5).
+
 **`ready()`** applies the precedence of §2.3(b) to every released element. It returns the jobs to
 dispatch and, separately, every job it completed itself, with how. Each job is handed out once.
-`limit` caps the jobs handed out by this call (`max_concurrent`, below). `job.rerun` is set from
+`dispatch` is grouped by node, in node order (workflow path, then name).
+- **`limit`** caps the jobs handed out by this call (`max_concurrent`, below) by whole node groups:
+  groups are taken in order while they fit, and only the group that crosses the cap is sliced. With
+  `limit=4` and two nodes of three released jobs, the first node is handed out whole and one job of
+  the second. A driver of an executor with `batches = True` passes no cap (`max_concurrent` is
+  infinite) and lets the executor cap inside itself, so a node's elements stay in one array or
+  batch. An external driver (§3.5) passes no `limit`.
+- **Sharing is the runner's.** The same-checksum table (today's `futured`, `sharing` and
+  `finished`, `submitter.py:610-616`, `:702-719`) is runner state applied in `ready()` after the
+  gate and absence steps. A twin of a job in flight is held and settled as `Settled(how="shared")` when
+  the first completes; a twin of a finished job settles at once. An external driver therefore sees
+  each shared job in `Round.settled` and never receives a twin to dispatch. The drivers of §3.2
+  keep no checksum table; they only dispatch.
+
+`job.rerun` is set from
 `rerun` and `propagate_rerun`: the outer job gets `rerun`, inner jobs get
 `rerun and propagate_rerun` (today's `:575`, `:702`).
 
@@ -425,7 +451,10 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
   `"resolution"` only (`submitter.py:1286`, `:1336-1348`). After E2 there is a third phase,
   `"expansion"`, for a block that could not be expanded: its entry has `state_index` and
   `state_key` `None` and `block` set, and its label is `B[block 1]`. `JobErrorEntry` gains
-  `state_key` and `block`, both defaulting to `None`. `NodeExecution` already records, per
+  `state_key` and `block`, both defaulting to `None`. A fourth phase, `"stopped"`, is recorded
+  for an element that was handed out and had no outcome when the driver closed its executors
+  (`fail_fast`, interruption, `close()`). A job reported `NotRun` already has its outcome and gets
+  no `"stopped"` entry. `NodeExecution` already records, per
   index, the upstream nodes that made it unrunnable (`unrunnable` at `:942`, set at `:1251` for a
   whole node and `:1267` per element). `ready()` reports each newly marked entry once, in
   `Round.unrunnable`, so a driver can record a descendant of a failure as blocked by it.
@@ -749,19 +778,31 @@ What such a driver must and need not supply:
   because a workflow job waiting for its lease is advanced only by a later `ready()` (§3.1). A
   driver with nothing in flight and `retry_after` set is waiting, not stuck; it calls `stuck()`
   only when `retry_after` is `None`.
-- **A supplied checksum sees absence through the suffix, transitively.** The reference a driver
-  returns for a job carries the whole `job.checksum`, suffix included, and a downstream supplied
-  key that names an upstream output is built from that value, not from the upstream's key before
-  the suffix (§2.3(a)). A key built from unsuffixed upstream keys does not see an accepted or
-  dropped `Absent` two levels down: a report read from a gather would be served from the run in
-  which record 7 was present. A driver whose keys have a fixed form (senselab's ADR-002 key
-  digest is a `Hex64`, and ADR-001 makes the node's checksum equal to it) cannot use the suffixed
-  string as its key. Its adapter folds the absence triples into its own key derivation instead,
-  so the suffix is redundant there; the stale read it prevents would come from the driver's own
-  store, since pydra's store holds only the run's completion records in that design.
+- **Absence reaches supplied keys, transitively.** A driver that supplies checksums has two
+  choices, and needs one. Its tasks may declare themselves absent-aware (§2.3(a)): the hook
+  receives the absence triples, folds them into its own key, and gets no suffix, so the key keeps
+  whatever form the driver gives its keys. This is optional. Otherwise the driver uses the suffixed
+  `job.checksum` as it is: the reference it returns for a job carries the whole value, and a
+  downstream supplied key that names an upstream output is built from it, not from the upstream's
+  key before the suffix. pydra puts no constraint on the form of a supplied checksum beyond one
+  path component, and a consumer may re-key the suffixed value into its own form. A key built from
+  unsuffixed upstream keys of a task that is not absent-aware does not see an accepted or dropped
+  `Absent` two levels down: a report read from a gather would be served from the run in which
+  record 7 was present.
 - **Infrastructure faults and held queues** are `NotRun(held=True)`. They are not errors, readers
   stay blocked, and the run ends incomplete and resumable. Content failures are `Failed`, or an
-  errored `Result`.
+  errored `Result`. The mapping, per job:
+
+  | What happened to the job | Outcome |
+  |---|---|
+  | its content failed and the driver's retries are exhausted | `Failed` (or an errored `Result`) |
+  | held by its environment or queue | `NotRun(held=True)`, for each job held |
+  | refused by a policy, such as a licence | `Failed`, for each job refused; never an exception raised out of the driver loop |
+  | being re-placed after a resource or infrastructure fault | no outcome yet; the job is still in flight |
+
+  A `Failed` makes that job's readers unrunnable and leaves its siblings' readers alone. A run
+  whose only remaining jobs are `NotRun` is `done`, lists them in `not_run`, and under `Submitter`
+  raises `RunIncomplete`.
 - **Its store** is a `ResultStore` adapter over the driver's own store. The runner commits workflow
   jobs to it (§3.1). If the adapter is not durable, workflow results last only for the run, and a
   resumed run re-expands them.
