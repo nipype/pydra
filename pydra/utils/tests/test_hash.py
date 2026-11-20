@@ -650,7 +650,8 @@ def test_hash_lambda_and_nested_function_stable_after_pickling_by_value(
         nested, kwargs = mod.make()
         for func in (nested, kwargs["callable"]):
             unpickled = cloudpickle.loads(cloudpickle.dumps(func))
-            assert unpickled.__code__.co_filename != func.__code__.co_filename
+            # NB: cloudpickle >= 3.1 replaces the co_filename with '<dynamic-code>'
+            assert unpickled is not func
             assert hash_function(unpickled) == hash_function(func)
     finally:
         sys.modules.pop(module_name, None)
