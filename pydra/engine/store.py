@@ -587,6 +587,37 @@ class PickleStore:
             return None
         return result
 
+    def recorded(
+        self,
+        jobs: "ty.Sequence[Job]",
+        listed: "dict[Path, set[str]] | None" = None,
+    ) -> "list[Job]":
+        """The jobs of ``jobs`` that have a success record, from one listing of the record
+        directory (kept in ``listed`` if given, so that a caller asking about several groups
+        of jobs lists it once). A record is not a result: ``lookup`` may still refuse it.
+        """
+        records = [(j, self.success_record(j.checksum, j.context)) for j in jobs]
+        if not records:
+            return []
+        directory = records[0][1].parent
+        if listed is not None and directory in listed:
+            present = listed[directory]
+        else:
+            try:
+                with os.scandir(directory) as entries:
+                    present = {e.name for e in entries}
+            except OSError:
+                present = set()
+            if listed is not None:
+                listed[directory] = present
+        return [j for j, record in records if record.name in present]
+
+    def expected_hits(self, jobs: "ty.Sequence[Job]") -> int:
+        """How many of ``jobs`` have a success record (see :meth:`recorded`). Records only:
+        ``GraphRunner.plan`` adds the results ``lookup`` finds for the other jobs when the
+        runner has ``lookup_before_dispatch``."""
+        return len(self.recorded(jobs))
+
     def withdraw_success(self, lease: DirectoryLease) -> None:
         """Remove the success record of the job held under ``lease``, before its slot
         is rewritten; called with the lease held."""
