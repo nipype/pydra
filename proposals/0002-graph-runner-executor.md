@@ -420,7 +420,11 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
 `rerun and propagate_rerun` (today's `:575`, `:702`).
 
 - **Under a `PortableStore`: `job.attempt`.** `ready()` gives each job in `Round.dispatch` an
-  `attempt` id, a UUID, when it hands the job out; a task with `can_resume` gets `"resume"`. A job
+  `attempt` id, a fresh UUID, each time it hands the job out (a job handed out again after
+  `retry` gets a new one). A task with `can_resume` gets a UUID too: its work directory does not
+  depend on the attempt, it is the stable `work/resume-<hash>` of its address, guarded by the
+  resumable lease of the same hash, and the outcome files there (`_committed.json`, `_error.json`)
+  carry the attempt, so an earlier attempt's outcome is never read as this one's. A job
   that is settled, propagated or marked unrunnable is never handed out and has none. A workflow
   job is never in `Round.dispatch`, so the runner also gives an attempt to each workflow job when it
   starts to expand it (after the store check, §3.1 "Workflow jobs under the split"), and to the
@@ -585,12 +589,13 @@ class Executor(Protocol):
         """Called once by the driver; `report` may be called from any thread."""
     def submit(self, jobs: Sequence[Job]) -> Handle: ...
     def cancel(self, handle: Handle) -> None:
-        """Stop the jobs of `handle` not yet finished; each is reported `NotRun`."""
+        """Stop the jobs of `handle` not yet finished, as the run ends; they are not reported."""
     def close(self) -> None: ...
 ```
 
 - **Outcomes are pushed.** Every job submitted is reported exactly once, through `report`, as a
-  `Result`, `Failed` or `NotRun`. The asynchronous driver turns each report into
+  `Result`, `Failed` or `NotRun` (a job the worker itself cancelled is `NotRun`), unless its handle
+  is cancelled as the run ends (below). The asynchronous driver turns each report into
   `runner.complete()` on its own loop (`loop.call_soon_threadsafe`). One `asyncio.Event` therefore
   waits across every executor of a run. The synchronous driver binds `runner.complete` itself, so
   an inline executor's report is applied before `submit` returns. The asynchronous driver closes
@@ -600,7 +605,10 @@ class Executor(Protocol):
 - **`submit`** takes a sequence. An executor with `batches = False` is given one job per call. One
   with `batches = True` is given every job of a round that the router sent to it, in node order.
 - **`cancel`** is called by the driver on every open handle when `fail_fast` stops a run, and when
-  the driver itself is interrupted, as the `finally` at `submitter.py:751-756` does now.
+  the driver itself is interrupted, as the `finally` at `submitter.py:751-756` does now. It is
+  called only as the run ends, after `runner.close()`: the jobs of a cancelled handle are not
+  reported, and each is recorded `"stopped"` where its workflow failed (§3.1). Cancelling a handle
+  in the middle of a run is not supported.
 - **A handle** is removed by the driver once all its jobs are reported.
 - **Running a job.** The executor runs a job by calling `Job.run` (or `load_and_run` in another
   process, `job.py:723`), which takes the lease, checks the store under it and commits
@@ -769,7 +777,12 @@ while not runner.done:
 What such a driver must and need not supply:
 - **Outputs may be references,** except where the runner reads values. A gate's predicate must
   resolve to a `bool` or an `Absent`. Absence must be reported as pydra's `Absent`, not as a
-  reference to one. A value that a downstream splitter splits over must be a real sequence.
+  reference to one. A value that a downstream splitter splits over must be a real sequence; a
+  reference there is refused with a `TypeError` naming the node and the field. The runner also
+  resolves each reader's inputs into its task, which coerces them to the declared types, so for now
+  every port that carries a reference, output or input, must be typed `Any`; a reference reaching a
+  typed port is refused by the type check with an error naming the field. A reference marker that
+  type coercion accepts for any declared type is a follow-up.
 - **Every settled job is visible** in `Round.settled`, with how and, for absences, the cause, and
   every element blocked by a failure in `Round.unrunnable`, with the upstream nodes that blocked
   it. A driver can therefore log every node as run, reused, typed-absent or blocked without the
