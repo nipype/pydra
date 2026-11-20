@@ -500,17 +500,28 @@ def test_ack_timeout_is_beater_death(tmp_path, callbacks):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="stops the beater with SIGSTOP")
 def test_ping_finds_a_hung_beater():
-    """``ping`` returns while the beater answers; a stopped beater does not answer within the
-    timeout, and the holder has lost its beater."""
+    """``ping`` answers True while the beater acknowledges. One unanswered ping (a holder whose call
+    held the GIL past the timeout, or a beater slow for a moment) is a miss, not a death: the beater
+    keeps running, and an answer resets the count. `PING_MISSES` consecutive misses are its death.
+    """
     import signal
+
+    from pydra.engine.lease import PING_MISSES
 
     client = BeaterClient()
     try:
-        client.ping(10)
-        assert client.alive
+        assert client.ping(10) is True
         os.kill(client.process.pid, signal.SIGSTOP)
-        with pytest.raises(BeaterDead, match="acknowledge ping"):
-            client.ping(0.5)
+        assert client.ping(0.2) is False  # one slow ping
+        assert client.alive and client.process.poll() is None
+        os.kill(client.process.pid, signal.SIGCONT)
+        assert client.ping(10) is True  # answered: the misses are forgotten
+        os.kill(client.process.pid, signal.SIGSTOP)
+        for _ in range(PING_MISSES - 1):
+            assert client.ping(0.2) is False
+            assert client.alive
+        with pytest.raises(BeaterDead, match="ping"):
+            client.ping(0.2)
         assert not client.alive
     finally:
         with contextlib.suppress(ProcessLookupError):
