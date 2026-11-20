@@ -27,6 +27,10 @@ class Docker(base.Container):
         """Resolve the image once: the reference given, the local image store, then
         the registry (RFC 0004 section 5.3). The image runs by the returned ``run``.
 
+        Output of ``docker image inspect`` that cannot be read raises
+        ``ImageResolutionError`` even under ``resolve_images="best-effort"``: the image
+        is there and its identity is not known, which is not the same as not resolving it.
+
         ``identity=`` is the author's assertion and is keyed as written (``docker@1:``
         followed by it, whatever it is). A ``docker-local@1:<Id>`` key names an image
         in this host's image store: it is reused on this host, and on workers that load
@@ -90,6 +94,11 @@ class Docker(base.Container):
         return image_id, repo_digests
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
+        if job.environment is not self:
+            raise base.ImageResolutionError(
+                f"{self!r} was asked to run a job built with the environment "
+                f"{job.environment!r}, whose reference is the one carried with it"
+            )
         # the reference the submitting process resolved and carried with the job
         docker_img = job.resolved.run
         # mounting all input locations

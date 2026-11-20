@@ -43,7 +43,12 @@ from pydra.engine.result import save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
-from pydra.environments.base import Environment, ImageResolutionError, ResolvedRef
+from pydra.environments.base import (
+    Container,
+    Environment,
+    ImageResolutionError,
+    ResolvedRef,
+)
 from pydra.utils.resources import ComputeResources
 from pydra.utils.etelemetry import check_latest_version
 
@@ -196,7 +201,8 @@ class Job(ty.Generic[TaskType]):
         # Carry the checksum, so a worker never rehashes the task's code, and the
         # environment's resolved reference, which the worker runs and never resolves
         self.checksum
-        self.resolved
+        if self.uses_image:
+            self.resolved
         # The task stays an object in the state, so it is serialised in the job's own
         # stream, and jobs pickled together (a workflow's node jobs) share one memo.
         # A Job therefore requires cloudpickle: the stdlib pickle cannot serialise the
@@ -256,6 +262,17 @@ class Job(ty.Generic[TaskType]):
         return self._checksum
 
     @property
+    def uses_image(self) -> bool:
+        """Whether the job runs a command in a container image, so its reference is
+        resolved: a shell task in a container environment. A python task has no image
+        to resolve, whatever environment it was given."""
+        from pydra.compose.shell.task import Task as ShellTask
+
+        return isinstance(self.environment, Container) and isinstance(
+            self.task, ShellTask
+        )
+
+    @property
     def resolved(self) -> "ResolvedRef":
         """The environment's reference, resolved once in the submitting process and
         carried with the job: the record keys its ``key`` and the worker executes its
@@ -309,11 +326,17 @@ class Job(ty.Generic[TaskType]):
             self.checksum  # collects the library modules the task's code reaches
             identity = getattr(self.store, "identity", None)
             if identity is None:
-                self._context = job_context(self.task, self.environment, self.resolved)
+                self._context = job_context(
+                    self.task,
+                    self.environment,
+                    self.resolved if self.uses_image else None,
+                )
             else:
                 self._context = identity.context(self, "lookup")
             tool_version = self.record.get("job", {}).get("tool_version")
-            if isinstance(tool_version, dict) or self.resolved.unresolved:
+            if isinstance(tool_version, dict) or (
+                self.uses_image and self.resolved.unresolved
+            ):
                 # a tool not found here: the result is used by this process only
                 self._context = {**self._context, "unknown": _nonce()}
             self._stored_contexts = check_declared_code(

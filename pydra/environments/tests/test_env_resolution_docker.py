@@ -348,3 +348,67 @@ def test_registry_errors_leave_the_image_unresolved(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", broken)
     assert images.registry_digest("org/tool", "1") is None
+
+
+def test_environments_differing_only_in_tag_resolve_apart(monkeypatch, tmp_path):
+    fake = FakeDocker(
+        monkeypatch,
+        local={"tool:1": (ID, []), "tool:2": ("sha256:" + "b" * 64, [])},
+    )
+    sub = Submitter(cache_root=tmp_path, telemetry=False)
+    refs = []
+    for tag in ("1", "2"):
+        job = Job(
+            task=shell.define("whoami")(),
+            name=tag,
+            submitter=sub,
+            environment=docker.Docker(image="tool", tag=tag),
+        )
+        refs.append(job.resolved)
+    assert refs[0].key != refs[1].key and refs[0].run != refs[1].run
+    assert sorted(fake.inspected) == ["tool:1", "tool:2"]
+
+
+def test_environments_differing_only_in_identity_resolve_apart(monkeypatch, tmp_path):
+    FakeDocker(monkeypatch)
+    sub = Submitter(cache_root=tmp_path, telemetry=False)
+    refs = []
+    for identity in (D1, D2):
+        job = Job(
+            task=shell.define("whoami")(),
+            name="j",
+            submitter=sub,
+            environment=docker.Docker(image="tool", identity=identity),
+        )
+        refs.append(job.resolved)
+    assert [r.key for r in refs] == [f"docker@1:{D1}", f"docker@1:{D2}"]
+
+
+def test_execute_on_a_job_of_another_environment_raises(monkeypatch, tmp_path):
+    FakeDocker(monkeypatch)
+    job = _job(tmp_path, None)
+    commands = _ran(monkeypatch)
+    with pytest.raises(ImageResolutionError, match="environment"):
+        docker.Docker(image="tool").execute(job)
+    assert commands == []
+
+
+def test_python_task_resolves_no_image(monkeypatch, tmp_path):
+    from pydra.compose import python
+
+    FakeDocker(monkeypatch, docker_missing=True)
+    sub = Submitter(
+        environment=docker.Docker(image="tool"),
+        cache_root=tmp_path,
+        resolve_images="require",
+        telemetry=False,
+    )
+
+    @python.define
+    def Plus(a: int) -> int:
+        return a + 1
+
+    job = Job(
+        task=Plus(a=1), name="j", submitter=sub, environment=docker.Docker(image="tool")
+    )
+    job.__getstate__()

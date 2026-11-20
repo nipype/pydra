@@ -68,7 +68,7 @@ class StoreIdentity(ty.Protocol):
 def _fields(value: ty.Iterable[str]) -> frozenset[str]:
     if isinstance(value, (str, bytes)):
         raise TypeError(f"recorded_only is a collection of field names, got {value!r}")
-    return frozenset(value)
+    return frozenset(value) | {REPOSITORY_FIELD}
 
 
 @attrs.frozen
@@ -76,11 +76,10 @@ class PydraIdentityV1:
     """``pydra-identity@1``: pydra's checksum is not the digest of a stored record, the context
     is `pydra.engine.context.job_context` in both phases, and the fingerprint
     (``pydra-context@1``) is the full sha256 of the RFC 8785 canonical JSON of the context
-    without the ``recorded_only`` fields."""
+    without the ``recorded_only`` fields. ``recorded_only`` always holds
+    ``environment_repository``, whatever else is given."""
 
-    recorded_only: frozenset[str] = attrs.field(
-        factory=lambda: frozenset({REPOSITORY_FIELD}), converter=_fields
-    )
+    recorded_only: frozenset[str] = attrs.field(factory=frozenset, converter=_fields)
     name: ty.ClassVar[str] = "pydra-identity@1"
     fingerprint_name: ty.ClassVar[str] = "pydra-context@1"
 
@@ -98,7 +97,9 @@ class PydraIdentityV1:
 
     def context(self, job: "Job", phase: ty.Literal["lookup", "execute"]) -> Context:
         job.checksum  # collects the library modules the task's code reaches
-        return job_context(job.task, job.environment, job.resolved)
+        return job_context(
+            job.task, job.environment, job.resolved if job.uses_image else None
+        )
 
     def fingerprint(self, context: Context) -> str:
         slotted = {k: v for k, v in context.items() if k not in self.recorded_only}
