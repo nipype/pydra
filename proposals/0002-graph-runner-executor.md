@@ -368,8 +368,15 @@ class GraphRunner:
 `plan(executors=None)` mirrors `drive(runner, executors, ...)`: the runner holds no executors, so an
 external driver passes them by the names its router returns, and the default is the submitter's
 workers. It changes nothing a run depends on: no job is released, handed out or settled, no lease is
-taken, no live node, `State` or table is written, and a job is formed only from upstream elements the
-runner has accepted (never from one in flight, whose store slot may hold an earlier attempt). Where an
+taken, no job table of a live node (`_tasks`, `blocked`, `queued`, `successful`, `errored`) and no
+static node's `State` is written, no in-flight result is read, and a job is formed only from upstream
+elements the runner has accepted (never from one in flight, whose store slot may hold an earlier
+attempt). On a partial node (E2) `plan()` may advance derived, monotone bookkeeping that the next
+`ready()` would perform the same way: registering blocks for source keys that exist, closing groups,
+sealing (which assigns `state_index`), and recording an inherited failed block as unrunnable. A partial
+node is probed on a copy that expands the blocks whose upstream elements have been accepted, and
+`PlanNode.known_elements` counts their elements while `elements` stays None until every block is
+expanded. Where an
 element's job cannot be formed yet, the router and `place(jobs)` are shown a stand-in (the node's name,
 task with lazy inputs, resources, no state index) and `PlanNode.provisional` is true. A router error
 on a real job raises, as the run would; on a stand-in the worker is None. `PlanNode.expected_hits` is 0
