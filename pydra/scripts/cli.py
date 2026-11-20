@@ -30,9 +30,13 @@ def cli():
 )
 def crash(crashfile, rerun, debugger=None):
     """Display a crash file and rerun if required."""
-    if crashfile.endswith(("pkl", "pklz")):
-        with open(crashfile, "rb") as f:
-            crash_content = cp.load(f)
+    if crashfile.endswith((".json", "pkl", "pklz")):
+        if crashfile.endswith(".json"):  # a work directory's _error.json, no pickle
+            with open(crashfile, "r", encoding="utf-8") as f:
+                crash_content = json.load(f)
+        else:
+            with open(crashfile, "rb") as f:
+                crash_content = cp.load(f)
         print("".join(crash_content["error message"]))
 
         if rerun:
@@ -63,7 +67,7 @@ def crash(crashfile, rerun, debugger=None):
             else:
                 raise FileNotFoundError(f"Job file {jobfile} not found")
     else:
-        raise ValueError("Only pickled crashfiles are supported")
+        raise ValueError("Only _error.json and pickled crashfiles are supported")
 
 
 def _import(name: str):
