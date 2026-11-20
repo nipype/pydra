@@ -1121,6 +1121,61 @@ class PoolRoot:
                                 removed += 1
         return removed
 
+    def collect_settled(self, age: float = 86400.0) -> int:
+        """Remove each ticket marked resolved more than ``age`` seconds ago, with its settled marks,
+        outcomes, losses, claim lease and ``slotted`` entry (RFC 0005 section 4.1), so that a queue's
+        listings stay as long as its live tickets. Its slot stays in the index (a segment is walked by
+        its slot numbers); its jobs' newest generations stay, naming a ticket that is gone, which
+        holds nothing. Return how many tickets went."""
+        import shutil
+
+        removed = 0
+        now = time.time()
+        with _dir(self._root, "queues") as queues:
+            labels = _names(queues)
+        for label in labels:
+            q = self._by_label(label)
+            if q is None:
+                continue
+            marks = _names(q.settled)
+            for name in _names(q.tickets):
+                digest = name[: -len(".json")] if name.endswith(".json") else ""
+                if not _HEX64.fullmatch(digest):
+                    continue
+                at = self._resolved_at(q, digest)
+                if at is None or now - at < age:
+                    continue
+                for mark in marks:
+                    if mark.startswith(f"{digest}-"):
+                        with contextlib.suppress(OSError):
+                            q.settled.unlink(mark)
+                for sub in ("outcome", "losses"):
+                    shutil.rmtree(q.path / sub / digest, ignore_errors=True)
+                shutil.rmtree(q.path / "claims" / f"{digest}.lease", ignore_errors=True)
+                for d, member in ((q.slotted, digest), (q.tickets, name)):
+                    with contextlib.suppress(FileNotFoundError):
+                        d.unlink(member)
+                q.cached.pop(digest, None)
+                removed += 1
+        return removed
+
+    def _resolved_at(self, q: _Queue, digest: str) -> float | None:
+        """When ticket ``digest``'s slot was marked resolved (its ``res-<n>`` mtime), None if not."""
+        slot = self._slot_of(q, digest)
+        if slot is None:
+            return None
+        seq, n = slot
+        segment = _child(q.segments, _seq(seq))
+        if segment is None:
+            return None
+        with segment:
+            try:
+                return segment.lstat(f"res-{n}").st_mtime
+            except OSError as err:
+                if not _absent(err):
+                    raise
+                return None
+
     def _collect_payloads(self, age: float) -> int:
         payloads = _child(self._root, "payloads")
         if payloads is None:
@@ -1379,6 +1434,10 @@ class PoolRoot:
             count = _count_outcomes(d)
             while count:
                 if _create(q.settled, f"{digest}-{count}", b"") != "exists":
+                    # the follower reads the highest: one mark per ticket bounds its listing
+                    if count > 1:
+                        with contextlib.suppress(OSError):
+                            q.settled.unlink(f"{digest}-{count - 1}")
                     return count
                 again = _count_outcomes(d)
                 if again <= count:
@@ -1521,6 +1580,19 @@ class PoolRoot:
             if (m := _HELD.fullmatch(name)) and int(m.group(1)) >= current:
                 found[m.group(2)] = max(found.get(m.group(2), 0), int(m.group(1)))
         return found
+
+    def release_holds(self, queue: str, label: str | None = None) -> int:
+        """Lift the holds of ``queue`` (of the residency ``label`` only, when given), whatever their
+        epoch; return how many were lifted (``pydracli pool release-hold``)."""
+        q = self.queue(queue)
+        lifted = 0
+        for name in _names(q.dir):
+            m = _HELD.fullmatch(name)
+            if m and (label is None or m.group(2) == label):
+                with contextlib.suppress(FileNotFoundError):
+                    q.dir.unlink(name)
+                    lifted += 1
+        return lifted
 
     def _current(self, epoch: int | None) -> int:
         if epoch is not None:
@@ -1783,11 +1855,12 @@ class Claim:
             found = self.pool._read_outcome(self._q, self.digest, job.key, attempt)
         if found is not None and found.get("outcome") in FINAL:
             return str(found.get("outcome")), g, found
-        if repair and mine is not None:
+        # without a generation of its own here, the ticket's own attempt (ruling R1)
+        if repair and attempt is not None:
             self.pool._repair(record)
             reason = "split" if record.get("cause") == "split" else "replaced"
-            self._withdraw(job, mine, reason, record.get("ticket"))
-            found = self.pool._read_outcome(self._q, self.digest, job.key, mine)
+            self._withdraw(job, attempt, reason, record.get("ticket"))
+            found = self.pool._read_outcome(self._q, self.digest, job.key, attempt)
             if found is not None and found.get("outcome") in FINAL:
                 return str(found.get("outcome")), g, found
         return "moved", g, record

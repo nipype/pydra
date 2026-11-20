@@ -10,6 +10,7 @@ a worker in another process imports them as this one does (a wheel install carri
 In-process tests reach a running task through that module's ``HOOK`` table.
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -766,6 +767,52 @@ def test_wedged_call_times_out(pool, tasks, processes, tmp_path):
     assert failed["fault"]["kind"] == "resource"
     assert failed["fault"]["type"] == "ResourceExhausted"
     assert not flag.exists()  # never run again
+
+
+@pytest.mark.skipif(not POSIX, reason="kills or stops the beater by signal")
+@pytest.mark.parametrize("signum", ["SIGKILL", "SIGSTOP"])
+def test_dead_beater_under_a_hung_call_expires_and_recycles(
+    pool, tasks, processes, tmp_path, signum
+):
+    """A worker whose beater dies (killed) or hangs (stopped) while a call that never returns runs
+    stops proving its claim, writes the call's ``expired`` outcomes itself once the deadline passes,
+    and exits to be recycled; the claim goes stale and a taker types the timeout. It does not keep
+    the claim alive forever."""
+    flag = tmp_path / "wedged"
+    job = pool.job(tasks.Wedge(flag=str(flag)), "wedge")
+    digest = pool.put([job])
+    proc = _start(
+        pool,
+        processes,
+        tmp_path,
+        settings=_settings(call_timeout=10.0, timeout_grace=1.0),
+    )
+    _wait(flag.exists, "the call to start")
+    out = subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True)
+    beaters = [int(p) for p in out.stdout.split()]
+    assert beaters, "the worker has a beater"
+    for pid in beaters:
+        os.kill(pid, getattr(signal, signum))
+    try:
+        assert proc.wait(BOUND) == 5  # EXIT_RECYCLE: neither hung nor killed
+    finally:
+        for pid in beaters:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+    [expired] = pool.outcomes()
+    assert expired["outcome"] == "expired" and expired["attempt"].endswith(".0")
+    flag.unlink()
+    _wait(lambda: _stale(pool.claim_dirs()), "the unproved claim to go stale")
+    _, code = _run(pool)  # takes the stale claim over
+    assert code == 0
+    gens = pool.generations(job)
+    assert [g["cause"] for g in gens] == ["put", "takeover"]
+    failed = pool.pool.read_outcome("cpu", digest, pool.key(job), gens[1]["attempt"])
+    assert (failed["outcome"], failed["fault"]["type"]) == (
+        "failed",
+        "ResourceExhausted",
+    )
+    assert not flag.exists()
 
 
 def test_worker_skips_withdrawn_and_superseded(pool, tasks):
