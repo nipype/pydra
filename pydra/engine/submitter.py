@@ -36,6 +36,7 @@ from pydra.engine.store import (
 )
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.general import default_run_cache_root, default_store_root
+from pydra.utils.storagedir import IS_WINDOWS
 from pydra.compose import workflow
 from pydra.engine.state import State
 from pydra.workers.base import Worker
@@ -816,14 +817,20 @@ def _portable_store(
 ) -> ResultStore:
     """The store of ``Submitter(store="portable")``: ``root`` is the user's own cache, so it is
     opened ``private`` and may hold pickles (RFC 0003 section 6.4); each read-only cache is a
-    portable root read ``shared`` unless given as a `~pydra.engine.portable.trust.Root`.
+    portable root read ``shared`` unless given as a `~pydra.engine.portable.trust.Root`. On
+    Windows, where a shared root is unsupported (RFC 0003 section 9), it is read ``private``,
+    which is accepted only under ``%LOCALAPPDATA%``; elsewhere it is skipped with a warning.
     """
     from pydra.engine.portable.store import PortableStore
     from pydra.engine.portable.trust import Root
     from pydra.utils.general import ensure_list
 
     readonly = [
-        ro if isinstance(ro, Root) else Root(Path(ro).resolve(), trust="shared")
+        (
+            ro
+            if isinstance(ro, Root)
+            else Root(Path(ro).resolve(), trust="private" if IS_WINDOWS else "shared")
+        )
         for ro in ensure_list(readonly_caches)
     ]
     return PortableStore(

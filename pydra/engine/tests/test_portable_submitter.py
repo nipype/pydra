@@ -229,6 +229,19 @@ def test_file_set_never_pickled(tmp_path):
     assert not list((tmp_path / "cache").rglob("*.pkl"))
 
 
+def test_readonly_caches_are_private_on_windows(tmp_path, monkeypatch):
+    """A shared root is unsupported on Windows, so a read-only cache given as a path is read
+    there as private (accepted only under %LOCALAPPDATA%); elsewhere it is shared."""
+    import pydra.engine.submitter as submitter_module
+    from pydra.engine.portable.trust import Root
+
+    ro = tmp_path / "ro"
+    for windows, trust in ((False, "shared"), (True, "private")):
+        monkeypatch.setattr(submitter_module, "IS_WINDOWS", windows)
+        store = submitter_module._portable_store(tmp_path / "c", [ro], "consistent")
+        assert store.readonly == (Root(ro.resolve(), trust=trust),)
+
+
 # -- find(job) in ready() ------------------------------------------------------------------------------
 
 

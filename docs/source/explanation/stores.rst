@@ -37,7 +37,11 @@ other names, such as a ``PickleStore`` cache, is refused with ``LegacyLayout``; 
 
 ``readonly_caches`` are portable roots searched after ``cache_root``. Each is read as
 ``shared`` (its pickle members are never opened) unless it is given as a
-:class:`~pydra.engine.portable.trust.Root` with another trust.
+:class:`~pydra.engine.portable.trust.Root` with another trust. Windows has no ``shared``
+roots, so there a path is read as ``private``, which holds only under ``%LOCALAPPDATA%``.
+
+Entry files are read-only: on Windows, clear their read-only attribute before deleting a
+root.
 
 
 Shared roots
