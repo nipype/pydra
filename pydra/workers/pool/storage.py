@@ -1005,14 +1005,14 @@ class PoolRoot:
     def charges(self, checksum: str, fingerprint: str) -> dict[str, int]:
         """A job's crash count (generations with ``charged``), its ``resource_moves``
         (``ladder`` generations at the ``call`` phase) and its infrastructure requeues
-        (``restart`` generations at the ``call`` phase, `Claim.restart`)."""
+        (``restart`` generations at the ``call`` or ``load`` phase, `Claim.restart`)."""
         gens = [r for _, r in self.generations(checksum, fingerprint)]
         return {
             "crashes": sum(1 for r in gens if r.get("charged") is True),
             "infrastructure": sum(
                 1
                 for r in gens
-                if r.get("cause") == "restart" and r.get("phase") == "call"
+                if r.get("cause") == "restart" and r.get("phase") in ("call", "load")
             ),
             "resource_moves": sum(
                 1

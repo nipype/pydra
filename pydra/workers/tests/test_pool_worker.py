@@ -133,6 +133,32 @@ class Recorder:
         return "1"
 
 
+class Broken:
+    # a provider whose load always fails, as a missing model file does
+    name = "broken"
+
+    def load(self, spec, device):
+        LOADS.append(("broken", device))
+        raise FileNotFoundError(2, "no such model", spec)
+
+    def close(self, obj):
+        pass
+
+    def footprint(self, spec):
+        return None
+
+    def measure(self, obj):
+        return None
+
+    def version(self):
+        return "1"
+
+
+@python.define
+def UseBroken(model: Provided[object, "broken"], x: int) -> int:
+    return x
+
+
 @python.define
 def UseServer(model: Provided[object, "sleepserver"], x: int) -> int:
     _hook("server", model, x)
@@ -1102,7 +1128,7 @@ def test_beater_death_recycles_after_settling(pool, tasks):
 
 def _providers(pool: Pool, tasks) -> None:
     """Jobs made from here on name the test providers."""
-    pool.submitter.providers = (tasks.SleepServer(), tasks.Recorder())
+    pool.submitter.providers = (tasks.SleepServer(), tasks.Recorder(), tasks.Broken())
     tasks.LOADS.clear()
 
 
@@ -1276,6 +1302,8 @@ def test_providers_load_on_the_granted_device(pool, tasks):
         ("l4", "NVIDIA L40S", False),
         ("l40s", "NVIDIA L40S", True),
         ("a40", "NVIDIA A400", False),
+        ("a100-80gb", "NVIDIA A100-SXM4-80GB", True),
+        ("80gb-a100", "NVIDIA A100-SXM4-80GB", False),
     ],
 )
 def test_gpu_type_matches_whole_tokens(pool, gpu_type, product, starts):
@@ -1507,3 +1535,30 @@ def test_bound_loads_on_the_process_device(tmp_path, tasks):
         resident.set_process_device(None)
         resident.close_process_set()
     assert tasks.LOADS == [("recorder", Device("cuda", 0))]
+
+
+def test_load_infrastructure_faults_are_bounded(pool, tasks):
+    """A provider whose load always fails (an infrastructure fault under the default classifier):
+    each fault writes a ``restart`` generation at the ``load`` phase, and at
+    ``infrastructure_replacements`` every job of the ticket is ``failed`` (``InfrastructureFault``),
+    so the worker stops reclaiming it and exits on idle."""
+    _providers(pool, tasks)
+    jobs = [pool.job(tasks.UseBroken(model="m", x=i), f"b{i}") for i in range(2)]
+    pool.put(jobs)
+    worker, code = _run(pool)
+    assert code == 0
+    assert worker.claims == [2, 2, 2]
+    for job in jobs:
+        gens = pool.generations(job)
+        assert [(g["cause"], g["phase"]) for g in gens] == [
+            ("put", None),
+            ("restart", "load"),
+            ("restart", "load"),
+        ]
+    failed = pool.outcomes()
+    assert sorted(o["outcome"] for o in failed) == ["failed", "failed"]
+    for o in failed:
+        assert o["fault"]["type"] == "InfrastructureFault"
+        assert "3 infrastructure faults" in o["fault"]["message"]
+        assert "load" in o["fault"]["message"]
+    assert [kind for kind, _ in tasks.LOADS] == ["broken"] * 3

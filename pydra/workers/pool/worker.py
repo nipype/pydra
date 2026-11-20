@@ -140,12 +140,12 @@ def _tokens(name: str) -> list[str]:
 
 
 def _gpu_type_matches(gpu_type: str, product: str) -> bool:
-    """Whether ``gpu_type``'s tokens appear, whole and in order, among the product name's:
-    ``h100`` matches "NVIDIA H100 80GB HBM3", ``a10`` does not match "NVIDIA A100-SXM4-80GB".
+    """Whether ``gpu_type``'s tokens appear, whole and in order (not necessarily adjacent), among
+    the product name's: ``h100`` matches "NVIDIA H100 80GB HBM3", ``a100-80gb`` matches "NVIDIA
+    A100-SXM4-80GB", and ``a10`` does not match it.
     """
-    want, have = _tokens(gpu_type), _tokens(product)
-    n = len(want)
-    return bool(want) and any(have[i : i + n] == want for i in range(len(have) - n + 1))
+    want, have = _tokens(gpu_type), iter(_tokens(product))
+    return bool(want) and all(token in have for token in want)
 
 
 def check_hardware(cls: WorkerClass, hardware: HardwareClass) -> WorkerClass:
@@ -800,9 +800,12 @@ class Worker:
         if fault.kind == "resource":
             self._resource(claim, entries, fault, "load")
             return
-        # an infrastructure fault requeues the ticket uncharged; holding it is the policy's (W7)
+        # an infrastructure fault requeues the ticket's jobs, bounded per job; holding the
+        # residency instead is the policy's (W7)
+        group: dict = {"stop": False}
+        for entry in entries:
+            self._infrastructure(claim, entry, fault, group, phase="load")
         self._release(claim)
-        self.stop.wait(self.settings.poll_s)
 
     def _infrastructure(
         self,
@@ -811,11 +814,12 @@ class Worker:
         fault: FaultRecord,
         group: dict,
         sample: Sample | None = None,
+        phase: str = "call",
     ) -> str:
         """Requeue a job after an infrastructure fault, uncharged, under a ``restart`` generation at
-        the ``call`` phase written now; at ``infrastructure_replacements`` such faults it is
-        ``failed`` with an ``InfrastructureFault`` (W7 replaces this with a hold of its
-        residency). The ticket is released either way."""
+        ``phase`` (``call`` or ``load``) written now; at ``infrastructure_replacements`` such faults
+        it is ``failed`` with an ``InfrastructureFault`` naming the count and the phase (W7 replaces
+        this with a hold of its residency). The caller releases the ticket."""
         current = claim.current(entry)
         if current is None:
             group["stop"] = True
@@ -826,8 +830,8 @@ class Worker:
                 "infrastructure",
                 "InfrastructureFault",
                 f"{faults} infrastructure faults (the budget is "
-                f"{self.faults.infrastructure_replacements}); the last: {fault.type}: "
-                f"{fault.message}",
+                f"{self.faults.infrastructure_replacements}); the last, at {phase}: "
+                f"{fault.type}: {fault.message}",
                 fault.phase,
                 gap=fault.gap,
             )
@@ -838,11 +842,12 @@ class Worker:
                 )
             claim.outcome(entry, current[1]["attempt"], "failed", **fields)
             return "failed"
-        claim.restart(entry, phase="call")
+        claim.restart(entry, phase=phase)
         logger.warning(
-            "infrastructure fault %d of %s: %s: %s; requeued",
+            "infrastructure fault %d of %s at %s: %s: %s; requeued",
             faults,
             entry.checksum,
+            phase,
             fault.type,
             fault.message,
         )
