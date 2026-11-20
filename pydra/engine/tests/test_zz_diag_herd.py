@@ -3,7 +3,6 @@
 import collections
 import functools
 import os
-import shutil
 import threading
 import time
 from pathlib import Path
@@ -12,6 +11,7 @@ import pytest
 
 import pydra.engine.portable.store as mod
 from pydra.engine.portable.store import PortableStore
+from pydra.engine.tests.test_portable_store import rmtree
 from pydra.utils.storagedir import IS_WINDOWS, StorageDir, StorePolicy
 
 CTX = {"python": "3.12", "platform": "test", "n": 1}
@@ -126,7 +126,7 @@ def test_zz_diag_herd(tmp_path, monkeypatch):
             for d in (tmp_path / "root" / "results@1").iterdir()
             if (d / name).exists()
         ][0]
-        shutil.rmtree(victim)
+        rmtree(victim)
         victim.write_text("x")
         barrier = threading.Barrier(16)
         out = [None] * 16
