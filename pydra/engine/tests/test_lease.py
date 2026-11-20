@@ -874,7 +874,7 @@ def test_release_retries_a_rename_refused_while_a_waiter_reads(
             raise sharing_violation(src)
         return real_rename(src, dst, *args, **kwargs)
 
-    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)  # patience 1 s
     with lease:
         monkeypatch.setattr(os, "rename", rename)
     assert len(refused) == 3
