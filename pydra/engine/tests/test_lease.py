@@ -1035,6 +1035,54 @@ def test_released_remains_do_not_hold_the_lease(tmp_path):
     assert not lockfile.exists()
 
 
+def test_stall_between_the_marks_and_the_clock_is_not_the_holders_age(
+    tmp_path, monkeypatch
+):
+    """A waiter stalled after it listed the marks is not told the holder is older for
+    it: the storage clock is read before the marks, so a stall only under-estimates
+    the age of a live holder."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    now = time.time()
+    for path in [lockfile, token_dir, *token_dir.iterdir()]:
+        os.utime(path, (now, now))  # the holder just renewed
+    storage = Clock(now)
+    newest_mtime = DirectoryLease._newest_mtime
+
+    def stalled(self, entries):
+        marks = newest_mtime(self, entries)
+        storage.now += 3 * SLOW.stale_after  # the waiter is descheduled here
+        return marks
+
+    monkeypatch.setattr(DirectoryLease, "_newest_mtime", stalled)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW, clock=storage)
+    assert not lease._judge()
+    assert token_dir.is_dir()
+    assert lease.broke == []
+
+
+def test_beat_that_fails_is_logged(tmp_path, monkeypatch, caplog):
+    """A heartbeat whose ``mkdir`` fails but is not yet lasting is retried, and says so
+    in the debug log, so a failing renewal can be told from a stalled one."""
+    lockfile = tmp_path / "abc.lock"
+    real_mkdir = os.mkdir
+
+    def mkdir(path, *args, **kwargs):
+        if Path(path).name == "beat-1":
+            raise sharing_violation(path)
+        return real_mkdir(path, *args, **kwargs)
+
+    caplog.set_level("DEBUG", logger="pydra")
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
+    with lease:
+        monkeypatch.setattr(os, "mkdir", mkdir)
+        deadline = time.monotonic() + 5
+        while "Could not renew" not in caplog.text and time.monotonic() < deadline:
+            time.sleep(0.01)
+        monkeypatch.setattr(os, "mkdir", real_mkdir)
+    assert "Could not renew" in caplog.text
+
+
 def test_unreadable_heartbeat_is_not_taken_for_a_stale_lease(tmp_path, monkeypatch):
     """A holder's heartbeat marks that cannot be read for a moment (on Windows, open in
     another process) are not absent: the lease is not judged by the older marks left."""
