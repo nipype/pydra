@@ -13,7 +13,12 @@ it are gone: on Linux it is a child subreaper (a process-wide setting, unlike
 by it. On other systems there is no subreaper and a descendant that leaves the group and
 whose parent dies is re-parented to init and is not found. When the lifeline reaches end
 of file the shim stops its whole tree, TERM then, after a grace period, KILL, refreshing
-the tree until it is empty. On SIGTERM it forwards TERM to its tree once and carries on.
+the tree until it is empty or a bound passes. On SIGTERM it forwards TERM to its tree once
+and carries on.
+
+While the command runs the shim only blocks, on the lifeline and a wakeup pipe fed by
+SIGCHLD and SIGTERM; the process table is scanned after the command exits, on SIGTERM
+and during teardown, never continuously.
 """
 
 import json
@@ -26,7 +31,9 @@ import time
 import typing as ty
 
 GRACE = 5.0
+TEARDOWN_BOUND = 20.0
 _POLL = 0.1
+_IDLE_POLL = 1.0  # after the command exits with survivors, where nothing signals
 
 # (ppid, pgid, running, start): ``running`` is False for a zombie; ``start`` is a token
 # that identifies the process across pid reuse (None if the OS gives none)
@@ -68,15 +75,17 @@ def _process_table() -> dict[int, _Row]:
             stdout=subprocess.PIPE,
             text=True,
         )
-        _HELPERS.add(ps.pid)  # a child of ours that must not count as a descendant
-        try:
-            out, _ = ps.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            ps.kill()
-            ps.communicate()
-            return table
     except OSError:
         return table
+    _HELPERS.add(ps.pid)  # a child of ours that must not count as a descendant
+    try:
+        out, _ = ps.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        ps.kill()
+        ps.communicate()
+        return table
+    finally:
+        _HELPERS.discard(ps.pid)  # reaped; the pid may be reused
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 4:
@@ -89,6 +98,7 @@ def _process_table() -> dict[int, _Row]:
                 )
             except ValueError:
                 continue
+    table.pop(ps.pid, None)
     return table
 
 
@@ -111,7 +121,7 @@ def _tree(me: int) -> set[int]:
     """The running processes below ``me`` and in its group, not ``me``"""
     table = _process_table()
     found = _descendants(table, me) | {p for p, row in table.items() if row[1] == me}
-    found -= _HELPERS | {me}
+    found -= {me}
     return {p for p in found if table.get(p, (0, 0, False, None))[2]}
 
 
@@ -123,12 +133,32 @@ def _signal(pids: ty.Iterable[int], sig: int) -> None:
             pass
 
 
+def _reap(child_pid: int) -> int | None:
+    """Reap every exited child (the command and adopted orphans); the command's exit
+    code if it was among them"""
+    code = None
+    while True:
+        try:
+            pid, wstatus = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return code
+        if pid == 0:
+            return code
+        if pid == child_pid:
+            code = os.waitstatus_to_exitcode(wstatus)
+
+
 def main(args: list[str]) -> int:
     lifeline = int(args[0])
     with os.fdopen(int(args[1]), "r") as cfg_file:
         cfg_file.seek(0)
         cfg = json.load(cfg_file)
+    wake_r, wake_w = os.pipe()
+    os.set_blocking(wake_r, False)
+    os.set_blocking(wake_w, False)
+    signal.set_wakeup_fd(wake_w)
     flags = {"term": False}
+    signal.signal(signal.SIGCHLD, lambda *_: None)  # so that SIGCHLD feeds the pipe
     signal.signal(signal.SIGTERM, lambda *_: flags.__setitem__("term", True))
     if sys.platform.startswith("linux"):
         try:
@@ -142,39 +172,53 @@ def main(args: list[str]) -> int:
     status: int | None = None  # the command's exit code, once reaped here
     forwarded = False
     teardown_at: float | None = None
+    eof = False
     while True:
-        while True:  # reap the command and any adopted orphan
-            try:
-                pid, wstatus = os.waitpid(-1, os.WNOHANG)
-            except ChildProcessError:
-                if status is None:
-                    status = child.returncode if child.returncode is not None else 0
-                break
-            if pid == 0:
-                break
-            if pid == child.pid:
-                status = os.waitstatus_to_exitcode(wstatus)
+        code = _reap(child.pid)
+        if code is not None:
+            status = code
+        elif status is None and child.returncode is not None:
+            status = child.returncode  # reaped by Popen itself
         if flags["term"] and not forwarded:
             forwarded = True
             _signal(_tree(me), signal.SIGTERM)
-        tree = _tree(me)
-        if status is not None and not tree:
+        if status is not None and not _tree(me):
             break
-        if teardown_at is None:
-            ready, _, _ = select.select([lifeline], [], [], _POLL)
-            if ready and os.read(lifeline, 1) == b"":
-                teardown_at = time.monotonic()
         if teardown_at is not None:
-            # a fresh tree each pass: a descendant that appeared since the last one is
-            # found before its parent dies and leaves it to init
+            if time.monotonic() - teardown_at > TEARDOWN_BOUND:
+                print(
+                    "procshim: tree still alive after teardown bound, exiting",
+                    file=sys.stderr,
+                )
+                break
             fresh = _tree(me)
             _signal(fresh, signal.SIGTERM)
             if time.monotonic() - teardown_at > GRACE:
                 _signal(fresh, signal.SIGKILL)
             time.sleep(_POLL)
+            continue
+        # block: nothing to scan for until the command exits, a signal arrives, or the
+        # lifeline closes; with survivors and no command, poll slowly
+        fds = [wake_r] if eof else [lifeline, wake_r]
+        ready, _, _ = select.select(fds, [], [], None if status is None else _IDLE_POLL)
+        if wake_r in ready:
+            try:
+                os.read(wake_r, 4096)
+            except BlockingIOError:
+                pass
+        if lifeline in ready and os.read(lifeline, 1) == b"":
+            eof = True
+            teardown_at = time.monotonic()
+    signal.set_wakeup_fd(-1)
     if status is not None and status < 0:
-        signal.signal(-status, signal.SIG_DFL)
-        os.kill(me, -status)
+        sig = -status
+        if sig != signal.SIGKILL:
+            try:
+                signal.signal(sig, signal.SIG_DFL)
+            except (OSError, ValueError):
+                sig = signal.SIGKILL
+        os.kill(me, sig)
+        time.sleep(1)  # the signal is pending delivery; fall through if it was ignored
     return status or 0
 
 

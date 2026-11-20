@@ -27,6 +27,33 @@ CHILD = textwrap.dedent("""
     """)
 
 
+@pytest.fixture(autouse=True)
+def _no_leftover_shims(monkeypatch):
+    """Every group a test starts is stopped (and every pid it recorded killed) when the
+    test ends, pass or fail"""
+    from pydra.engine import procgroup
+
+    started = []
+    original = procgroup.ProcessGroup.start.__func__
+
+    def start(cls, *args, **kwargs):
+        group = original(cls, *args, **kwargs)
+        started.append(group)
+        return group
+
+    monkeypatch.setattr(procgroup.ProcessGroup, "start", classmethod(start))
+    yield
+    for group in started:
+        try:
+            group.stop(term_timeout=1, kill_timeout=5)
+        except Exception:  # pragma: no cover
+            pass
+        try:
+            os.killpg(group.pid, signal.SIGKILL)
+        except (OSError, AttributeError):
+            pass
+
+
 def _alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -42,6 +69,18 @@ def _alive(pid: int) -> bool:
     except OSError:  # pragma: no cover
         return True
     return bool(out) and not out.startswith("Z")
+
+
+def _kill_recorded(path):
+    try:
+        pids = [int(p) for p in path.read_text().split()]
+    except (OSError, ValueError):
+        return
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
 
 
 def _wait_for(path, timeout=20):
@@ -555,6 +594,7 @@ def test_child_group_is_gone_when_the_parent_is_sigkilled(tmp_path):
     finally:
         parent.kill()
         parent.wait(timeout=20)
+        _kill_recorded(record)
 
 
 @posix_only
@@ -644,6 +684,7 @@ def test_daemonised_server_is_gone_when_the_parent_is_sigkilled(tmp_path):
     finally:
         parent.kill()
         parent.wait(timeout=20)
+        _kill_recorded(record)
 
 
 @posix_only
@@ -739,3 +780,51 @@ def test_provider_env_and_cwd_reach_only_the_command(tmp_path):
         assert group.proc.wait(timeout=20) == 0  # the shim itself ran
     finally:
         group.stop()
+
+
+@posix_only
+def test_idle_shim_uses_no_cpu(tmp_path):
+    import psutil
+
+    from pydra.engine.procgroup import ProcessGroup
+
+    record = tmp_path / "pids"
+    group = ProcessGroup.start([sys.executable, "-c", CHILD, str(record)])
+    _wait_for(record)
+    shim = psutil.Process(group.pid)
+    before = sum(shim.cpu_times()[:2])
+    time.sleep(3)
+    assert sum(shim.cpu_times()[:2]) - before < 0.1
+
+
+@posix_only
+def test_process_table_helpers_are_not_accumulated(tmp_path, monkeypatch):
+    from pydra.engine import _procshim
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    ps = bindir / "ps"
+    ps.write_text("#!/bin/sh\necho '  10     1    10 Ss   Mon Nov 20 07:47:20 2026'\n")
+    ps.chmod(ps.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(_procshim, "_USE_PROC", False)
+    for _ in range(5):
+        _procshim._process_table()
+    assert _procshim._HELPERS == set()
+
+
+@posix_only
+@pytest.mark.parametrize("sig", [signal.SIGKILL, signal.SIGTERM, signal.SIGSEGV])
+def test_command_killed_by_a_signal_is_relayed(sig):
+    """The leader exits as the command did, with no traceback (SIGKILL cannot be
+    re-installed as a handler)"""
+    from pydra.engine.procgroup import ProcessGroup
+
+    code = f"import os; os.kill(os.getpid(), {int(sig)})"
+    group = ProcessGroup.start(
+        [sys.executable, "-c", code], stderr=subprocess.PIPE, text=True
+    )
+    err = group.proc.stderr.read()
+    assert group.proc.wait(timeout=20) == -sig
+    assert "Traceback" not in err
+    group.stop()
