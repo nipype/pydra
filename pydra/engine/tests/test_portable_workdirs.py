@@ -518,7 +518,7 @@ def test_dedupe_lease_second_submitter_serves(tmp_path):
         thread.join()
         assert first.result().outputs.out == 2
     assert log.read_text() == "ran\n"
-    assert served.outputs.out == 2 and second.committed is None
+    assert served.outputs.out == 2 and second.committed.served is True
     assert store.dedupe is True
 
 

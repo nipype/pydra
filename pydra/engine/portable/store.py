@@ -47,6 +47,10 @@ from pydra.engine.portable.identity import (
 from pydra.engine.portable.layout import (
     _TEMP_RE,
     LayoutHeader,
+    LegacyLayout,
+    StoreLayoutAbsent,
+    StoreLayoutMismatch,
+    StoreLayoutUnknown,
     cdir_for,
     open_layout,
     shard_for,
@@ -139,6 +143,12 @@ class Committed:
     stored: bool
     kept: str | None
     served: bool = False
+
+
+class CommitHookError(RuntimeError):
+    """``on_commit`` added a member to the entry it was given. The hook keeps its records in
+    sidecars or the audit directory; the members of an entry are the entry format's alone.
+    """
 
 
 class StoreNotWritable(StoreUnavailable):
@@ -346,9 +356,13 @@ class PortableStore:
         for `PickleStore`, or a `~pydra.engine.portable.reuse.Reuse` hook. Bound to this store
         at construction and again after unpickling.
     on_commit : callable, optional
-        ``on_commit(staged, checksum, key, context, digest)``, called with the staging
-        directory of the entry and before its rename, after ``Reuse.compare`` (section 7.4).
-        If it raises, nothing is committed.
+        ``on_commit(staged, checksum, key, context, digest)``. It may run more than once for one
+        entry (a publish stages again if its staging directory was collected, and a job that
+        loses a race still ran it), so it must be idempotent, and a record it writes can
+        describe an entry that never became visible. It must not add members to ``staged``
+        (`CommitHookError`): it writes through `write_sidecar` or the audit directory. It is
+        called with the staging directory of the entry before its rename, after
+        ``Reuse.compare`` (section 7.4). If it raises, nothing is committed.
     legacy
         Accepted and not yet used.
     dedupe : bool, optional
@@ -440,10 +454,31 @@ class PortableStore:
             made |= self._entries_dir(handle)
             if made:
                 handle.sync()
+        self._checked: set[str] = set()
         for ro in self.readonly:
-            with StorageDir.open_root(ro.path, policy, trust=ro.trust) as handle:
-                open_layout(handle, expected, create=False)
+            self._check_readonly(os.path.abspath(os.fspath(ro.path)), ro.trust)
         self.reuse.bind(self)
+
+    def _check_readonly(self, path: str, trust: Trust) -> bool:
+        """Whether the read-only root at ``path`` carries this store's header. A root that
+        cannot be reached or holds no layout is logged and skipped, to be tried again at the
+        next lookup; a header that differs raises `StoreLayoutMismatch` (or the layout error
+        that says why it cannot be read)."""
+        if path in self._checked:
+            return True
+        try:
+            with StorageDir.open_root(path, self.policy, trust=trust) as handle:
+                open_layout(handle, self._expected, create=False)
+        except StoreLayoutAbsent as err:
+            logger.warning("the read-only root %s was skipped: %s", path, err)
+            return False
+        except (StoreLayoutMismatch, StoreLayoutUnknown, LegacyLayout):
+            raise
+        except OSError as err:
+            logger.warning("the read-only root %s was skipped: %s", path, err)
+            return False
+        self._checked.add(path)
+        return True
 
     def __reduce__(self) -> tuple:
         return (_rebuild, (self._args,))
@@ -901,6 +936,37 @@ class PortableStore:
                 if source is not None:
                     source.close()
 
+    def _commit_hook(
+        self,
+        staged: Path,
+        checksum: str,
+        key: KeyRecord,
+        context: Context,
+        digest: str,
+    ) -> None:
+        """Run ``on_commit``, then refuse an entry it added a member to: the member list is in
+        ``entry.json`` already, so such an entry would be unreadable."""
+        hook = ty.cast(ty.Callable, self.on_commit)
+
+        def listing() -> set[str]:
+            return {
+                os.path.relpath(os.path.join(d, f), staged)
+                for d, dirs, files in os.walk(staged)
+                for f in [*dirs, *files]
+            }
+
+        before = listing()
+        hook(staged, checksum, key, context, digest)
+        added = sorted(listing() - before)
+        if added:
+            name = getattr(hook, "__qualname__", None) or repr(hook)
+            raise CommitHookError(
+                f"the commit hook {name} added {', '.join(added)} to the entry being "
+                "committed; a hook keeps its records in a sidecar (store.write_sidecar) or "
+                "the audit directory, never among the members of an entry (RFC 0003 "
+                "section 7.4)"
+            )
+
     def _compare(
         self,
         checksum: str,
@@ -984,7 +1050,9 @@ class PortableStore:
                     if verify is not None:
                         self._compare(checksum, verify, outputs, digest, task)
                     if self.on_commit is not None:
-                        self.on_commit(Path(stage.path), checksum, key, context, digest)
+                        self._commit_hook(
+                            Path(stage.path), checksum, key, context, digest
+                        )
                     stage.set_mode(policy.entry_mode)
                     if policy.durability == "member":
                         stage.sync()
@@ -2045,6 +2113,34 @@ class PortableStore:
             logger.warning("not served: %s", err)
             return None
 
+    def _read_readonly(
+        self, ref: EntryRef, task: "Task | None", shard: str, trust: Trust
+    ) -> Result:
+        """Read an entry of a read-only root under that root's trust, writing nothing."""
+        try:
+            with StorageDir.open_root(ref.root, self.policy, trust=trust) as root:
+                stored, where = self._read_entry(
+                    root, ref, task, shard, trust=trust, readonly=True
+                )
+        except OSError as err:
+            if isinstance(err, (StoreUnavailable, FileNotFoundError)):
+                raise
+            raise StoreUnavailable(err.errno, f"{ref.cdir}: {err}") from err
+        return self._result_at(stored, where, task)
+
+    def record_served(self, job: "Job", result: Result) -> None:
+        """Record the entry a `Hit` served as the outcome of ``job``: ``<work dir>/_committed.json``
+        (``served``, naming the entry) and ``job.committed``, so that a process that did not
+        look it up (the Slurm and SGE adapters, a later ``job.result()``) reads that entry
+        (RFC 0003 section 7.2). Every hit is recorded, the job's own address included: a settled
+        reader that finds no record waits out the visibility timeout before it looks there.
+        """
+        committed = result.committed
+        if committed is None:
+            return
+        self._write_committed(job, self.work_dir(job), committed, "entry")
+        job.committed = committed
+
     def _read_ref(self, ref: EntryRef, task: "Task | None", shard: str) -> Result:
         with self._open() as root:
             try:
@@ -2100,15 +2196,20 @@ class PortableStore:
     ) -> Result | None:
         if committed.stored:
             ref = committed.entry
-            if ref.cdir != cdir_for(job.checksum) or os.path.abspath(
-                ref.root
-            ) != os.path.abspath(self.path):
+            shard = shard_for(ref.cdir, job.checksum, self.header.shard)
+            try:
+                trust, readonly = self._kind_of(ref.root)
+            except ValueError:
+                trust, readonly = self.trust, False
+                ref = attrs.evolve(ref, root="")
+            if ref.cdir != cdir_for(job.checksum) or not ref.root:
                 raise CorruptEntry(
                     f"the committed entry {ref.cdir} is not the entry of the job"
                 )
-            result = self._read_ref(
-                ref, job.task, shard_for(ref.cdir, job.checksum, self.header.shard)
-            )
+            if not readonly:
+                result = self._read_ref(ref, job.task, shard)
+            else:
+                result = self._read_readonly(ref, job.task, shard, trust)
         elif wd is None or committed.kept is None:
             return None
         elif os.path.basename(committed.kept) == _KEPT_ENTRY:
@@ -2294,6 +2395,8 @@ class PortableStore:
         shard = shard_for(cdir, checksum, self.header.shard)
         found: list[tuple[EntryRef, Context, str]] = []
         for path, trust, readonly in self._roots():
+            if readonly and not self._check_readonly(path, trust):
+                continue
             try:
                 found.extend(self._stored_in(path, trust, cdir, shard))
             except FileNotFoundError:
@@ -2379,8 +2482,10 @@ class PortableStore:
         stored: ty.Any = None,
     ) -> Result | None:
         """The `ResultStore` adapter of `find`: the `Hit`'s result, or None. ``stored`` (the
-        contexts `check_declared_code` read) is not used: the entries are ranked afresh,
-        from their ``context.json`` and its digest."""
+        contexts `check_declared_code` read) is not used, because it carries no ``context.json``
+        digest, which is what binds a verdict to the bytes it reads: the entries are ranked
+        afresh. No `Job` path calls this on a `PortableStore` (it reads through `find` and
+        `read_result`)."""
         found = self._find(checksum, context, task)
         return found.result if isinstance(found, Hit) else None
 
@@ -2431,6 +2536,9 @@ class PortableStore:
                 continue
             stored, where = read
             result = self._result_at(stored, where, task)
+            result.committed = Committed(
+                candidate.entry, False, stored.digest, stored.digest, True, None, True
+            )
             if candidate.entry.fingerprint != mine:
                 result.cross_context = True
                 result.reused_in = dict(context)
@@ -2510,9 +2618,13 @@ class PortableStore:
         try:
             for part in parts:
                 with self._denied(os.path.join(handles[-1].path, part)):
+                    parent = handles[-1]
+                    made = not self._exists_in(parent, part)
                     handles.append(
-                        handles[-1].child(part, create=True, mode=self.policy.side_mode)
+                        parent.child(part, create=True, mode=self.policy.side_mode)
                     )
+                    if made:
+                        parent.sync()  # the new name is durable before a record is
         except BaseException:
             for h in handles:
                 h.close()
@@ -2520,6 +2632,34 @@ class PortableStore:
         for h in handles[:-1]:
             h.close()
         return handles[-1]
+
+    @staticmethod
+    def _exists_in(parent: StorageDir, name: str) -> bool:
+        try:
+            parent.lstat(name)
+        except FileNotFoundError:
+            return False
+        return True
+
+    def write_sidecar(self, name: str, member: str, data: bytes) -> None:
+        """Write ``data`` as ``member`` of the sidecar ``name`` atomically and durably: to a
+        temporary name, flushed, renamed over ``member``, and the directory flushed, so a
+        reader sees no file or a whole one and the record survives a crash. A hook's reuse
+        record (``Reuse.served``) or comparison record is written this way.
+
+        Raises
+        ------
+        ValueError
+            ``member`` is not a plain file name.
+        StoreNotWritable
+            This user cannot write the sidecar.
+        """
+        if not member or member in (".", "..") or "/" in member or "\\" in member:
+            raise ValueError(f"a sidecar member is a plain file name, not {member!r}")
+        with self.sidecar(name) as side:
+            with self._denied(os.path.join(side.path, member)):
+                self._write_file(side, member, data, self.policy.file_mode)
+                side.sync()
 
     # -- de-duplication leases ---------------------------------------------------------------
 

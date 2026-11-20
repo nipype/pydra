@@ -502,7 +502,13 @@ class Job(ty.Generic[TaskType]):
         if find is not None:
             found = find(self)
             self.verify = getattr(found, "candidate", None)
-            return getattr(found, "result", None)
+            result = getattr(found, "result", None)
+            record = getattr(self.store, "record_served", None)
+            if result is not None and record is not None and self._has_work_dir:
+                record(
+                    self, result
+                )  # a reader in another process finds what was served
+            return result
         if self._has_work_dir:
             return self.store.read_own(self)
         return self.result()
