@@ -630,6 +630,7 @@ def test_follower_cost_10k_jobs(tmp_path, tasks, pools, monkeypatch):
 # -- substrates, scaling and failed starts -------------------------------------------------------
 
 
+@pytest.mark.skipif(not POSIX, reason="the fake nvidia-smi is a shebang script")
 def test_pool_never_starting_holds_jobs(tmp_path, tasks, pools, fake_nvidia_smi):
     """A class whose workers never start (an A100 granted to an H100 class) backs off and, after
     ``start_failures`` consecutive failed starts, is broken: its jobs are ``NotRun(held=True)``
@@ -661,6 +662,7 @@ def test_pool_never_starting_holds_jobs(tmp_path, tasks, pools, fake_nvidia_smi)
     assert _ready_marks(pool.root) == []
 
 
+@pytest.mark.skipif(not POSIX, reason="the fake nvidia-smi is a shebang script")
 def test_one_worker_per_gpu_local(tmp_path, tasks, pools, fake_nvidia_smi):
     """On a host whose ``nvidia-smi`` lists two GPUs, a one-GPU class runs one worker per device,
     each given its device through ``CUDA_VISIBLE_DEVICES``; a third cannot start."""
@@ -901,6 +903,7 @@ def test_cancel_withdraws_only_unclaimed_tickets(tmp_path, tasks, pools):
         claim.release()
 
 
+@pytest.mark.skipif(not POSIX, reason="the fake nvidia-smi is a shebang script")
 def test_refused_ticket_replaced_one_class_up(tmp_path, tasks, pools, fake_nvidia_smi):
     """A worker of a class whose device memory was unknown at placement reads less than the job
     declares and refuses the ticket; the follower re-places the job on the next class of the ladder,
