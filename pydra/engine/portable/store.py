@@ -487,9 +487,11 @@ class PortableStore:
                 with self._quarantine_dir(root) as q:
                     moved = _inode_name(st)
                     parent.rename(name, q, moved)
-                    with contextlib.suppress(OSError, NotImplementedError):
+                    with contextlib.suppress(OSError):
                         os.utime(
-                            os.path.join(q.path, moved), None, follow_symlinks=False
+                            os.path.join(q.path, moved),
+                            None,
+                            follow_symlinks=os.utime not in os.supports_follow_symlinks,
                         )
         except FileNotFoundError:
             return
