@@ -232,7 +232,9 @@ class Field:
     """
 
     name: str | None = None
-    provided: str | None = None
+    # Not compared, so not hashed: the checksum of a task that declares no provided field
+    # stays as it was, and a provided field's value is its spec, hashed like any input
+    provided: str | None = attrs.field(default=None, eq=False)
     type: ty.Type[ty.Any] = attrs.field(
         validator=is_type,
         default=ty.Any,
