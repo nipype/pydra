@@ -282,3 +282,40 @@ def test_every_field_of_a_template_has_its_own_digest():
         record = task_record(shell.define("tool", inputs=inputs)(**{"f0": 1}))
         fields = record["task"]["template"]["fields"]
         assert len(set(fields.values())) == len(fields)
+
+
+def _consume(t: object) -> int:
+    return 1
+
+
+def test_task_value_is_keyed_by_template_and_version():
+    """A task passed as an input value is a value: its checksum is the task's
+    environment-free one, so its command and declared version are in it (RFC 0004 3.1)
+    """
+    consumer = python.define(_consume)
+    assert consumer(t=_ls("-l")(flag=True))._checksum != (
+        consumer(t=_ls("-a")(flag=True))._checksum
+    )
+    one = shell.define("tool <x:int>", version="1")
+    two = shell.define("tool <x:int>", version="2")
+    assert consumer(t=one(x=1))._checksum != consumer(t=two(x=1))._checksum
+    assert consumer(t=one(x=1))._checksum == consumer(t=one(x=1))._checksum
+    # a split task value keeps its splitter in the encoding
+    assert consumer(t=one().split(x=[1, 2]))._checksum != (
+        consumer(t=one(x=1))._checksum
+    )
+
+
+def test_version_command_elements_are_strings():
+    with pytest.raises(ValueError, match="list of strings"):
+        shell.define("tool", version_command=["tool", 1], version_pattern=r"(\d+)")
+
+
+def test_no_match_with_empty_stdout_shows_stderr_and_return_code(tmp_path, fresh_memo):
+    command = _script(
+        tmp_path,
+        "import sys\nprint('openjdk 17.0.1', file=sys.stderr)\nsys.exit(3)\n",
+    )
+    task = shell.define("tool", version_command=command, version_pattern=r"jdk (\S+)")()
+    with pytest.raises(VersionCommandError, match=r"return code 3.*openjdk 17"):
+        _job(task).checksum

@@ -97,13 +97,6 @@ def field_digests(
     fields = {f.name: f for f in get_fields(task)}
     digests = {}
     if task._task_type() == "shell":
-        # the specs stay alive until every field is hashed: the cache memoises by
-        # ``id``, which a freed spec's successor would reuse
-        specs = {
-            f.name: template_spec(f, cache)
-            for f in fields.values()
-            if f.name != "executable" and TEMPLATE_PREFIX + f.name not in carried
-        }
         for field in fields.values():
             if field.name == "executable":
                 continue
@@ -111,7 +104,7 @@ def field_digests(
             digests[key] = (
                 carried[key][1]
                 if key in carried
-                else f"py@1:{hash_function(specs[field.name], cache=cache)}"
+                else f"py@1:{hash_function(template_spec(field, cache), cache=cache)}"
             )
     for name, value in inputs.items():
         if name in carried and carried[name][0] is getattr(task, name):

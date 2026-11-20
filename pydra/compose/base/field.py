@@ -222,7 +222,7 @@ class Field:
     )
     # documentation: attrs equality sees it, the identity of a task does not (see
     # `pydra.utils.hash.hashed_attribute`)
-    help: str = attrs.field(default="", metadata={"documentation": True})
+    help: str = attrs.field(default="", metadata={"pydra.documentation": True})
     requires: list[RequirementSet] = attrs.field(
         factory=list, converter=requires_converter
     )

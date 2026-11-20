@@ -57,7 +57,11 @@ def check_arguments(
             "give one of version= and version_command=, not both: a declared version "
             "is the version, a command asks the tool"
         )
-    if isinstance(version_command, str) or not version_command:
+    if (
+        isinstance(version_command, str)
+        or not version_command
+        or not all(isinstance(c, str) for c in version_command)
+    ):
         raise ValueError(
             f"version_command must be a non-empty list of strings, not {version_command!r}"
         )
@@ -100,9 +104,15 @@ def run_version_command(
         raise VersionCommandError(f"version_command {list(command)!r} failed: {e}")
     match = re.search(pattern, completed.stdout)
     if match is None or match.group(1) is None:
+        shown = completed.stdout[:500]
+        if not completed.stdout.strip():
+            shown = (
+                f"(empty stdout, return code {completed.returncode}; "
+                f"stderr: {completed.stderr[:500]!r})"
+            )
         raise VersionCommandError(
             f"version_pattern {pattern!r} does not match the stdout of version_command "
-            f"{list(command)!r}:\n{completed.stdout[:500]}"
+            f"{list(command)!r}:\n{shown}"
         )
     memo[key] = match.group(1)
     return memo[key]

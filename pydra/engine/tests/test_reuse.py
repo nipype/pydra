@@ -415,6 +415,8 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
     # the record carries the walk classification, which these environment variables set
     monkeypatch.delenv("PYDRA_USER_PACKAGES", raising=False)
     monkeypatch.delenv("PYDRA_CODE_HASH", raising=False)
+    # the goldens are the ``pydra-identity@2`` values of RFC 0004 I5a (the shell template
+    # in the record, no ``help`` in the ``Outputs`` digest), not a regression of the I1 ones
     # the module name depends on pytest's import mode, and is part of a declared version
     monkeypatch.setattr(inc_one, "__module__", "pydra.engine.tests.test_reuse")
     for task, checksum in [

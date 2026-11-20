@@ -14,8 +14,10 @@ pytestmark = pytest.mark.usefixtures("no_network")
 
 
 def _slot(cache_root, task):
-    """The one context slot holding the task's results"""
-    (slot,) = (Path(cache_root) / task._checksum).iterdir()
+    """The one context slot holding the task's results, below the job's checksum (a
+    shell job's includes its environment, which the default submitter makes native)"""
+    checksum = Job(name="slot", task=task, submitter=Submitter()).checksum
+    (slot,) = (Path(cache_root) / checksum).iterdir()
     return slot
 
 

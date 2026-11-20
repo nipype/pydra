@@ -746,10 +746,14 @@ def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
         keys = obj._element_checksums() if obj._splitter else [obj._checksum]
         yield f"__checksum__={keys},".encode()
     else:
-        for field in get_fields(obj):
-            yield f"{field.name}=".encode()
-            yield hash_single(obj._hashed_value(field.name), cache)
-            yield b","
+        # the task's own checksum: its record without the job's fields, so the command
+        # template and a declared version are in it (RFC 0004 section 3.1)
+        checksum = obj._checksum
+        cache.modules |= obj._code_modules or set()
+        cache.refs |= set(obj._code_refs or ())
+        for name, digests in (obj._declared_code or {}).items():
+            cache.declared.setdefault(name, set()).update(digests.split(","))
+        yield f"_checksum={checksum},".encode()
     yield b"_splitter="
     yield hash_single(obj._splitter, cache)
     yield b",_combiner="
