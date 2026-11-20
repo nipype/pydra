@@ -299,7 +299,15 @@ def check_declared_code(
     Returns the stored contexts it read, to be passed to ``lookup`` as ``stored``, or
     None if it read none."""
     code = context.get("code")
-    if not code or (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+    if not code:
+        return None
+    entry_path = getattr(store, "entry_path", None)
+    if entry_path is not None:  # a store whose entries are not its work directories
+        if entry_path(checksum, context).is_dir():
+            return None
+    elif (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+        return None
+    if not hasattr(store, "stored_contexts"):
         return None
     stored = list(store.stored_contexts(checksum))
     moved: dict[str, set[str]] = {}
@@ -381,6 +389,19 @@ class ResultStore(ty.Protocol):
 
     A job is identified by its checksum and the context it runs in. Each pair has
     its own slot, so results recorded in different contexts never overwrite each other.
+
+    Optional methods, found with ``getattr`` by the graph runner and not required of a
+    store:
+
+    ``read_succeeded(checksum, context, task) -> Result | None``
+        The result of a job whose slot records that it succeeded, read without the lease;
+        None when there is no such record, or the result is errored or from another
+        context. The runner settles a job it returns as stored before handing it out
+        (RFC 0002 section 3.1, "Resume"); without it every job is handed out, or looked
+        up first under ``lookup_before_dispatch``. See `PickleStore.read_succeeded`.
+    ``forget_committed(job) -> None``
+        Called once the runner holds a job's outcome, so a store that keeps the outcome in
+        the job's work directory until then can remove it (RFC 0003 section 5.4).
     """
 
     def cache_dir(self, checksum: str, context: Context) -> Path:
