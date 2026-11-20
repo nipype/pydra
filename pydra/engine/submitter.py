@@ -548,13 +548,10 @@ class Submitter:
                 + crash_file
             )
             exc.add_note(error_msg)
-            if raise_errors:
+            # a run that failed leaving no errored result of its own raises: what the store
+            # holds at the job's address is an earlier run's result, never this one's
+            if raise_errors or not self._failed_here(job):
                 raise exc
-            # this run failed: its result is an errored one, never what an earlier run
-            # stored at the same address
-            job._errored = True
-            job._held = None
-            job._cached_result = None
             logger.error("\nTask execution failed\n%s", error_msg)
         finally:
             self.run_start_time = None
@@ -567,6 +564,27 @@ class Submitter:
             raise RuntimeError(no_result_diagnosis(job))
         self._forget(job)
         return result
+
+    @staticmethod
+    def _failed_here(job: "Job[TaskType]") -> bool:
+        """Whether this call's run of ``job`` ended with an errored result of its own (its
+        task or a node failed), which a failed call returns when not raising. Under a store
+        with work directories that is a failure recorded for this attempt, never what the
+        store holds at the job's address, which an earlier run may have stored; the job is
+        then marked errored so that its result is the errored one."""
+        held = job._held
+        if job.errored or (held is not None and held.errored):
+            return True
+        if not job._has_work_dir:
+            return bool(job.result())
+        has_error = getattr(job.store, "_has_error", None)
+        try:
+            failed = has_error is not None and has_error(job.cache_dir, job.attempt)
+        except ValueError:  # never given an attempt
+            failed = False
+        if failed:
+            job._errored = True
+        return failed
 
     def _served(self, job: "Job[TaskType]") -> bool:
         """Whether the store serves the outer job of a call before it is leased, as

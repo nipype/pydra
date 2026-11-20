@@ -575,8 +575,21 @@ def test_a_failed_run_never_returns_an_earlier_stored_result(
     monkeypatch.setattr(Submitter, "submit", broken)
     monkeypatch.setattr(Submitter, "_run_workflow", broken)
     with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
-        result = sub(made, raise_errors=False, rerun=True)
+        # the run left no result of its own: the call raises, as it always has
+        with pytest.raises(RuntimeError, match="the driver broke"):
+            sub(made, raise_errors=False, rerun=True)
+
+
+def test_a_failed_call_not_raising_returns_its_errored_result(tmp_path):
+    """A run whose task fails, with raise_errors=False, returns this run's errored result."""
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        result = sub(Boom(x=1), raise_errors=False)
     assert result.errored
+
+
+@python.define
+def Boom(x: int) -> int:
+    raise ValueError("boom")
 
 
 @python.define
