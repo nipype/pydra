@@ -326,11 +326,17 @@ class Job(ty.Generic[TaskType]):
     @property
     def record_dir(self) -> Path | None:
         """Where the job's audit messages and resource logs go if not its working directory:
-        under a store with work directories, which empties the work directory once the
-        result is published, ``<cache_root>/audit/<uid>``."""
+        under a store with work directories, which empties the work directory once the result
+        is published, the store's ``audit_dir`` (``<root>/audit/<cdir>/<fingerprint>/<attempt>``).
+        """
         if not self._has_work_dir:
             return None
-        return self.cache_root / "audit" / self.uid
+        return self.store.audit_dir(self)
+
+    def _make_record_dir(self) -> Path | None:
+        if not self._has_work_dir or not self.audit.audit_flags:
+            return None
+        return self.store.make_audit_dir(self)
 
     @property
     def error_file(self) -> Path:
@@ -482,6 +488,22 @@ class Job(ty.Generic[TaskType]):
         if not self._has_work_dir or result.errored or result.committed is None:
             return result
         self.committed = result.committed
+        if self.audit.audit_check(AuditFlag.PROV):
+            ref = result.committed.entry
+            self.audit.audit_message(
+                {
+                    "@type": "publication",
+                    "checksum": self.checksum,
+                    "attempt": self.attempt,
+                    "entry": {
+                        "root": ref.root,
+                        "cdir": ref.cdir,
+                        "fingerprint": ref.fingerprint,
+                    },
+                    "stored": result.committed.stored,
+                },
+                AuditFlag.PROV,
+            )
         read = self.store.read_committed(self, result.committed)
         if read is None:
             return result
@@ -529,7 +551,7 @@ class Job(ty.Generic[TaskType]):
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(
-                odir=self.cache_dir, chdir=enters, record_dir=self.record_dir
+                odir=self.cache_dir, chdir=enters, record_dir=self._make_record_dir()
             )
             if self.audit.audit_check(AuditFlag.PROV):
                 self.audit.audit_task(job=self)
@@ -602,7 +624,7 @@ class Job(ty.Generic[TaskType]):
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(
-                odir=self.cache_dir, chdir=enters, record_dir=self.record_dir
+                odir=self.cache_dir, chdir=enters, record_dir=self._make_record_dir()
             )
             try:
                 self.audit.monitor()

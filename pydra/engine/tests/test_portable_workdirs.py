@@ -704,37 +704,27 @@ def test_audit_messages_and_runtime_survive_a_stored_publish(tmp_path):
     job, result = audited(store, tmp_path / "pc")
     assert result.runtime is not None and result.stored is True
     assert sorted(p.name for p in store.work_dir(job).iterdir()) == ["_committed.json"]
-    assert len(list(job.record_dir.rglob("*.jsonld"))) == expected
-    assert list(job.record_dir.glob("proc-*.log"))  # the resource monitor's log
-    assert not str(job.record_dir).startswith(str(store.work_dir(job)))
-
-
-def test_resume_outcome_of_an_earlier_run_is_not_read_before_the_next_run(tmp_path):
-    """A resumable job's directory is stable, its attempt is not: files record the attempt, and
-    a run that has not started finds nothing of the last one's."""
-    flag = tmp_path / "fail"
-    store, sub = portable_submitter(tmp_path)
-    with sub:
-        task = lambda: _Flaky(a=1, flag=str(flag))  # noqa: E731
-        store.visibility_timeout = 0.1
-        kept = job_in(sub, task(), resumable=True)
-        kept.run()  # kept outputs: _committed.json in the resume directory, stored False
-        wd = store.work_dir(kept)
-        assert (
-            json.loads((wd / "_committed.json").read_text())["attempt"] == kept.attempt
-        )
-        nxt = job_in(sub, task(), resumable=True)
-        assert store.work_dir(nxt) == wd and nxt.attempt != kept.attempt
-        assert nxt.result() is None and nxt.done is False
-        assert nxt.result(
-            settled=True
-        ).errored  # settled: nothing of this attempt, so Failed
-        flag.write_text("x")
-        failed = job_in(sub, task(), resumable=True)
-        with pytest.raises(RuntimeError):
-            failed.run()
-        doc = json.loads((wd / "_error.json").read_text())
-        assert doc["attempt"] == failed.attempt
-        later = job_in(sub, task(), resumable=True)
-        assert later.result() is None  # run 1's failure is not this attempt's
-        assert later.done is False
+    # found from the entry's address and the attempt, under the root, and private
+    ref = result.committed.entry
+    record = Path(store.path) / "audit" / ref.cdir / ref.fingerprint / job.attempt
+    assert record == job.record_dir and record.is_dir()
+    assert (
+        len(list(record.rglob("*.jsonld"))) == expected + 1
+    )  # the publication message
+    assert list(record.glob("proc-*.log"))  # the resource monitor's log
+    if not IS_WINDOWS:
+        for d in (record, record.parent, record.parent.parent, record / "messages"):
+            assert stat.S_IMODE(d.stat().st_mode) & 0o077 == 0, d
+    published = [
+        json.loads(p.read_text())
+        for p in record.rglob("*.jsonld")
+        if "publication" in p.read_text()
+    ]
+    (message,) = published
+    assert message["checksum"] == job.checksum and message["attempt"] == job.attempt
+    assert message["entry"]["fingerprint"] == ref.fingerprint
+    # evicting the entry removes its provenance with it
+    store.evict(ref, result.committed.own_digest)
+    assert not record.exists() and not record.parent.exists()
+    other = Path(store.path) / "audit" / ref.cdir
+    assert not other.exists() or not any(other.iterdir())

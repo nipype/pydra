@@ -86,6 +86,7 @@ _HASHED_CDIR = re.compile(r"h-[0-9a-f]{64}")
 _REPARSE = 0x400
 _WORK = "work"
 _LEASES = "leases"
+_AUDIT = "audit"
 _COMMITTED = "_committed.json"
 _ERROR = "_error.json"
 _KEPT_ENTRY = "_entry"
@@ -1196,12 +1197,25 @@ class PortableStore:
         with self._open() as root:
             try:
                 self._evict(root, entry, expected_digest)
+                if not self._exists(root, entry):
+                    self._forget_audit(root, entry)
             except FileNotFoundError:
+                self._forget_audit(root, entry)
                 return
             except OSError as err:
                 if isinstance(err, StoreUnavailable):
                     raise
                 raise StoreUnavailable(err.errno, f"{entry.cdir}: {err}") from err
+
+    def _exists(self, root: StorageDir, ref: EntryRef) -> bool:
+        try:
+            with root.child(self.header.entries) as entries:
+                with entries.child(self._shard_of(entries, ref.cdir)) as shard:
+                    with shard.child(ref.cdir) as cdir:
+                        cdir.lstat(ref.fingerprint)
+        except (FileNotFoundError, WrongKindError):
+            return False
+        return True
 
     def _evict(self, root: StorageDir, ref: EntryRef, expected: str) -> None:
         with root.child(self.header.entries) as entries:
@@ -1270,7 +1284,8 @@ class PortableStore:
         never one the caller's ``work_dir`` function names) is removed once it and everything
         directly in it, ``_committed.json`` included, is older than ``ages.work``, which must
         exceed the longest run: a job writes nothing at the top of its directory while it runs,
-        and a runner may read ``_committed.json`` until it holds the outcome.
+        and a runner may read ``_committed.json`` until it holds the outcome. ``<root>/audit/``
+        (provenance, see `audit_dir`) is removed by `evict` with its entry and is not swept here.
 
         Returns
         -------
@@ -1628,6 +1643,48 @@ class PortableStore:
         return self._work_path(
             job.checksum, self.identity.fingerprint(job.context), attempt
         )
+
+    def audit_dir(self, job: "Job") -> Path:
+        """Where the audit messages and resource logs of a run of ``job`` go:
+        ``<root>/audit/<cdir>/<fingerprint>/<attempt>``, which names the entry the run
+        publishes, so the provenance is found from its `EntryRef` and the attempt, and `evict`
+        removes it with the entry. The format of an entry (RFC 0003 section 6.1) lists and
+        digests every member and is shared and world-readable, so provenance, which holds
+        input paths and commands, cannot be a member of one."""
+        return (
+            Path(self.path)
+            / _AUDIT
+            / cdir_for(job.checksum)
+            / self.identity.fingerprint(job.context)
+            / (job.attempt or job.uid)
+        )
+
+    def make_audit_dir(self, job: "Job") -> Path:
+        """Make `audit_dir`, and its ``messages`` directory, ``0o700``, by descriptor from the
+        root."""
+        path = self.audit_dir(job)
+        parts = (*path.relative_to(self.path).parts, "messages")
+        with self._denied(str(path)):
+            with self._open() as root:
+                handle = root
+                opened = []
+                try:
+                    for name in parts:
+                        handle = handle.child(name, create=True, mode=0o700)
+                        opened.append(handle)
+                finally:
+                    for h in opened:
+                        h.close()
+        return path
+
+    def _forget_audit(self, root: StorageDir, ref: EntryRef) -> None:
+        """Remove the provenance of an entry that has gone."""
+        with contextlib.suppress(OSError):
+            with root.child(_AUDIT) as audit, audit.child(ref.cdir) as cdir:
+                _remove_tree(cdir, ref.fingerprint)
+            with root.child(_AUDIT) as audit:
+                with contextlib.suppress(OSError):
+                    audit.rmdir(ref.cdir)
 
     def _maybe_work_dir(self, job: "Job") -> Path | None:
         try:
