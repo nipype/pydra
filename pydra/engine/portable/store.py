@@ -1206,7 +1206,12 @@ class PortableStore:
     ) -> None:
         """Remove ``listed`` from ``parent`` if it is older than ``age``, recording the outcome."""
         where = os.path.join(parent.path, listed.name)
-        seen = listed.stat()
+        try:
+            seen = parent.lstat(
+                listed.name
+            )  # a listing's stat can lack the inode (Windows)
+        except FileNotFoundError:
+            return
         if _is_link(seen) or not stat.S_ISDIR(seen.st_mode):
             if now - seen.st_mtime < age:
                 report.kept.append((where, f"younger than {age:g} s"))
@@ -1360,7 +1365,7 @@ class PortableStore:
                         ):
                             where = os.path.join(cdir_dir.path, ref.fingerprint)
                             raise CorruptEntry(
-                                f"{err}; {where!r} cannot be moved aside "
+                                f"{err}; {where} cannot be moved aside "
                                 f"(owner: {_owner(where)})"
                             ) from err
                         raise

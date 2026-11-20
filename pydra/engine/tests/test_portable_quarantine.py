@@ -10,7 +10,7 @@ import pytest
 
 from pydra.engine.portable.entry import CorruptEntry
 from pydra.engine.portable.store import CollectReport, PortableStore, StoreNotWritable
-from pydra.utils.storagedir import IS_WINDOWS, StorageDir, StorageEntry, StorePolicy
+from pydra.utils.storagedir import IS_WINDOWS, StorageDir, StorePolicy
 from pydra.utils.storagedir import StoreAges
 
 from .test_portable_store import (
@@ -295,15 +295,14 @@ def test_collect_leaves_a_claimed_object_another_collector_took(tmp_path, monkey
     store.evict(other.entry, other.own_digest)
     (moved,) = quarantined(store.path)
     age(moved, 1000)
-    real = StorageEntry.stat
+    real = StorageDir.rename
 
-    def vanish(self):
-        st = real(self)
-        if self.name == moved.name:
-            os.rename(moved, moved.parent / "elsewhere")
-        return st
+    def vanish(self, name, target, new_name):
+        if new_name.startswith("gc-"):  # a mover puts it back just before the claim
+            real(self, name, self, "elsewhere")
+        real(self, name, target, new_name)
 
-    monkeypatch.setattr(StorageEntry, "stat", vanish)
+    monkeypatch.setattr(StorageDir, "rename", vanish)
     report = store.collect()
     assert report.removed == []
     assert (moved.parent / "elsewhere").is_dir()
