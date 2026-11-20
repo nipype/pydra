@@ -47,11 +47,24 @@ POLL_MAX = 2.0
 MISSED_BEATS = 1
 """Heartbeats a live holder may miss (a slow or hung write) without being taken over."""
 
+RELEASE_PATIENCE = 5.0
+"""Seconds a release retries renaming the holder's directory aside while the storage
+refuses it, as Windows does while another process has that directory or a file in it
+open (a waiter reading the holder record or the heartbeat marks)."""
+
 HOLDER_FILE = "holder.json"
 """The holder record in a lease's token directory."""
 
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
 _ESTALE = getattr(errno, "ESTALE", None)
+
+
+class _Unreadable(Exception):
+    """A mark in a lease exists but could not be read, so its age cannot be judged."""
+
+    def __init__(self, error: OSError):
+        super().__init__(str(error))
+        self.error = error
 
 
 class LeaseTimeout(TimeoutError):
@@ -483,7 +496,11 @@ class DirectoryLease:
     def _newest_mtime(self, entries: list[str]) -> float | None:
         """The newest mtime of the lease, its entries and theirs (the holder record
         and heartbeats), so a renewal shows even where a directory's own mtime is
-        reported late."""
+        reported late; None if the lease is gone.
+
+        A mark that is gone is skipped. A mark that exists but cannot be read (on
+        Windows, one another process has open) raises `_Unreadable`: judging the
+        lease by the older marks left would take a live holder for a stale one."""
         mtimes = []
         paths = [self.lockfile]
         for entry in entries:
@@ -495,12 +512,16 @@ class DirectoryLease:
         for path in paths:
             try:
                 mtimes.append(os.lstat(path).st_mtime)
-            except OSError:
-                continue
+            except OSError as err:
+                if err.errno in (errno.ENOENT, errno.ENOTDIR, _ESTALE):
+                    continue
+                raise _Unreadable(err) from err
         try:  # read again after listing, so a takeover renamed meanwhile shows
             mtimes.append(os.lstat(self.lockfile).st_mtime)
         except FileNotFoundError:
             return None
+        except OSError as err:
+            raise _Unreadable(err) from err
         return max(mtimes)
 
     def _judge(self) -> bool:
@@ -512,7 +533,15 @@ class DirectoryLease:
         if not os.path.isdir(self.lockfile) or os.path.islink(self.lockfile):
             return self._judge_legacy(st)
         holder, entries = self._read_holder()
-        newest = self._newest_mtime(entries)
+        if entries and all(e.startswith("gone-") for e in entries):
+            return self._clear_remains(entries)
+        try:
+            newest = self._newest_mtime(entries)
+        except _Unreadable as unreadable:
+            logger.debug("Cannot judge the lease %s now: %s", self.lockfile, unreadable)
+            if isinstance(unreadable.error, PermissionError):
+                self._refused = unreadable.error
+            return False
         if newest is None:
             return True
         self._saw(newest)
@@ -557,6 +586,22 @@ class DirectoryLease:
             self._broke(holder, age)
         else:
             logger.debug("Removed the remains of a takeover in %s", self.lockfile)
+        return True
+
+    def _clear_remains(self, entries: list[str]) -> bool:
+        """Remove a lease holding only ``gone-`` entries, whatever their age; whether it
+        was removed. They are what a release or a takeover renamed aside and could not
+        remove yet (on Windows, while another process had a file in them open), never
+        a holder: a holder's directory is its bare token."""
+        for entry in entries:
+            shutil.rmtree(self.lockfile / entry, ignore_errors=True)
+        try:
+            os.rmdir(self.lockfile)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False  # not emptied yet, or a new holder made its token meanwhile
+        logger.debug("Removed the released remains in %s", self.lockfile)
         return True
 
     def _judge_legacy(self, st: os.stat_result) -> bool:
@@ -747,13 +792,40 @@ class DirectoryLease:
         if token is None:
             return
         gone = self.lockfile / f"gone-{token}"
-        try:
-            os.rename(self.lockfile / token, gone)
-        except OSError:
-            if self.lost is None:
-                self._lose("its holder directory was gone at release")
-            return
-        self._remove(gone)
+        if self._rename_aside(self.lockfile / token, gone):
+            self._remove(gone)
+
+    def _rename_aside(self, token_dir: Path, gone: Path) -> bool:
+        """Rename the holder's directory to ``gone`` at release; whether it was.
+
+        Only a directory that is gone shows the lease taken over. Any other refusal is
+        retried for `RELEASE_PATIENCE` seconds: Windows refuses to rename a directory
+        while another process has it or a file in it open, as a waiter judging the
+        lease does for a moment at each poll. A rename still refused after that leaves
+        the lease to be taken over once stale."""
+        give_up = self.monotonic() + RELEASE_PATIENCE
+        delay = POLL_MIN / 5
+        while True:
+            try:
+                os.rename(token_dir, gone)
+                return True
+            except OSError as err:
+                if err.errno in (errno.ENOENT, _ESTALE):
+                    if self.lost is None:
+                        self._lose("its holder directory was gone at release")
+                    return False
+                if self.monotonic() >= give_up:
+                    logger.warning(
+                        "The lease %s could not be released (%s); it is taken over "
+                        "once not renewed for %.1fs",
+                        self.lockfile,
+                        err,
+                        self.settings.stale_after,
+                    )
+                    return False
+                logger.debug("Retrying the release of %s: %s", self.lockfile, err)
+            self.sleep(delay)
+            delay = min(delay * 2, POLL_MAX / 4)
 
     # Protocol
 
