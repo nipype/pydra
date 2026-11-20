@@ -672,13 +672,10 @@ def test_drive_passes_no_limit_to_batching_executor(submitter):
 
 
 class SlowRelease:
-    """Wraps a workflow job's lease; its release takes ``DELAY`` seconds. Each release
-    records its thread and the event-loop ticks counted while it slept"""
+    """Wraps a workflow job's lease; its release takes ``DELAY`` seconds"""
 
-    DELAY = 1.0
+    DELAY = 3.0
     released = 0
-    ticks = 0  # advanced by the test's ticker coroutine
-    seen: list = []  # (thread id, ticks before the sleep, ticks after it)
 
     def __init__(self, lease):
         self.lease = lease
@@ -694,12 +691,9 @@ class SlowRelease:
         return self
 
     def __exit__(self, *exc):
-        cls = type(self)
-        before = cls.ticks
         time.sleep(self.DELAY)
-        cls.seen.append((threading.get_ident(), before, cls.ticks))
         self.lease.__exit__(*exc)
-        cls.released += 1
+        type(self).released += 1
 
 
 class SlowReleaseStore(PickleStore):
@@ -710,8 +704,6 @@ class SlowReleaseStore(PickleStore):
 
 def test_async_driver_releases_leases_off_the_loop(tmp_path, monkeypatch):
     monkeypatch.setattr(SlowRelease, "released", 0)
-    monkeypatch.setattr(SlowRelease, "ticks", 0)
-    monkeypatch.setattr(SlowRelease, "seen", [])
     store = SlowReleaseStore(tmp_path / "cache")
     with Submitter(worker="debug", store=store) as sub:
         task = Outer(x=1)
@@ -720,15 +712,17 @@ def test_async_driver_releases_leases_off_the_loop(tmp_path, monkeypatch):
             task, store, on_error="raise_at_end", submitter=sub, job=job
         )
         ex = Batching()
-        loop_thread = []
+        gaps = []
 
         async def ticker(stop):
+            last = time.monotonic()
             while not stop.is_set():
                 await asyncio.sleep(0.02)
-                SlowRelease.ticks += 1
+                now = time.monotonic()
+                gaps.append(now - last)
+                last = now
 
         async def run():
-            loop_thread.append(threading.get_ident())
             stop = asyncio.Event()
             tick = asyncio.ensure_future(ticker(stop))
             await asyncio.sleep(0.05)
@@ -751,11 +745,7 @@ def test_async_driver_releases_leases_off_the_loop(tmp_path, monkeypatch):
         sub.loop.run_until_complete(run())
     assert runner.done and not runner.failed
     assert SlowRelease.released == 2  # inner and outer, both done when drive returns
-    # each release ran on another thread, and the loop kept turning while it slept
-    assert len(SlowRelease.seen) == 2
-    for thread, before, after in SlowRelease.seen:
-        assert thread != loop_thread[0]
-        assert after > before
+    assert max(gaps) < SlowRelease.DELAY / 2, max(gaps)
     assert job.result().outputs.out == 12
 
 
