@@ -623,7 +623,8 @@ outcomes per job and attempt (§4.3 step 5), probe marks left to clients, and th
   `LocalSubstrate`, 30 s on `SlurmSubstrate`; both unmeasured) and reads `outcome/<digest>/` only for
   tickets whose count moved. Listing one directory per ticket per poll would be 10⁴ `getdents` per poll
   at 10⁶ jobs on NFS. A writer that has just written an outcome counts the files in `outcome/<digest>/`
-  and creates `settled/<digest>-<count>`. Two writers can compute the same count (a loser finishing a job
+  and creates `settled/<digest>-<count>`, then removes `settled/<digest>-<count - 1>`, so the
+  directory holds one mark per ticket. Two writers can compute the same count (a loser finishing a job
   during a takeover, and the taker), and an existing mark makes the create fail. On `EEXIST` the writer
   counts again and creates the mark for the new count, repeating until it has created a mark, or found
   one, whose count includes its own outcome. The last count is therefore always written.
@@ -728,9 +729,11 @@ waited until its 6 h limit (T24-9, §9). A test (W4) fails if a pool module take
     loss. `deadline(token_dir, at | None, payload=None)`: sets or clears the directory's expiry and the JSON
     payload handed to `on_expire` (job timeout, below). `ack_expired(token_dir)`: the holder has stopped
     the expired call. `ping(timeout)`: the beater acknowledges and does nothing else, so a holder finds a
-    hung beater while no other request is due. From the beater: `lost(token_dir, reason)` when a beat finds the directory gone or
+    hung beater while no other request is due; one unanswered ping is a miss (a holder whose call
+    held the GIL reads the answer late), and `PING_MISSES` (3) consecutive misses are the beater's
+    death. From the beater: `lost(token_dir, reason)` when a beat finds the directory gone or
     failing, and `expired(token_dir)` when a deadline passes, after `on_expire` has run and beating of
-    that directory has stopped. A request not acknowledged within `renew_interval` is treated
+    that directory has stopped. Any other request not acknowledged within `renew_interval` is treated
     as the beater's death (a beater wedged on a hard mount must not block the holder while its claims go
     stale). A reader thread in the holder turns `lost` into the
     lease's lost state, so its next `prove()` answers `False` without a storage round trip; a call that
@@ -1329,7 +1332,7 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 |---|---|
 | A proof renews a claim | Found implementing W6, fixed in W5. `prove()` moves the claim's token directory's mtime, so a worker whose beater had died kept the claim of its call alive by proving it, and a call that never returned held its claim forever with no deadline, since deadlines are the beater's. §5.3 "The beater": the worker pings its beater every renewal interval while a call runs (L0 adds `BeaterClient.ping`), proves only while the beater answers, and with a dead beater writes the call's `expired` outcomes itself past the deadline and recycles. W6's `test_job_outlives_stale_after` stops the beater alone, as its row says; W5 adds a test of a dead or hung beater under a call that never returns. |
 | Submitter wiring and pool lifetime | Deferred from W6 to W11a, which owns the `pool` execute context and a pool that outlives a run. Until then a `WarmPool` is used as an external driver uses it (§7.2): `drive` closes its executors at the end of a run, and a sole coordinator's `close` stops its substrate's workers, so warm state does not survive from one run to the next. W11a decides who owns a pool's lifetime (the `Submitter`, a `drive` that does not close executors it was handed, or a `close` that leaves workers to exit on idle) and wires `Submitter(worker=WarmPool(...))`. |
-| `pydracli pool collect` | §4.1: it also removes tickets resolved more than its age ago, with their settled marks, outcomes and losses; a ticket's slot stays in its segment's index. So a queue's `settled/` holds the marks of its live tickets and of those resolved within the collect age. |
+| `pydracli pool collect` | §4.1: it also removes tickets resolved more than its age ago, with their settled marks, outcomes and losses; a ticket's slot stays in its segment's index. The writer of a settled mark removes the ticket's previous mark (§5.1), so within a run a queue's `settled/` holds one mark per ticket, which bounds the follower's listing at 10⁶ jobs; collect bounds it across runs. A lower mark left by a race (two writers' counts skipping one) stays until collect. |
 
 ### Amendment to revision 4 (implementation of W5)
 
