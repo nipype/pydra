@@ -780,7 +780,7 @@ hook, so a hook can refuse or record a hit by its root.
 **The commit hook.** `PortableStore(on_commit=callable)` is called with the staging directory, the
 checksum, the key, the context and the output digest after the members are written and after
 `compare`, before the rename (§5.1 step 4). It is the place for a provenance record that must exist
-before the result is visible. If it raises, nothing is committed.
+before the result is visible. If it raises, nothing is committed. It must not add members to the staging directory: the member list is in `entry.json` already, so the store refuses an entry the hook added a file to (a hook writes through `store.sidecar(name)` or the audit directory). It may run more than once for one entry (a restage, a lost race), so it must be idempotent.
 
 **Sidecars.** A hook that keeps store-level records, such as verify comparisons, writes them under
 `sidecars/<name>@<major>/` (or the directory the header names for it) through `store.sidecar(name)`,
