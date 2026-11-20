@@ -407,7 +407,11 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
   `limit=4` and two nodes of three released jobs, the first node is handed out whole and one job of
   the second. A driver of an executor with `batches = True` passes no cap (`max_concurrent` is
   infinite) and lets the executor cap inside itself, so a node's elements stay in one array or
-  batch. An external driver (§3.5) passes no `limit`.
+  batch: it gives its worker at most `max_concurrent` jobs at once and holds the rest of a round
+  until jobs end. Each batching executor caps its own jobs, and the driver's cap counts only the
+  jobs of the other executors, so a run with several batching executors, or one beside other
+  executors, can have more than `max_concurrent` jobs in flight in all. An external driver
+  (§3.5) passes no `limit`.
 - **Sharing is the runner's.** The same-checksum table (today's `futured`, `sharing` and
   `finished`, `submitter.py:610-616`, `:702-719`) is runner state applied in `ready()` after the
   gate and absence steps. A twin of a job in flight is held and settled as `Settled(how="shared")` when
