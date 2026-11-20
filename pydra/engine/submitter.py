@@ -45,6 +45,7 @@ logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
+    from pydra.engine.resident import Provider, ResidentSet
     from pydra.engine.hooks import TaskHooks
     from pydra.environments.base import Environment
 
@@ -166,6 +167,12 @@ class Submitter:
         is emitted when a ``FileSet`` output lies outside the cache directory). The
         ``pre_run_task``/``post_run_task`` hooks see the caller's directory, and audit
         messages without an explicit ``message_dir`` go to ``<cache_dir>/messages``
+    providers : iterable of Provider, optional
+        Providers of the task fields marked ``provided`` (see
+        :mod:`pydra.engine.resident`), besides those registered under the
+        ``pydra.providers`` entry point group. Under ``debug`` the submitter holds one
+        ``ResidentSet`` for its lifetime, so the state a provider loads is reused by
+        later calls; under ``cf`` each process has its own
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -214,6 +221,7 @@ class Submitter:
         on_error: OnError | None = None,
         telemetry: bool = True,
         chdir: bool = True,
+        providers: "ty.Iterable[Provider] | None" = None,
         **kwargs,
     ):
 
@@ -234,6 +242,8 @@ class Submitter:
             raise TypeError(f"'router' must be callable, not {router!r}")
 
         self.chdir = chdir
+        self.providers = tuple(providers) if providers is not None else ()
+        self._resident_set = None
         self.telemetry = telemetry
         if telemetry:
             Job.check_etelemetry()
@@ -412,6 +422,9 @@ class Submitter:
             )
 
         task._check_rules()
+        from pydra.engine.resident import check_task
+
+        check_task(task, self)  # a wiring error is raised before anything runs
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
             state = State(
@@ -503,16 +516,29 @@ class Submitter:
         else:
             worker.run(job, rerun=rerun)
 
+    def resident_set(self) -> "ResidentSet":
+        """The set of resident state of this submitter, created on first use"""
+        if self._resident_set is None:
+            from pydra.engine.resident import ResidentSet
+
+            self._resident_set = ResidentSet()
+        return self._resident_set
+
     def __getstate__(self):
         state = self.__dict__.copy()
         # Remove the unpicklable entries or those that should not be pickled
         # When unpickled (in another process) the submitter can't be called
         state["loop"] = None
+        state["_resident_set"] = None
         state["_sync_pool"] = None
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self.__dict__.setdefault("providers", ())
+        self.__dict__.setdefault("_resident_set", None)
+        # an unpickled submitter lives in a worker process, which holds one set
+        self._worker_copy = True
         # Restore the loop and workers
         self.loop = get_open_loop()
         for worker in self.workers.values():
@@ -696,6 +722,12 @@ class Submitter:
         if self._sync_pool is not None:
             self._sync_pool.shutdown()
             self._sync_pool = None
+        if self._resident_set is not None:
+            try:
+                self._resident_set.close()
+            except Exception as e:
+                errors.append(e)
+            self._resident_set = None
         for worker in {id(w): w for w in self.workers.values()}.values():
             try:
                 worker.close()
