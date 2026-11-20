@@ -2233,10 +2233,7 @@ class PortableStore:
                 raise CorruptEntry(
                     f"the committed entry {ref.cdir} is not the entry of the job"
                 )
-            if not readonly:
-                result = self._read_ref(ref, job.task, shard)
-            else:
-                result = self._read_readonly(ref, job.task, shard, trust)
+            result = self._read_recorded(job, ref, shard, trust, readonly, committed)
         elif wd is None or committed.kept is None:
             return None
         elif os.path.basename(committed.kept) == _KEPT_ENTRY:
@@ -2248,6 +2245,43 @@ class PortableStore:
         result.committed = committed
         result.stored = committed.stored
         return result
+
+    def _read_recorded(
+        self,
+        job: "Job",
+        ref: EntryRef,
+        shard: str,
+        trust: Trust,
+        readonly: bool,
+        committed: Committed,
+    ) -> Result:
+        """The entry a record names, which must still be the one that was recorded: its output
+        digest is ``committed.committed_digest``. A rerun replaces an entry at its address, so
+        an address alone no longer names its content. A mismatch is retried until the
+        visibility timeout (a stale lookup on shared storage), then raised."""
+        deadline = time.monotonic() + self.visibility_timeout
+        n = 0
+        while True:
+            with self._open_root_for(ref, trust, readonly) as root:
+                stored, where = self._read_entry(
+                    root, ref, job.task, shard, trust=trust, readonly=readonly
+                )
+            expected = committed.committed_digest
+            if expected is None or stored.digest == expected:
+                return self._result_at(stored, where, job.task)
+            if time.monotonic() >= deadline:
+                raise StoreUnavailable(
+                    errno.ESTALE,
+                    f"{ref.cdir}/{ref.fingerprint} was replaced since it was recorded "
+                    "(a rerun, or an entry committed over an evicted one)",
+                )
+            n += 1
+            time.sleep(min(0.005 * 2**n, 0.25))
+
+    def _open_root_for(self, ref: EntryRef, trust: Trust, readonly: bool) -> StorageDir:
+        if readonly:
+            return StorageDir.open_root(ref.root, self.policy, trust=trust)
+        return self._open()
 
     def _work_trust(self, handle: StorageDir, name: str) -> Trust:
         """The trust to read ``name`` in a work directory with: ``private`` if it is owned by
@@ -2498,27 +2532,26 @@ class PortableStore:
         success record of `PickleStore`, and on a miss nothing more. A present entry goes
         through the reuse hook like any lookup, and a result is returned only for a ``SERVE``
         verdict; ``VERIFY``, ``REFUSE`` and an entry that does not verify return None, and the
-        job is dispatched (a runner that must carry the verify mark calls `find`). Only this
-        store's own root is probed: an entry in a read-only root, or under another
-        fingerprint, is found by `find` under the job's lease."""
+        job is dispatched (a runner that must carry the verify mark calls `find`). Only the
+        entry at this store's own root and the job's own fingerprint is probed and served: a
+        reader in another process that finds no record reads that address, so a result from
+        another context or a read-only root is left to `find` under the job's lease, which
+        records what it served. No metadata call but the one ``lstat`` is made on a miss.
+        """
         cdir = cdir_for(checksum)
         fingerprint = self.identity.fingerprint(context)
         shard = shard_for(cdir, checksum, self.header.shard)
         try:
-            with self._open() as root, contextlib.ExitStack() as stack:
-                parent = root
-                for name in (self.header.entries, shard, cdir):
-                    parent = stack.enter_context(parent.child(name))
-                parent.lstat(fingerprint)
-        except (FileNotFoundError, WrongKindError):
+            os.lstat(
+                os.path.join(self.path, self.header.entries, shard, cdir, fingerprint)
+            )
+        except OSError:  # absent, or not visible from here: dispatch it
             return None
-        except OSError as err:
-            logger.debug("reading %s without its lease: %s", checksum, err)
-            return None
+        own = EntryRef(self.path, cdir, fingerprint)
         try:
-            found = self._find(checksum, context, task)
-        except OSError as err:  # unreadable or removed: run it under its lease
-            logger.debug("reading %s without its lease: %s", checksum, err)
+            found = self._find(checksum, context, task, own)
+        except Exception as err:  # a broken hook or an unreadable entry: run it leased
+            logger.warning("reading %s without its lease: %r", checksum, err)
             return None
         return found.result if isinstance(found, Hit) else None
 
@@ -2576,10 +2609,16 @@ class PortableStore:
         found = self._find(checksum, context, task)
         return found.result if isinstance(found, Hit) else None
 
-    def _find(self, checksum: str, context: Context, task: "Task | None") -> Lookup:
+    def _find(
+        self,
+        checksum: str,
+        context: Context,
+        task: "Task | None",
+        own: EntryRef | None = None,
+    ) -> Lookup:
         for _ in range(_RERANKS):
             ranked = self.reuse.rank(context, self.stored(checksum), task)
-            outcome = self._consider(checksum, ranked, context, task)
+            outcome = self._consider(checksum, ranked, context, task, own)
             if outcome is not _CONTENDED:
                 return ty.cast(Lookup, outcome)
         logger.warning(
@@ -2603,9 +2642,12 @@ class PortableStore:
         ranked: ty.Sequence[Candidate],
         context: Context,
         task: "Task | None",
+        own: EntryRef | None = None,
     ) -> "Lookup | object":
         mine = self.identity.fingerprint(context)
         for candidate in ranked:
+            if own is not None and not _same_entry(candidate.entry, own):
+                return Miss()  # only the own address is wanted, and it was not taken
             verdict = self.reuse.verdict(candidate, context, task)
             if verdict is Verdict.REFUSE:
                 return Miss()
@@ -2902,6 +2944,14 @@ class PortableStore:
             save(path, job=job)
         except Exception as err:
             logger.warning("could not save the failed job %s: %s", job.name, err)
+
+
+def _same_entry(a: EntryRef, b: EntryRef) -> bool:
+    return (
+        os.path.abspath(a.root) == os.path.abspath(b.root)
+        and a.cdir == b.cdir
+        and a.fingerprint == b.fingerprint
+    )
 
 
 class _AlwaysHeld:
