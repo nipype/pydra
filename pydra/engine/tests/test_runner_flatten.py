@@ -827,6 +827,47 @@ def test_close_names_the_stopped_elements(tmp_path):
         assert len(runner.errors) == 1
 
 
+@python.define
+def FailsOrHolds(x: int, hold: float = 3.0) -> int:
+    """Fails after a short wait when ``x`` is negative, otherwise runs for ``hold``"""
+    if x < 0:
+        time.sleep(0.5)
+        raise ValueError("fails on a negative x")
+    time.sleep(hold)
+    return x
+
+
+@workflow.define
+def FailAlongsideSplit(xs: list[int]) -> list[int]:
+    workflow.add(FailsOrHolds(x=-1), name="f")
+    s = workflow.add(FailsOrHolds().split(x=xs), name="s")
+    return s.out
+
+
+def test_stopped_entries_only_for_elements_handed_out(tmp_path):
+    """Under ``max_concurrent`` released elements held back by the cap were never handed
+    out, so they get no "stopped" entry; only those handed out and unfinished do"""
+    with Submitter(
+        worker="cf",
+        cache_root=tmp_path,
+        on_error="fail_fast",
+        max_concurrent=2,
+        n_procs=4,
+    ) as sub:
+        with pytest.raises(WorkflowError) as raised:
+            sub(FailAlongsideSplit(xs=[10, 11, 12, 13, 14, 15]), raise_errors=True)
+    entries = raised.value.entries
+    stopped = [(e.job_name, e.state_index) for e in entries if e.phase == "stopped"]
+    # the cap of two leaves room for one element of ``s`` beside ``f``
+    assert stopped == [("s", 0)]
+    (entry,) = [e for e in entries if e.phase == "stopped"]
+    assert entry.exception_type is None
+    assert entry.message == "stopped by f: fails on a negative x"
+    assert [(e.job_name, e.phase) for e in entries if e.phase != "stopped"] == [
+        ("f", "run")
+    ]
+
+
 # Failures that are entries
 
 

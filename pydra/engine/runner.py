@@ -868,12 +868,12 @@ class GraphRunner:
             if frame.state == "expanding" and frame.owned and frame.nodes_done:
                 self._finish(frame)
 
-    @staticmethod
-    def _name_stopped(frame: _Frame) -> None:
+    def _name_stopped(self, frame: _Frame) -> None:
         """Add an entry, naming the failure that stopped the workflow, for each element
         of its nodes that was handed out and has not completed. An element that
         completed has its own outcome, and one never handed out (blocked behind an
-        unfinished element) is not an entry: the driver reports it as unrunnable."""
+        unfinished element, or released but held back by the ``ready`` limit) is not
+        an entry: the driver reports it as unrunnable."""
         cause = frame.entries[0] if frame.entries else None
         if cause is None:
             return
@@ -883,7 +883,13 @@ class GraphRunner:
         first = cause.message.strip().splitlines()[0] if cause.message.strip() else ""
         for node in frame.graph.nodes:
             node.update_status()
-            for index in [*node.queued, *node.running]:
+            unfinished = [
+                *node.queued.items(),
+                *((i, job) for i, (job, _) in node.running.items()),
+            ]
+            for index, job in unfinished:
+                if job not in self._handed and job not in self._child:
+                    continue
                 frame.entries.append(
                     JobErrorEntry(
                         job_name=node.name,
