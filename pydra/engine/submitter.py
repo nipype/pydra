@@ -642,16 +642,13 @@ class Submitter:
     def _remove_work_dirs(self) -> None:
         """Remove the empty default work directories of this submitter's attempts; one the
         process is in, or that still holds files (a failure, kept outputs), stays."""
-        from pydra.utils.general import dir_held
+        from pydra.utils.general import dir_held, remove_if_unheld
 
         for path in list(self._work_dirs):
             if dir_held(path):
                 continue  # tried again at the next close
             self._work_dirs.discard(path)
-            try:
-                os.rmdir(path)
-            except OSError:
-                pass
+            remove_if_unheld(path)  # checked again with the removal, under one lock
 
     def collect(self) -> ty.Any:
         """Remove what the store keeps only for a while (`PortableStore.collect`: old staging,

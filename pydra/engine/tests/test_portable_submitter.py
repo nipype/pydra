@@ -18,6 +18,7 @@ from fileformats.generic import File
 
 from pydra.compose import python, workflow
 from pydra.engine.executor import WorkerExecutor
+from pydra.engine.job import Job
 from pydra.engine.portable.reuse import Verdict
 from pydra.engine.portable.store import PortableStore
 from pydra.engine.runner import GraphRunner
@@ -761,6 +762,71 @@ def test_forgetting_spares_a_directory_a_running_job_returns_to(tmp_path):
             release_dir(wd)
         store.forget_committed(a)
         assert not wd.exists()
+
+
+def test_a_directory_is_never_removed_between_a_jobs_cwd_read_and_its_hold(
+    tmp_path, monkeypatch
+):
+    """I5: job B reads the working directory, which is job X's work directory because X's
+    thread is in it; X then changes back and its outcome is forgotten. The forget must not
+    remove the directory B has read and will change back to: the read and the hold are one
+    step, and so are the check and the removal. Forced interleaving: the forget runs on
+    another thread at the moment B reads the directory."""
+    import inspect
+
+    store = make(tmp_path)
+    here = os.getcwd()
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(Two(x=1), store, on_error="raise_at_end", submitter=sub)
+        (x,) = runner.ready().dispatch
+        x.run()
+        wd = store.work_dir(x)
+        b = Job(task=Add1(x=10), submitter=sub, name="b")
+        real_getcwd = os.getcwd
+        armed, forgets = [True], []
+
+        def forget_x():
+            os.chdir(here)  # X's thread changes back, then its outcome is forgotten
+            store.forget_committed(x)
+
+        def getcwd():
+            cwd = real_getcwd()
+            caller = inspect.stack()[1].function
+            if armed and caller in ("run", "capture_cwd") and cwd == str(wd):
+                armed.clear()
+                t = threading.Thread(target=forget_x)
+                forgets.append(t)
+                t.start()
+                t.join(2)  # done at once unless it waits for the hold to be taken
+            return cwd
+
+        os.chdir(wd)  # X's thread is in its work directory
+        monkeypatch.setattr(os, "getcwd", getcwd)
+        try:
+            result = b.run()
+        finally:
+            monkeypatch.setattr(os, "getcwd", real_getcwd)
+            os.chdir(here)
+            for t in forgets:
+                t.join(30)
+    assert forgets and result.outputs.out == 11 and not result.errored
+
+
+def test_a_run_that_fails_before_its_task_releases_its_hold(tmp_path, monkeypatch):
+    """N10: an exception after the working directory is captured, before the task runs,
+    releases the hold and restores the directory."""
+    from pydra.utils import general
+
+    def broken(self):
+        raise RuntimeError("cannot make the work directory")
+
+    monkeypatch.setattr(Job, "_populate_filesystem", broken)
+    here = os.getcwd()
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        job = Job(task=Add1(x=1), submitter=sub, name="j")
+        with pytest.raises(RuntimeError, match="cannot make"):
+            job.run()
+    assert dict(general._held_dirs) == {} and os.getcwd() == here
 
 
 def test_stored_false_is_success_not_unrunnable(tmp_path):

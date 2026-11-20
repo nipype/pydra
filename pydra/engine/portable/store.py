@@ -1965,9 +1965,10 @@ class PortableStore:
                     handle.unlink(_COMMITTED)
         except FileNotFoundError:
             return
-        if self._work_fn is None and not _holds_cwd(path):
-            with contextlib.suppress(OSError):  # not empty: a failure, kept outputs
-                os.rmdir(path)
+        if self._work_fn is None:  # not if held, or not empty (a failure, kept outputs)
+            from pydra.utils.general import remove_if_unheld
+
+            remove_if_unheld(path)
 
     def _empty_work_dir(self, path: Path) -> None:
         """Empty a default work directory except ``_committed.json``. What cannot be removed
@@ -3019,14 +3020,6 @@ class PortableStore:
             save(path, job=job)
         except Exception as err:
             logger.warning("could not save the failed job %s: %s", job.name, err)
-
-
-def _holds_cwd(path: Path) -> bool:
-    """Whether the process working directory is ``path`` or below it, or a running job of
-    this process will return to such a directory (`pydra.utils.general.dir_held`)."""
-    from pydra.utils.general import dir_held
-
-    return dir_held(path)
 
 
 def _same_entry(a: EntryRef, b: EntryRef) -> bool:
