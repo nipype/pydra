@@ -10,7 +10,7 @@ import typing as ty
 def test_crash_cli(cli_runner, tmp_path):
     divide = Divide(x=15, y=0)
     with pytest.raises(ZeroDivisionError):
-        divide(cache_root=tmp_path)
+        divide(store="pickle", cache_root=tmp_path)
 
     (slot,) = PickleStore(tmp_path).slots(divide._checksum)
     error_file = slot / "_error.pklz"
