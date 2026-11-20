@@ -98,11 +98,19 @@ class _Stand:
 def _view(node: "NodeExecution", graph) -> "NodeExecution | None":
     """The node itself if it has started and is not partial, else a copy that can say
     what its elements are (None if that waits on upstream elements). The copy has its own
-    ``State`` and, for a partial node, its own blocks, so the live node, its ``State`` and
-    its tables are never written. A copy of a partial node expands every block whose
-    upstream elements are in the upstream nodes' ``successful``, as the next ``ready``
-    would, including the blocks of a live partial node that ``ready`` has not expanded
-    yet; its element keys are the live node's."""
+    ``State`` and, for a partial node, its own blocks. A copy of a partial node expands
+    every block whose upstream elements are in the upstream nodes' ``successful``, as the
+    next ``ready`` would, including the blocks of a live partial node that ``ready`` has
+    not expanded yet; its element keys are the live node's.
+
+    No job table of a live node is written (``_tasks``, ``blocked``, ``queued``,
+    ``successful``, ``errored``) and no in-flight result is read. Reading a live partial
+    node (its ``done``, ``settled`` or a whole read's seal check) may advance its derived
+    bookkeeping: registering blocks for source keys that exist, closing groups, sealing
+    (which assigns ``state_index`` to its jobs), and recording an inherited failed block
+    in ``unrunnable``. Each step is monotone and a function of tables ``plan()`` does not
+    write, so the next ``ready()`` would make the same change. A barrier copy may also
+    prepare the ``State`` of a sealed partial upstream, as its seal-time check does."""
     if node._tasks is not None and not node.is_partial:
         return node
     preds = graph.predecessors[node.name]

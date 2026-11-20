@@ -1175,3 +1175,46 @@ def test_group_with_a_failed_block_is_unrunnable(submitter):
     assert "C" not in dispatched
     of_c = [i for n, i in reported if n == "C"]
     assert len(of_c) == 2 and set(of_c) == {(0,), (1,)}, of_c
+
+
+@workflow.define
+def PerElement(x: list[int]):
+    a = workflow.add(L().split("x", x=x), name="A")
+    b = workflow.add(Inc().split("x", x=a.out), name="B")
+    c = workflow.add(Inc().split("x", x=a.out).combine("x"), name="C")
+    d = workflow.add(SumL(x=c.out), name="D")
+    return d.out
+
+
+def test_expand_ready_visits_only_changed_blocks(submitter, monkeypatch):
+    """With one upstream element completing per round (an async pool), each pending
+    block is visited when it is registered and when its source element finishes, not
+    on every round: the visits grow linearly, not quadratically"""
+    from pydra.engine import partial
+
+    visits = []
+    candidates = partial.PartialExpansion._candidates
+
+    def counted(self):
+        found = candidates(self)
+        visits.append(len(found))
+        return found
+
+    monkeypatch.setattr(partial.PartialExpansion, "_candidates", counted)
+    n = 60
+    runner = runner_for(submitter, PerElement(x=list(range(n))))
+    held = []
+    while True:
+        jobs = runner.ready().dispatch
+        held += [j for j in jobs if j.name == "A"]
+        others = [j for j in jobs if j.name != "A"]
+        batch, held = held[:1], held[1:]
+        if not (batch or others):
+            break
+        for job in batch + others:
+            finish(runner, job)
+    assert runner.done and not runner.failed
+    # B and C, n blocks each: a visit at registration (first pass), one when the
+    # block's A element finishes, and a few more for their D/group closures; visiting
+    # every pending block on every round would be about n * n
+    assert sum(visits) <= 6 * n, sum(visits)

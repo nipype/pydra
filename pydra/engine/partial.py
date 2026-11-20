@@ -120,6 +120,8 @@ class _Spec:
     inner : dict
         Each of the node's split inputs that is an upstream output, ``"<node>.<input>"``
         mapped to its lazy field
+    inner_sources : frozenset
+        The names of the nodes the inner inputs read
     rpn : list
         The splitter in RPN without the prev-state term of each inner source
         (``state.py`` ``prepare_states_ind``), which fixes the element order
@@ -143,6 +145,7 @@ class _Spec:
     """
 
     def __init__(self):
+        self.inner_sources: frozenset = frozenset()
         self.inner: dict[str, LazyOutField] = {}
         self.rpn: list[str] = []
         self.sources: list[str] = []
@@ -203,6 +206,7 @@ def classify(ex: "NodeExecution") -> tuple[str, ty.Any]:
 
     spec = _Spec()
     spec.inner = inner
+    spec.inner_sources = frozenset(inner_sources)
     spec.linked = {u for u in inner_sources if u in state.other_states}
     spec.rpn = remove_inp_from_splitter_rpn(rpn, [f"_{u}" for u in spec.linked])
     spec.sources = inner_sources + partial_prevs
@@ -385,6 +389,13 @@ class PartialExpansion:
         self.vals: dict[tuple, dict] = {}
         self.inputs_ind: dict[tuple, dict] = {}
         self.block_of: dict[tuple, tuple] = {}  # element key -> the key of its block
+        self.group_of: dict[tuple, tuple] = {}  # element key -> its group
+        # pending blocks by (inner source, its final key), so that ``expand_ready``
+        # visits only the blocks whose inner sources' keys changed (see ``_changed``)
+        self._waiting: dict[tuple, set] = defaultdict(set)
+        self._fresh: set = set()  # blocks registered since the last ``expand_ready``
+        self._cursors: dict[str, tuple] = {}
+        self._reverse: dict[str, dict] = {}
         self.groups: dict[tuple, list[tuple]] = {}
         self.closed: set[tuple] = set()
         self.open_groups: dict[tuple, dict] = {}  # open group key -> its fields
@@ -458,16 +469,31 @@ class PartialExpansion:
     # ------------------------------------------------------------------------------
     # Blocks
 
+    def _inner_positions(self, bkey: tuple) -> list[tuple[str, ty.Any]]:
+        """The inner sources of a block, each with the final key the block reads"""
+        names = self.spec.inner_sources
+        return [(n, k) for n, k in zip(self.spec.sources, bkey) if n in names]
+
     def _add_pending(self, bkey: tuple, block: _BlockState) -> None:
         self.blocks[bkey] = block
         self.pending[bkey] = block.fields
         self._pending_index.add(bkey, block.fields)
+        self._fresh.add(bkey)
+        for item in self._inner_positions(bkey):
+            self._waiting[item].add(bkey)
 
     def _set_status(self, bkey: tuple, status: str) -> None:
         block = self.blocks[bkey]
         block.status = status
         self.pending.pop(bkey, None)
         self._pending_index.remove(bkey, block.fields)
+        self._fresh.discard(bkey)
+        for item in self._inner_positions(bkey):
+            waiting = self._waiting.get(item)
+            if waiting is not None:
+                waiting.discard(bkey)
+                if not waiting:
+                    del self._waiting[item]
         if status in ("failed", "errored"):
             self.failed.append((("block", bkey), block.fields))
         self.version += 1
@@ -534,12 +560,78 @@ class PartialExpansion:
             return True
         return any(p in fields for p in final)
 
+    def _changed(self, name: str) -> "set | None":
+        """The final keys of inner source ``name`` whose status may have changed since
+        the last call, from the append-only logs of its tables (and, for a partial
+        source, its closed groups); None if any of them may have (a whole-node or block
+        failure, or logs that were replaced)"""
+        source = self.graph.node(name)
+        logs = (source.successful.log, source.errored.log, source.unrunnable.log)
+        partial = source._partial if source.is_partial else None
+        extra = (
+            (partial.final_log, len(partial.failed), len(partial.block_errors))
+            if partial is not None
+            else (None, 0, 0)
+        )
+        before = self._cursors.get(name)
+        now = tuple((id(log), len(log)) for log in logs) + (
+            len(extra[0]) if extra[0] is not None else 0,
+            extra[1],
+            extra[2],
+        )
+        self._cursors[name] = now
+        if before is None or any(b[0] != n[0] for b, n in zip(before[:3], now[:3])):
+            return None
+        if before[4:] != now[4:]:  # a failed block, or a block error, of the source
+            return None
+        entries = [
+            key for log, (_, start) in zip(logs, before[:3]) for key in log[start:]
+        ]
+        if any(e is None or isinstance(e, Block) for e in entries):
+            return None if source.state else {None}
+        keyed = name in self.spec.linked or partial is not None
+        if not keyed:  # its whole output is read: one key, None
+            return {None} if entries else set()
+        changed = set()
+        if partial is not None:
+            if partial.spec.group_paths is None:
+                changed.update(entries)
+            else:
+                changed.update(
+                    partial.group_of[e] for e in entries if e in partial.group_of
+                )
+                changed.update(partial.final_log[before[3] :])  # closed groups
+            return changed
+        reverse = self._reverse.get(name)
+        if reverse is None:  # a static source: its elements -> its final keys
+            reverse = self._reverse[name] = defaultdict(list)
+            for k in source._final_keys():
+                for e in source._read_elements(source._read_indices(k)):
+                    reverse[e].append(k)
+        for e in entries:
+            changed.update(reverse.get(e, ()))
+        return changed
+
+    def _candidates(self) -> list:
+        """The pending blocks whose status may have changed: those registered since the
+        last call, and those that read a changed key of an inner source"""
+        found = set(self._fresh)
+        self._fresh = set()
+        for name in self.spec.inner_sources:
+            changed = self._changed(name)
+            if changed is None:
+                return list(self.pending)
+            for key in changed:
+                found.update(self._waiting.get((name, key), ()))
+        return [b for b in found if b in self.pending]
+
     def expand_ready(self) -> None:
         """Expand each pending block whose inner sources have succeeded, and fail each
-        whose inner source has failed"""
+        whose inner source has failed. Only the blocks that may have changed since the
+        last call are visited (``_candidates``)"""
         ex, spec = self.ex, self.spec
-        inner_sources = {v._node.name for v in spec.inner.values()}
-        for bkey in sorted(self.pending, key=sort_key):
+        inner_sources = spec.inner_sources
+        for bkey in sorted(self._candidates(), key=sort_key):
             statuses = []
             for name, key in zip(spec.sources, bkey):
                 if name not in inner_sources:
@@ -624,6 +716,7 @@ class PartialExpansion:
                 group = tuple(entry.fields[p] for p in spec.group_paths)
                 self._add_group(group)
                 self.groups[group].append(key)
+                self.group_of[key] = group
             else:
                 self.final_log.append(key)
             ex.blocked[key] = ex._upstream(key)

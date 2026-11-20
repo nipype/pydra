@@ -103,6 +103,22 @@ def element_label(
     return name
 
 
+class Logged(dict):
+    """A dict that also lists each key set, in order (``log``, append-only), so that a
+    reader can take the keys set since it last looked without scanning the dict"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.log: list = list(self)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        try:
+            self.log.append(key)
+        except AttributeError:  # being unpickled or copied: items come before state
+            self.log = [key]
+
+
 class NodeExecution(ty.Generic[TaskType]):
     """A wrapper around a workflow node containing the execution state of the tasks that
     are generated from it.
@@ -171,11 +187,11 @@ class NodeExecution(ty.Generic[TaskType]):
         # Initialize the state dictionaries
         self._tasks = None
         self.blocked = None
-        self.successful = {}
-        self.errored = {}
+        self.successful = Logged()
+        self.errored = Logged()
         self.queued = {}
         self.running = {}  # Not used in logic, but may be useful for progress tracking
-        self.unrunnable = defaultdict(list)
+        self.unrunnable = Logged()
         self.workflow = workflow
         self.graph = None
         self._resolution_errors = []
@@ -668,7 +684,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 for p in predecessors
                 if (p._tasks is None and p.unrunnable) or p._node_error is not None
             ]:
-                self.unrunnable = {None: whole}
+                self.unrunnable = Logged({None: whole})
                 self.blocked = {}
             elif all(p.started for p in predecessors):
                 mode = self._classify()
@@ -679,7 +695,7 @@ class NodeExecution(ty.Generic[TaskType]):
                         if p.errored or p.unrunnable or p._block_errors
                     ]
                 ):
-                    self.unrunnable = {None: unrunnable}
+                    self.unrunnable = Logged({None: unrunnable})
                     self.blocked = {}
                 elif mode == "error":
                     self._fail_node(self._mode_error)
