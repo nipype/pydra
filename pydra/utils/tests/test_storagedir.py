@@ -964,3 +964,34 @@ def test_scandir_after_close_raises_on_either_backend(root):
         next(unstarted)
     with pytest.raises(ValueError, match="closed"):
         next(started)
+
+
+def test_names_lists_without_a_stat(root, monkeypatch):
+    """`names` lists a directory's names with no per-entry stat, so an entry that vanishes or
+    answers ESTALE between the listing and a stat can never fail or empty the listing; a symlink
+    is listed by name, never followed."""
+    d = root.child("d", create=True)
+    for name in ("x", "y"):
+        with d.open_new(name, 0o444):
+            pass
+    d.child("sub", create=True).close()
+    if hasattr(os, "symlink") and not storagedir.IS_WINDOWS:
+        os.symlink("x", os.path.join(d.path, "link"))
+    expected = sorted(n for n in os.listdir(d.path))
+
+    real_stat, real_lstat = os.stat, os.lstat
+
+    def stale_entries(real):
+        def call(path, *args, **kwargs):
+            if os.path.basename(os.fspath(path)) in expected:
+                raise OSError(errno.ESTALE, "stale file handle")
+            return real(path, *args, **kwargs)
+
+        return call
+
+    monkeypatch.setattr(os, "stat", stale_entries(real_stat))
+    monkeypatch.setattr(os, "lstat", stale_entries(real_lstat))
+    assert sorted(d.names()) == expected
+    d.close()
+    with pytest.raises(ValueError):
+        d.names()
