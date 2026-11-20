@@ -694,6 +694,21 @@ class StorageDir:
         finally:
             os.close(fd)
 
+    def names(self) -> list[str]:
+        """The names in this directory, with no per-entry ``stat``: an entry removed or answering
+        ``ESTALE`` between the listing and a stat of it can neither fail the listing nor drop the
+        other names. Nothing is followed, and what a name is is not checked; open it through this
+        handle to find out. Needs read permission on the directory."""
+        self._live()
+        if self._path_mode:
+            self._guard()
+            return os.listdir(self.path)
+        fd = os.open(".", os.O_RDONLY | _DIRECTORY | _CLOEXEC, dir_fd=self._fd)
+        try:
+            return os.listdir(fd)
+        finally:
+            os.close(fd)
+
     def set_mode(self, mode: int, name: str | None = None) -> None:
         """Set the mode of this directory, or of ``name`` in it, through a descriptor.
 
