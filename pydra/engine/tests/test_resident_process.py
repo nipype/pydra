@@ -72,9 +72,9 @@ def test_provider_load_spawns_child(tmp_path):
     handle = provider.load({}, Device())
     try:
         child, grandchild = _wait_for(record)
-        assert handle.pid == child
         assert _alive(child) and _alive(grandchild)
-        assert os.getpgid(child) == child  # its own group
+        assert os.getpgid(child) == handle.pid  # the shim's group, not ours
+        assert handle.pid != child
         assert os.getpgid(child) != os.getpgrp()
     finally:
         provider.close(handle)
@@ -162,20 +162,111 @@ def test_windows_stop_command_is_built(monkeypatch):
     assert procgroup.popen_group_kwargs("linux") == {"start_new_session": True}
 
 
-def test_child_oom_attributed_to_its_call(tmp_path, monkeypatch):
-    """The baseline is taken after the start, so an OOM kill is charged to the call
-    that ran when the counter moved, and only once. A fake ``memory.events`` stands in
-    where there is no cgroup v2"""
-    from pydra.engine.procgroup import CgroupOomBaseline
+def _use_fake_cgroup(monkeypatch, tmp_path):
+    from pydra.engine import procgroup
 
     events = tmp_path / "memory.events"
-    events.write_text("low 0\nhigh 0\nmax 0\noom 0\noom_kill 3\n")  # earlier siblings
-    baseline = CgroupOomBaseline(events)
-    baseline.reset()  # after the provider start
-    assert baseline.take() == 0  # call 1: nothing
-    events.write_text("low 0\nhigh 0\nmax 0\noom 1\noom_kill 4\n")
-    assert baseline.take() == 1  # call 2: the kill
-    assert baseline.take() == 0  # call 3: not charged again
+    events.write_text("oom 0\noom_kill 3\n")  # earlier siblings' kills
+    monkeypatch.setattr(procgroup, "_BASELINE", None)
+    monkeypatch.setattr(
+        procgroup.CgroupOomBaseline,
+        "discover",
+        classmethod(lambda cls, *a, **k: cls(events)),
+    )
+    return events
+
+
+def _bump(events, n):
+    events.write_text(f"oom 0\noom_kill {n}\n")
+
+
+def test_child_oom_attributed_to_its_call(tmp_path, monkeypatch):
+    """Drives ``load``: a kill during ``connect`` is before the baseline and is not
+    charged; one after it is charged to the next call, once. A fake ``memory.events``
+    stands in for the cgroup (the real file is covered by the Linux test below)"""
+    from pydra.engine.procgroup import ProcessProvider
+
+    events = _use_fake_cgroup(monkeypatch, tmp_path)
+
+    class Server(ProcessProvider):
+        name = "server"
+
+        def argv(self, spec, device):
+            return [sys.executable, "-c", "import time; time.sleep(600)"]
+
+        def connect(self, group, spec):
+            _bump(events, 4)  # killed while starting
+
+    provider = Server()
+    handle = provider.load({}, Device())
+    try:
+        assert handle.take_oom() == 0
+        _bump(events, 5)
+        assert handle.take_oom() == 1
+        assert handle.take_oom() == 0
+    finally:
+        provider.close(handle)
+
+
+def test_oom_baseline_is_one_per_process(tmp_path, monkeypatch):
+    """A kill is charged once, whichever resident's call asks first"""
+    from pydra.engine.procgroup import ProcessProvider
+
+    events = _use_fake_cgroup(monkeypatch, tmp_path)
+
+    class Server(ProcessProvider):
+        name = "server"
+
+        def argv(self, spec, device):
+            return [sys.executable, "-c", "import time; time.sleep(600)"]
+
+    a, b = Server(), Server()
+    ha, hb = a.load({}, Device()), b.load({}, Device())
+    try:
+        _bump(events, 4)
+        assert ha.take_oom() == 1
+        assert hb.take_oom() == 0
+        _bump(events, 6)
+        assert hb.take_oom() == 2
+        assert ha.take_oom() == 0
+    finally:
+        a.close(ha)
+        b.close(hb)
+
+
+def test_starting_a_provider_resets_the_baseline(tmp_path, monkeypatch):
+    from pydra.engine.procgroup import ProcessProvider
+
+    events = _use_fake_cgroup(monkeypatch, tmp_path)
+
+    class Server(ProcessProvider):
+        name = "server"
+
+        def argv(self, spec, device):
+            return [sys.executable, "-c", "import time; time.sleep(600)"]
+
+    a = Server()
+    ha = a.load({}, Device())
+    _bump(events, 4)  # unclaimed kill, then another provider starts
+    hb = a.load({}, Device())
+    try:
+        assert ha.take_oom() == 0
+    finally:
+        a.close(ha)
+        a.close(hb)
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="a real cgroup needs Linux"
+)
+def test_real_cgroup_baseline_when_present():
+    from pydra.engine.procgroup import CgroupOomBaseline
+
+    baseline = CgroupOomBaseline.discover()
+    if baseline.path is None:
+        pytest.skip("no readable cgroup oom_kill counter on this host")
+    baseline.reset()
+    assert baseline.take() == 0
 
 
 def test_cgroup_absent_is_no_accounting(tmp_path):
@@ -271,3 +362,201 @@ def test_plain_workflows_import_nothing_from_procgroup():
         "assert 'pydra.engine.procgroup' not in sys.modules"
     )
     subprocess.run([sys.executable, "-c", code], check=True, timeout=120)
+
+
+def test_cgroup_v1_fallback_reads_memory_oom_control(tmp_path):
+    from pydra.engine.procgroup import CgroupOomBaseline
+
+    root = tmp_path / "cg"
+    (root / "memory" / "job").mkdir(parents=True)
+    ctl = root / "memory" / "job" / "memory.oom_control"
+    ctl.write_text("oom_kill_disable 0\nunder_oom 0\noom_kill 2\n")
+    proc = tmp_path / "proc_cgroup"
+    proc.write_text("4:cpu,cpuacct:/job\n3:memory:/job\n")
+    baseline = CgroupOomBaseline.discover(proc_cgroup=proc, root=root)
+    assert baseline.path == ctl
+    baseline.reset()
+    ctl.write_text("oom_kill_disable 0\nunder_oom 0\noom_kill 3\n")
+    assert baseline.take() == 1
+
+
+def test_no_accounting_is_logged_once(tmp_path, caplog, monkeypatch):
+    import logging
+
+    from pydra.engine import procgroup
+
+    monkeypatch.setattr(procgroup, "_LOGGED_NO_ACCOUNTING", False)
+    with caplog.at_level(logging.DEBUG, logger="pydra.resident"):
+        for _ in range(3):
+            procgroup.CgroupOomBaseline.discover(proc_cgroup=tmp_path / "nope")
+    assert sum("OOM accounting" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_device_index_is_mapped_through_visible_devices(monkeypatch):
+    from pydra.engine.procgroup import ProcessProvider
+
+    class Server(ProcessProvider):
+        name = "server"
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,5")
+    assert Server().env({}, Device("cuda", 0))["CUDA_VISIBLE_DEVICES"] == "2"
+    assert Server().env({}, Device("cuda", 1))["CUDA_VISIBLE_DEVICES"] == "5"
+    with pytest.raises(ValueError):
+        Server().env({}, Device("cuda", 2))
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES")
+    assert Server().env({}, Device("cuda", 1))["CUDA_VISIBLE_DEVICES"] == "1"
+    assert Server().env({}, Device()) is None
+
+
+@posix_only
+def test_failed_connect_stops_the_leader(tmp_path):
+    from pydra.engine.procgroup import ProcessProvider
+
+    seen = []
+
+    class Server(ProcessProvider):
+        name = "server"
+
+        def argv(self, spec, device):
+            return [sys.executable, "-c", "import time; time.sleep(600)"]
+
+        def connect(self, group, spec):
+            seen.append(group)
+            raise RuntimeError("no handshake")
+
+    with pytest.raises(RuntimeError):
+        Server().load({}, Device())
+    assert seen[0].proc.returncode is not None
+    assert not _alive(seen[0].pid)
+
+
+SETSID_CHILD = textwrap.dedent("""
+    import os, subprocess, sys, time
+    gc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(600)"], start_new_session=True
+    )
+    open(sys.argv[1], "w").write(f"{os.getpid()} {gc.pid}")
+    time.sleep(600)
+    """)
+
+TERM_IGNORING_GRANDCHILD = textwrap.dedent("""
+    import os, subprocess, sys, time
+    gc = subprocess.Popen([sys.executable, "-c",
+        "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(600)"])
+    open(sys.argv[1], "w").write(f"{os.getpid()} {gc.pid}")
+    sys.exit(0)  # the leader's child exits at once; the grandchild stays
+    """)
+
+
+@posix_only
+def test_descendant_that_leaves_the_group_is_stopped_and_waited_for(tmp_path):
+    from pydra.engine.procgroup import ProcessGroup
+
+    record = tmp_path / "pids"
+    group = ProcessGroup.start([sys.executable, "-c", SETSID_CHILD, str(record)])
+    child, escaped = _wait_for(record)
+    assert os.getpgid(escaped) != group.pid  # really outside the group
+    group.stop(term_timeout=5, kill_timeout=10)
+    assert not _alive(child)
+    assert not _alive(escaped)
+
+
+@posix_only
+def test_escaped_descendant_is_in_the_gpu_wait(tmp_path, monkeypatch):
+    from pydra.engine.procgroup import ProcessProvider
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _fake_nvidia_smi(bindir)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    record = tmp_path / "pids"
+
+    class Server(ProcessProvider):
+        name = "server"
+
+        def argv(self, spec, device):
+            return [sys.executable, "-c", SETSID_CHILD, str(record)]
+
+    provider = Server(gpu_settle_timeout=20)
+    handle = provider.load({}, Device("cuda", 0))
+    child, escaped = _wait_for(record)
+    (bindir / "pids").write_text(f"{escaped}")
+    assert provider.measure(handle).device == 4096 * 1024 * 1024
+    provider.close(handle)
+    assert not _alive(escaped)
+
+
+@posix_only
+def test_term_ignoring_grandchild_is_sigkilled(tmp_path):
+    from pydra.engine.procgroup import ProcessGroup
+
+    record = tmp_path / "pids"
+    group = ProcessGroup.start(
+        [sys.executable, "-c", TERM_IGNORING_GRANDCHILD, str(record)]
+    )
+    _, grandchild = _wait_for(record)
+    t0 = time.monotonic()
+    group.stop(term_timeout=0.5, kill_timeout=10)
+    assert time.monotonic() - t0 < 8
+    assert not _alive(grandchild)
+
+
+@posix_only
+def test_crashed_leader_then_stop_does_not_reuse_or_resignal(tmp_path, monkeypatch):
+    """A leader that died stays unreaped until ``stop``, so its pid is not reused;
+    ``stop`` kills the survivors, reaps once, and a second ``stop`` signals nothing"""
+    from pydra.engine import procgroup
+    from pydra.engine.procgroup import ProcessGroup
+
+    record = tmp_path / "pids"
+    script = textwrap.dedent("""
+        import os, subprocess, sys
+        gc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        open(sys.argv[1], "w").write(f"{os.getpid()} {gc.pid}")
+        time.sleep(0)
+        """).replace("import os,", "import time, os,")
+    group = ProcessGroup.start([sys.executable, "-c", script, str(record)])
+    _, grandchild = _wait_for(record)
+    deadline = time.monotonic() + 20
+    while group.leader_running() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not group.leader_running()
+    assert group.proc.returncode is None  # not reaped by looking
+    group.members()
+    assert group.proc.returncode is None
+    group.stop(term_timeout=5, kill_timeout=10)
+    assert not _alive(grandchild)
+    assert group.proc.returncode is not None
+    calls = []
+    monkeypatch.setattr(procgroup.os, "killpg", lambda *a: calls.append(a))
+    monkeypatch.setattr(procgroup.os, "kill", lambda *a: calls.append(a))
+    group.stop()
+    assert calls == []
+
+
+@posix_only
+def test_child_group_is_gone_when_the_parent_is_sigkilled(tmp_path):
+    """The lifeline: the parent dies without running ``close`` and the server, its
+    descendants (also one that left the group) and the shim go away"""
+    record = tmp_path / "pids"
+    parent_code = textwrap.dedent(f"""
+        import sys, time
+        from pydra.engine.procgroup import ProcessGroup
+        g = ProcessGroup.start([sys.executable, "-c", {SETSID_CHILD!r}, {str(record)!r}])
+        open({str(tmp_path / "shim")!r}, "w").write(str(g.pid))
+        time.sleep(600)
+        """)
+    parent = subprocess.Popen([sys.executable, "-c", parent_code])
+    try:
+        child, escaped = _wait_for(record)
+        shim = int((tmp_path / "shim").read_text())
+        parent.send_signal(signal.SIGKILL)
+        parent.wait(timeout=20)
+        deadline = time.monotonic() + 30
+        pids = (shim, child, escaped)
+        while any(_alive(p) for p in pids) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert not any(_alive(p) for p in pids)
+    finally:
+        parent.kill()
+        parent.wait(timeout=20)
