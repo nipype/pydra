@@ -66,7 +66,14 @@ def wait_for(condition, timeout: float = 10.0, step: float = 0.01) -> bool:
 
 
 def newest_mtime(lockfile: Path) -> float:
-    return max(p.lstat().st_mtime for p in [lockfile, *lockfile.rglob("*")])
+    """The newest mtime in a lease, skipping a beat removed while it is listed."""
+    mtimes = []
+    for path in [lockfile, *lockfile.rglob("*")]:
+        try:
+            mtimes.append(path.lstat().st_mtime)
+        except FileNotFoundError:
+            pass
+    return max(mtimes)
 
 
 def heartbeat_threads() -> list[threading.Thread]:
