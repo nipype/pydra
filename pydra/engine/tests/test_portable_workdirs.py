@@ -586,7 +586,11 @@ def test_debug_cf_parity(any_worker, tmp_path):
         got = job.result(settled=True)
         wd = store.work_dir(job)
     assert got.errored is False and got.outputs.out == 2 and got.stored is True
-    assert Path(got.cache_dir) == store.entry_path(job.checksum, job.context)
+    # published under the execute context, which a worker process can make differ from the lookup
+    # context, so the result is read by the EntryRef that publish returned, not by recomputing it
+    ref = got.committed.entry
+    assert Path(got.cache_dir).name == ref.fingerprint and Path(got.cache_dir).is_dir()
+    assert Path(got.cache_dir).parent.name == ref.cdir == cdir_for(job.checksum)
     # emptied after the publish, except the record the runner removes once it holds the outcome
     assert sorted(p.name for p in wd.iterdir()) == ["_committed.json"]
     assert staging_names(tmp_path / "root") == []
