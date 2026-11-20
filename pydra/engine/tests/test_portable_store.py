@@ -1849,3 +1849,36 @@ def test_set_aside_fallback_rechecks_the_object(tmp_path, monkeypatch, meanwhile
         for h in [root, *handles]:
             h.close()
     assert entry.exists() == (meanwhile != "gone")
+
+
+def test_a_read_asks_for_no_more_than_a_block(tmp_path, monkeypatch):
+    """A JSON member is read in blocks, and a blob by the size the file has: ``read(n)``
+    allocates ``n`` bytes up front, so a read sized by the 1 GiB cap committed 1 GiB per read on
+    Windows and stalled concurrent readers for seconds."""
+    store = make(tmp_path)
+    c = publish(store)
+    asked = []
+    real = StorageDir.open_read
+
+    class Recording:
+        def __init__(self, f):
+            self.f = f
+
+        def read(self, n=-1):
+            asked.append(n)
+            return self.f.read(n)
+
+        def __getattr__(self, name):
+            return getattr(self.f, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.f.close()
+
+    monkeypatch.setattr(
+        StorageDir, "open_read", lambda self, name: Recording(real(self, name))
+    )
+    assert store.read(c.entry, None).outputs == OUT
+    assert asked and all(0 < n <= 1 << 20 for n in asked), asked

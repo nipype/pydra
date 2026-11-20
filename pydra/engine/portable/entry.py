@@ -509,11 +509,17 @@ def _open_member(entry: StorageDir, name: str) -> ty.BinaryIO:
 
 
 def _read_file(entry: StorageDir, name: str) -> bytes:
+    """The bytes of the member ``name``, read in blocks of at most ``_BLOCK`` bytes (a single
+    ``read(n)`` allocates ``n`` bytes up front, whatever the file holds)."""
+    chunks: list[bytes] = []
+    total = 0
     with _open_member(entry, name) as f:
-        data = f.read(_MAX_JSON + 1)
-    if len(data) > _MAX_JSON:
-        raise CorruptEntry(f"{name} is larger than {_MAX_JSON} bytes")
-    return data
+        while block := f.read(_BLOCK):
+            chunks.append(block)
+            total += len(block)
+            if total > _MAX_JSON:
+                raise CorruptEntry(f"{name} is larger than {_MAX_JSON} bytes")
+    return b"".join(chunks)
 
 
 def _verify_file(entry: StorageDir, name: str, rec: dict, verify: str) -> None:
@@ -534,7 +540,8 @@ def _verify_file(entry: StorageDir, name: str, rec: dict, verify: str) -> None:
 
 def _verify_blob(entry: StorageDir, name: str, rec: dict, verify: str) -> bytes:
     with _open_member(entry, name) as f:
-        data = f.read(rec["size"] + 1)
+        size = os.fstat(f.fileno()).st_size
+        data = f.read(min(size, rec["size"]) + 1)
     if len(data) != rec["size"]:
         raise CorruptEntry(
             f"{name} has size {len(data)}, the entry records {rec['size']}"
