@@ -59,7 +59,9 @@ class defined elsewhere is stored only once it is registered (see
 ``pathlib.Path`` output that names a file or directory the job wrote in its work directory
 is copied into the entry too and read back as a path to the copy; any other path is stored
 as a value, and its file is not. The work directory is emptied once the entry is published,
-so a file a task writes and does not return as an output is gone after the run. A tuple
+so a file a task writes and does not return as an output is gone after the run. A ``str``
+output is text even when it names a file: one naming a file in the work directory is
+stored as text, with a warning, and the file is not kept. A tuple
 comes back a tuple, a list a list.
 
 Shared roots

@@ -591,7 +591,7 @@ def test_debug_cf_parity(any_worker, tmp_path):
     assert sorted(p.name for p in wd.iterdir()) == ["_committed.json"]
     assert staging_names(tmp_path / "root") == []
     store.forget_committed(job)
-    assert wd.is_dir() and list(wd.iterdir()) == []  # left, empty, for collect
+    assert not wd.exists()  # empty, and the process is not in it: removed
 
 
 # -- collect ---------------------------------------------------------------------------------------------

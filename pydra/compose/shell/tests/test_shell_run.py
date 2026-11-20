@@ -247,11 +247,12 @@ def test_wf_shell_cmd_1(worker, tmp_path):
 
     wf = Workflow(cmd1="pwd", cmd2="ls")
 
+    # the upstream output is a string, stored as text (RFC 0003 section 6.4): the
+    # directory it names, the upstream work directory, is emptied and removed once the
+    # upstream entry is published, so the downstream `ls` finds no such directory
     with Submitter(worker=worker, cache_root=tmp_path) as sub:
-        res = sub(wf)
-
-    # the upstream work directory is emptied once its entry is published
-    assert res.outputs.out == ""
+        with pytest.raises(Exception, match="No such file or directory"):
+            sub(wf, raise_errors=True)
 
 
 # customised input task

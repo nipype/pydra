@@ -20,6 +20,7 @@ import sys
 import types
 import typing as ty
 import uuid
+import warnings
 from pathlib import Path
 
 from fileformats.core.fileset import FileSet
@@ -123,6 +124,7 @@ class Encoder:
         self.can_pickle = can_pickle
         self.allow_naive = allow_naive
         self.members: dict[str, dict[str, ty.Any]] = {}
+        self._warned: set[str] = set()
 
     # members
 
@@ -193,6 +195,7 @@ class Encoder:
                 raise UnencodableOutput(
                     field, tp, "a string with a lone surrogate"
                 ) from None
+            self._warn_work_path(value, field)
             return value
         if tp is complex:
             return {
@@ -262,6 +265,31 @@ class Encoder:
             "cloudpickle": cloudpickle.__version__,
             "python": _PYTHON,
         }
+
+    def _warn_work_path(self, value: str, field: str) -> None:
+        """Warn, once per field, of a ``str`` output that names an existing file or directory
+        the job wrote in its work directory: a string is a value, so the file is not stored
+        and is gone once the work directory is emptied."""
+        if (
+            self.work_dir is None
+            or field in self._warned
+            or not os.path.isabs(value)
+            or len(value) > 4096
+        ):
+            return
+        try:
+            real = os.path.realpath(value)
+        except (OSError, ValueError):
+            return
+        if real.startswith(self.work_dir + os.sep) and os.path.exists(real):
+            self._warned.add(field)
+            warnings.warn(
+                f"output {field!r} is the string {value!r}, a path inside the job's work "
+                "directory: a string is stored as text and the file is removed with the "
+                "work directory; return it as a pathlib.Path or a File to store the file",
+                UserWarning,
+                stacklevel=2,
+            )
 
     def _work_path(self, value: Path, field: str) -> JSON | None:
         """The file set form of a path to a file or directory inside the work directory

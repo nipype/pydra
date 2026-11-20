@@ -4,6 +4,8 @@ from pathlib import Path
 import contextlib
 import inspect
 import os
+import threading
+import collections
 import uuid
 import sys
 import typing as ty
@@ -796,3 +798,37 @@ def _make_attrs_class(field_types: dict[str, type]) -> type:
             {n: attrs.field(type=t) for n, t in field_types.items()},
         )
     )
+
+
+_held_dirs: "collections.Counter[str]" = collections.Counter()
+_held_lock = threading.Lock()
+
+
+def hold_dir(path: os.PathLike) -> None:
+    """Record that a running job will change the process working directory back to ``path``
+    (jobs on threads share the one working directory, so one may have captured another
+    job's directory), so that nothing removes it meanwhile (see `dir_held`)."""
+    with _held_lock:
+        _held_dirs[os.path.realpath(path)] += 1
+
+
+def release_dir(path: os.PathLike) -> None:
+    """Undo one `hold_dir` of ``path``."""
+    real = os.path.realpath(path)
+    with _held_lock:
+        _held_dirs[real] -= 1
+        if _held_dirs[real] <= 0:
+            del _held_dirs[real]
+
+
+def dir_held(path: os.PathLike) -> bool:
+    """Whether ``path``, or a directory below it, is the process working directory (or the
+    working directory cannot be read) or one a running job will return to."""
+    real = os.path.realpath(path)
+    try:
+        here = [os.path.realpath(os.getcwd())]
+    except OSError:
+        return True
+    with _held_lock:
+        held = here + list(_held_dirs)
+    return any(h == real or h.startswith(real + os.sep) for h in held)

@@ -32,6 +32,8 @@ from pydra.engine.result import (
     record_error_json,
 )
 from pydra.utils.general import (
+    hold_dir,
+    release_dir,
     atomic_write,
     attrs_values,
     attrs_fields,
@@ -669,6 +671,8 @@ class Job(ty.Generic[TaskType]):
             self._errored = False
             enters = self._enters_cache_dir
             cwd = os.getcwd()
+            if enters:  # restored to after the run: not removed meanwhile
+                hold_dir(cwd)
             self._withdraw_success(lease)
             self._populate_filesystem()
             if enters:
@@ -708,7 +712,10 @@ class Job(ty.Generic[TaskType]):
                     self._remove_info_file()
                 finally:
                     if enters:
-                        os.chdir(cwd)
+                        try:
+                            os.chdir(cwd)
+                        finally:
+                            release_dir(cwd)
         result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
@@ -746,6 +753,8 @@ class Job(ty.Generic[TaskType]):
             self._errored = False
             enters = self._enters_cache_dir
             cwd = os.getcwd()
+            if enters:  # restored to after the run: not removed meanwhile
+                hold_dir(cwd)
             self._withdraw_success(lease)
             self._populate_filesystem()
             result = Result(
@@ -782,7 +791,10 @@ class Job(ty.Generic[TaskType]):
                     self._remove_info_file()
                 finally:
                     if enters:
-                        os.chdir(cwd)
+                        try:
+                            os.chdir(cwd)
+                        finally:
+                            release_dir(cwd)
         result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution

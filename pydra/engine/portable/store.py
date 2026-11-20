@@ -1951,9 +1951,11 @@ class PortableStore:
 
     def forget_committed(self, job: "Job") -> None:
         """Remove ``_committed.json`` once the runner holds the job's outcome (RFC 0003 section
-        5.4). The directory itself stays, empty, for `collect`: jobs on threads share one
-        process working directory, which one of them may have restored to this directory,
-        and removing it would leave the process in a directory that no longer exists."""
+        5.4), and a default work directory that is then empty, unless the process working
+        directory is inside it: jobs on threads share that one directory, which one of them
+        may have restored to this one, and removing it would leave the process in a
+        directory that no longer exists (it is left for the submitter's close, or
+        `collect`)."""
         path = self._maybe_work_dir(job)
         if path is None:
             return
@@ -1963,6 +1965,9 @@ class PortableStore:
                     handle.unlink(_COMMITTED)
         except FileNotFoundError:
             return
+        if self._work_fn is None and not _holds_cwd(path):
+            with contextlib.suppress(OSError):  # not empty: a failure, kept outputs
+                os.rmdir(path)
 
     def _empty_work_dir(self, path: Path) -> None:
         """Empty a default work directory except ``_committed.json``. What cannot be removed
@@ -3014,6 +3019,14 @@ class PortableStore:
             save(path, job=job)
         except Exception as err:
             logger.warning("could not save the failed job %s: %s", job.name, err)
+
+
+def _holds_cwd(path: Path) -> bool:
+    """Whether the process working directory is ``path`` or below it, or a running job of
+    this process will return to such a directory (`pydra.utils.general.dir_held`)."""
+    from pydra.utils.general import dir_held
+
+    return dir_held(path)
 
 
 def _same_entry(a: EntryRef, b: EntryRef) -> bool:
