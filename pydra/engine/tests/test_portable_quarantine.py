@@ -55,9 +55,23 @@ def identity_of(store, committed):
     return os.stat(entry_path(store.path, committed))
 
 
+SKEW = 10_000.0
+
+
+@pytest.fixture
+def skew(monkeypatch):
+    """The store's clock runs SKEW seconds ahead. A rename or a utime changes ``ctime`` to
+    the real now, which cannot be set back, so an object is made old by moving the clock.
+    """
+    import pydra.engine.portable.store as mod
+
+    monkeypatch.setattr(mod, "_now", lambda: time.time() + SKEW)
+
+
 def age(path, seconds):
-    t = time.time() - seconds
-    os.utime(path, (t, t))
+    """Make ``path`` ``seconds`` old on the skewed clock (at most SKEW)."""
+    t = time.time() + SKEW - seconds
+    os.utime(path, (t, t), follow_symlinks=False)
 
 
 # -- fenced quarantine -----------------------------------------------------------------------------
@@ -213,7 +227,9 @@ def aged_store(tmp_path, **ages):
     return make(tmp_path, policy=StorePolicy(ages=StoreAges(**ages)))
 
 
-def test_collect_removes_aged_staging_quarantine_q_and_aside(tmp_path, monkeypatch):
+def test_collect_removes_aged_staging_quarantine_and_q_names(
+    tmp_path, monkeypatch, skew
+):
     store = aged_store(tmp_path, staging=100, quarantine=100)
     c = publish(store)
     root = Path(store.path)
@@ -226,7 +242,7 @@ def test_collect_removes_aged_staging_quarantine_q_and_aside(tmp_path, monkeypat
     os.chmod(stage / "files" / "f", 0o444)
     tmp = root / ".pydra-store.{}.tmp".format("a" * 32)
     tmp.write_text("{}")
-    # a quarantined entry, a q- name and an aside name
+    # a quarantined entry and a q- name
     other = publish(store, OTHER, checksum="python-other")
     store.evict(other.entry, other.own_digest)
     (parent / "q-1234").mkdir()
@@ -243,7 +259,7 @@ def test_collect_removes_aged_staging_quarantine_q_and_aside(tmp_path, monkeypat
     assert [p.name for p in parent.iterdir()] == [entry.name]
 
 
-def test_collect_spares_live_stage(tmp_path):
+def test_collect_spares_live_stage(tmp_path, skew):
     store = aged_store(tmp_path, staging=100, quarantine=100)
     root = Path(store.path)
     publish(store)
@@ -258,21 +274,21 @@ def test_collect_spares_live_stage(tmp_path):
     assert [str(live)] == [w for w, _ in report.kept if w == str(live)]
 
 
-def test_collect_never_removes_entries(tmp_path):
+def test_collect_never_removes_entries(tmp_path, skew):
     store = aged_store(tmp_path, staging=1, quarantine=1)
     cs = [publish(store, OUT, checksum=f"python-e{i}") for i in range(5)]
     for p in Path(store.path).rglob("*"):
-        age(p, 10_000)
+        age(p, SKEW)
     # a corrupt entry is still an entry: only a reader quarantines it
     corrupt(entry_path(store.path, cs[0]))
-    age(entry_path(store.path, cs[0]), 10_000)
+    age(entry_path(store.path, cs[0]), SKEW)
     store.collect()
     for c in cs[1:]:
         assert store.read(c.entry, None).outputs == OUT
     assert entry_path(store.path, cs[0]).is_dir()
 
 
-def test_collect_never_touches_sidecars(tmp_path):
+def test_collect_never_touches_sidecars(tmp_path, skew):
     store = aged_store(tmp_path, staging=1, quarantine=1)
     publish(store)
     root = Path(store.path)
@@ -281,13 +297,15 @@ def test_collect_never_touches_sidecars(tmp_path):
     (side / "run" / "q-1" / "f").write_text("x")
     (side / "note").write_text("x")
     for p in (side, side / "run", side / "run" / "q-1", side / "note"):
-        age(p, 10_000)
+        age(p, SKEW)
     report = store.collect()
     assert (side / "run" / "q-1" / "f").is_file() and (side / "note").is_file()
     assert not any("sidecars" in w for w in report.removed)
 
 
-def test_collect_leaves_a_claimed_object_another_collector_took(tmp_path, monkeypatch):
+def test_collect_leaves_a_claimed_object_another_collector_took(
+    tmp_path, monkeypatch, skew
+):
     """An object put back (or removed) between the listing and the claim is not removed."""
     store = aged_store(tmp_path, staging=100, quarantine=100)
     c = publish(store)
@@ -314,7 +332,7 @@ def test_collect_without_a_quarantine_directory(tmp_path):
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="needs POSIX modes")
-def test_collect_removes_a_sealed_quarantined_entry(tmp_path):
+def test_collect_removes_a_sealed_quarantined_entry(tmp_path, skew):
     store = aged_store(tmp_path, staging=100, quarantine=100)
     c = publish(store)
     entry = entry_path(store.path, c)
@@ -392,3 +410,266 @@ def test_collect_never_removes_an_entry_published_concurrently(tmp_path):
         c = publish(store, {"a": i}, checksum=f"python-keep{i}")
         assert c.stored
         assert store.read(c.entry, None).outputs == {"a": i}
+
+
+# -- fix round 1 ---------------------------------------------------------------------------------
+
+
+def slow_stage(monkeypatch, store, seconds):
+    fmt = type(store.format)
+    real = fmt.stage
+
+    def stage(self, staging, *a, **k):
+        d = real(self, staging, *a, **k)
+        time.sleep(seconds)  # a long copy into the last member: no new directory entry
+        return d
+
+    monkeypatch.setattr(fmt, "stage", stage)
+
+
+def test_a_live_writer_is_not_collected_during_a_long_copy(tmp_path, monkeypatch):
+    """B1: the writer touches its stage at least every quarter of the staging age."""
+    store = aged_store(tmp_path, staging=1.0, quarantine=3600)
+    slow_stage(monkeypatch, store, 2.0)
+    stop = threading.Event()
+    removed: list[str] = []
+
+    def collector():
+        while not stop.is_set():
+            removed.extend(store.collect().removed)
+            time.sleep(0.1)
+
+    t = threading.Thread(target=collector)
+    t.start()
+    try:
+        c = publish(store, {"a": 7}, checksum="python-slow")
+    finally:
+        stop.set()
+        t.join()
+    assert (c.stored, c.won) == (True, True)
+    assert removed == []
+    assert store.read(c.entry, None).outputs == {"a": 7}
+
+
+def vanishing_stage(monkeypatch, store, times):
+    import shutil
+
+    fmt = type(store.format)
+    real = fmt.stage
+    calls = {"n": 0}
+
+    def stage(self, staging, *a, **k):
+        d = real(self, staging, *a, **k)
+        calls["n"] += 1
+        if calls["n"] <= times:
+            shutil.rmtree(staging.path)  # a collector claimed and removed it
+        return d
+
+    monkeypatch.setattr(fmt, "stage", stage)
+    return calls
+
+
+def test_a_stage_that_vanished_is_staged_again_once(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    calls = vanishing_stage(monkeypatch, store, 1)
+    c = publish(store)
+    assert (c.won, c.stored, c.kept) == (True, True, None)
+    assert calls["n"] == 2
+    assert store.read(c.entry, None).outputs == OUT
+
+
+def test_a_stage_that_vanishes_twice_raises_not_a_phantom_kept(tmp_path, monkeypatch):
+    from pydra.utils.storagedir import StoreUnavailable
+
+    store = make(tmp_path)
+    vanishing_stage(monkeypatch, store, 2)
+    with pytest.raises(StoreUnavailable, match="vanished twice"):
+        publish(store)
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="a rename changes ctime on POSIX only")
+def test_an_object_moved_a_moment_ago_is_young_whatever_its_mtime(tmp_path, skew):
+    """I1: a rename changes ctime and not mtime; the age is the later of the two."""
+    store = aged_store(tmp_path, staging=100, quarantine=2 * SKEW)
+    c = publish(store)
+    entry = entry_path(store.path, c)
+    t = time.time() - 2 * 86400
+    os.utime(entry, (t, t))  # commit-time mtime, two days old; ctime is now
+    (Path(store.path) / "quarantine").mkdir(exist_ok=True)
+    moved = Path(store.path) / "quarantine" / "x"
+    os.rename(entry, moved)
+    assert moved.stat().st_mtime < time.time() - 86400
+    report = store.collect()  # the clock is SKEW ahead of the ctime, within the age
+    assert report.removed == []
+    assert str(moved) in [w for w, _ in report.kept]
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="a rename changes ctime on POSIX only")
+def test_the_fence_restores_a_valid_entry_while_a_collector_runs(tmp_path, monkeypatch):
+    """I1: a collector between the move and the stamp does not take the moved copy."""
+    store = aged_store(tmp_path, staging=3600, quarantine=3600)
+    c = publish(store)
+    entry = entry_path(store.path, c)
+    t = time.time() - 2 * 86400
+    for p in [entry, *entry.rglob("*")]:
+        os.utime(p, (t, t), follow_symlinks=False)
+    real = PortableStore._after_move
+    removed: list[str] = []
+
+    def after_move(self, *a, **k):
+        removed.extend(self.collect().removed)
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(PortableStore, "_after_move", after_move)
+    fmt = type(store.format)
+    real_read = fmt.read
+    calls = {"n": 0}
+
+    def read(self, *a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise CorruptEntry("transient")
+        return real_read(self, *a, **k)
+
+    monkeypatch.setattr(fmt, "read", read)
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    assert removed == []
+    assert store.read(c.entry, None).outputs == OUT
+
+
+@pytest.mark.parametrize(
+    "staging, quarantine, staging_goes, quarantine_goes",
+    [(100, 5000, True, False), (5000, 100, False, True)],
+)
+def test_staging_and_quarantine_have_their_own_ages(
+    tmp_path, skew, staging, quarantine, staging_goes, quarantine_goes
+):
+    store = aged_store(tmp_path, staging=staging, quarantine=quarantine)
+    c = publish(store)
+    root = Path(store.path)
+    parent = entry_path(root, c).parent
+    (root / "staging" / "s").mkdir()
+    (parent / "q-1").mkdir()
+    (root / "quarantine" / "x").mkdir(parents=True, exist_ok=True)
+    for p in (root / "staging" / "s", parent / "q-1", root / "quarantine" / "x"):
+        age(p, 1000)
+    store.collect()
+    assert (not (root / "staging" / "s").exists()) is staging_goes
+    assert (not (parent / "q-1").exists()) is quarantine_goes
+    assert (not (root / "quarantine" / "x").exists()) is quarantine_goes
+
+
+def test_wrong_digest_evict_never_renames(tmp_path, monkeypatch):
+    store = make(tmp_path)
+    c = publish(store)
+    calls: list = []
+    recording_rename(monkeypatch, calls)
+    store.evict(c.entry, "0" * 64)
+    assert calls == []
+
+
+def test_evict_moves_only_the_entry_it_read(tmp_path, monkeypatch):
+    """The entry is replaced after the evict read it: nothing of the new one is moved."""
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(store.path, c)
+    real = PortableStore._quarantine
+    calls: list = []
+
+    def replaced(self, root, parent, name, cdir, identity, expected=None):
+        assert identity is not None
+        assert identity.st_ino == os.stat(entry).st_ino
+        os.rename(entry, entry.parent / "elsewhere")
+        publish(self, OTHER)
+        recording_rename(monkeypatch, calls)
+        return real(self, root, parent, name, cdir, identity, expected)
+
+    monkeypatch.setattr(PortableStore, "_quarantine", replaced)
+    store.evict(c.entry, c.own_digest)
+    assert not [call for call in calls if "quarantine" in call[2]]
+    assert store.read(c.entry, None).outputs == OTHER
+
+
+def test_evict_of_a_wrong_kind_object_sets_it_aside(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(store.path, c)
+    corrupt(entry)
+    os.rename(entry, entry.parent / "elsewhere")
+    entry.write_text("not a directory")
+    store.evict(c.entry, c.own_digest)
+    assert not entry.exists() and len(quarantined(store.path)) == 1
+
+
+def test_collect_removes_a_gc_leftover_in_a_container(tmp_path, skew):
+    store = aged_store(tmp_path, staging=100, quarantine=100)
+    c = publish(store)
+    parent = entry_path(store.path, c).parent
+    (parent / "gc-abc").mkdir()
+    age(parent / "gc-abc", 1000)
+    assert store.collect().removed == [str(parent / "gc-abc")]
+
+
+def test_collect_removes_the_aside_names_the_format_declares(
+    tmp_path, skew, monkeypatch
+):
+    import re
+
+    store = aged_store(tmp_path, staging=100, quarantine=100)
+    c = publish(store)
+    parent = entry_path(store.path, c).parent
+    monkeypatch.setattr(
+        type(store.format), "aside_names", lambda self: re.compile(r"aside-.*")
+    )
+    (parent / "aside-1").mkdir()
+    (parent / "other-1").mkdir()
+    for p in (parent / "aside-1", parent / "other-1"):
+        age(p, 1000)
+    assert store.collect().removed == [str(parent / "aside-1")]
+
+
+def test_collect_reports_what_it_cannot_remove_with_its_owner(
+    tmp_path, skew, monkeypatch
+):
+    import pydra.engine.portable.store as mod
+
+    store = aged_store(tmp_path, staging=100, quarantine=100)
+    publish(store)
+    stage = Path(store.path) / "staging" / "dead"
+    stage.mkdir()
+    age(stage, 1000)
+
+    def fail(parent, name):
+        raise PermissionError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(mod, "_remove_tree", fail)
+    report = store.collect()
+    assert report.removed == []
+    ((where, why),) = [k for k in report.kept if k[0] == str(stage)] or [(None, None)]
+    assert where == str(stage) and "owner:" in why
+
+
+def test_collect_sweeps_only_its_own_files_at_the_root(tmp_path, skew):
+    store = aged_store(tmp_path, staging=100, quarantine=100)
+    publish(store)
+    root = Path(store.path)
+    (root / "notes.txt").write_text("x")
+    age(root / "notes.txt", 1000)
+    age(root / "pydra-store.json", 1000)
+    assert store.collect().removed == []
+    assert (root / "notes.txt").is_file() and (root / "pydra-store.json").is_file()
+
+
+def test_set_aside_stamps_the_moved_object(tmp_path):
+    store = make(tmp_path)
+    c = publish(store)
+    entry = entry_path(store.path, c)
+    os.rename(entry, entry.parent / "elsewhere")
+    entry.write_text("x")
+    old = 1_000_000_000
+    os.utime(entry, (old, old))
+    with pytest.raises(CorruptEntry):
+        store.read(c.entry, None)
+    (moved,) = quarantined(store.path)
+    assert moved.stat().st_mtime > old + 1000

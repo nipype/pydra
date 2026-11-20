@@ -15,6 +15,7 @@ import os
 import random
 import re
 import stat
+import threading
 import time
 import typing as ty
 import uuid
@@ -49,6 +50,7 @@ from pydra.engine.result import Result
 from pydra.utils.storagedir import (
     IS_WINDOWS,
     StorageDir,
+    StorageEntry,
     StorePolicy,
     StoreUnavailable,
     WrongKindError,
@@ -217,6 +219,52 @@ def _discard(parent: StorageDir, name: str) -> None:
 class _Replaced(Exception):
     """A directory this writer holds was replaced by another writer's and is no longer in the
     tree; the walk from the root starts again."""
+
+
+class _Vanished(Exception):
+    """The writer's staging directory is gone (collected): stage again."""
+
+
+class _Toucher:
+    """Touches a staging directory every ``interval`` seconds from a thread, so that a live
+    writer is never collected, whatever it is doing (RFC 0003 section 9)."""
+
+    def __init__(self, staging: StorageDir, name: str, interval: float) -> None:
+        self._staging = staging
+        self._name = name
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def touch(self) -> None:
+        try:
+            with self._staging.child(self._name) as d:
+                os.utime(d._fd if d._fd is not None else d.path, None)
+        except (OSError, ValueError):
+            pass  # gone: the writer finds out at the rename
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._interval):
+            self.touch()
+
+    def __enter__(self) -> "_Toucher":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._stop.set()
+        self._thread.join()
+
+
+def _now() -> float:
+    return time.time()
+
+
+def _last_change(st: os.stat_result) -> float:
+    """When an object was last modified or moved. A rename changes ``ctime`` and not
+    ``mtime``; on Windows ``ctime`` is the creation time, so only ``mtime`` is used there
+    and an object moved but not yet stamped is judged by its old ``mtime``."""
+    return st.st_mtime if IS_WINDOWS else max(st.st_mtime, st.st_ctime)
 
 
 class _Contended(Exception):
@@ -528,6 +576,11 @@ class PortableStore:
                 identity.st_ino,
             ):
                 return False
+            if not empty:
+                with contextlib.suppress(
+                    OSError
+                ):  # aged from the move, before it can be listed
+                    os.utime(entry._fd if entry._fd is not None else entry.path, None)
             if (
                 not IS_WINDOWS
                 and held.st_uid == os.geteuid()
@@ -781,6 +834,24 @@ class PortableStore:
             staging.close()
 
     def _publish(
+        self, root: StorageDir, staging: StorageDir, name: str, *args: ty.Any
+    ) -> Committed:
+        """`_publish_once`, staging again, once, if the staging directory was collected."""
+        try:
+            return self._publish_once(root, staging, name, *args)
+        except _Vanished:
+            logger.warning("the staging directory %s vanished; staging again", name)
+        try:
+            return self._publish_once(root, staging, uuid.uuid4().hex, *args)
+        except _Vanished:
+            raise StoreUnavailable(
+                errno.ENOENT,
+                f"the staging directory under {staging.path} vanished twice; is a collector "
+                "running with a staging age shorter than a write takes?",
+                staging.path,
+            ) from None
+
+    def _publish_once(
         self,
         root: StorageDir,
         staging: StorageDir,
@@ -799,21 +870,29 @@ class PortableStore:
         with self._denied(staging.path):
             stage = staging.child(name, create=True, mode=policy.staging_mode)
         try:
-            try:
-                digest = self.format.stage(
-                    stage, checksum, key, context, outputs, task, source, writer
+            with _Toucher(staging, name, policy.ages.staging / 4) as toucher:
+                toucher.touch()
+                try:
+                    digest = self.format.stage(
+                        stage, checksum, key, context, outputs, task, source, writer
+                    )
+                    stage.set_mode(policy.entry_mode)
+                    if policy.durability == "member":
+                        stage.sync()
+                    elif policy.durability == "entry" and hasattr(os, "sync"):
+                        os.sync()
+                finally:
+                    stage.close()
+                committed = self._place(
+                    root, staging, name, ref, shard, checksum, task, writer, digest
                 )
-                stage.set_mode(policy.entry_mode)
-                if policy.durability == "member":
-                    stage.sync()
-                elif policy.durability == "entry" and hasattr(os, "sync"):
-                    os.sync()
-            finally:
-                stage.close()
-            committed = self._place(
-                root, staging, name, ref, shard, checksum, task, writer, digest
-            )
+            if committed.kept is not None and not os.path.lexists(committed.kept):
+                raise _Vanished
+        except _Vanished:
+            raise
         except BaseException as err:
+            if isinstance(err, OSError) and not self._staged(staging, name):
+                raise _Vanished from err
             _discard(staging, name)
             if isinstance(err, OSError) and not isinstance(err, StoreUnavailable):
                 raise StoreUnavailable(err.errno, f"{staging.path}: {err}") from err
@@ -821,6 +900,14 @@ class PortableStore:
         if committed.stored:
             _discard(staging, name)  # renamed away, or equal to the occupant
         return committed
+
+    @staticmethod
+    def _staged(staging: StorageDir, name: str) -> bool:
+        try:
+            staging.lstat(name)
+        except FileNotFoundError:
+            return False
+        return True
 
     def _place(
         self,
@@ -890,6 +977,8 @@ class PortableStore:
                     staging.rename(name, cdir_dir, ref.fingerprint)
             except StoreUnavailable as err:
                 if not self._occupied(cdir_dir, ref.fingerprint):
+                    if not self._staged(staging, name):
+                        raise _Vanished from err
                     if err.errno in (
                         errno.ENOENT,
                         _STALE,
@@ -1052,8 +1141,8 @@ class PortableStore:
         Raises
         ------
         StoreNotWritable
-            The entry matches and this user cannot move it (it is not the owner and the parent
-            is not writable).
+            The entry is to be moved (its digest is the expected one, or it is corrupt) and this
+            user cannot move it (it is not the owner and the parent is not writable).
         EntryFormatUnknown, EntryNotTrusted
             The entry cannot be judged and is left in place.
         ValueError
@@ -1125,8 +1214,13 @@ class PortableStore:
         """Remove what a store leaves behind once it is older than the policy's ages (RFC 0003
         section 9): the children of ``staging/`` and header temporaries (``ages.staging``), the
         children of ``quarantine/`` and the ``q-`` and aside names in container directories
-        (``ages.quarantine``). Age is the modification time; a quarantined object is stamped
-        when it is moved and a writer touches its staging directory, so a live one is spared.
+        (``ages.quarantine``). Age is the later of the modification and change times (a rename
+        changes the change time, not the modification time, so an object moved a moment ago is
+        young), and a moved object is also stamped; on Windows, where the change time is the
+        creation time, only the stamp protects a copy between its move and its stamp, which a
+        private root's single user does not race. A writer touches its staging directory at
+        least once per quarter of ``ages.staging``, so a live one is spared. The walk visits
+        every shard and container directory, so its cost grows with the number of entries.
 
         An entry is never removed, and nothing outside those names is read or touched
         (sidecars included). An object is claimed with a rename to an inode-derived ``gc-`` name
@@ -1141,7 +1235,7 @@ class PortableStore:
         """
         report = CollectReport()
         ages = self.policy.ages
-        now = time.time()
+        now = _now()
         aside = self.format.aside_names()
         with self._open() as root:
             for e in list(root.scandir()):
@@ -1179,7 +1273,7 @@ class PortableStore:
         return report
 
     @staticmethod
-    def _children(parent: StorageDir, name: str) -> list:
+    def _children(parent: StorageDir, name: str) -> list[StorageEntry]:
         try:
             with parent.child(name) as d:
                 return [e for e in d.scandir() if e.is_dir()]
@@ -1199,7 +1293,7 @@ class PortableStore:
     def _sweep(
         self,
         parent: StorageDir,
-        listed: ty.Any,
+        listed: StorageEntry,
         age: float,
         now: float,
         report: CollectReport,
@@ -1207,18 +1301,17 @@ class PortableStore:
         """Remove ``listed`` from ``parent`` if it is older than ``age``, recording the outcome."""
         where = os.path.join(parent.path, listed.name)
         try:
-            seen = parent.lstat(
-                listed.name
-            )  # a listing's stat can lack the inode (Windows)
+            # not the listing's stat, which can lack the inode (Windows)
+            seen = parent.lstat(listed.name)
         except FileNotFoundError:
             return
         if _is_link(seen) or not stat.S_ISDIR(seen.st_mode):
-            if now - seen.st_mtime < age:
+            if now - _last_change(seen) < age:
                 report.kept.append((where, f"younger than {age:g} s"))
                 return
             self._finish(parent, listed.name, seen, False, where, report)
             return
-        if now - seen.st_mtime < age:
+        if now - _last_change(seen) < age:
             report.kept.append((where, f"younger than {age:g} s"))
             return
         try:
@@ -1230,7 +1323,7 @@ class PortableStore:
             report.kept.append((where, "replaced by an object of another kind"))
             return
         if (held.st_dev, held.st_ino) != (seen.st_dev, seen.st_ino) or (
-            now - held.st_mtime < age
+            now - _last_change(held) < age
         ):
             report.kept.append((where, "changed since it was listed"))
             return
