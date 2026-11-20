@@ -21,9 +21,9 @@ from pydra.engine.lease import (
 # Beats every 0.05 s, stale after 0.5 s: in-process tests
 FAST = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
 
-# Beats every second, stale after 10 s: an acknowledgement is due within 1 s, which
-# a loaded CI runner meets
-CROSS = LeaseSettings(stale_after=10, timeout=20, attribute_delay=0)
+# Beats every 4 s, stale after 10 s: an acknowledgement is due within 4 s, which a
+# slow Windows runner meets (1 s did not, once); (1 + 1) * 4 < 10 still holds
+CROSS = LeaseSettings(stale_after=10, timeout=20, renew_fraction=0.4, attribute_delay=0)
 
 # Beats every 0.2 s: the acknowledgement-timeout test, whose subject is the bound
 SHORT = LeaseSettings(stale_after=2, timeout=10, attribute_delay=0)
@@ -328,12 +328,12 @@ def test_release_is_not_a_loss(tmp_path):
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
         client.hold(lease)
-        time.sleep(2 * CROSS.renew_interval)
+        time.sleep(CROSS.renew_interval + 1)  # beaten at least once
         token_dir = lease.token_dir
         client.release(token_dir)
         lease.__exit__(None, None, None)
         assert not lease.lockfile.exists()
-        time.sleep(4 * CROSS.renew_interval)
+        time.sleep(2 * CROSS.renew_interval)  # a beat after the release would be due
         assert client.lost == {}
         assert lease.lost is None
         assert client.alive
@@ -393,9 +393,9 @@ def test_deadline_cleared_keeps_beating(tmp_path):
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
         client.hold(lease)
-        client.deadline(lease.token_dir, time.time() + 0.5)
+        client.deadline(lease.token_dir, time.time() + 3)  # cleared well before
         client.deadline(lease.token_dir, None)
-        assert not client.wait_expired(lease.token_dir, 1.0)
+        assert not client.wait_expired(lease.token_dir, 4.0)
         assert lease.prove()
         client.release(lease.token_dir)
         lease.__exit__(None, None, None)
@@ -494,11 +494,13 @@ HOLDER = textwrap.dedent("""\
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "kill_after, mode, killed",
-    [(1.0, "silent", True), (None, "silent", False), (1.0, "ack", False)],
+    [(1.0, "silent", True), (None, "silent", False), (5.0, "ack", False)],
 )
 def test_kill_after_unacknowledged_expiry(tmp_path, kill_after, mode, killed):
     """With ``kill_after`` set, a holder that sends no ``ack_expired`` in time is
-    killed by its beater; unset, or acknowledged, it never is."""
+    killed by its beater; unset, or acknowledged, it never is. The holder sleeps
+    past ``kill_after`` with a margin; the acknowledging holder has 5 s to answer,
+    so only the silent one depends on the kill's timing."""
     script = tmp_path / "holder.py"
     script.write_text(HOLDER)
     proc = subprocess.run(
@@ -509,7 +511,7 @@ def test_kill_after_unacknowledged_expiry(tmp_path, kill_after, mode, killed):
             json.dumps(CROSS.to_json()),
             json.dumps(kill_after),
             mode,
-            "4",
+            str((kill_after or 4) + 5),
         ],
         capture_output=True,
         text=True,
@@ -556,7 +558,9 @@ def test_callbacks_may_call_the_client(tmp_path):
         )
         assert client.alive
         before = newest_mtime(kept.lockfile)
-        assert wait_for(lambda: newest_mtime(kept.lockfile) > before, 10)
+        assert wait_for(
+            lambda: newest_mtime(kept.lockfile) > before, 3 * CROSS.renew_interval
+        )
         assert kept.prove()
         for lease in (expired, kept):
             client.release(lease.token_dir)
@@ -639,7 +643,7 @@ def test_holder_death_ends_beater(tmp_path, fork):
         child = pids["child"]
         proc.kill()
         proc.wait(30)
-        assert stops_moving(lockfile, 3 * CROSS.renew_interval, 30), "still beaten"
+        assert stops_moving(lockfile, 2 * CROSS.renew_interval, 60), "still beaten"
         if os.name == "posix":
             assert wait_for(lambda: not pid_alive(pids["beater"]), 30)
         if child is not None:
