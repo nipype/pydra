@@ -1622,3 +1622,68 @@ def test_load_infrastructure_faults_are_bounded(pool, tasks):
         assert "3 infrastructure faults" in o["fault"]["message"]
         assert "load" in o["fault"]["message"]
     assert [kind for kind, _ in tasks.LOADS] == ["broken"] * 3
+
+
+def _fake_smi(tmp_path, monkeypatch, indices, visible):
+    """A ``nvidia-smi`` on PATH listing GPUs ``indices`` (uuid ``GPU-<index>-aaaa``)."""
+    rows = "\n".join(
+        f"{i}, GPU-{i}-aaaa, H100-{i}, 81559, 9.0" for i in indices
+    )
+    exe = tmp_path / "nvidia-smi"
+    exe.write_text(f"#!/bin/sh\ncat <<'EOF'\n{rows}\nEOF\n")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    if visible is None:
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    else:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+
+
+def _read(tmp_path, monkeypatch, indices, visible):
+    from pydra.workers.pool.samples import read_hardware
+
+    _fake_smi(tmp_path, monkeypatch, indices, visible)
+    gpus = read_hardware().gpus
+    assert all(g.uuid == f"GPU-{g.index}-aaaa" for g in gpus)
+    return [g.index for g in gpus]
+
+
+def test_visible_indices_on_an_unconstrained_host(tmp_path, monkeypatch):
+    """(a) ``2,3`` on a four-GPU host: logical 0, 1 are physical 2, 3 (the product name carries the physical index)."""
+    got = _read(tmp_path, monkeypatch, [0, 1, 2, 3], "2,3")
+    assert got == [2, 3]
+
+
+def test_unset_visible_devices_grants_all(tmp_path, monkeypatch):
+    assert _read(tmp_path, monkeypatch, [0, 1], None) == [0, 1]
+
+
+def test_constrained_devices_fall_back_to_nvidia_smi_order(tmp_path, monkeypatch):
+    """(b) Host indices ``2,3`` while the cgroup shows only 0, 1: the two listed GPUs, in order."""
+    got = _read(tmp_path, monkeypatch, [0, 1], "2,3")
+    assert got == [0, 1]
+
+
+def test_uuids_are_matched_by_uuid(tmp_path, monkeypatch):
+    """(c) UUID entries select by UUID, in ``CUDA_VISIBLE_DEVICES`` order, not by position."""
+    got = _read(tmp_path, monkeypatch, [0, 1, 2, 3], "GPU-3-aaaa,GPU-1-aaaa")
+    assert got == [3, 1]
+
+
+@pytest.mark.parametrize(
+    "indices,visible",
+    [
+        ([0, 1, 2, 3], "GPU-9-aaaa"),  # unknown uuid
+        ([0, 1, 2, 3], "2,9"),  # index out of range, counts differ
+        ([0, 1], "2"),  # fewer entries than listed devices: ambiguous
+        ([0, 1], "GPU-0-aaaa,5"),  # mixed with a missing index
+        ([0, 1], "1,1"),  # duplicate
+    ],
+)
+def test_unmappable_visible_devices_grant_nothing(
+    tmp_path, monkeypatch, caplog, indices, visible
+):
+    """(d) An entry that cannot be mapped warns and grants no device; never a guessed one."""
+    with caplog.at_level(logging.WARNING):
+        assert _read(tmp_path, monkeypatch, indices, visible) == []
+    assert "CUDA_VISIBLE_DEVICES" in caplog.text

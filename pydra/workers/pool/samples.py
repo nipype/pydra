@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -9,6 +10,8 @@ import sys
 import typing as ty
 
 import attrs
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "Gpu",
@@ -27,6 +30,8 @@ class Gpu:
     product: str
     memory: int | None  # bytes
     compute_capability: str | None = None
+    uuid: str | None = None
+    index: int | None = None  # nvidia-smi's index; the logical ordinal is the position in ``gpus``
 
 
 @attrs.frozen
@@ -37,7 +42,7 @@ class HardwareClass:
     ----------
     device : {"cpu", "cuda"}
     gpus : tuple of Gpu
-        The visible devices, in ``CUDA_VISIBLE_DEVICES`` order.
+        The visible devices, in ``CUDA_VISIBLE_DEVICES`` order; position is the logical ordinal.
     cpus : int or None
         The CPUs this process may run on.
     """
@@ -66,23 +71,65 @@ def _cpus() -> int | None:
     return os.cpu_count()
 
 
+class _Unmapped(ValueError):
+    """``CUDA_VISIBLE_DEVICES`` names a device ``nvidia-smi`` does not list."""
+
+
+def _is_uuid(entry: str) -> bool:
+    return entry.upper().startswith(("GPU-", "MIG-"))
+
+
 def _visible(rows: list[list[str]]) -> list[list[str]]:
-    """The rows (index first) that ``CUDA_VISIBLE_DEVICES`` grants, in its order; all when unset or
-    when it names devices by UUID."""
+    """The rows ``[index, uuid, name, memory, compute_cap]`` that ``CUDA_VISIBLE_DEVICES`` grants,
+    in its order (position is the logical ordinal torch sees); all rows when it is unset.
+
+    An entry beginning ``GPU-`` or ``MIG-`` is a UUID (an unambiguous prefix suffices); any other
+    entry is an ``nvidia-smi`` index. Under a cgroup that constrains devices ``nvidia-smi`` lists
+    only the granted devices, renumbered from 0, so when every entry is an index and one is not
+    listed the rows are taken in the order ``nvidia-smi`` reports them, which is the order CUDA
+    enumerates them in; that needs as many entries as listed devices.
+
+    Raises
+    ------
+    _Unmapped
+        When an entry matches no listed device or more than one, or names a device twice.
+    """
     visible = os.environ.get("CUDA_VISIBLE_DEVICES")
     if visible is None:
         return rows
     entries = [e.strip() for e in visible.split(",") if e.strip()]
     if not entries:
         return []
-    if not all(e.isdigit() for e in entries):
-        return rows
     by_index = {r[0]: r for r in rows}
-    return [by_index[e] for e in entries if e in by_index]
+    if not any(_is_uuid(e) for e in entries) and not all(e in by_index for e in entries):
+        if all(e.isdigit() for e in entries) and len(entries) == len(rows):
+            return list(rows)
+        raise _Unmapped(
+            f"CUDA_VISIBLE_DEVICES={visible!r} does not match nvidia-smi's "
+            f"devices {sorted(by_index)}"
+        )
+    granted = []
+    for e in entries:
+        if _is_uuid(e):
+            hits = [r for r in rows if r[1].upper().startswith(e.upper())]
+        else:
+            hits = [by_index[e]] if e in by_index else []
+        if len(hits) != 1:
+            raise _Unmapped(
+                f"CUDA_VISIBLE_DEVICES entry {e!r} matches {len(hits)} of nvidia-smi's devices"
+            )
+        granted.append(hits[0])
+    if len({r[0] for r in granted}) != len(granted):
+        raise _Unmapped(f"CUDA_VISIBLE_DEVICES={visible!r} names a device twice")
+    return granted
 
 
 def read_hardware(timeout: float = 20.0) -> HardwareClass:
-    """The devices from ``nvidia-smi`` (none without it) and the CPUs this process may use."""
+    """The devices from ``nvidia-smi`` (none without it) and the CPUs this process may use.
+
+    A ``CUDA_VISIBLE_DEVICES`` that cannot be mapped to the devices ``nvidia-smi`` lists is logged
+    as a warning and grants no device, never a guessed one.
+    """
     exe = shutil.which("nvidia-smi")
     gpus: list[Gpu] = []
     if exe is not None:
@@ -90,7 +137,7 @@ def read_hardware(timeout: float = 20.0) -> HardwareClass:
             out = subprocess.run(
                 [
                     exe,
-                    "--query-gpu=index,name,memory.total,compute_cap",
+                    "--query-gpu=index,uuid,name,memory.total,compute_cap",
                     "--format=csv,noheader,nounits",
                 ],
                 capture_output=True,
@@ -101,15 +148,19 @@ def read_hardware(timeout: float = 20.0) -> HardwareClass:
         except (OSError, subprocess.SubprocessError):
             out = ""
         rows = [[c.strip() for c in line.split(",")] for line in out.splitlines()]
-        for row in _visible([r for r in rows if len(r) >= 3]):
+        try:
+            granted = _visible([r for r in rows if len(r) >= 4])
+        except _Unmapped as exc:
+            logger.warning("no GPU granted: %s", exc)
+            granted = []
+        for row in granted:
             try:
-                memory = int(float(row[2])) << 20  # MiB
+                memory = int(float(row[3])) << 20  # MiB
             except ValueError:
                 memory = None
-            capability = (
-                row[3] if len(row) > 3 and row[3] not in ("", "[N/A]") else None
-            )
-            gpus.append(Gpu(row[1], memory, capability))
+            capability = row[4] if len(row) > 4 and row[4] not in ("", "[N/A]") else None
+            index = int(row[0]) if row[0].isdigit() else None
+            gpus.append(Gpu(row[2], memory, capability, row[1], index))
     return HardwareClass("cuda" if gpus else "cpu", tuple(gpus), _cpus())
 
 
