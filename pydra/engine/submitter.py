@@ -148,7 +148,8 @@ class Submitter:
         to the next, and its store, if it has one, is the submitter's. ``"pool"`` makes a
         ``WarmPool`` over the submitter's store from ``**kwargs`` (``root``, ``classes``
         and its other parameters; ``substrate`` defaults to a ``LocalSubstrate``), which
-        the submitter closes when it is closed
+        the submitter closes when it is closed. A ``WarmPool`` serves one run at a time:
+        while one submitter's call runs on it, another's call raises ``PoolInUse``
     workers : dict[str, str or Worker], optional
         Further workers by name (each a worker name, class or object), for the router to
         choose between. The name ``"default"`` is reserved for ``worker``
@@ -314,7 +315,7 @@ class Submitter:
         if _is_executor(worker):
             pool_store = getattr(worker, "store", None)
             if pool_store is not None:
-                if store is None or isinstance(store, str):
+                if store is None or store == "portable":
                     store = pool_store
                 elif store is not pool_store:
                     raise ValueError(
@@ -397,6 +398,10 @@ class Submitter:
         )
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
+        if on_error is not None and on_error not in self.ON_ERROR_MODES:
+            raise ValueError(
+                f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
+            )
         made: list[Worker] = []
         try:
             worker = self._make_worker(worker, kwargs)
@@ -429,10 +434,6 @@ class Submitter:
                 stacklevel=2,
             )
         self.clean_stale_locks = False
-        if on_error is not None and on_error not in self.ON_ERROR_MODES:
-            raise ValueError(
-                f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
-            )
         self._on_error_arg = on_error
         self.on_error = self._loop_on_error(self.worker.is_async)
         self.errors = []

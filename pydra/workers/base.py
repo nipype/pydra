@@ -142,13 +142,18 @@ class ExecutorWorker(Worker):
 
         job.rerun = rerun
         self.executor.bind(report)
-        handle = self.executor.submit([job])
         try:
-            outcome = await done
-        except BaseException:
-            if handle.open:
-                self.executor.cancel(handle)
-            raise
+            handle = self.executor.submit([job])
+            try:
+                outcome = await done
+            except BaseException:
+                if handle.open:
+                    self.executor.cancel(handle)
+                raise
+        finally:
+            unbind = getattr(self.executor, "unbind", None)
+            if unbind is not None:
+                unbind(report)
         if isinstance(outcome, Failed):
             raise outcome.error
         if isinstance(outcome, NotRun):

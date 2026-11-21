@@ -115,6 +115,7 @@ __all__ = [
     "PoolBusy",
     "PoolFactsWouldSplitSlots",
     "PoolFenced",
+    "PoolInUse",
     "PoolJobFailed",
     "PoolSettings",
     "UnplaceableJob",
@@ -163,6 +164,11 @@ def pool_facts_recorded(store: ty.Any) -> bool:
         "the pool facts of each worker and batch would split one result into many slots; list it "
         "in the identity's recorded_only"
     )
+
+
+class PoolInUse(RuntimeError):
+    """Another run holds the pool's binding: a `WarmPool` serves one run at a time, because it
+    reports every outcome to the one callable it is bound to."""
 
 
 class PoolFenced(RuntimeError):
@@ -374,6 +380,12 @@ class WarmPool:
         Another coordinator stayed live for ``settings.coordinator_wait`` seconds.
     PoolFactsWouldSplitSlots
         The store's identity would key the ``pool`` section of the execute context.
+
+    Notes
+    -----
+    A pool serves one run at a time: a run binds it (`bind`) and holds it until it ends (`unbind`),
+    and a second run that binds it meanwhile raises `PoolInUse` rather than receive the other's
+    outcomes. Runs one after the other share its workers and their resident state.
     """
 
     checks_store: ty.ClassVar[bool] = True
@@ -449,6 +461,7 @@ class WarmPool:
         self.settings = settings
         self.codec = codec
         self._report: ty.Callable[["Job", "Outcome"], None] | None = None
+        self._bound = False  # whether a run holds the pool (`bind` until `unbind`)
         self._lock = threading.RLock()
         self._wake = threading.Event()
         self._stop = threading.Event()
@@ -578,8 +591,29 @@ class WarmPool:
     # -- the executor protocol -----------------------------------------------------------------
 
     def bind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
-        """Set the callable that receives each job's outcome (from the follower thread)."""
-        self._report = report
+        """Set the callable that receives each job's outcome (from the follower thread), and hold the
+        pool for that run until `unbind` (``drive`` and the `Submitter` call it as a run ends).
+
+        Raises
+        ------
+        PoolInUse
+            Another run holds the pool: it serves one run at a time.
+        """
+        with self._lock:
+            if self._bound and report is not self._report:
+                raise PoolInUse(
+                    f"{self!r} serves one run at a time, and another run holds it; run them one "
+                    "after the other, or give each concurrent run a pool of its own"
+                )
+            self._report = report
+            self._bound = True
+
+    def unbind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
+        """Release the pool held by the run bound with ``report``; a later run may bind it. Outcomes
+        that arrive meanwhile still go to ``report``."""
+        with self._lock:
+            if report is self._report:
+                self._bound = False
 
     def submit(self, jobs: ty.Sequence["Job"]) -> Handle:
         """Place the jobs and queue them for the follower to write as tickets; never blocks on

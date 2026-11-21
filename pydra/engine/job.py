@@ -863,15 +863,20 @@ class Job(ty.Generic[TaskType]):
             result.runtime = Runtime()
         result.runtime.pool = self.pool_facts
         if self.audit.audit_check(AuditFlag.PROV):
-            self.audit.audit_message(
-                {
-                    "@type": "pool-facts",
-                    "checksum": self.checksum,
-                    "attempt": self.attempt,
-                    "pool": self.pool_facts,
-                },
-                AuditFlag.PROV,
-            )
+            try:
+                self.audit.audit_message(
+                    {
+                        "@type": "pool-facts",
+                        "checksum": self.checksum,
+                        "attempt": self.attempt,
+                        "pool": self.pool_facts,
+                    },
+                    AuditFlag.PROV,
+                )
+            except Exception as err:  # the commit that follows must still run
+                logger.warning(
+                    "could not audit the pool facts of %s: %s", self.name, err
+                )
 
     def _run_task(self, rerun: bool) -> None:
         """Run the task. The state of each provided field is bound for the duration of

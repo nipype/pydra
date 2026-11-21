@@ -66,6 +66,13 @@ class Counting:
         return "7"
 
 
+class RefusesPoolFacts:
+    # a messenger that fails on the pool-facts message, and keeps the rest
+    def send(self, message, **kwargs):
+        if message.get("@type") == "pool-facts":
+            raise OSError("the audit is unwritable")
+
+
 def record_commit(staged, checksum, key, context, digest):
     COMMITS.append({"checksum": checksum, "context": json.loads(json.dumps(context))})
 
@@ -83,6 +90,33 @@ def Echo(x: int) -> int:
 @workflow.define
 def UseModels(model: str, xs: list) -> list:
     return workflow.add(UseModel(model=model).split(x=xs), name="U").out
+
+
+@python.define
+def MaybeOom(model: Provided[str, "counting"], x: int) -> int:
+    # the second job runs out of memory: a resource fault, after which the residency reloads
+    if x == 2:
+        raise MemoryError("out of memory in the call")
+    return x
+
+
+@python.define
+def Gate(where: str) -> str:
+    # the first execution waits for "go"; any later one returns at once
+    import time
+
+    d = Path(where)
+    if not (d / "first").exists():
+        (d / "first").touch()
+        while not (d / "go").exists():
+            time.sleep(0.05)
+        return "first"
+    return "later"
+
+
+@workflow.define
+def Echoes(xs: list) -> list:
+    return workflow.add(Echo().split(x=xs), name="E").out
 """
 
 
@@ -264,12 +298,16 @@ class Queue:
         for cls in classes:
             self.pool.put_class(cls.name, class_record(cls))
 
-    def work(self, cls):
+    def work(self, cls, **kwargs):
         """Run a worker of ``cls`` in this process until it is idle."""
         from pydra.workers.pool.worker import Worker
 
         worker = Worker(
-            self.pool.path, cls, settings=_settings(), device_memory=lambda: None
+            self.pool.path,
+            cls,
+            settings=_settings(),
+            device_memory=lambda: None,
+            **kwargs,
         )
         assert worker.run() == 0
         return worker
@@ -325,7 +363,7 @@ def _messages(root: Path, kind: str) -> list[dict]:
 # -- the pool section --------------------------------------------------------------------------
 
 
-def test_cold_and_warm_share_one_slot(tmp_path, tasks, queue_of):
+def test_cold_and_warm_share_one_slot(tmp_path, tasks, queue_of, monkeypatch):
     """Under an identity listing ``pool``, the cold and the warm call of one worker publish ``pool-facts@1``
     in their execute contexts, into the slot the lookup finds: the fingerprint is the one of the context
     without the section, so both results are served afterwards with no load."""
@@ -337,7 +375,11 @@ def test_cold_and_warm_share_one_slot(tmp_path, tasks, queue_of):
     models.mkdir()
     jobs = [q.job(tasks.UseModel(model=str(models), x=x), f"j{x}") for x in (1, 2)]
     q.put(jobs)
-    worker = q.work(_class())
+    from pydra.workers.pool import worker as worker_module
+    from pydra.workers.pool.samples import HardwareClass
+
+    monkeypatch.setattr(worker_module, "_host_token", lambda: "0123456789abcdef")
+    worker = q.work(_class(), hardware=lambda: HardwareClass(cpus=3))
 
     assert len(tasks.LOADS) == 1
     assert [c["checksum"] for c in tasks.COMMITS] == [j.checksum for j in jobs]
@@ -350,7 +392,14 @@ def test_cold_and_warm_share_one_slot(tmp_path, tasks, queue_of):
         assert f["attempt"] == job.attempt
         assert f["batch"] == {"size": 1, "index": 0}
         assert f["losses_survived"] == 0
-        assert f["hardware"]["device"] == "cpu"
+        assert f["hardware"] == {
+            "device": "cpu",
+            "name": None,
+            "memory_mib": None,
+            "compute_capability": None,
+            "cpus": 3,
+        }
+        assert f["host"] == "0123456789abcdef"
         (entry,) = f["residency"]
         assert entry["kind"] == "provider" and entry["name"] == "counting"
         assert entry["version"] == "7"
@@ -596,3 +645,172 @@ def test_drive_leaves_an_executor_instance_open(tmp_path, tasks, groups):
     finally:
         pool.close()
     assert pool._closed
+
+
+def test_reload_after_a_resource_fault_is_cold(tmp_path, tasks, queue_of):
+    """A call whose residency was reloaded after a resource fault is recorded cold, with no call since
+    the load: the facts follow the load that really happened."""
+    identity = PydraIdentityV1(recorded_only={"pool"})
+    store = _store(tmp_path, identity, on_commit=tasks.record_commit)
+    q = queue_of(store)
+    q.classes(_class(), _class("big", mem="64G"))
+    models = tmp_path / "loads"
+    models.mkdir()
+    jobs = [q.job(tasks.MaybeOom(model=str(models), x=x), f"j{x}") for x in (1, 2, 3)]
+    q.put(jobs)
+    q.work(_class())
+
+    assert (
+        len(list(models.iterdir())) == 2
+    )  # the first load, and the reload after the fault
+    facts = {c["checksum"]: c["context"]["pool"]["residency"][0] for c in tasks.COMMITS}
+    first, third = facts[jobs[0].checksum], facts[jobs[2].checksum]
+    assert (first["state"], first["since_load"]) == ("cold", 0)
+    assert (third["state"], third["since_load"]) == ("cold", 0)
+
+
+def test_losses_survived_counts_takeovers():
+    """``losses_survived`` counts the job's takeover generations; a job still on its first put lists
+    nothing."""
+    from pydra.workers.pool.worker import Worker
+
+    listed = []
+
+    class Pool:
+        def generations(self, checksum, fingerprint):
+            listed.append((checksum, fingerprint))
+            return [
+                (0, {"cause": "put"}),
+                (1, {"cause": "takeover"}),
+                (2, {"cause": "ladder"}),
+                (3, {"cause": "takeover"}),
+            ]
+
+    class Entry:
+        key = ("ck", "fp")
+
+    class Claim:
+        def __init__(self, cause):
+            self.cause = cause
+
+        def current(self, entry):
+            return 3, {"cause": self.cause}
+
+    worker = Worker.__new__(Worker)
+    worker.pool = Pool()
+    assert worker._losses(Claim("takeover"), Entry()) == 2
+    assert listed == [("ck", "fp")]
+    assert worker._losses(Claim("put"), Entry()) == 0
+    assert listed == [("ck", "fp")]
+
+
+def test_submitter_takes_the_executors_store(tmp_path, tasks):
+    """A `Submitter` given an executor uses its store; another store object, or another named store,
+    is refused."""
+    from pydra.workers.pool.pool import WarmPool
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    store = _store(tmp_path)
+    pool = WarmPool(
+        tmp_path / "pool",
+        [_class()],
+        ExternalSubstrate(),
+        store=store,
+        settings=_settings(),
+    )
+    try:
+        with Submitter(worker=pool) as sub:
+            assert sub.store is store
+        (tmp_path / "other").mkdir()
+        with pytest.raises(ValueError, match="executor"):
+            Submitter(worker=pool, store=_store(tmp_path / "other"))
+        with pytest.raises(ValueError, match="executor"):
+            Submitter(worker=pool, store="pickle")
+        assert not pool._closed
+    finally:
+        pool.close()
+
+
+def test_failed_construction_closes_a_pool_made_by_name(tmp_path, tasks):
+    """A `Submitter` whose construction fails after it made a pool by name closes that pool, so its
+    coordinator lease is not left held; a bad ``on_error`` is refused before any pool is made.
+    """
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    store = _store(tmp_path)
+    args = dict(
+        store=store,
+        worker="pool",
+        root=tmp_path / "pool",
+        classes=[_class()],
+        substrate=ExternalSubstrate(),
+        settings=_settings(),
+    )
+    with pytest.raises(ValueError, match="on_error"):
+        Submitter(on_error="bogus", **args)
+    assert not (tmp_path / "pool").exists()
+    with pytest.raises(ValueError, match="No worker matches"):
+        Submitter(workers={"other": "no-such-worker"}, **args)
+    assert (tmp_path / "pool" / "coordinator" / "1" / "ended").exists()
+
+
+def test_two_submitters_on_one_pool_at_once_refused(tmp_path, tasks, groups):
+    """While one `Submitter`'s run holds a caller-owned pool, a second one's run fails at once naming
+    the limit (`PoolInUse`), and the first completes; a later run binds the pool again.
+    """
+    import threading
+
+    from pydra.workers.pool.pool import PoolInUse
+
+    store = _store(tmp_path)
+    pool, substrate = _local_pool(tmp_path, tasks, store, groups)
+    gate = tmp_path / "gate"
+    gate.mkdir()
+    outcome: dict = {}
+
+    def first() -> None:
+        try:
+            with Submitter(store=store, worker=pool) as sub:
+                outcome["first"] = sub(tasks.Gate(where=str(gate))).outputs.out
+        except BaseException as exc:  # reported to the test
+            outcome["first"] = exc
+
+    thread = threading.Thread(target=first, daemon=True)
+    try:
+        thread.start()
+        _wait(lambda: (gate / "first").exists(), "the first run's job to start")
+        _track(substrate, groups)
+        with Submitter(store=store, worker=pool) as sub:
+            with pytest.raises(PoolInUse, match="one run at a time"):
+                sub(tasks.Echo(x=2))
+            with pytest.raises(PoolInUse, match="one run at a time"):
+                sub(tasks.Echoes(xs=[2, 3]))
+        (gate / "go").touch()
+        thread.join(BOUND)
+        assert not thread.is_alive()
+        assert outcome["first"] == "first"
+        with Submitter(store=store, worker=pool) as sub:
+            assert sub(tasks.Echoes(xs=[4, 5])).outputs.out == [4, 5]
+        with Submitter(store=store, worker=pool) as sub:  # after a driven run
+            assert sub(tasks.Echo(x=6)).outputs.out == 6
+    finally:
+        (gate / "go").touch()
+        pool.close()
+        thread.join(BOUND)
+
+
+def test_a_failing_audit_never_skips_the_commit(tmp_path, tasks, queue_of):
+    """A messenger that fails on the pool-facts message leaves the facts on the result and the commit
+    in place."""
+    identity = PydraIdentityV1(recorded_only={"pool"})
+    store = _store(tmp_path, identity, on_commit=tasks.record_commit)
+    q = queue_of(store)
+    q.submitter.audit.messengers = [tasks.RefusesPoolFacts()]
+    q.classes(_class())
+    models = tmp_path / "loads"
+    models.mkdir()
+    job = q.job(tasks.UseModel(model=str(models), x=1), "j")
+    q.put([job])
+    q.work(_class())
+    [commit] = tasks.COMMITS
+    assert commit["checksum"] == job.checksum and "pool" in commit["context"]

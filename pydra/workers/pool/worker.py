@@ -1282,9 +1282,12 @@ class Worker:
                 except Exception as exc:
                     raise _machinery(exc)
                 try:
-                    self._load(current)
+                    _, loaded = self._load(current)
                 except Exception as exc:
                     raise attach(exc, fault_of(exc, "load", self.classify))
+                if loaded:  # a reload after a fault: this call is cold
+                    group["cold"] = True
+                    self._warm[claim.queue] = 0
                 try:
                     ran = self._invoke(claim, item, current, attempt, group)
                 except Exception as exc:
