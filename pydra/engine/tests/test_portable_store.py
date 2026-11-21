@@ -1717,6 +1717,9 @@ def test_container_herd_over_a_regular_file(tmp_path, writers):
     wins, every other stores against the winner, and none waits out the visibility timeout.
     Durability is off: the herd is about the race, not the cost of a flush."""
     store = make(tmp_path, policy=StorePolicy(durability="none"))
+    store.visibility_timeout = (
+        3600  # never reached: a writer that waited it out would be kept, not stored
+    )
     c = publish(store)
     probe = entry_path(tmp_path / "root", c).parent
     for rnd in range(10):
@@ -1730,20 +1733,18 @@ def test_container_herd_over_a_regular_file(tmp_path, writers):
 
         def go(i):
             barrier.wait()
-            start = time.monotonic()
             try:
                 got = publish(store, checksum=name)
             except BaseException as err:  # noqa
                 got = err
-            out[i] = (got, time.monotonic() - start)
+            out[i] = got
 
         ts = [threading.Thread(target=go, args=(i,)) for i in range(writers)]
         [t.start() for t in ts]
         [t.join() for t in ts]
-        assert not [o for o, _ in out if isinstance(o, BaseException)], out
-        assert [(o.won, o.stored) for o, _ in out].count((True, True)) == 1, out
-        assert all(o.stored for o, _ in out), out
-        assert max(dt for _, dt in out) < store.visibility_timeout / 2, out
+        assert not [o for o in out if isinstance(o, BaseException)], out
+        assert [(o.won, o.stored) for o in out].count((True, True)) == 1, out
+        assert all(o.stored and o.kept is None for o in out), out
     assert probe.exists()
 
 

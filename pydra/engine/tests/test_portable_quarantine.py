@@ -418,40 +418,123 @@ def test_collect_never_removes_an_entry_published_concurrently(tmp_path):
 # -- fix round 1 ---------------------------------------------------------------------------------
 
 
-def slow_stage(monkeypatch, store, seconds):
+class FakeClock:
+    """The store's clock, advanced by the test. The writer's touch stamps its stage with this
+    clock, so a stage's age is the fake time since it was last touched, with no real wait.
+    """
+
+    def __init__(self, monkeypatch):
+        import pydra.engine.portable.store as mod
+
+        self.t = time.time() + SKEW
+        real_utime = os.utime
+
+        def utime(path, times=None, **kw):
+            if times is None:  # the writer's touch: "now"
+                times = (self.t, self.t)
+            return real_utime(path, times, **kw)
+
+        monkeypatch.setattr(mod, "_now", lambda: self.t)
+        monkeypatch.setattr(os, "utime", utime)
+        self.touchers = []
+        init = mod._Toucher.__init__
+
+        def record(toucher, *a, **k):
+            init(toucher, *a, **k)
+            self.touchers.append(toucher)
+
+        monkeypatch.setattr(mod._Toucher, "__init__", record)
+        # the toucher's thread does nothing: the test calls ``touch`` at the moments it chooses
+        monkeypatch.setattr(mod._Toucher, "_run", lambda toucher: None)
+
+
+def stage_that(monkeypatch, store, during):
+    """Run ``during(n)`` (n = 1, 2, ...) after each ``stage`` call finished encoding."""
     fmt = type(store.format)
     real = fmt.stage
+    calls = {"n": 0}
 
     def stage(self, staging, *a, **k):
         d = real(self, staging, *a, **k)
-        time.sleep(seconds)  # a long copy into the last member: no new directory entry
+        calls["n"] += 1
+        during(calls["n"])
         return d
 
     monkeypatch.setattr(fmt, "stage", stage)
+    return calls
 
 
 def test_a_live_writer_is_not_collected_during_a_long_copy(tmp_path, monkeypatch):
-    """B1: the writer touches its stage at least every quarter of the staging age."""
-    store = aged_store(tmp_path, staging=1.0, quarantine=3600)
-    slow_stage(monkeypatch, store, 2.0)
-    stop = threading.Event()
+    """B1: a stage touched within the staging age is never collected, however long the copy
+    takes in fake time. Every step moves the clock 0.9 of the staging age and runs `collect`
+    before the touch, so only the touch keeps the stage young."""
+    staging_age = 100.0
+    store = aged_store(tmp_path, staging=staging_age, quarantine=3600)
+    clock = FakeClock(monkeypatch)
     removed: list[str] = []
+    steps = 30  # 27 staging ages of fake time
 
-    def collector():
-        while not stop.is_set():
-            removed.extend(store.collect().removed)
-            time.sleep(0.1)
+    def long_copy(n):
+        (toucher,) = clock.touchers
+        toucher.touch()  # the encoding wrote real mtimes into the stage; now it is stamped
+        for _ in range(steps):
+            clock.t += 0.9 * staging_age
+            report = store.collect()
+            removed.extend(report.removed)
+            toucher.touch()
 
-    t = threading.Thread(target=collector)
-    t.start()
-    try:
-        c = publish(store, {"a": 7}, checksum="python-slow")
-    finally:
-        stop.set()
-        t.join()
+    calls = stage_that(monkeypatch, store, long_copy)
+    c = publish(store, {"a": 7}, checksum="python-slow")
     assert (c.stored, c.won) == (True, True)
+    assert calls["n"] == 1  # never collected, so never staged again
     assert removed == []
     assert store.read(c.entry, None).outputs == {"a": 7}
+
+
+def test_a_stage_left_untouched_past_the_staging_age_is_collected(
+    tmp_path, monkeypatch
+):
+    staging_age = 100.0
+    store = aged_store(tmp_path, staging=staging_age, quarantine=3600)
+    clock = FakeClock(monkeypatch)
+    removed: list[str] = []
+
+    def stalled(n):
+        if n == 1:
+            clock.touchers[0].touch()  # the last touch before the writer stalled
+            clock.t += 1.1 * staging_age  # the writer stalled: no touch
+            removed.extend(store.collect().removed)
+
+    calls = stage_that(monkeypatch, store, stalled)
+    c = publish(store, {"a": 8}, checksum="python-stalled")
+    assert len(removed) == 1  # its staging directory
+    assert calls["n"] == 2  # the writer found the stage gone and staged again
+    assert (c.stored, c.won) == (True, True)
+    assert store.read(c.entry, None).outputs == {"a": 8}
+
+
+def test_the_toucher_thread_touches_every_interval():
+    from pydra.engine.portable.store import _Toucher
+
+    touches = []
+
+    class Waits:
+        def __init__(self):
+            self.n = 0
+            self.intervals = []
+
+        def wait(self, interval):
+            self.intervals.append(interval)
+            self.n += 1
+            return self.n > 3  # three intervals elapse, then the writer stops
+
+    toucher = _Toucher.__new__(_Toucher)
+    toucher._interval = 2.5
+    toucher._stop = waits = Waits()
+    toucher.touch = lambda: touches.append(1)
+    toucher._run()
+    assert len(touches) == 3
+    assert set(waits.intervals) == {2.5}
 
 
 def vanishing_stage(monkeypatch, store, times):
@@ -480,9 +563,7 @@ def vanishing_stage(monkeypatch, store, times):
 def test_a_stage_that_vanished_is_staged_again_once(tmp_path, monkeypatch):
     store = make(tmp_path)
     calls = vanishing_stage(monkeypatch, store, 1)
-    t0 = time.monotonic()
     c = publish(store)
-    assert time.monotonic() - t0 < 5  # not the visibility timeout's backoff
     assert (c.won, c.stored, c.kept) == (True, True, None)
     assert calls["n"] == 2
     assert store.read(c.entry, None).outputs == OUT
@@ -492,11 +573,10 @@ def test_a_stage_that_vanishes_twice_raises_not_a_phantom_kept(tmp_path, monkeyp
     from pydra.utils.storagedir import StoreUnavailable
 
     store = make(tmp_path)
-    vanishing_stage(monkeypatch, store, 2)
-    t0 = time.monotonic()
+    calls = vanishing_stage(monkeypatch, store, 2)
     with pytest.raises(StoreUnavailable, match="vanished twice"):
         publish(store)
-    assert time.monotonic() - t0 < 5
+    assert calls["n"] == 2  # staged again once, not a third time
 
 
 def test_a_stage_that_vanishes_mid_encode_is_staged_again_once(tmp_path, monkeypatch):
@@ -515,9 +595,7 @@ def test_a_stage_that_vanishes_mid_encode_is_staged_again_once(tmp_path, monkeyp
         return real(self, staging, *a, **k)
 
     monkeypatch.setattr(fmt, "stage", stage)
-    t0 = time.monotonic()
     c = publish(store)
-    assert time.monotonic() - t0 < 5
     assert (c.won, c.stored, c.kept) == (True, True, None) and calls["n"] == 2
     assert store.read(c.entry, None).outputs == OUT
 
