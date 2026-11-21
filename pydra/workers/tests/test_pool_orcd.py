@@ -1041,7 +1041,7 @@ def test_two_residencies_two_queues(where, tasks, pools):
 
 
 def test_worker_killed_mid_ticket(where, tasks, pools):
-    """``scancel --signal=KILL`` of the worker a third of the way through its ticket: the claim is
+    """SIGKILL of the worker a third of the way through its ticket: the claim is
     taken over once stale by a new worker, under new attempts; every job is committed once and
     the loss is recorded."""
     with verdict("test_worker_killed_mid_ticket") as v:
@@ -1058,8 +1058,21 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
         def kill_when_stuck():
             _wait(lambda: (marks / "first").exists(), f"job {k} to start")
             [handle] = substrate.handles
+            # Slurm turns `scancel --signal=KILL` into a cancel (SIGTERM, then SIGKILL after
+            # KillWait), which the worker survives long enough to release its claims. A step in
+            # the worker's own job SIGKILLs the worker process; "[t]oken" keeps the pattern from
+            # matching this srun's own command line
             subprocess.run(
-                ["scancel", "--signal=KILL", "--full", handle.job_id],
+                [
+                    "srun",
+                    f"--jobid={handle.job_id}",
+                    "--overlap",
+                    "--ntasks=1",
+                    "pkill",
+                    "-KILL",
+                    "-f",
+                    f"[t]oken {handle.token}",
+                ],
                 check=True,
                 capture_output=True,
                 timeout=120,
