@@ -461,9 +461,13 @@ class Job(ty.Generic[TaskType]):
         Created as an attempt to simplify overlapping `Job`|`Workflow` behaviors.
         """
         # adding info file with the checksum in case the job was cancelled
-        # and the lockfile has to be removed
-        with atomic_write(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
-            json.dump({"checksum": self.checksum}, jsonfile)
+        # and the lockfile has to be removed; a job with a work directory writes nothing
+        # at its cache root, which a worker on another node may not have
+        if not self._has_work_dir:
+            with atomic_write(
+                self.cache_root / f"{self.uid}_info.json", "w"
+            ) as jsonfile:
+                json.dump({"checksum": self.checksum}, jsonfile)
         if self._has_work_dir:
             # a work directory is the store's to make (0o700) and never to remove
             self.store.begin_run(self)
@@ -899,7 +903,9 @@ class Job(ty.Generic[TaskType]):
 
     def _remove_info_file(self):
         """Remove the job's ``<uid>_info.json``; one that cannot be removed is logged
-        and left in place."""
+        and left in place. A job with a work directory wrote none."""
+        if self._has_work_dir:
+            return
         info_file = self.cache_root / f"{self.uid}_info.json"
         try:
             remove_from_cache(info_file)

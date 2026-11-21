@@ -390,6 +390,8 @@ _SLURM_OWNED = {
     "e": "worker logs go under the pool's private directory",
     "wrap": "the substrate wraps the worker command",
     "parsable": "the substrate reads the job id",
+    "requeue": "the substrate passes --no-requeue: a worker's token serves one process",
+    "no-requeue": "the substrate passes --no-requeue: a worker's token serves one process",
     "array": "one job per worker",
     "a": "one job per worker",
     "clusters": "a job on another cluster is never listed by this one's squeue",
@@ -416,11 +418,12 @@ class SlurmSubstrate:
     ``--time`` from the class's fields where set, then the class's ``substrate_args`` (each
     ``key: value`` as ``--key=value``, a one-letter key as ``-k value``, an empty value as a bare
     flag), and ``--wrap`` running the worker command. The job is named
-    ``pydra-<pool id>-e<epoch>-<token>``, carries its class as ``--comment`` and writes its output to
-    ``<pool>/private/logs/<token>.log``. ``--qos`` is never passed and a class naming it, or an
-    option the substrate sets itself, cannot start. Slurm gives a job its GPUs; the substrate does
-    not set ``CUDA_VISIBLE_DEVICES``, and runs each worker on a job of its own whatever the class's
-    ``workers_per_device``.
+    ``pydra-<pool id>-e<epoch>-<token>``, carries its class as ``--comment``, writes its output to
+    ``<pool>/private/logs/<token>.log`` and is ``--no-requeue``: a worker preempted or on a failed
+    node is lost, its claims taken over once stale, never run again under its token. ``--qos`` is
+    never passed and a class naming it, or an option the substrate sets itself, cannot start.
+    Slurm gives a job its GPUs; the substrate does not set ``CUDA_VISIBLE_DEVICES``, and runs each
+    worker on a job of its own whatever the class's ``workers_per_device``.
 
     `live` reads the process's shared queue listing (``squeue --user``, one per poll cycle with any
     `SlurmWorker` of the process) and lists this pool's jobs of this coordinator epoch and of
@@ -482,6 +485,7 @@ class SlurmSubstrate:
         self._cpus: dict[str, int] = {}
         self._attachment: Attachment | None = None
         self._swept = False
+        self._stopping: set[str] = set()  # cancelled jobs Slurm may still list
 
     @property
     def _listing(self):
@@ -562,6 +566,7 @@ class SlurmSubstrate:
             f"--job-name={self.job_name(token)}",
             f"--comment={cls.name}",
             f"--output={log}",
+            "--no-requeue",
         ]
         if cls.device == "cuda":
             n = max(cls.gpus, 1)
@@ -610,10 +615,15 @@ class SlurmSubstrate:
         at = self._require()
         snapshot = self._listing.read(self.max_age, self.squeue_timeout)
         epoch = at.epoch or 0
-        listed, stale = set(), []
+        listed, stale, stopping = set(), [], set()
         for job_id, (state, name, comment) in snapshot.rows.items():
             found = self._epoch_token(name)
             if found is None or found[0] > epoch:
+                continue
+            if (
+                job_id in self._stopping
+            ):  # cancelled by `stop`, still stopping: not a worker
+                stopping.add(job_id)
                 continue
             if job_id not in self._jobs:
                 if found[0] < epoch and not self._swept and state in _NOT_STARTED:
@@ -636,6 +646,7 @@ class SlurmSubstrate:
                         "cancelled pending Slurm jobs of earlier epochs: %s",
                         " ".join(stale),
                     )
+        self._stopping &= stopping
         live = []
         for job_id, handle in list(self._jobs.items()):
             if job_id in listed or handle.started >= snapshot.taken:
@@ -807,7 +818,8 @@ class SlurmSubstrate:
 
     def stop(self, workers: ty.Sequence[WorkerHandle]) -> None:
         """``scancel`` the workers' jobs; a worker given SIGTERM by Slurm settles what finished and
-        releases the rest. A failed ``scancel`` is logged and the workers stay listed.
+        releases the rest. A failed ``scancel`` is logged and the workers stay listed. A cancelled
+        job that Slurm still lists while it stops is neither live nor adopted again.
         """
         handles = [h for h in workers if h.job_id is not None]
         if not handles:
@@ -817,3 +829,4 @@ class SlurmSubstrate:
         for h in handles:
             h.ended = "stopped"
             self._jobs.pop(h.job_id, None)
+            self._stopping.add(h.job_id)
