@@ -1978,3 +1978,43 @@ def test_a_claim_is_released_unrun_until_the_new_epochs_budgets_exist(
     assert code == 0 and len(calls) >= 2
     [outcome] = pool.outcomes()
     assert outcome["outcome"] == "done"
+
+
+# -- which memory an out-of-memory load ran out of -----------------------------------------------
+
+
+def _named(qualname: str, base: type) -> type:
+    module, _, name = qualname.rpartition(".")
+    kind = type(name, (base,), {})
+    kind.__module__ = module
+    return kind
+
+
+@pytest.mark.parametrize(
+    "qualname, base, gpu_class, resource",
+    [
+        # cupy's device OOM subclasses MemoryError: it is still the device's
+        ("cupy.cuda.memory.OutOfMemoryError", MemoryError, True, "device"),
+        ("torch.cuda.OutOfMemoryError", RuntimeError, True, "device"),
+        ("torch.OutOfMemoryError", RuntimeError, True, "device"),
+        ("builtins.MemoryError", MemoryError, True, "host"),
+        ("cupy.cuda.memory.OutOfMemoryError", MemoryError, False, "host"),
+    ],
+)
+def test_out_of_memory_resource(qualname, base, gpu_class, resource):
+    """A device out-of-memory type, by qualified name anywhere in the chain, is the device's on a GPU
+    class, before the generic `MemoryError` rule; a plain `MemoryError` is the host's.
+    """
+    from pydra.workers.pool.faults import classify, oom_resource
+
+    kind = _named(qualname, base) if qualname != "builtins.MemoryError" else MemoryError
+    exc = kind("out of memory")
+    assert classify(exc, "load").reason == "oom"
+    assert oom_resource(exc, gpu_class) == resource
+    try:
+        try:
+            raise exc
+        except BaseException as inner:
+            raise RuntimeError("loading failed") from inner
+    except RuntimeError as wrapped:
+        assert oom_resource(wrapped, gpu_class) == resource

@@ -1039,17 +1039,14 @@ class Worker:
         self._release(claim)
 
     def _unfit(self, claim: Claim, exc: BaseException, job: "Job | None") -> None:
-        """Keep a load of the ticket's residency that ran out of memory as an `UnfitRecord`: host
-        memory when a `MemoryError` is in the exception's chain, else the device's; the grant is
-        the class's host memory, or its share of a device; the code is the providers' versions.
+        """Keep a load of the ticket's residency that ran out of memory as an `UnfitRecord`: the
+        memory `pydra.workers.pool.faults.oom_resource` names; the grant is the class's host
+        memory, or its share of a device; the code is the providers' versions.
         """
         key = residency_key(claim.ticket.residency)
         if key is None:
             return
-        host = any(isinstance(link, MemoryError) for link in _faults._chain(exc))
-        resource: ty.Literal["device", "host"] = (
-            "host" if host or not self.cls.gpus else "device"
-        )
+        resource = _faults.oom_resource(exc, bool(self.cls.gpus))
         if resource == "host":
             grant = self.cls.mem
         else:

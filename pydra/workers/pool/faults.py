@@ -27,20 +27,24 @@ __all__ = [
     "attached",
     "classify",
     "fault_of",
+    "oom_resource",
 ]
 
 Phase = ty.Literal["load", "call", "pool"]
 Kind = ty.Literal["content", "resource", "infrastructure", "policy"]
 
-# Exceptions that are out of memory, by qualified name, so nothing is imported to match them.
-OUT_OF_MEMORY = frozenset(
+# Exceptions that are out of a device's memory, by qualified name, so nothing is imported to match
+# them. cupy's subclasses MemoryError.
+DEVICE_OUT_OF_MEMORY = frozenset(
     (
-        "builtins.MemoryError",
         "torch.OutOfMemoryError",
         "torch.cuda.OutOfMemoryError",
+        "cupy.cuda.memory.OutOfMemoryError",
         "jax.errors.ResourceExhaustedError",
     )
 )
+# Exceptions that are out of memory, host or device.
+OUT_OF_MEMORY = frozenset(("builtins.MemoryError",)) | DEVICE_OUT_OF_MEMORY
 
 _RECORD = "__pydra_fault__"
 _MESSAGE = 2000
@@ -160,6 +164,21 @@ def classify(exc: BaseException, phase: Phase) -> FaultRecord:
     if phase == "call":
         return FaultRecord("content", name, str(exc)[:_MESSAGE], phase)
     return FaultRecord("infrastructure", name, str(exc)[:_MESSAGE], phase, gap=True)
+
+
+def oom_resource(exc: BaseException, gpu_class: bool) -> ty.Literal["device", "host"]:
+    """The memory an out-of-memory ``exc`` ran out of. On a GPU class, a device out-of-memory type
+    (`DEVICE_OUT_OF_MEMORY`, by qualified name anywhere in the chain) is the device's, before the
+    generic rule; otherwise a `MemoryError` in the chain is the host's, and anything else the
+    device's. On a CPU class it is always the host's."""
+    if not gpu_class:
+        return "host"
+    links = list(_chain(exc))
+    if any(_qualnames(link) & DEVICE_OUT_OF_MEMORY for link in links):
+        return "device"
+    if any(isinstance(link, MemoryError) for link in links):
+        return "host"
+    return "device"
 
 
 def fault_of(
