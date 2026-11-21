@@ -9,7 +9,9 @@ marked test that runs on the Slurm CI container.
 """
 
 import asyncio
+import contextlib
 import os
+import signal
 import shutil
 import stat
 import subprocess
@@ -59,7 +61,7 @@ take() {
   echo $((left - 1)) > "$d/$1"
   return 0
 }
-take hang-before-queue && exec sleep 300
+take hang-before-queue && { echo $$ >> "$d/hung"; exec sleep 300; }
 name=""; comment=""
 for a in "$@"; do
   case "$a" in
@@ -69,7 +71,7 @@ for a in "$@"; do
 done
 mkdir -p "$d/jobs"
 [ -f "$d/vanish" ] || echo "PENDING|$name|$comment" > "$d/jobs/$n"
-take hang-after-queue && exec sleep 300
+take hang-after-queue && { echo $$ >> "$d/hung"; exec sleep 300; }
 echo "$n"
 """
 # squeue: one row per queued job, `id|state|name|comment`, filtered by --name=; logs its arguments.
@@ -107,18 +109,31 @@ def fake_slurm(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_SLURM", str(state))
     monkeypatch.setattr(slurm, "_SHARED_LISTING", slurm.QueueListing())
     yield state
-    if shutil.which("pkill"):
-        subprocess.run(["pkill", "-f", "sleep 300"], check=False)
-    assert not _hung_sleeps(), "a hung fake sbatch outlived its test"
+    hung = _hung(state)
+    for pid in hung:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
+    assert not [
+        pid for pid in hung if _running(pid)
+    ], "a hung fake sbatch outlived its test"
 
 
-def _hung_sleeps() -> list[str]:
-    if not shutil.which("pgrep"):
-        return []
+def _hung(state: Path) -> list[int]:
+    """The pids of this test's fake sbatch calls that hung (each records its own)."""
+    where = state / "hung"
+    return [int(p) for p in where.read_text().split()] if where.exists() else []
+
+
+def _running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    # a killed child not yet reaped by its parent is a zombie: gone for this purpose
     out = subprocess.run(
-        ["pgrep", "-f", "sleep 300"], capture_output=True, text=True
-    ).stdout
-    return out.split()
+        ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True
+    ).stdout.strip()
+    return bool(out) and not out.startswith("Z")
 
 
 def _submitted(state: Path) -> list[list[str]]:
