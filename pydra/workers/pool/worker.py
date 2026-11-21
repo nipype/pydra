@@ -96,6 +96,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.resident import Provider
 
 __all__ = [
+    "EXIT_FAULTS",
     "EXIT_HARDWARE",
     "EXIT_OK",
     "EXIT_RECYCLE",
@@ -122,6 +123,8 @@ EXIT_HARDWARE = 4
 """``WrongHardware``: the grant does not match the class."""
 EXIT_RECYCLE = 5
 """A call's deadline passed or the beater died: start a fresh worker."""
+EXIT_FAULTS = 6
+"""The pool's classifier reference cannot be imported here or is not callable."""
 
 
 class WrongHardware(RuntimeError):
@@ -328,7 +331,12 @@ class Worker:
         self._worker_lease: DirectoryLease | None = None
         self._gaps: set[str] = set()
         # residencies this worker held: (queue, label) -> (reason, latest fault)
-        self._holds: dict[tuple[str, str], tuple[str, FaultRecord]] = {}
+        # (queue, label) -> (coordinator epoch, reason, latest fault); honoured only while that
+        # epoch is the newest and the hold mark stands
+        self._holds: dict[tuple[str, str], tuple[int, str, FaultRecord]] = {}
+        self._epoch: int | None = (
+            None  # the newest coordinator epoch this worker has read
+        )
         self._last_live = time.monotonic()
         self._pinged = 0.0
 
@@ -347,28 +355,55 @@ class Worker:
             logger.error("refusing to start: %s", err)
             return EXIT_USAGE
         try:
-            self._read_faults()
+            if not self._refresh():
+                return EXIT_FAULTS
             return self._run()
         finally:
             self.pool.close()
 
-    def _read_faults(self) -> None:
+    def _refresh(self) -> bool:
+        """When the newest coordinator epoch has changed, read the budgets and the classifier it
+        wrote (`_read_faults`) and forget the holds of older epochs; False when the classifier is
+        unusable."""
+        epochs = self.pool.epochs()
+        newest = epochs[-1] if epochs else 0
+        if newest == self._epoch:
+            return True
+        self._epoch = newest
+        self._holds = {k: v for k, v in self._holds.items() if v[0] == newest}
+        return self._read_faults()
+
+    def _read_faults(self) -> bool:
         """Take the budgets and the classifier the newest coordinator wrote into the pool, unless
-        given; a classifier that cannot be imported here is reported and the default used.
-        """
+        given; False (logged) when the classifier reference cannot be imported here or names
+        something not callable: the worker then exits `EXIT_FAULTS` rather than type faults by
+        another rule."""
         record = self.pool.faults() or {}
-        if self._faults_arg is None and isinstance(record.get("budgets"), dict):
-            self.faults = FaultBudgets.from_json(record["budgets"])
+        if self._faults_arg is None:
+            budgets = record.get("budgets")
+            self.faults = (
+                FaultBudgets.from_json(budgets)
+                if isinstance(budgets, dict)
+                else FaultBudgets()
+            )
+        if self._classify_arg is not None:
+            return True
         reference = record.get("classify")
-        if self._classify_arg is None and isinstance(reference, str):
-            try:
-                self.classify = _resolve(reference)
-            except Exception as err:
-                logger.error(
-                    "the pool's classifier %s cannot be imported here (%r): using the default",
-                    reference,
-                    err,
-                )
+        if reference is None:
+            self.classify = _faults.classify
+            return True
+        try:
+            classify = _resolve(reference)
+        except Exception as err:
+            logger.error(
+                "the pool's classifier %r cannot be imported here: %r", reference, err
+            )
+            return False
+        if not callable(classify):
+            logger.error("the pool's classifier %r is not callable", reference)
+            return False
+        self.classify = classify
+        return True
 
     def beater_alive(self) -> bool:
         """Whether the worker's beater process still runs."""
@@ -520,6 +555,8 @@ class Worker:
         spent, began, idle = 0, time.monotonic(), 0
         self._last_live = time.monotonic()
         while not self.stop.is_set() and self.recycle is None:
+            if not self._refresh():
+                return EXIT_FAULTS
             if self.substrate and self._orphaned():
                 logger.info(
                     "no live coordinator for %ss: exiting", self.settings.orphan_after_s
@@ -943,7 +980,7 @@ class Worker:
             f"{phase}: {fault.type}: {fault.message}"
         )
         logger.error(reason, extra={"event": "held", "residency": label})
-        self._holds[(claim.queue, label)] = (reason, fault)
+        self._holds[(claim.queue, label)] = (epoch, reason, fault)
         group["stop"] = True
         faulted = {e.key for e in requeue}
         for entry in claim.open_jobs():
@@ -960,12 +997,17 @@ class Worker:
         return "held"
 
     def _held_here(self, claim: Claim) -> bool:
-        """Whether this worker held the claim's residency; if so settle its open jobs ``held``,
-        unrun and unloaded."""
-        found = self._holds.get((claim.queue, claim.ticket.residency_label))
+        """Whether this worker held the claim's residency in the newest coordinator epoch and the
+        hold mark still stands (``pydracli pool release-hold`` lifts it); if so settle the claim's
+        open jobs ``held``, unrun and unloaded."""
+        key = (claim.queue, claim.ticket.residency_label)
+        found = self._holds.get(key)
         if found is None:
             return False
-        reason, fault = found
+        epoch, reason, fault = found
+        if epoch != self._epoch or key[1] not in self.pool.holds(claim.queue, epoch):
+            del self._holds[key]
+            return False
         for entry in claim.open_jobs():
             current = claim.current(entry)
             if current is not None:

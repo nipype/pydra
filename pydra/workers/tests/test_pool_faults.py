@@ -1698,3 +1698,169 @@ def test_a_held_residency_does_not_skip_its_queue(pool, tasks):
     pool.pool.hold("cpu", epoch, label)
     claim = pool.pool.claim("cpu")
     assert claim is not None and claim.digest == other
+
+
+# -- fix round 2 -------------------------------------------------------------------------------
+
+
+def _held_worker(pool, tasks):
+    """A worker that holds the empty residency of ``cpu`` in the newest epoch (one job requeued until
+    the budget) and keeps polling."""
+    import threading
+
+    pool.put([pool.job(tasks.Killed(x=0), "k0")])
+    worker = _worker(
+        pool,
+        _class(quantum_jobs=1),
+        classify=tasks.infrastructure,
+        settings=_settings(idle_polls=4000),
+    )
+    thread = threading.Thread(target=worker.run, daemon=True)
+    thread.start()
+    _wait(lambda: pool.pool.holds("cpu"), "the hold")
+    return worker, thread
+
+
+def test_local_hold_does_not_outlive_its_epoch(pool, tasks):
+    """The reviewer's probe: a residency this worker held in one coordinator epoch does not bind it
+    in a newer epoch; a later run's job of that residency runs."""
+    pool.pool.take_epoch()
+    worker, thread = _held_worker(pool, tasks)
+    try:
+        pool.pool.take_epoch()  # a later run: the hold no longer binds
+        later = pool.put([pool.job(tasks.Echo(x=7), "later")])
+        _wait(lambda: pool.outcomes(digest=later), "the later job's outcome")
+    finally:
+        worker.stop.set()
+        thread.join(BOUND)
+    [outcome] = pool.outcomes(digest=later)
+    assert outcome["outcome"] == "done"
+
+
+def test_released_hold_releases_the_worker(pool, tasks):
+    """``pydracli pool release-hold`` lifts the storage hold, and the worker that wrote it honours
+    the lift: a later job of the residency runs in the same epoch."""
+    pool.pool.take_epoch()
+    worker, thread = _held_worker(pool, tasks)
+    try:
+        assert pool.pool.release_holds("cpu") == 1
+        later = pool.put([pool.job(tasks.Echo(x=8), "released")])
+        _wait(lambda: pool.outcomes(digest=later), "the released job's outcome")
+    finally:
+        worker.stop.set()
+        thread.join(BOUND)
+    [outcome] = pool.outcomes(digest=later)
+    assert outcome["outcome"] == "done"
+
+
+def test_faults_reread_when_the_epoch_changes(pool, tasks, tmp_path):
+    """A running worker reads the budgets again when a newer coordinator epoch writes them: a job
+    of the new run is retried under its ``content_attempts=2``."""
+    import threading
+
+    from pydra.workers.pool.faults import FaultBudgets
+
+    first = pool.pool.take_epoch()
+    pool.pool.write_faults(
+        first, {"budgets": FaultBudgets().to_json(), "classify": None}
+    )
+    worker = _worker(pool, settings=_settings(idle_polls=4000))
+    thread = threading.Thread(target=worker.run, daemon=True)
+    thread.start()
+    try:
+        _wait(lambda: worker.token is not None and worker.cls is not None, "the start")
+        second = pool.pool.take_epoch()
+        pool.pool.write_faults(
+            second,
+            {"budgets": FaultBudgets(content_attempts=2).to_json(), "classify": None},
+        )
+        job = pool.job(tasks.FailOnce(marker=str(tmp_path / "once")), "flaky")
+        digest = pool.put([job])
+        _wait(
+            lambda: any(
+                o["outcome"] != "expired" for o in pool.outcomes(digest=digest)
+            ),
+            "the job's outcome",
+        )
+    finally:
+        worker.stop.set()
+        thread.join(BOUND)
+    [outcome] = pool.outcomes(digest=digest)
+    assert outcome["outcome"] == "done"
+
+
+@pytest.mark.parametrize("reference", ["no_such_module_xyz:classify", "os:sep"])
+def test_unusable_classifier_stops_the_worker_before_any_claim(pool, tasks, reference):
+    """A classifier reference the worker cannot import, or that names something not callable, is an
+    error: the worker exits non-zero before writing a ready mark or claiming anything, so its class
+    breaks after ``start_failures`` and its jobs are held."""
+    from pydra.workers.pool.faults import FaultBudgets
+    from pydra.workers.pool.worker import EXIT_FAULTS
+
+    epoch = pool.pool.take_epoch()
+    pool.pool.write_faults(
+        epoch, {"budgets": FaultBudgets().to_json(), "classify": reference}
+    )
+    digest = pool.put([pool.job(tasks.Echo(x=1), "unclaimed")])
+    worker, code = _run(pool)
+    assert code == EXIT_FAULTS
+    assert (
+        worker.token is None
+        or pool.pool.worker_record(worker.token, "ready.json") is None
+    )
+    assert pool.outcomes(digest=digest) == []
+    assert pool.pool.claim("cpu") is not None  # never claimed: the ticket is free
+
+
+def _partial_classifier():
+    import functools
+
+    from pydra.workers.pool.faults import classify
+
+    return functools.partial(classify)
+
+
+class _Bound:
+    def classify(self, exc, phase):
+        from pydra.workers.pool.faults import classify
+
+        return classify(exc, phase)
+
+
+@pytest.mark.parametrize(
+    "make",
+    [_partial_classifier, lambda: _Bound().classify, lambda: (lambda exc, phase: None)],
+    ids=["partial", "bound-method", "lambda"],
+)
+def test_pool_refuses_a_classifier_workers_cannot_import(tmp_path, tasks, pools, make):
+    """`WarmPool` resolves the classifier's reference and refuses one that does not round-trip (a
+    ``partial``, a bound method, a lambda) at construction, before anything is written.
+    """
+    sub = _submitter(tmp_path)
+    with pytest.raises(ValueError, match="classif"):
+        _warm(tmp_path, pools, sub, classify=make())
+    assert not (tmp_path / "pool" / "coordinator").exists() or not list(
+        (tmp_path / "pool" / "coordinator").glob("*/faults.json")
+    )
+
+
+def test_a_held_routed_queue_is_not_walked(pool, tasks, monkeypatch):
+    """A routed queue (``<class>#<digest>``) carries one residency (RFC 0005 section 4.2), so a hold
+    on it skips the queue without reading a slot."""
+    from pydra.workers.pool.storage import PoolRoot
+
+    epoch = pool.pool.take_epoch()
+    queue = "cpu#" + "ab" * 8
+    residency = ({"kind": "provider", "name": "m"},)
+    for i in range(3):
+        digest = pool.put(
+            [pool.job(tasks.Echo(x=i), f"r{i}")], queue=queue, residency=residency
+        )
+    label = pool.pool.ticket(queue, digest).residency_label
+    pool.pool.hold(queue, epoch, label)
+    walked = []
+    real = PoolRoot._target
+    monkeypatch.setattr(
+        PoolRoot, "_target", lambda self, *a: walked.append(a) or real(self, *a)
+    )
+    assert pool.pool.claim(queue) is None and walked == []

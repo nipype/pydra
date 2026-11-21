@@ -34,6 +34,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import hashlib
+import importlib
 import json
 import logging
 import math
@@ -189,15 +190,48 @@ def _label(residency: ty.Sequence[dict]) -> str:
     return hashlib.sha256(jcs(list(residency))).hexdigest()
 
 
-def _function_reference(obj: ty.Any) -> str:
-    """``module:qualname`` of a module-level function or class, or of an instance's class."""
+def _classifier_reference(obj: ty.Any) -> str:
+    """The ``module:qualname`` a worker imports the classifier ``obj`` by: a module-level function, or
+    a class it makes with no arguments, or such a reference itself.
+
+    Raises
+    ------
+    ValueError
+        ``obj`` does not round-trip through its reference (a ``functools.partial``, a bound method,
+        a lambda, a nested function, an instance), or the reference does not resolve to a callable.
+    """
+    from pydra.workers.pool.worker import _resolve
+
     if isinstance(obj, str):
-        return obj
-    target = obj if callable(obj) and hasattr(obj, "__qualname__") else type(obj)
-    reference = f"{target.__module__}:{target.__qualname__}"
-    if "<" in reference:
+        reference = obj
+        try:
+            resolved = _resolve(reference)
+        except Exception as err:
+            raise ValueError(
+                f"the classifier {reference!r} cannot be imported: {err!r}"
+            ) from err
+        if not callable(resolved):
+            raise ValueError(f"the classifier {reference!r} is not callable")
+        return reference
+    module = getattr(obj, "__module__", None)
+    qualname = getattr(obj, "__qualname__", None)
+    if not isinstance(module, str) or not isinstance(qualname, str):
         raise ValueError(
-            f"{obj!r} is not importable by a worker; pass a module-level function or class"
+            f"the classifier {obj!r} has no importable name: workers import it by "
+            "module:qualname; pass a module-level function or class"
+        )
+    reference = f"{module}:{qualname}"
+    try:
+        found: ty.Any = importlib.import_module(module)
+        for part in qualname.split("."):
+            found = getattr(found, part)
+    except Exception:
+        found = None
+    if found is not obj:
+        raise ValueError(
+            f"the classifier {obj!r} does not round-trip through {reference!r} (a partial, a "
+            "bound method, a lambda or a nested function cannot reach a worker); pass a "
+            "module-level function or class"
         )
     return reference
 
@@ -276,7 +310,7 @@ class WarmPool:
                 stacklevel=2,
             )
         classify_ref = (
-            None if classify is _faults.classify else _function_reference(classify)
+            None if classify is _faults.classify else _classifier_reference(classify)
         )
         self.root = Path(root).absolute()
         self.classes = tuple(classes)

@@ -1713,9 +1713,12 @@ class PoolRoot:
             Pass over tickets of more jobs than this (a warm worker gathering one-job tickets).
         """
         q = self.queue(queue)
-        # judged ticket by ticket: a queue may carry several residencies (a residency="ignore"
-        # job shares its class's queue with plain ones), so one held residency never skips it
+        # judged ticket by ticket: a class's queue may carry several residencies (a
+        # residency="ignore" job shares it with plain ones), so one held residency never skips
+        # it; a routed queue (``<class>#<digest>``) carries one, so any hold there skips it
         held = self.holds(queue, epoch)
+        if held and "#" in queue:
+            return None
         now = time.monotonic()
         interval = self.settings.renew_interval
         q.judged = {d: at for d, at in q.judged.items() if now - at < interval}
