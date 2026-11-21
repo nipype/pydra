@@ -1868,3 +1868,91 @@ def test_a_held_routed_queue_is_not_walked(pool, tasks, monkeypatch):
         PoolRoot, "_target", lambda self, *a: walked.append(a) or real(self, *a)
     )
     assert pool.pool.claim(queue) is None and walked == []
+
+
+@pytest.mark.parametrize("taken", ["before", "after"])
+def test_a_claim_made_before_the_new_epochs_budgets_waits_for_them(
+    pool, tasks, tmp_path, taken
+):
+    """The worker refreshes, then the new coordinator writes its budgets and puts a ticket, then the
+    worker claims it, all in one pass, with the new epoch taken before the refresh or after it:
+    the job runs under the new epoch's budgets (``content_attempts=2``), never the older one's.
+    """
+    from pydra.workers.pool.faults import FaultBudgets
+    from pydra.workers.pool.worker import Worker
+
+    first = pool.pool.take_epoch()
+    pool.pool.write_faults(
+        first, {"budgets": FaultBudgets().to_json(), "classify": None}
+    )
+    epochs = []
+    if taken == "before":
+        epochs.append(pool.pool.take_epoch())  # its budgets not written yet
+    job = pool.job(tasks.FailOnce(marker=str(tmp_path / "once")), "flaky")
+    real_next = Worker._next
+    done = []
+
+    def interleaved(self, prefer, left):
+        if not done:  # after this pass's refresh, before its claim
+            done.append(True)
+            if not epochs:
+                epochs.append(pool.pool.take_epoch())
+            pool.pool.write_faults(
+                epochs[0],
+                {
+                    "budgets": FaultBudgets(content_attempts=2).to_json(),
+                    "classify": None,
+                },
+            )
+            pool.put([job])
+        return real_next(self, prefer, left)
+
+    import unittest.mock
+
+    with unittest.mock.patch.object(Worker, "_next", interleaved):
+        worker, code = _run(pool)
+    assert code == 0 and done
+    [outcome] = pool.outcomes()
+    assert outcome["outcome"] == "done"
+    assert worker.faults == FaultBudgets(content_attempts=2)
+
+
+def test_a_claim_is_released_unrun_until_the_new_epochs_budgets_exist(
+    pool, tasks, tmp_path
+):
+    """A ticket claimed while the newest epoch's coordinator has not yet written its budgets is
+    released unrun (no attempt started); once they are written it runs under them."""
+    import unittest.mock
+
+    from pydra.workers.pool.faults import FaultBudgets
+    from pydra.workers.pool.worker import Worker
+
+    first = pool.pool.take_epoch()
+    pool.pool.write_faults(
+        first, {"budgets": FaultBudgets().to_json(), "classify": None}
+    )
+    second = pool.pool.take_epoch()
+    job = pool.job(tasks.FailOnce(marker=str(tmp_path / "once")), "flaky")
+    real_next = Worker._next
+    calls = []
+
+    def staged(self, prefer, left):
+        calls.append(len(pool.generations(job)) if calls else 0)
+        if len(calls) == 1:
+            pool.put([job])  # claimed before the budgets exist
+        elif len(calls) == 2:
+            assert pool.outcomes() == [] and len(pool.generations(job)) == 1
+            pool.pool.write_faults(
+                second,
+                {
+                    "budgets": FaultBudgets(content_attempts=2).to_json(),
+                    "classify": None,
+                },
+            )
+        return real_next(self, prefer, left)
+
+    with unittest.mock.patch.object(Worker, "_next", staged):
+        _, code = _run(pool)
+    assert code == 0 and len(calls) >= 2
+    [outcome] = pool.outcomes()
+    assert outcome["outcome"] == "done"

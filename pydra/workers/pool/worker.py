@@ -336,6 +336,12 @@ class Worker:
         self._holds: dict[tuple[str, str], tuple[int, str, FaultRecord]] = {}
         self._epoch: int | None = None  # the newest coordinator epoch this worker read
         self._faults_epoch: int | None = None  # the epoch whose fault record it read
+        self._recorded = (
+            False  # whether any coordinator of the pool wrote a fault record
+        )
+        self._scanned = (
+            False  # whether every epoch was searched since the newest changed
+        )
         self._last_live = time.monotonic()
         self._pinged = 0.0
 
@@ -369,17 +375,32 @@ class Worker:
         newest = epochs[-1] if epochs else 0
         if newest != self._epoch:
             self._epoch = newest
+            self._scanned = False
             self._holds = {k: v for k, v in self._holds.items() if v[0] == newest}
         elif self._faults_epoch == newest:
             return True
         return self._read_faults()
+
+    def _awaiting_faults(self) -> bool:
+        """Whether the pool's coordinators write fault records and the newest epoch's has not been
+        read: claims made now are not run (its coordinator writes it after taking the epoch).
+        """
+        return self._recorded and self._faults_epoch != self._epoch
 
     def _read_faults(self) -> bool:
         """Take the budgets and the classifier the newest coordinator wrote into the pool, unless
         given; False (logged) when the classifier reference cannot be imported here or names
         something not callable: the worker then exits `EXIT_FAULTS` rather than type faults by
         another rule."""
-        found = self.pool.faults()
+        found = self.pool.faults(self._epoch) if self._epoch else None
+        if found is None and not self._scanned:
+            # an older epoch's record, read once per epoch change, not on every pass
+            self._scanned = True
+            found = self.pool.faults()
+        if found is None and self._recorded:
+            return True  # the record in force stays until the newest epoch's is written
+        if found is not None:
+            self._recorded = True
         self._faults_epoch, record = found if found is not None else (None, {})
         if self._faults_arg is None:
             budgets = record.get("budgets")
@@ -579,6 +600,23 @@ class Worker:
                 idle += 1
                 if idle >= self.settings.idle_polls:
                     break
+                self.stop.wait(self.settings.poll_s)
+                continue
+            if (
+                not self._refresh()
+            ):  # a newer epoch may have begun since this pass began
+                for claim in held:
+                    self._release(claim)
+                return EXIT_FAULTS
+            if self._awaiting_faults():
+                logger.info(
+                    "coordinator epoch %s has not written its fault budgets yet: released "
+                    "%d claim(s) unrun",
+                    self._epoch,
+                    len(held),
+                )
+                for claim in held:
+                    self._release(claim)
                 self.stop.wait(self.settings.poll_s)
                 continue
             idle = 0
