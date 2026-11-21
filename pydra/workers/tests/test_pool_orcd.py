@@ -1096,8 +1096,15 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
             killed=killed,
             moved=len(moved),
             losses=len(_losses(pool.root)),
+            causes=dict(
+                collections.Counter(
+                    g["cause"] for gs in generations.values() for g in gs
+                )
+            ),
             sbatch=[h.job_id for h in substrate.handles],
         )
+        if not all(ok for _, ok in v.checks):
+            _print_logs(pool.root)
 
 
 def test_claim_lease_cross_node(where, slurm):
@@ -1521,3 +1528,10 @@ def _lines(path: Path) -> list[str]:
 def _node(handed: str) -> str:
     """The node of a line the coordinator wrote for each job it handed to the pool."""
     return handed.split()[0].rsplit("/", 1)[-1].split("[", 1)[0]
+
+
+def _print_logs(pool_root: Path, lines: int = 40) -> None:
+    """The tail of each worker's log, for a failed verdict (shown by pytest on failure)."""
+    for log in sorted((pool_root / "private" / "logs").glob("*.log")):
+        print(f"--- {log.name}")
+        print("\n".join(log.read_text(errors="replace").splitlines()[-lines:]))
