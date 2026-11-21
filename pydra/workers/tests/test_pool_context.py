@@ -1,0 +1,458 @@
+"""The ``pool`` section of the execute context (RFC 0005 section 8, W11a).
+
+A worker computes ``pool-facts@1`` for each call. Under a store whose identity lists ``pool`` in
+``recorded_only`` the section enters the execute context, where it is recorded and never splits a slot;
+under ``pydra-identity@1`` without it, and under `PickleStore`, it reaches only the audit record and
+``Result.runtime``. A store whose identity would key it is refused (`PoolFactsWouldSplitSlots`).
+"""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import typing as ty
+from pathlib import Path
+
+import attrs
+import pytest
+
+from pydra.engine.job import Job
+from pydra.engine.lease import LeaseSettings
+from pydra.engine.portable.identity import PydraIdentityV1
+from pydra.engine.portable.store import PortableStore
+from pydra.engine.submitter import Submitter
+
+POSIX = sys.platform != "win32"
+LEASE = LeaseSettings(
+    stale_after=4.0, renew_fraction=0.4, attribute_delay=0.0, timeout=10.0
+)
+BOUND = 120.0  # seconds any wait on another process may take before the test fails
+
+TASKS = """
+import json, os
+from pathlib import Path
+from uuid import uuid4
+from pydra.compose import python, workflow
+from pydra.engine.resident import Provided
+
+LOADS = []
+COMMITS = []
+
+
+class Counting:
+    # writes one file per load into the directory its spec names, so loads are counted across processes
+    name = "counting"
+
+    def load(self, spec, device):
+        LOADS.append(spec)
+        Path(spec, uuid4().hex).touch()
+        return spec
+
+    def close(self, obj):
+        pass
+
+    def footprint(self, spec):
+        return None
+
+    def measure(self, obj):
+        return None
+
+    def version(self):
+        return "7"
+
+
+def record_commit(staged, checksum, key, context, digest):
+    COMMITS.append({"checksum": checksum, "context": json.loads(json.dumps(context))})
+
+
+@python.define
+def UseModel(model: Provided[str, "counting"], x: int) -> int:
+    return x
+
+
+@python.define
+def Echo(x: int) -> int:
+    return x
+
+
+@workflow.define
+def UseModels(model: str, xs: list) -> list:
+    return workflow.add(UseModel(model=model).split(x=xs), name="U").out
+"""
+
+
+@pytest.fixture(scope="session")
+def tasks(tmp_path_factory):
+    """The task module, importable here and in workers started from here."""
+    where = tmp_path_factory.mktemp("pool_context_tasks")
+    (where / "_pydra_pool_context_tasks.py").write_text(TASKS)
+    sys.path.insert(0, str(where))
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(where), *filter(None, [os.environ.get("PYTHONPATH")])]
+    )
+    import _pydra_pool_context_tasks
+
+    return _pydra_pool_context_tasks
+
+
+@pytest.fixture(autouse=True)
+def clean(monkeypatch, tasks):
+    """Release every claim a test leaves held, empty the process's resident set and the task module's
+    records, pass or fail."""
+    from pydra.engine import resident
+    from pydra.workers.pool.storage import Claim
+
+    made = []
+    init = Claim.__init__
+
+    def recording(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+        made.append(self)
+
+    monkeypatch.setattr(Claim, "__init__", recording)
+    device = resident.process_device()
+    tasks.LOADS.clear()
+    tasks.COMMITS.clear()
+    yield
+    tasks.LOADS.clear()
+    tasks.COMMITS.clear()
+    resident.set_process_device(device)
+    resident.close_process_set()
+    for claim in made:
+        claim.lease.__exit__(None, None, None)
+
+
+@pytest.fixture
+def groups():
+    """Process groups of workers a test started: killed at the end, and none may be left."""
+    pids: list[int] = []
+    yield pids
+    for pid in pids:
+        if POSIX:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+    if POSIX:
+        for pid in pids:
+            _wait(lambda: not _group_alive(pid), f"process group {pid} to exit")
+
+
+def _group_alive(pid: int) -> bool:
+    found = subprocess.run(["pgrep", "-g", str(pid)], capture_output=True, text=True)
+    return found.stdout.strip() != ""
+
+
+def _wait(predicate, what: str, bound: float = BOUND) -> None:
+    import time
+
+    deadline = time.monotonic() + bound
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"timed out waiting for {what}")
+        time.sleep(0.05)
+
+
+def _settings(**kwargs):
+    from pydra.workers.pool.settings import PoolSettings
+
+    fields = dict(lease=LEASE, poll_s=0.05, idle_polls=2, timeout_grace=60.0)
+    fields.update(kwargs)
+    return PoolSettings(**fields)
+
+
+def _class(name="cpu", **kwargs):
+    from pydra.workers.pool.classes import WorkerClass
+
+    fields = dict(name=name, device="cpu", quantum_jobs=8, quantum_s=600.0)
+    fields.update(kwargs)
+    return WorkerClass(**fields)
+
+
+@attrs.frozen
+class ClientIdentity:
+    """A client's identity (RFC 0003 P9): pydra's key, context and fingerprint under another name."""
+
+    recorded_only: frozenset = attrs.field(factory=frozenset, converter=frozenset)
+    name: ty.ClassVar[str] = "client-identity@1"
+    fingerprint_name: ty.ClassVar[str] = "pydra-context@1"
+
+    @property
+    def _v1(self) -> PydraIdentityV1:
+        return PydraIdentityV1(recorded_only=self.recorded_only)
+
+    def key(self, job):
+        return self._v1.key(job)
+
+    def check_key(self, checksum, key):
+        return self._v1.check_key(checksum, key)
+
+    def context(self, job, phase):
+        return self._v1.context(job, phase)
+
+    def fingerprint(self, context):
+        return self._v1.fingerprint(context)
+
+
+def _store(tmp_path: Path, identity=None, **kwargs) -> PortableStore:
+    root = tmp_path / "store"
+    root.mkdir(mode=0o700, exist_ok=True)
+    kwargs.setdefault("pickle", True)
+    if identity is not None:
+        kwargs["identity"] = identity
+    return PortableStore(root, trust="private", **kwargs)
+
+
+class Queue:
+    """A pool root, a submitter and the tickets put on the pool, for an in-process worker."""
+
+    def __init__(self, tmp_path: Path, tasks, store):
+        from pydra.workers.pool.storage import PoolRoot
+
+        self.pool = PoolRoot.open(tmp_path / "pool", LEASE, probe=False)
+        self.submitter = Submitter(
+            store=store,
+            worker="debug",
+            providers=[tasks.Counting()],
+            audit_flags=_prov(),
+            messengers=_file_messenger(),
+        )
+        self.store = store
+
+    def job(self, task, name: str, rerun: bool = False) -> Job:
+        job = Job(task=task, submitter=self.submitter, name=name)
+        job.rerun = rerun
+        return job
+
+    def put(self, jobs, queue="cpu") -> str:
+        from pydra.engine import resident
+        from pydra.workers.pool.codec import PrivatePickle, write_payload
+        from pydra.workers.pool.storage import Ticket, TicketJob
+
+        entries = []
+        for job in jobs:
+            fingerprint = _fingerprint(self.store, job)
+            g = self.pool._next_generation((job.checksum, fingerprint))
+            job.attempt = f"{self.pool.pool_id}.{g}"
+            entries.append(
+                TicketJob(
+                    checksum=job.checksum,
+                    fingerprint=fingerprint,
+                    payload=write_payload(PrivatePickle(), job, self.pool.path),
+                    attempt=job.attempt,
+                    runner_attempt=0,
+                    units=1.0,
+                )
+            )
+        residency = tuple(
+            attrs.asdict(resident.spec_key(jobs[0].task, f, p))
+            for f, p in resident.provided_fields(jobs[0].task)
+        )
+        return self.pool.put(
+            queue,
+            Ticket(queue=queue, node="wf/node", jobs=entries, residency=residency),
+        )
+
+    def classes(self, *classes) -> None:
+        from pydra.workers.pool.worker import class_record
+
+        for cls in classes:
+            self.pool.put_class(cls.name, class_record(cls))
+
+    def work(self, cls):
+        """Run a worker of ``cls`` in this process until it is idle."""
+        from pydra.workers.pool.worker import Worker
+
+        worker = Worker(
+            self.pool.path, cls, settings=_settings(), device_memory=lambda: None
+        )
+        assert worker.run() == 0
+        return worker
+
+
+def _prov():
+    from pydra.utils.messenger import AuditFlag
+
+    return AuditFlag.PROV
+
+
+def _file_messenger():
+    from pydra.utils.messenger import FileMessenger
+
+    return FileMessenger()
+
+
+def _fingerprint(store, job) -> str:
+    import hashlib
+
+    from pydra.utils.digest import jcs
+
+    identity = getattr(store, "identity", None)
+    if identity is not None:
+        return identity.fingerprint(job.context)
+    return hashlib.sha256(jcs(job.context)).hexdigest()
+
+
+@pytest.fixture
+def queue_of(tmp_path, tasks):
+    made = []
+
+    def make(store):
+        q = Queue(tmp_path, tasks, store)
+        made.append(q)
+        return q
+
+    yield make
+    for q in made:
+        q.pool.close()
+        q.submitter.close()
+
+
+def _messages(root: Path, kind: str) -> list[dict]:
+    found = []
+    for path in Path(root).rglob("*.jsonld"):
+        message = json.loads(path.read_text())
+        if message.get("@type") == kind:
+            found.append(message)
+    return found
+
+
+# -- the pool section --------------------------------------------------------------------------
+
+
+def test_cold_and_warm_share_one_slot(tmp_path, tasks, queue_of):
+    """Under an identity listing ``pool``, the cold and the warm call of one worker publish ``pool-facts@1``
+    in their execute contexts, into the slot the lookup finds: the fingerprint is the one of the context
+    without the section, so both results are served afterwards with no load."""
+    identity = PydraIdentityV1(recorded_only={"pool"})
+    store = _store(tmp_path, identity, on_commit=tasks.record_commit)
+    q = queue_of(store)
+    q.classes(_class())
+    models = tmp_path / "loads"
+    models.mkdir()
+    jobs = [q.job(tasks.UseModel(model=str(models), x=x), f"j{x}") for x in (1, 2)]
+    q.put(jobs)
+    worker = q.work(_class())
+
+    assert len(tasks.LOADS) == 1
+    assert [c["checksum"] for c in tasks.COMMITS] == [j.checksum for j in jobs]
+    facts = [c["context"]["pool"] for c in tasks.COMMITS]
+    assert [f["residency"][0]["state"] for f in facts] == ["cold", "warm"]
+    assert [f["residency"][0]["since_load"] for f in facts] == [0, 1]
+    for f, job in zip(facts, jobs):
+        assert f["scheme"] == "pool-facts@1"
+        assert f["worker"] == worker.token and f["class"] == "cpu"
+        assert f["attempt"] == job.attempt
+        assert f["batch"] == {"size": 1, "index": 0}
+        assert f["losses_survived"] == 0
+        assert f["hardware"]["device"] == "cpu"
+        (entry,) = f["residency"]
+        assert entry["kind"] == "provider" and entry["name"] == "counting"
+        assert entry["version"] == "7"
+        assert entry["key"] == _resident_key(job)
+    assert isinstance(facts[0]["residency"][0]["load_s"], float)
+    slots = {identity.fingerprint(c["context"]) for c in tasks.COMMITS}
+    assert slots == {identity.fingerprint(jobs[0].context)}
+    assert all("pool" not in j.context for j in jobs)
+    # the lookup finds both entries in that slot: served, never loaded again
+    with Submitter(store=store, worker="debug", providers=[tasks.Counting()]) as sub:
+        assert [
+            sub(tasks.UseModel(model=str(models), x=x)).outputs.out for x in (1, 2)
+        ] == [1, 2]
+    assert len(list(models.iterdir())) == 1
+
+
+def _resident_key(job) -> str:
+    from pydra.engine import resident
+
+    [(field, name)] = resident.provided_fields(job.task)
+    return resident.spec_key(job.task, field, name).digest()
+
+
+def test_two_workers_share_one_slot(tmp_path, tasks, queue_of):
+    """One job run again on a second worker publishes into the slot of the first: the facts name two
+    workers, and the slot is one."""
+    identity = PydraIdentityV1(recorded_only={"pool"})
+    store = _store(tmp_path, identity, on_commit=tasks.record_commit)
+    q = queue_of(store)
+    q.classes(_class())
+    models = tmp_path / "loads"
+    models.mkdir()
+    task = tasks.UseModel(model=str(models), x=1)
+    q.put([q.job(task, "first")])
+    first = q.work(_class())
+    q.put([q.job(task, "again", rerun=True)])
+    second = q.work(_class())
+
+    assert first.token != second.token
+    workers = [c["context"]["pool"]["worker"] for c in tasks.COMMITS]
+    assert workers == [first.token, second.token]
+    slots = {identity.fingerprint(c["context"]) for c in tasks.COMMITS}
+    assert len(slots) == 1
+    stored = store.stored(task._checksum)
+    assert {ref.fingerprint for ref, _, _ in stored} == slots
+    [(_, context, _)] = stored
+    assert context["pool"]["worker"] in (first.token, second.token)
+
+
+def test_store_keying_pool_refused(tmp_path, tasks):
+    """A store whose identity would key ``pool`` is refused before the pool is touched; the same client
+    identity listing ``pool`` in ``recorded_only`` is accepted."""
+    from pydra.workers.pool.pool import PoolFactsWouldSplitSlots, WarmPool
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    keyed = _store(tmp_path, ClientIdentity())
+    with pytest.raises(PoolFactsWouldSplitSlots, match="client-identity@1"):
+        WarmPool(
+            tmp_path / "pool",
+            [_class()],
+            ExternalSubstrate(),
+            store=keyed,
+            settings=_settings(),
+        )
+    assert not (tmp_path / "pool").exists()
+
+    (tmp_path / "other").mkdir()
+    listed = _store(tmp_path / "other", ClientIdentity(recorded_only={"pool"}))
+    pool = WarmPool(
+        tmp_path / "pool",
+        [_class()],
+        ExternalSubstrate(),
+        store=listed,
+        settings=_settings(),
+    )
+    pool.close()
+
+
+@pytest.mark.parametrize("kind", ["v1", "pickle"])
+def test_v1_and_picklestore_facts_audit_only(tmp_path, tasks, queue_of, kind):
+    """Under ``pydra-identity@1`` without ``pool`` in ``recorded_only``, and under `PickleStore`, the
+    facts go to the audit record and ``Result.runtime``, never into the execute context.
+    """
+    from pydra.engine.store import PickleStore
+
+    if kind == "v1":
+        store = _store(tmp_path, on_commit=tasks.record_commit)
+    else:
+        store = PickleStore(tmp_path / "store")
+    q = queue_of(store)
+    q.classes(_class())
+    models = tmp_path / "loads"
+    models.mkdir()
+    job = q.job(tasks.UseModel(model=str(models), x=1), "j")
+    q.put([job])
+    worker = q.work(_class())
+
+    if kind == "v1":
+        [commit] = tasks.COMMITS
+        assert "pool" not in commit["context"]
+    [message] = _messages(tmp_path / "store", "pool-facts")
+    facts = message["pool"]
+    assert facts["scheme"] == "pool-facts@1" and facts["worker"] == worker.token
+    assert message["checksum"] == job.checksum and message["attempt"] == job.attempt
+    assert facts["residency"][0]["state"] == "cold"
+    if kind == "pickle":
+        result = store.lookup(job.checksum, job.context, task=job.task)
+        assert result is not None and "pool" not in result.context
+        assert result.runtime is not None and result.runtime.pool == facts

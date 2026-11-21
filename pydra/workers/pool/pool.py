@@ -26,7 +26,13 @@ The pool is the submitting process's side of the protocol of `pydra.workers.pool
   next start of its class backs off, and after ``start_failures`` consecutive ones the class is
   broken and its jobs are held.
 - **Lifecycle.** `close` writes the coordinator's ``ended`` mark; a coordinator that still holds the
-  newest epoch then stops the workers its substrate lists.
+  newest epoch then stops the workers its substrate lists. A pool outlives the runs driven on it:
+  ``drive`` never closes it, so its workers stay resident from one run to the next; whoever made it
+  closes it (its caller, or the `Submitter` that made it by name). Its workers still exit when idle.
+- **Pool facts.** Each worker computes ``pool-facts@1`` for each call. They enter the execute context
+  only under a store whose identity lists ``pool`` in ``recorded_only``; under ``pydra-identity@1``
+  without it, and under a store with no identity (`PickleStore`), they reach the audit record and
+  ``Result.runtime`` only. A pool refuses any other store (`PoolFactsWouldSplitSlots`).
 - **The cold re-check** (``PoolSettings.recheck_fraction``, RFC 0005 section 4.4). A settled job
   sampled by its checksum is queued, once its outcome is reported, for this process's re-check
   thread (a bounded queue: one that is full drops the re-check and counts it in
@@ -107,6 +113,7 @@ if ty.TYPE_CHECKING:
 
 __all__ = [
     "PoolBusy",
+    "PoolFactsWouldSplitSlots",
     "PoolFenced",
     "PoolJobFailed",
     "PoolSettings",
@@ -121,6 +128,41 @@ JobKey = tuple[str, str]
 
 class PoolBusy(RuntimeError):
     """Another coordinator's lease on the pool stayed live for ``coordinator_wait`` seconds."""
+
+
+class PoolFactsWouldSplitSlots(ValueError):
+    """The store's identity would key the ``pool`` section of the execute context: every worker and
+    every batch size would split one result into many slots (RFC 0005 section 8)."""
+
+
+POOL_FACTS_SECTION = "pool"
+"""The execute-context section a worker adds (``pool-facts@1``)."""
+
+
+def pool_facts_recorded(store: ty.Any) -> bool:
+    """Whether the pool facts enter the execute context of a job published to ``store``: True when its
+    identity lists ``pool`` in ``recorded_only``; False under ``pydra-identity@1`` without it and under a
+    store with no identity (`PickleStore`), whose facts reach the audit record and ``Result.runtime``
+    only.
+
+    Raises
+    ------
+    PoolFactsWouldSplitSlots
+        Any other identity: it would key the facts.
+    """
+    identity = getattr(store, "identity", None)
+    if identity is None:
+        return False
+    if POOL_FACTS_SECTION in getattr(identity, "recorded_only", ()):
+        return True
+    name = getattr(identity, "name", None)
+    if name == "pydra-identity@1":
+        return False
+    raise PoolFactsWouldSplitSlots(
+        f"the store's identity {name!r} does not list {POOL_FACTS_SECTION!r} in recorded_only, so "
+        "the pool facts of each worker and batch would split one result into many slots; list it "
+        "in the identity's recorded_only"
+    )
 
 
 class PoolFenced(RuntimeError):
@@ -330,6 +372,8 @@ class WarmPool:
     ------
     PoolBusy
         Another coordinator stayed live for ``settings.coordinator_wait`` seconds.
+    PoolFactsWouldSplitSlots
+        The store's identity would key the ``pool`` section of the execute context.
     """
 
     checks_store: ty.ClassVar[bool] = True
@@ -353,6 +397,7 @@ class WarmPool:
         codec: JobCodec = PrivatePickle(),
         probe: bool = True,
     ):
+        pool_facts_recorded(store)  # before the pool is touched
         self.batches = True
         classify_ref = (
             None if classify is _faults.classify else _classifier_reference(classify)
