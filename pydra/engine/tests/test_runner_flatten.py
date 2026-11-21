@@ -261,22 +261,55 @@ def test_second_submitter_waits_then_reads_stored(tmp_path, monkeypatch):
 
 
 @pytest.mark.timeout(120)
-def test_stale_workflow_lease_taken_over(tmp_path):
-    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+def test_stale_workflow_lease_taken_over(tmp_path, monkeypatch):
+    """A holder that stopped renewing is waited for until ``stale_after`` has passed on
+    the storage clock, then taken over and the workflow runs once.
+
+    The holder is a lease of this process whose heartbeat is stopped, which is what a
+    killed holder looks like to a waiter, and the waiter's storage clock is a fake, so
+    neither side depends on how the OS schedules processes or threads."""
+    log, root = tmp_path / "runs.log", tmp_path / "cache"
+    clock = {"t": 0.0}
+    base = [0.0]
+
+    def storage_clock() -> float:
+        return base[0] + clock["t"]
+
+    taken = []
+    acquire = PickleStore.acquire
+
+    def acquire_with_fake_clock(self, checksum, context):
+        lease = attrs.evolve(acquire(self, checksum, context), clock=storage_clock)
+        taken.append(lease)
+        return lease
+
+    # the runner makes its lease when it is built, so the fake clock goes in first
+    monkeypatch.setattr(PickleStore, "acquire", acquire_with_fake_clock)
     sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
-    holder = spawn_holder(runner.job, sub.store, ready, hold=600)
+    monkeypatch.setattr(PickleStore, "acquire", acquire)
+    assert len(taken) == 1
+    holder = sub.store.acquire(runner.job.checksum, runner.job.context)
+    holder.__enter__()
+    holder._heartbeat.stopped.set()  # dead: it never renews again
+    holder._heartbeat.join()
+    base[0] = max(
+        p.lstat().st_mtime for p in [holder.lockfile, *holder.lockfile.rglob("*")]
+    )
     try:
-        wait_for(ready, holder)
-        finish(holder, killed=True)
         with sub:
-            assert runner.ready().retry_after is not None  # the lease is not yet stale
-            start = time.monotonic()
+            rnd = runner.ready()  # the lease is not yet stale
+            assert rnd.dispatch == [] and rnd.retry_after is not None
+            assert log_lines(log) == []
+            clock["t"] = SETTINGS.stale_after + 1
+            for frame in runner._frames:  # judge now, not after the backoff
+                frame.retry_at = None
             drive(sub, runner)
             assert runner.result().outputs.out == 7
-        assert time.monotonic() - start < 20
+        assert [len(lease.broke) for lease in taken] == [1]
         assert not runner.errors
     finally:
-        holder.kill()
+        if holder.held:
+            holder.__exit__(None, None, None)
     assert len(log_lines(log)) == 1
 
 
