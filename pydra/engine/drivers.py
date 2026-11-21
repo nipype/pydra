@@ -67,14 +67,6 @@ def drive_inline(
         runner.close()
 
 
-def _unbind(executors: "ty.Iterable[Executor]", report: ty.Callable) -> None:
-    """Release each executor that holds a run's binding (an optional ``unbind``, as `WarmPool` has)"""
-    for executor in executors:
-        unbind = getattr(executor, "unbind", None)
-        if unbind is not None:
-            unbind(report)
-
-
 async def drive(
     runner: GraphRunner,
     executors: "ty.Mapping[str, Executor]",
@@ -187,8 +179,7 @@ async def drive(
     try:
         for executor in executors.values():
             executor.bind(report)
-    except BaseException:
-        _unbind(executors.values(), report)
+    except BaseException:  # an executor another run still holds (`PoolInUse`)
         runner.close()
         raise
     runner.release_off_thread()
@@ -246,7 +237,4 @@ async def drive(
         runner.close()
         for handle in open_handles:
             handle.executor.cancel(handle)
-        try:
-            await runner.released()
-        finally:
-            _unbind(executors.values(), report)
+        await runner.released()
