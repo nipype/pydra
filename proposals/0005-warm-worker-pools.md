@@ -604,6 +604,7 @@ class Substrate(Protocol):
     outcome/<digest>/<job>-<attempt>.json  one per job and attempt: done | failed | held | withdrawn | expired
     settled/<digest>-<count>            an O_EXCL empty file each time the ticket's outcome count reaches <count>
     held-<epoch>-<label>                a hold of a residency on this queue (§6)
+    faults/<epoch>-<label>/<n>          an infrastructure fault of a residency in an epoch (§6); O_EXCL
   follow/<checksum>-<fingerprint>/<g>   generation g of the job: an O_EXCL regular file naming its ticket and attempt
   follow/<checksum>-<fingerprint>/<g>.started  O_EXCL: attempt <g> was started, by which worker token
   workers/<token>/                      lease/, ready.json, samples.jsonl, calls/<seq>.json and <seq>.done (O_EXCL)
@@ -945,12 +946,18 @@ senselab's profiles differ the table says so (`rt/data/profiles/laptop.yaml:111-
   a later run (a new coordinator epoch) runs the held jobs; a hold counts only for its own epoch or a newer
   one, so a stale coordinator can never hold a newer one's work.
 - **A fault's class survives every wrapper.** A load failure that carries a resource record stays a
-  resource fault; a wrapper that re-raises keeps the original's record. senselab found a load-time OOM
+  resource fault; a wrapper that re-raises keeps the original's record. A record attached to an
+  exception (`faults.attach`), or to any exception of its `__cause__`/`__context__` chain, is the fault
+  whatever classifier is in use, and the default classifier looks for out of memory and `WorkerLost`
+  along that chain. senselab found a load-time OOM
   turned into an infrastructure fault by a wrapper, which held a healthy environment instead of moving to a
   larger class (R-287, §9).
 - **One bisection engine** for local and pool execution (§4.4), with two triggers: a resource fault, and a
   crash (`WorkerLost`, a protocol error, a fatal raised by a request rather than a load). A load is never
-  split or retried as a request. An exception element of a batched return is never a trigger.
+  split or retried as a request. An exception element of a batched return is never a trigger. Each
+  trigger reloads the residency first. A lone job's crash inside a live worker is run again under a
+  `"restart"` generation with `charged` true, so crashes in a live worker and losses of a dead one count
+  against one `crashes_charged`.
 - **OOM attribution is per worker.** A SIGKILL is a resource fault only when the worker's own cgroup
   recorded an OOM kill after the worker's latest baseline, taken at start and after each provider start;
   an OOM in a sibling process of the same Slurm job does not turn the next `scancel` into an OOM (senselab
@@ -1325,6 +1332,16 @@ for writing a process-owning provider, and the worker protocol as a reference pa
   placement; W6's `bench_pool_overhead` measures the latter.
 
 ## 13. Changes in revisions
+
+### Amendment to revision 4 (implementation of W7)
+
+| Item | Change |
+|---|---|
+| Infrastructure count | §5.1 layout, §6: a residency's infrastructure faults in an epoch are counted by O_EXCL records `faults/<epoch>-<label>/<n>` on its queue; at `infrastructure_replacements` the worker writes `held-<epoch>-<label>` and settles the faulting ticket's open jobs `held` (reason naming the residency, the count, the epoch and the latest cause). A failed load is one fault of the residency, not one per job. A worker on a pool with no coordinator epoch holds at epoch 1. The coordinator, on reading a `held` outcome, reports every other job it follows or places on that queue `NotRun(held=True)` for its epoch, with no extra listing per poll. |
+| `start_failures` | A `FaultBudgets` field (default 7), no longer a `PoolSettings` field. |
+| Passing budgets and classifier | `WarmPool` writes non-default `FaultBudgets` to `private/faults-<uuid>.json` and passes the classifier as a `module:qualname` reference; workers take `--faults` and `--classify`. |
+| Crash in a live worker | §6 "One bisection engine": a lone crash is retried under a charged `restart` generation (`Claim.restart(charged=True)`), uncounted as an infrastructure requeue. |
+| Load out of memory | Moves up the ladder at `phase: "load"`, uncharged, as §5.5 says; the `UnfitRecord` §6 names is written from W9, which adds the record type. |
 
 ### Amendment to revision 4 (implementation of W6)
 
