@@ -270,6 +270,25 @@ def test_an_unsettled_read_of_a_replaced_entry_never_sleeps(tmp_path, monkeypatc
     got = reader.result()  # unsettled: called from an event loop, which polls itself
     assert got.errored and "replaced" in got.failure
     assert sleeps == []
-    monkeypatch.setattr("pydra.engine.portable.store.VISIBILITY_TIMEOUT", 0.05)
+    clock = [0.0]
+    sleeps.clear()
+
+    class FakeTime:
+        """The store's clock: it advances only when the store sleeps."""
+
+        def __getattr__(self, name):
+            return getattr(time, name)
+
+        @staticmethod
+        def monotonic():
+            return clock[0]
+
+        @staticmethod
+        def sleep(s):
+            sleeps.append(s)
+            clock[0] += s
+
+    monkeypatch.setattr("pydra.engine.portable.store.time", FakeTime())
     got = cloudpickle.loads(cloudpickle.dumps(first_job)).result(settled=True)
-    assert got.errored and sleeps  # a settled read still retries before it fails
+    assert sleeps  # a settled read retries before it fails
+    assert got.errored and "replaced" in got.failure
