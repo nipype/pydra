@@ -38,6 +38,12 @@ class FakeSlurm:
         return [c for c in self.calls if c[0] == "scontrol"]
 
 
+@pytest.fixture(autouse=True)
+def fresh_listing(monkeypatch):
+    """A listing another test left in the process-wide cache is not this test's queue."""
+    monkeypatch.setattr(slurm, "_SHARED_LISTING", slurm.QueueListing())
+
+
 def run_worker(tmp_path, monkeypatch, states, resources=None, scontrol_rc=0, **kwargs):
     fake = FakeSlurm(states, scontrol_rc)
     monkeypatch.setattr(slurm.base, "read_and_display_async", fake)
