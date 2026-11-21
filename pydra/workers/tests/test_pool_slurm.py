@@ -957,6 +957,49 @@ def test_a_lasting_listing_failure_holds_the_run(tmp_path, fake_slurm, tasks, po
     assert len(_submitted(fake_slurm)) == 1
 
 
+def _worker_lease(root: Path, token: str):
+    """A worker's lease as its beater leaves it (``workers/<token>/lease/<hex>/beat``), and a
+    function that renews it: each call moves the beat's mtime one second on."""
+    beat = root / "workers" / token / "lease" / ("b" * 32) / "beat"
+    beat.parent.mkdir(parents=True, exist_ok=True)
+    beat.write_text("")
+    when = {"t": time.time() + 1000.0}  # newer than the directories just made
+
+    def renew():
+        when["t"] += 1.0
+        os.utime(beat, (when["t"], when["t"]))
+
+    renew()
+    return renew
+
+
+def test_a_class_that_settled_once_then_stalled_breaks(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """A settle exempts its class for ``stale_after`` only: a class that settled one job early in
+    the outage and then stalled breaks once the window, the count and the floor have passed.
+    """
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=2)
+    )
+    _queue_round(pool, sub, tasks, [1, 2, 3])
+    (fake_slurm / "vanish").touch()
+    pool._poll(100.0)
+    (fake_slurm / "squeue-fails").touch()
+    [digest] = [t.digest for t in pool._tickets.values()]
+    settled = pool.pool.settled
+    pool.pool.settled = lambda queue: {**settled(queue), digest: 1}  # one job, at 101
+    pool.pool.outcomes = lambda queue, digest, expect, within: {}
+    for now in (101.0, 102.0, 103.0, 104.0):
+        pool._poll(now)
+    assert "cpu" not in pool._broken  # within stale_after of the settle at 101
+    for now in (105.0, 106.0):
+        pool._poll(now)
+    assert "cpu" in pool._broken
+
+
 def test_a_long_gap_alone_does_not_break_a_class(tmp_path, fake_slurm, tasks, pools):
     """The time floor is not enough by itself: fewer than ``listing_failures`` failed polls, however
     far apart, break nothing."""
@@ -993,7 +1036,9 @@ def test_a_worker_ready_during_the_outage_protects_its_class(
     mark = tmp_path / "pool" / "workers" / token / "ready.json"
     mark.parent.mkdir(parents=True, exist_ok=True)
     mark.write_text(json.dumps({"token": token}))
+    renew = _worker_lease(tmp_path / "pool", token)
     for step in range(10):
+        renew()
         pool._poll(101.0 + step)
     assert "cpu" not in pool._broken
 
@@ -1012,12 +1057,64 @@ def test_a_listing_outage_does_not_break_a_class_with_a_ready_worker(
     pool._scale(100.0)
     [token] = list(pool._started)
     pool._ready.add(token)  # the worker is up and working
+    renew = _worker_lease(tmp_path / "pool", token)
     (fake_slurm / "squeue-fails").touch()
-    for step in range(
-        30
-    ):  # 7 is the default budget; 30 polls span far past stale_after
+    # 7 is the default budget; 30 polls span far past stale_after
+    for step in range(30):
+        renew()  # its beater keeps renewing its lease
         pool._poll(101.0 + step)
     assert "cpu" not in pool._broken and reported == []
+
+
+def test_a_ready_worker_that_is_gone_no_longer_protects_its_class(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """A worker that marked ready and then ended while ``squeue`` was down (its lease no longer
+    renewed) stops exempting its class: once its lease has not moved for ``stale_after``, the
+    failures count, and the class breaks at the count and the time floor."""
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=3)
+    )
+    reported = []
+    pool.bind(lambda job, outcome: reported.append(outcome))
+    _queue_round(pool, sub, tasks, [1])
+    pool._poll(100.0)  # the last good listing: the worker is started
+    [token] = list(pool._started)
+    pool._ready.add(token)
+    _worker_lease(tmp_path / "pool", token)  # beaten once, then never again
+    (fake_slurm / "jobs" / pool._started[token].job_id).unlink()  # the job ended
+    (fake_slurm / "squeue-fails").touch()
+    for now in (101.0, 102.0, 103.0, 104.0, 105.0, 106.0):
+        pool._poll(now)
+    # the lease, first seen at 101, is fresh until 105; three failures from then on
+    assert "cpu" not in pool._broken and reported == []
+    pool._poll(107.0)
+    [outcome] = reported
+    assert outcome.held and "times in a row" in outcome.reason
+
+
+def test_a_ready_worker_without_a_lease_does_not_protect_its_class(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """A ready worker whose lease is gone (released as it exited) is not live: its class breaks as
+    soon as the count and the time floor are reached."""
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=3)
+    )
+    _queue_round(pool, sub, tasks, [1])
+    pool._poll(100.0)
+    [token] = list(pool._started)
+    pool._ready.add(token)  # it marked ready, then exited and released its lease
+    (fake_slurm / "squeue-fails").touch()
+    for now in (101.0, 102.0, 103.0):
+        pool._poll(now)
+    assert "cpu" not in pool._broken  # the floor (stale_after = 4 s) is not reached
+    pool._poll(104.0)
+    assert "cpu" in pool._broken
 
 
 def test_a_class_that_settles_tickets_is_not_broken_by_a_listing_outage(

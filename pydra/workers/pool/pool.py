@@ -243,6 +243,21 @@ def _fingerprint(job: "Job") -> str:
     return hashlib.sha256(jcs(job.context)).hexdigest()
 
 
+def _newest_mtime(lease: Path) -> float | None:
+    """The newest mtime of a lease directory, its entries and theirs (a beater's heartbeats);
+    None when it is missing."""
+    try:
+        newest = os.lstat(lease).st_mtime
+        for entry in os.scandir(lease):
+            newest = max(newest, entry.stat(follow_symlinks=False).st_mtime)
+            if entry.is_dir(follow_symlinks=False):
+                for sub in os.scandir(entry.path):
+                    newest = max(newest, sub.stat(follow_symlinks=False).st_mtime)
+    except OSError:
+        return None
+    return newest
+
+
 class WarmPool:
     """An executor (RFC 0002 section 3.2) that runs jobs on warm workers of a pool.
 
@@ -348,7 +363,11 @@ class WarmPool:
         # when the substrate was last listed (or, never listed, first failed to be), and the
         # classes a ticket of which settled since then
         self._listed_at: float | None = None
-        self._progress: set[str] = set()
+        self._progress: dict[str, float] = (
+            {}
+        )  # class -> when a ticket of it last settled
+        # token -> (newest mtime of its worker lease, when the follower saw it change)
+        self._lease_seen: dict[str, tuple[float | None, float]] = {}
         # (queue, residency label) a worker held in this epoch, and why
         self._held: dict[tuple[str, str], str] = {}
         self._idle: dict[str, int] = collections.defaultdict(int)
@@ -977,7 +996,7 @@ class WarmPool:
             for t in tickets:
                 count = settled.get(t.digest, 0)
                 if count > t.seen:
-                    self._progress.add(_queue_class(queue))
+                    self._progress[_queue_class(queue)] = now
                 if count > t.seen or (t.recheck and count > 0):
                     try:
                         found = self.pool.outcomes(
@@ -1165,7 +1184,6 @@ class WarmPool:
             return
         self._listing_failures.clear()
         self._listed_at = now
-        self._progress.clear()
         live_ids = {id(h) for h in live}
         for token, h in list(self._started.items()):
             if id(h) in live_ids:
@@ -1234,45 +1252,56 @@ class WarmPool:
                     self.substrate.stop(surplus)
 
     def _listing_failed(self, err: Exception, now: float) -> None:
-        """Count a failed listing against each class with work that shows no progress: no ready
-        worker and no ticket settled since the last good listing. Once ``listing_failures`` polls
-        in a row have failed and ``stale_after`` has passed since that listing, such a class is
-        broken, so its jobs are held rather than left waiting."""
+        """Count a failed listing against each class with work that shows no progress: no live
+        ready worker (one whose worker lease moved within ``stale_after``) and no ticket settled
+        within ``stale_after``. Once ``listing_failures`` polls in a row have failed and
+        ``stale_after`` has passed since the last good listing, such a class is broken, so its
+        jobs are held rather than left waiting. Everything is read from storage."""
         logger.warning("listing the substrate's workers failed: %s", err)
+        stale = self.settings.lease.stale_after
         if self._listed_at is None:
             self._listed_at = now
-        for (
-            token,
-            h,
-        ) in self._started.items():  # ready marks are storage, not the listing
-            if token not in self._ready and self.pool.worker_record(
-                token, "ready.json"
-            ):
+        ready = set()
+        for token, h in self._started.items():
+            if token not in self._ready:
+                if not self.pool.worker_record(token, "ready.json"):
+                    continue
                 self._ready.add(token)
-        ready = {h.worker_class for t, h in self._started.items() if t in self._ready}
+            if self._lease_moved(token, now) < stale:
+                ready.add(h.worker_class)
+        for token in set(self._lease_seen) - set(self._started):
+            del self._lease_seen[token]
         wanted = self._demand()
         started = {h.worker_class for h in self._started.values()}
         for cls in self.classes:
             name = cls.name
             if name in self._broken or not (wanted.get(name) or name in started):
                 continue
-            if name in ready or name in self._progress:
-                self._listing_failures.pop(
-                    name, None
-                )  # progressing: the run is not stuck
+            settled = now - self._progress.get(name, float("-inf")) < stale
+            if name in ready or settled:  # progressing: the run is not stuck
+                self._listing_failures.pop(name, None)
                 continue
             self._listing_failures[name] += 1
             n = self._listing_failures[name]
             down = now - self._listed_at
-            if (
-                n >= self.faults.listing_failures
-                and down >= self.settings.lease.stale_after
-            ):
+            if n >= self.faults.listing_failures and down >= stale:
                 self._break(
                     cls,
                     f"listing the substrate's workers failed {n} times in a row over "
                     f"{down:.0f}s: {type(err).__name__}: {err}",
                 )
+
+    def _lease_moved(self, token: str, now: float) -> float:
+        """Seconds, on the follower's clock, since the worker's lease was last seen to move; a
+        missing lease never moved. Mtimes are compared only with each other."""
+        newest = _newest_mtime(self.root / "workers" / token / "lease")
+        last = self._lease_seen.get(token)
+        if newest is None:
+            return float("inf")
+        if last is None or last[0] != newest:
+            self._lease_seen[token] = (newest, now)
+            return 0.0
+        return now - last[1]
 
     def _may_start(self, name: str, now: float) -> bool:
         failures = self._failures[name]
