@@ -344,6 +344,7 @@ class WarmPool:
         self._failed_at: dict[str, float] = {}
         self._cause: dict[str, str] = {}
         self._broken: dict[str, str] = {}
+        self._listing_failures: dict[str, int] = collections.defaultdict(int)
         # (queue, residency label) a worker held in this epoch, and why
         self._held: dict[tuple[str, str], str] = {}
         self._idle: dict[str, int] = collections.defaultdict(int)
@@ -374,6 +375,7 @@ class WarmPool:
                 self.providers,
                 codec_ref,
                 pool_id=self.pool.pool_id,
+                classes=self.classes,
             )
             attach = getattr(substrate, "attach", None)
             if attach is not None:
@@ -1151,11 +1153,11 @@ class WarmPool:
     def _scale(self, now: float) -> None:
         try:
             live = list(self.substrate.live())
-        except (
-            Exception
-        ) as err:  # not read as every worker gone: the next poll lists again
-            logger.warning("listing the substrate's workers failed: %s", err)
+        except Exception as err:
+            # not read as every worker gone: the next poll lists again, within a budget
+            self._listing_failed(err)
             return
+        self._listing_failures.clear()
         live_ids = {id(h) for h in live}
         for token, h in list(self._started.items()):
             if id(h) in live_ids:
@@ -1223,6 +1225,25 @@ class WarmPool:
                     self._stopped.update(h.token for h in surplus)
                     self.substrate.stop(surplus)
 
+    def _listing_failed(self, err: Exception) -> None:
+        """Count a failed listing against each class with work; at ``listing_failures`` in a row
+        the class is broken, so its jobs are held rather than left waiting."""
+        logger.warning("listing the substrate's workers failed: %s", err)
+        wanted = self._demand()
+        started = {h.worker_class for h in self._started.values()}
+        for cls in self.classes:
+            name = cls.name
+            if name in self._broken or not (wanted.get(name) or name in started):
+                continue
+            self._listing_failures[name] += 1
+            n = self._listing_failures[name]
+            if n >= self.faults.listing_failures:
+                self._break(
+                    cls,
+                    f"listing the substrate's workers failed {n} times in a row: "
+                    f"{type(err).__name__}: {err}",
+                )
+
     def _may_start(self, name: str, now: float) -> bool:
         failures = self._failures[name]
         if not failures:
@@ -1230,12 +1251,16 @@ class WarmPool:
         backoff = self.settings.poll_s * 2 ** (failures - 1)
         return now - self._failed_at.get(name, 0.0) >= backoff
 
-    def _break(self, cls: WorkerClass) -> None:
+    def _break(self, cls: WorkerClass, cause: str | None = None) -> None:
         from pydra.workers.pool.worker import class_record
 
+        if cause is None:
+            cause = (
+                f"{self._failures[cls.name]} consecutive failed starts; the latest: "
+                f"{self._cause.get(cls.name)}"
+            )
         why = (
-            f"worker class {cls.name!r} is broken: {self._failures[cls.name]} consecutive "
-            f"failed starts; the latest: {self._cause.get(cls.name)}; class "
+            f"worker class {cls.name!r} is broken: {cause}; class "
             f"{json.dumps(class_record(cls), sort_keys=True)}"
         )
         logger.error(why)

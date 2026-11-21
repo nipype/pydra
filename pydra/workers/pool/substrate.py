@@ -138,6 +138,7 @@ class Attachment:
     codec: str | None = None
     pool_id: str = ""
     epoch: int | None = None  # the coordinator's epoch, set once it is taken
+    classes: tuple[WorkerClass, ...] = ()  # the classes the pool places jobs on
 
 
 def worker_argv(python: str, at: Attachment, cls: WorkerClass, token: str) -> list[str]:
@@ -391,6 +392,15 @@ _SLURM_OWNED = {
     "parsable": "the substrate reads the job id",
     "array": "one job per worker",
     "a": "one job per worker",
+    "clusters": "a job on another cluster is never listed by this one's squeue",
+    "M": "a job on another cluster is never listed by this one's squeue",
+    "gpus-per-node": "set from the class's gpus and gpu_type",
+    "gpus-per-task": "set from the class's gpus and gpu_type",
+    "gpus-per-socket": "set from the class's gpus and gpu_type",
+    "tres-per-task": "set from the class's gpus and cpus",
+    "cpus-per-gpu": "set from the class's cpus",
+    "mem-per-gpu": "set from the class's mem",
+    "mem-per-cpu": "set from the class's mem",
 }
 
 
@@ -409,9 +419,11 @@ class SlurmSubstrate:
     ``workers_per_device``.
 
     `live` reads the process's shared queue listing (``squeue --user``, one per poll cycle with any
-    `SlurmWorker` of the process) and lists this pool's jobs of this coordinator epoch: the ones it
-    submitted, a job of the epoch it did not record (a submission that landed late, which scaling
-    stops as a surplus), and those submitted since the listing was taken. A submission whose
+    `SlurmWorker` of the process) and lists this pool's jobs of this coordinator epoch and of
+    earlier ones: the ones it submitted, those submitted since the listing was taken, and jobs it
+    did not record (a submission that landed late, or a running worker an earlier coordinator
+    started), which count toward the class's workers and the CPU cap and which scaling may stop.
+    At its first listing it cancels earlier epochs' jobs that are still pending. A submission whose
     ``sbatch`` times out is looked up by its name; when it is found it is the worker, otherwise the
     name is looked up again after ``attribute_delay`` and, still not found, submitted once more under
     a new token. A timed-out ``sbatch`` can still land after that: the job is then a surplus.
@@ -464,6 +476,7 @@ class SlurmSubstrate:
         self._jobs: dict[str, WorkerHandle] = {}
         self._cpus: dict[str, int] = {}
         self._attachment: Attachment | None = None
+        self._swept = False
 
     @property
     def _listing(self):
@@ -477,6 +490,9 @@ class SlurmSubstrate:
         from pydra.workers.pool.settings import PoolSettings
 
         self._attachment = attachment
+        self._swept = False
+        for cls in attachment.classes:
+            self._cpus[cls.name] = cls.cpus or 1
         if self.attribute_delay is None or self.max_age is None:
             try:
                 settings = PoolSettings.from_json(
@@ -499,11 +515,26 @@ class SlurmSubstrate:
         return self._attachment
 
     @property
-    def prefix(self) -> str:
-        """The start of the name of every job of this pool and coordinator epoch."""
+    def pool_prefix(self) -> str:
+        """The start of the name of every job of this pool, whatever its epoch."""
         at = self._require()
         pool_id = at.pool_id or uuid.uuid5(uuid.NAMESPACE_URL, str(at.root)).hex[:12]
-        return f"pydra-{pool_id}-e{at.epoch or 0}-"
+        return f"pydra-{pool_id}-e"
+
+    @property
+    def prefix(self) -> str:
+        """The start of the name of every job of this pool and coordinator epoch."""
+        return f"{self.pool_prefix}{self._require().epoch or 0}-"
+
+    def _epoch_token(self, name: str) -> "tuple[int, str] | None":
+        """The epoch and token of a job of this pool named ``name``; None for any other job."""
+        rest = (
+            name[len(self.pool_prefix) :] if name.startswith(self.pool_prefix) else ""
+        )
+        epoch, _, token = rest.partition("-")
+        if not epoch.isdigit() or not token:
+            return None
+        return int(epoch), token
 
     def job_name(self, token: str) -> str:
         return f"{self.prefix}{token}"
@@ -554,8 +585,10 @@ class SlurmSubstrate:
             return True
         try:
             live = self.live()
-        except Exception as err:
-            return f"listing the Slurm queue failed: {err}"
+        except (
+            Exception
+        ):  # unknown is not "cannot start": scaling lists again before starting
+            return True
         held = sum(h.cpus for h in live)
         if held + (cls.cpus or 1) > self.per_user_cpu_cap:
             return (
@@ -565,32 +598,39 @@ class SlurmSubstrate:
         return True
 
     def live(self) -> list[WorkerHandle]:
+        """This pool's jobs of this epoch and of earlier ones, from the shared listing. At the
+        first listing after attaching, earlier epochs' jobs still pending are cancelled; their
+        running ones are adopted as unrecorded workers, so they count and scaling can stop them.
+        """
         at = self._require()
         snapshot = self._listing.read(self.max_age, self.squeue_timeout)
-        prefix = self.prefix
-        listed = set()
-        for job_id, (_, name, comment) in snapshot.rows.items():
-            if not name.startswith(prefix):
+        epoch = at.epoch or 0
+        listed, stale = set(), []
+        for job_id, (state, name, comment) in snapshot.rows.items():
+            found = self._epoch_token(name)
+            if found is None or found[0] > epoch:
                 continue
-            listed.add(job_id)
             if job_id not in self._jobs:
-                token = name[len(prefix) :]
-                handle = WorkerHandle(
-                    token=token,
-                    worker_class=comment,
-                    started=snapshot.taken,
-                    log=at.root / "private" / "logs" / f"{token}.log",
-                    cpus=self._cpus.get(comment, 1),
-                    job_id=job_id,
-                )
-                self._jobs[job_id] = handle
-                self.handles.append(handle)
-                logger.warning(
-                    "Slurm job %s (%s) of this pool's epoch was not submitted by this "
-                    "coordinator's records: a surplus",
-                    job_id,
-                    name,
-                )
+                if found[0] < epoch and not self._swept and state == "PENDING":
+                    stale.append(job_id)
+                    continue
+                self._adopt(job_id, found, comment, snapshot.taken)
+            listed.add(job_id)
+        if not self._swept:
+            if stale and not self._cancel(stale):
+                for job_id in stale:  # left queued: count them, try again next listing
+                    _, name, comment = snapshot.rows[job_id]
+                    self._adopt(
+                        job_id, self._epoch_token(name), comment, snapshot.taken
+                    )
+                    listed.add(job_id)
+            else:
+                self._swept = True
+                if stale:
+                    logger.info(
+                        "cancelled pending Slurm jobs of earlier epochs: %s",
+                        " ".join(stale),
+                    )
         live = []
         for job_id, handle in list(self._jobs.items()):
             if job_id in listed or handle.started >= snapshot.taken:
@@ -599,6 +639,46 @@ class SlurmSubstrate:
                 handle.ended = f"Slurm job {job_id} left the Slurm queue"
                 del self._jobs[job_id]
         return live
+
+    def _adopt(self, job_id: str, found, comment: str, taken: float) -> None:
+        job_epoch, token = found
+        handle = WorkerHandle(
+            token=token,
+            worker_class=comment,
+            started=taken,
+            log=self._require().root / "private" / "logs" / f"{token}.log",
+            cpus=self._cpus.get(comment, 1),
+            job_id=job_id,
+        )
+        self._jobs[job_id] = handle
+        self.handles.append(handle)
+        logger.info(
+            "Slurm job %s (epoch %d, class %r) of this pool is adopted as an unrecorded worker",
+            job_id,
+            job_epoch,
+            comment,
+        )
+
+    def _cancel(self, job_ids: ty.Sequence[str]) -> bool:
+        """``scancel`` the jobs; False when it failed (logged)."""
+        argv = ["scancel", *job_ids]
+        try:
+            done = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=self.squeue_timeout,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as err:
+            logger.warning("%s failed: %s", " ".join(argv), err)
+            return False
+        if done.returncode:
+            logger.warning(
+                "%s exited %d: %s", " ".join(argv), done.returncode, done.stderr.strip()
+            )
+            return False
+        return True
 
     def start(self, cls: WorkerClass, n: int) -> list[WorkerHandle]:
         """Submit up to ``n`` workers of ``cls`` while `can_start` allows.
@@ -727,22 +807,7 @@ class SlurmSubstrate:
         handles = [h for h in workers if h.job_id is not None]
         if not handles:
             return
-        argv = ["scancel", *(h.job_id for h in handles)]
-        try:
-            done = subprocess.run(
-                argv,
-                capture_output=True,
-                text=True,
-                timeout=self.squeue_timeout,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as err:
-            logger.warning("%s failed: %s", " ".join(argv), err)
-            return
-        if done.returncode:
-            logger.warning(
-                "%s exited %d: %s", " ".join(argv), done.returncode, done.stderr.strip()
-            )
+        if not self._cancel([h.job_id for h in handles]):
             return
         for h in handles:
             h.ended = "stopped"

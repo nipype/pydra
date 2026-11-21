@@ -79,18 +79,24 @@ class QueueListing:
 
     def __init__(self, clock: ty.Callable[[], float] = time.monotonic):
         self.clock = clock
-        self._lock = threading.Lock()
+        self._lock = (
+            threading.Lock()
+        )  # guards the kept listing; never held across squeue
+        self._reading = threading.Lock()  # serialises synchronous readers' squeue calls
         self._last: QueueSnapshot | None = None
 
     def _fresh(self, max_age: float) -> "QueueSnapshot | None":
-        last = self._last
+        last = (
+            self._last
+        )  # one attribute read: no lock, so an event loop never waits here
         if last is not None and self.clock() - last.taken < max_age:
             return last
         return None
 
     def _keep(self, snapshot: QueueSnapshot) -> QueueSnapshot:
-        if self._last is None or snapshot.taken >= self._last.taken:
-            self._last = snapshot
+        with self._lock:
+            if self._last is None or snapshot.taken >= self._last.taken:
+                self._last = snapshot
         return snapshot
 
     @staticmethod
@@ -100,15 +106,18 @@ class QueueListing:
 
     def read(self, max_age: float, timeout: float) -> QueueSnapshot:
         """A listing no older than ``max_age`` seconds, running ``squeue`` (bounded by ``timeout``
-        seconds) when there is none.
+        seconds) when there is none. Synchronous readers wait for one another's ``squeue``.
 
         Raises
         ------
         RuntimeError
             ``squeue`` failed, timed out or could not run.
         """
-        with self._lock:
-            found = self._fresh(max_age)
+        found = self._fresh(max_age)
+        if found is not None:
+            return found
+        with self._reading:
+            found = self._fresh(max_age)  # another reader may have listed meanwhile
             if found is not None:
                 return found
             taken = self.clock()
@@ -127,10 +136,10 @@ class QueueListing:
             return self._keep(QueueSnapshot(parse_squeue(done.stdout), taken))
 
     async def aread(self, max_age: float) -> QueueSnapshot:
-        """`read` for an event loop: ``squeue`` runs as an asynchronous subprocess; the caller
-        bounds it."""
-        with self._lock:
-            found = self._fresh(max_age)
+        """`read` for an event loop: it never waits for a synchronous reader's ``squeue``, and runs
+        its own as an asynchronous subprocess when the kept listing is too old; the caller bounds
+        it."""
+        found = self._fresh(max_age)
         if found is not None:
             return found
         taken = self.clock()
@@ -138,8 +147,7 @@ class QueueListing:
             *squeue_command(), hide_display=True
         )
         self._check(rc, stderr)
-        with self._lock:
-            return self._keep(QueueSnapshot(parse_squeue(stdout), taken))
+        return self._keep(QueueSnapshot(parse_squeue(stdout), taken))
 
 
 _SHARED_LISTING = QueueListing()
@@ -452,7 +460,6 @@ class SlurmWorker(base.Worker):
                         )
                     requeues += 1
                     remove_from_cache(job.lockfile)
-                    since = shared_listing().clock()
                     cmd_re = ("scontrol", "requeue", jobid)
                     rc, _, stderr = await base.read_and_display_async(
                         *cmd_re, hide_display=True
@@ -462,6 +469,8 @@ class SlurmWorker(base.Worker):
                             f"Slurm job {jobid} ended {done} but `scontrol requeue` "
                             f"failed: {stderr.strip()}"
                         )
+                    # a listing taken while the requeue was in flight may not show the job
+                    since = shared_listing().clock()
                 else:
                     return True
 

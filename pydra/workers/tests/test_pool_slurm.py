@@ -16,7 +16,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import threading
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -45,7 +47,8 @@ BOUND = 120.0  # seconds any wait on another process may take before the test fa
 POOL_ID = "0123456789ab"
 
 # sbatch: records its arguments, queues a job named by --job-name with --comment, prints its id.
-# Files in $FAKE_SLURM change it: `refuse` (exit 1), `vanish` (the job is never listed),
+# Files in $FAKE_SLURM change it: `refuse` (exit 1), `vanish` (the job is never listed), `state`
+# (the state the job is queued in, default PENDING),
 # `hang-after-queue` and `hang-before-queue` (each holds a count of calls to hang past the timeout).
 SBATCH = """#!/bin/sh
 d="$FAKE_SLURM"
@@ -70,21 +73,27 @@ for a in "$@"; do
   esac
 done
 mkdir -p "$d/jobs"
-[ -f "$d/vanish" ] || echo "PENDING|$name|$comment" > "$d/jobs/$n"
+state=$(cat "$d/state" 2>/dev/null || echo PENDING)
+[ -f "$d/vanish" ] || echo "$state|$name|$comment" > "$d/jobs/$n"
 take hang-after-queue && { echo $$ >> "$d/hung"; exec sleep 300; }
 echo "$n"
 """
-# squeue: one row per queued job, `id|state|name|comment`, filtered by --name=; logs its arguments.
+# squeue: one row per queued job, `id|state|name|comment`, filtered by --name=; an ended job is
+# listed only with --states=all, as Slurm's default lists pending and running jobs; logs its
+# arguments.
 SQUEUE = """#!/bin/sh
 d="$FAKE_SLURM"
 echo "$@" >> "$d/squeue.log"
 [ -f "$d/squeue-fails" ] && { echo "slurm_load_jobs error: Socket timed out" >&2; exit 1; }
-want=""
-for a in "$@"; do case "$a" in --name=*) want="${a#--name=}";; esac; done
+want=""; all=""
+for a in "$@"; do
+  case "$a" in --name=*) want="${a#--name=}";; --states=all) all=1;; esac
+done
 for j in "$d"/jobs/*; do
   [ -f "$j" ] || continue
   IFS='|' read -r state name comment < "$j"
   [ -n "$want" ] && [ "$name" != "$want" ] && continue
+  case "$state" in PENDING|RUNNING|COMPLETING) ;; *) [ -n "$all" ] || continue;; esac
   echo "$(basename "$j")|$state|$name|$comment"
 done
 exit 0
@@ -190,7 +199,7 @@ GPU = dict(
 
 
 def _substrate(
-    tmp_path, *, epoch=1, pool_id=POOL_ID, clock=None, root=None, **kwargs
+    tmp_path, *, epoch=1, pool_id=POOL_ID, clock=None, root=None, classes=(), **kwargs
 ) -> SlurmSubstrate:
     clock = clock or FakeClock()
     kwargs.setdefault("attribute_delay", 60.0)
@@ -202,7 +211,11 @@ def _substrate(
     (root / "private").mkdir(parents=True, exist_ok=True, mode=0o700)
     sub.attach(
         Attachment(
-            root, root / "private" / "settings.json", pool_id=pool_id, epoch=epoch
+            root,
+            root / "private" / "settings.json",
+            pool_id=pool_id,
+            epoch=epoch,
+            classes=tuple(classes),
         )
     )
     return sub
@@ -274,7 +287,24 @@ def test_providers_and_codec_reach_the_worker_command(tmp_path, fake_slurm):
     assert args[-1].endswith("--provider m:P --provider n:Q --codec c:Codec")
 
 
-@pytest.mark.parametrize("key", ["qos", "--qos", "gres", "output", "job-name", "wrap"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "qos",
+        "--qos",
+        "gres",
+        "output",
+        "job-name",
+        "wrap",
+        "clusters",
+        "M",
+        "gpus-per-node",
+        "gpus-per-task",
+        "tres-per-task",
+        "cpus-per-gpu",
+        "mem-per-gpu",
+    ],
+)
 def test_qos_and_substrate_owned_options_refused(tmp_path, fake_slurm, key):
     """``--qos`` is never passed, and options the substrate sets are not the class's: a class naming
     one cannot start (placement skips it) and starting it submits nothing."""
@@ -500,6 +530,19 @@ def test_timed_out_twice_raises(tmp_path, fake_slurm):
     assert len(_submitted(fake_slurm)) == 2
 
 
+def test_a_timed_out_submission_that_already_ended_is_found(tmp_path, fake_slurm):
+    """The lookup of a timed-out submission sees jobs in every state: one that already failed is
+    the worker (a failed start), never submitted again."""
+    (fake_slurm / "hang-after-queue").write_text("1")
+    (fake_slurm / "state").write_text("FAILED")
+    clock = FakeClock()
+    sub = _substrate(tmp_path, clock=clock, submit_timeout=1.0)
+    [h] = sub.start(_cls(), 1)
+    assert len(_submitted(fake_slurm)) == 1 and _jobs(fake_slurm) == [h.job_id]
+    clock.advance(1.0)
+    assert sub.live() == [] and h.job_id in h.cause
+
+
 def test_a_failed_lookup_is_not_read_as_not_found(tmp_path, fake_slurm):
     """When the lookup of a timed-out submission fails, its outcome is unknown: nothing is
     submitted again."""
@@ -563,10 +606,140 @@ def test_slurm_worker_never_reads_a_listing_older_than_its_job(
     assert len(_squeues(fake_slurm)) == 1
 
 
+class ScriptedQueue:
+    """Stands in for `SlurmWorker`'s queue listing and ``sacct``/``scontrol``: each listing is the
+    next scripted ``(rows, taken)``, and every call is recorded in order."""
+
+    def __init__(self, clock, listings, outcomes):
+        self.clock = clock
+        self.listings = list(listings)
+        self.outcomes = list(outcomes)
+        self.events: list[str] = []
+
+    async def snapshot(self):
+        rows, taken = self.listings.pop(0)
+        self.events.append(f"listing@{taken}")
+        return slurm.QueueSnapshot(rows, taken)
+
+    async def verify(self, jobid):
+        self.events.append("sacct")
+        return self.outcomes.pop(0)
+
+    async def command(self, *cmd, hide_display=False, strip=False):
+        assert cmd[:2] == ("scontrol", "requeue"), cmd
+        self.events.append(f"scontrol@{self.clock()}")
+        self.clock.advance(
+            1.0
+        )  # the requeue takes a second; listings may be taken meanwhile
+        return 0, "", ""
+
+
+def _scripted_worker(monkeypatch, clock, listings, outcomes):
+    queue = ScriptedQueue(clock, listings, outcomes)
+    monkeypatch.setattr(slurm, "_SHARED_LISTING", slurm.QueueListing(clock=clock))
+    monkeypatch.setattr(slurm.base, "read_and_display_async", queue.command)
+    monkeypatch.setattr(
+        slurm.SlurmWorker, "_queue_snapshot", lambda self: queue.snapshot()
+    )
+    monkeypatch.setattr(
+        slurm.SlurmWorker, "_verify_exit_code", lambda self, jobid: queue.verify(jobid)
+    )
+    return slurm.SlurmWorker(poll_delay=0), queue
+
+
+def _run_wait(worker, tmp_path, jobid="101"):
+    job = types.SimpleNamespace(lockfile=tmp_path / "job.lock")
+
+    async def go():
+        return await asyncio.wait_for(worker._wait(job, jobid, "err"), BOUND)
+
+    return asyncio.run(go())
+
+
+def test_wait_ignores_a_listing_taken_before_its_job(tmp_path, monkeypatch):
+    """`_wait` reads a listing taken before the job was submitted as no news: ``sacct`` is asked
+    only after a listing taken since shows the job gone."""
+    clock = FakeClock(1000.0)
+    worker, queue = _scripted_worker(
+        monkeypatch, clock, [({}, 999.0), ({}, 1000.0)], [True]
+    )
+    assert _run_wait(worker, tmp_path) is True
+    assert queue.events == ["listing@999.0", "listing@1000.0", "sacct"]
+
+
+def test_wait_ignores_a_listing_taken_during_its_requeue(tmp_path, monkeypatch):
+    """After a requeue, a listing taken while ``scontrol requeue`` was in flight is no news: the job
+    is not read as gone and requeued twice."""
+    clock = FakeClock(1000.0)
+    listings = [
+        ({}, 1000.0),  # the job ended: sacct says NODE_FAIL, so it is requeued at 1000
+        ({}, 1000.5),  # taken while scontrol ran (1000 to 1001): the job is not listed
+        ({"101": ("PENDING", "", "")}, 1001.0),
+        ({}, 1002.0),
+    ]
+    worker, queue = _scripted_worker(monkeypatch, clock, listings, ["NODE_FAIL", True])
+    assert _run_wait(worker, tmp_path) is True
+    assert queue.events == [
+        "listing@1000.0",
+        "sacct",
+        "scontrol@1000.0",
+        "listing@1000.5",
+        "listing@1001.0",
+        "listing@1002.0",
+        "sacct",
+    ]
+
+
+SLOW_SQUEUE = """#!/bin/sh
+d="$FAKE_SLURM"
+touch "$d/squeue-started"
+i=0
+while [ ! -f "$d/squeue-go" ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i + 1)); done
+exit 0
+"""
+
+
+def test_event_loop_not_blocked_by_a_listing_in_flight(tmp_path, fake_slurm):
+    """While another thread's ``squeue`` runs, the event loop's `aread` returns the listing it
+    already has instead of waiting for that ``squeue`` to finish."""
+    (tmp_path / "bin" / "squeue").write_text(SLOW_SQUEUE)
+    listing = slurm.QueueListing()
+    listing._keep(slurm.QueueSnapshot({"7": ("RUNNING", "n", "c")}, listing.clock()))
+    finished = threading.Event()
+
+    def other_reader():
+        try:
+            listing.read(0.0, 10.0)
+        except RuntimeError:
+            pass
+        finished.set()
+
+    thread = threading.Thread(target=other_reader)
+    thread.start()
+    try:
+        deadline = time.monotonic() + BOUND
+        while not (fake_slurm / "squeue-started").exists():
+            assert (
+                time.monotonic() < deadline
+            ), "the other reader's squeue never started"
+            time.sleep(0.01)
+
+        async def loop_read():
+            return await listing.aread(max_age=float("inf"))
+
+        snapshot = asyncio.run(loop_read())
+        assert set(snapshot.rows) == {"7"}
+        assert not finished.is_set(), "aread waited for the other reader's squeue"
+    finally:
+        (fake_slurm / "squeue-go").touch()
+        thread.join(BOUND)
+
+
 # -- through the pool ----------------------------------------------------------------------------
 
 TASKS = """
 from pydra.compose import python, workflow
+from pydra.utils.resources import ComputeResources
 
 
 @python.define
@@ -577,6 +750,12 @@ def Echo(x: int) -> int:
 @workflow.define
 def Many(xs: list) -> list:
     return workflow.add(Echo().split(x=xs), name="E").out
+
+
+@workflow.define
+def GpuMany(xs: list) -> list:
+    gpu = ComputeResources(gpus=1, gpu_type="h100")
+    return workflow.add(Echo().split(x=xs), name="E", resources=gpu).out
 """
 
 
@@ -607,9 +786,10 @@ def _pool(tmp_path, pools, substrate, sub, **kwargs):
     from pydra.workers.pool.pool import WarmPool
 
     kwargs.setdefault("settings", PoolSettings(lease=LEASE, poll_s=0.05))
+    classes = kwargs.pop("classes", [_cls(max_workers=2)])
     pool = WarmPool(
         tmp_path / "pool",
-        [_cls(max_workers=2)],
+        classes,
         substrate,
         store=sub.store,
         probe=False,
@@ -739,6 +919,142 @@ def test_workers_that_never_start_hold_their_jobs(tmp_path, fake_slurm, tasks, p
         assert isinstance(outcome, NotRun) and outcome.held
         assert "'cpu'" in outcome.reason and "2 consecutive" in outcome.reason
         assert "left the Slurm queue" in outcome.reason
+
+
+def test_a_lasting_listing_failure_holds_the_run(tmp_path, fake_slurm, tasks, pools):
+    """A ``squeue`` that keeps failing is skipped poll by poll, and after ``listing_failures`` polls
+    in a row the classes with work are broken: their jobs are ``NotRun(held=True)`` naming the
+    error, not left waiting for ever."""
+    (fake_slurm / "squeue-fails").touch()
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=3)
+    )
+    reported = []
+    pool.bind(lambda job, outcome: reported.append(outcome))
+    _queue_round(pool, sub, tasks, [1])
+    for step in range(2):
+        pool._poll(100.0 + step)
+    assert reported == [] and "cpu" not in pool._broken
+    pool._poll(103.0)
+    [outcome] = reported
+    assert isinstance(outcome, NotRun) and outcome.held
+    assert "3 times in a row" in outcome.reason and "Socket timed out" in outcome.reason
+    assert _submitted(fake_slurm) == []
+
+
+def test_a_good_listing_resets_the_listing_failures(tmp_path, fake_slurm, tasks, pools):
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=2)
+    )
+    _queue_round(pool, sub, tasks, [1])
+    for step in range(6):
+        failing = fake_slurm / "squeue-fails"
+        failing.touch() if step % 2 == 0 else failing.unlink()
+        pool._scale(100.0 + step)
+    assert "cpu" not in pool._broken
+
+
+def test_a_transient_listing_failure_at_submit_does_not_move_a_job(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """With a CPU cap, a ``squeue`` failure while a job is placed leaves it on its class: the
+    class is not read as unable to start, so the job is neither Unplaceable nor moved.
+    """
+    from pydra.workers.pool.placement import Placement
+
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0, per_user_cpu_cap=16)
+    pool = _pool(
+        tmp_path,
+        pools,
+        substrate,
+        sub,
+        classes=[_cls(max_workers=2), _cls("big", cpus=16, max_workers=1)],
+    )
+    runner = GraphRunner(
+        tasks.Many(xs=[1]), sub.store, on_error="raise_at_end", submitter=sub
+    )
+    jobs = runner.ready().dispatch
+    [control] = pool.place(jobs)  # with the queue listed
+    assert isinstance(control, Placement)
+    (fake_slurm / "squeue-fails").touch()
+    [placement] = pool.place(jobs)
+    assert isinstance(placement, Placement)
+    assert placement.worker_class == control.worker_class
+
+
+def test_earlier_epoch_jobs_adopted_and_pending_ones_cancelled(tmp_path, fake_slurm):
+    """A coordinator lists this pool's jobs of earlier epochs as its own unrecorded workers, so
+    they count and can be stopped; at its first listing it cancels those still pending.
+    """
+    (fake_slurm / "state").write_text("RUNNING")
+    first = _substrate(tmp_path, epoch=1)
+    running = first.start(_cls("gpu", **GPU), 2)
+    (fake_slurm / "state").write_text("PENDING")
+    [pending] = first.start(_cls("gpu", **GPU), 1)
+    later = _substrate(
+        tmp_path, epoch=3, root=tmp_path / "pool", classes=[_cls("gpu", **GPU)]
+    )
+    other = _substrate(tmp_path, epoch=1, pool_id="ba9876543210", root=tmp_path / "o")
+    other.start(_cls(), 1)
+    live = later.live()
+    assert sorted(h.job_id for h in live) == sorted(h.job_id for h in running)
+    assert all(h.worker_class == "gpu" for h in live)
+    assert (fake_slurm / "cancelled").read_text().split() == [pending.job_id]
+    assert later.live() == live
+    assert sum(h.cpus for h in live) == 16  # the class's CPUs, from the pool's classes
+
+
+def test_restarted_coordinator_never_exceeds_max_workers(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """After a coordinator restart the new one counts the old epoch's running GPU workers: the
+    class never has more than ``max_workers`` jobs in the queue."""
+    from pydra.workers.pool.pool import WarmPool
+
+    (fake_slurm / "state").write_text("RUNNING")
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    gpu = _cls("gpu", **{**GPU, "max_workers": 2, "quantum_jobs": 1})
+
+    def coordinator():
+        pool = WarmPool(
+            tmp_path / "pool",
+            [gpu],
+            SlurmSubstrate(max_age=0.0),
+            store=sub.store,
+            probe=False,
+            settings=PoolSettings(lease=LEASE, poll_s=0.05, unmeasured_workers=4),
+        )
+        pools.append(pool)
+        pool.bind(lambda job, outcome: None)
+        runner = GraphRunner(
+            tasks.GpuMany(xs=list(range(6))),
+            sub.store,
+            on_error="raise_at_end",
+            submitter=sub,
+        )
+        pool._queue_jobs(runner.ready().dispatch, handle=None)
+        pool._write()
+        return pool
+
+    first = coordinator()
+    for step in range(4):
+        first._scale(100.0 + step)
+    assert len(_jobs(fake_slurm)) == 2
+    # the coordinator dies: its lease ends, its workers keep running
+    first._closed = True
+    first._lease.__exit__(None, None, None)
+    first.pool.close()
+    second = coordinator()
+    assert second.epoch == first.epoch + 1
+    for step in range(6):
+        second._scale(200.0 + step)
+        assert len(_jobs(fake_slurm)) <= 2
+    assert len(_submitted(fake_slurm)) == 2
 
 
 # -- a real scheduler ----------------------------------------------------------------------------

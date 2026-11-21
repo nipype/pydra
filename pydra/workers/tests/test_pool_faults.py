@@ -629,6 +629,7 @@ def test_fault_budgets_defaults_and_json():
         "infrastructure_replacements": 3,
         "crashes_charged": 2,
         "start_failures": 7,
+        "listing_failures": 7,
     }
     assert "start_failures" not in {f.name for f in attrs.fields(PoolSettings)}
     changed = FaultBudgets(content_attempts=2, start_failures=3)
@@ -637,6 +638,8 @@ def test_fault_budgets_defaults_and_json():
         FaultBudgets.from_json({"resource_replacements": 1})
     with pytest.raises(ValueError):
         FaultBudgets(start_failures=0)
+    with pytest.raises(ValueError):
+        FaultBudgets(listing_failures=0)
 
 
 def test_no_alias_left_in_the_worker():
