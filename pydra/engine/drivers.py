@@ -176,12 +176,8 @@ async def drive(
     def report(job: "Job", outcome: "Outcome") -> None:
         loop.call_soon_threadsafe(on_outcome, job, outcome)
 
-    try:
-        for executor in executors.values():
-            executor.bind(report)
-    except BaseException:  # an executor another run still holds (`PoolInUse`)
-        runner.close()
-        raise
+    for executor in executors.values():
+        executor.bind(report)
     runner.release_off_thread()
     runner.read_off_thread(lambda: loop.call_soon_threadsafe(progressed.set))
     try:
@@ -237,4 +233,12 @@ async def drive(
         runner.close()
         for handle in open_handles:
             handle.executor.cancel(handle)
-        await runner.released()
+        try:
+            await runner.released()
+        finally:
+            for executor in executors.values():
+                unbind = getattr(
+                    executor, "unbind", None
+                )  # a per-run binding (`WarmPool`)
+                if unbind is not None:
+                    unbind(report)

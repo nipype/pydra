@@ -148,8 +148,8 @@ class Submitter:
         to the next, and its store, if it has one, is the submitter's. ``"pool"`` makes a
         ``WarmPool`` over the submitter's store from ``**kwargs`` (``root``, ``classes``
         and its other parameters; ``substrate`` defaults to a ``LocalSubstrate``), which
-        the submitter closes when it is closed. A ``WarmPool`` serves one run at a time:
-        while one submitter's call runs on it, another's call raises ``PoolInUse``
+        the submitter closes when it is closed. Several submitters may run on one
+        ``WarmPool`` at once: each run receives its own jobs' outcomes
     workers : dict[str, str or Worker], optional
         Further workers by name (each a worker name, class or object), for the router to
         choose between. The name ``"default"`` is reserved for ``worker``

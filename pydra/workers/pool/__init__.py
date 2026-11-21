@@ -30,7 +30,6 @@ _EXPORTS = {
     "PoolBusy": "pool",
     "PoolFactsWouldSplitSlots": "pool",
     "PoolFenced": "pool",
-    "PoolInUse": "pool",
     "PoolJobFailed": "pool",
     "PoolSettings": "settings",
     "UnplaceableJob": "pool",

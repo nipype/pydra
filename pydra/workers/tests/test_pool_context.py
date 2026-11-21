@@ -117,6 +117,34 @@ def Gate(where: str) -> str:
 @workflow.define
 def Echoes(xs: list) -> list:
     return workflow.add(Echo().split(x=xs), name="E").out
+
+
+@python.define
+def Hold(x: int, where: str) -> int:
+    # marks that it started, then waits for "go"
+    import time
+
+    d = Path(where)
+    (d / "held").touch()
+    while not (d / "go").exists():
+        time.sleep(0.05)
+    return x + 1
+
+
+@workflow.define(outputs=["a1", "a2"])
+def Interleaved(model: str, where: str):
+    # A1 and A2 run on the pool, M between them elsewhere
+    a1 = workflow.add(UseModel(model=model, x=1), name="A1")
+    m = workflow.add(Hold(x=a1.out, where=where), name="M")
+    a2 = workflow.add(UseModel(model=model, x=m.out), name="A2")
+    return a1.out, a2.out
+
+
+@workflow.define(outputs=["g", "e"])
+def GateAndEcho(where: str):
+    g = workflow.add(Gate(where=where), name="G")
+    e = workflow.add(Echo(x=7), name="E")
+    return g.out, e.out
 """
 
 
@@ -754,49 +782,199 @@ def test_failed_construction_closes_a_pool_made_by_name(tmp_path, tasks):
     assert (tmp_path / "pool" / "coordinator" / "1" / "ended").exists()
 
 
-def test_two_submitters_on_one_pool_at_once_refused(tmp_path, tasks, groups):
-    """While one `Submitter`'s run holds a caller-owned pool, a second one's run fails at once naming
-    the limit (`PoolInUse`), and the first completes; a later run binds the pool again.
-    """
+def _in_thread(outcome: dict, name: str, call) -> "threading.Thread":
     import threading
 
-    from pydra.workers.pool.pool import PoolInUse
+    def run() -> None:
+        try:
+            outcome[name] = call()
+        except BaseException as exc:  # reported to the test
+            outcome[name] = exc
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread
+
+
+def _sub(store, pool, tasks, task, **kwargs):
+    kwargs.setdefault("worker", pool)
+    with Submitter(store=store, providers=[tasks.Counting()], **kwargs) as sub:
+        return sub(task).outputs
+
+
+def test_another_run_between_a_runs_pool_rounds(tmp_path, tasks, groups):
+    """Run A puts A1 on the pool, then M elsewhere, then A2 on the pool. While A is in M, with nothing
+    open on the pool, run B binds the pool and completes; A2's outcome still goes to A, which
+    completes with its own results."""
+    store = _store(tmp_path)
+    pool, substrate = _local_pool(tmp_path, tasks, store, groups)
+    models, where = tmp_path / "loads", tmp_path / "where"
+    models.mkdir()
+    where.mkdir()
+    outcome: dict = {}
+    threads = []
+    try:
+        threads.append(
+            _in_thread(
+                outcome,
+                "A",
+                lambda: _sub(
+                    store,
+                    pool,
+                    tasks,
+                    tasks.Interleaved(model=str(models), where=str(where)),
+                    workers={"pool": pool},
+                    router=lambda job: "pool" if job.name in ("A1", "A2") else None,
+                    worker="debug",
+                ),
+            )
+        )
+        _wait(lambda: (where / "held").exists(), "run A to reach M")
+        _track(substrate, groups)
+        b = _sub(store, pool, tasks, tasks.UseModels(model=str(models), xs=[5, 6]))
+        assert b.out == [5, 6]
+        (where / "go").touch()
+        threads[0].join(BOUND)
+        assert not threads[0].is_alive(), "run A never received A2's outcome"
+        a = outcome["A"]
+        assert not isinstance(a, BaseException), a
+        assert (a.a1, a.a2) == (1, 2)
+        assert len(list(models.iterdir())) == 1
+    finally:
+        (where / "go").touch()
+        pool.close()
+        for thread in threads:
+            thread.join(BOUND)
+
+
+def test_two_runs_bind_one_pool_at_once(tmp_path, tasks, groups):
+    """Two threads each run a workflow on one pool at the same moment (a barrier): both complete
+    with their own results, a job they share included."""
+    import threading
+
+    store = _store(tmp_path)
+    pool, substrate = _local_pool(tmp_path, tasks, store, groups)
+    models = tmp_path / "loads"
+    models.mkdir()
+    barrier = threading.Barrier(2)
+    outcome: dict = {}
+
+    def run(xs):
+        barrier.wait(BOUND)
+        return _sub(store, pool, tasks, tasks.UseModels(model=str(models), xs=xs)).out
+
+    threads = [
+        _in_thread(outcome, "A", lambda: run([1, 2, 100])),
+        _in_thread(outcome, "B", lambda: run([3, 4, 100])),
+    ]
+    try:
+        for thread in threads:
+            thread.join(BOUND)
+            _track(substrate, groups)
+        assert not any(t.is_alive() for t in threads)
+        assert outcome == {"A": [1, 2, 100], "B": [3, 4, 100]}
+    finally:
+        pool.close()
+        for thread in threads:
+            thread.join(BOUND)
+
+
+def test_a_twin_in_another_run_gets_the_result(tmp_path, tasks, groups):
+    """Run B submits a job run A has open on the pool (the same checksum and slot): it waits on A's
+    ticket, and both runs get the one result."""
+    store = _store(tmp_path)
+    pool, substrate = _local_pool(tmp_path, tasks, store, groups)
+    gate = tmp_path / "gate"
+    gate.mkdir()
+    outcome: dict = {}
+    threads = []
+    try:
+        threads.append(
+            _in_thread(
+                outcome,
+                "A",
+                lambda: _sub(store, pool, tasks, tasks.Gate(where=str(gate))),
+            )
+        )
+        _wait(lambda: (gate / "first").exists(), "run A's job to start")
+        _track(substrate, groups)
+        threads.append(
+            _in_thread(
+                outcome,
+                "B",
+                lambda: _sub(store, pool, tasks, tasks.Gate(where=str(gate))),
+            )
+        )
+        _wait(
+            lambda: any(j.twin_of is not None for j in list(pool._open.values())),
+            "run B's twin to be open on the pool",
+        )
+        (gate / "go").touch()
+        for thread in threads:
+            thread.join(BOUND)
+        assert not any(t.is_alive() for t in threads)
+        assert outcome["A"].out == "first" and outcome["B"].out == "first"
+    finally:
+        (gate / "go").touch()
+        pool.close()
+        for thread in threads:
+            thread.join(BOUND)
+
+
+def test_one_runs_cancel_leaves_the_other_run_alone(tmp_path, tasks, groups):
+    """A run that cancels its jobs, one of them the twin another run waits on, is reported
+    ``NotRun`` for its own jobs only; the other run completes with the result."""
+    from pydra.engine.runner import GraphRunner, NotRun
 
     store = _store(tmp_path)
     pool, substrate = _local_pool(tmp_path, tasks, store, groups)
     gate = tmp_path / "gate"
     gate.mkdir()
     outcome: dict = {}
-
-    def first() -> None:
-        try:
-            with Submitter(store=store, worker=pool) as sub:
-                outcome["first"] = sub(tasks.Gate(where=str(gate))).outputs.out
-        except BaseException as exc:  # reported to the test
-            outcome["first"] = exc
-
-    thread = threading.Thread(target=first, daemon=True)
+    threads = []
+    sub = Submitter(store=store, worker="debug")
     try:
-        thread.start()
-        _wait(lambda: (gate / "first").exists(), "the first run's job to start")
+        runner = GraphRunner(
+            tasks.GateAndEcho(where=str(gate)),
+            store,
+            on_error="raise_at_end",
+            submitter=sub,
+        )
+        reported = []
+        pool.bind(lambda job, o: reported.append((job.name, o)))
+        handle = pool.submit(runner.ready().dispatch)
+        _wait(
+            lambda: (gate / "first").exists(), "the cancelled run's gate job to start"
+        )
         _track(substrate, groups)
-        with Submitter(store=store, worker=pool) as sub:
-            with pytest.raises(PoolInUse, match="one run at a time"):
-                sub(tasks.Echo(x=2))
-            with pytest.raises(PoolInUse, match="one run at a time"):
-                sub(tasks.Echoes(xs=[2, 3]))
+        threads.append(
+            _in_thread(
+                outcome,
+                "A",
+                lambda: _sub(store, pool, tasks, tasks.Gate(where=str(gate))),
+            )
+        )
+        _wait(
+            lambda: any(j.twin_of is not None for j in list(pool._open.values())),
+            "run A's twin to be open on the pool",
+        )
+        pool.cancel(handle)
+        # E may have settled already; G, open under a live claim, is cancelled for this run only
+        outcomes = dict(reported)
+        assert set(outcomes) == {"E", "G"}
+        assert outcomes["G"] == NotRun("cancelled", held=False)
         (gate / "go").touch()
-        thread.join(BOUND)
-        assert not thread.is_alive()
-        assert outcome["first"] == "first"
-        with Submitter(store=store, worker=pool) as sub:
-            assert sub(tasks.Echoes(xs=[4, 5])).outputs.out == [4, 5]
-        with Submitter(store=store, worker=pool) as sub:  # after a driven run
-            assert sub(tasks.Echo(x=6)).outputs.out == 6
+        threads[0].join(BOUND)
+        assert not threads[0].is_alive()
+        assert outcome["A"].out == "first"
+        assert len(reported) == 2
+        runner.close()
     finally:
         (gate / "go").touch()
         pool.close()
-        thread.join(BOUND)
+        sub.close()
+        for thread in threads:
+            thread.join(BOUND)
 
 
 def test_a_failing_audit_never_skips_the_commit(tmp_path, tasks, queue_of):

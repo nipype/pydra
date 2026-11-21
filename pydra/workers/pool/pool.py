@@ -46,6 +46,7 @@ The pool is the submitting process's side of the protocol of `pydra.workers.pool
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import contextlib
 import hashlib
@@ -115,7 +116,6 @@ __all__ = [
     "PoolBusy",
     "PoolFactsWouldSplitSlots",
     "PoolFenced",
-    "PoolInUse",
     "PoolJobFailed",
     "PoolSettings",
     "UnplaceableJob",
@@ -164,11 +164,6 @@ def pool_facts_recorded(store: ty.Any) -> bool:
         "the pool facts of each worker and batch would split one result into many slots; list it "
         "in the identity's recorded_only"
     )
-
-
-class PoolInUse(RuntimeError):
-    """Another run still has jobs open on the pool: a `WarmPool` serves one run at a time, because it
-    reports every outcome to the one callable it is bound to."""
 
 
 class PoolFenced(RuntimeError):
@@ -223,6 +218,11 @@ class _Job:
     ticket: "_Ticket | None" = (
         None  # the ticket that holds it, once written or followed
     )
+    # where its outcome goes: the binding of the run that submitted it (None: the latest binding)
+    report: "ty.Callable[[Job, Outcome], None] | None" = None
+    # jobs of other runs with its key, submitted while it was open: they settle with it
+    twins: "list[_Job]" = attrs.field(factory=list)
+    twin_of: "_Job | None" = None
 
 
 @attrs.define(eq=False)
@@ -320,6 +320,15 @@ def _fingerprint(job: "Job") -> str:
     return hashlib.sha256(jcs(job.context)).hexdigest()
 
 
+def _binding_key() -> tuple:
+    """Who is binding or submitting: the running event loop (each `Submitter` run has its own), or
+    the thread outside one."""
+    try:
+        return ("loop", id(asyncio.get_running_loop()))
+    except RuntimeError:
+        return ("thread", threading.get_ident())
+
+
 def _newest_mtime(lease: Path) -> float | None:
     """The newest mtime of a lease directory, its entries and theirs (a beater's heartbeats);
     None when it is missing."""
@@ -383,10 +392,10 @@ class WarmPool:
 
     Notes
     -----
-    A pool serves one run at a time: a run binds it (`bind`), and a second run that binds it while the
-    first still has jobs open here raises `PoolInUse` rather than take the first one's outcomes. Two
-    runs that bind it at the same instant, before either has submitted a job, are not told apart.
-    Runs one after the other share its workers and their resident state.
+    Several runs may share a pool, one after another or at once (two `Submitter`s on two threads):
+    each job's outcome goes to the run that submitted it (`bind` is per run, told apart by its event
+    loop), a job another run already has open here settles with it, and a run's ``cancel`` touches
+    only its own jobs. All runs share its workers and their resident state.
     """
 
     checks_store: ty.ClassVar[bool] = True
@@ -462,6 +471,9 @@ class WarmPool:
         self.settings = settings
         self.codec = codec
         self._report: ty.Callable[["Job", "Outcome"], None] | None = None
+        # each run's binding, by its event loop (or thread): the report of the jobs it submits
+        self._reports: dict[tuple, ty.Callable[["Job", "Outcome"], None]] = {}
+        self._by_key: dict[JobKey, _Job] = {}  # the open job followed for each key
         self._lock = threading.RLock()
         self._wake = threading.Event()
         self._stop = threading.Event()
@@ -591,28 +603,28 @@ class WarmPool:
     # -- the executor protocol -----------------------------------------------------------------
 
     def bind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
-        """Set the callable that receives each job's outcome (from the follower thread). The pool
-        serves one run at a time: its outcomes go to the one callable it is bound to.
-
-        Raises
-        ------
-        PoolInUse
-            Another binding still has jobs open on the pool.
-        """
+        """Set the callable that receives the outcomes (from the follower thread) of the jobs
+        submitted from here on by this run: the run calling it, told apart by its running event
+        loop, or by its thread outside one. Runs on other loops keep their own."""
         with self._lock:
-            if self._report is not None and report is not self._report and self._open:
-                raise PoolInUse(
-                    f"{self!r} serves one run at a time, and another run still has jobs open on "
-                    "it; run them one after the other, or give each concurrent run a pool of its "
-                    "own"
-                )
+            self._reports[_binding_key()] = report
             self._report = report
+
+    def unbind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
+        """Forget the binding of the run calling it, if it is ``report``; its jobs still open are
+        reported to it."""
+        with self._lock:
+            key = _binding_key()
+            if self._reports.get(key) is report:
+                del self._reports[key]
 
     def submit(self, jobs: ty.Sequence["Job"]) -> Handle:
         """Place the jobs and queue them for the follower to write as tickets; never blocks on
         capacity. A job that fits no class is reported ``Failed`` before this returns.
         """
-        if self._report is None:
+        with self._lock:
+            report = self._reports.get(_binding_key(), self._report)
+        if report is None:
             raise RuntimeError("bind() a report callable before submitting jobs")
         handle = Handle(self, tuple(jobs), set(jobs))
         with self._lock:
@@ -621,8 +633,8 @@ class WarmPool:
             if self._fenced is not None:
                 reports = [(j, None, NotRun(self._fenced, held=True)) for j in jobs]
             else:
-                reports = self._queue_jobs(jobs, handle)
-        self._deliver(reports, handle)
+                reports = self._queue_jobs(jobs, handle, report)
+        self._deliver(reports, handle, report)
         self._ensure_thread()
         self._wake.set()
         return handle
@@ -633,15 +645,17 @@ class WarmPool:
         whose results stay in the store. Every cancelled job is reported ``NotRun(held=False)``.
         """
         with self._lock:
-            cancelled = [self._open[j] for j in handle.jobs if j in self._open]
+            found = [self._open[j] for j in handle.jobs if j in self._open]
+            cancelled: list[_Job] = []
             by_ticket: dict[tuple[str, str], list[_Job]] = {}
-            for j in cancelled:
-                self._unwait(j)
-                if j.ticket is not None:
-                    by_ticket.setdefault((j.ticket.queue, j.ticket.digest), []).append(
-                        j
-                    )
-                self._forget(j)
+            for j in found:
+                gone, withdraw = self._cancel_one(j)
+                cancelled.append(gone)
+                if withdraw:
+                    by_ticket.setdefault(
+                        (gone.ticket.queue, gone.ticket.digest), []
+                    ).append(gone)
+                gone.ticket = None
         for (queue, digest), group in by_ticket.items():
             try:
                 claim = self.pool.take(queue, digest)
@@ -783,7 +797,10 @@ class WarmPool:
         )
 
     def _queue_jobs(
-        self, jobs: ty.Sequence["Job"], handle: Handle | None
+        self,
+        jobs: ty.Sequence["Job"],
+        handle: Handle | None,
+        report: "ty.Callable[[Job, Outcome], None] | None" = None,
     ) -> list[tuple["Job", _Job | None, "Outcome"]]:
         """Place each job and queue it for the follower, which checks it against the pool (a live
         ticket that holds it, a refusal) before writing it; no storage is read here. Return the
@@ -807,15 +824,33 @@ class WarmPool:
                 )
                 continue
             try:
-                placement, ladder, residency = self._placement(job, startable=startable)
                 key = (job.checksum, _fingerprint(job))
+                primary = self._by_key.get(key)
+                if primary is not None and primary.job in self._open:
+                    # another run's job of this key is open here: settle with it
+                    twin = _Job(
+                        job,
+                        handle,
+                        key,
+                        primary.queue,
+                        primary.ladder,
+                        primary.residency,
+                        report=report,
+                        twin_of=primary,
+                    )
+                    primary.twins.append(twin)
+                    self._open[job] = twin
+                    continue
+                placement, ladder, residency = self._placement(job, startable=startable)
             except Exception as exc:
                 reports.append((job, None, Failed(exc)))
                 continue
             if isinstance(placement, Unplaceable):
                 reports.append((job, None, Failed(UnplaceableJob(placement))))
                 continue
-            j = _Job(job, handle, key, placement.queue, ladder, residency)
+            j = _Job(
+                job, handle, key, placement.queue, ladder, residency, report=report
+            )
             broken = self._broken.get(placement.worker_class) or self._held.get(
                 (placement.queue, _label(residency))
             )
@@ -823,6 +858,7 @@ class WarmPool:
                 reports.append((job, j, NotRun(broken, held=True)))
                 continue
             self._open[job] = j
+            self._by_key[key] = j
             self._unchecked.append(j)
         return reports
 
@@ -981,9 +1017,45 @@ class WarmPool:
                     del self._queues[t.queue]
 
     def _forget(self, j: _Job) -> None:
+        """Stop following ``j``. A twin leaves its primary; a primary's twins leave the open jobs
+        with it and are reported with it (`_deliver`)."""
+        if j.twin_of is not None:
+            if j in j.twin_of.twins:
+                j.twin_of.twins.remove(j)
+            j.twin_of = None
+            self._open.pop(j.job, None)
+            return
         self._release(j)
+        if self._by_key.get(j.key) is j:
+            del self._by_key[j.key]
         if j.job is not None:
             self._open.pop(j.job, None)
+        for twin in j.twins:
+            self._open.pop(twin.job, None)
+
+    def _cancel_one(self, j: _Job) -> tuple[_Job, bool]:
+        """Stop following the cancelled job ``j``: the `_Job` to report ``NotRun``, and whether its
+        ticket entry may be withdrawn. A primary with twins hands its place, ticket and all, to its
+        first twin and is not withdrawn; a twin just leaves its primary."""
+        if j.twin_of is not None:
+            self._forget(j)
+            return j, False
+        if not j.twins:
+            self._unwait(j)
+            ticket = j.ticket
+            self._forget(j)
+            j.ticket = ticket  # read by the withdrawal, then cleared
+            return j, ticket is not None
+        heir = j.twins.pop(0)
+        gone = _Job(
+            j.job, j.handle, j.key, j.queue, j.ladder, j.residency, report=j.report
+        )
+        self._open.pop(j.job, None)
+        j.job, j.handle, j.report = heir.job, heir.handle, heir.report
+        for twin in j.twins:
+            twin.twin_of = j
+        self._open[j.job] = j
+        return gone, False
 
     def _queued(self, queue: str) -> int:
         return sum(len(self._tickets[tid].jobs) for tid in self._queues.get(queue, ()))
@@ -1487,21 +1559,37 @@ class WarmPool:
         logger.warning(why)
         with self._lock:
             self._fenced = why
-            reports = [(j.job, j, NotRun(why, held=True)) for j in self._open.values()]
-            for j in list(self._open.values()):
+            primaries = [j for j in self._open.values() if j.twin_of is None]
+            reports = [(j.job, j, NotRun(why, held=True)) for j in primaries]
+            for j in primaries:
                 self._forget(j)
             self._waiting.clear()
         self._deliver(reports)
 
-    def _deliver(self, reports: list, handle: Handle | None = None) -> None:
+    def _deliver(
+        self,
+        reports: list,
+        handle: Handle | None = None,
+        report: "ty.Callable[[Job, Outcome], None] | None" = None,
+    ) -> None:
+        """Report each outcome to the run that submitted the job (its `_Job`'s binding; else
+        ``report``, else the latest binding), and a primary's outcome to its twins too.
+        """
+        expanded = []
         for job, j, outcome in reports:
+            expanded.append((job, j, outcome))
+            if j is not None and j.twin_of is None and j.twins:
+                expanded.extend((t.job, t, outcome) for t in list(j.twins))
+                j.twins.clear()
+        for job, j, outcome in expanded:
             if job is None:
                 continue
             owner = j.handle if j is not None else handle
             if owner is not None:
                 owner.open.discard(job)
+            to = (j.report if j is not None else None) or report or self._report
             try:
-                self._report(job, outcome)
+                to(job, outcome)
             except Exception as err:  # the driver is gone
                 logger.warning(
                     "reporting %s failed: %s", getattr(job, "name", job), err
@@ -1691,6 +1779,8 @@ class WarmPool:
         with self._lock:
             held = []
             for j in list(self._open.values()):
+                if j.twin_of is not None:
+                    continue  # reported with its primary
                 queue = j.queue if j.ticket is None else j.ticket.queue
                 why = self._broken.get(_queue_class(queue)) or self._held.get(
                     (queue, _label(j.residency))
