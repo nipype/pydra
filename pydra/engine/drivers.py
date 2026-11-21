@@ -1,6 +1,7 @@
 """Drivers: the loops that run a :class:`~pydra.engine.runner.GraphRunner` to completion"""
 
 import asyncio
+import contextvars
 import time
 import typing as ty
 from collections import defaultdict, deque
@@ -173,14 +174,20 @@ async def drive(
         pump()
         progressed.set()
 
-    def report(job: "Job", outcome: "Outcome") -> None:
-        loop.call_soon_threadsafe(on_outcome, job, outcome)
+    context: "contextvars.Context | None" = (
+        None  # this run's, once its executors are bound
+    )
 
-    for executor in executors.values():
-        executor.bind(report)
+    def report(job: "Job", outcome: "Outcome") -> None:
+        # in this run's context (its executors' bindings), whichever thread reports
+        loop.call_soon_threadsafe(on_outcome, job, outcome, context=context)
+
     runner.release_off_thread()
     runner.read_off_thread(lambda: loop.call_soon_threadsafe(progressed.set))
     try:
+        for executor in executors.values():
+            executor.bind(report)
+        context = contextvars.copy_context()
         while True:
             rnd = runner.ready(limit())
             if fail_fast and runner.failed:

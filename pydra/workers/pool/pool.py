@@ -46,8 +46,8 @@ The pool is the submitting process's side of the protocol of `pydra.workers.pool
 
 from __future__ import annotations
 
-import asyncio
 import collections
+import contextvars
 import contextlib
 import hashlib
 import importlib
@@ -320,13 +320,20 @@ def _fingerprint(job: "Job") -> str:
     return hashlib.sha256(jcs(job.context)).hexdigest()
 
 
-def _binding_key() -> tuple:
-    """Who is binding or submitting: the running event loop (each `Submitter` run has its own), or
-    the thread outside one."""
-    try:
-        return ("loop", id(asyncio.get_running_loop()))
-    except RuntimeError:
-        return ("thread", threading.get_ident())
+_RUN: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+    "pydra_pool_run", default=None
+)
+"""The run a `bind` was made in: a token set in the binding context, which each asyncio task and
+each thread has its own copy of, so two runs on one event loop are told apart."""
+
+
+def _run_token(create: bool = False) -> object | None:
+    """This context's run token; with ``create``, one is set when there is none."""
+    token = _RUN.get()
+    if token is None and create:
+        token = object()
+        _RUN.set(token)
+    return token
 
 
 def _newest_mtime(lease: Path) -> float | None:
@@ -392,10 +399,12 @@ class WarmPool:
 
     Notes
     -----
-    Several runs may share a pool, one after another or at once (two `Submitter`s on two threads):
-    each job's outcome goes to the run that submitted it (`bind` is per run, told apart by its event
-    loop), a job another run already has open here settles with it, and a run's ``cancel`` touches
-    only its own jobs. All runs share its workers and their resident state.
+    Several runs may share a pool, one after another or at once (two `Submitter`s on two threads,
+    or two ``drive`` calls on one event loop): each job's outcome goes to the run that submitted it
+    (`bind` is per run, that is per asyncio task or thread, through a context variable), a job
+    another run already has open here settles with it, and a run's ``cancel`` touches only its own
+    jobs. All runs share its workers and their resident state. A twin of a job run with
+    ``rerun=True`` settles with the other run's attempt rather than computing again.
     """
 
     checks_store: ty.ClassVar[bool] = True
@@ -470,9 +479,8 @@ class WarmPool:
         self.classify = classify
         self.settings = settings
         self.codec = codec
-        self._report: ty.Callable[["Job", "Outcome"], None] | None = None
-        # each run's binding, by its event loop (or thread): the report of the jobs it submits
-        self._reports: dict[tuple, ty.Callable[["Job", "Outcome"], None]] = {}
+        # each run's binding, by its run token (`_RUN`): the report of the jobs it submits
+        self._reports: dict[object, ty.Callable[["Job", "Outcome"], None]] = {}
         self._by_key: dict[JobKey, _Job] = {}  # the open job followed for each key
         self._lock = threading.RLock()
         self._wake = threading.Event()
@@ -603,29 +611,42 @@ class WarmPool:
     # -- the executor protocol -----------------------------------------------------------------
 
     def bind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
-        """Set the callable that receives the outcomes (from the follower thread) of the jobs
-        submitted from here on by this run: the run calling it, told apart by its running event
-        loop, or by its thread outside one. Runs on other loops keep their own."""
+        """Set the callable that receives the outcomes (from the follower thread) of the jobs this
+        run submits from here on. A run is the context it binds in (`contextvars`: each asyncio
+        task and each thread has its own), so runs on other tasks or threads keep their own.
+        """
         with self._lock:
-            self._reports[_binding_key()] = report
-            self._report = report
+            self._reports[_run_token(create=True)] = report
 
     def unbind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
         """Forget the binding of the run calling it, if it is ``report``; its jobs still open are
         reported to it."""
         with self._lock:
-            key = _binding_key()
-            if self._reports.get(key) is report:
-                del self._reports[key]
+            token = _run_token()
+            if token is not None and self._reports.get(token) is report:
+                del self._reports[token]
+
+    def _sole_report(self) -> "ty.Callable[[Job, Outcome], None] | None":
+        """The binding when exactly one run is bound, else None."""
+        if len(self._reports) == 1:
+            return next(iter(self._reports.values()))
+        return None
 
     def submit(self, jobs: ty.Sequence["Job"]) -> Handle:
         """Place the jobs and queue them for the follower to write as tickets; never blocks on
         capacity. A job that fits no class is reported ``Failed`` before this returns.
         """
         with self._lock:
-            report = self._reports.get(_binding_key(), self._report)
+            token = _run_token()
+            report = self._reports.get(token) if token is not None else None
+            if report is None:
+                report = self._sole_report()
+            bound = len(self._reports)
         if report is None:
-            raise RuntimeError("bind() a report callable before submitting jobs")
+            raise RuntimeError(
+                "bind() a report callable in this run (task or thread) before submitting jobs: "
+                f"{bound} runs are bound, none here, so the outcomes would have nowhere to go"
+            )
         handle = Handle(self, tuple(jobs), set(jobs))
         with self._lock:
             if self._closed:
@@ -807,6 +828,7 @@ class WarmPool:
         reports due now: jobs that cannot be placed, and jobs placed on a broken class.
         """
         reports: list[tuple["Job", _Job | None, "Outcome"]] = []
+        report = report or self._sole_report()
         startable = self._startable()
         for job in jobs:
             if is_workflow(job.task):
@@ -1573,7 +1595,8 @@ class WarmPool:
         report: "ty.Callable[[Job, Outcome], None] | None" = None,
     ) -> None:
         """Report each outcome to the run that submitted the job (its `_Job`'s binding; else
-        ``report``, else the latest binding), and a primary's outcome to its twins too.
+        ``report``, else the one binding when exactly one run is bound), and a primary's outcome to
+        its twins too.
         """
         expanded = []
         for job, j, outcome in reports:
@@ -1587,7 +1610,14 @@ class WarmPool:
             owner = j.handle if j is not None else handle
             if owner is not None:
                 owner.open.discard(job)
-            to = (j.report if j is not None else None) or report or self._report
+            to = (j.report if j is not None else None) or report or self._sole_report()
+            if to is None:
+                logger.error(
+                    "the outcome of %s has no run to go to: it was submitted outside a bound run "
+                    "while several runs are bound",
+                    getattr(job, "name", job),
+                )
+                continue
             try:
                 to(job, outcome)
             except Exception as err:  # the driver is gone

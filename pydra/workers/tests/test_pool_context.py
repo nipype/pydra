@@ -140,6 +140,19 @@ def Interleaved(model: str, where: str):
     return a1.out, a2.out
 
 
+@python.define
+def Inc(x: int) -> int:
+    return x + 1
+
+
+@workflow.define
+def ThreeRounds(model: str, x: int) -> int:
+    # three rounds on the pool, each reading the one before
+    a = workflow.add(UseModel(model=model, x=x), name="A")
+    b = workflow.add(Inc(x=a.out), name="B")
+    return workflow.add(UseModel(model=model, x=b.out), name="C").out
+
+
 @workflow.define(outputs=["g", "e"])
 def GateAndEcho(where: str):
     g = workflow.add(Gate(where=where), name="G")
@@ -879,6 +892,65 @@ def test_two_runs_bind_one_pool_at_once(tmp_path, tasks, groups):
             thread.join(BOUND)
 
 
+def test_two_drives_on_one_event_loop(tmp_path, tasks, groups):
+    """Two runs driven on one event loop (``asyncio.gather``), each over three pool rounds: each
+    gets its own outcomes and completes; afterwards both are served from the store with no load.
+    """
+    import asyncio
+
+    from pydra.engine.drivers import drive
+    from pydra.engine.runner import GraphRunner
+
+    store = _store(tmp_path)
+    pool, substrate = _local_pool(tmp_path, tasks, store, groups)
+    models = tmp_path / "loads"
+    models.mkdir()
+    sub = Submitter(store=store, worker="debug", providers=[tasks.Counting()])
+    try:
+        runners = [
+            GraphRunner(
+                tasks.ThreeRounds(model=str(models), x=x),
+                store,
+                on_error="raise_at_end",
+                submitter=sub,
+            )
+            for x in (10, 20)
+        ]
+
+        async def both():
+            await asyncio.wait_for(
+                asyncio.gather(
+                    *(
+                        drive(
+                            runner,
+                            {"pool": pool},
+                            lambda job: "pool",
+                            on_error="raise_at_end",
+                            audit=sub.audit,
+                            max_concurrent=float("inf"),
+                        )
+                        for runner in runners
+                    )
+                ),
+                BOUND,
+            )
+
+        asyncio.run(both())
+        _track(substrate, groups)
+        for runner in runners:
+            assert not runner.errors and not runner.not_run
+        loads = len(list(models.iterdir()))
+        assert loads == 1
+        with Submitter(store=store, worker="debug", providers=[tasks.Counting()]) as s:
+            assert s(tasks.ThreeRounds(model=str(models), x=10)).outputs.out == 11
+            assert s(tasks.ThreeRounds(model=str(models), x=20)).outputs.out == 21
+        assert len(list(models.iterdir())) == loads
+        assert not pool._reports and not pool._open
+    finally:
+        pool.close()
+        sub.close()
+
+
 def test_a_twin_in_another_run_gets_the_result(tmp_path, tasks, groups):
     """Run B submits a job run A has open on the pool (the same checksum and slot): it waits on A's
     ticket, and both runs get the one result."""
@@ -992,3 +1064,46 @@ def test_a_failing_audit_never_skips_the_commit(tmp_path, tasks, queue_of):
     q.work(_class())
     [commit] = tasks.COMMITS
     assert commit["checksum"] == job.checksum and "pool" in commit["context"]
+
+
+def test_an_unbound_submit_needs_exactly_one_binding(tmp_path, tasks):
+    """A submit from a thread that never bound goes to the one bound run; with two runs bound it
+    is refused, never sent to either."""
+    import threading
+
+    from pydra.workers.pool.pool import WarmPool
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    pool = WarmPool(
+        tmp_path / "pool",
+        [_class()],
+        ExternalSubstrate(),
+        store=_store(tmp_path),
+        settings=_settings(),
+    )
+    outcome: dict = {}
+
+    def elsewhere(name, call):
+        thread = threading.Thread(
+            target=lambda: outcome.__setitem__(name, _try(call)), daemon=True
+        )
+        thread.start()
+        thread.join(BOUND)
+
+    try:
+        pool.bind(lambda job, o: None)
+        elsewhere("sole", lambda: pool.submit([]))
+        assert not isinstance(outcome["sole"], BaseException)
+        elsewhere("other", lambda: pool.bind(lambda job, o: None))
+        elsewhere("two", lambda: pool.submit([]))
+        assert isinstance(outcome["two"], RuntimeError)
+        assert "2 runs are bound" in str(outcome["two"])
+    finally:
+        pool.close()
+
+
+def _try(call):
+    try:
+        return call()
+    except BaseException as exc:  # returned to the test
+        return exc
