@@ -1637,15 +1637,20 @@ def _fake_smi(tmp_path, monkeypatch, indices, visible, mig=None):
         listing.append(f"GPU {i}: NVIDIA H100 (UUID: GPU-{i}-aaaa)")
         for n, u in enumerate((mig or {}).get(i, [])):
             listing.append(f"  MIG 1g.10gb Device {n}: (UUID: {u})")
-    exe = tmp_path / "nvidia-smi"
-    exe.write_text(
-        "#!/bin/sh\n"
-        f'if [ "$1" = "-L" ]; then cat <<\'EOF\'\n'
-        + "\n".join(listing)
-        + "\nEOF\nexit 0; fi\n"
-        f"cat <<'EOF'\n{rows}\nEOF\n"
+    # a Python script, run through a shebang on POSIX and a .cmd shim on Windows
+    script = tmp_path / "nvidia_smi.py"
+    script.write_text(
+        "import sys\n"
+        f"print({chr(10).join(listing)!r} if sys.argv[1:2] == ['-L'] else {rows!r})\n"
     )
-    exe.chmod(0o755)
+    if sys.platform == "win32":
+        (tmp_path / "nvidia-smi.cmd").write_text(
+            f'@"{sys.executable}" "{script}" %*\r\n'
+        )
+    else:
+        exe = tmp_path / "nvidia-smi"
+        exe.write_text(f"#!{sys.executable}\n" + script.read_text())
+        exe.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
     if visible is None:
         monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
