@@ -646,9 +646,14 @@ task = tasks.Resume(xs=list(range(cfg["jobs"])), where=str(marks))
 out, error = None, None
 try:
     with Submitter(worker=pool) as run:
-        out = run(task).outputs.out
+        out = run(task, raise_errors=True).outputs.out
 except Exception as exc:
-    error = f"{type(exc).__name__}: {exc}"
+    errors = list(getattr(exc, "errors", None) or [])
+    error = (
+        f"{len(errors)} job(s) failed; the first: {' '.join(errors[0].split())}"
+        if errors
+        else f"{type(exc).__name__}: {' '.join(str(exc).split())}"
+    )
 finally:
     pool.close()
 (marks / f"result-{role}.json").write_text(
@@ -963,6 +968,25 @@ def _wait(predicate, what: str, bound: float = BOUND) -> None:
         time.sleep(1.0)
 
 
+def _failure(exc: BaseException) -> str:
+    """A failed run in one line: how many jobs failed and the first one's error, whole."""
+    errors = list(getattr(exc, "errors", None) or [])
+    if not errors:
+        return f"{type(exc).__name__}: {' '.join(str(exc).split())}"
+    return f"{len(errors)} job(s) failed; the first: {' '.join(errors[0].split())}"
+
+
+def _run(sub, task):
+    """``sub(task)``, a failed run raising with its jobs' cause (`_failure`) rather than returning
+    a result whose ``outputs`` is None."""
+    from pydra.engine.submitter import WorkflowError
+
+    try:
+        return sub(task, raise_errors=True)
+    except WorkflowError as exc:
+        raise AssertionError(f"the run failed: {_failure(exc)}") from exc
+
+
 def _model_spec(where: Path, name: str = "model", **fields) -> dict:
     loads = where / f"loads-{name}"
     loads.mkdir()
@@ -1068,6 +1092,30 @@ def test_kill_command_is_built_clean():
     assert not any(a.startswith(("--qos", "--partition", "--account")) for a in argv)
 
 
+def test_a_failed_run_names_its_cause():
+    """A run whose jobs failed fails the check with how many failed and the first one's error,
+    never later as a None ``outputs`` (no Slurm is run)."""
+    from pydra.engine.submitter import WorkflowError
+
+    def sub(task, raise_errors=False):
+        if not raise_errors:
+            return None  # an errored result: the cause stays in the store
+        raise WorkflowError(
+            "Workflow job main failed with errors:",
+            [
+                "Job 'I(0)', Infer(x=0), errored:PoolJobFailed:\n FileNotFoundError: a",
+                "Job 'I(1)', Infer(x=1), errored:PoolJobFailed: FileNotFoundError: b",
+            ],
+        )
+
+    with pytest.raises(AssertionError) as caught:
+        _run(sub, object())
+    assert str(caught.value) == (
+        "the run failed: 2 job(s) failed; the first: "
+        "Job 'I(0)', Infer(x=0), errored:PoolJobFailed: FileNotFoundError: a"
+    )
+
+
 def _stop(proc: subprocess.Popen) -> None:
     if proc.poll() is None:
         with contextlib.suppress(ProcessLookupError):
@@ -1100,7 +1148,7 @@ def test_one_load_n_jobs_h100(where, tasks, pools):
         pool = _pool(where, pools, [cls])
         substrate = pool.substrate
         with Submitter(worker=pool, providers=[tasks.DeviceModel()]) as sub:
-            result = sub(tasks.Infers(spec=spec, xs=list(range(JOBS))))
+            result = _run(sub, tasks.Infers(spec=spec, xs=list(range(JOBS))))
         out = result.outputs.out
         v.check(
             "every job committed",
@@ -1183,7 +1231,7 @@ def test_process_provider_warm_h100(where, tasks, pools):
         stop, deferred = substrate.stop, []
         substrate.stop = deferred.append  # no scancel until the close record exists
         with Submitter(worker=pool, providers=[tasks.ServerModel()]) as sub:
-            result = sub(tasks.Serves(spec=spec, xs=list(range(n))))
+            result = _run(sub, tasks.Serves(spec=spec, xs=list(range(n))))
         out = result.outputs.out
         v.check(
             "every job committed", len(out) == n and all(math.isfinite(y) for y in out)
@@ -1229,7 +1277,8 @@ def test_two_residencies_two_queues(where, tasks, pools):
             settings=_settings(poll_s=1.0, max_queued_jobs=2 * quantum),
         )
         with Submitter(worker=pool, providers=[tasks.DeviceModel()]) as sub:
-            result = sub(
+            result = _run(
+                sub,
                 tasks.TwoModels(
                     a=a,
                     b=b,
@@ -1237,7 +1286,7 @@ def test_two_residencies_two_queues(where, tasks, pools):
                     order=str(order),
                     pool=str(pool.root),
                     delay=delay,
-                )
+                ),
             )
         v.check(
             "every job committed", len(result.outputs.a) == n == len(result.outputs.b)
@@ -1360,10 +1409,19 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
         )
         substrate = pool.substrate
         killed: dict[str, ty.Any] = {}
+        import threading
+
+        ended = threading.Event()
 
         def kill_when_stuck():
             try:
-                _wait(lambda: (marks / "first").exists(), f"job {k} to start")
+                _wait(
+                    lambda: (marks / "first").exists() or ended.is_set(),
+                    f"job {k} to start",
+                )
+                if not (marks / "first").exists():
+                    killed["error"] = f"the run ended before job {k} started"
+                    return
                 [handle] = substrate.handles
                 argv, env = _kill_command(handle.job_id, handle.token, os.environ)
                 version = subprocess.run(
@@ -1393,13 +1451,17 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
             if "error" in killed:
                 (marks / "kill-failed").touch()  # job k returns, so the run ends now
 
-        import threading
-
         killer = threading.Thread(target=kill_when_stuck, daemon=True)
         killer.start()
-        with Submitter(worker=pool) as sub:
-            result = sub(tasks.KillMes(xs=list(range(n)), where=str(marks), k=k))
-        killer.join(BOUND)
+        try:
+            with Submitter(worker=pool) as sub:
+                result = _run(
+                    sub, tasks.KillMes(xs=list(range(n)), where=str(marks), k=k)
+                )
+        finally:
+            ended.set()
+            killer.join(BOUND)
+            v.figure(kill=killed.get("error", "ran"))
         v.check("kill step ran", "job" in killed and "error" not in killed)
         v.check("every job committed", result.outputs.out == list(range(n)))
         done = collections.Counter(
@@ -1556,13 +1618,22 @@ def test_coordinator_killed_and_resumed_on_another_host(where, tasks, slurm):
             )
             procs.append(first)
             first.wait(BOUND)
-            v.check(
+            if not v.check(
                 "first coordinator killed",
                 first.returncode != 0
                 and (marks / "coordinator-first").exists()
                 and list(marks.glob("started-G-*"))
                 and not (marks / "result-first.json").exists(),
-            )
+            ):
+                ended = marks / "result-first.json"
+                raise AssertionError(
+                    f"the first coordinator exited {first.returncode} unkilled: "
+                    + (
+                        json.loads(ended.read_text())["error"] or "its run completed"
+                        if ended.exists()
+                        else f"no result; see {where / 'first.log'}"
+                    )
+                )
             tickets = {p.stem for p in (where / "pool").glob("queues/*/tickets/*.json")}
             second = _srun(
                 nodes[1],
@@ -1646,7 +1717,7 @@ def test_load_oom_climbs_the_ladder(where, tasks, pools):
         pool = _pool(where, pools, [small, large], fit=MeasuredFit(calibration))
         xs = list(range(8))
         with Submitter(worker=pool, providers=[tasks.DeviceModel()]) as sub:
-            result = sub(tasks.Infers(spec=spec, xs=xs, gpu_mem="1G"))
+            result = _run(sub, tasks.Infers(spec=spec, xs=xs, gpu_mem="1G"))
             v.check("every job committed", len(result.outputs.out) == len(xs))
             probe = Job(
                 task=tasks.Infer(model=spec, x=len(xs)),
@@ -1710,8 +1781,8 @@ def test_local_multi_gpu(where, tasks, pools):
             settings=_settings(poll_s=1.0, unmeasured_workers=2),
         )
         with Submitter(worker=pool) as sub:
-            result = sub(
-                tasks.DeviceHolds(xs=list(range(4)), where=str(marks), devices=2)
+            result = _run(
+                sub, tasks.DeviceHolds(xs=list(range(4)), where=str(marks), devices=2)
             )
         v.check(
             "every job committed", sorted(set(result.outputs.out)) == sorted(devices)
