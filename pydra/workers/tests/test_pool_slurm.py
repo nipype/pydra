@@ -10,6 +10,7 @@ marked test that runs on the Slurm CI container.
 
 import asyncio
 import contextlib
+import json
 import os
 import signal
 import shutil
@@ -93,7 +94,7 @@ for j in "$d"/jobs/*; do
   [ -f "$j" ] || continue
   IFS='|' read -r state name comment < "$j"
   [ -n "$want" ] && [ "$name" != "$want" ] && continue
-  case "$state" in PENDING|RUNNING|COMPLETING) ;; *) [ -n "$all" ] || continue;; esac
+  case "$state" in PENDING|RUNNING|COMPLETING|REQUEUE_HOLD|REQUEUE_FED) ;; *) [ -n "$all" ] || continue;; esac
   echo "$(basename "$j")|$state|$name|$comment"
 done
 exit 0
@@ -922,10 +923,10 @@ def test_workers_that_never_start_hold_their_jobs(tmp_path, fake_slurm, tasks, p
 
 
 def test_a_lasting_listing_failure_holds_the_run(tmp_path, fake_slurm, tasks, pools):
-    """A ``squeue`` that keeps failing is skipped poll by poll, and after ``listing_failures`` polls
-    in a row the classes with work are broken: their jobs are ``NotRun(held=True)`` naming the
-    error, not left waiting for ever."""
-    (fake_slurm / "squeue-fails").touch()
+    """A ``squeue`` that keeps failing is skipped poll by poll, and once ``listing_failures`` polls
+    in a row have failed and ``stale_after`` has passed since the last good listing, a class with
+    work and no ready worker is broken: its jobs are ``NotRun(held=True)`` naming the error, not
+    left waiting for ever."""
     sub = Submitter(cache_root=tmp_path / "store", worker="debug")
     substrate = SlurmSubstrate(max_age=0.0)
     pool = _pool(
@@ -934,14 +935,121 @@ def test_a_lasting_listing_failure_holds_the_run(tmp_path, fake_slurm, tasks, po
     reported = []
     pool.bind(lambda job, outcome: reported.append(outcome))
     _queue_round(pool, sub, tasks, [1])
-    for step in range(2):
-        pool._poll(100.0 + step)
+    (
+        fake_slurm / "vanish"
+    ).touch()  # the worker started never reaches the queue or a ready mark
+    pool._poll(100.0)  # the last good listing: one start
+    (fake_slurm / "squeue-fails").touch()
+    stale = LEASE.stale_after  # 4 s
+    for now in (
+        100.5,
+        101.0,
+        101.5,
+        102.0,
+        103.0,
+    ):  # the count is reached; the floor is not
+        pool._poll(now)
     assert reported == [] and "cpu" not in pool._broken
-    pool._poll(103.0)
+    pool._poll(100.0 + stale)
     [outcome] = reported
     assert isinstance(outcome, NotRun) and outcome.held
-    assert "3 times in a row" in outcome.reason and "Socket timed out" in outcome.reason
-    assert _submitted(fake_slurm) == []
+    assert "times in a row" in outcome.reason and "Socket timed out" in outcome.reason
+    assert len(_submitted(fake_slurm)) == 1
+
+
+def test_a_long_gap_alone_does_not_break_a_class(tmp_path, fake_slurm, tasks, pools):
+    """The time floor is not enough by itself: fewer than ``listing_failures`` failed polls, however
+    far apart, break nothing."""
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=3)
+    )
+    _queue_round(pool, sub, tasks, [1])
+    (fake_slurm / "vanish").touch()
+    pool._poll(100.0)
+    (fake_slurm / "squeue-fails").touch()
+    for now in (200.0, 300.0):  # far past stale_after, two failures of three
+        pool._poll(now)
+    assert "cpu" not in pool._broken
+    pool._poll(400.0)
+    assert "cpu" in pool._broken
+
+
+def test_a_worker_ready_during_the_outage_protects_its_class(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """A ready mark a started worker writes while ``squeue`` is down is read from storage, so the
+    class is not charged for the outage."""
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=2)
+    )
+    _queue_round(pool, sub, tasks, [1])
+    pool._scale(100.0)
+    [token] = list(pool._started)
+    (fake_slurm / "squeue-fails").touch()
+    mark = tmp_path / "pool" / "workers" / token / "ready.json"
+    mark.parent.mkdir(parents=True, exist_ok=True)
+    mark.write_text(json.dumps({"token": token}))
+    for step in range(10):
+        pool._poll(101.0 + step)
+    assert "cpu" not in pool._broken
+
+
+def test_a_listing_outage_does_not_break_a_class_with_a_ready_worker(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """While ``squeue`` fails, a class whose worker is ready is making progress through storage:
+    the failures are not counted against it, however long they last."""
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(tmp_path, pools, substrate, sub)
+    reported = []
+    pool.bind(lambda job, outcome: reported.append(outcome))
+    _queue_round(pool, sub, tasks, [1, 2])
+    pool._scale(100.0)
+    [token] = list(pool._started)
+    pool._ready.add(token)  # the worker is up and working
+    (fake_slurm / "squeue-fails").touch()
+    for step in range(
+        30
+    ):  # 7 is the default budget; 30 polls span far past stale_after
+        pool._poll(101.0 + step)
+    assert "cpu" not in pool._broken and reported == []
+
+
+def test_a_class_that_settles_tickets_is_not_broken_by_a_listing_outage(
+    tmp_path, fake_slurm, tasks, pools
+):
+    """A class one of whose tickets settled since the last good listing is not charged for the
+    outage either: a worker is running its work."""
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    substrate = SlurmSubstrate(max_age=0.0)
+    pool = _pool(
+        tmp_path, pools, substrate, sub, faults=FaultBudgets(listing_failures=2)
+    )
+    _queue_round(pool, sub, tasks, [1, 2, 3])
+    (
+        fake_slurm / "vanish"
+    ).touch()  # no ready mark: only settled tickets show the progress
+    pool._poll(100.0)
+    (fake_slurm / "squeue-fails").touch()
+    [digest] = [t.digest for t in pool._tickets.values()]
+    moved = {"n": 0}
+    settled = pool.pool.settled
+
+    def settling(queue):
+        found = settled(queue)
+        moved["n"] += 1
+        return {**found, digest: moved["n"]}  # a worker settles one more job each poll
+
+    pool.pool.settled = settling
+    pool.pool.outcomes = lambda queue, digest, expect, within: {}
+    for step in range(10):
+        pool._poll(101.0 + step)
+    assert "cpu" not in pool._broken
 
 
 def test_a_good_listing_resets_the_listing_failures(tmp_path, fake_slurm, tasks, pools):
@@ -1007,6 +1115,22 @@ def test_earlier_epoch_jobs_adopted_and_pending_ones_cancelled(tmp_path, fake_sl
     assert (fake_slurm / "cancelled").read_text().split() == [pending.job_id]
     assert later.live() == live
     assert sum(h.cpus for h in live) == 16  # the class's CPUs, from the pool's classes
+
+
+@pytest.mark.parametrize("held", ["PENDING", "REQUEUE_HOLD", "REQUEUE_FED"])
+def test_earlier_epoch_jobs_held_before_starting_are_cancelled(
+    tmp_path, fake_slurm, held
+):
+    """The sweep cancels every earlier-epoch job that never started, a held or requeue-held one as
+    much as a plain pending one; a running one is adopted."""
+    (fake_slurm / "state").write_text("RUNNING")
+    first = _substrate(tmp_path, epoch=1)
+    [running] = first.start(_cls(), 1)
+    (fake_slurm / "state").write_text(held)
+    [waiting] = first.start(_cls(), 1)
+    later = _substrate(tmp_path, epoch=2, root=tmp_path / "pool")
+    assert [h.job_id for h in later.live()] == [running.job_id]
+    assert (fake_slurm / "cancelled").read_text().split() == [waiting.job_id]
 
 
 def test_restarted_coordinator_never_exceeds_max_workers(

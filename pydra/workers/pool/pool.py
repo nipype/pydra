@@ -345,6 +345,10 @@ class WarmPool:
         self._cause: dict[str, str] = {}
         self._broken: dict[str, str] = {}
         self._listing_failures: dict[str, int] = collections.defaultdict(int)
+        # when the substrate was last listed (or, never listed, first failed to be), and the
+        # classes a ticket of which settled since then
+        self._listed_at: float | None = None
+        self._progress: set[str] = set()
         # (queue, residency label) a worker held in this epoch, and why
         self._held: dict[tuple[str, str], str] = {}
         self._idle: dict[str, int] = collections.defaultdict(int)
@@ -972,6 +976,8 @@ class WarmPool:
                 tickets = [self._tickets[t] for t in self._queues.get(queue, ())]
             for t in tickets:
                 count = settled.get(t.digest, 0)
+                if count > t.seen:
+                    self._progress.add(_queue_class(queue))
                 if count > t.seen or (t.recheck and count > 0):
                     try:
                         found = self.pool.outcomes(
@@ -1155,9 +1161,11 @@ class WarmPool:
             live = list(self.substrate.live())
         except Exception as err:
             # not read as every worker gone: the next poll lists again, within a budget
-            self._listing_failed(err)
+            self._listing_failed(err, now)
             return
         self._listing_failures.clear()
+        self._listed_at = now
+        self._progress.clear()
         live_ids = {id(h) for h in live}
         for token, h in list(self._started.items()):
             if id(h) in live_ids:
@@ -1225,23 +1233,45 @@ class WarmPool:
                     self._stopped.update(h.token for h in surplus)
                     self.substrate.stop(surplus)
 
-    def _listing_failed(self, err: Exception) -> None:
-        """Count a failed listing against each class with work; at ``listing_failures`` in a row
-        the class is broken, so its jobs are held rather than left waiting."""
+    def _listing_failed(self, err: Exception, now: float) -> None:
+        """Count a failed listing against each class with work that shows no progress: no ready
+        worker and no ticket settled since the last good listing. Once ``listing_failures`` polls
+        in a row have failed and ``stale_after`` has passed since that listing, such a class is
+        broken, so its jobs are held rather than left waiting."""
         logger.warning("listing the substrate's workers failed: %s", err)
+        if self._listed_at is None:
+            self._listed_at = now
+        for (
+            token,
+            h,
+        ) in self._started.items():  # ready marks are storage, not the listing
+            if token not in self._ready and self.pool.worker_record(
+                token, "ready.json"
+            ):
+                self._ready.add(token)
+        ready = {h.worker_class for t, h in self._started.items() if t in self._ready}
         wanted = self._demand()
         started = {h.worker_class for h in self._started.values()}
         for cls in self.classes:
             name = cls.name
             if name in self._broken or not (wanted.get(name) or name in started):
                 continue
+            if name in ready or name in self._progress:
+                self._listing_failures.pop(
+                    name, None
+                )  # progressing: the run is not stuck
+                continue
             self._listing_failures[name] += 1
             n = self._listing_failures[name]
-            if n >= self.faults.listing_failures:
+            down = now - self._listed_at
+            if (
+                n >= self.faults.listing_failures
+                and down >= self.settings.lease.stale_after
+            ):
                 self._break(
                     cls,
-                    f"listing the substrate's workers failed {n} times in a row: "
-                    f"{type(err).__name__}: {err}",
+                    f"listing the substrate's workers failed {n} times in a row over "
+                    f"{down:.0f}s: {type(err).__name__}: {err}",
                 )
 
     def _may_start(self, name: str, now: float) -> bool:

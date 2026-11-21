@@ -404,6 +404,10 @@ _SLURM_OWNED = {
 }
 
 
+# squeue states of a job that has not started running: plain or held pending, and requeue-held
+_NOT_STARTED = frozenset({"PENDING", "REQUEUE_HOLD", "REQUEUE_FED"})
+
+
 class SlurmSubstrate:
     """Submits one Slurm job per worker, never one per pydra job.
 
@@ -423,7 +427,8 @@ class SlurmSubstrate:
     earlier ones: the ones it submitted, those submitted since the listing was taken, and jobs it
     did not record (a submission that landed late, or a running worker an earlier coordinator
     started), which count toward the class's workers and the CPU cap and which scaling may stop.
-    At its first listing it cancels earlier epochs' jobs that are still pending. A submission whose
+    At its first listing it cancels earlier epochs' jobs that never started (pending, held or
+    requeue-held). A submission whose
     ``sbatch`` times out is looked up by its name; when it is found it is the worker, otherwise the
     name is looked up again after ``attribute_delay`` and, still not found, submitted once more under
     a new token. A timed-out ``sbatch`` can still land after that: the job is then a surplus.
@@ -611,7 +616,7 @@ class SlurmSubstrate:
             if found is None or found[0] > epoch:
                 continue
             if job_id not in self._jobs:
-                if found[0] < epoch and not self._swept and state == "PENDING":
+                if found[0] < epoch and not self._swept and state in _NOT_STARTED:
                     stale.append(job_id)
                     continue
                 self._adopt(job_id, found, comment, snapshot.taken)
