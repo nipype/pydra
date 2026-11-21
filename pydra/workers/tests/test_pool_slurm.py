@@ -512,12 +512,40 @@ def test_squeue_shared_with_slurm_worker(tmp_path, fake_slurm, monkeypatch):
         return await worker._squeue_all()
 
     assert sub.live() == [h]
-    assert asyncio.run(worker_poll()) == frozenset({h.job_id})
+    assert set(asyncio.run(worker_poll()).rows) == {h.job_id}
     assert len(_squeues(fake_slurm)) == 1
     clock.advance(6.0)
-    assert asyncio.run(worker_poll()) == frozenset({h.job_id})
+    assert set(asyncio.run(worker_poll()).rows) == {h.job_id}
     assert sub.live() == [h] and sub.can_start(_cls()) is True
     assert len(_squeues(fake_slurm)) == 2
+
+
+def test_slurm_worker_never_reads_a_listing_older_than_its_job(
+    tmp_path, fake_slurm, monkeypatch
+):
+    """A shared listing taken before a job was submitted does not say the job left the queue: the
+    worker waits for a newer listing rather than asking ``sacct`` too early."""
+    clock = FakeClock()
+    listing = slurm.QueueListing(clock=clock)
+    monkeypatch.setattr(slurm, "_SHARED_LISTING", listing)
+    listing.read(
+        0.0, 5.0
+    )  # another reader's listing of the queue before the submission
+    clock.advance(1.0)
+    job_id = subprocess.run(
+        ["sbatch", "--parsable", "--job-name=x", "--wrap", "true"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    worker = slurm.SlurmWorker(poll_delay=5)
+
+    async def poll():
+        return await worker._poll_job(job_id, since=clock())
+
+    clock.advance(1.0)  # the old listing is still within the worker's poll interval
+    assert asyncio.run(poll()) is False
+    assert len(_squeues(fake_slurm)) == 1
 
 
 # -- through the pool ----------------------------------------------------------------------------

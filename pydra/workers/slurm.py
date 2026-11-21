@@ -430,6 +430,8 @@ class SlurmWorker(base.Worker):
     async def _wait(self, job, jobid, error_file):
         """Poll a submitted job to its end, requeueing it within the budget"""
         self.error[jobid] = error_file
+        # a shared listing taken before this moment may not show the job yet
+        since = shared_listing().clock()
         requeues = 0
         # intermittent polling
         while True:
@@ -437,7 +439,7 @@ class SlurmWorker(base.Worker):
             # False: job is still pending/working
             # True: job is complete
             # Exception: Polling / job failure
-            done = await self._poll_job(jobid)
+            done = await self._poll_job(jobid, since)
             if done:
                 if (
                     done in self._requeue_states
@@ -450,6 +452,7 @@ class SlurmWorker(base.Worker):
                         )
                     requeues += 1
                     remove_from_cache(job.lockfile)
+                    since = shared_listing().clock()
                     cmd_re = ("scontrol", "requeue", jobid)
                     rc, _, stderr = await base.read_and_display_async(
                         *cmd_re, hide_display=True
@@ -584,15 +587,18 @@ class SlurmWorker(base.Worker):
 
     # ---- polling ----------------------------------------------------------------
 
-    async def _poll_job(self, jobid):
+    async def _poll_job(self, jobid, since: float | None = None):
+        """False while the job is queued; else its outcome. A listing taken before ``since`` (when
+        the job was submitted) that does not show it is read as queued, not gone."""
         logger.debug(f"Polling job {jobid}")
-        if jobid in await self._queue_snapshot():
+        snapshot = await self._queue_snapshot()
+        if jobid in snapshot.rows or (since is not None and snapshot.taken < since):
             return False
         # job is no longer queued or running - check exit code
         return await self._verify_exit_code(jobid)
 
-    async def _queue_snapshot(self) -> frozenset[str]:
-        """The ids this user has in the queue, from one ``squeue`` per poll cycle.
+    async def _queue_snapshot(self) -> "QueueSnapshot":
+        """This user's queue, from one ``squeue`` per poll cycle.
 
         Every job awaiting a poll shares the call of the next cycle; cycles are
         ``poll_delay`` seconds apart.
@@ -653,11 +659,10 @@ class SlurmWorker(base.Worker):
     def _squeue_cmd() -> tuple[str, ...]:
         return squeue_command()
 
-    async def _squeue_all(self) -> frozenset[str]:
-        """The ids in this user's queue, from the process's shared listing (one ``squeue`` per
-        cycle of ``poll_delay`` seconds, whoever reads it)."""
-        snapshot = await shared_listing().aread(self.poll_delay)
-        return frozenset(snapshot.rows)
+    async def _squeue_all(self) -> "QueueSnapshot":
+        """This user's queue from the process's shared listing (one ``squeue`` per cycle of
+        ``poll_delay`` seconds, whoever reads it)."""
+        return await shared_listing().aread(self.poll_delay)
 
     async def _verify_exit_code(self, jobid):
         cmd = ("sacct", "-n", "-X", "-P", "-j", jobid, "-o", "JobID,State,ExitCode")
