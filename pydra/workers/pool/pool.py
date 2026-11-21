@@ -46,6 +46,7 @@ The pool is the submitting process's side of the protocol of `pydra.workers.pool
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import contextvars
 import contextlib
@@ -320,19 +321,35 @@ def _fingerprint(job: "Job") -> str:
     return hashlib.sha256(jcs(job.context)).hexdigest()
 
 
-_RUN: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+_RUN: contextvars.ContextVar[tuple[object, object] | None] = contextvars.ContextVar(
     "pydra_pool_run", default=None
 )
-"""The run a `bind` was made in: a token set in the binding context, which each asyncio task and
-each thread has its own copy of, so two runs on one event loop are told apart."""
+"""The run a `bind` was made in: ``(token, owner)``, the owner being the asyncio task or thread that
+set it. Each task and thread has its own copy of the context, so two runs on one event loop are told
+apart; a copy inherited from a parent carries its token to code that does not bind (a hop to a
+thread), and is replaced by the first `bind` of its own."""
+
+
+def _owner() -> object:
+    """The asyncio task running this code, or its thread outside one."""
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        task = None
+    return task if task is not None else threading.current_thread()
 
 
 def _run_token(create: bool = False) -> object | None:
-    """This context's run token; with ``create``, one is set when there is none."""
-    token = _RUN.get()
-    if token is None and create:
-        token = object()
-        _RUN.set(token)
+    """This context's run token. With ``create`` (a `bind`), the token is this task's or thread's
+    own: one inherited from a parent context is replaced by a fresh one."""
+    held = _RUN.get()
+    if not create:
+        return None if held is None else held[0]
+    owner = _owner()
+    if held is not None and held[1] is owner:
+        return held[0]
+    token = object()
+    _RUN.set((token, owner))
     return token
 
 

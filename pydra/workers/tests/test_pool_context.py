@@ -935,7 +935,12 @@ def test_two_drives_on_one_event_loop(tmp_path, tasks, groups):
                 BOUND,
             )
 
+        # a binding made in the calling thread first (as an earlier run, or a test, leaves one):
+        # the tasks inherit its token, and must still be runs of their own
+        placeholder = lambda job, outcome: None  # noqa: E731
+        pool.bind(placeholder)
         asyncio.run(both())
+        pool.unbind(placeholder)
         _track(substrate, groups)
         for runner in runners:
             assert not runner.errors and not runner.not_run
