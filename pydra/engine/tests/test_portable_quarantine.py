@@ -420,7 +420,8 @@ def test_collect_never_removes_an_entry_published_concurrently(tmp_path):
 
 class FakeClock:
     """The store's clock, advanced by the test. The writer's touch stamps its stage with this
-    clock, so a stage's age is the fake time since it was last touched, with no real wait."""
+    clock, so a stage's age is the fake time since it was last touched, with no real wait.
+    """
 
     def __init__(self, monkeypatch):
         import pydra.engine.portable.store as mod
