@@ -1005,7 +1005,7 @@ class Worker:
         if found is None:
             return False
         epoch, reason, fault = found
-        if epoch != self._epoch or key[1] not in self.pool.holds(claim.queue, epoch):
+        if key[1] not in self.pool.holds(claim.queue, epoch):  # lifted by release-hold
             del self._holds[key]
             return False
         for entry in claim.open_jobs():
