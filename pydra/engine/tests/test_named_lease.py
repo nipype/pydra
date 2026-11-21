@@ -2,9 +2,11 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import contextlib
 import textwrap
 import threading
 import time
@@ -21,9 +23,9 @@ from pydra.engine.lease import (
 # Beats every 0.05 s, stale after 0.5 s: in-process tests
 FAST = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
 
-# Beats every second, stale after 10 s: an acknowledgement is due within 1 s, which
-# a loaded CI runner meets
-CROSS = LeaseSettings(stale_after=10, timeout=20, attribute_delay=0)
+# Beats every 4 s, stale after 10 s: an acknowledgement is due within 4 s, which a
+# slow Windows runner meets (1 s did not, once); (1 + 1) * 4 < 10 still holds
+CROSS = LeaseSettings(stale_after=10, timeout=20, renew_fraction=0.4, attribute_delay=0)
 
 # Beats every 0.2 s: the acknowledgement-timeout test, whose subject is the bound
 SHORT = LeaseSettings(stale_after=2, timeout=10, attribute_delay=0)
@@ -65,13 +67,43 @@ def wait_for(condition, timeout: float = 10.0, step: float = 0.01) -> bool:
     return True
 
 
+def entries(directory: Path) -> list[str]:
+    """The entries of ``directory``, none if it is gone or no directory: a beater
+    removes beats, and takers rename token directories, while a test reads them."""
+    try:
+        return os.listdir(directory)
+    except OSError:
+        return []
+
+
+def beat_count(lockfile: Path) -> int:
+    """The highest beat number in a lease's token directories, 0 if none. A beat
+    makes ``beat-<n+1>`` before it removes ``beat-<n>``, so the number grows exactly
+    while the lease is beaten, whatever the storage's mtime resolution, and a beat
+    removed during the listing cannot lower it."""
+    return max(
+        (
+            int(entry[5:])
+            for token in entries(lockfile)
+            for entry in entries(lockfile / token)
+            if re.fullmatch(r"beat-\d+", entry)
+        ),
+        default=0,
+    )
+
+
 def newest_mtime(lockfile: Path) -> float:
-    """The newest mtime in a lease, skipping a beat removed while it is listed."""
+    """The newest mtime of a lease, its entries and theirs, skipping any removed
+    while it is read. Read only where nothing beats the lease."""
+    paths = [lockfile]
+    for token in entries(lockfile):
+        paths.append(lockfile / token)
+        paths.extend(lockfile / token / entry for entry in entries(lockfile / token))
     mtimes = []
-    for path in [lockfile, *lockfile.rglob("*")]:
+    for path in paths:
         try:
             mtimes.append(path.lstat().st_mtime)
-        except FileNotFoundError:
+        except OSError:
             pass
     return max(mtimes)
 
@@ -186,8 +218,7 @@ def test_named_lease_take_beat_stale_takeover(tmp_path):
     assert lease.settings == FAST
     assert lease.try_take() is None
     assert lease.held and lease.token_dir.parent == lockfile
-    first = newest_mtime(lockfile)
-    assert wait_for(lambda: newest_mtime(lockfile) > first), "never beaten"
+    assert wait_for(lambda: beat_count(lockfile) >= 2), "never beaten"
     assert lease.prove()
 
     lease._heartbeat.stopped.set()  # the holder stops beating, as if frozen
@@ -231,9 +262,8 @@ def test_external_lease_starts_no_thread(tmp_path, enter):
         assert lease.try_take() is None
     assert lease.held and lease._heartbeat is None
     assert heartbeat_threads() == before
-    first = newest_mtime(lockfile)
     time.sleep(3 * FAST.renew_interval)
-    assert newest_mtime(lockfile) == first  # nothing beats it
+    assert beat_count(lockfile) == 0  # nothing beats it
     assert lease.prove()
     lease.__exit__(None, None, None)
     assert not lockfile.exists()
@@ -287,7 +317,7 @@ def test_lease_beaten_from_another_process(tmp_path):
         for lease in leases:
             client.hold(lease)
         assert heartbeat_threads() == []  # no beat thread in the holder
-        first = [newest_mtime(lease.lockfile) for lease in leases]
+        first = [beat_count(lease.lockfile) for lease in leases]
         start = time.monotonic()
         while time.monotonic() - start < 3 * CROSS.stale_after + 0.5:
             for lease in leases:
@@ -295,7 +325,7 @@ def test_lease_beaten_from_another_process(tmp_path):
                 assert rival.try_take() is not None, "taken over while beaten"
             time.sleep(0.25)
         for lease, was in zip(leases, first):
-            assert newest_mtime(lease.lockfile) > was
+            assert beat_count(lease.lockfile) > was
             assert lease.prove()
             assert lease.lost is None
         assert client.lost == {}
@@ -328,12 +358,12 @@ def test_release_is_not_a_loss(tmp_path):
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
         client.hold(lease)
-        time.sleep(2 * CROSS.renew_interval)
+        time.sleep(CROSS.renew_interval + 1)  # beaten at least once
         token_dir = lease.token_dir
         client.release(token_dir)
         lease.__exit__(None, None, None)
         assert not lease.lockfile.exists()
-        time.sleep(4 * CROSS.renew_interval)
+        time.sleep(2 * CROSS.renew_interval)  # a beat after the release would be due
         assert client.lost == {}
         assert lease.lost is None
         assert client.alive
@@ -393,9 +423,9 @@ def test_deadline_cleared_keeps_beating(tmp_path):
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
         client.hold(lease)
-        client.deadline(lease.token_dir, time.time() + 0.5)
+        client.deadline(lease.token_dir, time.time() + 3)  # cleared well before
         client.deadline(lease.token_dir, None)
-        assert not client.wait_expired(lease.token_dir, 1.0)
+        assert not client.wait_expired(lease.token_dir, 4.0)
         assert lease.prove()
         client.release(lease.token_dir)
         lease.__exit__(None, None, None)
@@ -468,6 +498,37 @@ def test_ack_timeout_is_beater_death(tmp_path, callbacks):
         second.__exit__(None, None, None)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="stops the beater with SIGSTOP")
+def test_ping_finds_a_hung_beater():
+    """``ping`` answers True while the beater acknowledges. One unanswered ping (a holder whose call
+    held the GIL past the timeout, or a beater slow for a moment) is a miss, not a death: the beater
+    keeps running, and an answer resets the count. `PING_MISSES` consecutive misses are its death.
+    """
+    import signal
+
+    from pydra.engine.lease import PING_MISSES
+
+    client = BeaterClient()
+    try:
+        assert client.ping(10) is True
+        os.kill(client.process.pid, signal.SIGSTOP)
+        assert client.ping(0.2) is False  # one slow ping
+        assert client.alive and client.process.poll() is None
+        os.kill(client.process.pid, signal.SIGCONT)
+        assert client.ping(10) is True  # answered: the misses are forgotten
+        os.kill(client.process.pid, signal.SIGSTOP)
+        for _ in range(PING_MISSES - 1):
+            assert client.ping(0.2) is False
+            assert client.alive
+        with pytest.raises(BeaterDead, match="ping"):
+            client.ping(0.2)
+        assert not client.alive
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(client.process.pid, signal.SIGCONT)
+        client.close()
+
+
 HOLDER = textwrap.dedent("""\
     import json, sys, time
     from pathlib import Path
@@ -494,11 +555,13 @@ HOLDER = textwrap.dedent("""\
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "kill_after, mode, killed",
-    [(1.0, "silent", True), (None, "silent", False), (1.0, "ack", False)],
+    [(1.0, "silent", True), (None, "silent", False), (5.0, "ack", False)],
 )
 def test_kill_after_unacknowledged_expiry(tmp_path, kill_after, mode, killed):
     """With ``kill_after`` set, a holder that sends no ``ack_expired`` in time is
-    killed by its beater; unset, or acknowledged, it never is."""
+    killed by its beater; unset, or acknowledged, it never is. The holder sleeps
+    past ``kill_after`` with a margin; the acknowledging holder has 5 s to answer,
+    so only the silent one depends on the kill's timing."""
     script = tmp_path / "holder.py"
     script.write_text(HOLDER)
     proc = subprocess.run(
@@ -509,7 +572,7 @@ def test_kill_after_unacknowledged_expiry(tmp_path, kill_after, mode, killed):
             json.dumps(CROSS.to_json()),
             json.dumps(kill_after),
             mode,
-            "4",
+            str((kill_after or 4) + 5),
         ],
         capture_output=True,
         text=True,
@@ -555,8 +618,10 @@ def test_callbacks_may_call_the_client(tmp_path):
             [("release", token_dir), ("ack_expired", expired.token_dir)]
         )
         assert client.alive
-        before = newest_mtime(kept.lockfile)
-        assert wait_for(lambda: newest_mtime(kept.lockfile) > before, 10)
+        before = beat_count(kept.lockfile)
+        assert wait_for(
+            lambda: beat_count(kept.lockfile) > before, 3 * CROSS.renew_interval
+        )
         assert kept.prove()
         for lease in (expired, kept):
             client.release(lease.token_dir)
@@ -585,14 +650,14 @@ ORPHANING = textwrap.dedent("""\
     """)
 
 
-def stops_moving(lockfile: Path, quiet: float, within: float) -> bool:
-    """Whether the lease's newest mark stays put for ``quiet`` seconds, at some
+def stops_beating(lockfile: Path, quiet: float, within: float) -> bool:
+    """Whether the lease's beat count stays put for ``quiet`` seconds, at some
     point within ``within`` seconds."""
     deadline = time.monotonic() + within
     while time.monotonic() < deadline:
-        before = newest_mtime(lockfile)
+        before = beat_count(lockfile)
         time.sleep(quiet)
-        if newest_mtime(lockfile) == before:
+        if beat_count(lockfile) == before:
             return True
     return False
 
@@ -639,7 +704,7 @@ def test_holder_death_ends_beater(tmp_path, fork):
         child = pids["child"]
         proc.kill()
         proc.wait(30)
-        assert stops_moving(lockfile, 3 * CROSS.renew_interval, 30), "still beaten"
+        assert stops_beating(lockfile, 2 * CROSS.renew_interval, 60), "still beaten"
         if os.name == "posix":
             assert wait_for(lambda: not pid_alive(pids["beater"]), 30)
         if child is not None:

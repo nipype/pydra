@@ -9,7 +9,9 @@ import subprocess
 import sys
 import textwrap
 import time
+import typing as ty
 from pathlib import Path
+import attrs
 import pytest
 from pydra.compose import python, workflow
 from pydra.engine.drivers import drive_inline
@@ -260,52 +262,119 @@ def test_second_submitter_waits_then_reads_stored(tmp_path, monkeypatch):
 
 
 @pytest.mark.timeout(120)
-def test_stale_workflow_lease_taken_over(tmp_path):
-    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+def test_stale_workflow_lease_taken_over(tmp_path, monkeypatch):
+    """A holder that stopped renewing is waited for until ``stale_after`` has passed on
+    the storage clock, then taken over and the workflow runs once.
+
+    The holder is a lease of this process whose heartbeat is stopped, which is what a
+    killed holder looks like to a waiter, and the waiter's storage clock is a fake, so
+    neither side depends on how the OS schedules processes or threads."""
+    log, root = tmp_path / "runs.log", tmp_path / "cache"
+    clock = {"t": 0.0}
+    base = [0.0]
+
+    def storage_clock() -> float:
+        return base[0] + clock["t"]
+
+    taken = []
+    acquire = PickleStore.acquire
+
+    def acquire_with_fake_clock(self, checksum, context):
+        lease = attrs.evolve(acquire(self, checksum, context), clock=storage_clock)
+        taken.append(lease)
+        return lease
+
+    # the runner makes its lease when it is built, so the fake clock goes in first
+    monkeypatch.setattr(PickleStore, "acquire", acquire_with_fake_clock)
     sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
-    holder = spawn_holder(runner.job, sub.store, ready, hold=600)
+    monkeypatch.setattr(PickleStore, "acquire", acquire)
+    assert len(taken) == 1
+    holder = sub.store.acquire(runner.job.checksum, runner.job.context)
+    holder.__enter__()
+    holder._heartbeat.stopped.set()  # dead: it never renews again
+    holder._heartbeat.join()
+    base[0] = max(
+        p.lstat().st_mtime for p in [holder.lockfile, *holder.lockfile.rglob("*")]
+    )
     try:
-        wait_for(ready, holder)
-        finish(holder, killed=True)
         with sub:
-            assert runner.ready().retry_after is not None  # the lease is not yet stale
-            start = time.monotonic()
+            rnd = runner.ready()  # the lease is not yet stale
+            assert rnd.dispatch == [] and rnd.retry_after is not None
+            assert log_lines(log) == []
+            clock["t"] = SETTINGS.stale_after + 1
+            for frame in runner._frames:  # judge now, not after the backoff
+                frame.retry_at = None
             drive(sub, runner)
             assert runner.result().outputs.out == 7
-        assert time.monotonic() - start < 20
+        assert [len(lease.broke) for lease in taken] == [1]
         assert not runner.errors
     finally:
-        holder.kill()
+        if holder.held:
+            holder.__exit__(None, None, None)
     assert len(log_lines(log)) == 1
 
 
 @pytest.mark.timeout(120)
 def test_live_holder_not_taken_over_past_stale_after(tmp_path, monkeypatch):
-    """The holder keeps its lease, renewing, for three times ``stale_after``, so the
-    second submitter keeps waiting and never expands"""
-    log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+    """A holder that renews its lease is waited for past three times ``stale_after``
+    on the storage clock, so the second submitter keeps waiting and never expands.
+
+    The holder is a lease of this process whose own heartbeat is stopped: the test
+    makes its beats between polls, and the waiter's storage clock is a fake that moves
+    0.3 s per poll, so neither depends on how the OS schedules threads. The real
+    heartbeat across processes is covered by
+    ``test_lease.py::test_real_heartbeat_keeps_a_waiter_in_another_process_out``."""
+    log, root = tmp_path / "runs.log", tmp_path / "cache"
+    clock = {"t": 0.0}
+    base = [0.0]
+
+    def storage_clock() -> float:
+        return base[0] + clock["t"]
+
+    taken = []
+    acquire = PickleStore.acquire
+
+    def acquire_with_fake_clock(self, checksum, context):
+        lease = attrs.evolve(acquire(self, checksum, context), clock=storage_clock)
+        taken.append(lease)
+        return lease
+
+    # the runner makes its lease when it is built, so the fake clock goes in first
+    monkeypatch.setattr(PickleStore, "acquire", acquire_with_fake_clock)
     sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
-    holder = spawn_holder(runner.job, sub.store, ready, hold=3.0)
+    monkeypatch.setattr(PickleStore, "acquire", acquire)
+    assert len(taken) == 1
+    holder = sub.store.acquire(runner.job.checksum, runner.job.context)
+    holder.__enter__()
+    holder._heartbeat.stopped.set()  # beats are the test's, below
+    holder._heartbeat.join()
+    token_dir = holder.lockfile / holder._token
+    base[0] = max(
+        p.lstat().st_mtime for p in [holder.lockfile, *holder.lockfile.rglob("*")]
+    )
     try:
-        wait_for(ready, holder)
         expansions = count_expansions(monkeypatch)
         with sub:
-            start = time.monotonic()
             retries = 0
-            while time.monotonic() - start < 2.2:  # the holder lives for 3 s
+            while clock["t"] <= 3 * SETTINGS.stale_after:
+                for frame in runner._frames:  # judge at every poll, not each backoff
+                    frame.retry_at = None
                 rnd = runner.ready()
                 assert rnd.dispatch == [] and expansions == []
                 if rnd.retry_after is not None:
                     retries += 1
-                time.sleep(min(rnd.retry_after or 0.05, 0.2))
+                clock["t"] += 0.3
+                # the holder renews: a mark at the new storage time
+                os.utime(token_dir, (storage_clock(), storage_clock()))
             assert retries > 1
-            assert time.monotonic() - start > 2 * SETTINGS.stale_after
             assert expansions == []
-            finish(holder)
+            assert [lease.broke for lease in taken] == [[]]
+            holder.__exit__(None, None, None)
             drive(sub, runner)  # the lease is free: the waiter now expands
             assert runner.result().outputs.out == 7
     finally:
-        holder.kill()
+        if holder.held:
+            holder.__exit__(None, None, None)
     assert len(log_lines(log)) == 1
 
 
@@ -923,3 +992,89 @@ def test_failure_at_start_runs_no_post_hook(tmp_path):
                 hooks=TaskHooks(pre_run_task=refuse, post_run_task=post),
             )
     assert seen == []
+
+
+# An element whose inputs cannot be resolved, released last
+
+
+@python.define
+def Stringify(x: int) -> ty.Any:
+    return "one" if x == 1 else x
+
+
+@python.define
+def Mark(a: int, marks: str) -> int:
+    from pathlib import Path
+
+    (Path(marks) / str(a)).touch()
+    return a
+
+
+@workflow.define
+def LastUnresolvable(xs, marks):
+    a = workflow.add(Stringify().split("x", x=xs), name="A")
+    b = workflow.add(Mark(a=a.out, marks=marks), name="B")
+    return b.out
+
+
+def run_all_but_a1(runner) -> Job:
+    """Run every element that ``ready`` hands out, holding A(1) back until nothing else
+    is pending, and return A(1) unreported"""
+    held = []
+    while pending := held + runner.ready().dispatch:
+        held = []
+        for job in pending:
+            if (job.name, job.state_index) == ("A", 1):
+                held.append(job)
+            else:
+                runner.complete(job, job.run())
+        if held and held == pending:
+            return held[0]
+    raise AssertionError("A(1) was not handed out")
+
+
+def test_last_unresolvable_element_is_an_error_not_a_commit(tmp_path):
+    """The element released last fails to resolve its inputs, which completes every
+    node in the same pass of ``ready``: the workflow is not committed as if it had
+    succeeded, and the element is an entry of the run"""
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    sub, runner = runner_for(
+        tmp_path / "cache", LastUnresolvable(xs=[0, 1, 2, 3], marks=str(marks))
+    )
+    with sub:
+        a1 = run_all_but_a1(runner)
+        runner.complete(a1, a1.run())
+        assert runner.ready().dispatch == []
+        runner.close()
+    assert runner.done
+    assert runner.root_error is None
+    (entry,) = runner.entries
+    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    assert sorted(p.name for p in marks.iterdir()) == ["0", "2", "3"]
+
+
+def test_close_collects_a_resolution_error_released_outside_ready(tmp_path):
+    """A runner that does not own the workflow job: the last element is released by the
+    deprecated ``Submitter.get_runnable_tasks`` rather than ``ready``, its inputs cannot
+    be resolved, and ``close`` makes it an entry of the run"""
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    store = PickleStore(tmp_path / "cache", lease_settings=SETTINGS)
+    with Submitter(worker="debug", store=store) as sub:
+        runner = GraphRunner(
+            LastUnresolvable(xs=[0, 1, 2, 3], marks=str(marks)),
+            store,
+            on_error="raise_at_end",
+            submitter=sub,
+        )
+        a1 = run_all_but_a1(runner)
+        runner.complete(a1, a1.run())
+        with pytest.warns(DeprecationWarning):
+            assert sub.get_runnable_tasks(runner.exec_graph) == []
+        assert runner.done  # B(1) is released and errored, its error on its node
+        assert runner.errors == []
+        runner.close()
+    (entry,) = runner.entries
+    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    assert len(runner.errors) == 1 and "B(1)" in runner.errors[0]
