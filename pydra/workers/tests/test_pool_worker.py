@@ -1261,6 +1261,19 @@ def test_infrastructure_faults_hold_the_residency(pool, tasks):
     assert len(pool.pool.holds("cpu")) == 1
 
 
+def test_requeued_ticket_reclaimed_while_gathering(pool, tasks):
+    """A warm worker that gathers one-job tickets passes over the ticket it still holds; once that
+    ticket is released unsettled (an infrastructure requeue) the same worker claims it again at
+    once, rather than skipping it for a renewal interval and exiting idle with the job open.
+    """
+    job = pool.job(tasks.Fail(x=1), "requeued")
+    pool.put([job])
+    _, code = _run(pool, _class(quantum_jobs=4), classify=_infrastructure)
+    assert code == 0
+    assert [g["cause"] for g in pool.generations(job)] == ["put", "restart", "restart"]
+    assert [o["outcome"] for o in pool.outcomes()] == ["failed"]
+
+
 def test_crash_budget_fails_a_job_crashed_worker(pool, tasks):
     """A job with ``crashes_charged`` charged generations is ``failed`` (``JobCrashedWorker``)
     without running."""

@@ -809,7 +809,7 @@ def test_plain_workflow_untouched(tmp_path):
     """``import pydra`` and a ``cf`` run import nothing of the pool and write nothing outside the cache
     root."""
     script = textwrap.dedent("""
-        import json, sys
+        import json, os, sys, threading
         import pydra
         from pydra.compose import python, workflow
         from pydra.engine.submitter import Submitter
@@ -822,7 +822,14 @@ def test_plain_workflow_untouched(tmp_path):
         def Wf(xs: list) -> list:
             return workflow.add(Add().split(x=xs), name="A").out
 
+        def _orphaned(parent=os.getppid()):
+            # exit with the test, however it ends (a timeout kills pytest, not this script)
+            while os.getppid() == parent:
+                threading.Event().wait(1.0)
+            os._exit(3)
+
         if __name__ == "__main__":
+            threading.Thread(target=_orphaned, daemon=True).start()
             with Submitter(worker="cf", cache_root=sys.argv[1]) as sub:
                 out = sub(Wf(xs=[1, 2, 3])).outputs.out
             pool = [m for m in sys.modules if m.startswith("pydra.workers.pool")]
@@ -832,14 +839,25 @@ def test_plain_workflow_untouched(tmp_path):
     work.mkdir()
     (tmp_path / "run.py").write_text(script)
     before = sorted(p.name for p in work.iterdir())
-    out = subprocess.run(
+    proc = subprocess.Popen(
         [sys.executable, str(tmp_path / "run.py"), str(tmp_path / "cache")],
         cwd=work,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        check=True,
-        timeout=BOUND,
+        start_new_session=POSIX,
     )
+    try:
+        stdout, stderr = proc.communicate(timeout=BOUND)
+    finally:
+        _kill_group(proc)  # the cf worker's processes go with the script's group
+    assert proc.returncode == 0, stderr
+    if POSIX:
+        left = subprocess.run(
+            ["pgrep", "-g", str(proc.pid)], capture_output=True, text=True
+        )
+        assert left.stdout.strip() == "", "the cf run left processes behind"
+    out = subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
     record = json.loads(out.stdout.strip().splitlines()[-1])
     assert record == {"out": [2, 3, 4], "pool": []}
     assert sorted(p.name for p in work.iterdir()) == before
