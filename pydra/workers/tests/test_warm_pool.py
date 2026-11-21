@@ -1462,3 +1462,22 @@ def test_rerun_after_collect_fresh_attempt(tmp_path, tasks, pools):
     assert [g["cause"] for g in gens][-1] == "put"
     attempts = {g["attempt"] for g in gens}
     assert len(attempts) == len(gens) and gens[-1]["attempt"].endswith(".1")
+
+
+def test_jobs_of_a_submitter_on_a_pool_need_no_user_cache(tmp_path, tasks, pools):
+    """A `Submitter` given a pool and no ``cache_root`` runs on the pool's portable store, and its
+    jobs keep their run files at that store's root, which every worker reaches, never in this host's
+    user cache: a worker on another host has none at that path, as here, where the run cache is
+    removed before the run."""
+    import shutil
+
+    from pydra.utils.general import default_run_cache_root
+
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub)
+    with Submitter(worker=pool) as run:
+        assert run.cache_root == Path(sub.store.path).resolve()
+        shutil.rmtree(default_run_cache_root(), ignore_errors=True)
+        result = run(tasks.Many(xs=[1, 2, 3]), raise_errors=True)
+    assert result.outputs.out == [1, 2, 3]
+    assert not default_run_cache_root().exists()

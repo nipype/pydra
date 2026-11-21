@@ -293,6 +293,21 @@ def test_store_and_cache_root_must_agree(tmp_path):
     assert Submitter(store=store, cache_root=tmp_path / "a").store is store
 
 
+def test_a_private_portable_store_roots_the_submitter_cache(tmp_path):
+    """Given a private `PortableStore` and no ``cache_root``, a `Submitter`'s cache root is the
+    store's root, as under ``store="portable"``, never the user cache of the host it was made on;
+    a shared root, which other users read, is not."""
+    from pydra.engine.portable.store import PortableStore
+    from pydra.utils.general import default_run_cache_root
+
+    private = PortableStore(tmp_path / "p", trust="private", pickle=True)
+    assert Submitter(store=private).cache_root == (tmp_path / "p").resolve()
+    shared = PortableStore(
+        tmp_path / "s", trust="shared", work_dir=lambda c, f, a: tmp_path / "w" / a
+    )
+    assert Submitter(store=shared).cache_root == default_run_cache_root().resolve()
+
+
 def test_picklestore_slots(tmp_path):
     store = PickleStore(tmp_path)
     other = {**CTX, "platform": "q"}
