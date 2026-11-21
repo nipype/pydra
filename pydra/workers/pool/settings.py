@@ -47,8 +47,6 @@ class PoolSettings:
         when a per-job time is measured.
     unmeasured_workers : int
         Workers wanted per queue when no per-job time is measured.
-    start_failures : int
-        Consecutive failed starts after which a worker class is broken and its jobs are held.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -62,7 +60,6 @@ class PoolSettings:
     max_queued_jobs: int | None = attrs.field(default=None, validator=_positive)
     target_wall_s: float = attrs.field(default=600.0, validator=_positive)
     unmeasured_workers: int = attrs.field(default=1, validator=_positive)
-    start_failures: int = attrs.field(default=7, validator=_positive)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)
