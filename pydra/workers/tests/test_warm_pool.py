@@ -31,6 +31,7 @@ LEASE = LeaseSettings(
 BOUND = 120.0  # seconds any wait on another process may take before the test fails
 
 TASKS = """
+import os
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -106,10 +107,26 @@ def BigGpuMark(x: int, where: str) -> int:
     return workflow.add(Mark(x=x, where=where), name="M", resources=need).out
 
 
+@python.define
+def DeviceHold(x: int, where: str, devices: int) -> str:
+    # announce this worker's device, then hold until ``devices`` workers have announced theirs, so
+    # no worker can drain the queue before the others start; the bound only stops a hang
+    d = Path(where)
+    device = os.environ.get("CUDA_VISIBLE_DEVICES", "none")
+    (d / f"device-{device}").touch()
+    deadline = time.monotonic() + 120
+    while len(list(d.glob("device-*"))) < devices:
+        if time.monotonic() > deadline:
+            raise RuntimeError("the other workers never ran a job")
+        time.sleep(0.05)
+    return device
+
+
 @workflow.define
-def GpuMarks(xs: list, where: str) -> list:
+def GpuHolds(xs: list, where: str, devices: int) -> list:
     gpu = ComputeResources(gpus=1)
-    return workflow.add(Mark(where=where).split(x=xs), name="M", resources=gpu).out
+    node = DeviceHold(where=where, devices=devices).split(x=xs)
+    return workflow.add(node, name="H", resources=gpu).out
 """
 
 FAKE_NVIDIA_SMI = """#!{python}
@@ -701,7 +718,9 @@ def test_pool_never_starting_holds_jobs(tmp_path, tasks, pools, fake_nvidia_smi)
 @pytest.mark.skipif(not POSIX, reason="the fake nvidia-smi is a shebang script")
 def test_one_worker_per_gpu_local(tmp_path, tasks, pools, fake_nvidia_smi):
     """On a host whose ``nvidia-smi`` lists two GPUs, a one-GPU class runs one worker per device,
-    each given its device through ``CUDA_VISIBLE_DEVICES``; a third cannot start."""
+    each given its device through ``CUDA_VISIBLE_DEVICES``; a third cannot start. Every job holds
+    until both workers have run one, so the placement is asserted, not a race between the first
+    worker draining the queue and the second marking ready."""
     from pydra.workers.pool.substrate import LocalSubstrate
 
     fake_nvidia_smi("NVIDIA H100 80GB HBM3", "NVIDIA H100 80GB HBM3")
@@ -718,8 +737,10 @@ def test_one_worker_per_gpu_local(tmp_path, tasks, pools, fake_nvidia_smi):
         substrate=substrate,
         settings=_settings(unmeasured_workers=4),
     )
-    runner = _drive(sub, tasks.GpuMarks(xs=list(range(4)), where=str(marks)), pool)
+    holds = tasks.GpuHolds(xs=list(range(4)), where=str(marks), devices=2)
+    runner = _drive(sub, holds, pool)
     assert runner.done and not runner.failed
+    assert sorted(p.name for p in marks.iterdir()) == ["device-0", "device-1"]
     assert len(substrate.handles) == 2
     assert sorted(h.devices for h in substrate.handles) == [("0",), ("1",)]
     assert substrate.can_start(gpu) is not True or not substrate.live()
