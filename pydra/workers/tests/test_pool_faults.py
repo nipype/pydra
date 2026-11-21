@@ -1754,8 +1754,9 @@ def test_released_hold_releases_the_worker(pool, tasks):
 
 
 def test_faults_reread_when_the_epoch_changes(pool, tasks, tmp_path):
-    """A running worker reads the budgets again when a newer coordinator epoch writes them: a job
-    of the new run is retried under its ``content_attempts=2``."""
+    """A running worker reads the budgets again when a newer coordinator epoch writes them, even
+    when it saw the epoch before the budgets were written: a job of the new run is retried under
+    its ``content_attempts=2``."""
     import threading
 
     from pydra.workers.pool.faults import FaultBudgets
@@ -1770,6 +1771,9 @@ def test_faults_reread_when_the_epoch_changes(pool, tasks, tmp_path):
     try:
         _wait(lambda: worker.token is not None and worker.cls is not None, "the start")
         second = pool.pool.take_epoch()
+        # the worker sees the new epoch before its coordinator writes the budgets (the window
+        # between take_epoch and write_faults), and must still read them once written
+        _wait(lambda: worker._epoch == second, "the worker to see the new epoch")
         pool.pool.write_faults(
             second,
             {"budgets": FaultBudgets(content_attempts=2).to_json(), "classify": None},

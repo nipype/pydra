@@ -1660,8 +1660,9 @@ class PoolRoot:
             with coordinator.child(str(epoch)) as d:
                 _create(d, "faults.json", jcs(record))
 
-    def faults(self) -> dict | None:
-        """The fault record of the newest coordinator epoch that wrote one; None when none did."""
+    def faults(self) -> tuple[int, dict] | None:
+        """The newest coordinator epoch that wrote a fault record, and the record; None when none
+        did."""
         with _dir(self._root, "coordinator") as coordinator:
             for epoch in reversed(self.epochs()):
                 d = _child(coordinator, str(epoch))
@@ -1670,7 +1671,7 @@ class PoolRoot:
                 with d:
                     record = _read_record(d, "faults.json")
                 if record is not None:
-                    return record
+                    return epoch, record
         return None
 
     def coordinator_lease(

@@ -334,9 +334,8 @@ class Worker:
         # (queue, label) -> (coordinator epoch, reason, latest fault); honoured only while that
         # epoch is the newest and the hold mark stands
         self._holds: dict[tuple[str, str], tuple[int, str, FaultRecord]] = {}
-        self._epoch: int | None = (
-            None  # the newest coordinator epoch this worker has read
-        )
+        self._epoch: int | None = None  # the newest coordinator epoch this worker read
+        self._faults_epoch: int | None = None  # the epoch whose fault record it read
         self._last_live = time.monotonic()
         self._pinged = 0.0
 
@@ -362,15 +361,17 @@ class Worker:
             self.pool.close()
 
     def _refresh(self) -> bool:
-        """When the newest coordinator epoch has changed, read the budgets and the classifier it
-        wrote (`_read_faults`) and forget the holds of older epochs; False when the classifier is
-        unusable."""
+        """When the newest coordinator epoch has changed, forget the holds of older epochs; until
+        that epoch's fault record has been read (its coordinator writes it after taking the epoch),
+        read the newest record (`_read_faults`). False when the classifier is unusable.
+        """
         epochs = self.pool.epochs()
         newest = epochs[-1] if epochs else 0
-        if newest == self._epoch:
+        if newest != self._epoch:
+            self._epoch = newest
+            self._holds = {k: v for k, v in self._holds.items() if v[0] == newest}
+        elif self._faults_epoch == newest:
             return True
-        self._epoch = newest
-        self._holds = {k: v for k, v in self._holds.items() if v[0] == newest}
         return self._read_faults()
 
     def _read_faults(self) -> bool:
@@ -378,7 +379,8 @@ class Worker:
         given; False (logged) when the classifier reference cannot be imported here or names
         something not callable: the worker then exits `EXIT_FAULTS` rather than type faults by
         another rule."""
-        record = self.pool.faults() or {}
+        found = self.pool.faults()
+        self._faults_epoch, record = found if found is not None else (None, {})
         if self._faults_arg is None:
             budgets = record.get("budgets")
             self.faults = (
