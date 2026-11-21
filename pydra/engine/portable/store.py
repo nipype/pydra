@@ -2921,7 +2921,7 @@ class PortableStore:
         if job is not None:
             checksum = job.checksum
             key = self.identity.key(job)
-            context = self.identity.context(job, "execute")
+            context = self._with_pool_facts(job, self.identity.context(job, "execute"))
             wd = self.work_dir(job)
         else:
             checksum = getattr(lease, "checksum")
@@ -2977,6 +2977,15 @@ class PortableStore:
                 self._empty_work_dir(ty.cast(Path, wd))
         result.committed = committed
         result.stored = committed.stored
+
+    def _with_pool_facts(self, job: "Job", context: Context) -> Context:
+        """``context`` with the ``pool`` section a pool worker computed for the call (RFC 0005
+        section 8), when the identity lists ``pool`` in ``recorded_only``, so it is recorded and
+        splits no slot; otherwise ``context`` unchanged."""
+        facts = getattr(job, "pool_facts", None)
+        if facts is None or "pool" not in self.identity.recorded_only:
+            return context
+        return {**context, "pool": facts}
 
     def _serve_occupant(
         self,
