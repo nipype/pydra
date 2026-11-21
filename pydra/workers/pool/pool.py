@@ -27,6 +27,12 @@ The pool is the submitting process's side of the protocol of `pydra.workers.pool
   broken and its jobs are held.
 - **Lifecycle.** `close` writes the coordinator's ``ended`` mark; a coordinator that still holds the
   newest epoch then stops the workers its substrate lists.
+- **The cold re-check** (``PoolSettings.recheck_fraction``, RFC 0005 section 4.4). A settled job
+  sampled by its checksum is run again by the follower, after its outcome is reported: a fresh copy
+  of the job, alone, on a resident set of its own, marked to verify against the committed entry, so
+  the store compares it through its reuse hook and its publish loses to the committed entry. Equal
+  output digests or not, a `ParityRecord` is written to the calibration; the first mismatch of a
+  residency is also logged and sent through the job's audit, once per coordinator.
 """
 
 from __future__ import annotations
@@ -43,7 +49,6 @@ import threading
 import time
 import typing as ty
 import uuid
-import warnings
 from pathlib import Path
 
 import attrs
@@ -53,7 +58,13 @@ from pydra.engine.lease import LeaseTimeout
 from pydra.engine.runner import Failed, NotRun
 from pydra.utils.digest import jcs
 from pydra.utils.general import is_workflow
+from pydra.utils.messenger import AuditFlag
 from pydra.utils.resources import ComputeResources
+from pydra.workers.pool.calibration import (
+    DirectoryCalibration,
+    ParityRecord,
+    residency_key,
+)
 from pydra.workers.pool.classes import WorkerClass
 from pydra.workers.pool.codec import JobCodec, PrivatePickle, write_payload
 from pydra.workers.pool import faults as _faults
@@ -66,6 +77,7 @@ from pydra.workers.pool.placement import (
     Unplaceable,
     _candidate_reason,
     _order,
+    fit_request,
     place,
 )
 from pydra.workers.pool.settings import PoolSettings
@@ -236,6 +248,18 @@ def _classifier_reference(obj: ty.Any) -> str:
     return reference
 
 
+def _sampled(checksum: str, fraction: float) -> bool:
+    """Whether the job of ``checksum`` is re-checked under ``recheck_fraction``: the same answer for
+    a checksum every time, and for about ``fraction`` of checksums."""
+    if fraction <= 0.0:
+        return False
+    if fraction >= 1.0:
+        return True
+    return (
+        int(hashlib.sha256(checksum.encode()).hexdigest()[:16], 16) < fraction * 2**64
+    )
+
+
 def _fingerprint(job: "Job") -> str:
     identity = getattr(job.store, "identity", None)
     if identity is not None:
@@ -274,7 +298,10 @@ class WarmPool:
     fit : Fit
         Judges a job's request against a class (default `DeclaredFit`).
     calibration : Calibration, optional
-        Measurements for scaling; None: none measured yet (W9 adds the default store).
+        Where the coordinator writes its re-checks' `ParityRecord`s; None:
+        `DirectoryCalibration` at ``root / "calibration"``, where the pool's workers write their
+        samples and unfit records whatever is passed here. A `MeasuredFit` given as ``fit`` reads
+        the calibration it was made with.
     providers : sequence of Provider or "module:qualname"
         Providers the workers this pool starts load before the jobs' own.
     faults : FaultBudgets
@@ -317,13 +344,6 @@ class WarmPool:
         probe: bool = True,
     ):
         self.batches = True
-        if calibration is not None:
-            warnings.warn(
-                "WarmPool does not use calibration yet: scaling uses unmeasured_workers and "
-                "workers record no calibration (RFC 0005 W9)",
-                UserWarning,
-                stacklevel=2,
-            )
         classify_ref = (
             None if classify is _faults.classify else _classifier_reference(classify)
         )
@@ -336,8 +356,15 @@ class WarmPool:
         self.substrate = substrate
         self.store = store
         self.fit = fit
-        self.calibration = calibration
+        self.calibration = (
+            calibration
+            if calibration is not None
+            else DirectoryCalibration(self.root / "calibration")
+        )
         self.providers = tuple(_reference(p) for p in providers)
+        self._provider_objects: tuple | None = None
+        self._rechecks: list[tuple[_Job, ty.Any, dict]] = []
+        self._parity_reported: set[str] = set()
         self.faults = faults
         self.classify = classify
         self.settings = settings
@@ -578,6 +605,23 @@ class WarmPool:
 
         return can_start
 
+    def _providers(self) -> tuple:
+        """The pool's providers as its workers make them, for the code a placement judges by; one
+        that cannot be imported here is left out."""
+        if self._provider_objects is None:
+            from pydra.workers.pool.worker import _resolve
+
+            made = []
+            for reference in self.providers:
+                try:
+                    made.append(_resolve(reference))
+                except Exception as err:
+                    logger.warning(
+                        "the provider %s cannot be made here: %s", reference, err
+                    )
+            self._provider_objects = tuple(made)
+        return self._provider_objects
+
     def _live(self) -> list[WorkerHandle]:
         try:
             return list(self.substrate.live())
@@ -601,7 +645,8 @@ class WarmPool:
             names = [c.name for c in ordered]
             if above in names:
                 classes = tuple(ordered[names.index(above) + 1 :])
-        placement = place(job, classes, self.fit, can_start)
+        request = fit_request(job, self._providers())
+        placement = place(job, classes, self.fit, can_start, request=request)
         if isinstance(placement, Unplaceable):
             return placement, (), ()
         res = job.resources if job.resources is not None else ComputeResources()
@@ -1012,6 +1057,7 @@ class WarmPool:
         self._scale(now)
         self._hold_broken()
         self._deliver(reports)
+        self._run_rechecks()
 
     def _read(self, t: _Ticket, found: dict[str, dict], reports: list) -> None:
         """Settle or retarget each followed job of ``t`` that has an outcome record in it (a job that
@@ -1054,6 +1100,126 @@ class WarmPool:
                     )
                 self._forget(j)
                 reports.append((j.job, j, verdict[1]))
+                if outcome.get("outcome") == "done" and _sampled(
+                    j.key[0], self.settings.recheck_fraction
+                ):
+                    self._rechecks.append((j, verdict[1], outcome))
+
+    # -- the sampled cold re-check -------------------------------------------------------------
+
+    def _run_rechecks(self) -> None:
+        with self._lock:
+            due, self._rechecks = self._rechecks, []
+        for j, result, outcome in due:
+            try:
+                self._recheck(j, result, outcome)
+            except Exception:  # a re-check is a measurement: it never fails the run
+                logger.exception("re-checking %s failed", getattr(j.job, "name", j.job))
+
+    def _recheck(self, j: _Job, result: ty.Any, outcome: dict) -> None:
+        """Run ``j``'s job again alone on a fresh residency against its committed entry and write
+        the `ParityRecord`; report the first mismatch of the residency through the audit.
+        """
+        from pydra.engine.portable.reuse import Candidate
+
+        job = j.job
+        committed = getattr(result, "committed", None)
+        stored = getattr(job.store, "stored", None)
+        if isinstance(result, Failed) or getattr(result, "errored", False):
+            return
+        if committed is None or stored is None:
+            logger.warning(
+                "%s is not re-checked: its store has no committed entry to verify against",
+                job.name,
+            )
+            return
+        entry = committed.entry
+        candidate = next(
+            (
+                Candidate(ref, context, digest, 0, "recheck")
+                for ref, context, digest in stored(job.checksum)
+                if os.path.abspath(ref.root) == os.path.abspath(entry.root)
+                and (ref.cdir, ref.fingerprint) == (entry.cdir, entry.fingerprint)
+            ),
+            None,
+        )
+        if candidate is None:
+            logger.warning("%s is not re-checked: its entry cannot be read", job.name)
+            return
+        fresh, against, reason = self._fresh_run(job, candidate)
+        equal = not reason and fresh is not None and fresh == against
+        if not reason and not equal:
+            reason = "the output digests differ"
+        key = residency_key(j.residency) or "none"
+        batch = int((outcome.get("sample") or {}).get("batch_size") or 1)
+        record = ParityRecord(
+            key, job.checksum, (batch, 1), equal, against, fresh, reason
+        )
+        try:
+            self.calibration.record(record)
+        except Exception as err:
+            logger.warning("could not record the re-check of %s: %s", job.name, err)
+        if equal or key in self._parity_reported:
+            return
+        self._parity_reported.add(key)
+        logger.warning(
+            "the re-check of %s on a fresh residency differs from its committed entry "
+            "(residency %s): %s",
+            job.name,
+            key,
+            reason,
+        )
+        audit = getattr(job, "audit", None)
+        if audit is not None and audit.audit_check(AuditFlag.PROV):
+            try:
+                audit.audit_message(
+                    {
+                        "@type": "pool-recheck",
+                        "residency": key,
+                        "checksum": job.checksum,
+                        "batch_sizes": [batch, 1],
+                        "committed": against,
+                        "fresh": fresh,
+                        "reason": reason,
+                    },
+                    AuditFlag.PROV,
+                )
+            except Exception as err:
+                logger.warning("could not audit the re-check of %s: %s", job.name, err)
+
+    def _fresh_run(
+        self, job: "Job", candidate: ty.Any
+    ) -> tuple[str | None, str | None, str]:
+        """Run a copy of ``job`` (decoded as a worker decodes it) alone, never served from the
+        store, on a resident set of its own, marked to verify against ``candidate``; its publish
+        loses to the committed entry. Return its output digest, the committed entry's and why it
+        did not reach them ("" when it did)."""
+        data, _ = self.codec.encode(job)
+        copy = self.codec.decode(data, job.store)
+        copy.attempt = f"recheck-{uuid.uuid4().hex}"
+        copy._work_dir_memo = None
+        copy.claim = None
+        copy.chdir = (
+            False  # the follower is a thread: never change the process's directory
+        )
+        copy.verify = candidate
+        copy._reusable = lambda: None  # run, never serve the entry it verifies against
+        submitter = getattr(copy, "submitter", None)
+        if submitter is not None:  # a resident set of its own: a fresh residency
+            submitter._worker_copy = False
+            submitter._resident_set = None
+        try:
+            copy.run()
+        except Exception as exc:
+            return None, None, f"{type(exc).__name__}: {exc}"[:2000]
+        finally:
+            resident_set = getattr(submitter, "_resident_set", None)
+            if resident_set is not None:
+                resident_set.close()
+        published = copy.committed
+        if published is None:
+            return None, None, "the re-check published nothing to compare"
+        return published.own_digest, published.committed_digest, ""
 
     def _verdict(
         self, t: _Ticket, outcome: dict, attempt: str, j: _Job

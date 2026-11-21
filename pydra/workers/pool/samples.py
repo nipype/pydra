@@ -1,4 +1,5 @@
-"""What a pool worker measures: its hardware and a `Sample` per settled job (RFC 0005 section 4.3)."""
+"""What a pool worker reads of its hardware and memory (RFC 0005 section 4.3); the `Sample` it records
+per settled job is `pydra.workers.pool.calibration.Sample`."""
 
 from __future__ import annotations
 
@@ -8,7 +9,6 @@ import re
 import shutil
 import subprocess
 import sys
-import typing as ty
 
 import attrs
 
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "Gpu",
     "HardwareClass",
-    "Sample",
     "device_memory",
     "host_memory",
     "read_hardware",
@@ -231,59 +230,3 @@ def device_memory() -> int | None:
 
     held = gpu_memory_by_pid()
     return None if held is None else sum(held.values())
-
-
-@attrs.frozen
-class Sample:
-    """What a worker measured for one settled job (senselab's ``Sample`` without its audio fields).
-
-    Attributes
-    ----------
-    wall_s : float
-        Seconds of the call that ran the job.
-    claim_s : float
-        Seconds the worker spent claiming the tickets it ran with.
-    batch_size : int
-        Jobs in the call.
-    units : float, optional
-        The job's units (padded units of the call, when batched).
-    baseline_bytes : int, optional
-        The worker's resident bytes at start, before any provider loaded.
-    resident_bytes, peak_bytes : int, optional
-        The worker's resident bytes after the call, and its peak so far.
-    device_baseline_bytes : int, optional
-        Device-wide bytes before the worker's first claim on a CUDA class.
-    device_bytes : int, optional
-        Device-wide bytes, read once per claim on a CUDA class.
-    load_s : float
-        Seconds loading the residency for this job (0 when it was resident).
-    cold : bool
-        Whether this job's residency was loaded for it.
-    since_load : int
-        Jobs this worker ran on the residency since it was loaded, before this one.
-    reload : bool
-        Whether the residency was reloaded after a resource fault.
-    worker : str
-        The worker's token.
-    ended : float
-        ``time.time()`` when the job settled.
-    """
-
-    wall_s: float
-    claim_s: float
-    batch_size: int
-    units: float | None
-    baseline_bytes: int | None
-    resident_bytes: int | None
-    peak_bytes: int | None
-    device_baseline_bytes: int | None
-    device_bytes: int | None
-    load_s: float
-    cold: bool
-    since_load: int
-    reload: bool
-    worker: str
-    ended: float
-
-    def to_json(self) -> dict[str, ty.Any]:
-        return attrs.asdict(self)

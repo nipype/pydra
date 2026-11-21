@@ -1,0 +1,906 @@
+"""Calibration, `MeasuredFit`, the cold re-check and ``place`` for ``plan()`` (RFC 0005 sections 3.3,
+4.4, 7.4; W9).
+
+The fit tests are ported from senselab's ``fit_test.py`` (an oversized residency moves up, one that fits
+no class is unplaceable with its numbers, an unfit record skips its class and every smaller one, nothing
+measured leaves the placement alone, the one judging rule at its boundary, measured figures stay out of
+the placement and the checksum) and the runtime tests from ``pool_unfit_test.py`` (a load out of memory
+is kept as a record and the next placement avoids the class; one that fails on every class records each
+and the next placement is unplaceable). senselab's ``coordinate_fit_test.py`` maps onto
+`test_unplaceable_by_measure_fails_at_submit_and_writes_nothing`. Its ``probe_machine_fit_test.py`` and
+the probe variant of ``pool_unfit_test.py`` are not ported: they drive senselab's probe machine, which
+holds a unit back until it is measured, and pydra has no probe machine; a client that measures writes
+the same records (`DirectoryCalibration.record`).
+
+Nothing is timed: workers in this process are driven to idle, and waits on other processes poll for a
+state with a bound that only fails a hung test.
+"""
+
+import asyncio
+import json
+import os
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from pydra.engine.job import Job
+from pydra.engine.lease import LeaseSettings
+from pydra.engine.submitter import Submitter
+from pydra.workers.pool.calibration import (
+    Code,
+    DirectoryCalibration,
+    MemoryFit,
+    ParityRecord,
+    Sample,
+    TimeRecord,
+    UnfitRecord,
+    hardware_of,
+    residency_key,
+)
+from pydra.workers.pool.classes import WorkerClass
+from pydra.workers.pool.fit import MeasuredFit
+from pydra.workers.pool.placement import (
+    FitRequest,
+    Placement,
+    Unplaceable,
+    fit_request,
+    place,
+)
+from pydra.utils.resources import ComputeResources
+
+POSIX = sys.platform != "win32"
+LEASE = LeaseSettings(
+    stale_after=4.0, renew_fraction=0.4, attribute_delay=0.0, timeout=10.0
+)
+BOUND = 120.0  # seconds any wait on another process may take before the test fails
+GB = 10**9
+G = 1024**3
+SMALL, LARGE = 1 * G, 8 * G
+
+TASKS = """
+from uuid import uuid4
+from pydra.compose import python, workflow
+from pydra.engine.resident import Provided
+from pydra.utils.resources import ComputeResources
+
+VERSION = {"sized": "1"}
+FAIL = {"load": False}
+LOADS = []
+
+
+class Recorder:
+    # an in-process provider that records each load
+    name = "recorder"
+
+    def load(self, spec, device):
+        LOADS.append("recorder")
+        return spec
+
+    def close(self, obj):
+        pass
+
+    def footprint(self, spec):
+        return None
+
+    def measure(self, obj):
+        return None
+
+    def version(self):
+        return "1"
+
+
+class Sized(Recorder):
+    # a provider whose load runs out of host memory while FAIL["load"] is set
+    name = "sized"
+
+    def load(self, spec, device):
+        LOADS.append("sized")
+        if FAIL["load"]:
+            raise MemoryError("out of memory loading the model")
+        return spec
+
+    def version(self):
+        return VERSION["sized"]
+
+
+@python.define
+def UseSized(model: Provided[object, "sized"], x: int) -> int:
+    return x
+
+
+@python.define
+def Fresh(model: Provided[str, "recorder"], x: int) -> str:
+    # a different output on every run: a re-check never matches
+    return uuid4().hex
+
+
+@python.define
+def Same(model: Provided[str, "recorder"], x: int) -> int:
+    return x
+
+
+@workflow.define
+def Freshes(xs: list) -> list:
+    return workflow.add(Fresh(model="m").split(x=xs), name="F").out
+
+
+@workflow.define
+def Sames(xs: list) -> list:
+    return workflow.add(Same(model="m").split(x=xs), name="S").out
+
+
+@workflow.define
+def Longs(xs: list) -> list:
+    long = ComputeResources(time=3600)
+    return workflow.add(Same(model="m").split(x=xs), name="S", resources=long).out
+"""
+
+
+# -- fixtures and helpers ----------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def tasks(tmp_path_factory):
+    """The task module, importable here and in workers started from here."""
+    where = tmp_path_factory.mktemp("pool_calibration_tasks")
+    (where / "_pydra_pool_calibration_tasks.py").write_text(TASKS)
+    sys.path.insert(0, str(where))
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(where), *filter(None, [os.environ.get("PYTHONPATH")])]
+    )
+    import _pydra_pool_calibration_tasks
+
+    return _pydra_pool_calibration_tasks
+
+
+@pytest.fixture(autouse=True)
+def clean(monkeypatch, tasks):
+    """Release every claim a test leaves held and reset the task module, pass or fail."""
+    from pydra.workers.pool.storage import Claim
+
+    made = []
+    init = Claim.__init__
+
+    def recording(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+        made.append(self)
+
+    monkeypatch.setattr(Claim, "__init__", recording)
+    monkeypatch.setitem(tasks.VERSION, "sized", "1")
+    monkeypatch.setitem(tasks.FAIL, "load", False)
+    tasks.LOADS.clear()
+    yield
+    tasks.LOADS.clear()
+    for claim in made:
+        claim.lease.__exit__(None, None, None)
+
+
+@pytest.fixture
+def pools():
+    """Every `WarmPool` a test makes is closed, every worker its substrate started is killed, and no
+    process of theirs is left."""
+    made = []
+    yield made
+    groups = []
+    for pool in made:
+        try:
+            pool.close()
+        finally:
+            for handle in getattr(pool.substrate, "handles", []):
+                if handle.process is not None:
+                    groups.append(handle.process.pid)
+                    _kill_group(handle.process)
+    if POSIX:
+        for pid in groups:
+            found = subprocess.run(
+                ["pgrep", "-g", str(pid)], capture_output=True, text=True
+            )
+            assert found.stdout.strip() == "", f"processes left in group {pid}"
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    if proc.poll() is None:
+        try:
+            if POSIX:
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except (ProcessLookupError, PermissionError):
+            pass
+    try:
+        proc.wait(BOUND)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _settings(**kwargs):
+    from pydra.workers.pool.settings import PoolSettings
+
+    fields = dict(lease=LEASE, poll_s=0.05, idle_polls=2, timeout_grace=60.0)
+    fields.update(kwargs)
+    return PoolSettings(**fields)
+
+
+def _class(name="cpu", **kwargs):
+    fields = dict(name=name, device="cpu", quantum_jobs=4, quantum_s=600.0)
+    fields.update(kwargs)
+    return WorkerClass(**fields)
+
+
+def ok(cls):
+    return True
+
+
+class Pool:
+    """A pool, a store and the jobs put on the pool, for one test (as in ``test_pool_faults``)."""
+
+    def __init__(self, tmp_path: Path, tasks):
+        from pydra.workers.pool.storage import PoolRoot
+
+        self.pool = PoolRoot.open(tmp_path / "pool", LEASE, probe=False)
+        self.submitter = Submitter(cache_root=tmp_path / "store", worker="debug")
+        self.submitter.providers = (tasks.Recorder(), tasks.Sized())
+        self.store = self.submitter.store
+        self.tickets: list[tuple[str, str]] = []
+
+    @property
+    def path(self) -> Path:
+        return self.pool.path
+
+    @property
+    def calibration(self) -> DirectoryCalibration:
+        return DirectoryCalibration(self.path / "calibration")
+
+    def job(self, task, name: str, *, resources=None) -> Job:
+        return Job(task=task, submitter=self.submitter, name=name, resources=resources)
+
+    def put(self, jobs, queue, **kwargs) -> str:
+        import attrs
+
+        from pydra.engine import resident
+        from pydra.workers.pool.codec import PrivatePickle, write_payload
+        from pydra.workers.pool.storage import Ticket, TicketJob
+
+        entries = []
+        for job in jobs:
+            fingerprint = self.store.identity.fingerprint(job.context)
+            g = self.pool._next_generation((job.checksum, fingerprint))
+            job.attempt = f"{self.pool.pool_id}.{g}"
+            entries.append(
+                TicketJob(
+                    checksum=job.checksum,
+                    fingerprint=fingerprint,
+                    payload=write_payload(PrivatePickle(), job, self.path),
+                    attempt=job.attempt,
+                    runner_attempt=0,
+                    units=1.0,
+                )
+            )
+        residency = tuple(
+            attrs.asdict(resident.spec_key(jobs[0].task, f, p))
+            for f, p in resident.provided_fields(jobs[0].task)
+        )
+        ticket = Ticket(
+            queue=queue, node="wf/node", jobs=entries, residency=residency, **kwargs
+        )
+        digest = self.pool.put(queue, ticket)
+        self.tickets.append((queue, digest))
+        return digest
+
+    def newest(self, job: Job) -> tuple[str, dict | None]:
+        """The queue of the job's newest generation's ticket and its outcome there."""
+        key = (job.checksum, self.store.identity.fingerprint(job.context))
+        _, record = self.pool.newest(*key)
+        queue = self.pool._by_label(record["queue"]).name
+        found = self.pool.read_outcome(queue, record["ticket"], key, record["attempt"])
+        return queue, found
+
+    def classes(self, *classes) -> None:
+        from pydra.workers.pool.worker import class_record
+
+        for cls in classes:
+            self.pool.put_class(cls.name, class_record(cls))
+
+
+@pytest.fixture
+def pool(tmp_path, tasks):
+    p = Pool(tmp_path, tasks)
+    yield p
+    p.pool.close()
+
+
+def _run(pool: Pool, cls):
+    from pydra.workers.pool.worker import Worker
+
+    worker = Worker(pool.path, cls, settings=_settings(), device_memory=lambda: None)
+    return worker, worker.run()
+
+
+def _warm(tmp_path, pools, sub, classes=None, **kwargs):
+    from pydra.workers.pool.pool import WarmPool
+    from pydra.workers.pool.substrate import LocalSubstrate
+
+    kwargs.setdefault("settings", _settings(idle_polls=40))
+    pool = WarmPool(
+        tmp_path / "pool",
+        classes or [_class()],
+        LocalSubstrate(),
+        store=sub.store,
+        **kwargs,
+    )
+    pools.append(pool)
+    return pool
+
+
+def _drive(sub, task, executor):
+    from pydra.engine.drivers import drive
+    from pydra.engine.runner import GraphRunner
+
+    runner = GraphRunner(task, sub.store, on_error="raise_at_end", submitter=sub)
+    asyncio.run(
+        drive(
+            runner,
+            {"pool": executor},
+            lambda job: "pool",
+            on_error="raise_at_end",
+            audit=sub.audit,
+            max_concurrent=float("inf"),
+        )
+    )
+    if runner.errors:
+        raise AssertionError("\n".join(runner.errors))
+    return runner
+
+
+def _seed(cal, key, cls, *, resident, m0=0.0, m1=0.0, n=4):
+    """Warm samples whose host fit is exactly ``resident``, ``m0`` and ``m1``."""
+    for i in range(n):
+        units = float(i + 1)
+        cal.record(
+            Sample(
+                wall_s=0.5,
+                claim_s=0.0,
+                batch_size=1,
+                units=units,
+                baseline_bytes=None,
+                resident_bytes=resident,
+                peak_bytes=int(resident + m0 + m1 * units),
+                device_baseline_bytes=None,
+                device_bytes=None,
+                load_s=0.0,
+                cold=False,
+                since_load=i + 1,
+                reload=False,
+                worker="seed",
+                ended=0.0,
+                key=key,
+                hardware=hardware_of(cls),
+            )
+        )
+
+
+CPU = _class("cpu", mem=1 * GB)
+CPU_LARGE = _class("cpu-large", mem=8 * GB)
+
+
+@pytest.fixture
+def measured(tmp_path, tasks):
+    """A job with resident state, its request and an empty calibration."""
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    sub.providers = (tasks.Recorder(), tasks.Sized())
+    job = Job(task=tasks.Same(model="m", x=1), submitter=sub, name="j")
+    return job, fit_request(job), DirectoryCalibration(tmp_path / "calibration")
+
+
+# -- the calibration store ---------------------------------------------------------------------
+
+
+def test_residency_key_is_the_residency_digest(measured):
+    """The calibration key from a ticket's residency (as `attrs.asdict`) is the job's residency
+    digest, the one a routed queue is named by."""
+    import attrs
+
+    from pydra.engine import resident
+
+    job, request, _ = measured
+    digest = resident.residency_digest(job)
+    assert request.key == digest
+    assert residency_key([attrs.asdict(k) for k in request.residency]) == digest
+    assert residency_key(()) is None
+    got = place(job, [CPU], MeasuredFit(DirectoryCalibration("unused")), ok)
+    assert got.queue == f"cpu#{digest}"
+
+
+def test_directory_calibration_round_trip(tmp_path):
+    """Records persist for a later instance; the memory fit is Theil–Sen (an outlier moves nothing);
+    a last line still being written is skipped; fewer than ``min_samples`` samples are unmeasured.
+    """
+    cal = DirectoryCalibration(tmp_path / "cal")
+    cls = _class("cpu", mem=8 * GB)
+    _seed(cal, "k", cls, resident=1000, m0=100.0, m1=10.0, n=4)
+    # an outlier: Theil-Sen keeps the line
+    cal.record(
+        attrs_evolve_sample(
+            resident=1000, peak=1000 + 10_000, units=2.5, key="k", cls=cls
+        )
+    )
+    unfit = UnfitRecord("k", "host", 8 * GB, "cpu", Code((("p", "1"),)))
+    parity = ParityRecord("k", "c" * 64, (4, 1), False, "a", "b", "differs")
+    cal.record(unfit)
+    cal.record(parity)
+    samples = cal.root / "k" / "cpu" / "samples" / "seed.jsonl"
+    with samples.open("a") as f:
+        f.write('{"wall_s": 1.0, "trunc')
+    later = DirectoryCalibration(tmp_path / "cal")
+    fit = later.memory("k", hardware_of(cls))
+    assert (fit.resident, round(fit.m0, 6), round(fit.m1, 6), fit.n) == (
+        1000,
+        100.0,
+        10.0,
+        5,
+    )
+    assert later.unfit("k") == [unfit] and later.parity("k") == [parity]
+    assert later.times("k", hardware_of(cls)) == [TimeRecord(1, 0.5, 5)]
+    assert (
+        DirectoryCalibration(tmp_path / "cal", min_samples=6).memory(
+            "k", hardware_of(cls)
+        )
+        is None
+    )
+    assert later.memory("other", hardware_of(cls)) is None
+    gpu = WorkerClass("h", "cuda", gpus=1, gpu_type="h100", gpu_mem=80 * G)
+    assert later.memory("k", hardware_of(gpu)) is None  # another hardware class
+    with pytest.raises(ValueError, match="key and hardware"):
+        cal.record(attrs_evolve_sample(resident=1, peak=1, units=1, key=None, cls=cls))
+
+
+def attrs_evolve_sample(*, resident, peak, units, key, cls):
+    return Sample(
+        wall_s=0.5,
+        claim_s=0.0,
+        batch_size=1,
+        units=units,
+        baseline_bytes=None,
+        resident_bytes=resident,
+        peak_bytes=peak,
+        device_baseline_bytes=None,
+        device_bytes=None,
+        load_s=0.0,
+        cold=False,
+        since_load=3,
+        reload=False,
+        worker="seed",
+        ended=0.0,
+        key=key,
+        hardware=hardware_of(cls),
+    )
+
+
+def test_unfit_record_binds_only_its_code():
+    """A record binds the code that wrote it: a provider's version or the environment changed, or a
+    code that cannot be read, binds nothing."""
+    record = UnfitRecord("k", "device", 40 * G, "a100", Code((("m", "1"),)))
+    assert record.binds(Code((("m", "1"),)))
+    assert not record.binds(Code((("m", "2"),)))
+    assert not record.binds(Code((("m", "1"),), environment="docker:abc"))
+    assert not record.binds(None)
+    assert UnfitRecord.from_json(json.loads(json.dumps(record.to_json()))) == record
+
+
+# -- MeasuredFit (ported from senselab's fit_test.py) ------------------------------------------
+
+
+def test_an_oversized_residency_is_placed_on_the_larger_class(measured):
+    """Resident plus m0 over the headroom of a class's grant skips it; the next larger class that
+    fits is taken, and the class tried names the numbers."""
+    job, request, cal = measured
+    assert place(job, [CPU, CPU_LARGE], MeasuredFit(cal), ok).worker_class == "cpu"
+    _seed(cal, request.key, CPU, resident=950_000_000, m0=1000.0)
+    got = place(job, [CPU_LARGE, CPU], MeasuredFit(cal), ok)
+    assert isinstance(got, Placement) and got.worker_class == "cpu-large"
+    assert [(t.worker_class, t.verdict) for t in got.tried] == [
+        ("cpu", "too small"),
+        ("cpu-large", "fits"),
+    ]
+    assert "resident 950000000 + m0 1000" in got.tried[0].reason
+    assert "900000000" in got.tried[0].reason
+    small = DirectoryCalibration(cal.root.parent / "small")
+    _seed(small, request.key, CPU, resident=100_000_000)
+    assert place(job, [CPU, CPU_LARGE], MeasuredFit(small), ok).worker_class == "cpu"
+
+
+def test_a_residency_that_fits_no_class_is_unplaceable_and_names_the_numbers(measured):
+    """With no larger class the placement stops; the message names each class tried and the
+    figures."""
+    job, request, cal = measured
+    _seed(cal, request.key, CPU, resident=950_000_000, m0=1000.0)
+    got = place(job, [CPU], MeasuredFit(cal), ok)
+    assert isinstance(got, Unplaceable)
+    [tried] = got.tried
+    assert (tried.worker_class, tried.verdict) == ("cpu", "too small")
+    assert "950000000" in str(got) and "900000000" in str(got)
+
+
+def test_an_unfit_record_skips_the_class_it_names_and_every_smaller_one(measured):
+    """A load that ran out of memory in a grant makes that grant and any below it unfit, whatever
+    was measured; a record of the other resource does not."""
+    job, request, cal = measured
+    _seed(cal, request.key, CPU, resident=10_000_000)
+    cal.record(UnfitRecord(request.key, "host", 1 * GB, "cpu", request.code))
+    got = place(job, [CPU, CPU_LARGE], MeasuredFit(cal), ok)
+    assert got.worker_class == "cpu-large"
+    assert got.tried[0].verdict == "unfit"
+    assert "ran out of host memory in a grant of 1000000000" in got.tried[0].reason
+    both = DirectoryCalibration(cal.root.parent / "both")
+    both.record(UnfitRecord(request.key, "host", 8 * GB, "cpu-large", request.code))
+    got = place(job, [CPU, CPU_LARGE], MeasuredFit(both), ok)
+    assert isinstance(got, Unplaceable)
+    assert [t.verdict for t in got.tried] == ["unfit", "unfit"]
+    other = DirectoryCalibration(cal.root.parent / "other")
+    other.record(UnfitRecord(request.key, "device", 8 * GB, "gpu", request.code))
+    assert place(job, [CPU, CPU_LARGE], MeasuredFit(other), ok).worker_class == "cpu"
+
+
+def test_a_residency_with_no_measure_and_no_record_stays_where_it_is(measured):
+    """Nothing to judge by: the placement is `DeclaredFit`'s."""
+    from pydra.workers.pool.placement import DeclaredFit
+
+    job, _, cal = measured
+    classes = [CPU, CPU_LARGE]
+    assert place(job, classes, MeasuredFit(cal), ok) == place(
+        job, classes, DeclaredFit(), ok
+    )
+
+
+def test_judge_is_the_one_rule(measured):
+    """At the boundary resident + m0 equal to the limit fits; above it is too small; a GPU class of
+    unknown memory is unknown; a time over the class's is unfit."""
+    _, request, _ = measured
+
+    class Fixed:
+        def memory(self, key, hardware):
+            return MemoryFit(resident=90, m0=0.0, m1=1.0, n=3)
+
+        def unfit(self, key):
+            return ()
+
+        def times(self, key, hardware):
+            return ()
+
+    fit = MeasuredFit(Fixed())
+    assert fit.judge(request, _class("a", mem=100)).verdict == "fits"
+    assert fit.judge(request, _class("b", mem=99)).verdict == "too small"
+    unknown = WorkerClass("g", "cuda", gpus=1)
+    assert fit.judge(request, unknown).verdict == "unknown"
+    import attrs
+
+    slow = attrs.evolve(request, resources=ComputeResources(time=7200))
+    assert fit.judge(slow, _class("c", mem=100, time=3600)).verdict == "unfit"
+
+
+def test_measured_figures_stay_out_of_the_placement_and_the_checksum(
+    measured, tmp_path
+):
+    """Two fits whose resident memory differs by a little place alike, and the job's checksum is
+    the one it had before any placement."""
+    job, request, _ = measured
+    before = job.checksum
+    placements = []
+    for resident in (950_000_000, 960_000_000):
+        cal = DirectoryCalibration(tmp_path / f"cal-{resident}")
+        _seed(cal, request.key, CPU, resident=resident)
+        got = place(job, [CPU, CPU_LARGE], MeasuredFit(cal), ok)
+        placements.append((got.worker_class, got.queue, got.batch))
+    assert placements[0] == placements[1] and placements[0][0] == "cpu-large"
+    assert job.checksum == before
+
+
+def test_measured_fit_batch_rule(measured):
+    """``max(1, floor((headroom x share - resident - m0) / (m1 x length)))`` on fixed figures, with
+    ``share`` the device memory over ``workers_per_device`` and ``length`` the longest units; then
+    the fastest recorded batch at or below that bound."""
+    _, request, _ = measured
+    figures = {"fit": MemoryFit(resident=10 * G, m0=2 * G, m1=0.5 * G, n=6)}
+    figures["times"] = ()
+
+    class Fixed:
+        def memory(self, key, hardware):
+            return figures["fit"]
+
+        def unfit(self, key):
+            return ()
+
+        def times(self, key, hardware):
+            return figures["times"]
+
+    h100 = WorkerClass(
+        "h100",
+        "cuda",
+        gpus=1,
+        gpu_type="h100",
+        gpu_mem=80 * G,
+        workers_per_device=2,
+        quantum_jobs=64,
+    )
+    fit = MeasuredFit(Fixed(), headroom=0.9)
+    # share 40G; 0.9 x 40G - 10G - 2G = 24G; m1 x length = 0.5G x 4 = 2G; floor(12)
+    assert fit.batch(request, h100, [1.0, 4.0, None]) == 12
+    figures["times"] = (
+        TimeRecord(1, 0.5, 3),
+        TimeRecord(8, 0.1, 3),
+        TimeRecord(12, 0.2, 3),
+        TimeRecord(16, 0.01, 3),  # above the bound: not taken
+    )
+    assert fit.batch(request, h100, [1.0, 4.0]) == 8
+    figures["times"] = (TimeRecord(4, 0.1, 3),)  # one batch size: the bound stands
+    assert fit.batch(request, h100, [4.0]) == 12
+    figures["times"] = ()
+    figures["fit"] = MemoryFit(resident=40 * G, m0=0.0, m1=0.5 * G, n=6)
+    assert fit.batch(request, h100, [4.0]) == 1  # no room
+    figures["fit"] = MemoryFit(resident=1 * G, m0=0.0, m1=0.0, n=6)
+    assert fit.batch(request, h100, [4.0]) == 64  # no per-job memory: a ticket's worth
+    figures["fit"] = None
+    assert fit.batch(request, h100, [4.0]) == 1  # unmeasured
+
+
+# -- a load out of memory at run time (ported from senselab's pool_unfit_test.py) ---------------
+
+
+def test_a_runtime_load_oom_records_unfit_and_the_replan_avoids_the_class(pool, tasks):
+    """A load runs out of memory on the small class: the jobs move to the large one and run there,
+    one `UnfitRecord` is kept, and the next placement starts on the large class."""
+    small, large = _class("small", mem=SMALL), _class("large", mem=LARGE)
+    pool.classes(small, large)
+    jobs = [pool.job(tasks.UseSized(model="m", x=i), f"j{i}") for i in range(2)]
+    key = fit_request(jobs[0]).key
+    pool.put(jobs, "small", ladder=("large",))
+    tasks.FAIL["load"] = True
+    _, code = _run(pool, small)
+    assert code == 0
+    [record] = pool.calibration.unfit(key)
+    assert (record.resource, record.grant, record.worker_class) == (
+        "host",
+        SMALL,
+        "small",
+    )
+    assert record.code == Code((("sized", "1"),))
+    tasks.FAIL["load"] = False
+    _, code = _run(pool, large)
+    assert code == 0
+    assert [pool.newest(j)[0] for j in jobs] == ["large", "large"]
+    assert [pool.newest(j)[1]["outcome"] for j in jobs] == ["done", "done"]
+    third = pool.job(tasks.UseSized(model="m", x=3), "j3")
+    got = place(third, [small, large], MeasuredFit(pool.calibration), ok)
+    assert got.worker_class == "large" and got.tried[0].verdict == "unfit"
+    assert len(pool.calibration.unfit(key)) == 1
+
+
+def test_a_load_that_fails_on_every_class_records_each_and_the_replan_is_unplaceable(
+    pool, tasks
+):
+    """The moved jobs' load fails on the large class too: it records its own fact, the jobs fail
+    ``Unplaceable``, and no class is left for the next placement."""
+    small, large = _class("small", mem=SMALL), _class("large", mem=LARGE)
+    pool.classes(small, large)
+    job = pool.job(tasks.UseSized(model="m", x=1), "j")
+    key = fit_request(job).key
+    pool.put([job], "small", ladder=("large",))
+    tasks.FAIL["load"] = True
+    _run(pool, small)
+    _run(pool, large)
+    queue, failed = pool.newest(job)
+    assert queue == "large"
+    assert (failed["outcome"], failed["fault"]["type"]) == ("failed", "Unplaceable")
+    assert sorted((r.resource, r.grant) for r in pool.calibration.unfit(key)) == [
+        ("host", SMALL),
+        ("host", LARGE),
+    ]
+    got = place(job, [small, large], MeasuredFit(pool.calibration), ok)
+    assert isinstance(got, Unplaceable)
+    assert [t.verdict for t in got.tried] == ["unfit", "unfit"]
+
+
+def test_unfit_record_unbinds_after_provider_version_change(pool, tasks):
+    """An out-of-memory verdict persists across calibration instances while the provider's
+    ``version()`` is the one the load ran under, and stops binding once it changes: the next
+    placement goes back to the small class."""
+    small, large = _class("small", mem=SMALL), _class("large", mem=LARGE)
+    pool.classes(small, large)
+    job = pool.job(tasks.UseSized(model="m", x=1), "j")
+    pool.put([job], "small", ladder=("large",))
+    tasks.FAIL["load"] = True
+    _run(pool, small)
+    again = pool.job(tasks.UseSized(model="m", x=2), "again")
+    got = place(again, [small, large], MeasuredFit(pool.calibration), ok)
+    assert got.worker_class == "large"
+    assert [(t.worker_class, t.verdict) for t in got.tried] == [
+        ("small", "unfit"),
+        ("large", "unknown"),
+    ]
+    tasks.VERSION["sized"] = "2"
+    later = pool.job(tasks.UseSized(model="m", x=2), "later")
+    got = place(later, [small, large], MeasuredFit(pool.calibration), ok)
+    assert got.worker_class == "small"
+    [record] = pool.calibration.unfit(fit_request(later).key)  # kept, no longer binding
+    assert record.code == Code((("sized", "1"),))
+    assert fit_request(later).code == Code((("sized", "2"),))
+
+
+def test_unplaceable_by_measure_fails_at_submit_and_writes_nothing(
+    tmp_path, tasks, pools
+):
+    """A residency measured too large for every class is ``Failed(UnplaceableJob)`` at submit with
+    its numbers; no ticket is written and no worker started (senselab's
+    ``coordinate_fit_test.py``)."""
+    from pydra.engine.runner import Failed
+    from pydra.workers.pool.pool import UnplaceableJob
+
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    sub.providers = (tasks.Recorder(),)
+    job = Job(task=tasks.Same(model="m", x=1), submitter=sub, name="j")
+    cal = DirectoryCalibration(tmp_path / "pool" / "calibration")
+    resident = 9 * GB
+    _seed(cal, fit_request(job).key, CPU_LARGE, resident=resident)
+    warm = _warm(tmp_path, pools, sub, [CPU, CPU_LARGE], fit=MeasuredFit(cal))
+    reports = []
+    warm.bind(lambda j, outcome: reports.append(outcome))
+    warm.submit([job])
+    [outcome] = reports
+    assert isinstance(outcome, Failed) and isinstance(outcome.error, UnplaceableJob)
+    assert f"resident {resident}" in str(outcome.error)
+    assert list((tmp_path / "pool").rglob("tickets/*.json")) == []
+    assert warm.substrate.handles == []
+
+
+# -- plan() shows the classes tried (through RFC 0002 R8's place hook) --------------------------
+
+
+def test_plan_shows_classes_tried(tmp_path, tasks, pools):
+    """``GraphRunner.plan()`` asks the `WarmPool` where each node's elements would run: the
+    placement carries every class tried with its verdict and numbers, and a recorded unfit load
+    moves the next plan to the larger class. Nothing is written or started."""
+    from pydra.engine.runner import GraphRunner
+
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    sub.providers = (tasks.Recorder(),)
+    small = _class("small", mem="1G", time=60)
+    large = _class("large", mem="4G", time=7200)
+    warm = _warm(tmp_path, pools, sub, [small, large])
+    runner = GraphRunner(
+        tasks.Longs(xs=[1, 2]), sub.store, submitter=sub, on_error="raise_at_end"
+    )
+    [node] = runner.plan(executors={"default": warm}).nodes
+    assert node.path == "S" and len(node.placement) == 2
+    for placement in node.placement:
+        assert placement.worker_class == "large"
+        assert [(t.worker_class, t.verdict) for t in placement.tried] == [
+            ("small", "unfit"),
+            ("large", "fits"),
+        ]
+        assert "time 3600s exceeds the class limit of 60s" in placement.tried[0].reason
+        assert placement.queue.startswith("large#")
+    assert warm.substrate.handles == []
+    assert list((tmp_path / "pool").rglob("tickets/*.json")) == []
+
+    measured = DirectoryCalibration(tmp_path / "measured")
+    job = Job(task=tasks.Same(model="m", x=1), submitter=sub, name="probe")
+    request = fit_request(job)
+    measured.record(UnfitRecord(request.key, "host", 1 * G, "small", request.code))
+    plain = _class("small", mem="1G"), _class("large", mem="4G")
+    warm2 = _warm(
+        tmp_path / "second", pools, sub, list(plain), fit=MeasuredFit(measured)
+    )
+    runner = GraphRunner(
+        tasks.Sames(xs=[1]), sub.store, submitter=sub, on_error="raise_at_end"
+    )
+    [node] = runner.plan(executors={"default": warm2}).nodes
+    [placement] = node.placement
+    assert placement.worker_class == "large"
+    assert [(t.worker_class, t.verdict) for t in placement.tried] == [
+        ("small", "unfit"),
+        ("large", "unknown"),
+    ]
+
+
+# -- the sampled cold re-check -----------------------------------------------------------------
+
+
+def test_recheck_sampling_is_deterministic():
+    """A job is sampled by its checksum against ``recheck_fraction``: 0 never, 1 always, and the
+    same answer every time."""
+    from pydra.workers.pool.pool import _sampled
+
+    checksums = [f"python-{i:064x}" for i in range(200)]
+    assert not any(_sampled(c, 0.0) for c in checksums)
+    assert all(_sampled(c, 1.0) for c in checksums)
+    half = [_sampled(c, 0.5) for c in checksums]
+    assert half == [_sampled(c, 0.5) for c in checksums] and 0 < sum(half) < 200
+    from pydra.workers.pool.settings import PoolSettings
+
+    with pytest.raises(ValueError):
+        PoolSettings(recheck_fraction=1.5)
+
+
+def _recheck_run(tmp_path, pools, tasks, workflow, fraction):
+    from pydra.utils.messenger import AuditFlag, FileMessenger
+
+    messages = tmp_path / "messages"
+    sub = Submitter(
+        cache_root=tmp_path / "store",
+        worker="debug",
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+        messenger_args={"message_dir": str(messages)},
+    )
+    sub.providers = (tasks.Recorder(),)
+    warm = _warm(
+        tmp_path,
+        pools,
+        sub,
+        settings=_settings(idle_polls=40, recheck_fraction=fraction),
+    )
+    runner = _drive(sub, workflow(xs=[1, 2]), warm)
+    warm.close()
+    job = Job(task=tasks.Same(model="m", x=1), submitter=sub, name="k")
+    key = fit_request(job).key
+    parity = DirectoryCalibration(tmp_path / "pool" / "calibration").parity(key)
+    audits = []
+    for path in messages.glob("*.jsonld") if messages.exists() else []:
+        message = json.loads(path.read_text())
+        if message.get("@type") == "pool-recheck":
+            audits.append(message)
+    return runner, parity, audits, sub
+
+
+def test_recheck_mismatch_writes_parity_and_one_audit(tmp_path, tasks, pools):
+    """With ``recheck_fraction=1`` each settled job runs again alone on a fresh residency, through
+    the store's verify path: a task whose output differs on every run writes a `ParityRecord` per job
+    with both digests, and one audit message for the residency; the committed results stand.
+    """
+    runner, parity, audits, sub = _recheck_run(
+        tmp_path, pools, tasks, tasks.Freshes, 1.0
+    )
+    assert runner.done and not runner.failed
+    assert all(len(sub.store.stored(r.checksum)) == 1 for r in parity)
+    assert len(parity) == 2 and not any(r.equal for r in parity)
+    assert all(r.batch_sizes == (1, 1) for r in parity)
+    assert all(r.committed and r.fresh and r.committed != r.fresh for r in parity)
+    assert len(audits) == 1
+    assert audits[0]["residency"] == parity[0].key
+    assert audits[0]["checksum"] in {r.checksum for r in parity}
+
+
+def test_recheck_equal_writes_parity_and_no_audit(tmp_path, tasks, pools):
+    """A deterministic task's re-check writes equal `ParityRecord`s and no audit message; with the
+    default fraction of 0 nothing is re-checked."""
+    _, parity, audits, _ = _recheck_run(tmp_path, pools, tasks, tasks.Sames, 1.0)
+    assert len(parity) == 2 and all(r.equal and r.committed == r.fresh for r in parity)
+    assert audits == []
+    _, none, _, _ = _recheck_run(tmp_path / "off", pools, tasks, tasks.Sames, 0.0)
+    assert none == []
+
+
+def test_recheck_goes_through_the_verify_path(tmp_path, tasks, pools, monkeypatch):
+    """The re-check is a run marked to verify against the committed entry: the store hands the
+    entry and the fresh digest to its reuse hook's ``compare``, whose refusal makes the re-check
+    unequal with the hook's reason. (Patched here, in the coordinator's process only: the workers'
+    own runs verify nothing.)"""
+    from pydra.engine.portable.reuse import PolicyReuse
+
+    seen = []
+
+    def compare(self, candidate, stored, fresh, fresh_digest, task):
+        seen.append((candidate.admitted_by, stored.digest, fresh_digest))
+        raise ValueError("the hook refuses")
+
+    monkeypatch.setattr(PolicyReuse, "compare", compare)
+    _, parity, audits, sub = _recheck_run(tmp_path, pools, tasks, tasks.Sames, 1.0)
+    assert len(seen) == 2
+    assert all(by == "recheck" and stored == fresh for by, stored, fresh in seen)
+    assert len(parity) == 2 and not any(r.equal for r in parity)
+    assert all("the hook refuses" in r.reason for r in parity)
+    assert len(audits) == 1
+    assert all(len(sub.store.stored(r.checksum)) == 1 for r in parity)

@@ -9,6 +9,11 @@ from pydra.engine.lease import LeaseSettings
 __all__ = ["PoolSettings"]
 
 
+def _fraction(_inst, attribute, value) -> None:
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"{attribute.name} is in [0, 1], not {value!r}")
+
+
 def _positive(_inst, attribute, value) -> None:
     if value is not None and value <= 0:
         raise ValueError(f"{attribute.name} must be positive, not {value!r}")
@@ -47,6 +52,9 @@ class PoolSettings:
         when a per-job time is measured.
     unmeasured_workers : int
         Workers wanted per queue when no per-job time is measured.
+    recheck_fraction : float
+        The fraction of settled jobs the coordinator runs again alone on a fresh residency and
+        compares with the committed entry (RFC 0005 section 4.4), sampled by checksum; 0: none.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -60,6 +68,7 @@ class PoolSettings:
     max_queued_jobs: int | None = attrs.field(default=None, validator=_positive)
     target_wall_s: float = attrs.field(default=600.0, validator=_positive)
     unmeasured_workers: int = attrs.field(default=1, validator=_positive)
+    recheck_fraction: float = attrs.field(default=0.0, validator=_fraction)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)

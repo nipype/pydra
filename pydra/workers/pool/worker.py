@@ -28,8 +28,10 @@ one loop:
    charged ``restart`` generation until ``crashes_charged``. An infrastructure fault requeues the job;
    at ``infrastructure_replacements`` faults of the residency in the coordinator's epoch the residency
    is held on its queue and the ticket's open jobs are settled ``held``.
-5. **Settle** each job as it finishes: its `Sample`, then its outcome record (proved), then the ticket's
-   settled mark.
+5. **Settle** each job as it finishes: its `Sample` (kept too in the pool's calibration directory,
+   ``<root>/calibration``, for a job with resident state), then its outcome record (proved), then the
+   ticket's settled mark. A load that runs out of memory is kept there as an `UnfitRecord` naming the
+   class's grant and the providers' versions (RFC 0005 section 3.3).
 6. **Prove** every held claim each renewal interval while a call runs; a lost claim is abandoned (the
    call in flight stopped when a provider's process runs it, its outcome not written).
 7. **Exit** after ``idle_polls`` empty polls; on SIGTERM after settling finished jobs and releasing the
@@ -74,9 +76,17 @@ from pydra.workers.pool.faults import (
     attached,
     fault_of,
 )
+from pydra.workers.pool.calibration import (
+    Code,
+    DirectoryCalibration,
+    Sample,
+    UnfitRecord,
+    code_of,
+    hardware_of,
+    residency_key,
+)
 from pydra.workers.pool.samples import (
     HardwareClass,
-    Sample,
     device_memory,
     host_memory,
     read_hardware,
@@ -302,6 +312,7 @@ class Worker:
         self.memory = memory
         self.device_memory = device_memory
         self.codec = codec or PrivatePickle()
+        self.calibration = DirectoryCalibration(self.root / "calibration")
         self.pool: PoolRoot | None = None
         self.client: BeaterClient | None = None
         self.cls: WorkerClass | None = None
@@ -798,7 +809,7 @@ class Worker:
         try:
             load_s, loaded = self._load(jobs[0][1])
         except Exception as exc:
-            self._load_fault(claim, [e for e, _ in jobs], exc)
+            self._load_fault(claim, [e for e, _ in jobs], exc, jobs[0][1])
             return
         queue = claim.queue
         cold = queue not in self._warm or loaded
@@ -919,18 +930,58 @@ class Worker:
                 submitter.providers = (*self.providers, *own)
 
     def _load_fault(
-        self, claim: Claim, entries: list[TicketJob], exc: BaseException
+        self,
+        claim: Claim,
+        entries: list[TicketJob],
+        exc: BaseException,
+        job: "Job | None" = None,
     ) -> None:
-        """A load failed: a resource fault moves the ticket's jobs up the ladder (`_resource`);
-        anything else is one infrastructure fault of the residency (`_infrastructure`). The claim is
-        released."""
+        """A load failed: a resource fault is kept as an `UnfitRecord` (`_unfit`) and moves the
+        ticket's jobs up the ladder (`_resource`); anything else is one infrastructure fault of the
+        residency (`_infrastructure`). The claim is released."""
         fault = fault_of(exc, "load", self.classify)
         logger.error("loading the residency of %s failed: %r", claim.digest, exc)
         if fault.kind == "resource":
+            if fault.reason == "oom":
+                self._unfit(claim, exc, job)
             self._resource(claim, entries, fault, "load")
         else:
             self._infrastructure(claim, entries, fault, {"stop": False}, phase="load")
         self._release(claim)
+
+    def _unfit(self, claim: Claim, exc: BaseException, job: "Job | None") -> None:
+        """Keep a load of the ticket's residency that ran out of memory as an `UnfitRecord`: host
+        memory when a `MemoryError` is in the exception's chain, else the device's; the grant is
+        the class's host memory, or its share of a device; the code is the providers' versions.
+        """
+        key = residency_key(claim.ticket.residency)
+        if key is None:
+            return
+        host = any(isinstance(link, MemoryError) for link in _faults._chain(exc))
+        resource: ty.Literal["device", "host"] = (
+            "host" if host or not self.cls.gpus else "device"
+        )
+        if resource == "host":
+            grant = self.cls.mem
+        else:
+            grant = (
+                None
+                if self.cls.gpu_mem is None
+                else self.cls.gpu_mem // self.cls.workers_per_device
+            )
+        code = None if job is None else code_of(job, self.providers)
+        record = UnfitRecord(
+            key,
+            resource,
+            grant,
+            self.cls.name,
+            code if code is not None else Code(),
+            worker=self.token,
+        )
+        try:
+            self.calibration.record(record)
+        except OSError as err:
+            logger.warning("could not record an unfit load: %s", err)
 
     def _gap(self, fault: FaultRecord) -> None:
         """Report an unclassified exception from the pool's machinery, once per type."""
@@ -1175,7 +1226,7 @@ class Worker:
                 if record is None or record.phase != "load":
                     raise
                 # a load inside the call: never split or retried; every open job of the ticket
-                self._load_fault(claim, claim.open_jobs() or [entry], exc)
+                self._load_fault(claim, claim.open_jobs() or [entry], exc, job)
                 group["stop"] = True
                 return "stopped"
             verdict = self._settle_job(claim, entry, settled, state, group, tries)
@@ -1479,6 +1530,8 @@ class Worker:
             reload=bool(group.get("reload", False)),
             worker=self.token,
             ended=time.time(),
+            key=residency_key(claim.ticket.residency),
+            hardware=hardware_of(self.cls),
         )
 
     def _settle(
@@ -1502,6 +1555,11 @@ class Worker:
                 }
             )
             fields["sample"] = record
+            if sample.key is not None:
+                try:
+                    self.calibration.record(sample)
+                except OSError as err:
+                    logger.warning("could not record a sample: %s", err)
         written = claim.outcome(entry, attempt, kind, **fields)
         if written is None:
             self._lost.add(claim.lease.token_dir)
