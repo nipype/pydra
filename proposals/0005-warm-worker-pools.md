@@ -1340,6 +1340,15 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 
 ## 13. Changes in revisions
 
+### Amendment to revision 4 (implementation of W12)
+
+| Item | Change |
+|---|---|
+| The per-job band of `test_one_load_n_jobs_h100` | §11 W12: "per-job wall after the load within the calibration's band" reads as **in the steady regime**: the calibration's batch-1 steady per-job time (`TimeRecord`) is fitted from every warm call of the run, and the warm calls' 95th-percentile per-job time is below the cold call's. No numeric width is set: none is measured, and a factor would be an unmeasured threshold. A numeric band needs a measured width and a further amendment. |
+| Killing a worker in `test_worker_killed_mid_ticket` | §11 W12: `scancel --signal=KILL` is a cancel on real Slurm (SIGTERM, then SIGKILL after `KillWait`), so the worker drains and releases its claim and no takeover happens (seen on the CI Slurm container: `CANCELLED ... DUE to SIGNAL Terminated`). The test SIGKILLs the worker process with an `srun --jobid=<worker job> --overlap` step, run without the allocation's `SLURM_*`, `SRUN_*`, `SBATCH_*` and `SALLOC_*` input variables (keeping `SLURM_CONF`) and with explicit minimal sizes. |
+| Which memory an out-of-memory load ran out of | §3.3, §6: the `UnfitRecord`'s resource is what the first out-of-memory link of the exception's chain says. A device type (torch's two, cupy's `cupy.cuda.memory.OutOfMemoryError`, which is a `MemoryError`) is the device's before the generic `MemoryError` rule; jax's `ResourceExhaustedError` is the device's only when its message names a device; a `MemoryError` is the host's. A loader that caught a device OOM and then ran out of host memory falling back is the host's. |
+| A stopped Slurm worker | §4.5: a job `SlurmSubstrate.stop` cancelled is neither live nor adopted again while Slurm still lists it (during `KillWait`, or completing), and is forgotten once it leaves the listing. |
+
 ### Amendment to revision 4 (implementation of W11a)
 
 | Item | Change |
