@@ -37,10 +37,11 @@ class MeasuredFit:
 
     1. A class whose ``time`` is below the request's is ``"unfit"`` (as under every `Fit`).
     2. A class is ``"unfit"`` when a load of the residency ran out of memory, under the code it
-       runs under now, on that class, or in a grant at least as large as the class's of the same
-       resource: host records against host memory on every class, device records against the
-       device share on a GPU class. This comes before the next step, so an out-of-memory verdict
-       recorded on a class of unknown device memory (with the memory its worker read) holds.
+       runs under now, in a grant at least as large as the class's of the same resource (or, when
+       either grant is unknown, on that class): host records against host memory on every
+       class, device records against the device share on a GPU class. This comes before the
+       next step, so an out-of-memory verdict recorded on a class of unknown device memory (with
+       the memory its worker read) holds for that class.
     3. A GPU class with ``gpu_mem=None`` is ``"unknown"``.
     4. With a memory fit of the residency on the class's hardware, the class is ``"too small"``
        when ``resident + m0 > headroom × grant``, otherwise it ``"fits"``.
@@ -85,8 +86,10 @@ class MeasuredFit:
             if not r.binds(request.code) or r.resource not in grants:
                 continue
             grant = grants[r.resource]
-            if r.worker_class == cls.name or (
-                r.grant is not None and grant is not None and r.grant >= grant
+            if (
+                r.worker_class == cls.name
+                if r.grant is None or grant is None
+                else r.grant >= grant
             ):
                 held.append((r, grant))
         if not held:

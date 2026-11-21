@@ -142,8 +142,35 @@ class Grows(Recorder):
         return spec
 
 
+class _Group:
+    def known_pids(self):
+        return [CHILD]
+
+
+class _Handle:
+    # what a process-owning provider's load returns: its process group
+    group = _Group()
+
+
+CHILD = 4_000_000  # a pid no process has: its /proc reads are faked
+
+
+class Child(Recorder):
+    # a provider whose model lives in a child process
+    name = "child"
+
+    def load(self, spec, device):
+        LOADS.append("child")
+        return _Handle()
+
+
 @python.define
 def UseSized(model: Provided[object, "sized"], x: int) -> int:
+    return x
+
+
+@python.define
+def UseChild(model: Provided[object, "child"], x: int) -> int:
     return x
 
 
@@ -1306,7 +1333,7 @@ def test_gpu_oom_verdict_holds(tmp_path, tasks, pools, case):
 class _Meter:
     """A fake `CallMeter`: every call peaks 7 host bytes and 70 device bytes above its start."""
 
-    def start(self):
+    def start(self, pids=None):
         return (0, 0)
 
     def stop(self, state):
@@ -1452,3 +1479,166 @@ def test_workers_write_to_the_given_calibration_directory(tmp_path, tasks, pools
         _warm(tmp_path / "other", pools, sub, calibration=Elsewhere())
     with pytest.warns(UserWarning, match="no out-of-memory verdict"):
         _warm(tmp_path / "third", pools, sub, fit=MeasuredFit(given))
+
+
+# -- fix round 2: provider children on the host, unseen pids on the device, grants over names ---
+
+
+def _fake_proc(monkeypatch, tasks, child):
+    """Fake ``/proc``: this process holds 100 MB and peaks 0 above it; the child, once loaded,
+    holds ``child`` bytes (None: unreadable) and peaks 1 GB above them."""
+    from pydra.workers.pool import samples
+
+    def status(field, pid="self"):
+        if pid == tasks.CHILD:
+            if child is None or "child" not in tasks.LOADS:
+                return None
+            return child + (GB if field == "VmHWM" else 0)
+        return 100 * 10**6
+
+    monkeypatch.setattr(samples, "_status_kb", status)
+    monkeypatch.setattr(samples, "_reset_hwm", lambda pid: True, raising=False)
+
+
+@pytest.mark.parametrize("child", [12 * GB, None])
+def test_a_providers_child_process_counts_on_the_host(pool, tasks, monkeypatch, child):
+    """A provider whose model lives in a child process: the host figures sum every process the
+    worker owns, so a 12 GB child does not "fit" a 4 GB class; when a child's figures cannot be
+    read there is no host peak, so no host fit, and placement falls back to the declared
+    figures."""
+    from pydra.workers.pool.worker import Worker
+
+    _fake_proc(monkeypatch, tasks, child)
+    pool.submitter.providers = (tasks.Child(),)
+    small, large = _class("small", mem=4 * GB), _class("large", mem=16 * GB)
+    pool.classes(small, large)
+    jobs = [pool.job(tasks.UseChild(model="m", x=i), f"c{i}") for i in range(2)]
+    pool.put(jobs, "small")
+    worker = Worker(
+        pool.path,
+        small,
+        settings=_settings(),
+        memory=lambda: (100 * 10**6, None),
+        device_memory=lambda: None,
+    )
+    assert worker.run() == 0
+    key = fit_request(jobs[0]).key
+    measured = DirectoryCalibration(pool.calibration.root, min_samples=1)
+    [warm] = [s for s in measured.samples(key, hardware_of(small)) if not s.cold]
+    got = place(jobs[0], [small, large], MeasuredFit(measured), ok)
+    if child is None:
+        assert (warm.resident_bytes, warm.peak_bytes) == (None, None)
+        assert measured.memory(key, hardware_of(small)) is None
+        assert got.worker_class == "small" and got.tried[0].verdict == "unknown"
+    else:
+        assert warm.resident_bytes == 100 * 10**6 + child
+        assert warm.peak_bytes == warm.resident_bytes + GB
+        assert got.worker_class == "large"
+        assert [t.verdict for t in got.tried] == ["too small", "fits"]
+
+
+def test_a_device_read_that_sees_no_own_pid_is_unknown(tmp_path, monkeypatch):
+    """``nvidia-smi`` listing pids of another namespace (a container): with CUDA initialised in
+    this process, no row for this worker is unknown (None), never 0; torch's reserved bytes are the
+    device peak a `CallMeter` reads."""
+    if not POSIX:
+        pytest.skip("a shell-script stand-in for nvidia-smi")
+    from pydra.workers.pool import samples
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "nvidia-smi"
+    fake.write_text("#!/bin/sh\necho '1, 4096'\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+    class Cuda:
+        def reset_peak_memory_stats(self):
+            self.peak = 0
+
+        def memory_reserved(self):
+            return 5 * G
+
+        def max_memory_reserved(self):
+            return 7 * G
+
+        def memory_allocated(self):
+            raise AssertionError("the allocated figure is not the device pressure")
+
+        max_memory_allocated = memory_allocated
+
+    monkeypatch.setattr(samples, "_torch_cuda", lambda: None)
+    assert samples.device_memory([os.getpid()]) == 0  # no CUDA here: nothing held
+    assert samples.device_memory() == 4096 << 20
+    monkeypatch.setattr(samples, "_torch_cuda", lambda: Cuda())
+    assert samples.device_memory([os.getpid()]) is None
+    meter = samples.CallMeter()
+    monkeypatch.setattr(samples, "_reset_hwm", lambda pid: False)
+    assert meter.stop(meter.start([os.getpid()])) == (None, 2 * G)
+
+
+def test_a_record_on_a_class_whose_grant_grew_does_not_bind(measured):
+    """A record binds by grant when both are known: 16G recorded on ``cpu`` does not make ``cpu``
+    unfit once it is raised to 64G (§3.3: a grant at least as large); by name only when a grant is
+    unknown."""
+    _, request, _ = measured
+    record = UnfitRecord(request.key, "host", 16 * G, "cpu", request.code)
+
+    class Fixed:
+        def memory(self, key, hardware):
+            return None
+
+        def unfit(self, key):
+            return [record]
+
+        def times(self, key, hardware):
+            return ()
+
+    fit = MeasuredFit(Fixed())
+    assert fit.judge(request, _class("cpu", mem=16 * G)).verdict == "unfit"
+    assert fit.judge(request, _class("cpu", mem=64 * G)).verdict != "unfit"
+    assert (
+        fit.judge(request, _class("cpu")).verdict == "unfit"
+    )  # grant unknown: by name
+
+
+def test_an_unreachable_calibration_directory_is_not_made_locally(pool, tasks, caplog):
+    """A calibration directory named in the pool whose parent is absent where the worker runs (a
+    coordinator's path not mounted on the node): the worker warns once, writes nothing and makes
+    no local tree."""
+    import logging
+
+    absent = pool.path.parent / "not-mounted" / "calibration"
+    pool.pool.write_faults(pool.pool.take_epoch(), {"calibration": str(absent)})
+    jobs = [pool.job(tasks.UseSized(model="m", x=i), f"s{i}") for i in range(2)]
+    pool.put(jobs, "cpu")
+    with caplog.at_level(logging.WARNING, logger="pydra.pool"):
+        _, code = _run(pool, _class())
+    assert code == 0
+    assert not absent.parent.exists()
+    assert not (pool.path / "calibration").exists()
+    warned = [r for r in caplog.records if "not reachable here" in r.getMessage()]
+    assert len(warned) == 1
+
+
+def test_the_host_peak_sums_each_own_process_or_is_none(monkeypatch):
+    """The call's host peak sums each own process's high-water mark above its resident set before
+    the call; one process whose mark cannot be read gives no peak."""
+    from pydra.workers.pool import samples
+
+    figures = {
+        (1, "VmRSS"): 100,
+        (1, "VmHWM"): 130,
+        (2, "VmRSS"): 1000,
+        (2, "VmHWM"): 1500,
+    }
+    monkeypatch.setattr(
+        samples, "_status_kb", lambda field, pid="self": figures.get((pid, field))
+    )
+    monkeypatch.setattr(samples, "_reset_hwm", lambda pid: True)
+    monkeypatch.setattr(samples, "_torch_cuda", lambda: None)
+    meter = samples.CallMeter()
+    assert meter.stop(meter.start([1, 2])) == (30 + 500, None)
+    state = meter.start([1, 2])
+    del figures[(2, "VmHWM")]
+    assert meter.stop(state) == (None, None)

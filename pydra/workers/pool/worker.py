@@ -278,7 +278,8 @@ class Worker:
         Read the hardware, this process's ``(current, peak)`` host bytes, and the device bytes of
         this worker's own processes (default: this process and its providers' process groups).
     meter : CallMeter
-        Reads each call's host and device peaks where they are cheap (`CallMeter`).
+        Reads each call's host and device peaks where they are cheap (`CallMeter`), over this
+        worker's own processes.
     codec : JobCodec
     token : str, optional
         The worker's token (32 hex digits), named by the substrate that started it so that its
@@ -321,7 +322,10 @@ class Worker:
         # residency key -> (host bytes, device bytes) gained across its load in this worker
         self._load_bytes: dict[str, tuple[int | None, int | None]] = {}
         self.codec = codec or PrivatePickle()
-        self.calibration = DirectoryCalibration(self.root / "calibration")
+        self.calibration: DirectoryCalibration | None = DirectoryCalibration(
+            self.root / "calibration"
+        )
+        self._calibration_warned = False
         self.pool: PoolRoot | None = None
         self.client: BeaterClient | None = None
         self.cls: WorkerClass | None = None
@@ -423,9 +427,23 @@ class Worker:
             self._recorded = True
         self._faults_epoch, record = found if found is not None else (None, {})
         where = record.get("calibration")
-        self.calibration = DirectoryCalibration(
-            where if isinstance(where, str) and where else self.root / "calibration"
+        home = (
+            Path(where)
+            if isinstance(where, str) and where
+            else self.root / "calibration"
         )
+        if home.parent.is_dir():
+            self.calibration = DirectoryCalibration(home)
+        else:
+            # a coordinator's path not mounted here: never a calibration tree local to this node
+            if not self._calibration_warned:
+                self._calibration_warned = True
+                logger.warning(
+                    "the pool's calibration directory %s is not reachable here (its parent is "
+                    "absent): this worker records no samples or unfit loads",
+                    home,
+                )
+            self.calibration = None
         if self._faults_arg is None:
             budgets = record.get("budgets")
             self.faults = (
@@ -946,9 +964,20 @@ class Worker:
         return took, loaded
 
     def _held_bytes(self) -> tuple[int | None, int | None]:
-        """This worker's host resident bytes and its own processes' device bytes, now."""
+        """The host resident bytes and the device bytes of this worker's own processes (itself and
+        its providers' process groups), now; host None when any of them cannot be read.
+        """
+        from pydra.workers.pool import samples
+
         device = self.device_memory() if self.cls.device == "cuda" else None
-        return self.memory()[0], device
+        host = self.memory()[0]
+        for pid in self._own_pids():
+            if host is None:
+                break
+            if pid != os.getpid():
+                rss = samples.process_rss(pid)
+                host = None if rss is None else host + rss
+        return host, device
 
     def _own_pids(self) -> list[int]:
         """This process and the processes its resident providers started."""
@@ -1024,6 +1053,8 @@ class Worker:
         record = UnfitRecord(
             key, resource, grant, self.cls.name, code, worker=self.token
         )
+        if self.calibration is None:
+            return
         try:
             self.calibration.record(record)
         except OSError as err:
@@ -1367,7 +1398,7 @@ class Worker:
         if deadline is not None:
             with contextlib.suppress(BeaterDead):  # then the loop enforces it
                 self.client.deadline(token_dir, deadline, payload)
-        metered = self.meter.start()
+        metered = self.meter.start(self._own_pids())
         call = self._run_call(claim, job, deadline, payload)
         try:
             peaks = self.meter.stop(metered)
@@ -1635,7 +1666,7 @@ class Worker:
                 }
             )
             fields["sample"] = record
-            if sample.key is not None:
+            if sample.key is not None and self.calibration is not None:
                 try:
                     self.calibration.record(sample)
                 except OSError as err:

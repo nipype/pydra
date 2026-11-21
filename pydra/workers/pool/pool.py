@@ -1154,7 +1154,8 @@ class WarmPool:
         try:
             self._recheck_queue.put_nowait(item)
         except queuelib.Full:
-            self.rechecks_dropped += 1
+            with self._lock:
+                self.rechecks_dropped += 1
             logger.warning(
                 "the re-check queue is full (%d): a re-check is dropped (%d so far)",
                 self.recheck_queue,
@@ -1177,7 +1178,8 @@ class WarmPool:
             if item is None:
                 return
             if self._recheck_stop.is_set():
-                self.rechecks_dropped += 1
+                with self._lock:
+                    self.rechecks_dropped += 1
                 continue
             j, result, outcome = item
             try:
