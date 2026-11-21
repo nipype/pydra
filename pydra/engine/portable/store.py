@@ -887,6 +887,7 @@ class PortableStore:
         *,
         verify: ty.Any = None,
         replace: bool = False,
+        expected: str | None = None,
     ) -> Committed:
         """Publish ``outputs`` at the address of ``checksum`` and ``context`` (RFC 0003 section
         5.1).
@@ -902,8 +903,14 @@ class PortableStore:
         once the entry is staged, ``Reuse.compare`` is called with the stored entry and the fresh
         outputs, then ``on_commit`` with the staging directory, both before the rename; if either
         raises, nothing is committed. A candidate that can no longer be read is not compared.
-        ``replace`` and the `Result` of a lost race (which `commit` settles) are not acted on
-        here yet.
+
+        ``replace`` is a rerun (RFC 0003 section 10): just before the rename the entry at the
+        address is evicted if its output digest is ``expected``, the digest the caller read when
+        its job started (None: there was none, nothing is evicted). If another writer commits
+        in between, or the evict cannot move the entry (this user does not own it, or the
+        parent is not writable), the publish loses the race like any other and the occupant is
+        never served: the result is ours, stored only when the digests are equal. The reuse
+        hook is not asked.
 
         Raises
         ------
@@ -930,7 +937,7 @@ class PortableStore:
                 with self._container_staging(root) as staging:
                     return self._publish(
                         root, staging, name, ref, shard, checksum, key, context,
-                        outputs, task, source, writer, verify,
+                        outputs, task, source, writer, verify, replace, expected,
                     )  # fmt: skip
             finally:
                 if source is not None:
@@ -1032,6 +1039,8 @@ class PortableStore:
         source: StorageDir | None,
         writer: str,
         verify: Candidate | None = None,
+        replace: bool = False,
+        expected: str | None = None,
     ) -> Committed:
         """Stage, place and clean up once. A thread touches the staging directory every
         quarter of ``ages.staging`` for as long as it is being written or placed, so `collect`
@@ -1060,6 +1069,8 @@ class PortableStore:
                         os.sync()
                 finally:
                     stage.close()
+                if replace and expected is not None:
+                    self._evict_for_rerun(root, ref, expected)
                 committed = self._place(
                     root, staging, name, ref, shard, checksum, task, writer, digest
                 )
@@ -1077,6 +1088,22 @@ class PortableStore:
         if committed.stored:
             _discard(staging, name)  # renamed away, or equal to the occupant
         return committed
+
+    def _evict_for_rerun(self, root: StorageDir, ref: EntryRef, expected: str) -> None:
+        """Move the entry a rerun replaces to ``quarantine/``, if it is still the one the job
+        read (RFC 0003 section 10). An entry that cannot be moved stays, and the rename that
+        follows loses the race. The provenance under ``audit/`` is not removed with it: the
+        rerun's own attempt is recorded there, at the same address."""
+        try:
+            self._evict(root, ref, expected)
+        except (StoreNotWritable, EntryFormatUnknown, EntryNotTrusted) as err:
+            logger.warning("the rerun could not evict %s: %s", ref.fingerprint, err)
+        except FileNotFoundError:
+            pass  # gone already
+        except OSError as err:
+            logger.warning(
+                "the rerun could not evict %s: %s: %s", ref.fingerprint, ref.cdir, err
+            )
 
     @staticmethod
     def _staged(staging: StorageDir, name: str) -> bool:
@@ -2166,12 +2193,14 @@ class PortableStore:
         wd = self._maybe_work_dir(job)
         try:
             if job.committed is not None:
-                found = self._read_committed(job, wd, job.committed)
+                found = self._read_committed(job, wd, job.committed, settled)
             else:
                 found = None
                 doc = self._committed_doc(job, wd, settled) if wd is not None else None
                 if doc is not None:
-                    found = self._read_committed(job, wd, self._committed_of(doc, wd))
+                    found = self._read_committed(
+                        job, wd, self._committed_of(doc, wd), settled
+                    )
             if found is None:
                 found = self.read_own(job)
         except FileNotFoundError:
@@ -2192,7 +2221,11 @@ class PortableStore:
         return self._read_committed(job, self._maybe_work_dir(job), committed)
 
     def _read_committed(
-        self, job: "Job", wd: Path | None, committed: Committed
+        self,
+        job: "Job",
+        wd: Path | None,
+        committed: Committed,
+        settled: bool = False,
     ) -> Result | None:
         if committed.stored:
             ref = committed.entry
@@ -2206,10 +2239,9 @@ class PortableStore:
                 raise CorruptEntry(
                     f"the committed entry {ref.cdir} is not the entry of the job"
                 )
-            if not readonly:
-                result = self._read_ref(ref, job.task, shard)
-            else:
-                result = self._read_readonly(ref, job.task, shard, trust)
+            result = self._read_recorded(
+                job, ref, shard, trust, readonly, committed, settled
+            )
         elif wd is None or committed.kept is None:
             return None
         elif os.path.basename(committed.kept) == _KEPT_ENTRY:
@@ -2221,6 +2253,45 @@ class PortableStore:
         result.committed = committed
         result.stored = committed.stored
         return result
+
+    def _read_recorded(
+        self,
+        job: "Job",
+        ref: EntryRef,
+        shard: str,
+        trust: Trust,
+        readonly: bool,
+        committed: Committed,
+        settled: bool = False,
+    ) -> Result:
+        """The entry a record names, which must still be the one that was recorded: its output
+        digest is ``committed.committed_digest``. A rerun replaces an entry at its address, so
+        an address alone no longer names its content. A mismatch is raised at once, and when
+        ``settled`` retried until the visibility timeout first (a stale lookup on shared
+        storage): an unsettled reader is called from an event loop and never sleeps."""
+        deadline = time.monotonic() + (self.visibility_timeout if settled else 0.0)
+        n = 0
+        while True:
+            with self._open_root_for(ref, trust, readonly) as root:
+                stored, where = self._read_entry(
+                    root, ref, job.task, shard, trust=trust, readonly=readonly
+                )
+            expected = committed.committed_digest
+            if expected is None or stored.digest == expected:
+                return self._result_at(stored, where, job.task)
+            if time.monotonic() >= deadline:
+                raise StoreUnavailable(
+                    errno.ESTALE,
+                    f"{ref.cdir}/{ref.fingerprint} was replaced since it was recorded "
+                    "(a rerun, or an entry committed over an evicted one)",
+                )
+            n += 1
+            time.sleep(min(0.005 * 2**n, 0.25))
+
+    def _open_root_for(self, ref: EntryRef, trust: Trust, readonly: bool) -> StorageDir:
+        if readonly:
+            return StorageDir.open_root(ref.root, self.policy, trust=trust)
+        return self._open()
 
     def _work_trust(self, handle: StorageDir, name: str) -> Trust:
         """The trust to read ``name`` in a work directory with: ``private`` if it is owned by
@@ -2463,6 +2534,65 @@ class PortableStore:
                 context,
             )
 
+    def read_succeeded(
+        self, checksum: str, context: Context, task: "Task | None"
+    ) -> Result | None:
+        """The result stored at the rank-0 address of ``checksum`` and ``context``, read
+        without a lease (RFC 0003 section 5.2): one ``lstat`` of the entry, the cost of the
+        success record of `PickleStore`, and on a miss nothing more. A present entry goes
+        through the reuse hook like any lookup, and a result is returned only for a ``SERVE``
+        verdict; ``VERIFY``, ``REFUSE`` and an entry that does not verify return None, and the
+        job is dispatched (a runner that must carry the verify mark calls `find`). Only the
+        entry at this store's own root and the job's own fingerprint is probed and served: a
+        reader in another process that finds no record reads that address, so a result from
+        another context or a read-only root is left to `find` under the job's lease, which
+        records what it served. No metadata call but the one ``lstat`` is made on a miss.
+        """
+        cdir = cdir_for(checksum)
+        fingerprint = self.identity.fingerprint(context)
+        shard = shard_for(cdir, checksum, self.header.shard)
+        try:
+            os.lstat(
+                os.path.join(self.path, self.header.entries, shard, cdir, fingerprint)
+            )
+        except OSError:  # absent, or not visible from here: dispatch it
+            return None
+        own = EntryRef(self.path, cdir, fingerprint)
+        try:
+            found = self._find(checksum, context, task, own)
+        except Exception as err:  # a broken hook or an unreadable entry: run it leased
+            logger.warning("reading %s without its lease: %r", checksum, err)
+            return None
+        return found.result if isinstance(found, Hit) else None
+
+    def begin_rerun(self, job: "Job") -> None:
+        """Mark ``job`` as a rerun that replaces the entry at its own address (RFC 0003
+        section 10), under its lease: ``job.replace`` is set, and ``job.replaces`` is the output
+        digest of the entry there now, which the publish evicts only if it is still the one at
+        the address (None if there is none or it cannot be read). The job does not verify
+        against anything: the hook is not asked."""
+        job.replace = True
+        job.verify = None
+        job.replaces = None
+        cdir = cdir_for(job.checksum)
+        fingerprint = self.identity.fingerprint(job.context)
+        shard = shard_for(cdir, job.checksum, self.header.shard)
+        try:
+            found = self._stored_in(self.path, self.trust, cdir, shard, fingerprint)
+            if not found:
+                return
+            ref, context, context_digest = found[0]
+            read = self._serve(
+                job.checksum,
+                Candidate(ref, context, context_digest, 0, "exact"),
+                job.task,
+            )
+        except (_Changed, FileNotFoundError, OSError) as err:
+            logger.debug("the entry a rerun replaces cannot be read: %s", err)
+            return
+        if read is not None:
+            job.replaces = read[0].digest
+
     def find(self, job: "Job") -> Lookup:
         """What ``job`` may reuse (RFC 0003 section 7.1): a `Hit` with the result to serve, a
         `Verify` whose candidate the job runs against (the caller sets ``job.verify``), or a
@@ -2489,10 +2619,16 @@ class PortableStore:
         found = self._find(checksum, context, task)
         return found.result if isinstance(found, Hit) else None
 
-    def _find(self, checksum: str, context: Context, task: "Task | None") -> Lookup:
+    def _find(
+        self,
+        checksum: str,
+        context: Context,
+        task: "Task | None",
+        own: EntryRef | None = None,
+    ) -> Lookup:
         for _ in range(_RERANKS):
             ranked = self.reuse.rank(context, self.stored(checksum), task)
-            outcome = self._consider(checksum, ranked, context, task)
+            outcome = self._consider(checksum, ranked, context, task, own)
             if outcome is not _CONTENDED:
                 return ty.cast(Lookup, outcome)
         logger.warning(
@@ -2516,9 +2652,12 @@ class PortableStore:
         ranked: ty.Sequence[Candidate],
         context: Context,
         task: "Task | None",
+        own: EntryRef | None = None,
     ) -> "Lookup | object":
         mine = self.identity.fingerprint(context)
         for candidate in ranked:
+            if own is not None and not _same_entry(candidate.entry, own):
+                return Miss()  # only the own address is wanted, and it was not taken
             verdict = self.reuse.verdict(candidate, context, task)
             if verdict is Verdict.REFUSE:
                 return Miss()
@@ -2719,6 +2858,7 @@ class PortableStore:
             }
         files_from = wd if wd is not None else getattr(lease, "cache_dir", None)
         kind = "entry"
+        replace = bool(getattr(job, "replace", False))
         try:
             committed = self.publish(
                 checksum,
@@ -2728,6 +2868,8 @@ class PortableStore:
                 result.task,
                 files_from,
                 verify=getattr(job, "verify", None),
+                replace=replace,
+                expected=getattr(job, "replaces", None),
             )
         except UnencodableOutput:
             if job is None:
@@ -2740,7 +2882,9 @@ class PortableStore:
         else:
             taken = (
                 self._serve_occupant(checksum, committed, context, result.task)
-                if not committed.stored and committed.committed_digest is not None
+                if not replace
+                and not committed.stored
+                and committed.committed_digest is not None
                 else None
             )
             if taken is not None:
@@ -2810,6 +2954,14 @@ class PortableStore:
             save(path, job=job)
         except Exception as err:
             logger.warning("could not save the failed job %s: %s", job.name, err)
+
+
+def _same_entry(a: EntryRef, b: EntryRef) -> bool:
+    return (
+        os.path.abspath(a.root) == os.path.abspath(b.root)
+        and a.cdir == b.cdir
+        and a.fingerprint == b.fingerprint
+    )
 
 
 class _AlwaysHeld:
