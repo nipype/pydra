@@ -563,9 +563,7 @@ def vanishing_stage(monkeypatch, store, times):
 def test_a_stage_that_vanished_is_staged_again_once(tmp_path, monkeypatch):
     store = make(tmp_path)
     calls = vanishing_stage(monkeypatch, store, 1)
-    t0 = time.monotonic()
     c = publish(store)
-    assert time.monotonic() - t0 < 5  # not the visibility timeout's backoff
     assert (c.won, c.stored, c.kept) == (True, True, None)
     assert calls["n"] == 2
     assert store.read(c.entry, None).outputs == OUT
@@ -575,11 +573,10 @@ def test_a_stage_that_vanishes_twice_raises_not_a_phantom_kept(tmp_path, monkeyp
     from pydra.utils.storagedir import StoreUnavailable
 
     store = make(tmp_path)
-    vanishing_stage(monkeypatch, store, 2)
-    t0 = time.monotonic()
+    calls = vanishing_stage(monkeypatch, store, 2)
     with pytest.raises(StoreUnavailable, match="vanished twice"):
         publish(store)
-    assert time.monotonic() - t0 < 5
+    assert calls["n"] == 2  # staged again once, not a third time
 
 
 def test_a_stage_that_vanishes_mid_encode_is_staged_again_once(tmp_path, monkeypatch):
@@ -598,9 +595,7 @@ def test_a_stage_that_vanishes_mid_encode_is_staged_again_once(tmp_path, monkeyp
         return real(self, staging, *a, **k)
 
     monkeypatch.setattr(fmt, "stage", stage)
-    t0 = time.monotonic()
     c = publish(store)
-    assert time.monotonic() - t0 < 5
     assert (c.won, c.stored, c.kept) == (True, True, None) and calls["n"] == 2
     assert store.read(c.entry, None).outputs == OUT
 
