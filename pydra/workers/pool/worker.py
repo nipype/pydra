@@ -284,6 +284,8 @@ class Worker:
     token : str, optional
         The worker's token (32 hex digits), named by the substrate that started it so that its
         coordinator finds its ready mark; default a fresh one.
+    clock : callable
+        Seconds on a monotonic clock, which times the ``orphan_after_s`` wait.
     """
 
     def __init__(
@@ -302,6 +304,7 @@ class Worker:
         meter: CallMeter | None = None,
         codec: JobCodec | None = None,
         token: str | None = None,
+        clock: ty.Callable[[], float] = time.monotonic,
     ):
         self.root = Path(root)
         self._token_arg = token
@@ -336,7 +339,7 @@ class Worker:
             0  # loop passes on which a coordinator was judged live (substrate)
         )
         self.orphan_polls = (
-            0  # loop passes since then with none live, before the orphan exit
+            0  # passes with none live since the last live one, before the orphan exit
         )
         self.served: list[tuple[str, str]] = []
         self.claims: list[int] = []
@@ -366,7 +369,9 @@ class Worker:
         self._scanned = (
             False  # whether every epoch was searched since the newest changed
         )
-        self._last_live = time.monotonic()
+        self._clock = clock
+        # the first judgement with no live coordinator since the last live one, on ``clock``
+        self._orphan_since: float | None = None
         self._pinged = 0.0
 
     # -- the run -------------------------------------------------------------------------------
@@ -618,7 +623,7 @@ class Worker:
         quantum_jobs, quantum_s = self.cls.quantum_jobs, self.cls.quantum_s
         current: str | None = None
         spent, began, idle = 0, time.monotonic(), 0
-        self._last_live = time.monotonic()
+        self._orphan_since = None
         while not self.stop.is_set() and self.recycle is None:
             if not self._refresh():
                 return EXIT_FAULTS
@@ -766,11 +771,16 @@ class Worker:
         )
 
     def _orphaned(self) -> bool:
+        """Whether ``orphan_after_s`` has passed on ``clock`` since the first judgement that
+        found no live coordinator after the last that found one."""
         if self._coordinator_live():
-            self._last_live = time.monotonic()
+            self._orphan_since = None
             self.live_polls += 1
             return False
-        if time.monotonic() - self._last_live > self.settings.orphan_after_s:
+        now = self._clock()
+        if self._orphan_since is None:
+            self._orphan_since = now
+        if now - self._orphan_since > self.settings.orphan_after_s:
             return True
         self.orphan_polls += 1
         return False
