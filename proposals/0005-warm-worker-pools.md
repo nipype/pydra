@@ -592,7 +592,7 @@ class Substrate(Protocol):
 ```
 <root>/                                 0700 (private pool)
   pool.json                             header: "pool@1", pool id (random), the full LeaseSettings, codec, owner uid, probe results
-  coordinator/<epoch>/                  one per coordinator, taken by mkdir; lease, attempt, ended
+  coordinator/<epoch>/                  one per coordinator, taken by mkdir; lease, attempt, ended, faults.json (§6)
   classes/<name>.json                   the WorkerClass as JCS
   queues/<label>/                       label = sha256 of the queue name
     name                                the queue name, written once
@@ -955,9 +955,15 @@ senselab's profiles differ the table says so (`rt/data/profiles/laptop.yaml:111-
 - **One bisection engine** for local and pool execution (§4.4), with two triggers: a resource fault, and a
   crash (`WorkerLost`, a protocol error, a fatal raised by a request rather than a load). A load is never
   split or retried as a request. An exception element of a batched return is never a trigger. Each
-  trigger reloads the residency first. A lone job's crash inside a live worker is run again under a
-  `"restart"` generation with `charged` true, so crashes in a live worker and losses of a dead one count
-  against one `crashes_charged`.
+  trigger reloads the residency first, and a reload is a load (a fault there is the residency's, never
+  the call's). A lone job's crash inside a live worker is run again under a fresh `"restart"` attempt,
+  uncharged; lost `crashes_charged` times in a row it is `JobCrashedWorker`. A crash whose jobs all
+  completed afterwards was survived: it counts as an infrastructure fault of the residency, charged to
+  no job (senselab's `_survived`), so an environment that crashes intermittently is held.
+- **The pool's machinery is not the job.** Only the task's own exception and a load's are classified;
+  an error of the pool's machinery around a call (a storage error starting the attempt or writing the
+  call record) is an infrastructure fault of the residency, and a `KeyboardInterrupt` or `SystemExit`
+  from it is not typed at all.
 - **OOM attribution is per worker.** A SIGKILL is a resource fault only when the worker's own cgroup
   recorded an OOM kill after the worker's latest baseline, taken at start and after each provider start;
   an OOM in a sibling process of the same Slurm job does not turn the next `scancel` into an OOM (senselab
@@ -1337,10 +1343,10 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 
 | Item | Change |
 |---|---|
-| Infrastructure count | §5.1 layout, §6: a residency's infrastructure faults in an epoch are counted by O_EXCL records `faults/<epoch>-<label>/<n>` on its queue; at `infrastructure_replacements` the worker writes `held-<epoch>-<label>` and settles the faulting ticket's open jobs `held` (reason naming the residency, the count, the epoch and the latest cause). A failed load is one fault of the residency, not one per job. A worker on a pool with no coordinator epoch holds at epoch 1. The coordinator, on reading a `held` outcome, reports every other job it follows or places on that queue `NotRun(held=True)` for its epoch, with no extra listing per poll. |
+| Infrastructure count | §5.1 layout, §6: a residency's infrastructure faults in an epoch (survived crashes among them) are counted by O_EXCL records `faults/<epoch>-<label>/<n>` on its queue; at `infrastructure_replacements` the worker writes `held-<epoch>-<label>`, settles the faulting ticket's open jobs `held` (reason naming the residency, the count, the epoch and the latest cause), and settles any ticket of that residency it had already gathered `held` without loading or running it. A failed load is one fault of the residency, not one per job. A worker on a pool with no coordinator epoch holds at epoch 1. The coordinator, on reading a `held` outcome, reports every other job **of that residency** it follows or places on that queue `NotRun(held=True)` for its epoch, with no extra listing per poll; jobs of other residencies sharing the queue (`residency="ignore"`, §4.2) are not held, and a worker judges holds per ticket, not per queue. |
 | `start_failures` | A `FaultBudgets` field (default 7), no longer a `PoolSettings` field. |
-| Passing budgets and classifier | `WarmPool` writes non-default `FaultBudgets` to `private/faults-<uuid>.json` and passes the classifier as a `module:qualname` reference; workers take `--faults` and `--classify`. |
-| Crash in a live worker | §6 "One bisection engine": a lone crash is retried under a charged `restart` generation (`Claim.restart(charged=True)`), uncounted as an infrastructure requeue. |
+| Passing budgets and classifier | §5.1 layout: each coordinator writes its `FaultBudgets` and its classifier as a `module:qualname` reference to `coordinator/<epoch>/faults.json`, once; every worker, whoever started it (`ExternalSubstrate` included), reads the newest epoch's at start. The classifier must be importable where the workers run; one that is not is reported and the default used. |
+| Crash in a live worker | §6 "One bisection engine": a lone crash is retried under a fresh, uncharged `restart` attempt; the engine counts the job's lone losses in a row (capped by its own count, whatever a caller's count says), and a survived crash is the residency's infrastructure fault. Generations are charged only by takeovers (§5.5). |
 | Load out of memory | Moves up the ladder at `phase: "load"`, uncharged, as §5.5 says; the `UnfitRecord` §6 names is written from W9, which adds the record type. |
 
 ### Amendment to revision 4 (implementation of W6)
