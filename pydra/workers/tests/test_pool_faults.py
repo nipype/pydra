@@ -185,6 +185,11 @@ def Brokens(xs: list) -> list:
 
 
 @workflow.define
+def Killeds(xs: list) -> list:
+    return workflow.add(Killed().split(x=xs), name="K").out
+
+
+@workflow.define
 def Marks(xs: list, where: str) -> list:
     return workflow.add(Mark(where=where).split(x=xs), name="M").out
 
@@ -1275,7 +1280,8 @@ def test_held_residency_reports_its_jobs_not_run(tmp_path, tasks, pools):
 def test_pool_passes_faults_and_classify_to_its_workers(tmp_path, tasks, pools):
     """`WarmPool` hands its fault budgets and classifier to the workers it starts, and warns of
     neither: ``content_attempts=2`` retries a task that fails once, and a classifier passed by
-    reference reaches the worker. ``calibration`` still warns (W9)."""
+    reference reaches the worker (a call's exception, content by default, holds the residency under
+    a classifier that types it infrastructure). ``calibration`` still warns (W9)."""
     from pydra.workers.pool.faults import FaultBudgets
 
     sub = _submitter(tmp_path)
@@ -1287,7 +1293,6 @@ def test_pool_passes_faults_and_classify_to_its_workers(tmp_path, tasks, pools):
     assert runner.done and not runner.failed
 
     sub2 = Submitter(cache_root=tmp_path / "store2", worker="debug")
-    sub2.providers = (tasks.Broken(),)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         strict = _warm(
@@ -1301,8 +1306,8 @@ def test_pool_passes_faults_and_classify_to_its_workers(tmp_path, tasks, pools):
     from pydra.engine.submitter import RunIncomplete
 
     with pytest.raises(RunIncomplete) as info:
-        _drive(sub2, tasks.Brokens(xs=[1]), strict)
-    [(_, held)] = info.value.not_run
+        _drive(sub2, tasks.Killeds(xs=[1]), strict)
+    [(_, held)] = info.value.not_run  # the default classifier would fail it as content
     assert held.held and "1 infrastructure faults" in held.reason
 
     with pytest.warns(UserWarning, match="calibration"):
