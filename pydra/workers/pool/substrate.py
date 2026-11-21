@@ -390,6 +390,8 @@ _SLURM_OWNED = {
     "e": "worker logs go under the pool's private directory",
     "wrap": "the substrate wraps the worker command",
     "parsable": "the substrate reads the job id",
+    "requeue": "the substrate passes --no-requeue: a worker's token serves one process",
+    "no-requeue": "the substrate passes --no-requeue: a worker's token serves one process",
     "array": "one job per worker",
     "a": "one job per worker",
     "clusters": "a job on another cluster is never listed by this one's squeue",
@@ -416,11 +418,12 @@ class SlurmSubstrate:
     ``--time`` from the class's fields where set, then the class's ``substrate_args`` (each
     ``key: value`` as ``--key=value``, a one-letter key as ``-k value``, an empty value as a bare
     flag), and ``--wrap`` running the worker command. The job is named
-    ``pydra-<pool id>-e<epoch>-<token>``, carries its class as ``--comment`` and writes its output to
-    ``<pool>/private/logs/<token>.log``. ``--qos`` is never passed and a class naming it, or an
-    option the substrate sets itself, cannot start. Slurm gives a job its GPUs; the substrate does
-    not set ``CUDA_VISIBLE_DEVICES``, and runs each worker on a job of its own whatever the class's
-    ``workers_per_device``.
+    ``pydra-<pool id>-e<epoch>-<token>``, carries its class as ``--comment``, writes its output to
+    ``<pool>/private/logs/<token>.log`` and is ``--no-requeue``: a worker preempted or on a failed
+    node is lost, its claims taken over once stale, never run again under its token. ``--qos`` is
+    never passed and a class naming it, or an option the substrate sets itself, cannot start.
+    Slurm gives a job its GPUs; the substrate does not set ``CUDA_VISIBLE_DEVICES``, and runs each
+    worker on a job of its own whatever the class's ``workers_per_device``.
 
     `live` reads the process's shared queue listing (``squeue --user``, one per poll cycle with any
     `SlurmWorker` of the process) and lists this pool's jobs of this coordinator epoch and of
@@ -563,6 +566,7 @@ class SlurmSubstrate:
             f"--job-name={self.job_name(token)}",
             f"--comment={cls.name}",
             f"--output={log}",
+            "--no-requeue",
         ]
         if cls.device == "cuda":
             n = max(cls.gpus, 1)

@@ -110,6 +110,7 @@ __all__ = [
     "EXIT_HARDWARE",
     "EXIT_OK",
     "EXIT_RECYCLE",
+    "EXIT_REUSED",
     "EXIT_SETTINGS",
     "EXIT_USAGE",
     "Worker",
@@ -134,6 +135,8 @@ EXIT_HARDWARE = 4
 EXIT_RECYCLE = 5
 """A call's deadline passed or the beater died: start a fresh worker."""
 EXIT_FAULTS = 6
+EXIT_REUSED = 7
+"""The token's ready mark exists: an earlier process (a requeued Slurm job's first run) used it."""
 """The pool's classifier reference cannot be imported here or is not callable."""
 
 
@@ -504,6 +507,14 @@ class Worker:
         try:
             self.providers = tuple(_resolve(p) for p in self._provider_args)
             self.token = self._token_arg or uuid.uuid4().hex
+            if self.pool.worker_record(self.token, "ready.json") is not None:
+                # its calls, lease and claims are the earlier process's: never taken over by it
+                logger.error(
+                    "refusing to start: worker %s was already started; a token serves one "
+                    "process (a requeued job runs its command again)",
+                    self.token,
+                )
+                return EXIT_REUSED
             self.pool.worker_dir(self.token).close()
             lease = DirectoryLease.at(
                 self.pool.path / "workers" / self.token / "lease",

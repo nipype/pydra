@@ -247,6 +247,7 @@ def test_class_to_sbatch_args(tmp_path, fake_slurm):
         "--partition=gpuq",
         "--account=lab",
         "--comment=gpu",
+        "--no-requeue",
     } <= set(first)
     assert not any(a.startswith("--qos") for a in first)
     assert first[-2] == "--wrap"
@@ -309,6 +310,8 @@ def test_providers_and_codec_reach_the_worker_command(tmp_path, fake_slurm):
         "tres-per-task",
         "cpus-per-gpu",
         "mem-per-gpu",
+        "requeue",
+        "no-requeue",
     ],
 )
 def test_qos_and_substrate_owned_options_refused(tmp_path, fake_slurm, key):

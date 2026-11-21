@@ -663,6 +663,24 @@ def test_settings_mismatch_any_field_refuses(pool, field):
     assert worker.token is None and not (pool.path / "workers").exists()
 
 
+def test_a_reused_token_refuses_to_start(pool, tasks):
+    """A worker started under a token that an earlier process already made ready (a Slurm job
+    requeued after preemption runs its command again) exits `EXIT_REUSED` before it takes that
+    token's lease or claims anything: the call records stay the earlier process's, never written
+    over from sequence 1, and its jobs wait for a worker of a new token."""
+    from pydra.workers.pool.worker import EXIT_REUSED
+
+    pool.put([pool.job(tasks.Echo(x=1), "e1")])
+    first, code = _run(pool, settings=_settings(idle_polls=1))
+    assert code == 0 and pool.kinds() == ["done"]
+    calls = pool.pool.calls(first.token)
+    assert [seq for seq, _, _ in calls] == [1]
+    pool.put([pool.job(tasks.Echo(x=2), "e2")])
+    again, code = _run(pool, token=first.token, settings=_settings(idle_polls=1))
+    assert code == EXIT_REUSED == 7
+    assert pool.pool.calls(first.token) == calls and pool.kinds() == ["done"]
+
+
 def test_settings_differing_in_max_wait_accepted(pool):
     """``max_wait`` caps a waiter, not staleness: a worker differing only there starts."""
     _, code = _run(pool, settings=_settings(lease=attrs.evolve(LEASE, max_wait=3.0)))
