@@ -367,17 +367,21 @@ class WarmPool:
             )
             with os.fdopen(fd, "w") as f:
                 json.dump(settings.to_json(), f)
+            codec_ref = None if isinstance(codec, PrivatePickle) else _reference(codec)
+            attachment = Attachment(
+                self.root,
+                self.settings_path,
+                self.providers,
+                codec_ref,
+                pool_id=self.pool.pool_id,
+            )
             attach = getattr(substrate, "attach", None)
             if attach is not None:
-                codec_ref = (
-                    None if isinstance(codec, PrivatePickle) else _reference(codec)
-                )
-                attach(
-                    Attachment(self.root, self.settings_path, self.providers, codec_ref)
-                )
+                attach(attachment)
             self._await_coordinators()
             # the epoch is taken after every fallible step (senselab R-283)
             self.epoch = self.pool.take_epoch()
+            attachment.epoch = self.epoch
             # every worker reads the budgets and the classifier from the pool, however started
             self.pool.write_faults(
                 self.epoch, {"budgets": faults.to_json(), "classify": classify_ref}
@@ -510,7 +514,13 @@ class WarmPool:
             if self.epoch is not None:
                 self.pool.end_epoch(self.epoch)
                 if self._fenced is None and not self.pool.fenced(self.epoch):
-                    live = self.substrate.live()
+                    try:
+                        live = list(self.substrate.live())
+                    except Exception as err:  # stop what this coordinator started
+                        logger.warning(
+                            "listing the substrate's workers failed at close: %s", err
+                        )
+                        live = list(self._started.values())
                     if live:
                         self.substrate.stop(live)
         finally:
@@ -1139,7 +1149,13 @@ class WarmPool:
         return wanted
 
     def _scale(self, now: float) -> None:
-        live = self._live()
+        try:
+            live = list(self.substrate.live())
+        except (
+            Exception
+        ) as err:  # not read as every worker gone: the next poll lists again
+            logger.warning("listing the substrate's workers failed: %s", err)
+            return
         live_ids = {id(h) for h in live}
         for token, h in list(self._started.items()):
             if id(h) in live_ids:
@@ -1181,7 +1197,22 @@ class WarmPool:
                 for _ in range(want - len(mine)):
                     if self.substrate.can_start(cls) is not True:
                         break
-                    for h in self.substrate.start(cls, 1):
+                    try:
+                        handles = self.substrate.start(cls, 1)
+                    except Exception as err:  # a refused submission: a failed start
+                        for h in getattr(err, "started", ()):
+                            self._started[h.token] = h
+                        self._failures[name] += 1
+                        self._failed_at[name] = now
+                        self._cause[name] = f"{type(err).__name__}: {err}"
+                        logger.warning(
+                            "starting a worker of class %r failed (%s): failed start %d",
+                            name,
+                            self._cause[name],
+                            self._failures[name],
+                        )
+                        break
+                    for h in handles:
                         self._started[h.token] = h
             elif len(mine) > want:
                 pending = [h for h in mine if h.token not in self._ready]

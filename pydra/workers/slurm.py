@@ -1,6 +1,9 @@
 import asyncio
+import subprocess
 import sys
 import re
+import threading
+import time
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
@@ -18,6 +21,135 @@ if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
 
 
+SQUEUE_FORMAT = "%i|%T|%j|%k"
+"""The ``squeue`` columns read: job id, state, name, comment (the comment last, as it is free text)."""
+
+
+def squeue_command(*extra: str) -> tuple[str, ...]:
+    """``squeue`` for this user's jobs (``--user=<uid>``, never ``--me``) in `SQUEUE_FORMAT`."""
+    # a numeric uid is accepted by --user; Slurm runs only on POSIX, but the
+    # worker is importable and unit-testable elsewhere
+    user = os.getuid() if hasattr(os, "getuid") else getpass.getuser()
+    return ("squeue", "-h", f"--user={user}", "-r", *extra, "-o", SQUEUE_FORMAT)
+
+
+def parse_squeue(stdout: str) -> dict[str, tuple[str, str, str]]:
+    """``{job id: (state, name, comment)}`` from `squeue_command` output; a row holding only an id
+    has empty state, name and comment."""
+    rows = {}
+    for line in stdout.splitlines():
+        parts = line.strip().split("|", 3)
+        if not parts[0]:
+            continue
+        parts += [""] * (4 - len(parts))
+        rows[parts[0]] = (parts[1], parts[2], parts[3])
+    return rows
+
+
+@attrs.frozen
+class QueueSnapshot:
+    """One listing of this user's queue.
+
+    Attributes
+    ----------
+    rows : dict
+        ``{job id: (state, name, comment)}``.
+    taken : float
+        When the ``squeue`` that made it started, on its listing's clock: a job submitted after
+        this may be missing from it.
+    """
+
+    rows: dict
+    taken: float
+
+
+class QueueListing:
+    """This user's Slurm queue, listed by one ``squeue --user`` per poll cycle and shared by every
+    reader in the process: `SlurmWorker`'s poller and the warm pool's `SlurmSubstrate`.
+
+    A reader asks for a listing no older than ``max_age`` seconds (its own poll interval); the first
+    reader of a cycle runs ``squeue`` and the others read its result. A failed ``squeue`` raises and
+    is not kept.
+
+    Parameters
+    ----------
+    clock : callable
+        Monotonic seconds.
+    """
+
+    def __init__(self, clock: ty.Callable[[], float] = time.monotonic):
+        self.clock = clock
+        self._lock = threading.Lock()
+        self._last: QueueSnapshot | None = None
+
+    def _fresh(self, max_age: float) -> "QueueSnapshot | None":
+        last = self._last
+        if last is not None and self.clock() - last.taken < max_age:
+            return last
+        return None
+
+    def _keep(self, snapshot: QueueSnapshot) -> QueueSnapshot:
+        if self._last is None or snapshot.taken >= self._last.taken:
+            self._last = snapshot
+        return snapshot
+
+    @staticmethod
+    def _check(rc: int, stderr: str) -> None:
+        if rc or "slurm_load_jobs error" in stderr:
+            raise RuntimeError(f"squeue exited {rc}: {stderr.strip()}")
+
+    def read(self, max_age: float, timeout: float) -> QueueSnapshot:
+        """A listing no older than ``max_age`` seconds, running ``squeue`` (bounded by ``timeout``
+        seconds) when there is none.
+
+        Raises
+        ------
+        RuntimeError
+            ``squeue`` failed, timed out or could not run.
+        """
+        with self._lock:
+            found = self._fresh(max_age)
+            if found is not None:
+                return found
+            taken = self.clock()
+            cmd = squeue_command()
+            try:
+                done = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=timeout, check=False
+                )
+            except subprocess.TimeoutExpired:
+                raise RuntimeError(
+                    f"`{' '.join(cmd)}` did not finish within {timeout}s"
+                ) from None
+            except OSError as err:
+                raise RuntimeError(f"could not run squeue: {err}") from err
+            self._check(done.returncode, done.stderr)
+            return self._keep(QueueSnapshot(parse_squeue(done.stdout), taken))
+
+    async def aread(self, max_age: float) -> QueueSnapshot:
+        """`read` for an event loop: ``squeue`` runs as an asynchronous subprocess; the caller
+        bounds it."""
+        with self._lock:
+            found = self._fresh(max_age)
+        if found is not None:
+            return found
+        taken = self.clock()
+        rc, stdout, stderr = await base.read_and_display_async(
+            *squeue_command(), hide_display=True
+        )
+        self._check(rc, stderr)
+        with self._lock:
+            return self._keep(QueueSnapshot(parse_squeue(stdout), taken))
+
+
+_SHARED_LISTING = QueueListing()
+
+
+def shared_listing() -> QueueListing:
+    """The process's `QueueListing`."""
+    return _SHARED_LISTING
+
+
 class SlurmJobCancelled(RuntimeError):
     """A job that was cancelled; it is never requeued."""
 
@@ -30,7 +162,8 @@ class SlurmWorker(base.Worker):
     ----------
     poll_delay
         Seconds between poll cycles. Each cycle makes one ``squeue --user=<your uid>`` call
-        for every job awaiting a poll.
+        for every job awaiting a poll, shared with any other reader of the process's queue
+        listing (a warm pool's ``SlurmSubstrate``) that listed it within the cycle.
     sbatch_args
         Extra ``sbatch`` options for every job.
     requeue_budget
@@ -518,18 +651,13 @@ class SlurmWorker(base.Worker):
 
     @staticmethod
     def _squeue_cmd() -> tuple[str, ...]:
-        # a numeric uid is accepted by --user; Slurm runs only on POSIX, but the
-        # worker is importable and unit-testable elsewhere
-        user = os.getuid() if hasattr(os, "getuid") else getpass.getuser()
-        return ("squeue", "-h", f"--user={user}", "-r", "-o", "%i")
+        return squeue_command()
 
     async def _squeue_all(self) -> frozenset[str]:
-        rc, stdout, stderr = await base.read_and_display_async(
-            *self._squeue_cmd(), hide_display=True
-        )
-        if rc or "slurm_load_jobs error" in stderr:
-            raise RuntimeError(f"squeue exited {rc}: {stderr.strip()}")
-        return frozenset(stdout.split())
+        """The ids in this user's queue, from the process's shared listing (one ``squeue`` per
+        cycle of ``poll_delay`` seconds, whoever reads it)."""
+        snapshot = await shared_listing().aread(self.poll_delay)
+        return frozenset(snapshot.rows)
 
     async def _verify_exit_code(self, jobid):
         cmd = ("sacct", "-n", "-X", "-P", "-j", jobid, "-o", "JobID,State,ExitCode")
