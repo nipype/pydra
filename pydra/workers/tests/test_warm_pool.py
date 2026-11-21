@@ -85,6 +85,26 @@ def Many(xs: list) -> list:
     return workflow.add(Echo().split(x=xs), name="E").out
 
 
+@python.define
+def Forget(where: str) -> str:
+    # removes a directory from inside a pool job, once the outer job has started
+    import shutil
+
+    shutil.rmtree(where, ignore_errors=True)
+    return where
+
+
+@python.define
+def EchoAfter(x: int, after: str) -> int:
+    return x
+
+
+@workflow.define
+def ForgetThenMany(where: str, xs: list) -> list:
+    gone = workflow.add(Forget(where=where), name="F")
+    return workflow.add(EchoAfter(after=gone.out).split(x=xs), name="E").out
+
+
 @workflow.define
 def Marks(xs: list, where: str) -> list:
     return workflow.add(Mark(where=where).split(x=xs), name="M").out
@@ -1464,20 +1484,42 @@ def test_rerun_after_collect_fresh_attempt(tmp_path, tasks, pools):
     assert len(attempts) == len(gens) and gens[-1]["attempt"].endswith(".1")
 
 
-def test_jobs_of_a_submitter_on_a_pool_need_no_user_cache(tmp_path, tasks, pools):
-    """A `Submitter` given a pool and no ``cache_root`` runs on the pool's portable store, and its
-    jobs keep their run files at that store's root, which every worker reaches, never in this host's
-    user cache: a worker on another host has none at that path, as here, where the run cache is
-    removed before the run."""
-    import shutil
+def _without_the_run_cache(tmp_path, tasks, pools, store):
+    """Run `ForgetThenMany` on a pool over ``store`` through ``Submitter(worker=pool)``: its first
+    pool job removes this host's user run cache once the outer job has started, so the later pool
+    jobs run where it is absent, as on a worker of another host."""
+    from types import SimpleNamespace
 
     from pydra.utils.general import default_run_cache_root
 
-    sub = _submitter(tmp_path)
-    pool = _warm(tmp_path, pools, sub)
+    pool = _warm(tmp_path, pools, SimpleNamespace(store=store))
     with Submitter(worker=pool) as run:
-        assert run.cache_root == Path(sub.store.path).resolve()
-        shutil.rmtree(default_run_cache_root(), ignore_errors=True)
-        result = run(tasks.Many(xs=[1, 2, 3]), raise_errors=True)
+        task = tasks.ForgetThenMany(where=str(default_run_cache_root()), xs=[1, 2, 3])
+        result = run(task, raise_errors=True)
     assert result.outputs.out == [1, 2, 3]
     assert not default_run_cache_root().exists()
+    return run
+
+
+def test_jobs_of_a_submitter_on_a_pool_need_no_user_cache(tmp_path, tasks, pools):
+    """A `Submitter` given a pool over a private store and no ``cache_root`` roots its cache at the
+    store, so its pool jobs keep their run files where every worker reaches, never in the user cache
+    of the submitting host."""
+    store = _submitter(tmp_path).store
+    run = _without_the_run_cache(tmp_path, tasks, pools, store)
+    assert run.cache_root == Path(store.path).resolve()
+
+
+@pytest.mark.skipif(not POSIX, reason="a shared root is PlatformUnsupported on Windows")
+def test_jobs_on_a_shared_store_pool_need_no_user_cache(tmp_path, tasks, pools):
+    """On a pool over a shared store, whose root holds no run files, a job with a work directory
+    writes nothing in the submitter's cache root, the user run cache of the submitting host.
+    """
+    from pydra.engine.portable.store import PortableStore
+
+    store = PortableStore(
+        tmp_path / "shared",
+        trust="shared",
+        work_dir=lambda c, f, a: tmp_path / "work" / f"{c}-{a}",
+    )
+    _without_the_run_cache(tmp_path, tasks, pools, store)
