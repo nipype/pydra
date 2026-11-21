@@ -1327,16 +1327,19 @@ def _drive(sub, task, executor, rerun=False):
     runner = GraphRunner(
         task, sub.store, on_error="raise_at_end", submitter=sub, rerun=rerun
     )
-    asyncio.run(
-        drive(
-            runner,
-            {"pool": executor},
-            lambda job: "pool",
-            on_error="raise_at_end",
-            audit=sub.audit,
-            max_concurrent=float("inf"),
+    try:
+        asyncio.run(
+            drive(
+                runner,
+                {"pool": executor},
+                lambda job: "pool",
+                on_error="raise_at_end",
+                audit=sub.audit,
+                max_concurrent=float("inf"),
+            )
         )
-    )
+    finally:
+        executor.close()  # its owner closes it: drive never does
     if runner.errors:
         raise AssertionError("\n".join(runner.errors))
     if runner.not_run:

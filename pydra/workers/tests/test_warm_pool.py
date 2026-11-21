@@ -221,7 +221,8 @@ def _submitter(tmp_path):
 
 def _drive(sub, task, executor, check=True, rerun=False, **kwargs):
     """Run ``task``'s nodes on ``executor`` through the asynchronous driver, as an external driver
-    does, and raise as `Submitter` does when jobs did not run."""
+    that owns the executor does: it closes the executor after the run (``drive`` never does). Raise as
+    `Submitter` does when jobs did not run."""
     runner = GraphRunner(
         task, sub.store, on_error="raise_at_end", submitter=sub, rerun=rerun
     )
@@ -245,16 +246,19 @@ def _drive(sub, task, executor, check=True, rerun=False, **kwargs):
 
     executor.bind = recording_bind
     kwargs.setdefault("max_concurrent", float("inf"))
-    asyncio.run(
-        drive(
-            runner,
-            {"pool": executor},
-            lambda job: "pool",
-            on_error="raise_at_end",
-            audit=sub.audit,
-            **kwargs,
+    try:
+        asyncio.run(
+            drive(
+                runner,
+                {"pool": executor},
+                lambda job: "pool",
+                on_error="raise_at_end",
+                audit=sub.audit,
+                **kwargs,
+            )
         )
-    )
+    finally:
+        executor.close()
     runner.limits, runner.reported = limits, reported
     if not check:
         return runner
@@ -296,7 +300,7 @@ def _key(sub, job):
 
 
 def _raw(root: Path):
-    """The pool at ``root``, opened afresh: ``drive`` closes its executor, and with it the pool's."""
+    """The pool at ``root``, opened afresh: `_drive` closes its executor, and with it the pool's."""
     from pydra.workers.pool.storage import PoolRoot
 
     return PoolRoot.open(root, LEASE, create=False, probe=False)
