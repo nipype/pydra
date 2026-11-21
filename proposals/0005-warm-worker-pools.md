@@ -254,7 +254,7 @@ class WorkerClass:
     max_workers: int = 1
     workers_per_device: int = 1            # co-tenancy; the fit divides device memory by it
     mounts: tuple[Path, ...] = ()          # roots every warm environment of the class binds
-    substrate_args: Mapping[str, str] = {} # partition, account, qos, constraint: the substrate's own
+    substrate_args: Mapping[str, str] = {} # partition, account, constraint: the substrate's own
     quantum_jobs: int = 64                 # most jobs one claim gathers (§4.2); unmeasured
     quantum_s: float = 300.0               # most seconds a worker stays on one queue; unmeasured
 ```
@@ -562,7 +562,8 @@ class Substrate(Protocol):
 - **`SlurmSubstrate(...)`** submits **one `sbatch` per worker**, never per job: `--gres=gpu:<type>:<n>`,
   `--cpus-per-task`, `--mem`, `--time` and the class's `substrate_args`, with `--wrap` running the worker
   command for that class, a job name scoped to the pool, its coordinator epoch and a token, and logs
-  under the pool's private directory. A submission that times out is followed by a lookup of its name;
+  under the pool's private directory. It never passes `--qos`, and a class whose `substrate_args`
+  name it, or an option the substrate sets itself, cannot start. A submission that times out is followed by a lookup of its name;
   when the name is found, it is not submitted again, and when it is not, it is submitted once more only
   after `attribute_delay`. senselab's version resubmits after a failed lookup and records the duplicate
   worker as an open defect (R-286, `ex/substrates.py:603-641`); this rule narrows it. It does not close
@@ -1338,6 +1339,18 @@ for writing a process-owning provider, and the worker protocol as a reference pa
   placement; W6's `bench_pool_overhead` measures the latter.
 
 ## 13. Changes in revisions
+
+### Amendment to revision 4 (implementation of W8)
+
+| Item | Change |
+|---|---|
+| `--qos` and owned options | §3.2, §4.5: `SlurmSubstrate` never passes `--qos`; `qos` leaves the `substrate_args` examples. A class whose `substrate_args` set `qos` or an option the substrate derives or sets (`gres`, `gpus`, `cpus-per-task`, `mem`, `time`, `job-name`, `comment`, `output`, `error`, `wrap`, `parsable`, `array`, or their one-letter forms) cannot start: `can_start` names the key, so placement skips the class, and `start` raises. |
+| Resubmission after a timeout | §4.5: the name of a timed-out `sbatch` is looked up at once and again after `attribute_delay`; only when both find nothing is the worker submitted once more, under a new token, so a first submission that lands later is a distinct job of the epoch (listed by `live`, stopped as a surplus) and never a second worker on one token's directory. A lookup that fails leaves the outcome unknown and raises; a second timeout raises. `attribute_delay` and the listing's age default to the pool's `LeaseSettings.attribute_delay` and `poll_s`. |
+| Failed submissions and listings | §4.5 "Failed starts": a `start` that raises (a refused or failed `sbatch`) is a failed start of its class, with the error as the latest cause, so it backs off and breaks the class like a worker that never marks ready. A `live()` that raises skips that poll's scaling instead of counting every started worker gone; `close` with the listing down stops the workers the coordinator started. |
+| The shared listing | §4.5: one process-wide `squeue -h --user=<uid> -r -o "%i|%T|%j|%k"` (id, state, name, comment) per poll cycle serves `SlurmWorker`'s poller and every `SlurmSubstrate`; a reader takes a listing younger than its own poll interval. A job submitted after a listing was taken counts as live until a later listing. The job's class travels as its `--comment`. |
+| Which jobs `live()` lists | §4.5: the jobs named for this pool and this coordinator epoch. Jobs of an earlier epoch are not listed or cancelled: they are warm workers of the pool, which exit on idle or when no coordinator is live. |
+| Attachment | The `Attachment` a pool hands its substrate carries the pool id and, once taken, the coordinator epoch. |
+| GPUs under Slurm | Slurm grants a job its GPUs and sets `CUDA_VISIBLE_DEVICES`; the substrate does not, and runs one job per worker whatever `workers_per_device`. |
 
 ### Amendment to revision 4 (implementation of W7)
 
