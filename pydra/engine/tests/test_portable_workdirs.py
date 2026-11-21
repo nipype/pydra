@@ -541,8 +541,16 @@ def test_anonymous_lease_holder_names_no_user(tmp_path):
         text = files[0].read_text()
         record = json.loads(text)
         assert set(record) == {"started", "token"}
-        for secret in (getpass.getuser(), socket.gethostname(), str(os.getpid())):
-            assert secret not in text.replace(record["token"], "")
+        secrets = [getpass.getuser(), socket.gethostname(), str(os.getpid())]
+        if hasattr(os, "getuid"):
+            secrets.append(str(os.getuid()))
+        for key, value in record.items():
+            for secret in secrets:
+                assert str(value) != secret, key
+                if isinstance(value, str) and key != "token":
+                    assert secret not in value, key
+        assert isinstance(record["started"], float)
+        assert isinstance(record["token"], str)
         assert "python-abc" not in "".join(
             p.name for p in lease.lockfile.parent.iterdir()
         )
