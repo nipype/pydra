@@ -482,6 +482,7 @@ class SlurmSubstrate:
         self._cpus: dict[str, int] = {}
         self._attachment: Attachment | None = None
         self._swept = False
+        self._stopping: set[str] = set()  # cancelled jobs Slurm may still list
 
     @property
     def _listing(self):
@@ -610,10 +611,15 @@ class SlurmSubstrate:
         at = self._require()
         snapshot = self._listing.read(self.max_age, self.squeue_timeout)
         epoch = at.epoch or 0
-        listed, stale = set(), []
+        listed, stale, stopping = set(), [], set()
         for job_id, (state, name, comment) in snapshot.rows.items():
             found = self._epoch_token(name)
             if found is None or found[0] > epoch:
+                continue
+            if (
+                job_id in self._stopping
+            ):  # cancelled by `stop`, still stopping: not a worker
+                stopping.add(job_id)
                 continue
             if job_id not in self._jobs:
                 if found[0] < epoch and not self._swept and state in _NOT_STARTED:
@@ -636,6 +642,7 @@ class SlurmSubstrate:
                         "cancelled pending Slurm jobs of earlier epochs: %s",
                         " ".join(stale),
                     )
+        self._stopping &= stopping
         live = []
         for job_id, handle in list(self._jobs.items()):
             if job_id in listed or handle.started >= snapshot.taken:
@@ -807,7 +814,8 @@ class SlurmSubstrate:
 
     def stop(self, workers: ty.Sequence[WorkerHandle]) -> None:
         """``scancel`` the workers' jobs; a worker given SIGTERM by Slurm settles what finished and
-        releases the rest. A failed ``scancel`` is logged and the workers stay listed.
+        releases the rest. A failed ``scancel`` is logged and the workers stay listed. A cancelled
+        job that Slurm still lists while it stops is neither live nor adopted again.
         """
         handles = [h for h in workers if h.job_id is not None]
         if not handles:
@@ -817,3 +825,4 @@ class SlurmSubstrate:
         for h in handles:
             h.ended = "stopped"
             self._jobs.pop(h.job_id, None)
+            self._stopping.add(h.job_id)
