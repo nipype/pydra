@@ -1320,6 +1320,8 @@ class GraphRunner:
         """Commit the result of a workflow job whose nodes are done (or that failed
         while expanding)"""
         job = frame.job
+        # an element released in this pass of ``ready`` may have failed to resolve
+        self._collect_resolution_errors(frame)
         if error is None and not frame.errors and not frame.nodes_done:
             frame.state = "finished"  # interrupted: nothing is built or stored
             self._release_lease(frame)
@@ -1407,6 +1409,7 @@ class GraphRunner:
         pool, self._read_pool = self._read_pool, None
         if pool is not None:  # reads not taken up are dropped with their jobs
             pool.shutdown(wait=False, cancel_futures=True)
+        self._collect_resolution_errors()
         for frame in reversed(list(self._frames)):
             if frame.state == "finished" or not frame.owned:
                 continue
