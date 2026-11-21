@@ -36,6 +36,19 @@ class PoolSettings:
         its beater kills it.
     drain_s : float
         Seconds a worker given SIGTERM waits for the call in flight before releasing its claims.
+    coordinator_wait : float, optional
+        Seconds a new coordinator waits for another live coordinator of the pool before it raises
+        ``PoolBusy``; None waits without bound.
+    max_queued_jobs : int, optional
+        Jobs written as tickets per queue and not yet settled; the rest wait in the submitting
+        process. None: 4 x ``quantum_jobs`` x ``max_workers`` of the queue's class.
+    target_wall_s : float
+        Seconds the waiting jobs of a queue should take with the workers scaling starts for them,
+        when a per-job time is measured.
+    unmeasured_workers : int
+        Workers wanted per queue when no per-job time is measured.
+    start_failures : int
+        Consecutive failed starts after which a worker class is broken and its jobs are held.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -45,6 +58,11 @@ class PoolSettings:
     call_timeout: float | None = attrs.field(default=None, validator=_positive)
     timeout_grace: float = attrs.field(default=60.0, validator=_positive)
     drain_s: float = attrs.field(default=20.0, validator=_positive)
+    coordinator_wait: float | None = attrs.field(default=None, validator=_positive)
+    max_queued_jobs: int | None = attrs.field(default=None, validator=_positive)
+    target_wall_s: float = attrs.field(default=600.0, validator=_positive)
+    unmeasured_workers: int = attrs.field(default=1, validator=_positive)
+    start_failures: int = attrs.field(default=7, validator=_positive)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)

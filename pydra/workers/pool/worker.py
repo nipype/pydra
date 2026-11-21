@@ -237,6 +237,9 @@ class Worker:
     hardware, memory, device_memory : callable
         Read the hardware, this process's ``(current, peak)`` host bytes and device-wide bytes.
     codec : JobCodec
+    token : str, optional
+        The worker's token (32 hex digits), named by the substrate that started it so that its
+        coordinator finds its ready mark; default a fresh one.
     """
 
     def __init__(
@@ -253,8 +256,10 @@ class Worker:
         memory: ty.Callable[[], tuple[int | None, int | None]] = host_memory,
         device_memory: ty.Callable[[], int | None] = device_memory,
         codec: JobCodec | None = None,
+        token: str | None = None,
     ):
         self.root = Path(root)
+        self._token_arg = token
         self._cls_arg = cls
         self._provider_args = tuple(providers)
         self.classify = classify
@@ -335,7 +340,7 @@ class Worker:
         )
         try:
             self.providers = tuple(_resolve(p) for p in self._provider_args)
-            self.token = uuid.uuid4().hex
+            self.token = self._token_arg or uuid.uuid4().hex
             self.pool.worker_dir(self.token).close()
             lease = DirectoryLease.at(
                 self.pool.path / "workers" / self.token / "lease",
@@ -1394,6 +1399,12 @@ def main(argv: ty.Sequence[str] | None = None) -> int:
         action="store_true",
         help="started by a substrate: exit when no coordinator is live",
     )
+    parser.add_argument(
+        "--token", help="the worker's token (32 hex digits), named by its substrate"
+    )
+    parser.add_argument(
+        "--codec", help="the payload codec as module:qualname; default PrivatePickle"
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
@@ -1407,7 +1418,17 @@ def main(argv: ty.Sequence[str] | None = None) -> int:
         providers=args.provider,
         settings=settings,
         substrate=args.substrate,
+        token=args.token,
+        codec=load_codec(args.codec),
     )
+
+
+def load_codec(reference: str | None) -> JobCodec | None:
+    """The codec ``module:qualname`` names, made with no arguments; None for None."""
+    if reference is None:
+        return None
+    codec = _resolve(reference)
+    return codec() if isinstance(codec, type) else codec
 
 
 if __name__ == "__main__":
