@@ -987,3 +987,42 @@ def test_failure_at_start_runs_no_post_hook(tmp_path):
                 hooks=TaskHooks(pre_run_task=refuse, post_run_task=post),
             )
     assert seen == []
+
+
+# An element whose inputs cannot be resolved, released last
+
+
+@workflow.define
+def LastUnresolvable(xs, marks):
+    from pydra.engine.tests.test_on_error import Mark, Stringify
+
+    a = workflow.add(Stringify().split("x", x=xs), name="A")
+    b = workflow.add(Mark(a=a.out, marks=marks), name="B")
+    return b.out
+
+
+def test_last_unresolvable_element_is_an_error_not_a_commit(tmp_path):
+    """The element released last fails to resolve its inputs, which completes every
+    node in the same pass of ``ready``: the workflow is not committed as if it had
+    succeeded, and the element is an entry of the run"""
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    sub, runner = runner_for(
+        tmp_path / "cache", LastUnresolvable(xs=[0, 1, 2, 3], marks=str(marks))
+    )
+    with sub:
+        # every element runs before A(1), whose output B(1) cannot take
+        held = []
+        while pending := held + runner.ready().dispatch:
+            held = []
+            for job in pending:
+                if (job.name, job.state_index) == ("A", 1) and len(pending) > 1:
+                    held.append(job)
+                else:
+                    runner.complete(job, job.run())
+        runner.close()
+    assert runner.done
+    assert runner.root_error is None
+    (entry,) = runner.entries
+    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    assert sorted(p.name for p in marks.iterdir()) == ["0", "2", "3"]
