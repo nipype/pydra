@@ -138,7 +138,11 @@ class Submitter:
         ``store="pickle"`` it holds :class:`~pydra.engine.store.PickleStore` slots and is
         by default ``run-cache`` there; loading from such a cache unpickles its files, so
         pointing Pydra at it trusts everyone who can write to it with code execution as
-        the reading user: only use caches whose writers you trust
+        the reading user: only use caches whose writers you trust. Given a store object
+        (or an executor's store) and no ``cache_root``, it is that store's root when the
+        store has one a job may write to (a ``PickleStore``, or a private or trusted
+        ``PortableStore``), so a job run on another host keeps its run files where the
+        store is; otherwise ``run-cache`` in the user cache directory
     worker : str, Worker or Executor, optional
         The worker to use, by default "cf". It runs every job the router does not send
         elsewhere, and is available to the router under the name ``"default"``. An
@@ -349,7 +353,7 @@ class Submitter:
                     "give them to the store instead"
                 )
             if cache_root is None:
-                cache_root = store_root
+                cache_root = _store_root(store)
             elif (
                 store_root is not None
                 and Path(cache_root).resolve() != Path(store_root).resolve()
@@ -1066,6 +1070,22 @@ def _check_private(root: Path) -> None:
         f'store=PortableStore({str(root)!r}, trust="trusted"); or give a cache_root that '
         "does not exist yet, which the submitter makes 0o700",
     )
+
+
+def _store_root(store: ty.Any) -> "os.PathLike | None":
+    """The cache root a store object gives a `Submitter` given no ``cache_root``: a
+    `~pydra.engine.store.PickleStore`'s ``cache_root``, or the root of a private or trusted
+    `~pydra.engine.portable.store.PortableStore` (as under ``store="portable"``); None for
+    any other, a shared root among them, whose other users must not read a job's run files.
+    """
+    root = getattr(store, "cache_root", None)
+    if root is not None:
+        return root
+    from pydra.engine.portable.store import PortableStore
+
+    if isinstance(store, PortableStore) and store.trust != "shared":
+        return store.path
+    return None
 
 
 def _portable_store(
