@@ -116,7 +116,11 @@ FAKE_NVIDIA_SMI = """#!{python}
 import os, sys
 args = " ".join(sys.argv[1:])
 gpus = {gpus!r}
-if "--query-gpu=index,name" in args:
+if "--query-gpu=index,uuid,name" in args:
+    for i, gpu in enumerate(gpus):
+        name, mib = gpu if isinstance(gpu, (list, tuple)) else (gpu, 81559)
+        print(f"{{i}}, GPU-fake-{{i}}, {{name}}, {{mib}}, 9.0")
+elif "--query-gpu=index,name" in args:
     for i, gpu in enumerate(gpus):
         name, mib = gpu if isinstance(gpu, (list, tuple)) else (gpu, 81559)
         print(f"{{i}}, {{name}}, {{mib}}, 9.0")
