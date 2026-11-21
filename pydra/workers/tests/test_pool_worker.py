@@ -1626,9 +1626,7 @@ def test_load_infrastructure_faults_are_bounded(pool, tasks):
 
 def _fake_smi(tmp_path, monkeypatch, indices, visible):
     """A ``nvidia-smi`` on PATH listing GPUs ``indices`` (uuid ``GPU-<index>-aaaa``)."""
-    rows = "\n".join(
-        f"{i}, GPU-{i}-aaaa, H100-{i}, 81559, 9.0" for i in indices
-    )
+    rows = "\n".join(f"{i}, GPU-{i}-aaaa, H100-{i}, 81559, 9.0" for i in indices)
     exe = tmp_path / "nvidia-smi"
     exe.write_text(f"#!/bin/sh\ncat <<'EOF'\n{rows}\nEOF\n")
     exe.chmod(0o755)

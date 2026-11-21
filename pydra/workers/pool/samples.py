@@ -31,7 +31,9 @@ class Gpu:
     memory: int | None  # bytes
     compute_capability: str | None = None
     uuid: str | None = None
-    index: int | None = None  # nvidia-smi's index; the logical ordinal is the position in ``gpus``
+    index: int | None = (
+        None  # nvidia-smi's index; the logical ordinal is the position in ``gpus``
+    )
 
 
 @attrs.frozen
@@ -101,7 +103,9 @@ def _visible(rows: list[list[str]]) -> list[list[str]]:
     if not entries:
         return []
     by_index = {r[0]: r for r in rows}
-    if not any(_is_uuid(e) for e in entries) and not all(e in by_index for e in entries):
+    if not any(_is_uuid(e) for e in entries) and not all(
+        e in by_index for e in entries
+    ):
         if all(e.isdigit() for e in entries) and len(entries) == len(rows):
             return list(rows)
         raise _Unmapped(
@@ -158,7 +162,9 @@ def read_hardware(timeout: float = 20.0) -> HardwareClass:
                 memory = int(float(row[3])) << 20  # MiB
             except ValueError:
                 memory = None
-            capability = row[4] if len(row) > 4 and row[4] not in ("", "[N/A]") else None
+            capability = (
+                row[4] if len(row) > 4 and row[4] not in ("", "[N/A]") else None
+            )
             index = int(row[0]) if row[0].isdigit() else None
             gpus.append(Gpu(row[2], memory, capability, row[1], index))
     return HardwareClass("cuda" if gpus else "cpu", tuple(gpus), _cpus())
