@@ -1252,7 +1252,8 @@ def test_two_residencies_two_queues(where, tasks, pools):
         yields = [
             i
             for i in range(1, len(calls))
-            if labels[i] != labels[i - 1] and _left_waiting(calls[i], labels[i - 1])
+            if labels[i] != labels[i - 1]
+            and _left_waiting(calls[i], labels[i - 1], calls[i - 1])
         ]
         v.check("quantum yields with its own queue waiting", yields)
         loads_a, loads_b = _by_worker(Path(a["loads"])), _by_worker(Path(b["loads"]))
@@ -1270,9 +1271,11 @@ def test_two_residencies_two_queues(where, tasks, pools):
         )
 
 
-def _left_waiting(call: dict, left: str) -> bool:
+def _left_waiting(call: dict, left: str, before: dict) -> bool:
     """Whether, at this call (the first after a switch), the queue of node ``left`` held a ticket
-    written before the claim the worker now runs under and not yet settled."""
+    written before the claim the worker now runs under and not yet settled, which the worker's
+    node had already listed in ``before``, the last call on ``left``: a ticket the storage showed
+    only after the switch made the queue look empty, and leaving it is no yield."""
 
     def node_of(queue: dict) -> str | None:
         for t in queue["tickets"].values():
@@ -1285,10 +1288,58 @@ def _left_waiting(call: dict, left: str) -> bool:
     if not taken or not gone or not taken[0]["claims"]:
         return False
     claimed = max(taken[0]["claims"].values())
+    seen = {
+        digest
+        for q in before["queues"].values()
+        if node_of(q) == left
+        for digest in q["tickets"]
+    }
     return any(
-        t["written"] < claimed and t["settled"] < t["jobs"]
-        for t in gone[0]["tickets"].values()
+        t["written"] < claimed and t["settled"] < t["jobs"] and digest in seen
+        for digest, t in gone[0]["tickets"].items()
     )
+
+
+def _snapshot(label: str, tickets: dict, claims: dict) -> dict:
+    """A synthetic call record: queue ``qa`` holds node A's tickets, ``qb`` node B's."""
+    queues = {"qa": {"tickets": {}, "claims": {}}, "qb": {"tickets": {}, "claims": {}}}
+    for digest, (node, written, settled) in tickets.items():
+        queue = queues["qa" if node == "A" else "qb"]
+        queue["tickets"][digest] = {
+            "node": node,
+            "written": written,
+            "jobs": 4,
+            "settled": settled,
+        }
+    for digest, started in claims.items():
+        queues["qa" if digest.startswith("a") else "qb"]["claims"][digest] = started
+    return {"label": label, "queues": queues}
+
+
+def test_left_waiting_needs_the_ticket_seen_before_the_switch():
+    """A yield is a switch away from queue A while A held a waiting ticket that the worker's node
+    had already listed before the switch. A ticket written before the new claim but first seen
+    after the switch (the storage showed it late, so A looked empty) is no yield."""
+    before = _snapshot("A", {"a1": ("A", 10.0, 0), "a2": ("A", 11.0, 0)}, {"a1": 12.0})
+    after = _snapshot(
+        "B",
+        {"a1": ("A", 10.0, 4), "a2": ("A", 11.0, 0), "b1": ("B", 10.5, 0)},
+        {"b1": 20.0},
+    )
+    assert _left_waiting(after, "A", before)  # a2 was waiting and already seen: a yield
+    late_before = _snapshot("A", {"a1": ("A", 10.0, 0)}, {"a1": 12.0})
+    late_after = _snapshot(
+        "B",
+        {"a1": ("A", 10.0, 4), "a3": ("A", 19.0, 0), "b1": ("B", 10.5, 0)},
+        {"b1": 20.0},
+    )
+    assert not _left_waiting(
+        late_after, "A", late_before
+    )  # a3 seen only after the switch
+    younger = _snapshot("B", {"a1": ("A", 10.0, 4), "a2": ("A", 21.0, 0)}, {"b1": 20.0})
+    assert not _left_waiting(younger, "A", before)  # written after the claim
+    drained = _snapshot("B", {"a1": ("A", 10.0, 4), "a2": ("A", 11.0, 4)}, {"b1": 20.0})
+    assert not _left_waiting(drained, "A", before)  # nothing left waiting
 
 
 # -- faults --------------------------------------------------------------------------------------
@@ -1315,6 +1366,17 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
                 _wait(lambda: (marks / "first").exists(), f"job {k} to start")
                 [handle] = substrate.handles
                 argv, env = _kill_command(handle.job_id, handle.token, os.environ)
+                version = subprocess.run(
+                    ["srun", "--version"],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                shown = (version.stdout or version.stderr).strip().splitlines()
+                killed["srun"] = (
+                    shown[0] if version.returncode == 0 and shown else "unknown"
+                )
                 done = subprocess.run(
                     argv, env=env, capture_output=True, text=True, timeout=300
                 )

@@ -13,6 +13,7 @@ exception it was raised from or during, is the fault, whatever classifier is in 
 
 from __future__ import annotations
 
+import re
 import typing as ty
 
 import attrs
@@ -40,11 +41,15 @@ DEVICE_OUT_OF_MEMORY = frozenset(
         "torch.OutOfMemoryError",
         "torch.cuda.OutOfMemoryError",
         "cupy.cuda.memory.OutOfMemoryError",
-        "jax.errors.ResourceExhaustedError",
     )
 )
+# Out of memory of either kind: the device's only when its message names a device.
+EITHER_OUT_OF_MEMORY = frozenset(("jax.errors.ResourceExhaustedError",))
 # Exceptions that are out of memory, host or device.
-OUT_OF_MEMORY = frozenset(("builtins.MemoryError",)) | DEVICE_OUT_OF_MEMORY
+OUT_OF_MEMORY = (
+    frozenset(("builtins.MemoryError",)) | DEVICE_OUT_OF_MEMORY | EITHER_OUT_OF_MEMORY
+)
+_NAMES_DEVICE = re.compile(r"\b(device|gpu|cuda|hbm|tpu|vram)\b", re.IGNORECASE)
 
 _RECORD = "__pydra_fault__"
 _MESSAGE = 2000
@@ -166,18 +171,32 @@ def classify(exc: BaseException, phase: Phase) -> FaultRecord:
     return FaultRecord("infrastructure", name, str(exc)[:_MESSAGE], phase, gap=True)
 
 
+def _oom_kind(link: BaseException) -> ty.Literal["device", "host"] | None:
+    """Which memory one exception says ran out, or None when it is not out of memory. A device
+    type is the device's before the generic `MemoryError` rule (cupy's is a `MemoryError`); one of
+    `EITHER_OUT_OF_MEMORY` is the device's when its message names a device, else the host's.
+    """
+    names = _qualnames(link)
+    if names & DEVICE_OUT_OF_MEMORY:
+        return "device"
+    if names & EITHER_OUT_OF_MEMORY:
+        return "device" if _NAMES_DEVICE.search(str(link)) else "host"
+    if isinstance(link, MemoryError):
+        return "host"
+    return None
+
+
 def oom_resource(exc: BaseException, gpu_class: bool) -> ty.Literal["device", "host"]:
-    """The memory an out-of-memory ``exc`` ran out of. On a GPU class, a device out-of-memory type
-    (`DEVICE_OUT_OF_MEMORY`, by qualified name anywhere in the chain) is the device's, before the
-    generic rule; otherwise a `MemoryError` in the chain is the host's, and anything else the
-    device's. On a CPU class it is always the host's."""
+    """The memory an out-of-memory ``exc`` ran out of: on a GPU class, what the first
+    out-of-memory link of the chain says (`_oom_kind`), so a loader that caught a device OOM and
+    then ran out of host memory falling back is the host's; the device's when no link says. On a
+    CPU class it is always the host's."""
     if not gpu_class:
         return "host"
-    links = list(_chain(exc))
-    if any(_qualnames(link) & DEVICE_OUT_OF_MEMORY for link in links):
-        return "device"
-    if any(isinstance(link, MemoryError) for link in links):
-        return "host"
+    for link in _chain(exc):
+        kind = _oom_kind(link)
+        if kind is not None:
+            return kind
     return "device"
 
 

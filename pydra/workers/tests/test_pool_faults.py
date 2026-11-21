@@ -2018,3 +2018,46 @@ def test_out_of_memory_resource(qualname, base, gpu_class, resource):
             raise RuntimeError("loading failed") from inner
     except RuntimeError as wrapped:
         assert oom_resource(wrapped, gpu_class) == resource
+
+
+def test_out_of_memory_resource_follows_the_first_out_of_memory_link():
+    """The first out-of-memory link in chain order decides: a CUDA OOM caught by a loader that falls
+    back to the host and then runs out of host memory is the host's; the reverse is the
+    device's."""
+    from pydra.workers.pool.faults import oom_resource
+
+    cuda = _named("torch.cuda.OutOfMemoryError", RuntimeError)
+    try:
+        try:
+            raise cuda("CUDA out of memory")
+        except RuntimeError:
+            raise MemoryError("host memory exhausted while offloading")
+    except MemoryError as fallback:
+        assert oom_resource(fallback, True) == "host"
+    try:
+        try:
+            raise MemoryError("host memory")
+        except MemoryError as host:
+            raise cuda("CUDA out of memory") from host
+    except RuntimeError as device:
+        assert oom_resource(device, True) == "device"
+
+
+@pytest.mark.parametrize(
+    "message, resource",
+    [
+        ("Out of memory while trying to allocate 2.0GiB on device cuda:0", "device"),
+        (
+            "RESOURCE_EXHAUSTED: Out of memory allocating 4096 bytes of host memory",
+            "host",
+        ),
+    ],
+)
+def test_jax_resource_exhausted_is_the_device_only_when_it_names_it(message, resource):
+    """jax's ResourceExhaustedError is out of memory either way; it is the device's only when its
+    message names a device."""
+    from pydra.workers.pool.faults import classify, oom_resource
+
+    exc = _named("jax.errors.ResourceExhaustedError", RuntimeError)(message)
+    assert classify(exc, "load").reason == "oom"
+    assert oom_resource(exc, True) == resource
