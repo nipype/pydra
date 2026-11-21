@@ -9,6 +9,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import typing as ty
 from pathlib import Path
 import attrs
 import pytest
@@ -991,3 +992,89 @@ def test_failure_at_start_runs_no_post_hook(tmp_path):
                 hooks=TaskHooks(pre_run_task=refuse, post_run_task=post),
             )
     assert seen == []
+
+
+# An element whose inputs cannot be resolved, released last
+
+
+@python.define
+def Stringify(x: int) -> ty.Any:
+    return "one" if x == 1 else x
+
+
+@python.define
+def Mark(a: int, marks: str) -> int:
+    from pathlib import Path
+
+    (Path(marks) / str(a)).touch()
+    return a
+
+
+@workflow.define
+def LastUnresolvable(xs, marks):
+    a = workflow.add(Stringify().split("x", x=xs), name="A")
+    b = workflow.add(Mark(a=a.out, marks=marks), name="B")
+    return b.out
+
+
+def run_all_but_a1(runner) -> Job:
+    """Run every element that ``ready`` hands out, holding A(1) back until nothing else
+    is pending, and return A(1) unreported"""
+    held = []
+    while pending := held + runner.ready().dispatch:
+        held = []
+        for job in pending:
+            if (job.name, job.state_index) == ("A", 1):
+                held.append(job)
+            else:
+                runner.complete(job, job.run())
+        if held and held == pending:
+            return held[0]
+    raise AssertionError("A(1) was not handed out")
+
+
+def test_last_unresolvable_element_is_an_error_not_a_commit(tmp_path):
+    """The element released last fails to resolve its inputs, which completes every
+    node in the same pass of ``ready``: the workflow is not committed as if it had
+    succeeded, and the element is an entry of the run"""
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    sub, runner = runner_for(
+        tmp_path / "cache", LastUnresolvable(xs=[0, 1, 2, 3], marks=str(marks))
+    )
+    with sub:
+        a1 = run_all_but_a1(runner)
+        runner.complete(a1, a1.run())
+        assert runner.ready().dispatch == []
+        runner.close()
+    assert runner.done
+    assert runner.root_error is None
+    (entry,) = runner.entries
+    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    assert sorted(p.name for p in marks.iterdir()) == ["0", "2", "3"]
+
+
+def test_close_collects_a_resolution_error_released_outside_ready(tmp_path):
+    """A runner that does not own the workflow job: the last element is released by the
+    deprecated ``Submitter.get_runnable_tasks`` rather than ``ready``, its inputs cannot
+    be resolved, and ``close`` makes it an entry of the run"""
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    store = PickleStore(tmp_path / "cache", lease_settings=SETTINGS)
+    with Submitter(worker="debug", store=store) as sub:
+        runner = GraphRunner(
+            LastUnresolvable(xs=[0, 1, 2, 3], marks=str(marks)),
+            store,
+            on_error="raise_at_end",
+            submitter=sub,
+        )
+        a1 = run_all_but_a1(runner)
+        runner.complete(a1, a1.run())
+        with pytest.warns(DeprecationWarning):
+            assert sub.get_runnable_tasks(runner.exec_graph) == []
+        assert runner.done  # B(1) is released and errored, its error on its node
+        assert runner.errors == []
+        runner.close()
+    (entry,) = runner.entries
+    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    assert len(runner.errors) == 1 and "B(1)" in runner.errors[0]

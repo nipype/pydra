@@ -2117,9 +2117,11 @@ class Claim:
     def release(self) -> None:
         """Write the ticket's settled mark for its outcome count, mark its slot resolved when every
         job has a final outcome in this ticket, then release the claim lease. Releasing again does
-        nothing."""
+        nothing. The ticket leaves the queue's judged set, so that this process (which passed over
+        it while holding it) may claim it again at once."""
         if self.lease.token_dir is None:
             return
+        self._q.judged.pop(self.digest, None)
         try:
             if self.lease.held:
                 self.pool._settle(self._q, self.digest)
