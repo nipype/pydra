@@ -419,35 +419,36 @@ def test_gathers_one_job_tickets_once_warm(pool, tasks):
     assert sorted(s["cold"] for s in samples) == [False] * 10 + [True]
 
 
-def test_samples_leave_resident_memory_out_of_the_per_job_figure(pool, tasks):
-    """A stand-in model of 1000 bytes loaded on the first job, and 10 bytes per job while it runs: the
-    warm samples hold the model as resident and their peaks add only the job's bytes."""
+def test_samples_never_report_the_processs_lifetime_memory(pool, tasks):
+    """A job with no resident state: its sample keeps the worker's baseline, and neither the
+    process's resident set after the call nor its lifetime peak is reported as the job's (RFC 0005
+    W9 attributes memory to a residency's load; ``test_pool_calibration`` covers that).
+    """
     for i in range(3):
         pool.put([pool.job(tasks.Echo(x=i), f"t{i}")])
     memory = {"current": 100, "peak": 100}
 
     def standing_in(x):
-        if memory["current"] == 100:
-            memory["current"] += 1000
+        memory["current"] += 1000
         memory["peak"] = max(memory["peak"], memory["current"] + 10)
 
     tasks.HOOK["echo"] = standing_in
     _, code = _run(pool, memory=lambda: (memory["current"], memory["peak"]))
     assert code == 0
     samples = [o["sample"] for o in pool.outcomes()]
-    warm = [s for s in samples if not s["cold"]]
-    assert min(s["resident_bytes"] for s in warm) == 1100
-    assert max(s["peak_bytes"] for s in samples) == 1110
+    assert len(samples) == 3
     assert {s["baseline_bytes"] for s in samples} == {100}
+    assert {(s["resident_bytes"], s["peak_bytes"]) for s in samples} == {(None, None)}
 
 
-def test_device_memory_read_once_per_claim_on_a_cuda_class(pool, tasks):
-    """On a CUDA class the device memory is read once before the first claim (the baseline) and once
-    per claim, never per job."""
+def test_device_memory_read_before_the_first_claim_and_at_each_load(pool, tasks):
+    """On a CUDA class the worker's own device bytes are read once before the first claim (the
+    baseline) and around each load, never per job: jobs with nothing to load read it once.
+    """
     cls = _class("gpu", device="cuda", gpus=1, gpu_mem="16G", quantum_jobs=4)
     for i in range(4):
         pool.put([pool.job(tasks.Echo(x=i), f"t{i}")], queue="gpu")
-    reads = iter([0, 1000, 1010])
+    reads = iter([0])
     _, code = _run(
         pool,
         cls,
@@ -457,8 +458,9 @@ def test_device_memory_read_once_per_claim_on_a_cuda_class(pool, tasks):
     assert code == 0 and next(reads, None) is None
     samples = [o["sample"] for o in pool.outcomes("gpu")]
     assert len(samples) == 4
-    assert {s["device_baseline_bytes"] for s in samples} == {0}
-    assert sorted(s["device_bytes"] for s in samples) == [1000, 1010, 1010, 1010]
+    assert {(s["device_baseline_bytes"], s["device_bytes"]) for s in samples} == {
+        (0, None)
+    }
 
 
 def test_a_jobs_outcome_is_settled_before_the_next_call(pool, tasks):

@@ -72,12 +72,16 @@ class Sample:
         The job's units (padded units of the call, when batched).
     baseline_bytes : int, optional
         The worker's resident bytes at start, before any provider loaded.
-    resident_bytes, peak_bytes : int, optional
-        The worker's resident bytes after the call, and its peak so far.
+    resident_bytes : int, optional
+        The host bytes of this residency: ``baseline_bytes`` plus the worker's resident-set growth
+        across the load of this residency; None when either was not read.
+    peak_bytes : int, optional
+        ``resident_bytes`` plus the call's host peak above the resident set just before the call;
+        None when the host gives no per-call peak.
     device_baseline_bytes : int, optional
-        Device-wide bytes before the worker's first claim on a CUDA class.
+        Device bytes of the worker's own processes before its first load, on a CUDA class.
     device_bytes : int, optional
-        Device-wide bytes, read once per claim on a CUDA class.
+        Device bytes of the worker's own processes gained across the load of this residency.
     load_s : float
         Seconds loading the residency for this job (0 when it was resident).
     cold : bool
@@ -95,7 +99,11 @@ class Sample:
     hardware : HardwareClass, optional
         The hardware class of the worker's class (`hardware_of`).
     device_peak_bytes : int, optional
-        Device bytes at the call's peak, when the measuring process reads it (a worker does not).
+        ``device_bytes`` plus the call's device allocator peak above what was allocated before the
+        call; None when not read (a provider whose state is another process).
+    others : int
+        Resident keys of other residencies the worker held during the call; a sample with any is
+        not fitted (their bytes cannot be told apart).
     """
 
     wall_s: float
@@ -116,6 +124,7 @@ class Sample:
     key: str | None = None
     hardware: HardwareClass | None = None
     device_peak_bytes: int | None = None
+    others: int = 0
 
     def to_json(self) -> dict[str, ty.Any]:
         record = attrs.asdict(self, recurse=False)
@@ -190,7 +199,8 @@ class UnfitRecord:
 
     @classmethod
     def from_json(cls, record: dict) -> "UnfitRecord":
-        values = dict(record)
+        known = {f.name for f in attrs.fields(cls)}
+        values = {k: v for k, v in record.items() if k in known}
         code = values.pop("code", None) or {}
         return cls(
             code=Code(code.get("versions", ()), code.get("environment")), **values
@@ -219,12 +229,14 @@ class ParityRecord:
         The job's checksum.
     batch_sizes : tuple of int
         The batch size of the committed run, then of the re-check (1).
-    equal : bool
-        The output digests are equal and the run raised nothing.
+    equal : bool or None
+        The output digests are equal (True) or not, or the store's comparison refused the fresh
+        outputs (False); None when the re-check could not run (the task, a provider or the
+        device failed in the coordinator), which is no statement about the task.
     committed, fresh : str, optional
         The committed entry's output digest and the re-check's; None when one was not reached.
     reason : str
-        Why ``equal`` is false ("" when it is true).
+        Why ``equal`` is not true ("" when it is).
     ended : float
         ``time.time()`` when it was recorded.
     """
@@ -234,7 +246,7 @@ class ParityRecord:
     batch_sizes: tuple[int, int] = attrs.field(
         converter=lambda v: tuple(int(b) for b in v)
     )
-    equal: bool
+    equal: bool | None
     committed: str | None = None
     fresh: str | None = None
     reason: str = ""
@@ -247,16 +259,21 @@ class ParityRecord:
 
     @classmethod
     def from_json(cls, record: dict) -> "ParityRecord":
-        return cls(**record)
+        known = {f.name for f in attrs.fields(cls)}
+        return cls(**{k: v for k, v in record.items() if k in known})
 
 
 @attrs.frozen
 class MemoryFit:
-    """Memory of one kind: the resident bytes, and the peak beyond them as ``m0 + m1 × units``."""
+    """Memory of one kind: the resident bytes, and the peak beyond them as ``m0 + m1 × units``.
+
+    ``m1`` is None when the samples carry fewer than two distinct units: the per-unit memory is then
+    unknown, not zero.
+    """
 
     resident: int
     m0: float
-    m1: float
+    m1: float | None
     n: int
 
 
@@ -414,7 +431,9 @@ class DirectoryCalibration:
             )
             fd = os.open(where / f"{_safe(record.worker)}.jsonl", flags, 0o644)
             try:
-                os.write(fd, line.encode())
+                data = line.encode()
+                while data:
+                    data = data[os.write(fd, data) :]
             finally:
                 os.close(fd)
             return
@@ -450,11 +469,20 @@ class DirectoryCalibration:
                 )
         return found
 
+    def _parsed(self, key: str, kind: str, parse: ty.Callable[[dict], ty.Any]) -> list:
+        found = []
+        for record in self._records(key, kind):
+            try:
+                found.append(parse(record))
+            except (TypeError, ValueError, AttributeError) as err:
+                logger.warning("skipping a %s record of %s: %s", kind, key, err)
+        return found
+
     def unfit(self, key: str) -> list[UnfitRecord]:
-        return [UnfitRecord.from_json(r) for r in self._records(key, "unfit")]
+        return self._parsed(key, "unfit", UnfitRecord.from_json)
 
     def parity(self, key: str) -> list[ParityRecord]:
-        return [ParityRecord.from_json(r) for r in self._records(key, "parity")]
+        return self._parsed(key, "parity", ParityRecord.from_json)
 
     def samples(self, key: str, hardware: HardwareClass) -> list[Sample]:
         """Every sample of ``key`` on ``hardware``."""
@@ -480,36 +508,51 @@ class DirectoryCalibration:
         return found
 
     def _warm(self, key: str, hardware: HardwareClass) -> list[Sample]:
-        return [s for s in self.samples(key, hardware) if not s.cold and not s.reload]
+        """Samples of calls on a residency loaded before the call, alone in its worker."""
+        return [
+            s
+            for s in self.samples(key, hardware)
+            if not s.cold and not s.reload and s.others == 0
+        ]
 
     def memory(self, key: str, hardware: HardwareClass) -> MemoryFit | None:
-        """The Theil–Sen fit of peak bytes beyond the resident ones against units over the warm
-        samples (senselab's ``_memory_fit``): device memory on a GPU class, host memory otherwise.
-        The resident bytes are the least seen after a call; a fit whose slope is negative, or of
-        fewer than ``min_samples`` samples, is None."""
-        rows: list[tuple[float, int, int]] = []
+        """The fit of peak bytes beyond the resident ones against units over the warm samples
+        (senselab's ``_memory_fit``): device memory on a GPU class, host memory otherwise.
+
+        A sample without a measured peak is not used: with none, there is no fit (senselab's
+        ``device_unmeasured``), never a fit of zero activation memory. The resident bytes are the
+        least seen. ``m1`` is the Theil–Sen slope over the samples whose units are known, None
+        with fewer than two distinct units (``m0`` is then the median excess); a negative slope,
+        or fewer than ``min_samples`` samples, gives None.
+        """
+        rows: list[tuple[float | None, int, int]] = []
         for s in self._warm(key, hardware):
             if hardware.gpus:
-                if s.device_bytes is None:
+                if s.device_bytes is None or s.device_peak_bytes is None:
                     continue
-                after = s.device_bytes - (s.device_baseline_bytes or 0)
-                peak = (
-                    after
-                    if s.device_peak_bytes is None
-                    else s.device_peak_bytes - (s.device_baseline_bytes or 0)
-                )
+                base = s.device_baseline_bytes or 0
+                after, peak = base + s.device_bytes, base + s.device_peak_bytes
             else:
                 if s.resident_bytes is None or s.peak_bytes is None:
                     continue
                 after, peak = s.resident_bytes, s.peak_bytes
-            rows.append((float(s.units or 0.0), peak, after))
+            rows.append((s.units, peak, after))
         if len(rows) < self.min_samples:
             return None
         resident = min(after for _, _, after in rows)
-        fit = _theil_sen([(u, float(peak - after)) for u, peak, after in rows])
-        if fit is None or fit[1] < 0:
-            return None
-        return MemoryFit(resident=resident, m0=fit[0], m1=fit[1], n=len(rows))
+        known = [
+            (float(u), float(peak - after)) for u, peak, after in rows if u is not None
+        ]
+        if len({u for u, _ in known}) >= 2:
+            fit = _theil_sen(known)
+            if fit is None:
+                return None
+            m0, m1 = fit
+            if m1 < 0:
+                return None
+            return MemoryFit(resident=resident, m0=m0, m1=m1, n=len(known))
+        m0 = _median([float(peak - after) for _, peak, after in rows])
+        return MemoryFit(resident=resident, m0=m0, m1=None, n=len(rows))
 
     def times(self, key: str, hardware: HardwareClass) -> list[TimeRecord]:
         """The median per-job seconds of warm calls, per batch size."""

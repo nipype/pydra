@@ -53,8 +53,11 @@ class PoolSettings:
     unmeasured_workers : int
         Workers wanted per queue when no per-job time is measured.
     recheck_fraction : float
-        The fraction of settled jobs the coordinator runs again alone on a fresh residency and
-        compares with the committed entry (RFC 0005 section 4.4), sampled by checksum; 0: none.
+        The fraction of settled jobs run again alone on a fresh residency and compared with the
+        committed entry (RFC 0005 section 4.4), sampled by checksum; 0: none. The re-check runs in
+        the coordinator's process, on a thread of its own: that process needs the task's
+        providers, its dependencies and, for a GPU task, a device (a re-check it cannot run is
+        recorded as not run). A worker-side re-check is a follow-up.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)

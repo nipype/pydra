@@ -9,12 +9,14 @@ import re
 import shutil
 import subprocess
 import sys
+import typing as ty
 
 import attrs
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "CallMeter",
     "Gpu",
     "HardwareClass",
     "device_memory",
@@ -223,10 +225,84 @@ def host_memory() -> tuple[int | None, int | None]:
     return current, peak
 
 
-def device_memory() -> int | None:
-    """Device bytes held by every compute process on the visible devices (the co-tenancy baseline),
-    None without ``nvidia-smi``."""
+def device_memory(pids: "ty.Iterable[int] | None" = None) -> int | None:
+    """Device bytes held by the compute processes ``pids`` (every one when None), None without
+    ``nvidia-smi``."""
     from pydra.engine.procgroup import gpu_memory_by_pid
 
-    held = gpu_memory_by_pid()
+    held = gpu_memory_by_pid(pids)
     return None if held is None else sum(held.values())
+
+
+def _status_kb(field: str) -> int | None:
+    """A ``kB`` field of ``/proc/self/status``, in bytes; None off Linux."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith(field + ":"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _torch_cuda() -> ty.Any:
+    """``torch.cuda`` when torch is already imported in this process and CUDA initialised there;
+    torch is never imported here."""
+    torch = sys.modules.get("torch")
+    if torch is None:
+        return None
+    try:
+        cuda = torch.cuda
+        return cuda if cuda.is_available() and cuda.is_initialized() else None
+    except Exception:
+        return None
+
+
+class CallMeter:
+    """The per-call memory peaks a worker reads around one call, where they are cheap.
+
+    Host: on Linux the resident-set high-water mark is reset before the call (``clear_refs``) and
+    read after it. Device: torch's allocator peak, reset before the call, when torch is already
+    imported and CUDA initialised in the worker (a provider whose state lives in another process is
+    not measured). `stop` returns each peak above what was held just before the call, None where
+    it is not read.
+    """
+
+    def start(self) -> tuple[int | None, int | None]:
+        host = None
+        try:
+            with open("/proc/self/clear_refs", "w") as f:
+                f.write("5")
+            host = _status_kb("VmRSS")
+        except OSError:
+            pass
+        device = None
+        cuda = _torch_cuda()
+        if cuda is not None:
+            try:
+                cuda.reset_peak_memory_stats()
+                device = cuda.memory_allocated()
+            except Exception:
+                device = None
+        return host, device
+
+    def stop(
+        self, state: tuple[int | None, int | None]
+    ) -> tuple[int | None, int | None]:
+        host0, device0 = state
+        host = device = None
+        if host0 is not None:
+            peak = _status_kb("VmHWM")
+            host = None if peak is None else max(0, peak - host0)
+        if device0 is not None:
+            cuda = _torch_cuda()
+            try:
+                device = (
+                    None
+                    if cuda is None
+                    else max(0, cuda.max_memory_allocated() - device0)
+                )
+            except Exception:
+                device = None
+        return host, device

@@ -66,9 +66,19 @@ from pydra.compose import python, workflow
 from pydra.engine.resident import Provided
 from pydra.utils.resources import ComputeResources
 
-VERSION = {"sized": "1"}
+VERSION = {"sized": "1", "cuda": "1"}
 FAIL = {"load": False}
 LOADS = []
+MEM = {"rss": 1000, "device": 50}
+SIZES = {"a": 100, "b": 300}
+
+
+class OutOfMemoryError(RuntimeError):
+    # stands for torch's: the classifier knows it by its qualified name
+    pass
+
+
+OutOfMemoryError.__module__ = "torch.cuda"
 
 
 class Recorder:
@@ -106,9 +116,58 @@ class Sized(Recorder):
         return VERSION["sized"]
 
 
+class Cuda(Recorder):
+    # a GPU provider: FAIL["load"] "cuda" raises CUDA out of memory, "host" a MemoryError
+    name = "cuda"
+
+    def load(self, spec, device):
+        LOADS.append("cuda")
+        if FAIL["load"] == "cuda":
+            raise OutOfMemoryError("CUDA out of memory. Tried to allocate 2.00 GiB")
+        if FAIL["load"] == "host":
+            raise MemoryError("out of host memory")
+        return spec
+
+    def version(self):
+        return VERSION["cuda"]
+
+
+class Grows(Recorder):
+    # a provider whose load grows the fake host and device memory by SIZES[spec]
+    name = "grows"
+
+    def load(self, spec, device):
+        MEM["rss"] += SIZES[spec]
+        MEM["device"] += 10 * SIZES[spec]
+        return spec
+
+
 @python.define
 def UseSized(model: Provided[object, "sized"], x: int) -> int:
     return x
+
+
+@python.define
+def UseCuda(model: Provided[object, "cuda"], x: int) -> int:
+    return x
+
+
+@python.define
+def UseGrows(model: Provided[object, "grows"], x: int) -> int:
+    return x
+
+
+@workflow.define
+def Chain(x: int) -> int:
+    # three residencies, so no node's result is another's
+    a = workflow.add(Same(model="a", x=x), name="A")
+    b = workflow.add(Same(model="b", x=a.out), name="B")
+    return workflow.add(Same(model="c", x=b.out), name="C").out
+
+
+@workflow.define
+def UseSizeds(xs: list) -> list:
+    return workflow.add(UseSized(model="m").split(x=xs), name="U").out
 
 
 @python.define
@@ -169,11 +228,19 @@ def clean(monkeypatch, tasks):
         made.append(self)
 
     monkeypatch.setattr(Claim, "__init__", recording)
+    from pydra.engine import resident
+
     monkeypatch.setitem(tasks.VERSION, "sized", "1")
+    monkeypatch.setitem(tasks.VERSION, "cuda", "1")
     monkeypatch.setitem(tasks.FAIL, "load", False)
+    monkeypatch.setitem(tasks.MEM, "rss", 1000)
+    monkeypatch.setitem(tasks.MEM, "device", 50)
+    device = resident.process_device()
     tasks.LOADS.clear()
     yield
     tasks.LOADS.clear()
+    resident.set_process_device(device)
+    resident.close_process_set()
     for claim in made:
         claim.lease.__exit__(None, None, None)
 
@@ -319,7 +386,7 @@ def _run(pool: Pool, cls):
     return worker, worker.run()
 
 
-def _warm(tmp_path, pools, sub, classes=None, **kwargs):
+def _warm(tmp_path, pools, sub, classes=None, substrate=None, **kwargs):
     from pydra.workers.pool.pool import WarmPool
     from pydra.workers.pool.substrate import LocalSubstrate
 
@@ -327,7 +394,7 @@ def _warm(tmp_path, pools, sub, classes=None, **kwargs):
     pool = WarmPool(
         tmp_path / "pool",
         classes or [_class()],
-        LocalSubstrate(),
+        substrate if substrate is not None else LocalSubstrate(),
         store=sub.store,
         **kwargs,
     )
@@ -457,6 +524,133 @@ def test_directory_calibration_round_trip(tmp_path):
         cal.record(attrs_evolve_sample(resident=1, peak=1, units=1, key=None, cls=cls))
 
 
+def test_memory_fit_takes_warm_lone_measured_samples(tmp_path):
+    """The resident bytes are the least seen; cold, reloaded and shared-worker samples, and samples
+    without a measured peak, are not fitted; a negative slope is no fit; samples with fewer than
+    two distinct units give an unknown ``m1``, not 0; a record that is not this version's is
+    skipped, not fatal."""
+    import attrs
+
+    cls = _class("cpu", mem=8 * GB)
+    hw = hardware_of(cls)
+    cal = DirectoryCalibration(tmp_path / "cal")
+    for resident, units in ((1000, 1.0), (1200, 2.0), (1100, 3.0)):
+        cal.record(
+            attrs_evolve_sample(
+                resident=resident,
+                peak=resident + 10 * int(units),
+                units=units,
+                key="k",
+                cls=cls,
+            )
+        )
+    base = attrs_evolve_sample(resident=10, peak=10**9, units=4.0, key="k", cls=cls)
+    for skipped in (
+        attrs.evolve(base, cold=True),
+        attrs.evolve(base, reload=True),
+        attrs.evolve(base, others=1),
+        attrs.evolve(base, peak_bytes=None),
+    ):
+        cal.record(skipped)
+    fit = cal.memory("k", hw)
+    assert (fit.resident, round(fit.m0, 6), round(fit.m1, 6), fit.n) == (
+        1000,
+        0.0,
+        10.0,
+        3,
+    )
+    falling = DirectoryCalibration(tmp_path / "falling")
+    for units in (1.0, 2.0, 3.0):
+        falling.record(
+            attrs_evolve_sample(
+                resident=1000,
+                peak=1000 + 100 - 10 * int(units),
+                units=units,
+                key="k",
+                cls=cls,
+            )
+        )
+    assert falling.memory("k", hw) is None
+    flat = DirectoryCalibration(tmp_path / "flat")
+    for peak in (1100, 1200, 1300):
+        flat.record(
+            attrs_evolve_sample(resident=1000, peak=peak, units=None, key="k", cls=cls)
+        )
+    assert flat.memory("k", hw) == MemoryFit(resident=1000, m0=200.0, m1=None, n=3)
+    (flat.root / "k" / "unfit").mkdir()
+    (flat.root / "k" / "unfit" / "1-x.json").write_text('{"key": "k", "resource": 3}')
+    assert flat.unfit("k") == []
+
+
+def test_no_device_peak_is_no_device_fit(measured, tmp_path):
+    """A GPU worker's samples without a measured device peak give no device fit (senselab's
+    ``device_unmeasured``): a job declaring 30G is not placed on a 24G L4 because ten gigabytes
+    were seen resident there; with measured peaks the fit judges."""
+    import attrs
+
+    job, request, _ = measured
+    big = attrs.evolve(request, resources=ComputeResources(gpus=1, gpu_mem="30G"))
+    l4 = WorkerClass("l4", "cuda", gpus=1, gpu_type="l4", gpu_mem=24 * G)
+    a100 = WorkerClass("a100", "cuda", gpus=1, gpu_type="a100", gpu_mem=40 * G)
+    cal = DirectoryCalibration(tmp_path / "cal")
+    for i in range(4):
+        sample = attrs_evolve_sample(
+            resident=None, peak=None, units=1.0 + i, key=request.key, cls=l4
+        )
+        cal.record(attrs.evolve(sample, device_bytes=10 * G, device_baseline_bytes=0))
+    assert cal.memory(request.key, hardware_of(l4)) is None
+    got = place(job, [l4, a100], MeasuredFit(cal), ok, request=big)
+    assert got.worker_class == "a100"
+    assert [(t.worker_class, t.verdict) for t in got.tried] == [
+        ("l4", "too small"),
+        ("a100", "fits"),
+    ]
+    assert MeasuredFit(cal).batch(big, l4, [None]) == 1
+    peaked = DirectoryCalibration(tmp_path / "peaked")
+    for i in range(4):
+        sample = attrs_evolve_sample(
+            resident=None, peak=None, units=1.0 + i, key=request.key, cls=l4
+        )
+        peaked.record(
+            attrs.evolve(
+                sample,
+                device_bytes=10 * G,
+                device_baseline_bytes=0,
+                device_peak_bytes=10 * G + G * (i + 1),
+            )
+        )
+    fit = peaked.memory(request.key, hardware_of(l4))
+    assert (fit.resident, round(fit.m0), round(fit.m1)) == (10 * G, 0, G)
+    assert (
+        place(job, [l4, a100], MeasuredFit(peaked), ok, request=big).worker_class
+        == "l4"
+    )
+
+
+def test_batch_through_place_with_unknown_length_is_one(measured, tmp_path):
+    """Through `place`, whose request carries no units: a measured per-unit memory gives a batch of
+    1, an unknown one too, and only a per-unit memory measured as 0 over real units gives the
+    ceiling."""
+    job, request, _ = measured
+    cls = _class("cpu", mem=8 * GB, quantum_jobs=64)
+    sloped = DirectoryCalibration(tmp_path / "sloped")
+    _seed(sloped, request.key, cls, resident=1 * GB, m1=1.0 * GB)
+    assert sloped.memory(request.key, hardware_of(cls)).m1 == pytest.approx(GB)
+    assert place(job, [cls], MeasuredFit(sloped), ok).batch == 1
+    flat = DirectoryCalibration(tmp_path / "flat")
+    _seed(flat, request.key, cls, resident=1 * GB, m1=0.0)
+    assert place(job, [cls], MeasuredFit(flat), ok).batch == 64
+    unknown = DirectoryCalibration(tmp_path / "unknown")
+    for _ in range(3):
+        unknown.record(
+            attrs_evolve_sample(
+                resident=GB, peak=GB, units=None, key=request.key, cls=cls
+            )
+        )
+    assert unknown.memory(request.key, hardware_of(cls)).m1 is None
+    assert place(job, [cls], MeasuredFit(unknown), ok).batch == 1
+
+
 def attrs_evolve_sample(*, resident, peak, units, key, cls):
     return Sample(
         wall_s=0.5,
@@ -488,6 +682,40 @@ def test_unfit_record_binds_only_its_code():
     assert not record.binds(Code((("m", "1"),), environment="docker:abc"))
     assert not record.binds(None)
     assert UnfitRecord.from_json(json.loads(json.dumps(record.to_json()))) == record
+
+
+def test_an_unfit_record_of_unknown_grant_binds_its_own_class_only(measured):
+    """A record whose grant is unknown holds for the class it was written on, never another; a
+    host record holds on a GPU class too, against its host memory."""
+    _, request, _ = measured
+    code = request.code
+    record = UnfitRecord(request.key, "host", None, "cpu", code)
+
+    class Fixed:
+        records = [record]
+
+        def memory(self, key, hardware):
+            return None
+
+        def unfit(self, key):
+            return self.records
+
+        def times(self, key, hardware):
+            return ()
+
+    fit = MeasuredFit(Fixed())
+    assert fit.judge(request, _class("cpu")).verdict == "unfit"
+    assert fit.judge(request, _class("other")).verdict != "unfit"
+    gpu = WorkerClass("l4", "cuda", gpus=1, gpu_mem=24 * G, mem=32 * G)
+    Fixed.records = [UnfitRecord(request.key, "host", 64 * G, "elsewhere", code)]
+    assert fit.judge(request, gpu).verdict == "unfit"
+    Fixed.records = [UnfitRecord(request.key, "host", 32 * G, "elsewhere", code)]
+    assert fit.judge(request, gpu).verdict == "unfit"  # a grant as large binds
+    Fixed.records = [UnfitRecord(request.key, "host", 16 * G, "elsewhere", code)]
+    assert fit.judge(request, gpu).verdict != "unfit"
+    anon = WorkerClass("anon", "cuda", gpus=1)
+    Fixed.records = [UnfitRecord(request.key, "device", 24 * G, "anon", code)]
+    assert fit.judge(request, anon).verdict == "unfit"  # before "unknown"
 
 
 # -- MeasuredFit (ported from senselab's fit_test.py) ------------------------------------------
@@ -642,6 +870,16 @@ def test_measured_fit_batch_rule(measured):
     assert fit.batch(request, h100, [4.0]) == 1  # no room
     figures["fit"] = MemoryFit(resident=1 * G, m0=0.0, m1=0.0, n=6)
     assert fit.batch(request, h100, [4.0]) == 64  # no per-job memory: a ticket's worth
+    figures["fit"] = MemoryFit(resident=1 * G, m0=0.0, m1=1.0, n=6)
+    assert (
+        fit.batch(request, h100, [4.0]) == 64
+    )  # room for millions: capped at a ticket
+    figures["fit"] = MemoryFit(resident=10 * G, m0=2 * G, m1=0.5 * G, n=6)
+    assert (
+        fit.batch(request, h100, [None]) == 1
+    )  # per-unit memory measured, length unknown
+    figures["fit"] = MemoryFit(resident=10 * G, m0=2 * G, m1=None, n=6)
+    assert fit.batch(request, h100, [4.0]) == 1  # per-unit memory unknown
     figures["fit"] = None
     assert fit.batch(request, h100, [4.0]) == 1  # unmeasured
 
@@ -790,9 +1028,10 @@ def test_plan_shows_classes_tried(tmp_path, tasks, pools):
     request = fit_request(job)
     measured.record(UnfitRecord(request.key, "host", 1 * G, "small", request.code))
     plain = _class("small", mem="1G"), _class("large", mem="4G")
-    warm2 = _warm(
-        tmp_path / "second", pools, sub, list(plain), fit=MeasuredFit(measured)
-    )
+    with pytest.warns(UserWarning, match="no out-of-memory verdict"):
+        warm2 = _warm(
+            tmp_path / "second", pools, sub, list(plain), fit=MeasuredFit(measured)
+        )
     runner = GraphRunner(
         tasks.Sames(xs=[1]), sub.store, submitter=sub, on_error="raise_at_end"
     )
@@ -824,7 +1063,7 @@ def test_recheck_sampling_is_deterministic():
         PoolSettings(recheck_fraction=1.5)
 
 
-def _recheck_run(tmp_path, pools, tasks, workflow, fraction):
+def _recheck_run(tmp_path, pools, tasks, workflow, fraction, model="recorder"):
     from pydra.utils.messenger import AuditFlag, FileMessenger
 
     messages = tmp_path / "messages"
@@ -835,7 +1074,7 @@ def _recheck_run(tmp_path, pools, tasks, workflow, fraction):
         messengers=FileMessenger(),
         messenger_args={"message_dir": str(messages)},
     )
-    sub.providers = (tasks.Recorder(),)
+    sub.providers = (tasks.Recorder(), tasks.Sized())
     warm = _warm(
         tmp_path,
         pools,
@@ -844,7 +1083,8 @@ def _recheck_run(tmp_path, pools, tasks, workflow, fraction):
     )
     runner = _drive(sub, workflow(xs=[1, 2]), warm)
     warm.close()
-    job = Job(task=tasks.Same(model="m", x=1), submitter=sub, name="k")
+    task = tasks.Same if model == "recorder" else tasks.UseSized
+    job = Job(task=task(model="m", x=1), submitter=sub, name="k")
     key = fit_request(job).key
     parity = DirectoryCalibration(tmp_path / "pool" / "calibration").parity(key)
     audits = []
@@ -904,3 +1144,311 @@ def test_recheck_goes_through_the_verify_path(tmp_path, tasks, pools, monkeypatc
     assert all("the hook refuses" in r.reason for r in parity)
     assert len(audits) == 1
     assert all(len(sub.store.stored(r.checksum)) == 1 for r in parity)
+
+
+# -- fix round 1: GPU verdicts across pools, attribution, the re-check thread, homes --------------
+
+
+def _wait(predicate, what: str, bound: float = BOUND) -> None:
+    import time
+
+    deadline = time.monotonic() + bound
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"timed out waiting for {what}")
+        time.sleep(0.05)
+
+
+def _gpu(name, product, memory, **kwargs):
+    from pydra.workers.pool.samples import Gpu, HardwareClass
+
+    fields = dict(name=name, device="cuda", gpus=1, quantum_jobs=4, quantum_s=600.0)
+    fields.update(kwargs)
+    return WorkerClass(**fields), HardwareClass("cuda", (Gpu(product, memory),), 4)
+
+
+def _hand_run(tmp_path, pools, sub, classes, job, runs):
+    """A `WarmPool` on an `ExternalSubstrate`: ``job`` submitted, then for each ``(class, hardware,
+    failure)`` of ``runs`` a worker of that class started by hand in this process on that hardware
+    once the job is queued there, the provider failing as ``failure`` says. Returns the outcome.
+    """
+    from pydra.workers.pool.substrate import ExternalSubstrate
+    from pydra.workers.pool.worker import Worker
+
+    warm = _warm(tmp_path, pools, sub, classes, substrate=ExternalSubstrate())
+    reports = []
+    warm.bind(lambda j, outcome: reports.append(outcome))
+    warm.submit([job])
+    key = (job.checksum, sub.store.identity.fingerprint(job.context))
+    for cls, hardware, failure in runs:
+
+        def queued(name=cls.name):
+            newest = warm.pool.newest(*key)
+            if newest is None:
+                return False
+            q = warm.pool._by_label(newest[1].get("queue", ""))
+            return q is not None and q.name.split("#")[0] == name
+
+        _wait(queued, f"the job queued on {cls.name}")
+        job.submitter  # the provider reads FAIL in this process
+        tasks_module = sys.modules["_pydra_pool_calibration_tasks"]
+        tasks_module.FAIL["load"] = failure
+        worker = Worker(
+            warm.root,
+            cls,
+            settings=_settings(),
+            device_memory=lambda: None,
+            hardware=lambda h=hardware: h,
+        )
+        assert worker.run() == 0
+    _wait(lambda: reports, "the job's outcome")
+    warm.close()
+    return reports[0]
+
+
+def _gpu_sub(tmp_path, tasks):
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    sub.providers = (tasks.Cuda(),)
+    return sub
+
+
+def test_gpu_load_oom_persists_across_warm_pools(tmp_path, tasks, pools):
+    """A "CUDA out of memory" load on an L4 shared by two workers is a device record of the
+    worker's share (12G), the job runs on the A100, and the next pool's placement starts there;
+    a new provider version unbinds it."""
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    l4, l4_hw = _gpu(
+        "l4", "NVIDIA L4", 24 * G, gpu_type="l4", gpu_mem=24 * G, workers_per_device=2
+    )
+    a100, a100_hw = _gpu(
+        "a100", "NVIDIA A100-SXM4-40GB", 40 * G, gpu_type="a100", gpu_mem=40 * G
+    )
+    sub = _gpu_sub(tmp_path, tasks)
+    job = Job(
+        task=tasks.UseCuda(model="m", x=1),
+        submitter=sub,
+        name="j",
+        resources=ComputeResources(gpus=1),
+    )
+    outcome = _hand_run(
+        tmp_path,
+        pools,
+        sub,
+        [l4, a100],
+        job,
+        [(l4, l4_hw, "cuda"), (a100, a100_hw, False)],
+    )
+    assert not getattr(outcome, "errored", True)
+    key = fit_request(job).key
+    [record] = DirectoryCalibration(tmp_path / "pool" / "calibration").unfit(key)
+    assert (record.resource, record.grant, record.worker_class) == (
+        "device",
+        12 * G,
+        "l4",
+    )
+    measured = MeasuredFit(DirectoryCalibration(tmp_path / "pool" / "calibration"))
+    second = _warm(
+        tmp_path, pools, sub, [l4, a100], substrate=ExternalSubstrate(), fit=measured
+    )
+    [got] = second.place([job])
+    assert got.worker_class == "a100"
+    assert [(t.worker_class, t.verdict) for t in got.tried] == [
+        ("l4", "unfit"),
+        ("a100", "unknown"),
+    ]
+    tasks.VERSION["cuda"] = "2"
+    [got] = second.place([job])
+    assert got.worker_class == "l4"
+
+
+@pytest.mark.parametrize(
+    "case", ["unknown device memory", "host out of memory on a GPU class"]
+)
+def test_gpu_oom_verdict_holds(tmp_path, tasks, pools, case):
+    """The verdict holds for a class whose device memory was unknown at placement (its worker read
+    24G: the record names it, and the class is unfit before it is unknown), and for a host
+    ``MemoryError`` on a GPU class (a host record against its host memory)."""
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    if case == "unknown device memory":
+        cls, hw = _gpu("anon", "NVIDIA L4", 24 * G)
+        failure, expect = "cuda", ("device", 24 * G)
+    else:
+        cls, hw = _gpu(
+            "l4", "NVIDIA L4", 24 * G, gpu_type="l4", gpu_mem=24 * G, mem=32 * G
+        )
+        failure, expect = "host", ("host", 32 * G)
+    sub = _gpu_sub(tmp_path, tasks)
+    job = Job(
+        task=tasks.UseCuda(model="m", x=1),
+        submitter=sub,
+        name="j",
+        resources=ComputeResources(gpus=1),
+    )
+    _hand_run(tmp_path, pools, sub, [cls], job, [(cls, hw, failure)])
+    calibration = DirectoryCalibration(tmp_path / "pool" / "calibration")
+    [record] = calibration.unfit(fit_request(job).key)
+    assert (record.resource, record.grant, record.worker_class) == (*expect, cls.name)
+    second = _warm(
+        tmp_path,
+        pools,
+        sub,
+        [cls],
+        substrate=ExternalSubstrate(),
+        fit=MeasuredFit(calibration),
+    )
+    [got] = second.place([job])
+    assert isinstance(got, Unplaceable)
+    assert [(t.worker_class, t.verdict) for t in got.tried] == [(cls.name, "unfit")]
+
+
+class _Meter:
+    """A fake `CallMeter`: every call peaks 7 host bytes and 70 device bytes above its start."""
+
+    def start(self):
+        return (0, 0)
+
+    def stop(self, state):
+        return (7, 70)
+
+
+def test_samples_attribute_memory_to_their_residency(pool, tasks):
+    """A worker serving residency A then B records each with the bytes gained across its own load
+    (host and its own processes' device bytes, read again at each load) and the call's peaks; B's
+    samples, taken with A still resident, are kept but never fitted."""
+    from pydra.workers.pool.worker import Worker
+
+    cls, hw = _gpu("l4", "NVIDIA L4", 24 * G, gpu_type="l4", gpu_mem=24 * G)
+    pool.submitter.providers = (tasks.Grows(),)
+    pool.classes(cls)
+    a = [pool.job(tasks.UseGrows(model="a", x=i), f"a{i}") for i in range(2)]
+    b = [pool.job(tasks.UseGrows(model="b", x=i), f"b{i}") for i in range(2)]
+    pool.put(a, "l4")
+    pool.put(b, "l4")
+    worker = Worker(
+        pool.path,
+        cls,
+        settings=_settings(),
+        hardware=lambda: hw,
+        memory=lambda: (
+            tasks.MEM["rss"],
+            10**12,
+        ),  # a lifetime peak that must not be used
+        device_memory=lambda: tasks.MEM["device"],
+        meter=_Meter(),
+    )
+    assert worker.run() == 0
+    cal = pool.calibration
+    hardware = hardware_of(cls)
+    ka, kb = fit_request(a[0]).key, fit_request(b[0]).key
+    sa, sb = cal.samples(ka, hardware), cal.samples(kb, hardware)
+    assert [(s.cold, s.others) for s in sa] == [(True, 0), (False, 0)]
+    assert [(s.cold, s.others) for s in sb] == [(True, 1), (False, 1)]
+    assert {(s.resident_bytes, s.peak_bytes) for s in sa} == {
+        (1000 + 100, 1000 + 100 + 7)
+    }
+    assert {(s.resident_bytes, s.peak_bytes) for s in sb} == {
+        (1000 + 300, 1000 + 300 + 7)
+    }
+    assert {
+        (s.device_baseline_bytes, s.device_bytes, s.device_peak_bytes) for s in sa
+    } == {(50, 1000, 1070)}
+    assert {(s.device_bytes, s.device_peak_bytes) for s in sb} == {(3000, 3070)}
+    assert DirectoryCalibration(cal.root, min_samples=1).memory(kb, hardware) is None
+    fit = DirectoryCalibration(cal.root, min_samples=1).memory(ka, hardware)
+    assert (fit.resident, fit.m0) == (50 + 1000, 70.0)
+
+
+def test_device_bytes_count_the_workers_own_processes(monkeypatch, tmp_path):
+    """By default a worker counts the device bytes of its own processes only, never a co-tenant's."""
+    from pydra.workers.pool import worker as worker_module
+
+    asked = []
+    monkeypatch.setattr(
+        worker_module, "device_memory", lambda pids=None: asked.append(pids) or 0
+    )
+    w = worker_module.Worker(tmp_path, _class())
+    assert w.device_memory() == 0
+    assert asked == [[os.getpid()]]
+
+
+def test_recheck_not_run_is_recorded_and_never_audited(tmp_path, tasks, pools):
+    """A re-check whose provider cannot load in the coordinator's process (here a load that runs
+    out of memory there only) is recorded as not run, ``equal=None``, and never audited.
+    """
+    tasks.FAIL["load"] = True  # this process only: the workers import the module afresh
+    _, parity, audits, _ = _recheck_run(
+        tmp_path, pools, tasks, tasks.UseSizeds, 1.0, "sized"
+    )
+    assert len(parity) == 2 and all(r.equal is None for r in parity)
+    assert all("MemoryError" in r.reason for r in parity)
+    assert audits == []
+
+
+def test_follower_continues_while_a_recheck_blocks(tmp_path, tasks, pools, monkeypatch):
+    """A re-check runs on its own thread with a bounded queue. With A's re-check held, the follower
+    still reports B and then C (each placed only after its upstream was reported) and the run
+    completes; with B's re-check queued, C's is dropped and counted; `close` (called by the
+    driver) returns within its bound while A's is still held, and B's is dropped once A's ends.
+    """
+    import threading
+
+    from pydra.workers.pool.pool import WarmPool
+
+    entered, release = threading.Event(), threading.Event()
+    original = WarmPool._fresh_run
+
+    def held(self, job, candidate):
+        entered.set()
+        assert release.wait(BOUND)
+        return original(self, job, candidate)
+
+    monkeypatch.setattr(WarmPool, "_fresh_run", held)
+    monkeypatch.setattr(WarmPool, "recheck_queue", 1)
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    sub.providers = (tasks.Recorder(),)
+    settings = _settings(idle_polls=40, recheck_fraction=1.0, drain_s=0.1)
+    warm = _warm(tmp_path, pools, sub, settings=settings)
+    runner = _drive(sub, tasks.Chain(x=1), warm)  # the driver closes the pool
+    assert runner.done and entered.is_set() and not release.is_set()
+    assert warm.rechecks_dropped == 1  # C's: the queue held B's
+    assert warm._recheck_thread.is_alive()
+    release.set()
+    warm._recheck_thread.join(BOUND)
+    assert not warm._recheck_thread.is_alive()
+    assert warm.rechecks_dropped == 2  # and B's, left at close
+    calibration = DirectoryCalibration(tmp_path / "pool" / "calibration")
+    keys = [
+        fit_request(Job(task=tasks.Same(model=m, x=1), submitter=sub, name=m)).key
+        for m in "abc"
+    ]
+    assert [[r.equal for r in calibration.parity(k)] for k in keys] == [[True], [], []]
+
+
+def test_workers_write_to_the_given_calibration_directory(tmp_path, tasks, pools):
+    """A `DirectoryCalibration` passed to the pool is where its workers write; any other
+    calibration, or a fit reading elsewhere, warns."""
+    import warnings
+
+    given = DirectoryCalibration(tmp_path / "given")
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    sub.providers = (tasks.Recorder(),)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warm = _warm(tmp_path, pools, sub, calibration=given, fit=MeasuredFit(given))
+    _drive(sub, tasks.Sames(xs=[1]), warm)
+    warm.close()
+    job = Job(task=tasks.Same(model="m", x=1), submitter=sub, name="k")
+    hardware = hardware_of(_class())
+    assert len(given.samples(fit_request(job).key, hardware)) == 1
+    assert not (tmp_path / "pool" / "calibration").exists()
+
+    class Elsewhere:
+        def record(self, record):
+            pass
+
+    with pytest.warns(UserWarning, match="workers write"):
+        _warm(tmp_path / "other", pools, sub, calibration=Elsewhere())
+    with pytest.warns(UserWarning, match="no out-of-memory verdict"):
+        _warm(tmp_path / "third", pools, sub, fit=MeasuredFit(given))
