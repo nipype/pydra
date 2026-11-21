@@ -1,3 +1,4 @@
+import asyncio
 import os
 import attrs
 import typing as ty
@@ -103,11 +104,10 @@ class ConcurrentFuturesWorker(base.Worker):
         rerun: bool = False,
     ) -> "Result":
         """Run a job."""
-        assert self.loop, "No event loop available to submit tasks"
         if not is_workflow(job.task):  # a workflow job keeps its pickle
             job.persist_pickle = False
         job_pkl = cp.dumps(job)
-        return await self.loop.run_in_executor(
+        return await asyncio.get_running_loop().run_in_executor(
             self.pool, self.uncloudpickle_and_run, job_pkl, rerun
         )
 
