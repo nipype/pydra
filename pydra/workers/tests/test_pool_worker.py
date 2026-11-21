@@ -573,8 +573,9 @@ def test_lost_claim_abandons_its_call(pool, tasks):
     assert [r.get("worker") for r in _started(pool, second)] == []
     taken = []  # the emptied lease is taken once it is judged stale
     _wait(
-        lambda: taken.append(pool.pool.take("cpu", digest, beat="external"))
-        or taken[-1],
+        lambda: (
+            taken.append(pool.pool.take("cpu", digest, beat="external")) or taken[-1]
+        ),
         "the ticket to be claimable",
     )
     taken[-1].release()
@@ -1624,11 +1625,23 @@ def test_load_infrastructure_faults_are_bounded(pool, tasks):
     assert [kind for kind, _ in tasks.LOADS] == ["broken"] * 3
 
 
-def _fake_smi(tmp_path, monkeypatch, indices, visible):
-    """A ``nvidia-smi`` on PATH listing GPUs ``indices`` (uuid ``GPU-<index>-aaaa``)."""
+def _fake_smi(tmp_path, monkeypatch, indices, visible, mig=None):
+    """A ``nvidia-smi`` on PATH listing GPUs ``indices`` (uuid ``GPU-<index>-aaaa``); ``mig`` maps
+    a parent index to its MIG UUIDs, which only ``-L`` lists, as the real tool does."""
     rows = "\n".join(f"{i}, GPU-{i}-aaaa, H100-{i}, 81559, 9.0" for i in indices)
+    listing = []
+    for i in indices:
+        listing.append(f"GPU {i}: NVIDIA H100 (UUID: GPU-{i}-aaaa)")
+        for n, u in enumerate((mig or {}).get(i, [])):
+            listing.append(f"  MIG 1g.10gb Device {n}: (UUID: {u})")
     exe = tmp_path / "nvidia-smi"
-    exe.write_text(f"#!/bin/sh\ncat <<'EOF'\n{rows}\nEOF\n")
+    exe.write_text(
+        "#!/bin/sh\n"
+        f'if [ "$1" = "-L" ]; then cat <<\'EOF\'\n'
+        + "\n".join(listing)
+        + "\nEOF\nexit 0; fi\n"
+        f"cat <<'EOF'\n{rows}\nEOF\n"
+    )
     exe.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
     if visible is None:
@@ -1637,45 +1650,80 @@ def _fake_smi(tmp_path, monkeypatch, indices, visible):
         monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
 
 
-def _read(tmp_path, monkeypatch, indices, visible):
+def _hw(tmp_path, monkeypatch, indices, visible, mig=None):
     from pydra.workers.pool.samples import read_hardware
 
-    _fake_smi(tmp_path, monkeypatch, indices, visible)
-    gpus = read_hardware().gpus
+    _fake_smi(tmp_path, monkeypatch, indices, visible, mig)
+    return read_hardware().gpus
+
+
+def _read(tmp_path, monkeypatch, indices, visible):
+    gpus = _hw(tmp_path, monkeypatch, indices, visible)
     assert all(g.uuid == f"GPU-{g.index}-aaaa" for g in gpus)
     return [g.index for g in gpus]
 
 
 def test_visible_indices_on_an_unconstrained_host(tmp_path, monkeypatch):
-    """(a) ``2,3`` on a four-GPU host: logical 0, 1 are physical 2, 3 (the product name carries the physical index)."""
-    got = _read(tmp_path, monkeypatch, [0, 1, 2, 3], "2,3")
-    assert got == [2, 3]
+    """(a) ``2,3`` on a four-GPU host: logical 0, 1 are physical 2, 3."""
+    assert _read(tmp_path, monkeypatch, [0, 1, 2, 3], "2,3") == [2, 3]
 
 
 def test_unset_visible_devices_grants_all(tmp_path, monkeypatch):
     assert _read(tmp_path, monkeypatch, [0, 1], None) == [0, 1]
 
 
-def test_constrained_devices_fall_back_to_nvidia_smi_order(tmp_path, monkeypatch):
-    """(b) Host indices ``2,3`` while the cgroup shows only 0, 1: the two listed GPUs, in order."""
-    got = _read(tmp_path, monkeypatch, [0, 1], "2,3")
-    assert got == [0, 1]
+def test_constrained_devices_map_local_indices_exactly(tmp_path, monkeypatch):
+    """(b) Under ConstrainDevices Slurm sets local ``0,1`` and ``nvidia-smi`` lists 0, 1."""
+    assert _read(tmp_path, monkeypatch, [0, 1], "0,1") == [0, 1]
+
+
+def test_visible_order_is_logical_order(tmp_path, monkeypatch):
+    """``1,0``: logical 0 is physical 1, logical 1 is physical 0."""
+    assert _read(tmp_path, monkeypatch, [0, 1], "1,0") == [1, 0]
 
 
 def test_uuids_are_matched_by_uuid(tmp_path, monkeypatch):
     """(c) UUID entries select by UUID, in ``CUDA_VISIBLE_DEVICES`` order, not by position."""
-    got = _read(tmp_path, monkeypatch, [0, 1, 2, 3], "GPU-3-aaaa,GPU-1-aaaa")
-    assert got == [3, 1]
+    assert _read(tmp_path, monkeypatch, [0, 1, 2, 3], "GPU-3-aaaa,GPU-1-aaaa") == [3, 1]
+
+
+def test_uuid_prefix_matches_when_unambiguous(tmp_path, monkeypatch):
+    assert _read(tmp_path, monkeypatch, [0, 1, 2, 3], "GPU-2,gpu-0-a") == [2, 0]
+
+
+@pytest.mark.parametrize("visible", ["-1", "", "NoDevFiles"])
+def test_no_device_values_grant_nothing_quietly(tmp_path, monkeypatch, caplog, visible):
+    with caplog.at_level(logging.WARNING):
+        assert _read(tmp_path, monkeypatch, [0, 1], visible) == []
+    assert caplog.text == ""
+
+
+def test_mig_uuid_maps_to_its_parent_with_unknown_memory(tmp_path, monkeypatch):
+    """A MIG slice takes the parent's product and index, and no memory (the parent's total overstates it)."""
+    mig = {1: ["MIG-aaaa1111", "MIG-bbbb2222"]}
+    gpus = _hw(tmp_path, monkeypatch, [0, 1], "MIG-bbbb2222,GPU-0-aaaa", mig)
+    assert [(g.uuid, g.index, g.product) for g in gpus] == [
+        ("MIG-bbbb2222", 1, "H100-1"),
+        ("GPU-0-aaaa", 0, "H100-0"),
+    ]
+    assert gpus[0].memory is None and gpus[1].memory == 81559 << 20
+
+
+def test_unknown_mig_uuid_grants_nothing(tmp_path, monkeypatch, caplog):
+    with caplog.at_level(logging.WARNING):
+        assert _hw(tmp_path, monkeypatch, [0, 1], "MIG-zzzz", {1: ["MIG-aaaa"]}) == ()
+    assert "CUDA_VISIBLE_DEVICES" in caplog.text
 
 
 @pytest.mark.parametrize(
     "indices,visible",
     [
         ([0, 1, 2, 3], "GPU-9-aaaa"),  # unknown uuid
-        ([0, 1, 2, 3], "2,9"),  # index out of range, counts differ
-        ([0, 1], "2"),  # fewer entries than listed devices: ambiguous
+        ([0, 1, 2, 3], "2,9"),  # index not listed
+        ([0, 1], "2,3"),  # host indices under a cgroup: CUDA cannot see them either
         ([0, 1], "GPU-0-aaaa,5"),  # mixed with a missing index
         ([0, 1], "1,1"),  # duplicate
+        ([0, 1, 2], "GPU-"),  # ambiguous prefix
     ],
 )
 def test_unmappable_visible_devices_grant_nothing(
@@ -1685,3 +1733,21 @@ def test_unmappable_visible_devices_grant_nothing(
     with caplog.at_level(logging.WARNING):
         assert _read(tmp_path, monkeypatch, indices, visible) == []
     assert "CUDA_VISIBLE_DEVICES" in caplog.text
+
+
+def test_gpu_identity_does_not_enter_equality():
+    from pydra.workers.pool.samples import Gpu
+
+    assert Gpu("H100", 1, "9.0", "GPU-a", 0) == Gpu("H100", 1, "9.0", "GPU-b", 3)
+
+
+def test_ready_mark_records_uuid_and_index(pool, tmp_path, monkeypatch):
+    from pydra.workers.pool.samples import read_hardware
+
+    _fake_smi(tmp_path, monkeypatch, [0, 1], "1")
+    worker, code = _run(
+        pool, _class("gpu", device="cuda", gpus=1), hardware=read_hardware
+    )
+    assert code == 0
+    gpu = pool.pool.worker_record(worker.token, "ready.json")["hardware"]["gpus"][0]
+    assert (gpu["uuid"], gpu["index"]) == ("GPU-1-aaaa", 1)

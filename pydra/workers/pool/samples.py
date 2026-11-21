@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -30,10 +31,9 @@ class Gpu:
     product: str
     memory: int | None  # bytes
     compute_capability: str | None = None
-    uuid: str | None = None
-    index: int | None = (
-        None  # nvidia-smi's index; the logical ordinal is the position in ``gpus``
-    )
+    uuid: str | None = attrs.field(default=None, eq=False)
+    # nvidia-smi's index; the logical ordinal is the position in ``gpus``
+    index: int | None = attrs.field(default=None, eq=False)
 
 
 @attrs.frozen
@@ -81,15 +81,40 @@ def _is_uuid(entry: str) -> bool:
     return entry.upper().startswith(("GPU-", "MIG-"))
 
 
-def _visible(rows: list[list[str]]) -> list[list[str]]:
+def _mig_parents(exe: str, timeout: float) -> dict[str, str]:
+    """Each ``MIG-`` UUID that ``nvidia-smi -L`` lists, mapped to its parent device's UUID (the
+    ``--query-gpu`` rows carry only the parent's)."""
+    try:
+        out = subprocess.run(
+            [exe, "-L"], capture_output=True, text=True, timeout=timeout, check=True
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    parents: dict[str, str] = {}
+    parent = None
+    for line in out.splitlines():
+        m = re.search(r"\(UUID: ((?:GPU|MIG)-[^)\s]+)\)", line)
+        if m is None:
+            continue
+        if line.lstrip().startswith("GPU"):
+            parent = m.group(1)
+        elif parent is not None:
+            parents[m.group(1)] = parent
+    return parents
+
+
+def _visible(
+    rows: list[list[str]], mig: dict[str, str] | None = None
+) -> list[list[str]]:
     """The rows ``[index, uuid, name, memory, compute_cap]`` that ``CUDA_VISIBLE_DEVICES`` grants,
-    in its order (position is the logical ordinal torch sees); all rows when it is unset.
+    in its order (position is the logical ordinal torch sees); all rows when it is unset, none
+    when it is empty, ``-1`` or ``NoDevFiles``.
 
     An entry beginning ``GPU-`` or ``MIG-`` is a UUID (an unambiguous prefix suffices); any other
-    entry is an ``nvidia-smi`` index. Under a cgroup that constrains devices ``nvidia-smi`` lists
-    only the granted devices, renumbered from 0, so when every entry is an index and one is not
-    listed the rows are taken in the order ``nvidia-smi`` reports them, which is the order CUDA
-    enumerates them in; that needs as many entries as listed devices.
+    entry is an ``nvidia-smi`` index. A ``MIG-`` entry is the row of its parent (``mig`` maps it
+    there) with its own UUID and no memory, the parent's total overstating the slice. Under a
+    cgroup that constrains devices Slurm sets local indices ``0..k-1``, which ``nvidia-smi`` lists
+    under the same numbers; host indices that it does not list are not mapped.
 
     Raises
     ------
@@ -99,31 +124,31 @@ def _visible(rows: list[list[str]]) -> list[list[str]]:
     visible = os.environ.get("CUDA_VISIBLE_DEVICES")
     if visible is None:
         return rows
-    entries = [e.strip() for e in visible.split(",") if e.strip()]
-    if not entries:
+    if visible.strip() in ("", "-1", "NoDevFiles"):
         return []
+    entries = [e.strip() for e in visible.split(",") if e.strip()]
     by_index = {r[0]: r for r in rows}
-    if not any(_is_uuid(e) for e in entries) and not all(
-        e in by_index for e in entries
-    ):
-        if all(e.isdigit() for e in entries) and len(entries) == len(rows):
-            return list(rows)
-        raise _Unmapped(
-            f"CUDA_VISIBLE_DEVICES={visible!r} does not match nvidia-smi's "
-            f"devices {sorted(by_index)}"
-        )
     granted = []
     for e in entries:
-        if _is_uuid(e):
+        if e.upper().startswith("MIG-"):
+            full = [u for u in (mig or {}) if u.upper().startswith(e.upper())]
+            parent = [r for r in rows if len(full) == 1 and r[1] == mig[full[0]]]
+            hits = (
+                [[parent[0][0], full[0], parent[0][2], "", *parent[0][4:]]]
+                if parent
+                else []
+            )
+        elif e.upper().startswith("GPU-"):
             hits = [r for r in rows if r[1].upper().startswith(e.upper())]
         else:
             hits = [by_index[e]] if e in by_index else []
         if len(hits) != 1:
             raise _Unmapped(
-                f"CUDA_VISIBLE_DEVICES entry {e!r} matches {len(hits)} of nvidia-smi's devices"
+                f"CUDA_VISIBLE_DEVICES entry {e!r} matches {len(hits)} of nvidia-smi's "
+                f"devices {sorted(by_index)}"
             )
         granted.append(hits[0])
-    if len({r[0] for r in granted}) != len(granted):
+    if len({r[1] for r in granted}) != len(granted):
         raise _Unmapped(f"CUDA_VISIBLE_DEVICES={visible!r} names a device twice")
     return granted
 
@@ -152,8 +177,10 @@ def read_hardware(timeout: float = 20.0) -> HardwareClass:
         except (OSError, subprocess.SubprocessError):
             out = ""
         rows = [[c.strip() for c in line.split(",")] for line in out.splitlines()]
+        visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        mig = _mig_parents(exe, timeout) if "MIG-" in visible.upper() else {}
         try:
-            granted = _visible([r for r in rows if len(r) >= 4])
+            granted = _visible([r for r in rows if len(r) >= 4], mig)
         except _Unmapped as exc:
             logger.warning("no GPU granted: %s", exc)
             granted = []
