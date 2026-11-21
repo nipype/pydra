@@ -1,9 +1,13 @@
-"""The ``pool`` section of the execute context (RFC 0005 section 8, W11a).
+"""The ``pool`` section of the execute context, and a pool that outlives a run (RFC 0005 section 8, W11a).
 
 A worker computes ``pool-facts@1`` for each call. Under a store whose identity lists ``pool`` in
 ``recorded_only`` the section enters the execute context, where it is recorded and never splits a slot;
 under ``pydra-identity@1`` without it, and under `PickleStore`, it reaches only the audit record and
 ``Result.runtime``. A store whose identity would key it is refused (`PoolFactsWouldSplitSlots`).
+
+`Submitter(worker=<WarmPool>)` leaves the pool to its caller, so its workers stay resident from one run to
+the next; a pool the `Submitter` makes by name is closed with the `Submitter`. Loads are counted by a
+provider that writes one file per load, never timed.
 """
 
 import json
@@ -412,6 +416,16 @@ def test_store_keying_pool_refused(tmp_path, tasks):
             settings=_settings(),
         )
     assert not (tmp_path / "pool").exists()
+    with pytest.raises(PoolFactsWouldSplitSlots):
+        Submitter(
+            store=keyed,
+            worker="pool",
+            root=tmp_path / "pool",
+            classes=[_class()],
+            substrate=ExternalSubstrate(),
+            settings=_settings(),
+        )
+    assert not (tmp_path / "pool").exists()
 
     (tmp_path / "other").mkdir()
     listed = _store(tmp_path / "other", ClientIdentity(recorded_only={"pool"}))
@@ -456,3 +470,129 @@ def test_v1_and_picklestore_facts_audit_only(tmp_path, tasks, queue_of, kind):
         result = store.lookup(job.checksum, job.context, task=job.task)
         assert result is not None and "pool" not in result.context
         assert result.runtime is not None and result.runtime.pool == facts
+
+
+# -- a pool that outlives a run ------------------------------------------------------------------
+
+
+def _local_pool(tmp_path, tasks, store, groups, **kwargs):
+    from pydra.workers.pool.pool import WarmPool
+    from pydra.workers.pool.substrate import LocalSubstrate
+
+    substrate = LocalSubstrate()
+    kwargs.setdefault("settings", _settings(idle_polls=100_000))
+    pool = WarmPool(
+        tmp_path / "pool",
+        [_class()],
+        substrate,
+        store=store,
+        providers=["_pydra_pool_context_tasks:Counting"],
+        **kwargs,
+    )
+    return pool, substrate
+
+
+def _track(substrate, groups) -> None:
+    for handle in substrate.handles:
+        if handle.process is not None and handle.process.pid not in groups:
+            groups.append(handle.process.pid)
+
+
+def test_two_runs_on_a_caller_owned_pool_load_once(tmp_path, tasks, groups):
+    """Two successive ``sub(task)`` runs on one caller-owned `WarmPool` use one resident load: neither
+    the run nor the `Submitter`'s close closes the pool, which its caller closes."""
+    store = _store(tmp_path)
+    pool, substrate = _local_pool(tmp_path, tasks, store, groups)
+    models = tmp_path / "loads"
+    models.mkdir()
+    try:
+        with Submitter(store=store, worker=pool, providers=[tasks.Counting()]) as sub:
+            first = sub(tasks.UseModel(model=str(models), x=1))
+            _track(substrate, groups)
+            assert first.outputs.out == 1
+            assert not pool._closed
+            second = sub(tasks.UseModels(model=str(models), xs=[2, 3]))
+            _track(substrate, groups)
+            assert second.outputs.out == [2, 3]
+        assert not pool._closed
+        assert len(list(models.iterdir())) == 1
+        assert len(substrate.handles) == 1
+        assert substrate.handles[0].process.poll() is None  # still resident
+    finally:
+        pool.close()
+    _track(substrate, groups)
+    _wait(
+        lambda: all(h.process.poll() is not None for h in substrate.handles),
+        "the pool's workers to stop when its caller closes it",
+    )
+
+
+def test_pool_by_name_closed_on_submitter_exit(tmp_path, tasks, groups):
+    """A pool the `Submitter` makes by name stays open between runs and is closed with the `Submitter`,
+    which stops its workers."""
+    from pydra.workers.pool.substrate import LocalSubstrate
+
+    store = _store(tmp_path)
+    substrate = LocalSubstrate()
+    models = tmp_path / "loads"
+    models.mkdir()
+    with Submitter(
+        store=store,
+        worker="pool",
+        root=tmp_path / "pool",
+        classes=[_class()],
+        substrate=substrate,
+        settings=_settings(idle_polls=100_000),
+        providers=[tasks.Counting()],
+    ) as sub:
+        pool = sub.worker.executor
+        assert sub(tasks.UseModel(model=str(models), x=1)).outputs.out == 1
+        _track(substrate, groups)
+        assert not pool._closed
+        assert sub(tasks.UseModel(model=str(models), x=2)).outputs.out == 2
+        _track(substrate, groups)
+        assert not pool._closed
+        assert len(list(models.iterdir())) == 1
+    assert pool._closed
+    assert (tmp_path / "pool" / "coordinator" / str(pool.epoch) / "ended").exists()
+    _wait(
+        lambda: all(h.process.poll() is not None for h in substrate.handles),
+        "the pool's workers to stop when the Submitter closes",
+    )
+
+
+def test_drive_leaves_an_executor_instance_open(tmp_path, tasks, groups):
+    """``drive`` never closes an executor it was handed: its owner does."""
+    import asyncio
+
+    from pydra.engine.drivers import drive
+    from pydra.engine.runner import GraphRunner
+
+    store = _store(tmp_path)
+    pool, substrate = _local_pool(tmp_path, tasks, store, groups)
+    try:
+        sub = Submitter(store=store, worker="debug")
+        runner = GraphRunner(
+            tasks.UseModels(model=str(tmp_path), xs=[1]),
+            store,
+            on_error="raise_at_end",
+            submitter=sub,
+        )
+        sub.providers = (tasks.Counting(),)
+        asyncio.run(
+            drive(
+                runner,
+                {"pool": pool},
+                lambda job: "pool",
+                on_error="raise_at_end",
+                audit=sub.audit,
+                max_concurrent=float("inf"),
+            )
+        )
+        _track(substrate, groups)
+        assert not runner.errors and not runner.not_run
+        assert not pool._closed
+        sub.close()
+    finally:
+        pool.close()
+    assert pool._closed

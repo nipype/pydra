@@ -34,7 +34,7 @@ def drive_inline(
     runner : GraphRunner
         The runner to drive
     executor : InlineExecutor
-        Runs each job
+        Runs each job; left open, for whoever made it to close
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
     audit : Audit
@@ -65,7 +65,6 @@ def drive_inline(
             )
     finally:
         runner.close()
-        executor.close()
 
 
 async def drive(
@@ -83,9 +82,10 @@ async def drive(
     in node order, one call per job unless the executor batches. Outcomes are reported
     onto this loop. The driver keeps no checksum table: the runner settles twins itself.
     With ``on_error="fail_fast"`` the first failure stops the run. On the way out, whether
-    complete, failed or interrupted, every open handle is cancelled, the runner's leases
-    are released (off the loop) and the executors are closed. Failures are left on
-    ``runner.errors``.
+    complete, failed or interrupted, every open handle is cancelled and the runner's leases
+    are released (off the loop). The executors are never closed: whoever made them closes
+    them, so an executor that holds warm workers (a ``WarmPool``) keeps them from one run to
+    the next. Failures are left on ``runner.errors``.
 
     ``max_concurrent`` caps the jobs in flight through ``runner.ready(limit)``, unless an
     executor batches (``batches = True``): the runner is then asked for every ready job, so
@@ -233,8 +233,4 @@ async def drive(
         runner.close()
         for handle in open_handles:
             handle.executor.cancel(handle)
-        try:
-            await runner.released()
-        finally:
-            for executor in executors.values():
-                executor.close()
+        await runner.released()
