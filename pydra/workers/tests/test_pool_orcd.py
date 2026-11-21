@@ -62,6 +62,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import typing as ty
 import uuid
@@ -1409,8 +1410,6 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
         )
         substrate = pool.substrate
         killed: dict[str, ty.Any] = {}
-        import threading
-
         ended = threading.Event()
 
         def kill_when_stuck():
@@ -1642,11 +1641,21 @@ def test_coordinator_killed_and_resumed_on_another_host(where, tasks, slurm):
             )
             procs.append(second)
             _wait(
-                lambda: any(
-                    _node(line) == "G" for line in _lines(marks / "handed-second")
-                ),
+                lambda: second.poll() is not None
+                or any(_node(line) == "G" for line in _lines(marks / "handed-second")),
                 "the second coordinator to hand a Gated job to the pool",
             )
+            if not any(_node(line) == "G" for line in _lines(marks / "handed-second")):
+                ended = marks / "result-second.json"
+                raise AssertionError(
+                    f"the second coordinator exited {second.returncode} before "
+                    "handing a Gated job: "
+                    + (
+                        json.loads(ended.read_text())["error"] or "no error"
+                        if ended.exists()
+                        else f"no result; see {where / 'second.log'}"
+                    )
+                )
             (marks / "go").touch()
             second.wait(BOUND)
         finally:
