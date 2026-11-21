@@ -5,11 +5,13 @@ only on the two triggers: a resource fault (out of memory, a timeout) and a cras
 protocol error, a fatal raised by a request rather than a load). Each trigger first reloads the
 residency (``reload``), then the call is halved and each half sent again until the failing job is
 alone; a half that completed keeps its results. A lone job's resource fault is returned for the
-caller to move up the ladder; a lone job's crash is recorded (``lost``) and the job sent again, until
-it has been lost ``crashes_charged`` times, when it is ``JobCrashedWorker``, a content fault of that
-job. Any other raise from a whole call fails each of its jobs with that fault. A load is never split
-or retried as a request: a fault whose record says ``load`` is raised out unchanged. An exception
-element of a batched return is that job's content fault and never a trigger.
+caller to move up the ladder; a lone job's crash sends it again, until it has been lost
+``crashes_charged`` times in a row, when it is ``JobCrashedWorker``, a content fault of that job. A
+crash whose jobs all completed afterwards was survived: it is reported (``survived``) as the
+environment's fault, charged to no job. Any other raise from a whole call fails each of its jobs
+with that fault. Only `Exception` instances are typed; anything else propagates. A load is never
+split or retried as a request: a fault whose record says ``load`` is raised out unchanged. An
+exception element of a batched return is that job's content fault and never a trigger.
 """
 
 from __future__ import annotations
@@ -62,6 +64,7 @@ def bisect(
     reload: ty.Callable[[FaultRecord], None] | None = None,
     lost: ty.Callable[[T], int] | None = None,
     crashes_charged: int = 2,
+    survived: ty.Callable[[FaultRecord], None] | None = None,
 ) -> list[Settled]:
     """Run ``items`` as one ``call`` and settle each, bisecting on the resource and crash triggers.
 
@@ -79,9 +82,13 @@ def bisect(
         Called with the fault after each trigger, before anything runs again: the residency is not
         trusted after an out-of-memory error, and a crashed process must be started again.
     lost : callable, optional
-        Records a crash of a job alone and returns how many it has had; default a count kept here.
+        The crashes of a job recorded elsewhere (its charged generations); the job is charged when
+        that count or the engine's own count of its lone losses in a row reaches
+        ``crashes_charged``, so the engine terminates whatever the hook returns.
     crashes_charged : int
         Crashes of a job alone after which it is ``JobCrashedWorker``.
+    survived : callable, optional
+        Called with each crash whose jobs all completed in the end.
 
     Returns
     -------
@@ -97,19 +104,19 @@ def bisect(
     """
     settled: list[Settled | None] = [None] * len(items)
     counts: dict[int, int] = {}
+    crashes: list[tuple[FaultRecord, list[int]]] = []
 
     def count(index: int) -> int:
-        if lost is not None:
-            return lost(items[index])
         counts[index] = counts.get(index, 0) + 1
-        return counts[index]
+        recorded = lost(items[index]) if lost is not None else 0
+        return max(recorded, counts[index])
 
     def run(indices: list[int]) -> None:
         try:
             outputs = list(call([items[i] for i in indices]))
         except Abandon:
             raise
-        except BaseException as exc:  # noqa: B036 - typed, then settled or raised
+        except Exception as exc:
             fault = fault_of(exc, "call", classify)
             if fault.phase == "load":
                 raise
@@ -117,6 +124,8 @@ def bisect(
                 for i in indices:
                     settled[i] = Settled(fault=fault, error=exc)
                 return
+            if fault.crash:
+                crashes.append((fault, list(indices)))
             if reload is not None:
                 reload(fault)
             if len(indices) > 1:
@@ -165,4 +174,10 @@ def bisect(
 
     if items:
         run(list(range(len(items))))
+    if survived is not None:
+        for fault, indices in crashes:
+            if all(
+                settled[i] is not None and settled[i].fault is None for i in indices
+            ):
+                survived(fault)
     return ty.cast(list[Settled], settled)

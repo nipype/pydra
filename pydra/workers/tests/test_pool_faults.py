@@ -97,6 +97,17 @@ class Broken(_InProcess):
         raise FileNotFoundError(2, "no such model", spec)
 
 
+class FlakyLoad(_InProcess):
+    # a provider whose first load succeeds and every later one runs out of memory
+    name = "flakyload"
+
+    def load(self, spec, device):
+        LOADS.append("flakyload")
+        if LOADS.count("flakyload") > 1:
+            raise MemoryError("CUDA out of memory")
+        return spec
+
+
 class SleepServer(ProcessProvider):
     # a provider whose state is a child process that sleeps
     name = "sleepserver"
@@ -141,6 +152,21 @@ def UseBroken(model: Provided[object, "broken"], x: int) -> int:
 
 
 @python.define
+def OomOnFlaky(model: Provided[object, "flakyload"], x: int) -> int:
+    if x == 1:
+        raise MemoryError("CUDA out of memory")
+    return x
+
+
+@python.define
+def CrashOnce(marker: str) -> str:
+    if not os.path.exists(marker):
+        Path(marker).touch()
+        raise WorkerLost("the provider's process ended mid-request")
+    return marker
+
+
+@python.define
 def Oom(x: int) -> int:
     raise MemoryError("CUDA out of memory")
 
@@ -182,6 +208,21 @@ def FailOnce(marker: str) -> str:
 @workflow.define
 def Brokens(xs: list) -> list:
     return workflow.add(UseBroken(model="m").split(x=xs), name="B").out
+
+
+@workflow.define(outputs=["b", "e"])
+def Mixed(xs: list):
+    from pydra.utils.resources import ComputeResources
+
+    ignore = ComputeResources(residency="ignore")
+    b = workflow.add(UseBroken(model="m").split(x=xs), name="B", resources=ignore)
+    e = workflow.add(Echo().split(x=xs), name="E")
+    return b.out, e.out
+
+
+@workflow.define
+def Flakys(markers: list) -> list:
+    return workflow.add(FailOnce().split(marker=markers), name="F").out
 
 
 @workflow.define
@@ -331,6 +372,7 @@ class Pool:
     def providers(self, tasks) -> None:
         """Jobs made from here on name the test providers."""
         self.submitter.providers = (
+            tasks.FlakyLoad(),
             tasks.Recorder(),
             tasks.OomLoad(),
             tasks.Broken(),
@@ -795,6 +837,47 @@ def test_the_losses_are_counted_by_the_caller():
     )
 
 
+def test_a_count_that_never_grows_is_capped_by_the_engine():
+    """A ``lost`` hook whose count never grows cannot loop the engine: its own count of the job's
+    losses in a row caps the retries at ``crashes_charged``."""
+    calls = Calls({0: None})
+    [dead] = _bisect(calls, [0], lost=lambda item: 0, crashes_charged=2)
+    assert dead.fault.type == "JobCrashedWorker" and calls.sizes == [1, 1]
+
+
+def test_survived_crashes_are_reported_and_a_charged_items_are_not():
+    """Each loss whose jobs all completed afterwards is reported to ``survived`` (the environment's
+    fault, charged to no job); the losses a job charged with ``JobCrashedWorker`` caused are not
+    (senselab's ``_mark_survived``)."""
+    survived = []
+    calls = Calls({3: 1})
+    settled = _bisect(calls, list(range(BATCH)), survived=survived.append)
+    assert all(s.fault is None for s in settled)
+    assert [(f.crash, f.kind) for f in survived] == [(True, "infrastructure")]
+
+    survived.clear()
+    _bisect(Calls({7: None}), list(range(BATCH)), survived=survived.append)
+    assert survived == []
+
+    survived.clear()
+    [done] = _bisect(Calls({0: 1}), [0], survived=survived.append)
+    assert done.fault is None and len(survived) == 1
+
+
+def test_a_task_raising_keyboard_interrupt_is_content_and_machinery_interrupts_propagate():
+    """Only `Exception`s are typed: a `KeyboardInterrupt` from the call itself propagates out of the
+    engine (the worker wraps a task's own as content before it reaches the engine)."""
+
+    def call(items):
+        raise KeyboardInterrupt()
+
+    from pydra.workers.pool.bisect import bisect
+    from pydra.workers.pool.faults import classify
+
+    with pytest.raises(KeyboardInterrupt):
+        bisect([0], call, classify=classify)
+
+
 # -- the worker --------------------------------------------------------------------------------
 
 
@@ -939,9 +1022,10 @@ def test_sibling_oom_does_not_type_scancel(pool, tasks, tmp_path, monkeypatch):
 
 
 def test_lone_call_crashing_twice_is_job_crashed_worker(pool, tasks):
-    """A job whose call crashes (`WorkerLost`) alone is retried on a reloaded residency under a
-    charged ``restart`` generation; at ``crashes_charged`` it is ``failed``, ``JobCrashedWorker``,
-    a content fault."""
+    """A job whose call crashes (`WorkerLost`) alone is retried on a reloaded residency under a fresh
+    ``restart`` attempt, uncharged (a crash it survived would be the environment's); lost
+    ``crashes_charged`` times in a row it is ``failed``, ``JobCrashedWorker``, a content fault.
+    """
     ran = []
     tasks.HOOK["crash"] = ran.append
     job = pool.job(tasks.Crash(x=1), "crash")
@@ -951,10 +1035,8 @@ def test_lone_call_crashing_twice_is_job_crashed_worker(pool, tasks):
     gens = pool.generations(job)
     assert [(g["cause"], g["charged"]) for g in gens] == [
         ("put", False),
-        ("restart", True),
-        ("restart", True),
+        ("restart", False),
     ]
-    assert pool.pool.charges(*pool.key(job))["crashes"] == 2
     [failed] = pool.outcomes()
     assert (failed["outcome"], failed["fault"]["kind"], failed["fault"]["type"]) == (
         "failed",
@@ -1199,7 +1281,7 @@ def test_call_infrastructure_faults_hold_the_residency(pool, tasks):
     pool.pool.take_epoch()
     job = pool.job(tasks.Killed(x=1), "infra")
     pool.put([job])
-    _, code = _run(pool, _class(quantum_jobs=1), classify=tasks.infrastructure)
+    _, code = _run(pool, classify=tasks.infrastructure)
     assert code == 0
     assert [(g["cause"], g["phase"]) for g in pool.generations(job)] == [
         ("put", None),
@@ -1391,3 +1473,204 @@ def test_refused_job_replaced_on_resume(tmp_path, tasks, pools):
         gens = [r for _, r in raw.generations(entry.checksum, entry.fingerprint)]
     assert [g["queue"] for g in gens] == [queue_label("small"), queue_label("large")]
     assert gens[0]["attempt"] != gens[1]["attempt"]
+
+
+# -- fix round 1 -------------------------------------------------------------------------------
+
+
+def test_gathered_tickets_do_not_run_after_hold(pool, tasks):
+    """A warm worker that gathered more one-job tickets of a residency than the budget runs no call
+    after it holds the residency: the rest are settled ``held`` unrun."""
+    ran = []
+    tasks.HOOK["killed"] = ran.append
+    pool.pool.take_epoch()
+    digests = [pool.put([pool.job(tasks.Killed(x=i), f"k{i}")]) for i in range(6)]
+    _, code = _run(pool, _class(quantum_jobs=8), classify=tasks.infrastructure)
+    assert code == 0
+    assert len(ran) == 3, f"calls run: {ran} (budget 3)"
+    kinds = [o["outcome"] for d in digests for o in pool.outcomes(digest=d)]
+    assert kinds.count("held") >= 1 and "failed" not in kinds
+    faults = pool.path / "queues"
+    assert len([p for p in faults.glob("*/faults/*/*")]) == 3
+
+
+def test_requeued_ticket_reclaimed_while_gathering_is_held(pool, tasks):
+    """A requeued ticket is claimed again by the gathering worker that released it, until the hold
+    (the W5 judged-set fix, without a ``quantum_jobs=1`` sidestep)."""
+    pool.pool.take_epoch()
+    job = pool.job(tasks.Killed(x=1), "infra")
+    pool.put([job])
+    _, code = _run(pool, _class(quantum_jobs=4), classify=tasks.infrastructure)
+    assert code == 0
+    assert [o["outcome"] for o in pool.outcomes()] == ["held"]
+
+
+def test_storage_error_in_a_call_is_infrastructure_not_content(
+    pool, tasks, monkeypatch
+):
+    """An `OSError` (``ESTALE``) from the pool's machinery around a call is an infrastructure fault
+    of the residency (requeued), never the job's content fault, and the job runs again.
+    """
+    from pydra.workers.pool.storage import PoolRoot
+
+    real = PoolRoot.write_call
+    state = {"n": 0}
+
+    def flaky(self, *args, **kwargs):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise OSError(116, "Stale file handle")
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(PoolRoot, "write_call", flaky)
+    job = pool.job(tasks.Echo(x=1), "estale")
+    pool.put([job])
+    _, code = _run(pool)
+    assert code == 0
+    gens = pool.generations(job)
+    assert [(g["cause"], g["phase"]) for g in gens][:2] == [
+        ("put", None),
+        ("restart", "call"),
+    ]
+    assert pool.newest(job)[1]["outcome"] == "done"
+
+
+def test_keyboard_interrupt_from_the_machinery_propagates(pool, tasks, monkeypatch):
+    """A `KeyboardInterrupt` raised by the pool's machinery around a call is not typed: it leaves the
+    worker and writes no outcome."""
+    from pydra.workers.pool.storage import PoolRoot
+
+    def interrupted(self, *args, **kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(PoolRoot, "write_call", interrupted)
+    pool.put([pool.job(tasks.Echo(x=1), "a")])
+    with pytest.raises(KeyboardInterrupt):
+        _run(pool)
+    assert pool.outcomes() == []
+
+
+def test_a_reload_that_runs_out_of_memory_is_a_load(pool, tasks):
+    """Ported from senselab's ``test_a_reload_that_runs_out_of_memory_is_a_load_never_split``: after
+    one job's call runs out of memory the residency is reloaded for the next job, and that reload
+    running out of memory is a load fault: the remaining jobs move up at the ``load`` phase,
+    uncharged, rather than as a call fault of one job."""
+    pool.providers(tasks)
+    jobs = [pool.job(tasks.OomOnFlaky(model="m", x=i), f"j{i}") for i in (1, 2, 3)]
+    pool.put(jobs, ladder=("big",))
+    _classes(pool, _class("big"))
+    _, code = _run(pool)
+    assert code == 0
+    assert tasks.LOADS == ["flakyload", "flakyload"]
+    first, *rest = jobs
+    assert [(g["cause"], g["phase"]) for g in pool.generations(first)][-1] == (
+        "ladder",
+        "call",
+    )
+    for job in rest:
+        assert [(g["cause"], g["phase"]) for g in pool.generations(job)] == [
+            ("put", None),
+            ("ladder", "load"),
+        ]
+        assert pool.pool.charges(*pool.key(job))["resource_moves"] == 0
+
+
+def test_a_survived_crash_counts_against_the_residency(pool, tasks, tmp_path):
+    """A crash the job survives on a reloaded residency is an infrastructure fault of the residency,
+    charged to no job; at the budget the residency is held and its other tickets are not claimed.
+    """
+    from pydra.workers.pool.faults import FaultBudgets
+
+    pool.pool.take_epoch()
+    survivor = pool.job(tasks.CrashOnce(marker=str(tmp_path / "crashed")), "survivor")
+    other = pool.job(tasks.Echo(x=5), "other")
+    pool.put([survivor])
+    second = pool.put([other])
+    _, code = _run(
+        pool, _class(quantum_jobs=1), faults=FaultBudgets(infrastructure_replacements=1)
+    )
+    assert code == 0
+    assert all(g["charged"] is False for g in pool.generations(survivor))
+    assert pool.newest(survivor)[1]["outcome"] == "done"
+    assert len(pool.pool.holds("cpu")) == 1
+    assert pool.outcomes(digest=second) == []  # not claimed under the hold
+    [record] = [
+        json.loads(p.read_text()) for p in pool.path.glob("queues/*/faults/*/*")
+    ]
+    assert record["fault"]["reason"] == "crash" and record["ticket"] != second
+
+
+def test_mixed_queue_holds_only_the_faulting_residency(tmp_path, tasks, pools):
+    """``residency="ignore"`` jobs share the class's queue with plain ones; holding the provider's
+    residency there reports only its jobs ``NotRun(held=True)``: the plain jobs run."""
+    from pydra.engine.submitter import RunIncomplete
+
+    sub = _submitter(tmp_path)
+    sub.providers = (tasks.Broken(),)
+    pool = _warm(tmp_path, pools, sub)
+    with pytest.raises(RunIncomplete) as info:
+        _drive(sub, tasks.Mixed(xs=[1, 2]), pool)
+    names = sorted(job.name for job, _ in info.value.not_run)
+    assert all(o.held for _, o in info.value.not_run)
+    assert len(names) == 2 and all("B" in n for n in names)
+
+
+def test_budgets_and_classifier_reach_hand_started_workers(
+    tmp_path, tasks, pools, processes
+):
+    """On `ExternalSubstrate` the pool's budgets and classifier reference are written into the pool
+    root, so a worker started by hand with no options uses them."""
+    from pydra.engine.submitter import RunIncomplete
+    from pydra.workers.pool.faults import FaultBudgets
+    from pydra.workers.pool.substrate import ExternalSubstrate
+
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=ExternalSubstrate(),
+        faults=FaultBudgets(content_attempts=2, infrastructure_replacements=1),
+        classify=tasks.infrastructure,
+    )
+    worker = _root_worker(pool.root, processes, tmp_path)
+    with pytest.raises(RunIncomplete) as info:
+        _drive(sub, tasks.Killeds(xs=[1]), pool)
+    [(_, held)] = info.value.not_run  # the default classifier would fail it as content
+    assert held.held and "1 infrastructure faults" in held.reason
+    worker.wait(BOUND)
+
+    sub2 = Submitter(cache_root=tmp_path / "store2", worker="debug")
+    plain = _warm(
+        tmp_path / "plain",
+        pools,
+        sub2,
+        substrate=ExternalSubstrate(),
+        faults=FaultBudgets(content_attempts=2),
+    )
+    _root_worker(plain.root, processes, tmp_path)
+    marker = tmp_path / "failed-once"
+    runner = _drive(sub2, tasks.Flakys(markers=[str(marker)]), plain)
+    assert runner.done and not runner.failed
+
+
+def _root_worker(root, processes, tmp_path):
+    """``python -m pydra.workers.pool.worker`` on ``root`` with no fault options, by hand."""
+    path = tmp_path / f"root-settings-{len(processes)}.json"
+    path.write_text(json.dumps(_settings(idle_polls=40).to_json()))
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pydra.workers.pool.worker",
+            "--root",
+            str(root),
+            "--class",
+            "cpu",
+            "--settings",
+            str(path),
+        ],
+        start_new_session=POSIX,
+    )
+    processes.append(proc)
+    return proc

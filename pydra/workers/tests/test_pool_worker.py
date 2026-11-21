@@ -1271,7 +1271,7 @@ def test_requeued_ticket_reclaimed_while_gathering(pool, tasks):
     _, code = _run(pool, _class(quantum_jobs=4), classify=_infrastructure)
     assert code == 0
     assert [g["cause"] for g in pool.generations(job)] == ["put", "restart", "restart"]
-    assert [o["outcome"] for o in pool.outcomes()] == ["failed"]
+    assert [o["outcome"] for o in pool.outcomes()] == ["held"]
 
 
 def test_crash_budget_fails_a_job_crashed_worker(pool, tasks):

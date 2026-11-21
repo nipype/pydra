@@ -567,7 +567,9 @@ class _Queue:
         self.judged: dict[str, float] = {}  # tickets found under a live claim, when
         self.missing: dict[str, float] = {}  # tickets found missing or corrupt, when
         self.faults: list[tuple[str, str]] = []
-        self.residency: str | None = None  # the residency label of the queue's tickets
+        self.residencies: set[str] = (
+            set()
+        )  # the residency labels of the tickets read here
 
     def close(self) -> None:
         for sub in self._SUBDIRS:
@@ -1005,17 +1007,14 @@ class PoolRoot:
     def charges(self, checksum: str, fingerprint: str) -> dict[str, int]:
         """A job's crash count (generations with ``charged``), its ``resource_moves``
         (``ladder`` generations at the ``call`` phase) and its infrastructure requeues
-        (uncharged ``restart`` generations at the ``call`` or ``load`` phase, `Claim.restart`).
-        """
+        (``restart`` generations at the ``call`` or ``load`` phase, `Claim.restart`)."""
         gens = [r for _, r in self.generations(checksum, fingerprint)]
         return {
             "crashes": sum(1 for r in gens if r.get("charged") is True),
             "infrastructure": sum(
                 1
                 for r in gens
-                if r.get("cause") == "restart"
-                and r.get("phase") in ("call", "load")
-                and r.get("charged") is not True
+                if r.get("cause") == "restart" and r.get("phase") in ("call", "load")
             ),
             "resource_moves": sum(
                 1
@@ -1656,6 +1655,27 @@ class PoolRoot:
             with coordinator.child(str(epoch)) as d:
                 _create(d, "ended", b"")
 
+    def write_faults(self, epoch: int, record: dict) -> None:
+        """Write coordinator epoch ``epoch``'s fault budgets and classifier reference,
+        ``coordinator/<epoch>/faults.json``, once (RFC 0005 section 6): every worker reads them
+        (`faults`), whoever started it."""
+        with _dir(self._root, "coordinator") as coordinator:
+            with coordinator.child(str(epoch)) as d:
+                _create(d, "faults.json", jcs(record))
+
+    def faults(self) -> dict | None:
+        """The fault record of the newest coordinator epoch that wrote one; None when none did."""
+        with _dir(self._root, "coordinator") as coordinator:
+            for epoch in reversed(self.epochs()):
+                d = _child(coordinator, str(epoch))
+                if d is None:
+                    continue
+                with d:
+                    record = _read_record(d, "faults.json")
+                if record is not None:
+                    return record
+        return None
+
     def coordinator_lease(
         self, epoch: int, *, beat: ty.Literal["thread", "external"] = "thread"
     ) -> DirectoryLease:
@@ -1697,9 +1717,10 @@ class PoolRoot:
         """
         q = self.queue(queue)
         held = self.holds(queue, epoch)
-        if (
-            held and q.residency in held
-        ):  # every ticket of a queue has the queue's residency
+        if held and q.residencies and q.residencies <= held.keys():
+            # every residency read on this queue is held (a queue may carry several: a
+            # residency="ignore" job shares the class's queue with plain ones; tickets are
+            # judged one by one below otherwise)
             return None
         now = time.monotonic()
         interval = self.settings.renew_interval
@@ -1735,7 +1756,7 @@ class PoolRoot:
             q.faults.append((digest, "missing"))
             q.missing[digest] = time.monotonic()
         else:
-            q.residency = ticket.residency_label
+            q.residencies.add(ticket.residency_label)
         return ticket
 
     def take(
@@ -1939,13 +1960,10 @@ class Claim:
                     prior=record["attempt"],
                 )
 
-    def restart(
-        self, job: TicketJob, *, phase: str = "call", charged: bool = False
-    ) -> str:
+    def restart(self, job: TicketJob, *, phase: str = "call") -> str:
         """Write the job's next generation, ``restart`` at ``phase`` naming this ticket, before an
-        infrastructure fault releases it, or ``charged`` before a crashed job alone is run again, so
-        the requeue or the crash is counted (`PoolRoot.charges`); return the new attempt.
-        """
+        infrastructure fault releases it, so the requeue is counted (`PoolRoot.charges`); return
+        the new attempt."""
         current = self.current(job)
         if current is None:
             raise ValueError(f"job {job.checksum} is not held by ticket {self.digest}")
@@ -1956,7 +1974,6 @@ class Claim:
             cause="restart",
             phase=phase,
             prior=current[1]["attempt"],
-            charged=charged,
         )
         return record["attempt"]
 

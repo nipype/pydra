@@ -232,32 +232,14 @@ def pool_probe(root, attribute_delay):
     default=None,
     help="The payload codec as module:qualname; default PrivatePickle.",
 )
-@click.option(
-    "--faults",
-    type=click.Path(exists=True, dir_okay=False),
-    default=None,
-    help="A JSON file of FaultBudgets; default the defaults.",
-)
-@click.option(
-    "--classify",
-    default=None,
-    help="The fault classifier as module:qualname; default the pool's default table.",
-)
-def pool_worker(
-    root, cls, settings, provider, substrate, token, codec, faults, classify
-):
+def pool_worker(root, cls, settings, provider, substrate, token, codec):
     """Run a warm worker of class CLS on the pool at ROOT until it is idle, orphaned or
     stopped (RFC 0005 section 4.3). Exits 3 when its lease settings differ from the
     pool's, 4 when the hardware does not match the class, 5 when it recycles."""
     import logging
 
     from pydra.workers.pool.settings import PoolSettings
-    from pydra.workers.pool.worker import (
-        load_classifier,
-        load_codec,
-        load_faults,
-        run_worker,
-    )
+    from pydra.workers.pool.worker import load_codec, run_worker
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
@@ -270,9 +252,7 @@ def pool_worker(
             root,
             cls,
             providers=provider,
-            classify=load_classifier(classify),
             settings=loaded,
-            faults=load_faults(faults),
             substrate=substrate,
             token=token,
             codec=load_codec(codec),

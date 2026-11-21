@@ -184,6 +184,11 @@ def _reference(obj: ty.Any) -> str:
     return f"{kind.__module__}:{kind.__qualname__}"
 
 
+def _label(residency: ty.Sequence[dict]) -> str:
+    """A residency's label, as `Ticket.residency_label` computes it."""
+    return hashlib.sha256(jcs(list(residency))).hexdigest()
+
+
 def _function_reference(obj: ty.Any) -> str:
     """``module:qualname`` of a module-level function or class, or of an instance's class."""
     if isinstance(obj, str):
@@ -224,10 +229,12 @@ class WarmPool:
     providers : sequence of Provider or "module:qualname"
         Providers the workers this pool starts load before the jobs' own.
     faults : FaultBudgets
-        Passed to the workers this pool starts; ``start_failures`` is this coordinator's.
+        Written into the pool for this coordinator's epoch, where every worker reads them, whoever
+        started it; ``start_failures`` is this coordinator's.
     classify : callable
-        ``classify(exc, phase) -> FaultRecord``, passed to the workers this pool starts as a
-        ``module:qualname`` reference (a module-level function, or a class made with no arguments).
+        ``classify(exc, phase) -> FaultRecord``, written into the pool as a ``module:qualname``
+        reference (a module-level function, or a class made with no arguments), which every worker
+        imports: it must be importable where the workers run.
     settings : PoolSettings
         Written for the workers this pool starts; its lease settings must equal the pool's.
     codec : JobCodec
@@ -303,7 +310,8 @@ class WarmPool:
         self._failed_at: dict[str, float] = {}
         self._cause: dict[str, str] = {}
         self._broken: dict[str, str] = {}
-        self._held: dict[str, str] = {}  # queues whose residency a worker held, and why
+        # (queue, residency label) a worker held in this epoch, and why
+        self._held: dict[tuple[str, str], str] = {}
         self._idle: dict[str, int] = collections.defaultdict(int)
         self._fenced: str | None = None
         self._closed = False
@@ -325,32 +333,21 @@ class WarmPool:
             )
             with os.fdopen(fd, "w") as f:
                 json.dump(settings.to_json(), f)
-            self.faults_path = None
-            if faults != FaultBudgets():
-                self.faults_path = private / f"faults-{uuid.uuid4().hex}.json"
-                fd = os.open(
-                    self.faults_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
-                )
-                with os.fdopen(fd, "w") as f:
-                    json.dump(faults.to_json(), f)
             attach = getattr(substrate, "attach", None)
             if attach is not None:
                 codec_ref = (
                     None if isinstance(codec, PrivatePickle) else _reference(codec)
                 )
                 attach(
-                    Attachment(
-                        self.root,
-                        self.settings_path,
-                        self.providers,
-                        codec_ref,
-                        faults=self.faults_path,
-                        classify=classify_ref,
-                    )
+                    Attachment(self.root, self.settings_path, self.providers, codec_ref)
                 )
             self._await_coordinators()
             # the epoch is taken after every fallible step (senselab R-283)
             self.epoch = self.pool.take_epoch()
+            # every worker reads the budgets and the classifier from the pool, however started
+            self.pool.write_faults(
+                self.epoch, {"budgets": faults.to_json(), "classify": classify_ref}
+            )
             lease = self.pool.coordinator_lease(self.epoch)
             lease.__enter__()
             self._lease = lease
@@ -594,7 +591,7 @@ class WarmPool:
                 continue
             j = _Job(job, handle, key, placement.queue, ladder, residency)
             broken = self._broken.get(placement.worker_class) or self._held.get(
-                placement.queue
+                (placement.queue, _label(residency))
             )
             if broken is not None:
                 reports.append((job, j, NotRun(broken, held=True)))
@@ -829,8 +826,8 @@ class WarmPool:
         with self._lock:
             batches = []
             for queue, waiting in self._waiting.items():
-                if _queue_class(queue) in self._broken or queue in self._held:
-                    continue  # held by `_hold_broken`
+                if _queue_class(queue) in self._broken:
+                    continue  # held by `_hold_broken`, as are jobs of a held residency
                 room = self._max_queued(queue) - self._queued(queue)
                 taken = []
                 while waiting and room > 0:
@@ -980,8 +977,10 @@ class WarmPool:
                         self._waiting.setdefault(j.queue, collections.deque()).append(j)
                     continue
                 if verdict[0] == "held":
-                    # the residency is held on its queue for this epoch: its other jobs too
-                    self._held.setdefault(t.queue, verdict[1].reason)
+                    # the job's residency is held on its queue for this epoch: its other jobs too
+                    self._held.setdefault(
+                        (t.queue, _label(j.residency)), verdict[1].reason
+                    )
                 self._forget(j)
                 reports.append((j.job, j, verdict[1]))
 
@@ -1179,8 +1178,9 @@ class WarmPool:
         self._hold_broken()
 
     def _hold_broken(self) -> None:
-        """Report every open job placed on a broken class, or on a queue whose residency a worker
-        held in this epoch, ``NotRun(held=True)``: queued, followed, or re-placed onto it since.
+        """Report every open job placed on a broken class, or of a residency a worker held on its
+        queue in this epoch, ``NotRun(held=True)``: queued, followed, or re-placed onto it since.
+        Jobs of other residencies on the same queue (``residency="ignore"``) are not held.
         """
         if not self._broken and not self._held:
             return
@@ -1188,7 +1188,9 @@ class WarmPool:
             held = []
             for j in list(self._open.values()):
                 queue = j.queue if j.ticket is None else j.ticket.queue
-                why = self._broken.get(_queue_class(queue)) or self._held.get(queue)
+                why = self._broken.get(_queue_class(queue)) or self._held.get(
+                    (queue, _label(j.residency))
+                )
                 if why is None:
                     continue
                 self._unwait(j)
