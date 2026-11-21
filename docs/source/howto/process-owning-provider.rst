@@ -110,6 +110,13 @@ that daemonised itself is still stopped with the rest.
 A worker closes its resident state when it evicts it to make room for another model, when it exits
 (idle, drained after SIGTERM, or recycled), and after a crash of the state.
 
+**Under Slurm, a cancel reaches the child too.** ``scancel``, a pool's stop and a job's time limit
+send SIGTERM to every process of the worker's job at once, the provider's child included (and the
+shim relays it to its tree). The worker's drain cannot keep the server alive for the call in
+flight: that call fails, as a ``WorkerLost`` when the client raises it (a crash, charged to the job
+within ``crashes_charged``), and the job runs again elsewhere. A server that must finish its
+request on SIGTERM has to handle the signal itself.
+
 
 Faults
 ------

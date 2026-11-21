@@ -178,6 +178,21 @@ bounds the wait), then takes the next *epoch*. A coordinator that was killed is 
 from any host: the new one follows the jobs the old one had already put, reads the finished ones
 from the store, and adopts its still-running Slurm workers.
 
+A resumed run also waits out the *store's* leases that the killed process held: the lease of each
+workflow job it was running is taken over only once it is ``stale_after`` old on the store's own
+settings, not the pool's. With ``PortableStore`` (the default) that is the lease default, 300 s,
+plus the attribute delay. ``PickleStore`` takes ``lease_settings``; give it the pool's to make both
+waits the same:
+
+.. code-block:: python
+
+    from pydra.engine.store import PickleStore
+
+    lease = LeaseSettings(stale_after=300, attribute_delay=60)
+    store = PickleStore("/shared/user/cache", lease_settings=lease)
+    pool = WarmPool("/shared/user/pool", [h100], SlurmSubstrate(), store=store,
+                    settings=PoolSettings(lease=lease, poll_s=30))
+
 
 Settings that matter on a cluster
 ---------------------------------

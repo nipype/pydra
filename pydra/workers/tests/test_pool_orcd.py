@@ -47,7 +47,7 @@ tests submit their workers with ``sbatch`` and so need ``sbatch`` to work from t
 pytest. Each verdict line is also appended to ``<PYDRA_TEST_SHARED_DIR>/verdicts.log``.
 
 Loads are counted by files: a provider's ``load`` (and the process provider's child, when it
-starts) writes one file per load into a directory of the spec, named by the worker's Slurm job id,
+starts) writes one file per load into a directory of the spec, named ``<Slurm job id>-<pid>-<uuid>``,
 so the count is read from any node.
 """
 
@@ -67,6 +67,7 @@ import typing as ty
 import uuid
 from pathlib import Path
 
+import attrs
 import pytest
 
 from pydra.engine.lease import LeaseSettings
@@ -85,8 +86,9 @@ SERVER_PYTHON = os.environ.get("PYDRA_TEST_SERVER_PYTHON") or sys.executable
 TIMEOUT = int(os.environ.get("PYDRA_TEST_TIMEOUT", "7200"))
 POSIX = sys.platform != "win32"
 
+# every cluster test carries @slurm; the module's unit tests of its own helpers do not
+slurm_case = pytest.mark.slurm
 pytestmark = [
-    pytest.mark.slurm,
     pytest.mark.timeout(TIMEOUT),
     pytest.mark.skipif(not POSIX, reason="Slurm clusters are POSIX"),
 ]
@@ -123,6 +125,7 @@ from pydra.compose import python, workflow
 from pydra.engine.procgroup import ProcessProvider, gpu_memory_by_pid
 from pydra.engine.resident import Provided
 from pydra.utils.resources import ComputeResources
+from pydra.workers.pool.faults import WorkerLost
 
 CAP = "PYDRA_TEST_DEVICE_CAP"  # bytes of device memory a worker may use, set per class
 
@@ -172,12 +175,11 @@ class Model:
             cupy.cuda.Device(index).use()
             if cap:
                 cupy.get_default_memory_pool().set_limit(size=int(cap))
-            try:
-                rng = cupy.random.RandomState(int(spec.get("seed", 0)))
-                self.layer = rng.standard_normal((self.width, self.width), dtype=cupy.float32)
-                self.ballast = cupy.empty(ballast // 4, dtype=cupy.float32) if ballast else None
-            except cupy.cuda.memory.OutOfMemoryError as err:
-                raise MemoryError(f"CUDA out of memory: {err}") from err
+            # cupy.cuda.memory.OutOfMemoryError propagates as itself: the pool reads it as the
+            # device's, by name
+            rng = cupy.random.RandomState(int(spec.get("seed", 0)))
+            self.layer = rng.standard_normal((self.width, self.width), dtype=cupy.float32)
+            self.ballast = cupy.empty(ballast // 4, dtype=cupy.float32) if ballast else None
         else:
             raise RuntimeError("neither torch nor cupy is importable: no way to use the device")
 
@@ -235,15 +237,19 @@ class _Client:
         self.closes = closes
 
     def __call__(self, x):
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.connect(self.path)
-            s.sendall(f"{x}\\n".encode())
-            data = b""
-            while not data.endswith(b"\\n"):
-                chunk = s.recv(4096)
-                if not chunk:
-                    raise ConnectionError("the model server closed the connection")
-                data += chunk
+        # a server that is gone is a crash of the resident state, not the job's fault
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.connect(self.path)
+                s.sendall(f"{x}\\n".encode())
+                data = b""
+                while not data.endswith(b"\\n"):
+                    chunk = s.recv(4096)
+                    if not chunk:
+                        raise ConnectionError("the model server closed the connection")
+                    data += chunk
+        except OSError as err:
+            raise WorkerLost(f"the model server stopped: {err}") from err
         return float(data.decode())
 
 
@@ -312,11 +318,47 @@ def Serve(model: Provided[object, "orcd-server"], x: int) -> float:
     return model.client(x)
 
 
+def queue_snapshot(pool):
+    """Each queue of the pool at ``pool`` as its worker sees it now: per ticket its node, write
+    time (storage mtime), job count and highest settled count, and the start time of each live
+    claim (from the holder record, on the storage clock)."""
+    queues = {}
+    for q in Path(pool, "queues").iterdir():
+        settled = {}
+        for mark in (q / "settled").glob("*"):
+            digest, _, count = mark.name.rpartition("-")
+            settled[digest] = max(settled.get(digest, 0), int(count))
+        tickets, claims = {}, {}
+        for t in (q / "tickets").glob("*.json"):
+            try:
+                record = json.loads(t.read_bytes())
+                tickets[t.stem] = {
+                    "node": record["node"],
+                    "written": t.stat().st_mtime,
+                    "jobs": len(record["jobs"]),
+                    "settled": settled.get(t.stem, 0),
+                }
+            except (OSError, ValueError):
+                continue
+        for holder in (q / "claims").glob("*.lease/*/holder.json"):
+            try:
+                claims[holder.parent.parent.name[: -len(".lease")]] = json.loads(
+                    holder.read_bytes()
+                )["started"]
+            except (OSError, ValueError, KeyError):
+                continue
+        queues[q.name] = {"tickets": tickets, "claims": claims}
+    return queues
+
+
 @python.define
-def Logged(model: Provided[object, "orcd-model"], x: int, label: str, order: str) -> float:
-    # one worker serves both queues: the order of the calls shows the quantum's yield
+def Logged(
+    model: Provided[object, "orcd-model"], x: int, label: str, order: str, pool: str, delay: float
+) -> float:
+    # one worker serves both queues: each call records its node and what every queue held
+    time.sleep(delay)
     with open(order, "a") as f:
-        f.write(f"{label} {x}\\n")
+        f.write(json.dumps({"label": label, "x": x, "queues": queue_snapshot(pool)}) + "\\n")
     return model(x)
 
 
@@ -333,10 +375,12 @@ def Serves(spec: dict, xs: list) -> list:
 
 
 @workflow.define(outputs=["a", "b"])
-def TwoModels(a: dict, b: dict, xs: list, order: str):
+def TwoModels(a: dict, b: dict, xs: list, order: str, pool: str, delay: float):
     need = ComputeResources(gpus=1)
-    ra = workflow.add(Logged(model=a, label="a", order=order).split(x=xs), name="A", resources=need)
-    rb = workflow.add(Logged(model=b, label="b", order=order).split(x=xs), name="B", resources=need)
+    la = Logged(model=a, label="A", order=order, pool=pool, delay=delay).split(x=xs)
+    lb = Logged(model=b, label="B", order=order, pool=pool, delay=delay).split(x=xs)
+    ra = workflow.add(la, name="A", resources=need)
+    rb = workflow.add(lb, name="B", resources=need)
     return ra.out, rb.out
 
 
@@ -374,11 +418,12 @@ def GpuEchoes(xs: list) -> list:
 
 @python.define
 def KillMe(x: int, where: str, k: int) -> int:
-    # job k's first execution never returns (its worker is killed under it); any other returns
+    # job k's first execution returns only if the test's kill failed (its worker is killed under
+    # it); any other returns at once
     d = Path(where)
     if x == k and not (d / "first").exists():
         (d / "first").touch()
-        while True:
+        while not (d / "kill-failed").exists():
             time.sleep(1.0)
     (d / f"done-{x}-{uuid4().hex}").touch()
     return x
@@ -540,6 +585,7 @@ role, config = sys.argv[1], Path(sys.argv[2])
 cfg = json.loads(config.read_text())
 import _pydra_orcd_tasks as tasks
 from pydra.engine.lease import LeaseSettings
+from pydra.engine.runner import GraphRunner
 from pydra.engine.submitter import Submitter
 from pydra.workers.pool.classes import WorkerClass
 from pydra.workers.pool.pool import WarmPool, _fingerprint
@@ -566,6 +612,29 @@ def recording(jobs):
 
 
 pool.submit = recording
+# the jobs the runner completes from the store instead of dispatching (a success record, or a
+# hit of the store's find): its reuses, counted where they happen
+hits = []
+read_succeeded = GraphRunner._read_succeeded_jobs
+
+
+def counting(store, jobs):
+    dispatch = read_succeeded(store, jobs)
+    kept = {id(job) for job in dispatch}
+    hits.extend(job.name for job in jobs if id(job) not in kept)
+    return dispatch
+
+
+GraphRunner._read_succeeded_jobs = staticmethod(counting)
+settle_stored = GraphRunner._settle_stored
+
+
+def settling(self, job, result):
+    hits.append(job.name)
+    return settle_stored(self, job, result)
+
+
+GraphRunner._settle_stored = settling
 if role == "first":
     def watch():
         while not list(marks.glob("started-G-*")):
@@ -583,7 +652,7 @@ except Exception as exc:
 finally:
     pool.close()
 (marks / f"result-{role}.json").write_text(
-    json.dumps({"out": out, "error": error, "handed": len(handed), "epoch": pool.epoch})
+    json.dumps({"out": out, "error": error, "handed": len(handed), "hits": hits, "epoch": pool.epoch})
 )
 """
 
@@ -608,7 +677,8 @@ class Verdict:
 
 
 def _report(test_id: str, status: str, reason: str) -> None:
-    line = " ".join(f"VERDICT {test_id} {status} {reason}".split())[:600]
+    """Print the verdict line whole (no cut) and keep it in ``<shared>/verdicts.log``."""
+    line = " ".join(f"VERDICT {test_id} {status} {reason}".split())
     print(line, flush=True)
     if SHARED:
         with (
@@ -618,24 +688,37 @@ def _report(test_id: str, status: str, reason: str) -> None:
             f.write(line + "\n")
 
 
+def _reason(v: Verdict, error: str | None = None) -> str:
+    """Every check with its result, ``[name=PASS]`` or ``[name=FAIL]``, then the error if any, then
+    the figures."""
+    checks = " ".join(f"[{name}={'PASS' if ok else 'FAIL'}]" for name, ok in v.checks)
+    figures = " ".join(f"{k}={val}" for k, val in v.figures.items())
+    parts = [checks or "[no check reached]"]
+    if error is not None:
+        parts.append(f"error={error}")
+    if figures:
+        parts.append(figures)
+    return "; ".join(parts)
+
+
 @contextlib.contextmanager
 def verdict(test_id: str) -> ty.Iterator[Verdict]:
-    """Print ``VERDICT <test id> PASS|FAIL <reason>`` once, then fail the test unless every check
-    passed. An exception inside is the verdict ``FAIL`` naming it."""
+    """Print ``VERDICT <test id> PASS|FAIL <reason>`` once, naming every check with its result, then
+    fail the test unless every check passed. An exception inside is the verdict ``FAIL``, with the
+    checks reached and the exception."""
     v = Verdict(test_id)
     try:
         yield v
     except pytest.skip.Exception:
         raise
     except BaseException as exc:
-        _report(test_id, "FAIL", f"{type(exc).__name__}: {exc}")
+        _report(test_id, "FAIL", _reason(v, f"{type(exc).__name__}: {exc}"))
         raise
     failed = [name for name, ok in v.checks if not ok]
-    figures = " ".join(f"{k}={val}" for k, val in v.figures.items())
-    if failed:
-        _report(test_id, "FAIL", f"failed: {', '.join(failed)}; {figures}")
-        raise AssertionError(f"{test_id}: failed checks {failed}; {figures}")
-    _report(test_id, "PASS", f"{len(v.checks)} checks; {figures}")
+    if failed or not v.checks:
+        _report(test_id, "FAIL", _reason(v))
+        raise AssertionError(f"{test_id}: failed checks {failed}; {_reason(v)}")
+    _report(test_id, "PASS", _reason(v))
 
 
 # -- fixtures ------------------------------------------------------------------------------------
@@ -911,6 +994,80 @@ def _srun(node: str, argv: list[str], log: Path) -> subprocess.Popen:
         out.close()
 
 
+# Variables that pass an allocation's sizes and options to srun, sbatch and salloc: a step started
+# inside another job with them asks for that job's nodes, CPUs and memory and is refused.
+_SLURM_INPUT = ("SLURM_", "SRUN_", "SBATCH_", "SALLOC_")
+_SLURM_KEPT = ("SLURM_CONF",)  # where the cluster's configuration is, not a size
+
+
+def _kill_command(
+    job_id: str, token: str, environ: ty.Mapping[str, str]
+) -> tuple[list[str], dict[str, str]]:
+    """The ``srun`` step that SIGKILLs the worker ``token`` inside its own Slurm job ``job_id``,
+    and the environment to run it in: this process's, without the Slurm input variables of the
+    allocation running pytest, and with explicit minimal sizes.
+
+    ``scancel --signal=KILL`` is no use here: Slurm turns it into a cancel (SIGTERM, then SIGKILL
+    after KillWait), which the worker survives long enough to release its claims. ``[t]oken``
+    keeps the pattern from matching this srun's own command line.
+    """
+    env = {
+        k: v
+        for k, v in environ.items()
+        if k in _SLURM_KEPT or not k.startswith(_SLURM_INPUT)
+    }
+    argv = [
+        "srun",
+        f"--jobid={job_id}",
+        "--overlap",
+        "--nodes=1",
+        "--ntasks=1",
+        "--cpus-per-task=1",
+        "--mem=100M",
+        "pkill",
+        "-KILL",
+        "-f",
+        f"[t]oken {token}",
+    ]
+    return argv, env
+
+
+def test_kill_command_is_built_clean():
+    """Inside an allocation the kill step carries none of its Slurm input variables, only explicit
+    minimal sizes in the worker's own job (no Slurm is run)."""
+    allocation = {
+        "PATH": "/usr/bin",
+        "HOME": "/home/user",
+        "SLURM_CONF": "/etc/slurm/slurm.conf",
+        "SLURM_JOB_ID": "500",
+        "SLURM_NNODES": "3",
+        "SLURM_JOB_NUM_NODES": "3",
+        "SLURM_CPUS_PER_TASK": "8",
+        "SLURM_MEM_PER_NODE": "65536",
+        "SLURM_TRES_PER_TASK": "cpu:8",
+        "SRUN_CPUS_PER_TASK": "8",
+        "SBATCH_PARTITION": "gpu",
+        "SALLOC_ACCOUNT": "lab",
+    }
+    argv, env = _kill_command("123", "a" * 32, allocation)
+    assert env == {
+        "PATH": "/usr/bin",
+        "HOME": "/home/user",
+        "SLURM_CONF": "/etc/slurm/slurm.conf",
+    }
+    assert argv[:7] == [
+        "srun",
+        "--jobid=123",
+        "--overlap",
+        "--nodes=1",
+        "--ntasks=1",
+        "--cpus-per-task=1",
+        "--mem=100M",
+    ]
+    assert argv[7:] == ["pkill", "-KILL", "-f", f"[t]oken {'a' * 32}"]
+    assert not any(a.startswith(("--qos", "--partition", "--account")) for a in argv)
+
+
 def _stop(proc: subprocess.Popen) -> None:
     if proc.poll() is None:
         with contextlib.suppress(ProcessLookupError):
@@ -926,15 +1083,21 @@ def _stop(proc: subprocess.Popen) -> None:
 # -- one worker, one load ------------------------------------------------------------------------
 
 
+@slurm_case
 @gpu
 def test_one_load_n_jobs_h100(where, tasks, pools):
     """One `SlurmSubstrate` worker runs ``PYDRA_TEST_JOBS`` jobs of a provided model: one
-    ``sbatch``, one load, every job committed. Per-job wall is recorded by the worker's samples
-    and reported, not asserted."""
+    ``sbatch``, one load, every job committed. The calibration's steady per-job time is fitted
+    from the warm calls, and the calls after the load are in that steady band rather than the
+    cold one: the 95th percentile of their per-job wall is below the first call's (relative to
+    the run's own calibration; no wall-clock threshold)."""
+    from pydra.workers.pool.calibration import DirectoryCalibration, hardware_of
+
     _need_device_library()
     with verdict("test_one_load_n_jobs_h100") as v:
         spec = _model_spec(where)
-        pool = _pool(where, pools, [_class("gpu", True, max_workers=1)])
+        cls = _class("gpu", True, max_workers=1)
+        pool = _pool(where, pools, [cls])
         substrate = pool.substrate
         with Submitter(worker=pool, providers=[tasks.DeviceModel()]) as sub:
             result = sub(tasks.Infers(spec=spec, xs=list(range(JOBS))))
@@ -946,23 +1109,57 @@ def test_one_load_n_jobs_h100(where, tasks, pools):
         v.check("one sbatch", len(substrate.handles) == 1)
         loads = _by_worker(Path(spec["loads"]))
         v.check("one load", sum(loads.values()) == 1)
-        samples = sum(
-            len(p.read_text().splitlines())
+        samples = [
+            json.loads(line)
             for p in pool.root.glob("workers/*/samples.jsonl")
+            for line in p.read_text().splitlines()
+        ]
+        cold = [s for s in samples if s["cold"]]
+        warm = sorted(
+            s["wall_s"] / s["batch_size"]
+            for s in samples
+            if not s["cold"] and not s["reload"]
+        )
+        keys = {s["key"] for s in samples}
+        ready = _ready_marks(pool.root)
+        # the worker files its samples under its class with the device memory it read
+        measured = attrs.evolve(cls, gpu_mem=ready[0]["gpu_mem"]) if ready else cls
+        times = (
+            DirectoryCalibration(pool.root / "calibration").times(
+                next(iter(keys)), hardware_of(measured)
+            )
+            if len(keys) == 1
+            else []
+        )
+        steady = next((t for t in times if t.batch == 1), None)
+        v.check("one cold call", len(cold) == 1 and len(warm) == JOBS - 1)
+        v.check(
+            "calibration fitted from the warm calls",
+            steady is not None and steady.n == len(warm),
+        )
+        p95 = warm[int(0.95 * (len(warm) - 1))] if warm else None
+        v.check(
+            "warm calls in the steady band",
+            bool(cold) and p95 is not None and p95 < cold[0]["wall_s"],
         )
         v.figure(
             jobs=JOBS,
             sbatch=[h.job_id for h in substrate.handles],
             loads_per_worker=loads,
-            samples=samples,
+            cold_s=round(cold[0]["wall_s"], 4) if cold else None,
+            steady_s=round(steady.per_job_s, 4) if steady else None,
+            p95_s=round(p95, 4) if p95 is not None else None,
         )
 
 
+@slurm_case
 @gpu
 def test_process_provider_warm_h100(where, tasks, pools):
     """The same with a process-owning provider whose child serves the model: one child start for
     every job, and its eviction (the worker's idle exit closing it) leaves no process of the
-    group and no device memory behind."""
+    group and no device memory behind. The coordinator's own idle stop is held back until the
+    close is recorded, so its ``scancel`` (whose SIGTERM reaches the child too) cannot race it.
+    """
     _need_device_library()
     with verdict("test_process_provider_warm_h100") as v:
         starts, closes = where / "starts", where / "closes"
@@ -983,6 +1180,8 @@ def test_process_provider_warm_h100(where, tasks, pools):
             settings=_settings(idle_polls=6),
         )
         substrate = pool.substrate
+        stop, deferred = substrate.stop, []
+        substrate.stop = deferred.append  # no scancel until the close record exists
         with Submitter(worker=pool, providers=[tasks.ServerModel()]) as sub:
             result = sub(tasks.Serves(spec=spec, xs=list(range(n))))
         out = result.outputs.out
@@ -992,32 +1191,54 @@ def test_process_provider_warm_h100(where, tasks, pools):
         v.check("one sbatch", len(substrate.handles) == 1)
         v.check("one child start", len(_files(starts)) == 1)
         _wait(lambda: _files(closes), "the worker to exit idle and close its provider")
+        substrate.stop = stop
         [record] = [json.loads((closes / c).read_text()) for c in _files(closes)]
         v.check("no process left", record["pids"] and not record["alive_after"])
         v.check("child held device memory", (record["device_bytes_before"] or 0) > 0)
         v.check("no device memory left", record["device_bytes_after"] == 0)
-        v.figure(jobs=n, starts=len(_files(starts)), close=record)
+        v.figure(
+            jobs=n,
+            starts=len(_files(starts)),
+            deferred_stops=len(deferred),
+            close=record,
+        )
 
 
+@slurm_case
 @gpu
 def test_two_residencies_two_queues(where, tasks, pools):
     """Two models on one class: two routed queues, a worker that yields one queue for the other
-    when its quantum ends, and at most ``max_workers`` loads per model."""
+    when its quantum ends although that queue still has a waiting ticket, and at most
+    ``max_workers`` loads per model.
+
+    Two tickets per queue are written ahead (``max_queued_jobs``); each queue's third is written
+    once its first settles, and so is younger than the other queue's waiting ticket. Each call
+    snapshots the queues, and at some switch the queue left must still hold a ticket written
+    before the claim of the queue taken and not yet settled: the worker passed over waiting work
+    of its own queue for older work of the other, which no claim rule but the quantum's does.
+    """
     _need_device_library()
     with verdict("test_two_residencies_two_queues") as v:
-        quantum, n, max_workers = 4, 16, 1
+        quantum, n, max_workers, delay = 4, 16, 1, 2.0
         a, b = _model_spec(where, "a", seed=1), _model_spec(where, "b", seed=2)
         order = where / "order.log"
         pool = _pool(
             where,
             pools,
             [_class("gpu", True, max_workers=max_workers, quantum_jobs=quantum)],
-            # one ticket per queue at a time: a queue's next ticket is written only after its
-            # last settled, so it is younger than the other queue's waiting one
-            settings=_settings(max_queued_jobs=quantum),
+            settings=_settings(poll_s=1.0, max_queued_jobs=2 * quantum),
         )
         with Submitter(worker=pool, providers=[tasks.DeviceModel()]) as sub:
-            result = sub(tasks.TwoModels(a=a, b=b, xs=list(range(n)), order=str(order)))
+            result = sub(
+                tasks.TwoModels(
+                    a=a,
+                    b=b,
+                    xs=list(range(n)),
+                    order=str(order),
+                    pool=str(pool.root),
+                    delay=delay,
+                )
+            )
         v.check(
             "every job committed", len(result.outputs.a) == n == len(result.outputs.b)
         )
@@ -1025,21 +1246,55 @@ def test_two_residencies_two_queues(where, tasks, pools):
         v.check(
             "two queues", len(names) == 2 and all(q.startswith("gpu#") for q in names)
         )
-        labels = [line.split()[0] for line in order.read_text().splitlines()]
+        calls = [json.loads(line) for line in order.read_text().splitlines()]
+        labels = [c["label"] for c in calls]
         runs = [len(list(g)) for _, g in itertools.groupby(labels)]
-        v.check("quantum yields", len(runs) >= 3 and max(runs) <= quantum)
+        yields = [
+            i
+            for i in range(1, len(calls))
+            if labels[i] != labels[i - 1] and _left_waiting(calls[i], labels[i - 1])
+        ]
+        v.check("quantum yields with its own queue waiting", yields)
         loads_a, loads_b = _by_worker(Path(a["loads"])), _by_worker(Path(b["loads"]))
         v.check(
             "at most max_workers loads per model",
             0 < sum(loads_a.values()) <= max_workers
             and 0 < sum(loads_b.values()) <= max_workers,
         )
-        v.figure(queues=len(names), runs=runs, loads_a=loads_a, loads_b=loads_b)
+        v.figure(
+            queues=len(names),
+            runs=runs,
+            yields_at=yields,
+            loads_a=loads_a,
+            loads_b=loads_b,
+        )
+
+
+def _left_waiting(call: dict, left: str) -> bool:
+    """Whether, at this call (the first after a switch), the queue of node ``left`` held a ticket
+    written before the claim the worker now runs under and not yet settled."""
+
+    def node_of(queue: dict) -> str | None:
+        for t in queue["tickets"].values():
+            return t["node"].rsplit("/", 1)[-1]
+        return None
+
+    queues = list(call["queues"].values())
+    taken = [q for q in queues if node_of(q) == call["label"]]
+    gone = [q for q in queues if node_of(q) == left]
+    if not taken or not gone or not taken[0]["claims"]:
+        return False
+    claimed = max(taken[0]["claims"].values())
+    return any(
+        t["written"] < claimed and t["settled"] < t["jobs"]
+        for t in gone[0]["tickets"].values()
+    )
 
 
 # -- faults --------------------------------------------------------------------------------------
 
 
+@slurm_case
 def test_worker_killed_mid_ticket(where, tasks, pools):
     """SIGKILL of the worker a third of the way through its ticket: the claim is
     taken over once stale by a new worker, under new attempts; every job is committed once and
@@ -1056,28 +1311,25 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
         killed: dict[str, ty.Any] = {}
 
         def kill_when_stuck():
-            _wait(lambda: (marks / "first").exists(), f"job {k} to start")
-            [handle] = substrate.handles
-            # Slurm turns `scancel --signal=KILL` into a cancel (SIGTERM, then SIGKILL after
-            # KillWait), which the worker survives long enough to release its claims. A step in
-            # the worker's own job SIGKILLs the worker process; "[t]oken" keeps the pattern from
-            # matching this srun's own command line
-            subprocess.run(
-                [
-                    "srun",
-                    f"--jobid={handle.job_id}",
-                    "--overlap",
-                    "--ntasks=1",
-                    "pkill",
-                    "-KILL",
-                    "-f",
-                    f"[t]oken {handle.token}",
-                ],
-                check=True,
-                capture_output=True,
-                timeout=120,
-            )
-            killed.update(job=handle.job_id, done=len(_files(marks, "done-")))
+            try:
+                _wait(lambda: (marks / "first").exists(), f"job {k} to start")
+                [handle] = substrate.handles
+                argv, env = _kill_command(handle.job_id, handle.token, os.environ)
+                done = subprocess.run(
+                    argv, env=env, capture_output=True, text=True, timeout=300
+                )
+                killed.update(job=handle.job_id, done=len(_files(marks, "done-")))
+                if done.returncode:
+                    killed["error"] = (
+                        f"{' '.join(argv)} exited {done.returncode}: "
+                        f"{done.stderr.strip() or done.stdout.strip()}"
+                    )
+            except (
+                BaseException
+            ) as exc:  # reported in the verdict, never lost in the thread
+                killed["error"] = f"{type(exc).__name__}: {exc}"
+            if "error" in killed:
+                (marks / "kill-failed").touch()  # job k returns, so the run ends now
 
         import threading
 
@@ -1086,6 +1338,7 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
         with Submitter(worker=pool) as sub:
             result = sub(tasks.KillMes(xs=list(range(n)), where=str(marks), k=k))
         killer.join(BOUND)
+        v.check("kill step ran", "job" in killed and "error" not in killed)
         v.check("every job committed", result.outputs.out == list(range(n)))
         done = collections.Counter(
             name.split("-")[1] for name in _files(marks, "done-")
@@ -1120,6 +1373,7 @@ def test_worker_killed_mid_ticket(where, tasks, pools):
             _print_logs(pool.root)
 
 
+@slurm_case
 def test_claim_lease_cross_node(where, slurm):
     """Ported from senselab's cross-node lease probe: three roles on three nodes. A holder that
     beats past ``stale_after`` is never taken over; SIGKILLed while holding, it is taken over by
@@ -1194,6 +1448,7 @@ def test_claim_lease_cross_node(where, slurm):
         )
 
 
+@slurm_case
 def test_coordinator_killed_and_resumed_on_another_host(where, tasks, slurm):
     """The submitting process is SIGKILLed while its workers hold jobs; a coordinator on a second
     node resumes the run on the same pool: it follows the jobs the first put (none is put twice),
@@ -1240,7 +1495,11 @@ def test_coordinator_killed_and_resumed_on_another_host(where, tasks, slurm):
             procs.append(first)
             first.wait(BOUND)
             v.check(
-                "first coordinator killed", not (marks / "result-first.json").exists()
+                "first coordinator killed",
+                first.returncode != 0
+                and (marks / "coordinator-first").exists()
+                and list(marks.glob("started-G-*"))
+                and not (marks / "result-first.json").exists(),
             )
             tickets = {p.stem for p in (where / "pool").glob("queues/*/tickets/*.json")}
             second = _srun(
@@ -1275,27 +1534,28 @@ def test_coordinator_killed_and_resumed_on_another_host(where, tasks, slurm):
         puts = [sum(g["cause"] == "put" for g in gs) for gs in generations.values()]
         v.check("no job put twice", len(puts) >= n and all(p == 1 for p in puts))
         handed = _lines(marks / "handed-second")
-        reused = 2 * n - len(handed)
+        # reuses are counted where the runner completes a job from the store's records
+        hits = [h for h in result["hits"] if _node(f"{h} -") in ("Q", "G")]
         followed = sum(
             1
             for line in handed
             if generations.get(line.split()[1], [{}])[0].get("ticket") in tickets
         )
-        v.check(
-            "executions + reuses = jobs", len(handed) + reused == 2 * n and reused >= 1
-        )
+        v.check("executions + reuses = jobs", len(handed) + len(hits) == 2 * n and hits)
         v.check("followed the first's tickets", followed >= 1)
         firsts = json.loads((marks / "coordinator-first").read_text())
         v.check("second took the next epoch", result["epoch"] > firsts["epoch"])
         v.figure(
             nodes=nodes[:2],
             handed=len(handed),
-            reused=reused,
+            reused=len(hits),
             followed=followed,
+            first_exit=first.returncode,
             executed=sum(executed.values()),
         )
 
 
+@slurm_case
 @gpu
 def test_load_oom_climbs_the_ladder(where, tasks, pools):
     """A class whose usable device memory is capped below the model: its load runs out of memory,
@@ -1366,6 +1626,7 @@ def test_load_oom_climbs_the_ladder(where, tasks, pools):
 # -- local substrate inside one allocation -------------------------------------------------------
 
 
+@slurm_case
 @gpu
 def test_local_multi_gpu(where, tasks, pools):
     """`LocalSubstrate` inside one allocation of two GPUs: one worker per device, given it through
@@ -1412,6 +1673,7 @@ def test_local_multi_gpu(where, tasks, pools):
         v.figure(devices=devices, workers=len(substrate.handles))
 
 
+@slurm_case
 @gpu
 def test_mistyped_grant_refused(where, tasks, pools):
     """A class naming another GPU type than the allocation's: each worker refuses the hardware it
@@ -1444,7 +1706,8 @@ def test_mistyped_grant_refused(where, tasks, pools):
             and all(h.process.wait(BOUND) == EXIT_HARDWARE for h in substrate.handles),
         )
         v.check(
-            "jobs held", runner.not_run and all(getattr(o, "held", False) for o in held)
+            "every job held",
+            len(held) == 4 and all(getattr(o, "held", False) for o in held),
         )
         v.check(
             "no job failed", not runner.errors and not getattr(runner, "failed", None)
@@ -1487,21 +1750,27 @@ print(json.dumps({
 """
 
 
+@slurm_case
 def test_plain_workflow_untouched_slurm(where, slurm):
     """A workflow on the plain Slurm worker, with no pool: it runs, imports nothing of
-    ``pydra.workers.pool`` and leaves no pool file anywhere."""
+    ``pydra.workers.pool`` and leaves no pool file in the test's directory, which holds its cache
+    and its user cache root (``PYDRA_CACHE_ROOT``)."""
     with verdict("test_plain_workflow_untouched_slurm") as v:
         script = where / "plain.py"
         script.write_text(PLAIN)
         cache = where / "cache"
         args = " ".join(f"--{k}={val}" for k, val in _substrate_args(False).items())
         before = sorted(p.relative_to(where) for p in where.rglob("*"))
+        from pydra.utils.general import CACHE_ROOT_ENV_VAR
+
+        env = {**os.environ, CACHE_ROOT_ENV_VAR: str(where / "cache" / "user")}
         proc = subprocess.run(
             [sys.executable, str(script), str(cache), args],
             capture_output=True,
             text=True,
             timeout=BOUND,
             cwd=where,
+            env=env,
         )
         v.check("ran", proc.returncode == 0)
         report = (
