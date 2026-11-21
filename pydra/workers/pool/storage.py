@@ -567,9 +567,6 @@ class _Queue:
         self.judged: dict[str, float] = {}  # tickets found under a live claim, when
         self.missing: dict[str, float] = {}  # tickets found missing or corrupt, when
         self.faults: list[tuple[str, str]] = []
-        self.residencies: set[str] = (
-            set()
-        )  # the residency labels of the tickets read here
 
     def close(self) -> None:
         for sub in self._SUBDIRS:
@@ -1716,12 +1713,9 @@ class PoolRoot:
             Pass over tickets of more jobs than this (a warm worker gathering one-job tickets).
         """
         q = self.queue(queue)
+        # judged ticket by ticket: a queue may carry several residencies (a residency="ignore"
+        # job shares its class's queue with plain ones), so one held residency never skips it
         held = self.holds(queue, epoch)
-        if held and q.residencies and q.residencies <= held.keys():
-            # every residency read on this queue is held (a queue may carry several: a
-            # residency="ignore" job shares the class's queue with plain ones; tickets are
-            # judged one by one below otherwise)
-            return None
         now = time.monotonic()
         interval = self.settings.renew_interval
         q.judged = {d: at for d, at in q.judged.items() if now - at < interval}
@@ -1755,8 +1749,6 @@ class PoolRoot:
         if ticket is None:
             q.faults.append((digest, "missing"))
             q.missing[digest] = time.monotonic()
-        else:
-            q.residencies.add(ticket.residency_label)
         return ticket
 
     def take(

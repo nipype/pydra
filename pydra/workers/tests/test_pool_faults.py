@@ -1674,3 +1674,27 @@ def _root_worker(root, processes, tmp_path):
     )
     processes.append(proc)
     return proc
+
+
+def test_a_held_residency_does_not_skip_its_queue(pool, tasks):
+    """A worker that has read a ticket of a residency later held still claims another residency's
+    ticket on the same queue (``residency="ignore"`` jobs share the class's queue)."""
+    from pydra.workers.pool.storage import Ticket
+
+    pool.providers(tasks)
+    epoch = pool.pool.take_epoch()
+    provided = pool.job(tasks.UseBroken(model="m", x=1), "provided")
+    plain = pool.job(tasks.Echo(x=2), "plain")
+    pool.put([provided])
+    other = pool.put([plain])
+    first = pool.pool.claim("cpu")  # reads the provided residency's ticket
+    label = Ticket(
+        queue="cpu",
+        node="n",
+        jobs=[pool.entry(provided)],
+        residency=_residency(provided),
+    ).residency_label
+    first.release()
+    pool.pool.hold("cpu", epoch, label)
+    claim = pool.pool.claim("cpu")
+    assert claim is not None and claim.digest == other
