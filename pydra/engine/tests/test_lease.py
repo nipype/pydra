@@ -122,21 +122,49 @@ def test_holder_records_its_stale_after(tmp_path):
         assert lease.holder()["stale_after"] == FAST.stale_after
 
 
+CAPPED = LeaseSettings(
+    stale_after=10, timeout=15, attribute_delay=0, max_honoured_stale_after=40
+)
+
+
 @pytest.mark.parametrize(
-    "record, expected",
+    "record, unreadable, expected",
     [
-        (None, 10),
-        ({"stale_after": 20}, 20),
-        ({"stale_after": 5}, 10),
-        ({}, STALE_AFTER),
-        ({"stale_after": True}, STALE_AFTER),
-        ({"stale_after": "20"}, STALE_AFTER),
-        ({"stale_after": -1}, STALE_AFTER),
-        ({"stale_after": float("inf")}, STALE_AFTER),
+        (None, False, 10),
+        (None, True, 40),
+        ({"stale_after": 20}, False, 20),
+        ({"stale_after": 5}, False, 10),
+        ({"stale_after": 1e9}, False, 40),
+        ({}, False, 40),
+        ({"stale_after": True}, False, 40),
+        ({"stale_after": "20"}, False, 40),
+        ({"stale_after": -1}, False, 40),
+        ({"stale_after": float("inf")}, False, 40),
     ],
 )
-def test_holder_stale_after(record, expected):
-    assert holder_stale_after(record, 10) == expected
+def test_holder_stale_after(record, unreadable, expected):
+    assert holder_stale_after(record, CAPPED, unreadable=unreadable) == expected
+
+
+def test_max_honoured_stale_after_default_and_bounds():
+    assert LeaseSettings().max_honoured_stale_after == 4 * STALE_AFTER
+    assert (
+        LeaseSettings(stale_after=2000, timeout=3000).max_honoured_stale_after == 2000
+    )
+    with pytest.raises(ValueError, match="max_honoured_stale_after"):
+        LeaseSettings(stale_after=10, timeout=15, max_honoured_stale_after=5)
+
+
+def test_huge_recorded_bound_is_taken_over_by_the_cap(tmp_path):
+    """The waiter's bound stretches at most to the cap, so a record of 1e9 cannot hold
+    every waiter forever."""
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile, stale_after=1e9)
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, CAPPED)
+    with lease:
+        assert len(lease.broke) == 1
+        assert 40 < clock.t <= 40 + POLL_MAX
 
 
 def test_holder_with_longer_bounds_taken_over_after_them(tmp_path):

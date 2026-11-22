@@ -387,9 +387,10 @@ class PortableStore:
         How the store's leases (de-duplication, resume and rerun) beat, age and wait; see
         `~pydra.engine.lease.LeaseSettings`. The holder is always ``"anonymous"``: an entry
         is portable, so its lease names no user, host or pid. A lease is stale only after
-        the larger of this ``stale_after`` and the one its holder recorded, so a process with
-        shorter bounds never takes over a live holder. Default ``LeaseSettings()``; read-only
-        after construction.
+        the larger of this ``stale_after`` and the one its holder recorded, at most
+        ``max_honoured_stale_after`` (`~pydra.engine.lease.holder_stale_after`), so a process
+        with shorter bounds never takes over a live holder. Default ``LeaseSettings()``;
+        read-only after construction.
     """
 
     def __init__(
@@ -1567,7 +1568,7 @@ class PortableStore:
         try:
             with root.child(_LEASES) as leases:
                 newest = self._newest_in(leases, f"{name}.lock")
-                record = self._holder_record(leases, f"{name}.lock")
+                record, unreadable = self._holder_record(leases, f"{name}.lock")
         except (FileNotFoundError, WrongKindError):
             return False
         except OSError:
@@ -1575,12 +1576,14 @@ class PortableStore:
         if newest is None:  # not a directory: not a lease this store takes
             return False
         return now - newest < holder_stale_after(
-            record, self.lease_settings.stale_after
+            record, self.lease_settings, unreadable=unreadable
         )
 
     @staticmethod
-    def _holder_record(leases: StorageDir, name: str) -> dict | None:
-        """The holder record of the lease ``name``, or None if none can be read."""
+    def _holder_record(leases: StorageDir, name: str) -> tuple[dict | None, bool]:
+        """The holder record of the lease ``name`` (None if none can be read), and whether
+        a record exists that could not be read."""
+        unreadable = False
         try:
             with leases.child(name) as lease:
                 for e in sorted(lease.scandir(), key=lambda e: e.name):
@@ -1589,13 +1592,16 @@ class PortableStore:
                     try:
                         with lease.child(e.name) as t, t.open_read(HOLDER_FILE) as f:
                             record = json.loads(f.read())
-                    except (OSError, ValueError, WrongKindError):
+                    except (FileNotFoundError, ValueError, WrongKindError):
+                        continue
+                    except OSError:
+                        unreadable = True
                         continue
                     if isinstance(record, dict):
-                        return record
+                        return record, False
         except (OSError, WrongKindError):
             pass
-        return None
+        return None, unreadable
 
     @staticmethod
     def _newest_in(parent: StorageDir, name: str) -> float | None:

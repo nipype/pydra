@@ -593,6 +593,48 @@ def test_lease_settings_dead_holder_taken_over_after_the_longer_bound(tmp_path):
     assert 2.0 <= time.monotonic() - start < 6
 
 
+def test_lease_settings_huge_recorded_bound_is_capped(tmp_path):
+    """A dead holder recording an absurd ``stale_after`` is honoured only up to the
+    taker's ``max_honoured_stale_after``: the waiter takes it over by then, and collect
+    sees it as stale after the cap."""
+    capped = attrs.evolve(SHORT, max_honoured_stale_after=2.0)
+    store = make(tmp_path, dedupe=True, lease_settings=capped)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=1e9)
+    name = lease.lockfile.name[: -len(".lock")]
+    with store._open() as root:
+        assert store._lease_live(root, name, time.time())
+        assert not store._lease_live(root, name, time.time() + 2.5)
+    start = time.monotonic()
+    with lease:
+        assert len(lease.broke) == 1
+    assert 2.0 <= time.monotonic() - start < 6
+
+
+def test_lease_settings_unreadable_holder_judged_by_the_cap(tmp_path):
+    """A holder record another user's process left unreadable counts as the cap."""
+    capped = attrs.evolve(SHORT, max_honoured_stale_after=2.0)
+    store = make(tmp_path, dedupe=True, lease_settings=capped)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=0.5)
+    (record,) = lease.lockfile.rglob("holder.json")
+    record.chmod(0)
+    try:
+        if os.access(record, os.R_OK):
+            pytest.skip("the record stays readable (running as root)")
+        name = lease.lockfile.name[: -len(".lock")]
+        with store._open() as root:
+            assert store._lease_live(root, name, time.time() + 1.0)
+            assert not store._lease_live(root, name, time.time() + 2.5)
+        start = time.monotonic()
+        with lease:
+            assert len(lease.broke) == 1
+        assert 2.0 <= time.monotonic() - start < 6
+    finally:
+        if record.exists():
+            record.chmod(0o600)
+
+
 def test_lease_settings_unrecorded_holder_judged_by_the_default(tmp_path):
     """A holder an older pydra wrote, with no recorded bounds, is judged by the default
     ``stale_after``, so short bounds do not take it over."""
