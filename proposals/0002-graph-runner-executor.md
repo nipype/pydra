@@ -266,7 +266,10 @@ class Absent:
   - A reader of an absent sub-state receives the `Absent`, not an empty list. A sub-state is read
     as a group of a combining node, and a group is absent when every upstream element it covers
     gave an `Absent`. A combining reader applies its mode as above. A reader of a group with no
-    elements for another reason, such as an empty list, receives an empty list.
+    elements for another reason, such as an empty list, receives an empty list. The group is
+    formed wherever the combine sits: a partial node records its absent sub-states, own and
+    inherited, by the coordinates they fix, so a partial node downstream that combines the
+    inner axis forms the absent group too, through any chain of partial nodes.
   - A read of every element holds only the elements that exist: a node split over `[[0, 1],
     Absent]` reads as `[1, 2]`, as if the absent element were not there. A read of every group
     holds the `Absent` in place of each absent group (`[[1, 2], Absent]`). Neither read is ever
@@ -279,10 +282,12 @@ class Absent:
   - A barrier node (§4.3, E2), and a barrier reader of a partial node, read an upstream element
     that is an `Absent` as an empty sub-state, which today's `State` indexes when every sibling
     is empty too: a reader combining the block axis of an all-absent upstream gets `[]`. Beside a
-    present element the empty sub-state is ragged and is refused as other ragged shapes are. A
-    combining barrier node refuses an `Absent` element with a `PydraStateError` naming its
-    combiner: the reader of the absent group must receive the `Absent`, and only a partial node
-    can give it.
+    present element the empty sub-state is ragged and is refused as other ragged shapes are.
+    Today's `State` cannot form an absent group, so a combine that would keep one where a barrier
+    node, or any node that is not partial, lies between the absent element and the combine
+    raises `AbsentGroupError` (a `PydraStateError`) naming the axis and the upstream node. This
+    covers a combining barrier node itself and a combining reader downstream of one. A combine
+    that keeps no absent group (one over the block axis only) is not refused.
   - A key written while an absent element opened one propagating element (the behaviour before
     this rule was implemented) carries the `Absent`, hashed by `cause` or in the absence suffix.
     Under this rule no reader holds that `Absent`, so such a key is never looked up: it is
@@ -1021,7 +1026,7 @@ additions behind them.
 | R7 | driver model: `Round.settled`, `Round.unrunnable`, `NotRun`/`RunIncomplete`, `upstream()`, `lookup_before_dispatch`, `read_succeeded` in the protocol; `job.attempt` on handed-out jobs, and `find(job)` with `job.verify` when the store has `find` | R4 | opt-in |
 | R8 | `plan()` (subsumes J2) | R6, F2, B2 | opt-in |
 | E2 | partial `State` (0001 §3.1 step 2): per-element release of nested fan-out, `state_key`, the `"expansion"` phase and `Unrunnable.key`/`block`, including an `Absent` splitter input per element | R1 | 0001's; barrier kept for the six shapes of §2.2; corrects the ragged, empty, combined-source, mixed-scalar and static-combine cases (#945), whose checksums change; the `test_readiness` resplit and bad-input tests change expectations to keys |
-| R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the absence suffix for supplied checksums and unhashed fields; whole-node absence for a splitter input; after E2, per-element absence of a splitter input (no elements in that element's sub-state, an absent group read as the `Absent`, a barrier node reads an empty sub-state and refuses when it combines). A single value that is an `Absent` propagates under `"drop"` (it has no elements to drop); a combined read of a wholly absent node is that `Absent`, so `"drop"` gives an empty list. A whole-value `Absent` has element index -1 in its triple | R6, E2 | opt-in |
+| R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the absence suffix for supplied checksums and unhashed fields; whole-node absence for a splitter input; after E2, per-element absence of a splitter input (no elements in that element's sub-state, an absent group read as the `Absent`, downstream partial combines form the absent group, a barrier path reads an empty sub-state and raises `AbsentGroupError` where a combine would keep an absent group). A single value that is an `Absent` propagates under `"drop"` (it has no elements to drop); a combined read of a wholly absent node is that `Absent`, so `"drop"` gives an empty list. A whole-value `Absent` has element index -1 in its triple | R6, E2 | opt-in |
 | R10b | `when=`/`unless=`: node inputs, upstream states, lazy reads and edges; the precedence rule, with the gate read before data inputs are resolved; `Settled(how="gated")`, the gated-job identity and `PlanNode.gated`; a `bool` or an `Any`-typed lazy gate checked when read; `select(n)` (`pydra.compose.select`, a callable module, as `pydra.compose` is a namespace package; `from pydra.compose.select import select` also works) | R10a | opt-in |
 | R11 | `workflow.loop` as a runtime while-loop: a `LoopTask` whose frame the runner grows one round at a time; `carry=`, `index=`, optional `max_rounds`; outputs `rounds`, `converged`, `stopped`; the cycle stop; a two-round memory window; `Round.loops`, `PlanNode.rounds`/`max_rounds` and state `"looping"`; `GraphRunner.done` waits for an open loop on an unowned root | R6, R10b, E2 | opt-in |
 
