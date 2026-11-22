@@ -223,7 +223,11 @@ class Absent:
   requires. A task with no accepted or dropped `Absent` keeps its checksum unchanged, so no
   existing cache slot moves. Example: a gather over records whose key is built from its upstreams'
   keys gets a different checksum in a run where record 7 was routed off than in a run where
-  record 7 ran, although the upstream keys are the same in both.
+  record 7 ran, although the upstream keys are the same in both. An `Absent` a field holds as a
+  constant (a node of a nested workflow given one through the workflow's input, or a root job's
+  input) counts like a resolved one: a whole value at index -1, a list element at its position.
+  `"drop"` is not applied to a constant list: its `Absent` elements reach the task, which holds
+  them, and they enter the suffix.
 - **An absent-aware supplied checksum gets no suffix.** A task with a supplied checksum may declare
   that its hook sees absence (`define(checksum=..., absent_aware=True)`, or
   `__checksum_absent_aware__ = True` on a class that defines `__checksum__`). The runner then
