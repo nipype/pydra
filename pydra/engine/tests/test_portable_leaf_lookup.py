@@ -19,12 +19,17 @@ from .test_portable_store import TRUST, make
 from .test_portable_submitter import drive_with_run
 from .test_portable_workflow_jobs import ByTask, spy
 
-RUNS: list[int] = []
+# the file each test's runs of `Counted` are appended to: read through the environment at run
+# time, so it counts runs in this process and in a copy of the task a pickle round trip made
+RUNS_ENV = "PYDRA_TEST_X6B_RUNS"
 
 
 @python.define
 def Counted(x: int) -> int:
-    RUNS.append(x)
+    import os
+
+    with open(os.environ["PYDRA_TEST_X6B_RUNS"], "a") as f:
+        f.write(f"{x}\n")
     return x + 1
 
 
@@ -35,10 +40,14 @@ def OneLeaf(x: int) -> int:
 
 
 @pytest.fixture(autouse=True)
-def _clear_runs():
-    RUNS.clear()
-    yield
-    RUNS.clear()
+def _runs_file(tmp_path, monkeypatch):
+    monkeypatch.setenv(RUNS_ENV, str(tmp_path / "runs.txt"))
+
+
+def runs(tmp_path) -> list[int]:
+    """The ``x`` of every run of `Counted` in this test so far"""
+    path = tmp_path / "runs.txt"
+    return [int(line) for line in path.read_text().split()] if path.exists() else []
 
 
 def runner_for(store, sub, task, lookup_before_dispatch=False):
@@ -55,7 +64,8 @@ def runner_for(store, sub, task, lookup_before_dispatch=False):
 def populate(tmp_path, store):
     with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc0") as sub:
         assert sub(Counted(x=1)).outputs.out == 2
-    RUNS.clear()
+    assert runs(tmp_path) == [1]
+    (tmp_path / "runs.txt").unlink()
 
 
 def leaf_finds(calls):
@@ -88,7 +98,7 @@ def test_leaf_miss_always_held_one_lookup(
     finds = spy(monkeypatch, store, "find")
     run_one_leaf(tmp_path, store, lookup_before_dispatch)
     assert len(leaf_finds(finds)) == 1
-    assert RUNS == [1]
+    assert runs(tmp_path) == [1]
 
 
 def test_leaf_probe_absent_still_looks_under_the_lease(tmp_path, monkeypatch):
@@ -107,7 +117,7 @@ def test_leaf_probe_absent_still_looks_under_the_lease(tmp_path, monkeypatch):
     )
     finds = spy(monkeypatch, store, "find")
     leaf = run_one_leaf(tmp_path, store, lookup_before_dispatch=False)
-    assert RUNS == []
+    assert runs(tmp_path) == []
     assert len(leaf_finds(finds)) == 1
     assert leaf.committed is not None
     assert leaf.committed.entry.root == str(tmp_path / "donor")
@@ -123,7 +133,7 @@ def test_leaf_hit_served_from_the_first_lookup(
     populate(tmp_path, store)
     finds = spy(monkeypatch, store, "find")
     leaf = run_one_leaf(tmp_path, store, lookup_before_dispatch)
-    assert RUNS == []
+    assert runs(tmp_path) == []
     assert len(leaf_finds(finds)) == 1
     assert leaf.committed is not None
     assert leaf.committed.entry.root == store.path
@@ -143,7 +153,7 @@ def test_leaf_verify_asked_once(tmp_path, lookup_before_dispatch, dedupe, asked)
     hook.asked = 0
     leaf = run_one_leaf(tmp_path, store, lookup_before_dispatch)
     assert hook.asked == asked
-    assert RUNS == [1]
+    assert runs(tmp_path) == [1]
     assert leaf.verify is not None
 
 
@@ -159,16 +169,16 @@ def test_leaf_published_between_lookup_and_lease_served(
         runner = runner_for(store, sub, OneLeaf(x=1), lookup_before_dispatch)
         rnd = runner.ready()
         (job,) = rnd.dispatch
-        assert RUNS == []
+        assert runs(tmp_path) == []
         # process B: its own store over the same root
         other = PortableStore(tmp_path / "root", trust=TRUST)
         with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
             published = b(Counted(x=1))
-        assert RUNS == [1]
+        assert runs(tmp_path) == [1]
         runner.complete(job, job.run(rerun=job.rerun))
         drive_with_run(runner)
         assert runner.result().outputs.out == 2
-    assert RUNS == [1]
+    assert runs(tmp_path) == [1]
     assert job.committed is not None
     assert job.committed.entry == published.committed.entry
 
@@ -186,7 +196,7 @@ def test_outer_leaf_verify_asked_once(tmp_path, dedupe, asked):
     with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
         assert sub(Counted(x=1)).outputs.out == 2
     assert hook.asked == asked
-    assert RUNS == [1]
+    assert runs(tmp_path) == [1]
 
 
 def test_leaf_pickled_to_a_worker_looks_again(tmp_path, monkeypatch):
@@ -204,9 +214,11 @@ def test_leaf_pickled_to_a_worker_looks_again(tmp_path, monkeypatch):
         with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
             published = b(Counted(x=1))
         assert published.committed.won is True
+        assert runs(tmp_path) == [1]  # B computed it
         finds = spy(monkeypatch, worker.store, "find")
         result = worker.run(rerun=worker.rerun)
     assert len(finds) == 1
+    assert runs(tmp_path) == [1]  # the worker did not
     assert result.committed.served is True  # not recomputed
     assert result.committed.entry == published.committed.entry
 
@@ -225,6 +237,7 @@ def test_leaf_retried_looks_again(tmp_path, monkeypatch):
         other = PortableStore(tmp_path / "root", trust=TRUST, dedupe=False)
         with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
             published = b(Counted(x=1))
+        assert runs(tmp_path) == [1]  # B computed it
         (again,) = runner.ready().dispatch
         assert again is job
         finds = spy(monkeypatch, store, "find")
@@ -232,5 +245,6 @@ def test_leaf_retried_looks_again(tmp_path, monkeypatch):
         drive_with_run(runner)
         assert runner.result().outputs.out == 2
     assert len(leaf_finds(finds)) == 1
+    assert runs(tmp_path) == [1]  # the retried run did not
     assert job.committed.served is True  # not recomputed
     assert job.committed.entry == published.committed.entry
