@@ -43,12 +43,15 @@ class PlanNode:
         ``recorded(jobs)`` method (``PickleStore``) is asked for its recorded jobs and the
         others are looked up under that option. A store with neither (an adapter) reports 0. Only
         elements whose inputs are resolvable now have a checksum and are counted.
-    state : "pending" | "waiting" | "deferred" | "absent"
+    state : "pending" | "waiting" | "deferred" | "absent" | "looping"
         ``pending``: its elements are released or can be. ``waiting``: a workflow job
         whose lease another process holds. ``deferred``: what it holds is not known yet (a
         workflow job not yet expanded, a split over an upstream output none of whose
         elements has been read). ``absent``: the node will be absent as a whole (RFC 0002
-        section 2.3(a)), with no elements, so it is not routed, placed or looked up
+        section 2.3(a)), with no elements, so it is not routed, placed or looked up.
+        ``looping``: an entered loop (RFC 0002 section 2.3(d)), named by its job's path
+        and followed by its live rounds; its total is never predicted, so ``elements``
+        is None
     gated : int
         Elements a gate switches off (RFC 0002 section 2.3(b)), counted from the
         predicate's result; they are not looked up in the store, routed or placed
@@ -69,6 +72,10 @@ class PlanNode:
         node (one that splits over an upstream output and is expanded one block per
         upstream element), the elements of the blocks whose upstream elements the
         runner has accepted; None when nothing about the node can be read yet
+    rounds : int, optional
+        For a ``looping`` entry, the rounds of the loop that are done
+    max_rounds : int, optional
+        For a ``looping`` entry, the loop's ``max_rounds``, None if it has none
     """
 
     path: str
@@ -76,12 +83,14 @@ class PlanNode:
     resources: "ComputeResources | None"
     worker: str | None
     expected_hits: int
-    state: ty.Literal["pending", "waiting", "deferred", "absent"]
+    state: ty.Literal["pending", "waiting", "deferred", "absent", "looping"]
     gated: int = 0
     absent: int = 0
     placement: object | None = None
     provisional: bool = False
     known_elements: int | None = None
+    rounds: int | None = None
+    max_rounds: int | None = None
 
 
 @attrs.frozen
@@ -233,11 +242,31 @@ def build_plan(
         if frame.state == "leasing":
             nodes.append(_leasing(frame))
         elif frame.state == "expanding" and frame.graph is not None:
+            if frame.loop is not None:
+                nodes.append(_looping(frame))
             for node in frame.graph.sorted_nodes:
                 entry = _node(runner, frame, node, executors, listed)
                 if entry is not None:
                     nodes.append(entry)
     return Plan(tuple(nodes))
+
+
+def _looping(frame: "_Frame") -> PlanNode:
+    """The entry of an entered loop: the rounds done so far, never a predicted total;
+    no round is instantiated"""
+    from pydra.engine.loop import loop_label
+
+    loop = frame.loop
+    return PlanNode(
+        path=loop_label(frame),
+        elements=None,
+        resources=frame.job.resources if frame.job is not None else None,
+        worker=None,
+        expected_hits=0,
+        state="looping",
+        rounds=loop.rounds - (0 if loop.last.done else 1),
+        max_rounds=loop.spec.max_rounds,
+    )
 
 
 def _leasing(frame: "_Frame") -> PlanNode:

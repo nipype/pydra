@@ -138,6 +138,8 @@ class LoopState:
     stopped : str | None
         Why the loop ended: ``"until"``, ``"max-rounds"``, ``"cycle"``, ``"absent"`` or
         ``"error"``; None while it is open
+    advanced : int
+        The rounds added during the current call of ``GraphRunner.ready``
     """
 
     def __init__(self, spec: LoopSpec, first: "NodeExecution"):
@@ -148,12 +150,14 @@ class LoopState:
         self.seen: set[str] = set()
         self.until: ty.Any = None
         self.stopped: str | None = None
+        self.advanced = 0
 
     @property
     def ran(self) -> int:
         """The rounds instantiated, less a last round that completed absent by
         propagation (it did not run)"""
-        absent = self.last.job(None)._propagated_absent is not None
+        job = (self.last._tasks or {}).get(None)
+        absent = job is not None and job._propagated_absent is not None
         return self.rounds - int(absent)
 
 
@@ -251,6 +255,7 @@ def instantiate(runner: "GraphRunner", frame: "_Frame") -> "NodeExecution":
         runner._release_node(frame, loop.prev)
     loop.prev, loop.last = last, new
     loop.rounds += 1
+    loop.advanced += 1
     return new
 
 
@@ -263,20 +268,26 @@ def advance(runner: "GraphRunner", frame: "_Frame") -> None:
     last = loop.last
     if last.errored or last.unrunnable or last._node_error is not None:
         # the round's error is the frame's, which fails the loop job when it finishes
-        loop.stopped = "error"
+        runner._close_loop(frame, "error")
         return
     try:
         until = read_until(frame)
     except Exception as exc:
-        loop.stopped = "error"
         runner._fail_loop(frame, exc)
         return
     loop.until = until
     checksum = last.job(None).checksum
     stopped = decide(loop, until, checksum)
     if stopped is not None:
-        loop.stopped = stopped
+        runner._close_loop(frame, stopped)
         return
+    if loop.advanced >= MAX_ADVANCES:
+        return  # the driver calls ``ready`` again, as this call settled rounds
     if loop.spec.index is None:
         loop.seen.add(checksum)
     instantiate(runner, frame)
+
+
+#: The most rounds one loop adds during one call of ``GraphRunner.ready``, so that a
+#: loop replayed from the store hands control back to its driver
+MAX_ADVANCES = 64

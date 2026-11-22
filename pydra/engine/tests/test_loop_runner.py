@@ -12,6 +12,7 @@ import pytest
 from pydra.compose import python, workflow
 from pydra.engine.absent import Absent
 from pydra.engine.job import Job
+from pydra.engine.loop import MAX_ADVANCES
 from pydra.engine.result import Result
 from pydra.engine.runner import Failed, GraphRunner, NotRun
 from pydra.engine.store import SUCCESS_DIR, PickleStore
@@ -653,3 +654,77 @@ def test_upstream_of_a_released_round_is_refused(submitter):
     assert [j.name for j, _ in runner.upstream(r3)["n"]] == ["r2"]
     with pytest.raises(LookupError, match="r1"):
         runner.upstream(jobs[1])
+
+
+# -- reporting loops (L6) ----------------------------------------------------------------------------
+
+
+def test_driver_sees_one_loop_closed_per_element(submitter):
+    runner = runner_for(submitter, OverSplit(xs=[16, 4, 8]))
+    closed = []
+    for _ in range(200):
+        if runner.done:
+            break
+        rnd = runner.ready()
+        closed += rnd.loops
+        for job in rnd.dispatch:
+            runner.complete(job, run_inline(job))
+    assert runner.done
+    assert sorted((c.loop, c.rounds, c.stopped) for c in closed) == [
+        ("halve[0]", 4, "until"),
+        ("halve[1]", 2, "until"),
+        ("halve[2]", 3, "until"),
+    ]
+
+
+def test_loop_closed_reports_error_and_cycle(submitter):
+    @workflow.define(outputs=["x"])
+    def Wf(x: int) -> int:
+        return workflow.add(workflow.loop(BoomAt2, until="done")(x=x), name="boom").x
+
+    def complete(job):
+        try:
+            return run_inline(job)
+        except RuntimeError as exc:
+            return Failed(exc)
+
+    rounds = drive(runner_for(submitter, Wf(x=0)), complete)
+    assert [(c.loop, c.rounds, c.stopped) for r in rounds for c in r.loops] == [
+        ("boom", 3, "error")
+    ]
+    task = workflow.loop(Clamp, until="done")(x=1)
+    rounds = drive(runner_for(submitter, task))
+    assert [(c.loop, c.rounds, c.stopped) for r in rounds for c in r.loops] == [
+        ("ClampLoop", 3, "cycle")
+    ]
+
+
+def test_loop_closing_alone_is_reported_before_done(submitter):
+    """The ``ready`` that closes an unowned root loop reports it, and ``done`` waits for
+    that report"""
+    runner = runner_for(submitter, CountLoop(n=0, stop=1))
+    (r0,) = runner.ready().dispatch
+    runner.complete(r0, run_inline(r0))
+    assert not runner.done
+    rnd = runner.ready()
+    assert (rnd.dispatch, rnd.settled) == ([], [])
+    assert [(c.loop, c.rounds, c.stopped) for c in rnd.loops] == [
+        ("CountLoop", 1, "until")
+    ]
+    assert runner.done
+
+
+def test_replayed_loop_yields_to_its_driver(tmp_path):
+    """A loop replayed from the store adds at most MAX_ADVANCES rounds per ``ready``"""
+    cache_root = tmp_path / "pickled"
+    with Submitter(worker="debug", store=PickleStore(cache_root)) as submitter:
+        loop_outputs(submitter, Outer(stop=150))
+        checksum = CountLoop(n=0, stop=150)._checksum
+        shutil.rmtree(cache_root / checksum)
+        for record in (cache_root / SUCCESS_DIR).glob(f"{checksum}-*"):
+            record.unlink()
+        rounds = drive(runner_for(submitter, Outer(stop=150)))
+    per_call = [len([s for s in r.settled if s.job.name[0] == "r"]) for r in rounds]
+    assert sum(per_call) == 150
+    assert max(per_call) <= MAX_ADVANCES + 1
+    assert len([n for n in per_call if n]) >= 3

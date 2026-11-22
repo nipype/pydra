@@ -1244,6 +1244,26 @@ class AbsentNode:
     inherits: str | None
 
 
+@attrs.frozen
+class LoopClosed:
+    """A loop that ended (RFC 0002 section 2.3(d)), reported once
+
+    Attributes
+    ----------
+    loop : str
+        The path of the loop's job, its element index or key included (``"refine[3]"``)
+    rounds : int
+        The rounds instantiated, less a last round that completed absent by propagation
+    stopped : str
+        ``"until"``, ``"max-rounds"``, ``"cycle"``, ``"absent"`` or ``"error"`` (a round
+        failed, or ``until`` was not a ``bool`` or an ``Absent``)
+    """
+
+    loop: str
+    rounds: int
+    stopped: ty.Literal["until", "max-rounds", "cycle", "absent", "error"]
+
+
 def node_label(node: "NodeExecution") -> str:
     """The name of a node with the path of the nested workflows that hold it"""
     return "/".join((*node.path, node.name))
@@ -1264,6 +1284,8 @@ class Round:
         The nodes found absent as a whole since the last call, each reported once
     unrunnable : list[Unrunnable]
         The elements marked unrunnable since the last call, each reported once
+    loops : list[LoopClosed]
+        The loops that ended since the last call, each reported once
     retry_after : float | None
         Seconds until a waiting workflow lease is tried again, ``None`` if none waits
     """
@@ -1272,6 +1294,7 @@ class Round:
     settled: list[Settled] = attrs.field(factory=list)
     unrunnable: list[Unrunnable] = attrs.field(factory=list)
     absent_nodes: list[AbsentNode] = attrs.field(factory=list)
+    loops: list[LoopClosed] = attrs.field(factory=list)
     retry_after: float | None = None
 
 
@@ -1407,6 +1430,8 @@ class GraphRunner:
         # keyed by node label, never by ``id(node)``: a loop releases nodes, whose ids
         # may then be reused
         self._reported_unrunnable: set[tuple[str, ty.Any]] = set()
+        # the loops that ended, not yet reported by ``ready``
+        self._closed_loops: list[LoopClosed] = []
         self._reported_absent_nodes: set[str] = set()
         # the same-checksum table: the job handed out for each checksum until its outcome
         # is reported, the twins held behind it, and the outcome once reported
@@ -1753,9 +1778,17 @@ class GraphRunner:
                             self._release_job(inner)
             self._frames.remove(child)
 
+    def _close_loop(self, frame: _Frame, stopped: str) -> None:
+        """End a frame's loop, to be reported once in :attr:`Round.loops`"""
+        frame.loop.stopped = stopped
+        self._closed_loops.append(
+            LoopClosed(loop_label(frame), frame.loop.ran, stopped)
+        )
+
     def _fail_loop(self, frame: _Frame, exc: BaseException) -> None:
         """Fail a loop whose ``until`` could not be read: its job, or the run when the
         loop is the runner's own task and the runner does not own its job"""
+        self._close_loop(frame, "error")
         if frame.owned:
             self._finish(frame, exc)
             return
@@ -1946,8 +1979,13 @@ class GraphRunner:
         -------
         Round
             The jobs to dispatch, the jobs the runner completed itself, the elements newly
-            marked unrunnable, and the seconds until a waiting workflow lease is tried again
+            marked unrunnable, the loops that ended, and the seconds until a waiting
+            workflow lease is tried again. A loop adds at most ``MAX_ADVANCES`` rounds per
+            call, so a loop replayed from the store returns to its driver between them
         """
+        for frame in self._frames:
+            if frame.loop is not None:
+                frame.loop.advanced = 0
         while True:
             before = self._progress()
             self._settle_frames()
@@ -1990,11 +2028,12 @@ class GraphRunner:
             self._note_attempt(job)
         self._collect_resolution_errors()
         settled, self._settled = self._settled, []
+        loops, self._closed_loops = self._closed_loops, []
         unrunnable = self._new_unrunnable()
         absent_nodes = self._new_absent_nodes()
         retry_after = self._retry_after()
         self._quiescent = (
-            not (dispatch or settled or unrunnable or absent_nodes)
+            not (dispatch or settled or unrunnable or absent_nodes or loops)
             and retry_after is None
             and not self._in_flight
             and not self._reading
@@ -2004,6 +2043,7 @@ class GraphRunner:
             settled=settled,
             unrunnable=unrunnable,
             absent_nodes=absent_nodes,
+            loops=loops,
             retry_after=retry_after,
         )
 
@@ -2516,7 +2556,7 @@ class GraphRunner:
 
     def _unreported(self) -> bool:
         """Whether :meth:`ready` has records it has not returned yet"""
-        if self._settled:
+        if self._settled or self._closed_loops:
             return True
         for frame in self._frames:
             if frame.graph is None:
