@@ -1818,13 +1818,36 @@ class GraphRunner:
     def done(self) -> bool:
         """Whether every node of the graph has completed (and, if the runner owns the
         workflow job, it is committed), or nothing else can progress and jobs remain
-        :class:`NotRun` (an incomplete run: see :attr:`not_run`)"""
+        :class:`NotRun` (an incomplete run: see :attr:`not_run`). It stays False while a
+        settled job, an unrunnable element or an absent node has not yet been reported by
+        :meth:`ready`, such as a twin shared by the last :meth:`complete`"""
         root = self._root
         if root.owned:
             finished = root.state == "finished"
         else:
             finished = all(n.done for n in root.graph.nodes)
+        if self._unreported():
+            return False
         return finished or (bool(self._not_run) and self._quiescent)
+
+    def _unreported(self) -> bool:
+        """Whether :meth:`ready` has records it has not returned yet"""
+        if self._settled:
+            return True
+        for frame in self._frames:
+            if frame.graph is None:
+                continue
+            for node in frame.graph.nodes:
+                if any(
+                    (id(node), index) not in self._reported_unrunnable
+                    for index in node.unrunnable
+                ):
+                    return True
+                if node.absent is not None and (
+                    id(node) not in self._reported_absent_nodes
+                ):
+                    return True
+        return False
 
     @property
     def entries(self) -> list[JobErrorEntry]:

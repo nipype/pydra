@@ -170,12 +170,10 @@ def run_inline(job) -> Result:
 
 
 def drive(runner, complete=run_inline):
-    """Drive a runner by hand to the end, returning every round. A twin settled by the
-    last ``complete`` is reported by the ``ready`` after it, so one more is called."""
+    """Drive a runner by hand to the end, returning every round"""
     rounds = []
     for _ in range(100):
         if runner.done:
-            rounds.append(runner.ready())
             return rounds
         rnd = runner.ready()
         rounds.append(rnd)
