@@ -566,12 +566,79 @@ class PartialExpansion:
                 prefixed = {("_" + name,) + p: c for p, c in fields.items()}
                 self.absent.append((("from", name, ident), prefixed, record))
                 self.version += 1
-                group_paths = self.spec.group_paths
-                if group_paths is not None and all(p in prefixed for p in group_paths):
-                    # a group of this node that only the absent sub-state would fill
-                    group = tuple(prefixed[p] for p in group_paths)
-                    self._add_group(group)
-                    self._inherited_absent.setdefault(group, record)
+                if self.spec.group_paths is not None:
+                    self._absent_groups(name, prefixed, record)
+
+    def _absent_groups(self, name: str, prefixed: dict, record: tuple) -> None:
+        """Form the groups of this node that only an absent sub-state of source ``name``
+        would fill: the group paths it fixes, each combined with every coordinate of this
+        node's own static split entries on the paths it does not. A group that keeps an
+        axis inside the absent sub-state has no such group. A group that keeps an axis
+        of another source cannot be enumerated, so it is refused as a block error
+        (``AbsentGroupError``) and the node never seals"""
+        from pydra.engine.runner import AbsentGroupError, error_entry
+
+        ex, spec = self.ex, self.spec
+        prefix = "_" + name
+
+        def owner(path: tuple) -> str:
+            head = path[0]
+            if head in spec.inner:
+                return "_" + spec.inner[head]._node.name
+            return head
+
+        unfixed = [p for p in spec.group_paths if p not in prefixed]
+        if any(owner(p) == prefix for p in unfixed):
+            return  # it keeps an axis of the absent sub-state, which has no elements
+        groups = None
+        if not unfixed:
+            groups = [tuple(prefixed[p] for p in spec.group_paths)]
+        else:
+            skeleton = dict(self.static_entries)
+            kept = {owner(p) for p in unfixed}
+            for term in rpn_terms(spec.rpn):
+                if term in skeleton:
+                    continue
+                head = owner((term,))
+                if head == prefix:
+                    base = {p: c for p, c in prefixed.items() if p[0] == prefix}
+                    skeleton[term] = [Entry(base, {}, {})]
+                elif head in kept:
+                    break  # another source's axis is kept: not enumerable
+                else:
+                    skeleton[term] = [Entry({}, {}, {})]
+            else:
+                try:
+                    found = expand_rpn(spec.rpn, skeleton)
+                    if all(all(p in e.fields for p in unfixed) for e in found):
+                        groups = sorted(
+                            {
+                                tuple(
+                                    prefixed[p] if p in prefixed else e.fields[p]
+                                    for p in spec.group_paths
+                                )
+                                for e in found
+                            },
+                            key=sort_key,
+                        )
+                except Exception:
+                    groups = None
+        if groups is None:
+            exc = AbsentGroupError(
+                f"Node {ex.name!r} combines an absent sub-state of {name!r} but keeps an "
+                "axis of another source: the groups its reader must receive as the "
+                "Absent cannot be enumerated"
+            )
+            self.block_errors.append(f"Job {ex.name!r}, errored:\n{exc}")
+            ex._resolution_errors.append(self.block_errors[-1])
+            ex._resolution_entries.append(
+                error_entry(ex.name, None, exc, phase="expansion")
+            )
+            self.failed.append((("absent", name, len(self.failed)), dict(prefixed)))
+            return
+        for group in groups:
+            self._add_group(group)
+            self._inherited_absent.setdefault(group, record)
 
     @staticmethod
     def _fixes_final_key(source: "NodeExecution", fields: dict) -> bool:

@@ -427,9 +427,64 @@ def test_combine_over_a_barrier_nodes_absent_substate_is_refused(submitter):
         runner = runner_for(submitter, task)
         rounds = drive(runner)
         assert not settled(rounds, node) and not settled(rounds, "S")
+        assert len(runner.entries) == 1, "the combine was not refused"
         (entry,) = runner.entries
         assert entry.job_name == node
         assert entry.exception_type.endswith("AbsentGroupError")
         assert "'B.a'" in entry.message and "'A'" in entry.message
     # a combine that does not keep the absent element's group is not refused
     assert submitter(BarrierReader(ns=[-1])).outputs.out == []
+
+
+# -- a downstream combine that keeps an axis of its own (review r2, I4) ------------------------------
+
+
+@python.define
+def Id2(x: int, y: int) -> int:
+    return x + 100 * y
+
+
+@workflow.define(outputs=["groups", "summary"])
+def OwnAxisCombine(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(Ident().split("x", x=a.out), name="B")
+    c = workflow.add(Id2(x=b.out).split("y", y=[1, 2]).combine("B.x"), name="C")
+    s = workflow.add(Summarize(vals=c.out), name="S")
+    return c.out, s.out
+
+
+@python.define
+def Ys() -> list[int]:
+    return [1, 2]
+
+
+@workflow.define(outputs=["groups", "summary"])
+def OtherSourceAxisCombine(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(Ident().split("x", x=a.out), name="B")
+    e = workflow.add(Ys(), name="E")
+    c = workflow.add(Id2(x=b.out).split("y", y=e.out).combine("B.x"), name="C")
+    s = workflow.add(Summarize(vals=c.out), name="S")
+    return c.out, s.out
+
+
+def test_downstream_combine_keeping_its_own_axis_forms_each_absent_group(submitter):
+    out = submitter(OwnAxisCombine(ns=[2, -1])).outputs
+    assert out.groups == [[100, 101], [200, 201], NO_LIST, NO_LIST]
+    assert out.summary == ["100,101", "200,201", "absent:no-list", "absent:no-list"]
+    out = submitter(OwnAxisCombine(ns=[-1])).outputs
+    assert (out.groups, out.summary) == ([NO_LIST] * 2, ["absent:no-list"] * 2)
+
+
+def test_absent_groups_that_cannot_be_enumerated_are_refused(submitter):
+    runner = runner_for(submitter, OtherSourceAxisCombine(ns=[-1]))
+    rounds = drive(runner)
+    assert not settled(rounds, "S")
+    errors = [
+        e for e in runner.entries if e.exception_type.endswith("AbsentGroupError")
+    ]
+    assert [e.job_name for e in errors] == ["C"], "the combine was not refused"
+    assert "'B'" in errors[0].message
+    # with nothing absent the same workflow runs
+    out = submitter(OtherSourceAxisCombine(ns=[2])).outputs
+    assert out.summary == ["100,101", "200,201"]
