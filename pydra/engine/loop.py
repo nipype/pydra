@@ -252,7 +252,7 @@ def instantiate(runner: "GraphRunner", frame: "_Frame") -> "NodeExecution":
     for name in spec.body_outputs:
         setattr(workflow.outputs, name, getattr(outputs, name))
     if loop.prev is not None:  # only the two newest rounds are held
-        runner._release_node(frame, loop.prev)
+        runner._to_release.append((frame, loop.prev))
     loop.prev, loop.last = last, new
     loop.rounds += 1
     loop.advanced += 1
@@ -288,6 +288,9 @@ def advance(runner: "GraphRunner", frame: "_Frame") -> None:
     instantiate(runner, frame)
 
 
-#: The most rounds one loop adds during one call of ``GraphRunner.ready``, so that a
-#: loop replayed from the store hands control back to its driver
+#: The most rounds each loop adds during one call of ``GraphRunner.ready``, so that a
+#: loop replayed from the store hands control back to its driver. The cap is per loop: a
+#: split of n replayed loops may settle up to n times as many rounds in one call, as a
+#: wide stored node settles all its elements in one call. It also bounds the rounds a
+#: loop holds within one call, whose releases wait for the end of the call
 MAX_ADVANCES = 64

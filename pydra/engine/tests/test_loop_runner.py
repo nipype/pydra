@@ -76,7 +76,8 @@ def drive(runner, complete=run_inline, limit=2000):
         rounds.append(rnd)
         for job in rnd.dispatch:
             runner.complete(job, complete(job))
-        if not (rnd.dispatch or rnd.settled or rnd.unrunnable or rnd.absent_nodes):
+        progress = rnd.dispatch or rnd.settled or rnd.unrunnable or rnd.absent_nodes
+        if not (progress or rnd.loops):
             if runner.done:  # as `drive_inline` decides
                 return rounds
             raise AssertionError(runner.stuck())
@@ -333,8 +334,10 @@ def test_fixed_point_stops_on_cycle(submitter):
 def test_cycle_of_length_two(submitter):
     task = workflow.loop(Flip, until="done", max_rounds=20)(x=0)
     rounds = drive(runner_for(submitter, task))
-    # r0 is released when r2 is added, so a harness that commits nothing recomputes r2
-    assert dispatched(rounds) == ["r0", "r1", "r2"]
+    # r0 is released at the end of the call that adds r2, so r2 is still served r0's
+    # outcome there
+    assert dispatched(rounds) == ["r0", "r1"]
+    assert [s.how for s in settled(rounds, "r2")] == ["shared"]
     out = loop_outputs(submitter, task)
     assert (out.x, out.rounds, out.stopped) == (1, 3, "cycle")
 
@@ -642,6 +645,16 @@ def test_workflow_rounds_release_child_frames(submitter):
     assert records == [f"r{k}/each" for k in range(60)]
 
 
+def test_record_of_a_round_released_in_the_same_call_is_reported(submitter):
+    """A workflow round whose absent node is found in the call that also releases it
+    (the later rounds are served from the store) still has its record reported once"""
+    submitter(CountWfLoop(n=1, stop=4))  # stores the rounds from n=1
+    rounds = drive(runner_for(submitter, CountWfLoop(n=0, stop=4)))
+    hows = [(s.job.name, s.how) for s in settled(rounds) if not s.job.workflow_path]
+    assert hows == [(f"r{k}", "workflow-stored") for k in (1, 2, 3)]
+    assert [a.node for r in rounds for a in r.absent_nodes] == ["r0/each"]
+
+
 def test_upstream_of_a_released_round_is_refused(submitter):
     runner = runner_for(submitter, CountLoop(n=0, stop=5))
     jobs = []
@@ -659,7 +672,9 @@ def test_upstream_of_a_released_round_is_refused(submitter):
 # -- reporting loops (L6) ----------------------------------------------------------------------------
 
 
-def test_driver_sees_one_loop_closed_per_element(submitter):
+def test_driver_sees_one_loop_closed_per_loop_instance(submitter):
+    """Each loop job that is entered is reported once; an element whose loop job is a
+    twin of another's is served its result and is not a loop instance of its own"""
     runner = runner_for(submitter, OverSplit(xs=[16, 4, 8]))
     closed = []
     for _ in range(200):

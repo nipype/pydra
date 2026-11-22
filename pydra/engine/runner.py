@@ -1432,6 +1432,8 @@ class GraphRunner:
         self._reported_unrunnable: set[tuple[str, ty.Any]] = set()
         # the loops that ended, not yet reported by ``ready``
         self._closed_loops: list[LoopClosed] = []
+        # the loop rounds to release once ``ready`` has collected their records
+        self._to_release: list[tuple[_Frame, NodeExecution]] = []
         self._reported_absent_nodes: set[str] = set()
         # the same-checksum table: the job handed out for each checksum until its outcome
         # is reported, the twins held behind it, and the outcome once reported
@@ -1776,7 +1778,8 @@ class GraphRunner:
                     for inner in (node._tasks or {}).values():
                         if inner is not None:
                             self._release_job(inner)
-            self._frames.remove(child)
+            if child in self._frames:
+                self._frames.remove(child)
 
     def _close_loop(self, frame: _Frame, stopped: str) -> None:
         """End a frame's loop, to be reported once in :attr:`Round.loops`"""
@@ -1980,8 +1983,9 @@ class GraphRunner:
         Round
             The jobs to dispatch, the jobs the runner completed itself, the elements newly
             marked unrunnable, the loops that ended, and the seconds until a waiting
-            workflow lease is tried again. A loop adds at most ``MAX_ADVANCES`` rounds per
-            call, so a loop replayed from the store returns to its driver between them
+            workflow lease is tried again. Each loop adds at most ``MAX_ADVANCES`` rounds
+            per call, so a loop replayed from the store returns to its driver between
+            them; the rounds a loop no longer needs are released at the end of the call
         """
         for frame in self._frames:
             if frame.loop is not None:
@@ -2031,6 +2035,11 @@ class GraphRunner:
         loops, self._closed_loops = self._closed_loops, []
         unrunnable = self._new_unrunnable()
         absent_nodes = self._new_absent_nodes()
+        # released only now: a round's records, its child frames' included, are collected
+        # above even when the round was superseded within this call
+        releases, self._to_release = self._to_release, []
+        for frame, node in releases:
+            self._release_node(frame, node)
         retry_after = self._retry_after()
         self._quiescent = (
             not (dispatch or settled or unrunnable or absent_nodes or loops)
