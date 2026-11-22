@@ -30,11 +30,21 @@ def test_audit_prov(
 
     # printing the audit message
     funky = TestFunc(a=1)
-    funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky(
+        store="pickle",
+        cache_root=tmpdir,
+        audit_flags=AuditFlag.PROV,
+        messengers=PrintMessenger(),
+    )
 
     # saving the audit message into the file
     funky = TestFunc(a=2)
-    funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky(
+        store="pickle",
+        cache_root=tmpdir,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+    )
     # this should be the default loctaion
     message_path = _slot(tmpdir, funky) / "messages"
     assert (_slot(tmpdir, funky) / "messages").exists()
@@ -52,6 +62,7 @@ def test_audit_task(tmpdir):
 
     funky = TestFunc(a=2)
     funky(
+        store="pickle",
         cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
@@ -82,6 +93,7 @@ def test_audit_shellcommandtask(tmpdir):
     shelly = Shelly()
 
     shelly(
+        store="pickle",
         cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
@@ -149,6 +161,7 @@ def test_audit_shellcommandtask_file(tmp_path):
         in_file_2=file_in_2,
     )
     shelly(
+        store="pickle",
         cache_root=tmp_path,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
@@ -188,6 +201,7 @@ def test_audit_shellcommandtask_version(tmpdir):
     import glob
 
     shelly(
+        store="pickle",
         cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
@@ -216,7 +230,12 @@ def test_audit_prov_messdir_1(
 
     # printing the audit message
     funky = TestFunc(a=1)
-    funky(cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky(
+        store="pickle",
+        cache_root=tmpdir,
+        audit_flags=AuditFlag.PROV,
+        messengers=PrintMessenger(),
+    )
 
     # saving the audit message into the file
     funky = TestFunc(a=2)
@@ -225,7 +244,10 @@ def test_audit_prov_messdir_1(
     funky_task = Job(
         task=funky,
         submitter=Submitter(
-            cache_root=tmpdir, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
+            store="pickle",
+            cache_root=tmpdir,
+            audit_flags=AuditFlag.PROV,
+            messengers=FileMessenger(),
         ),
         name="funky",
     )
@@ -285,6 +307,7 @@ def test_audit_prov_wf(
     wf = Workflow(x=2)
 
     wf(
+        store="pickle",
         cache_root=tmpdir,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
@@ -308,6 +331,7 @@ def test_audit_all(
     message_path = Path(tmpdir) / "messages"
 
     funky(
+        store="pickle",
         cache_root=tmpdir,
         audit_flags=AuditFlag.ALL,
         messengers=FileMessenger(),

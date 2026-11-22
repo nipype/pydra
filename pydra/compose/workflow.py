@@ -20,7 +20,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.engine.lazy import LazyOutField
     from pydra.engine.graph import DiGraph
-    from pydra.engine.submitter import NodeExecution
+    from pydra.engine.runner import NodeExecution
     from pydra.environments.base import Environment
     from pydra.engine.hooks import TaskHooks
     from pydra.utils.resources import ComputeResources
@@ -334,11 +334,22 @@ class WorkflowOutputs(base.Outputs):
         workflow: "Workflow" = job.return_values["workflow"]
         exec_graph: "DiGraph[NodeExecution]" = job.return_values["exec_graph"]
 
+        # A block of a partial node that could not be expanded has no element, so its
+        # error is reported before any read of the node
+        if block_errors := [e for n in exec_graph.nodes for e in n._block_errors]:
+            raise RuntimeError(
+                f"Workflow {job!r} failed with errors:\n\n" + "\n\n".join(block_errors)
+            )
         # Check for errors in any of the workflow nodes
         if errored := [n for n in exec_graph.nodes if n.errored]:
             errors = []
             for node in errored:
                 for node_task in node.errored.values():
+                    if isinstance(node_task, Exception):
+                        errors.append(
+                            f"Job {node.name!r} could not be resolved: {node_task!r}"
+                        )
+                        continue
                     result = node_task.result()
                     if result.errors:
                         time_of_crash = result.errors["time of crash"]
@@ -388,11 +399,11 @@ class WorkflowTask(base.Task[WorkflowOutputsType]):
 
     def _run(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow."""
-        job.submitter.expand_workflow(job, rerun)
+        job.submitter._expand(job, rerun)
 
     async def _run_async(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow asynchronously."""
-        await job.submitter.expand_workflow_async(job, rerun)
+        await job.submitter._expand_async(job, rerun)
 
     def construct(self) -> "Workflow":
         from pydra.engine.workflow import Workflow

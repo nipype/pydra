@@ -2013,12 +2013,16 @@ def bytes_repr_task_function(obj: TaskFunction, cache: Cache) -> Iterator[bytes]
     )
 
 
-def hashed_attribute(attribute: "attrs.Attribute", _value: ty.Any = None) -> bool:
+def hashed_attribute(attribute: "attrs.Attribute", value: ty.Any = None) -> bool:
     """Whether an attrs attribute is part of the identity of its instance: the attributes
     that take part in comparisons, except documentation (``metadata={"pydra.documentation":
-    True}``, a field's ``help``), which attrs equality sees and an identity does not"""
-    return bool(attribute.eq) and not attribute.metadata.get(
-        "pydra.documentation", False
+    True}``, a field's ``help``), which attrs equality sees and an identity does not, and
+    an attribute marked ``hash_if_set`` while it is ``None``, so that adding such an
+    attribute leaves the hash of every object that does not set it unchanged"""
+    return (
+        bool(attribute.eq)
+        and not attribute.metadata.get("pydra.documentation", False)
+        and not (attribute.metadata.get("hash_if_set") and value is None)
     )
 
 

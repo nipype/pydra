@@ -60,14 +60,14 @@ def test_default_router_keeps_a_single_worker(tmp_path):
         assert sub.router is default_router
         assert sub.workers == {"default": only}
         assert sub(Pipeline(x=1)).outputs.out == 4
-    assert only.seen == ["main", "prep", "train", "post"]
+    assert only.seen == ["prep", "train", "post"]
 
 
 def test_default_router_ignores_tags_when_other_workers_exist(tmp_path):
     default, other = RecordingDebug(), RecordingDebug()
     with Submitter(worker=default, workers={"gpu": other}, cache_root=tmp_path) as sub:
         assert sub(Pipeline(x=1)).outputs.out == 4
-    assert default.seen == ["main", "prep", "train", "post"]
+    assert default.seen == ["prep", "train", "post"]
     assert other.seen == []
 
 
@@ -80,7 +80,7 @@ def test_route_gpu_tagged_jobs_to_their_own_worker(tmp_path):
         cache_root=tmp_path,
     ) as sub:
         assert sub(Pipeline(x=1)).outputs.out == 4
-    assert default.seen == ["main", "prep", "post"]
+    assert default.seen == ["prep", "post"]
     assert gpu.seen == ["train"]
 
 
@@ -90,7 +90,7 @@ def test_route_by_resources(tmp_path):
         worker=default, workers={"gpu": gpu}, router=by_gpus, cache_root=tmp_path
     ) as sub:
         assert sub(Pipeline(x=1)).outputs.out == 4
-    assert default.seen == ["main", "prep", "post"]
+    assert default.seen == ["prep", "post"]
     assert gpu.seen == ["train"]
 
 
@@ -103,7 +103,7 @@ def test_router_can_name_the_default_worker(tmp_path):
         cache_root=tmp_path,
     ) as sub:
         assert sub(Pipeline(x=1)).outputs.out == 4
-    assert default.seen == ["main", "prep", "train"]
+    assert default.seen == ["prep", "train"]
     assert gpu.seen == ["post"]
 
 
@@ -149,7 +149,7 @@ def test_mixed_run_with_an_asynchronous_routed_worker(tmp_path):
         cache_root=tmp_path,
     ) as sub:
         assert sub(Pipeline(x=1)).outputs.out == 4
-    assert default.seen == ["main", "prep", "post"]
+    assert default.seen == ["prep", "post"]
     assert gpu.seen == ["train"]
 
 
@@ -348,7 +348,7 @@ def test_top_level_workflow_with_a_routed_tag_is_expanded_by_the_default_worker(
         cache_root=tmp_path,
     ) as sub:
         assert sub(tagged).outputs.out == 4
-    assert default.seen == ["main", "prep", "post"]
+    assert default.seen == ["prep", "post"]
     assert gpu.seen == ["train"]
 
 

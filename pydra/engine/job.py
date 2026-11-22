@@ -30,8 +30,11 @@ from pydra.engine.result import (
     RuntimeSpec,
     Result,
     record_error,
+    record_error_json,
 )
 from pydra.utils.general import (
+    capture_cwd,
+    release_dir,
     atomic_write,
     attrs_values,
     attrs_fields,
@@ -56,6 +59,7 @@ logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import Submitter
+    from pydra.engine.portable.store import Committed
     from pydra.compose.base import Arg
 
 TaskType = ty.TypeVar("TaskType", bound=Task)
@@ -93,11 +97,34 @@ class Job(ty.Generic[TaskType]):
     task: TaskType
     submitter: "Submitter | None"
     environment: "Environment | None"
-    state_index: int
+    # The flat index of the job's element within its split, None without a split, and
+    # None on a partial node until the node is sealed
+    state_index: int | None
+    # The key of the job's element on a partial node (see ``NodeExecution``), else None
+    state_key: tuple | None = None
+    rerun: bool = False  # Set by the graph runner when it hands the job out
+    # The names of the nested workflows that hold the job, outermost first, with the
+    # element's index where one is split; set by the graph runner
+    workflow_path: tuple[str, ...] = ()
+    # The id of this attempt at the job (see the attribute's docstring below)
+    attempt: str | None = None
+    # Whether the audit of a workflow job was started by the runner, so that it is
+    # finalised with the job
+    _audit_started: bool = False
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
     _inputs: dict[str, ty.Any] | None = None
     _run_start_time: datetime | None
+
+    attempt: str | None = None
+    """The id of this attempt at the job (RFC 0003 section 5.4): a fresh UUID each time the
+    runner hands it out (again after ``retry``), given to a workflow job when its expansion
+    starts and to ``Submitter``'s outer job when it is created. Under a store that has
+    ``work_dir`` it names the job's work directory, except for a task that can resume, whose
+    directory is the stable ``work/resume-<hash>`` of its address; its outcome files there
+    carry the attempt. None for a job never handed out (settled or stored)."""
+    committed: "Committed | None" = None
+    """What this process's `PortableStore` publish returned for the job."""
 
     def __init__(
         self,
@@ -108,6 +135,7 @@ class Job(ty.Generic[TaskType]):
         state_index: int | None = None,
         hooks: TaskHooks | None = None,
         resources: ComputeResources | None = None,
+        state_key: tuple | None = None,
     ):
         """
         Initialize a job.
@@ -140,6 +168,7 @@ class Job(ty.Generic[TaskType]):
         )
         self.name = name
         self.state_index = state_index
+        self.state_key = state_key
         self.resources = resources if resources is not None else task._resources
 
         self.return_values = {}
@@ -161,6 +190,8 @@ class Job(ty.Generic[TaskType]):
         # was just written by run(). Not included in __getstate__ so it is
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
+        # The result reported by ``GraphRunner.complete``, as given
+        self._held = None
         # Set while the job is queued to run in this process's submitter and its run
         # has not finished
         self._awaiting_run = False
@@ -172,6 +203,21 @@ class Job(ty.Generic[TaskType]):
         # The stored contexts of the checksum read by `check_declared_code`, for the
         # job's first lookup
         self._stored_contexts = None
+        self.attempt = None
+        self.committed = None
+        # The stored entry the job runs against, set from a `Verify` by `_reusable` or by a
+        # runner (`Candidate | None`; RFC 0003 section 7.1)
+        self.verify = None
+        # Whether a runner or submitter asked the store's ``find(job)`` before dispatch and
+        # was not served (``verify`` holds its answer): a run under a lease that excludes no
+        # other taker does not ask again (RFC 0002 section 3.1). Cleared by each run and
+        # by a retry, and never pickled.
+        self.looked_up = False
+        # A rerun under a store that replaces: set by the store's ``begin_rerun`` (RFC 0003
+        # section 10); ``replaces`` is the output digest of the entry it evicts
+        self.replace = False
+        self.replaces = None
+        self._work_dir_memo = None
 
         # Save the submitter attributes needed to run the job later
         self.audit = submitter.audit
@@ -179,6 +225,9 @@ class Job(ty.Generic[TaskType]):
         self.cache_root = submitter.cache_root
         self.store = submitter.store
         self._run_start_time = None
+        from pydra.engine.resident import check_providers
+
+        check_providers(self)
 
     @property
     def cache_root(self):
@@ -210,7 +259,11 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
+        state.pop("_held", None)
         state.pop("_awaiting_run", None)
+        # A lookup made before dispatch is current only for a run in this process: a job
+        # handed to a worker may wait in a queue, so it looks the store up again
+        state.pop("looked_up", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
         return state
@@ -228,6 +281,7 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
+        self.__dict__.setdefault("_held", None)
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
@@ -235,6 +289,13 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_resolved", None)
         self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
+        self.__dict__.setdefault("attempt", None)
+        self.__dict__.setdefault("committed", None)
+        self.__dict__.setdefault("verify", None)
+        self.__dict__.setdefault("looked_up", False)
+        self.__dict__.setdefault("replace", False)
+        self.__dict__.setdefault("replaces", None)
+        self.__dict__.setdefault("_work_dir_memo", None)
 
     @classmethod
     def check_etelemetry(cls) -> None:
@@ -366,9 +427,59 @@ class Job(ty.Generic[TaskType]):
         return self._can_resume
 
     @property
+    def _has_work_dir(self) -> bool:
+        """Whether the store runs jobs in work directories of their own, apart from the
+        entries it commits (a `~pydra.engine.portable.store.PortableStore`)."""
+        return callable(getattr(self.store, "work_dir", None))
+
+    @property
     def cache_dir(self):
-        """Get the filesystem path where outputs will be written."""
-        return self.store.cache_dir(self.checksum, self.context)
+        """Get the filesystem path where outputs will be written: the store's work
+        directory for the job if it defines one (a pure function of the checksum, the
+        context and `attempt`), otherwise the job's slot."""
+        if not self._has_work_dir:
+            return self.store.cache_dir(self.checksum, self.context)
+        memo = self._work_dir_memo
+        key = (self.attempt, self.can_resume)
+        if memo is None or memo[0] != key:
+            memo = (key, self.store.work_dir(self))
+            self._work_dir_memo = memo
+        return memo[1]
+
+    @property
+    def record_dir(self) -> Path | None:
+        """Where the job's audit messages and resource logs go if not its working directory:
+        under a store with work directories, which empties the work directory once the result
+        is published, the store's ``audit_dir`` (``<root>/audit/<cdir>/<fingerprint>/<attempt>``).
+        """
+        if not self._has_work_dir:
+            return None
+        return self.store.audit_dir(self)
+
+    def _make_record_dir(self) -> Path | None:
+        if not self._has_work_dir or not self.audit.audit_flags:
+            return None
+        return self.store.make_audit_dir(self)
+
+    @property
+    def error_file(self) -> Path:
+        """Where a failure of the job is recorded: ``_error.json`` in its work directory
+        under a store that has one, otherwise ``_error.pklz`` in its slot."""
+        return self.cache_dir / ("_error.json" if self._has_work_dir else "_error.pklz")
+
+    def _may_record_error(self, lease) -> bool:
+        """Whether a failure may be recorded beside the job: always in an attempt's own
+        work directory, which no other run writes to; in a slot, or the work directory a
+        resumable job shares across runs, only while ``lease`` is still held."""
+        if self._has_work_dir and not self.can_resume:
+            return True
+        return lease_still_held(lease)
+
+    def _record_error(self, error) -> Path:
+        """Record ``error`` (a formatted traceback) beside the job."""
+        if self._has_work_dir:
+            return record_error_json(self.cache_dir, error=error, attempt=self.attempt)
+        return record_error(self.cache_dir, error=error)
 
     @property
     def inputs(self) -> dict[str, ty.Any]:
@@ -434,9 +545,13 @@ class Job(ty.Generic[TaskType]):
         # and the lockfile has to be removed
         with atomic_write(self.cache_root / f"{self.uid}_info.json", "w") as jsonfile:
             json.dump({"checksum": self.checksum}, jsonfile)
-        if not self.can_resume and self.cache_dir.exists():
-            remove_from_cache(self.cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=self.can_resume)
+        if self._has_work_dir:
+            # a work directory is the store's to make (0o700) and never to remove
+            self.store.begin_run(self)
+        else:
+            if not self.can_resume and self.cache_dir.exists():
+                remove_from_cache(self.cache_dir)
+            self.cache_dir.mkdir(parents=True, exist_ok=self.can_resume)
         # Save job pkl into the output directory for future reference. An in-process
         # worker never reads it back, so it is written only if the job fails.
         if self.persist_pickle:
@@ -476,8 +591,167 @@ class Job(ty.Generic[TaskType]):
 
     def _pickle_to_commit(self, result: Result) -> "Job | None":
         """The job to write beside ``result``: this job if it is to be persisted or
-        has failed, otherwise None."""
+        has failed, otherwise None. A store with work directories is always given the
+        job, which names the directory; it never writes the job to an entry."""
+        if self._has_work_dir:
+            return self
         return self if self.persist_pickle or result.errored else None
+
+    def _take_attempt(self) -> None:
+        """Give a job that is run without having been handed out by a runner (``job.run()``
+        called directly) an attempt of its own, so that under a store with work directories
+        it has one to run in."""
+        if self.attempt is None and self._has_work_dir:
+            self.attempt = uuid4().hex
+
+    def _acquire(self):
+        """The lease guarding the job; a resumable job's work directory is stable across
+        runs, so a store with work directories guards it whatever its de-duplication."""
+        if self._has_work_dir and self.can_resume:
+            return self.store.acquire(self.checksum, self.context, resumable=True)
+        return self.store.acquire(self.checksum, self.context)
+
+    def _reusable(self, lease, looked_up: bool = False) -> Result | None:
+        """The result a run under the lease can serve instead of computing: the stored
+        result for the job, if any. A store with ``find`` answers through its reuse hook
+        (RFC 0003 section 7.1): a `Verify` marks the job to verify against that entry (and
+        the job runs), anything else clears the mark. A job ``looked_up`` before dispatch
+        is not looked up again under a lease that excludes nobody (``exclusive`` False):
+        it keeps the mark that lookup set. An exclusive lease may have been held by a
+        process that published the job since, so it looks again (RFC 0003 section 5.3).
+        A work directory's ``_committed.json`` is the outcome of an earlier run and is
+        never served to a new one."""
+        find = getattr(self.store, "find", None)
+        if find is not None:
+            if looked_up and getattr(lease, "exclusive", True) is False:
+                return None
+            found = find(self)
+            self.verify = getattr(found, "candidate", None)
+            result = getattr(found, "result", None)
+            record = getattr(self.store, "record_served", None)
+            if result is not None and record is not None and self._has_work_dir:
+                record(
+                    self, result
+                )  # a reader in another process finds what was served
+            return result
+        if self._has_work_dir:
+            return self.store.read_own(self)
+        return self.result()
+
+    def _begin_rerun(self, rerun: bool) -> None:
+        """Under a store that replaces a stored result on a rerun (`PortableStore`), mark the
+        job so that its commit evicts the entry it read and takes its place; a job that is not
+        a rerun is not marked."""
+        begin = getattr(self.store, "begin_rerun", None)
+        if rerun and begin is not None:
+            begin(self)
+        else:
+            self.replace = False
+            self.replaces = None
+
+    def _published(self, result: Result) -> Result:
+        """The result of a run, as the job reads it from here on: under a store with
+        work directories its outputs are read from the entry (or the kept outputs), which
+        is where their files are once the work directory is emptied."""
+        if not self._has_work_dir or result.errored or result.committed is None:
+            return result
+        self.committed = result.committed
+        if self.audit.audit_check(AuditFlag.PROV):
+            ref = result.committed.entry
+            self.audit.audit_message(
+                {
+                    "@type": "publication",
+                    "checksum": self.checksum,
+                    "attempt": self.attempt,
+                    "entry": {
+                        "root": ref.root,
+                        "cdir": ref.cdir,
+                        "fingerprint": ref.fingerprint,
+                    },
+                    "stored": result.committed.stored,
+                },
+                AuditFlag.PROV,
+            )
+        read = self.store.read_committed(self, result.committed)
+        if read is None:
+            return result
+        read.runtime = result.runtime  # this run's measurement; an entry stores none
+        return read
+
+    def _start_workflow(self, lease) -> Result:
+        """Begin the expansion of a workflow job whose lease is held and whose stored
+        result, if any, is not to be used: withdraw its success record, prepare its
+        directory, run the ``pre_run_task`` hook and start its audit. Returns the
+        result the workflow's outputs are later put in (see `_finish_workflow`)."""
+        self._errored = False
+        self._audit_started = False
+        self._begin_rerun(self.rerun)
+        self._withdraw_success(lease)
+        self._populate_filesystem()
+        result = Result(
+            outputs=None,
+            runtime=None,
+            errored=False,
+            cache_dir=self.cache_dir,
+            task=self.task,
+            context=self.context,
+            record=self.record,
+        )
+        self.hooks.pre_run_task(self)
+        self.audit.start_audit(
+            odir=self.cache_dir, chdir=False, record_dir=self._make_record_dir()
+        )
+        self._audit_started = True
+        if self.audit.audit_check(AuditFlag.PROV):
+            self.audit.audit_task(job=self)
+        self.audit.monitor()
+        return result
+
+    def _finish_workflow(
+        self, lease, result: Result | None, error: BaseException | None
+    ) -> BaseException | None:
+        """Commit the result of a workflow job whose nodes are done, under its lease,
+        and run its ``post_run`` hook if it succeeded. Returns the error of the
+        workflow (``error``, or the one raised building its outputs), None if it
+        succeeded. Raises what the commit raises (`LeaseLost`), after which nothing is
+        stored."""
+        cwd = os.getcwd()
+        if result is None:  # it failed while starting
+            result = Result(
+                outputs=None,
+                runtime=None,
+                errored=False,
+                cache_dir=self.cache_dir,
+                task=self.task,
+                context=self.context,
+                record=self.record,
+            )
+        if error is None:
+            try:
+                result.outputs = self.task.Outputs._from_job(self)
+                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+            except Exception as exc:
+                error = exc
+        if error is not None:
+            traceback = format_exception(type(error), error, error.__traceback__)
+            if self._may_record_error(lease):
+                self._record_error(traceback)
+            result.errored = True
+            self._errored = True
+        if self._audit_started:  # not if it failed before the audit
+            self.hooks.post_run_task(self, result)
+            self.audit.finalize_audit(result=result)
+        self.store.commit(lease, result, job=self._pickle_to_commit(result))
+        self._awaiting_run = False
+        self._remove_info_file()
+        return error
+
+    def _complete_workflow(self, result: Result) -> None:
+        """What follows the release of the lease of a workflow job that succeeded"""
+        result = self._published(result)
+        self.hooks.post_run(self, result)
+        self._check_for_hash_changes()
+        self._cached_result = result
 
     def run(self, rerun: bool = False):
         """Prepare the job working directory, execute the task, and save the
@@ -494,57 +768,70 @@ class Job(ty.Generic[TaskType]):
 
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        lease = self.store.acquire(self.checksum, self.context)
+        self._take_attempt()
+        looked_up, self.looked_up = self.looked_up, False
+        lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         with lease:
             if not (rerun):
-                result = self.result()
+                result = self._reusable(lease, looked_up)
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     self._cached_result = result
                     return result
+            self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
-            cwd = os.getcwd()
-            self._withdraw_success(lease)
-            self._populate_filesystem()
-            if enters:
-                os.chdir(self.cache_dir)
-            result = Result(
-                outputs=None,
-                runtime=None,
-                errored=False,
-                cache_dir=self.cache_dir,
-                task=self.task,
-                context=self.context,
-                record=self.record,
-            )
-            self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
-            if self.audit.audit_check(AuditFlag.PROV):
-                self.audit.audit_task(job=self)
+            # the directory restored to after the run, captured and held at once so that
+            # nothing removes it meanwhile (jobs on threads share the working directory)
+            cwd = capture_cwd() if enters else os.getcwd()
             try:
-                self.audit.monitor()
-                self.task._run(self, rerun)
-                result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
-            except Exception:
-                etype, eval, etr = sys.exc_info()
-                traceback = format_exception(etype, eval, etr)
-                if lease_still_held(lease):
-                    record_error(self.cache_dir, error=traceback)
-                result.errored = True
-                raise
-            finally:
+                self._withdraw_success(lease)
+                self._populate_filesystem()
+                if enters:
+                    os.chdir(self.cache_dir)
+                result = Result(
+                    outputs=None,
+                    runtime=None,
+                    errored=False,
+                    cache_dir=self.cache_dir,
+                    task=self.task,
+                    context=self.context,
+                    record=self.record,
+                )
+                self.hooks.pre_run_task(self)
+                self.audit.start_audit(
+                    odir=self.cache_dir,
+                    chdir=enters,
+                    record_dir=self._make_record_dir(),
+                )
+                if self.audit.audit_check(AuditFlag.PROV):
+                    self.audit.audit_task(job=self)
                 try:
+                    self.audit.monitor()
+                    self._run_task(rerun)
+                    result.outputs = self.task.Outputs._from_job(self)
+                    self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+                except Exception:
+                    etype, eval, etr = sys.exc_info()
+                    traceback = format_exception(etype, eval, etr)
+                    if self._may_record_error(lease):
+                        self._record_error(traceback)
+                    result.errored = True
+                    raise
+                finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
-                finally:
-                    if enters:
+            finally:
+                if enters:
+                    try:
                         os.chdir(cwd)
+                    finally:
+                        release_dir(cwd)
+        result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
@@ -567,59 +854,93 @@ class Job(ty.Generic[TaskType]):
         """
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
-        lease = self.store.acquire(self.checksum, self.context)
+        self._take_attempt()
+        looked_up, self.looked_up = self.looked_up, False
+        lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         async with lease:
             if not rerun:
-                result = self.result()
+                result = self._reusable(lease, looked_up)
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     self._cached_result = result
                     return result
+            self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
-            cwd = os.getcwd()
-            self._withdraw_success(lease)
-            self._populate_filesystem()
-            result = Result(
-                outputs=None,
-                runtime=None,
-                errored=False,
-                cache_dir=self.cache_dir,
-                task=self.task,
-                context=self.context,
-                record=self.record,
-            )
-            self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.cache_dir, chdir=enters)
+            # the directory restored to after the run, captured and held at once so that
+            # nothing removes it meanwhile (jobs on threads share the working directory)
+            cwd = capture_cwd() if enters else os.getcwd()
             try:
-                self.audit.monitor()
-                await self.task._run_async(self, rerun)
-                result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
-            except Exception:
-                etype, eval, etr = sys.exc_info()
-                traceback = format_exception(etype, eval, etr)
-                if lease_still_held(lease):
-                    record_error(self.cache_dir, error=traceback)
-                result.errored = True
-                self._errored = True
-                raise
-            finally:
+                self._withdraw_success(lease)
+                self._populate_filesystem()
+                result = Result(
+                    outputs=None,
+                    runtime=None,
+                    errored=False,
+                    cache_dir=self.cache_dir,
+                    task=self.task,
+                    context=self.context,
+                    record=self.record,
+                )
+                self.hooks.pre_run_task(self)
+                self.audit.start_audit(
+                    odir=self.cache_dir,
+                    chdir=enters,
+                    record_dir=self._make_record_dir(),
+                )
                 try:
+                    self.audit.monitor()
+                    await self.task._run_async(self, rerun)
+                    result.outputs = self.task.Outputs._from_job(self)
+                    self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+                except Exception:
+                    etype, eval, etr = sys.exc_info()
+                    traceback = format_exception(etype, eval, etr)
+                    if self._may_record_error(lease):
+                        self._record_error(traceback)
+                    result.errored = True
+                    self._errored = True
+                    raise
+                finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
-                finally:
-                    if enters:
+            finally:
+                if enters:
+                    try:
                         os.chdir(cwd)
+                    finally:
+                        release_dir(cwd)
+        result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the job
         self._check_for_hash_changes()
+        if self._has_work_dir:
+            self._cached_result = result
         return result
+
+    def _run_task(self, rerun: bool) -> None:
+        """Run the task. The state of each provided field is bound for the duration of
+        the run and handed to the task through ``provided_values``; a task with no
+        provided field costs nothing here."""
+        from pydra.engine.resident import provided_fields
+
+        self.provided_values = {}
+        if not provided_fields(self.task):
+            self.task._run(self, rerun)
+            return
+        from pydra.engine import resident
+
+        with resident.bound(self) as values:
+            self.provided_values = values
+            try:
+                self.task._run(self, rerun)
+            finally:
+                self.provided_values = {}
 
     def _remove_info_file(self):
         """Remove the job's ``<uid>_info.json``; one that cannot be removed is logged
@@ -667,7 +988,7 @@ class Job(ty.Generic[TaskType]):
         self._run_start_time = datetime.fromtimestamp(stat.st_ctime)
         return self._run_start_time
 
-    def result(self, return_inputs=False):
+    def result(self, return_inputs=False, *, settled=False):
         """
         Retrieve the outcomes of this particular job.
 
@@ -678,18 +999,29 @@ class Job(ty.Generic[TaskType]):
         return_inputs : :obj: `bool`, :obj:`str`
             if True or "val" result is returned together with values of the input fields,
             if "ind" result is returned together with indices of the input fields
+        settled : bool
+            Under a store with work directories: the job has been reported complete, so a
+            result that is not found is a failure, reported as an errored result naming the
+            work directory, after the store's visibility retry for ``_committed.json``
+            (RFC 0003 section 7.2). Otherwise nothing found is None, a job not yet run.
 
         Returns
         -------
         result : Result
             the result of the job
         """
+        if self._held is not None and not return_inputs:
+            return self._held
         if self.errored:
+            try:
+                where = self.cache_dir
+            except ValueError:  # a job never handed out has no work directory
+                where = Path(self.store.path)
             return Result(
                 outputs=None,
                 runtime=None,
                 errored=True,
-                cache_dir=self.cache_dir,
+                cache_dir=where,
                 task=self.task,
             )
 
@@ -699,7 +1031,9 @@ class Job(ty.Generic[TaskType]):
             return self._cached_result
 
         context, stored = self.context, self._stored_contexts
-        if stored is None:
+        if self._has_work_dir:
+            result = self.store.read_result(self, settled=settled)
+        elif stored is None:
             result = self.store.lookup(self.checksum, context, task=self.task)
         else:
             self._stored_contexts = None
@@ -838,6 +1172,8 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
             save(job_pkl.parent, result=result)
         raise
 
+    portable = job._has_work_dir
+    job._take_attempt()  # a job pickled before a runner handed it out
     resultfile = job.cache_dir / "_result.pklz"
     try:
         if job.is_async:
@@ -849,12 +1185,12 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
         raise
     except Exception as e:
         # creating result and error files if missing
-        errorfile = job.cache_dir / "_error.pklz"
+        errorfile = job.error_file
         if not errorfile.exists():  # not sure if this is needed
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
-            errorfile = record_error(job.cache_dir, error=traceback)
-        if not resultfile.exists():  # not sure if this is needed
+            errorfile = job._record_error(traceback)
+        if not portable and not resultfile.exists():  # not sure if this is needed
             result = Result(
                 outputs=None,
                 runtime=None,

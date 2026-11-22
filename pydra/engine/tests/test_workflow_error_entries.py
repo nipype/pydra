@@ -19,7 +19,10 @@ def test_entries_name_the_failed_job(worker, on_error, tmp_path):
         with pytest.raises(WorkflowError) as excinfo:
             sub(Propagate(x=[2, 1, 3], y=[10, 20]), raise_errors=True)
     error = excinfo.value
-    (entry,) = error.entries
+    # a run stopped by fail_fast also names the elements it handed out and stopped
+    stopped = [e for e in error.entries if e.phase == "stopped"]
+    assert all(e.message.startswith("stopped by A(1): ") for e in stopped)
+    (entry,) = [e for e in error.entries if e.phase != "stopped"]
     assert isinstance(entry, JobErrorEntry)
     assert entry.job_name == "A"
     assert entry.state_index == 1
@@ -46,11 +49,17 @@ def test_entries_record_unresolvable_inputs(worker, tmp_path):
         with pytest.raises(WorkflowError) as excinfo:
             sub(BadInput(xs=[0, 1, 2, 3], marks=str(marks)), raise_errors=True)
     (entry,) = excinfo.value.entries
-    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    # B splits over A's output: its entries carry the element's key, not an index (E2)
+    assert (entry.job_name, entry.state_index, entry.state_key, entry.phase) == (
+        "B",
+        None,
+        (1, 0),
+        "resolution",
+    )
     assert entry.exception_type
     assert "Traceback" in entry.traceback
     assert len(excinfo.value.errors) == 1
-    assert "B(1)" in excinfo.value.errors[0]
+    assert "B[1,0]" in excinfo.value.errors[0]
     assert pickle.loads(pickle.dumps(excinfo.value)).entries == [entry]
 
 

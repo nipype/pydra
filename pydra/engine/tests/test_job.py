@@ -13,7 +13,7 @@ def test_save(tmpdir):
     outdir = Path(tmpdir)
     with pytest.raises(ValueError):
         save(tmpdir)
-    foo = Job(name="mult", task=Multiply(x=1, y=2), submitter=Submitter())
+    foo = Job(name="mult", task=Multiply(x=1, y=2), submitter=Submitter(store="pickle"))
     # save job
     save(outdir, job=foo)
     del foo
@@ -38,7 +38,9 @@ def test_load_and_run(tmpdir):
     job_pkl = Path(tmpdir.join("task_main.pkl"))
     # Note that tasks now don't have state arrays and indices, just a single resolved
     # set of parameters that are ready to run
-    job = Job(name="mult", task=Multiply(x=2, y=10), submitter=Submitter())
+    job = Job(
+        name="mult", task=Multiply(x=2, y=10), submitter=Submitter(store="pickle")
+    )
     with job_pkl.open("wb") as fp:
         cp.dump(job, fp)
     resultfile = load_and_run(job_pkl=job_pkl)
@@ -56,7 +58,7 @@ def test_load_and_run_exception_run(tmpdir):
     job = Job(
         task=RaiseXeq1(x=1),
         name="raise",
-        submitter=Submitter(worker="cf", cache_root=cache_root),
+        submitter=Submitter(worker="cf", store="pickle", cache_root=cache_root),
     )
 
     with job_pkl.open("wb") as fp:
@@ -77,7 +79,9 @@ def test_load_and_run_exception_run(tmpdir):
     result_exception = cp.loads(resultfile.read_bytes())
     assert result_exception.errored is True
 
-    job = Job(task=RaiseXeq1(x=2), name="wont_raise", submitter=Submitter())
+    job = Job(
+        task=RaiseXeq1(x=2), name="wont_raise", submitter=Submitter(store="pickle")
+    )
 
     with job_pkl.open("wb") as fp:
         cp.dump(job, fp)
@@ -100,7 +104,7 @@ def test_load_and_run_wf(tmpdir, worker):
     job = Job(
         name="mult",
         task=Workflow(x=2),
-        submitter=Submitter(cache_root=tmpdir, worker=worker),
+        submitter=Submitter(store="pickle", cache_root=tmpdir, worker=worker),
     )
 
     with wf_pkl.open("wb") as fp:

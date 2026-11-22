@@ -77,7 +77,7 @@ def test_relative_writes_land_in_caller_dir(caller_dir, tmp_path):
 
 def test_relative_writes_land_in_cache_dir_by_default(caller_dir, tmp_path):
     cache = tmp_path / "cache"
-    with Submitter(worker="debug", cache_root=cache) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=cache) as sub:
         sub(Probe(x=7))
     assert not (caller_dir / "rel.txt").exists()
     assert len(list(cache.rglob("rel.txt"))) == 1
@@ -135,6 +135,7 @@ def test_workflow_of_python_tasks_keeps_cwd(caller_dir, tmp_path, w):
 def test_audit_messages_go_to_the_job_dir(caller_dir, tmp_path):
     with Submitter(
         worker="debug",
+        store="pickle",
         cache_root=tmp_path / "cache",
         chdir=False,
         audit_flags=AuditFlag.PROV,

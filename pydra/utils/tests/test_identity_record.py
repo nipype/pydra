@@ -207,7 +207,9 @@ def test_job_keeps_record_and_pickles_it():
 
 def test_result_keeps_record(tmp_path):
     job = Job(
-        name="t", task=Add(a=1), submitter=Submitter(cache_root=tmp_path / "cache")
+        name="t",
+        task=Add(a=1),
+        submitter=Submitter(store="pickle", cache_root=tmp_path / "cache"),
     )
     result = job.run()
     assert result.record == task_record(job.task)
@@ -367,7 +369,7 @@ def test_hash_changes_with_no_executor_name():
 def test_result_record_through_worker_and_async(any_worker, tmp_path):
     from pydra.engine.submitter import Submitter
 
-    with Submitter(worker=any_worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=any_worker, store="pickle", cache_root=tmp_path) as sub:
         result = sub(Add(a=3))
     assert result.record is not None
     assert record_checksum(result.record) == Add(a=3)._checksum
@@ -377,7 +379,7 @@ def test_result_record_through_worker_and_async(any_worker, tmp_path):
     def Wf(a: int) -> int:
         return workflow.add(Add(a=a)).out
 
-    with Submitter(worker=any_worker, cache_root=tmp_path) as sub:
+    with Submitter(worker=any_worker, store="pickle", cache_root=tmp_path) as sub:
         wf_result = sub(Wf(a=3))
     assert wf_result.record == task_record(Wf(a=3))
     assert record_checksum(wf_result.record) == Wf(a=3)._checksum

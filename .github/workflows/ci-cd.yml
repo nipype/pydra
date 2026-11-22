@@ -113,7 +113,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.run == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 25 || 10 }}
+    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 25 || 15 }}
     strategy:
       # Full tier: every OS x Python 3.11-3.15, plus pre-release and minimum dependency
       # variants. Fast tier: Python 3.13 only (see the plan job).
@@ -144,6 +144,15 @@ jobs:
         run: tox c
       - name: Run tox
         run: tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real) && 900 || 300 }}
+      # The portable store's own tests use `trusted` roots on Windows, where `private` holds only
+      # under %LOCALAPPDATA% (the runner's temporary directory is there): run them again as
+      # `private`, the trust of a Submitter's default store (RFC 0003 section 6.4)
+      - name: Run the portable store tests under private roots
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          PYDRA_TEST_PORTABLE_TRUST: private
+        run: tox -v --exit-and-dump-after 300 -- -n auto pydra/engine/tests/test_portable_*.py
 
   test-singularity:
     needs: plan
@@ -377,7 +386,7 @@ jobs:
         docker exec slurm bash -c "uv pip install --python /opt/venv/bin/python -e /pydra[test,psij] && /opt/venv/bin/python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py --only-worker=slurm --color=yes"
+        docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py pydra/engine/tests/test_executor.py pydra/workers/tests/test_submit_many.py --only-worker=slurm --color=yes"
     - name: Return ownership of the uv cache to the runner
       if: always()
       run: docker exec slurm bash -c "chown -R $(id -u):$(id -g) /root/.cache/uv"

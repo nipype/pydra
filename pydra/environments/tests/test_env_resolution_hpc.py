@@ -44,6 +44,7 @@ def _ran(monkeypatch):
 
 def _job(tmp_path, env, **submitter_kwargs):
     sub = Submitter(
+        store="pickle",
         environment=env,
         cache_root=tmp_path / "cache",
         telemetry=False,
@@ -258,6 +259,7 @@ def test_apptainer_docker_digest_runs(tmp_path, monkeypatch):
     assert ref.run.startswith("docker://alpine@sha256:")
     echo = shell.define("echo")(executable="echo", append_args=["hi"])
     with Submitter(
+        store="pickle",
         environment=env,
         cache_root=tmp_path / "cold",
         telemetry=False,
@@ -275,6 +277,7 @@ def test_apptainer_docker_digest_runs(tmp_path, monkeypatch):
     warm = singularity.Singularity(image=ref.run)
     start = time.perf_counter()
     with Submitter(
+        store="pickle",
         environment=warm,
         cache_root=tmp_path / "warm",
         telemetry=False,
@@ -305,6 +308,7 @@ def test_apptainer_relative_sif_runs(tmp_path, monkeypatch):
     monkeypatch.chdir(images_dir)
     env = singularity.Singularity(image="tool.sif")
     with Submitter(
+        store="pickle",
         environment=env,
         cache_root=tmp_path / "cache",
         telemetry=False,
@@ -542,7 +546,9 @@ def test_lmod_real_resolution(tmp_path, monkeypatch):
     print(f"lmod resolution: {elapsed * 1000:.1f} ms")  # measured on the cluster (§7)
     assert ref.key == "lmod@1:tool/2.0"
     assert ref.recorded["modules"] == {"tool": "tool/2.0"}
-    with Submitter(environment=env, cache_root=tmp_path / "c", telemetry=False) as sub:
+    with Submitter(
+        store="pickle", environment=env, cache_root=tmp_path / "c", telemetry=False
+    ) as sub:
         result = sub(shell.define("printenv TOOL_VERSION")())
     assert result.outputs.stdout.strip() == "2.0"
     assert result.context["environment"] == "lmod@1:tool/2.0"

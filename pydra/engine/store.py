@@ -299,7 +299,15 @@ def check_declared_code(
     Returns the stored contexts it read, to be passed to ``lookup`` as ``stored``, or
     None if it read none."""
     code = context.get("code")
-    if not code or (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+    if not code:
+        return None
+    entry_path = getattr(store, "entry_path", None)
+    if entry_path is not None:  # a store whose entries are not its work directories
+        if entry_path(checksum, context).is_dir():
+            return None
+    elif (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+        return None
+    if not hasattr(store, "stored_contexts"):
         return None
     stored = list(store.stored_contexts(checksum))
     moved: dict[str, set[str]] = {}
@@ -309,13 +317,14 @@ def check_declared_code(
     if not moved:
         return stored
     reuse = getattr(store, "reuse", None)
+    accepts = getattr(reuse, "accept", None)
     first = next(
         (
             other
             for _, other in stored
-            if reuse is not None
+            if accepts is not None
             and type(reuse) is not ExactReuse
-            and reuse.accept(other, context, task)
+            and accepts(other, context, task)
         ),
         None,
     )
@@ -380,6 +389,36 @@ class ResultStore(ty.Protocol):
 
     A job is identified by its checksum and the context it runs in. Each pair has
     its own slot, so results recorded in different contexts never overwrite each other.
+
+    Optional methods, found with ``getattr`` by the graph runner and not required of a
+    store:
+
+    ``read_succeeded(checksum, context, task) -> Result | None``
+        The result of a job whose slot records that it succeeded, read without the lease;
+        None when there is no such record, or the result is errored or from another
+        context. The runner settles a job it returns as stored before handing it out
+        (RFC 0002 section 3.1, "Resume"); without it every job is handed out, or looked
+        up first under ``lookup_before_dispatch``. See `PickleStore.read_succeeded`.
+    ``forget_committed(job) -> None``
+        Called once the runner holds a job's outcome, so a store that keeps the outcome in
+        the job's work directory until then can remove it (RFC 0003 section 5.4).
+    ``find(job, *, probe=False) -> Hit | Verify | Miss``
+        Asked instead of ``read_succeeded`` and ``lookup`` when present (RFC 0002 section
+        3.1): a ``Hit`` is settled as stored, a ``Verify`` is handed out with ``job.verify``
+        set to its candidate, a ``Miss`` is handed out. ``probe=True`` (every released job
+        without ``lookup_before_dispatch``, when the store has no ``present``) answers
+        ``Miss`` at the cost of an existence check when the job's own address holds
+        nothing. A job handed out after ``find(job)`` is marked ``looked_up`` and, under a
+        lease whose ``exclusive`` is False, is not looked up again under it; an exclusive
+        lease looks again. The store check of a workflow job under its lease asks it too.
+        See `PortableStore.find`.
+    ``present(job) -> bool``
+        Whether the job's own address holds an entry, one existence check; a runner
+        without ``lookup_before_dispatch`` asks it of every released job and asks
+        ``find(job)`` only of those that do.
+    ``expected_hits(jobs) -> int``
+        How many of ``jobs`` ``ready()`` may settle from the store, without a reuse being
+        recorded; read by ``GraphRunner.plan``.
     """
 
     def cache_dir(self, checksum: str, context: Context) -> Path:
@@ -564,6 +603,37 @@ class PickleStore:
         if result is None or result.errored or result.cross_context:
             return None
         return result
+
+    def recorded(
+        self,
+        jobs: "ty.Sequence[Job]",
+        listed: "dict[Path, set[str]] | None" = None,
+    ) -> "list[Job]":
+        """The jobs of ``jobs`` that have a success record, from one listing of the record
+        directory (kept in ``listed`` if given, so that a caller asking about several groups
+        of jobs lists it once). A record is not a result: ``lookup`` may still refuse it.
+        """
+        records = [(j, self.success_record(j.checksum, j.context)) for j in jobs]
+        if not records:
+            return []
+        directory = records[0][1].parent
+        if listed is not None and directory in listed:
+            present = listed[directory]
+        else:
+            try:
+                with os.scandir(directory) as entries:
+                    present = {e.name for e in entries}
+            except OSError:
+                present = set()
+            if listed is not None:
+                listed[directory] = present
+        return [j for j, record in records if record.name in present]
+
+    def expected_hits(self, jobs: "ty.Sequence[Job]") -> int:
+        """How many of ``jobs`` have a success record (see :meth:`recorded`). Records only:
+        ``GraphRunner.plan`` adds the results ``lookup`` finds for the other jobs when the
+        runner has ``lookup_before_dispatch``."""
+        return len(self.recorded(jobs))
 
     def withdraw_success(self, lease: DirectoryLease) -> None:
         """Remove the success record of the job held under ``lease``, before its slot

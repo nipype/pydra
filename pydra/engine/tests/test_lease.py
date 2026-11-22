@@ -22,6 +22,9 @@ from pydra.engine.lease import (
     LeaseSettings,
     LeaseTimeout,
     LeaseUnavailable,
+    POLL_MAX,
+    STALE_AFTER,
+    holder_stale_after,
 )
 from pydra.engine.job import load_and_run
 from pydra.engine.result import Result
@@ -84,15 +87,16 @@ class FakeTime:
 SLOW = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0)
 
 
-def plant_foreign_lease(lockfile: Path) -> Path:
-    """Plant the lease directory a process on another host left, return its token dir."""
+def plant_foreign_lease(lockfile: Path, stale_after: float | None = 0.1) -> Path:
+    """Plant the lease directory a process on another host left, return its token dir.
+    Its recorded ``stale_after`` is by default shorter than any test's, so the taker's
+    bound decides; None records none, as an older pydra did."""
     token_dir = lockfile / ("f" * 32)
     token_dir.mkdir(parents=True)
-    (token_dir / HOLDER_FILE).write_text(
-        json.dumps(
-            {"owner": "someone", "host": FOREIGN_HOST, "pid": DEAD_PID, "started": 0}
-        )
-    )
+    record = {"owner": "someone", "host": FOREIGN_HOST, "pid": DEAD_PID, "started": 0}
+    if stale_after is not None:
+        record["stale_after"] = stale_after
+    (token_dir / HOLDER_FILE).write_text(json.dumps(record))
     return token_dir
 
 
@@ -110,6 +114,81 @@ def newest_mtime(lockfile: Path) -> float:
 def test_directory_lease_is_a_lease(tmp_path):
     assert isinstance(DirectoryLease("abc", tmp_path, tmp_path / "abc.lock"), Lease)
     assert isinstance(PickleStore(tmp_path).acquire("abc", {}), Lease)
+
+
+def test_holder_records_its_stale_after(tmp_path):
+    lease = DirectoryLease("abc", tmp_path, tmp_path / "abc.lock", settings=FAST)
+    with lease:
+        assert lease.holder()["stale_after"] == FAST.stale_after
+
+
+CAPPED = LeaseSettings(
+    stale_after=10, timeout=15, attribute_delay=0, max_honoured_stale_after=40
+)
+
+
+@pytest.mark.parametrize(
+    "record, unreadable, expected",
+    [
+        (None, False, 10),
+        (None, True, 40),
+        ({"stale_after": 20}, False, 20),
+        ({"stale_after": 5}, False, 10),
+        ({"stale_after": 1e9}, False, 40),
+        ({}, False, 40),
+        ({"stale_after": True}, False, 40),
+        ({"stale_after": "20"}, False, 40),
+        ({"stale_after": -1}, False, 40),
+        ({"stale_after": float("inf")}, False, 40),
+    ],
+)
+def test_holder_stale_after(record, unreadable, expected):
+    assert holder_stale_after(record, CAPPED, unreadable=unreadable) == expected
+
+
+def test_max_honoured_stale_after_default_and_bounds():
+    assert LeaseSettings().max_honoured_stale_after == 4 * STALE_AFTER
+    assert (
+        LeaseSettings(stale_after=2000, timeout=3000).max_honoured_stale_after == 2000
+    )
+    with pytest.raises(ValueError, match="max_honoured_stale_after"):
+        LeaseSettings(stale_after=10, timeout=15, max_honoured_stale_after=5)
+
+
+def test_huge_recorded_bound_is_taken_over_by_the_cap(tmp_path):
+    """The waiter's bound stretches at most to the cap, so a record of 1e9 cannot hold
+    every waiter forever."""
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile, stale_after=1e9)
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, CAPPED)
+    with lease:
+        assert len(lease.broke) == 1
+        assert 40 < clock.t <= 40 + POLL_MAX
+
+
+def test_holder_with_longer_bounds_taken_over_after_them(tmp_path):
+    """A dead holder that recorded a longer ``stale_after`` is taken over after it, and
+    the waiter's bound stretches by the difference, so it does not give up first."""
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile, stale_after=20)
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, SLOW)  # stale after 10, timeout 15
+    with lease:
+        assert lease.held
+        assert len(lease.broke) == 1
+        assert 20 < clock.t <= 20 + POLL_MAX
+
+
+def test_holder_without_recorded_bounds_judged_by_the_default(tmp_path):
+    """A holder an older pydra wrote is taken over after the default ``stale_after``."""
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile, stale_after=None)
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    with lease:
+        assert len(lease.broke) == 1
+        assert STALE_AFTER < clock.t <= STALE_AFTER + POLL_MAX
 
 
 def test_lease_records_holder_and_releases(tmp_path):
@@ -592,7 +671,7 @@ def TakenOverMidRun(root: str) -> int:
 @pytest.mark.timeout(60)
 def test_suspended_holder_does_not_overwrite_the_takers_result(tmp_path):
     root = tmp_path / "cache"
-    with Submitter(worker="debug", cache_root=root) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=root) as sub:
         with pytest.raises(Exception) as excinfo:
             sub(TakenOverMidRun(root=str(root)), raise_errors=True)
     assert isinstance(excinfo.value, LeaseLost)
@@ -848,3 +927,444 @@ def test_rerun_after_sigkill_takes_over(tmp_path):
     assert "Took over the lease" in err
     assert len((tmp_path / "runs.log").read_text().splitlines()) == 2
     assert not any(p.suffix == ".lock" for p in (tmp_path / "cache").iterdir())
+
+
+# try_take: one attempt at a time, for a caller that must not block
+
+
+def test_try_take_returns_none_when_free(tmp_path):
+    lease = DirectoryLease("abc", tmp_path, tmp_path / "abc.lock", settings=FAST)
+    assert lease.try_take() is None
+    assert lease.held
+    lease.__exit__(None, None, None)
+    assert not lease.lockfile.exists()
+
+
+def test_try_take_returns_the_delay_while_held_then_takes_it(tmp_path):
+    lockfile = tmp_path / "abc.lock"
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    with holder:
+        first = waiter.try_take()
+        assert first is not None and first > 0
+        second = waiter.try_take()
+        assert second is not None and second >= first  # backs off between attempts
+        assert not waiter.held
+    assert waiter.try_take() is None
+    assert waiter.held
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_keeps_its_bounds_between_attempts(tmp_path):
+    """The first call starts the wait's clock; later calls do not restart it, so the
+    wait ends in ``LeaseTimeout`` however often it is retried"""
+    lockfile = tmp_path / "abc.lock"
+    settings = LeaseSettings(
+        stale_after=10, timeout=15, attribute_delay=0, max_wait=0.2
+    )
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    with holder:
+        assert waiter.try_take() is not None
+        time.sleep(0.3)
+        with pytest.raises(LeaseTimeout):
+            waiter.try_take()
+        assert not waiter.held
+    # a new wait starts afresh
+    assert waiter.try_take() is None
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_takes_over_a_stale_lease(tmp_path):
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile)
+    settings = LeaseSettings(stale_after=0.3, timeout=10, attribute_delay=0)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    deadline = time.monotonic() + 20
+    while (delay := waiter.try_take()) is not None:
+        assert time.monotonic() < deadline
+        time.sleep(delay)
+    assert waiter.held
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_is_part_of_the_lease_protocol():
+    assert "try_take" in dir(Lease)
+
+
+def sharing_violation(path) -> PermissionError:
+    """What Windows raises for a path another process has open: a sharing violation
+    or access denied, both errno EACCES."""
+    return PermissionError(
+        errno.EACCES, "The process cannot access the file", str(path)
+    )
+
+
+def test_release_retries_a_rename_refused_while_a_waiter_reads(
+    tmp_path, monkeypatch, caplog
+):
+    """On Windows a directory cannot be renamed while another process has it or a
+    file in it open, as a waiter judging the lease does. Release retries the rename
+    instead of reporting the lease taken over and leaving it behind."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+    refused = []
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(dst).name.startswith("gone-") and len(refused) < 3:
+            refused.append(src)
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)  # patience 1 s
+    with lease:
+        monkeypatch.setattr(os, "rename", rename)
+    assert len(refused) == 3
+    assert lease.lost is None
+    assert "taken over" not in caplog.text
+    assert not lockfile.exists()
+
+
+def test_release_refused_for_good_is_not_reported_as_taken_over(
+    tmp_path, monkeypatch, caplog
+):
+    """A release whose rename is refused for good leaves a lease that ages and is taken
+    over once stale; its holder was not taken over and is not reported so."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(dst).name.startswith("gone-"):
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    clock = FakeTime(time.time())
+    lease = clock.lease(tmp_path, lockfile, FAST)
+    with lease:
+        monkeypatch.setattr(os, "rename", rename)
+    assert lease.lost is None
+    assert "taken over while held" not in caplog.text
+    assert "could not be released" in caplog.text
+
+
+@pytest.mark.timeout(60)
+def test_waiter_takes_a_lease_released_while_it_reads_the_holder(
+    tmp_path, monkeypatch, caplog
+):
+    """Windows semantics: a directory cannot be renamed while a file in it is open. The
+    holder releases while a waiter has the holder record open; the waiter then takes
+    the lease at once, and the holder is not reported taken over (the failure of
+    test_concurrent_submissions_run_a_job_once on Windows, where the waiter instead
+    waited stale_after for a lease left behind)."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename, real_read_text = os.rename, Path.read_text
+    open_in = set()
+    reading, refused = threading.Event(), threading.Event()
+
+    def read_text(self, *args, **kwargs):
+        if self.name == HOLDER_FILE and not refused.is_set():
+            open_in.add(self.parent)
+            reading.set()
+            refused.wait(10)  # held open until the holder's rename was refused
+            open_in.discard(self.parent)
+        return real_read_text(self, *args, **kwargs)
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(src) in open_in:
+            refused.set()
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+    monkeypatch.setattr(os, "rename", rename)
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    holder.__enter__()
+    took = []
+
+    def wait():
+        with DirectoryLease("abc", tmp_path, lockfile, settings=SLOW):
+            took.append(time.monotonic())
+
+    waiter = threading.Thread(target=wait)
+    waiter.start()
+    assert reading.wait(10)
+    released = time.monotonic()
+    holder.__exit__(None, None, None)
+    waiter.join(SLOW.stale_after)
+    assert refused.is_set()
+    assert holder.lost is None
+    assert "taken over while held" not in caplog.text
+    assert took and took[0] - released < SLOW.stale_after / 2
+
+
+def test_released_remains_do_not_hold_the_lease(tmp_path):
+    """What a release could not remove (on Windows a file a waiter had open) is no
+    holder: the next taker removes it and takes the lease without waiting."""
+    lockfile = tmp_path / "abc.lock"
+    remains = lockfile / ("gone-" + "e" * 32)
+    remains.mkdir(parents=True)
+    (remains / HOLDER_FILE).write_text(json.dumps({"pid": DEAD_PID}))
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    with lease:
+        assert lease.held
+        assert clock.t == 0
+        assert not remains.exists()
+        assert lease.broke == []
+    assert not lockfile.exists()
+
+
+def test_unreadable_heartbeat_is_not_taken_for_a_stale_lease(tmp_path, monkeypatch):
+    """A holder's heartbeat marks that cannot be read for a moment (on Windows, open in
+    another process) are not absent: the lease is not judged by the older marks left."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    now = time.time()
+    os.utime(lockfile, (now - 100, now - 100))  # only the holder's marks are fresh
+    real_lstat = os.lstat
+
+    def lstat(path, *args, **kwargs):
+        if Path(path) == token_dir or Path(path).parent == token_dir:
+            raise sharing_violation(path)
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", lstat)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW, clock=lambda: now)
+    assert not lease._judge()
+    assert token_dir.is_dir()
+    assert lease.broke == []
+
+
+@pytest.fixture
+def unreadable_mark(monkeypatch):
+    """Make ``lstat`` of a path always refused, as for a mark in a foreign token
+    directory without search permission; returns a setter for that path."""
+    real_lstat = os.lstat
+    refused = []
+
+    def lstat(path, *args, **kwargs):
+        if refused and Path(path) == refused[0]:
+            raise sharing_violation(path)
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", lstat)
+    return refused.append
+
+
+def test_live_holder_with_an_unreadable_mark_is_waited_for(tmp_path, unreadable_mark):
+    """A mark that cannot ever be read does not stop the holder's renewals from keeping
+    the wait alive: the waiter waits until max_wait, it does not give up as if the
+    lease could not be removed."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+
+    def holder_beats(clock):
+        os.utime(token_dir, (clock.storage(), clock.storage()))
+
+    clock = FakeTime(newest_mtime(lockfile), on_sleep=holder_beats)
+    unreadable_mark(token_dir / HOLDER_FILE)
+    settings = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, max_wait=50)
+    with pytest.raises(LeaseTimeout) as excinfo:
+        clock.lease(tmp_path, lockfile, settings).__enter__()
+    assert type(excinfo.value) is LeaseTimeout
+    assert "max_wait" in str(excinfo.value)
+    assert 50 <= clock.t < 52
+    assert token_dir.is_dir()
+
+
+def test_dead_holder_with_an_unreadable_mark_is_taken_over(tmp_path, unreadable_mark):
+    """A dead holder whose mark cannot ever be read is taken over on the storage clock
+    once its readable marks have been stale for stale_after since the unreadable one
+    was first seen, within the waiter's timeout."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    clock = FakeTime(newest_mtime(lockfile))
+    unreadable_mark(token_dir / HOLDER_FILE)
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    with lease:
+        assert lease.held
+        assert 10 <= clock.t < 15
+        assert len(lease.broke) == 1
+
+
+def test_try_take_waits_for_a_live_holder_with_an_unreadable_mark(
+    tmp_path, unreadable_mark
+):
+    """A wait driven by try_take keeps what it saw between calls: a renewing holder
+    with a mark that cannot be read keeps the wait alive until max_wait, and is not
+    taken over"""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+
+    def holder_beats(clock):
+        os.utime(token_dir, (clock.storage(), clock.storage()))
+
+    clock = FakeTime(newest_mtime(lockfile), on_sleep=holder_beats)
+    unreadable_mark(token_dir / HOLDER_FILE)
+    settings = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, max_wait=50)
+    waiter = clock.lease(tmp_path, lockfile, settings)
+    with pytest.raises(LeaseTimeout) as excinfo:
+        while (delay := waiter.try_take()) is not None:
+            clock.sleep(delay)
+    assert type(excinfo.value) is LeaseTimeout
+    assert "max_wait" in str(excinfo.value)
+    assert 50 <= clock.t < 52
+    assert not waiter.held
+    assert waiter.broke == []
+    assert token_dir.is_dir()
+
+
+def test_try_take_takes_over_a_dead_holder_with_an_unreadable_mark(
+    tmp_path, unreadable_mark
+):
+    """try_take takes over a dead holder whose mark cannot be read once stale_after has
+    passed on the storage clock since the first unreadable sighting, not before"""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    clock = FakeTime(newest_mtime(lockfile))
+    unreadable_mark(token_dir / HOLDER_FILE)
+    waiter = clock.lease(tmp_path, lockfile, SLOW)
+    while (delay := waiter.try_take()) is not None:
+        assert waiter.broke == []
+        clock.sleep(delay)
+    assert waiter.held
+    assert 10 <= clock.t < 15
+    assert len(waiter.broke) == 1
+    waiter.__exit__(None, None, None)
+    assert not lockfile.exists()
+
+
+def test_try_take_lease_with_a_refused_release(tmp_path, monkeypatch, caplog):
+    """A lease taken with try_take retries a refused release within its patience; one
+    refused for good is not reported taken over, and a waiter using try_take takes
+    it over only once stale"""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+    refusing = [3]
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(dst).name.startswith("gone-") and refusing[0] > 0:
+            refusing[0] -= 1
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(os, "rename", rename)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)  # patience 1 s
+    assert lease.try_take() is None
+    lease.__exit__(None, None, None)
+    assert refusing == [0]
+    assert lease.lost is None
+    assert not lockfile.exists()
+
+    clock = FakeTime(time.time())
+    holder = clock.lease(tmp_path, lockfile, FAST)
+    assert holder.try_take() is None
+    refusing[0] = 10**9  # refused for good
+    holder.__exit__(None, None, None)
+    assert holder.lost is None
+    assert "taken over while held" not in caplog.text
+    assert "could not be released" in caplog.text
+    assert lockfile.is_dir()
+
+    refusing[0] = 0
+    later = FakeTime(newest_mtime(lockfile))
+    waiter = later.lease(tmp_path, lockfile, FAST)
+    while (delay := waiter.try_take()) is not None:
+        assert waiter.broke == []
+        later.sleep(delay)
+    assert later.t > FAST.stale_after
+    assert len(waiter.broke) == 1
+    waiter.__exit__(None, None, None)
+    assert not lockfile.exists()
+
+
+def test_stale_holder_beside_remains_is_taken_over(tmp_path):
+    """Remains beside a holder's token do not make the lease removable at once: the
+    holder is judged and taken over once stale."""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    (lockfile / ("gone-" + "e" * 32)).mkdir()
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    with lease:
+        assert 10 <= clock.t < 12
+        assert len(lease.broke) == 1
+        assert not token_dir.exists()
+
+
+def test_takeover_found_only_at_release_marks_the_lease_lost(tmp_path, caplog):
+    """A lease taken over while held, not found by a heartbeat or `prove`, is found at
+    release: its directory is gone, which is not retried."""
+    lockfile = tmp_path / "abc.lock"
+    clock = FakeTime(time.time())
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    with lease:
+        token = lease._token
+        os.rename(lockfile / token, lockfile / ("gone-" + "d" * 32))
+    assert lease.lost == "its holder directory was gone at release"
+    assert "taken over while held" in caplog.text
+    assert clock.t == 0
+
+
+@pytest.mark.timeout(60)
+def test_short_stale_after_release_refused_is_not_taken_over_mid_release(
+    tmp_path, monkeypatch, caplog
+):
+    """With a short stale_after a refused release gives up before a waiter could see
+    the stopped holder stale, so the holder is not taken over during its release."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+    holder_thread = threading.current_thread()
+
+    def rename(src, dst, *args, **kwargs):
+        if threading.current_thread() is holder_thread and os.path.exists(src):
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
+    holder.__enter__()
+    took = []
+
+    def wait():
+        with DirectoryLease("abc", tmp_path, lockfile, settings=FAST):
+            took.append(True)
+
+    waiter = threading.Thread(target=wait)
+    waiter.start()
+    time.sleep(0.2)
+    monkeypatch.setattr(os, "rename", rename)
+    holder.__exit__(None, None, None)
+    waiter.join(30)
+    assert took
+    assert holder.lost is None
+    assert "taken over while held" not in caplog.text
+
+
+def test_async_release_does_not_block_the_event_loop(tmp_path, monkeypatch):
+    """An async release retries a refused rename with asyncio.sleep, never the
+    blocking sleep."""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+    refused = []
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(dst).name.startswith("gone-") and len(refused) < 2:
+            refused.append(src)
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    def blocking_sleep(seconds):
+        raise AssertionError("blocking sleep in an async release")
+
+    lease = DirectoryLease(
+        "abc", tmp_path, lockfile, settings=SLOW, sleep=blocking_sleep
+    )
+
+    async def run():
+        async with lease:
+            monkeypatch.setattr(os, "rename", rename)
+
+    asyncio.run(run())
+    assert len(refused) == 2
+    assert lease.lost is None
+    assert not lockfile.exists()

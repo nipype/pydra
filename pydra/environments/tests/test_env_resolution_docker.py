@@ -95,7 +95,9 @@ def test_docker_several_entries_keyed_by_id(monkeypatch):
 def test_docker_registry_head_once_per_tag(monkeypatch, tmp_path):
     fake = FakeDocker(monkeypatch, registry={"org/tool:1": D1})
     env = docker.Docker(image="org/tool", tag="1")
-    sub = Submitter(environment=env, cache_root=tmp_path, telemetry=False)
+    sub = Submitter(
+        store="pickle", environment=env, cache_root=tmp_path, telemetry=False
+    )
     refs = []
     for name in "abc":
         job = Job(task=shell.define("whoami")(), name=name, submitter=sub)
@@ -112,7 +114,9 @@ def test_docker_offline_unresolved(monkeypatch, tmp_path):
     assert ref.unresolved
     assert ref.run == "org/tool:1"
     assert "docker@1:" not in ref.key and "org/tool:1" in ref.key
-    sub = Submitter(environment=env, cache_root=tmp_path, telemetry=False)
+    sub = Submitter(
+        store="pickle", environment=env, cache_root=tmp_path, telemetry=False
+    )
     job = Job(task=shell.define("whoami")(), name="j", submitter=sub)
     assert job.record["job"]["environment"] == job.resolved.key
     # the result is used by this process only
@@ -122,6 +126,7 @@ def test_docker_offline_unresolved(monkeypatch, tmp_path):
 def test_resolve_images_require_raises(monkeypatch, tmp_path):
     FakeDocker(monkeypatch, docker_missing=True)
     sub = Submitter(
+        store="pickle",
         environment=docker.Docker(image="org/tool"),
         cache_root=tmp_path,
         resolve_images="require",
@@ -134,7 +139,12 @@ def test_resolve_images_require_raises(monkeypatch, tmp_path):
 
 def test_resolve_images_value_checked(tmp_path):
     with pytest.raises(ValueError, match="resolve_images"):
-        Submitter(cache_root=tmp_path, resolve_images="always", telemetry=False)
+        Submitter(
+            store="pickle",
+            cache_root=tmp_path,
+            resolve_images="always",
+            telemetry=False,
+        )
 
 
 def test_mirror_shares_key(monkeypatch):
@@ -149,6 +159,7 @@ def test_mirror_shares_key(monkeypatch):
 def test_resolved_job_record_and_context_use_key(monkeypatch, tmp_path):
     FakeDocker(monkeypatch)
     sub = Submitter(
+        store="pickle",
         environment=docker.Docker(image=f"org/fsl@{D1}"),
         cache_root=tmp_path,
         telemetry=False,
@@ -168,6 +179,7 @@ def test_execute_no_tag_suffix_on_resolved(monkeypatch, tmp_path):
         return 0, "", ""
 
     sub = Submitter(
+        store="pickle",
         environment=docker.Docker(image=f"org/tool@{D1}"),
         cache_root=tmp_path,
         telemetry=False,
@@ -185,7 +197,10 @@ def test_execute_runs_local_image_by_id(monkeypatch, tmp_path):
     FakeDocker(monkeypatch, local={"tool:latest": (ID, [])})
     commands = []
     sub = Submitter(
-        environment=docker.Docker(image="tool"), cache_root=tmp_path, telemetry=False
+        store="pickle",
+        environment=docker.Docker(image="tool"),
+        cache_root=tmp_path,
+        telemetry=False,
     )
     job = Job(task=shell.define("whoami")(), name="j", submitter=sub)
     job.resolved
@@ -206,7 +221,9 @@ def test_docker_real_daemon(tmp_path):
     ref = env.resolve()
     assert not ref.unresolved
     assert ref.key.startswith(("docker@1:sha256:", "docker-local@1:sha256:"))
-    with Submitter(environment=env, cache_root=tmp_path, telemetry=False) as sub:
+    with Submitter(
+        store="pickle", environment=env, cache_root=tmp_path, telemetry=False
+    ) as sub:
         result = sub(shell.define("echo")(executable="echo", append_args=["hi"]))
     assert result.outputs.stdout.strip() == "hi"
 
@@ -215,7 +232,9 @@ def _job(tmp_path, env, supplied=False):
     task = shell.define("whoami")
     if supplied:
         task.__checksum__ = lambda self, inputs: "shell-fixed"
-    sub = Submitter(environment=env, cache_root=tmp_path, telemetry=False)
+    sub = Submitter(
+        store="pickle", environment=env, cache_root=tmp_path, telemetry=False
+    )
     return Job(task=task(), name="j", submitter=sub)
 
 
@@ -260,7 +279,10 @@ def test_worker_without_carried_reference_raises(monkeypatch, tmp_path):
 def test_five_jobs_one_inspect(monkeypatch, tmp_path):
     fake = FakeDocker(monkeypatch, local={"tool:latest": (ID, [])})
     sub = Submitter(
-        environment=docker.Docker(image="tool"), cache_root=tmp_path, telemetry=False
+        store="pickle",
+        environment=docker.Docker(image="tool"),
+        cache_root=tmp_path,
+        telemetry=False,
     )
     for name in "abcde":
         Job(task=shell.define("whoami")(), name=name, submitter=sub).resolved
@@ -356,7 +378,7 @@ def test_environments_differing_only_in_tag_resolve_apart(monkeypatch, tmp_path)
         monkeypatch,
         local={"tool:1": (ID, []), "tool:2": ("sha256:" + "b" * 64, [])},
     )
-    sub = Submitter(cache_root=tmp_path, telemetry=False)
+    sub = Submitter(store="pickle", cache_root=tmp_path, telemetry=False)
     refs = []
     for tag in ("1", "2"):
         job = Job(
@@ -372,7 +394,7 @@ def test_environments_differing_only_in_tag_resolve_apart(monkeypatch, tmp_path)
 
 def test_environments_differing_only_in_identity_resolve_apart(monkeypatch, tmp_path):
     FakeDocker(monkeypatch)
-    sub = Submitter(cache_root=tmp_path, telemetry=False)
+    sub = Submitter(store="pickle", cache_root=tmp_path, telemetry=False)
     refs = []
     for identity in (D1, D2):
         job = Job(
@@ -399,6 +421,7 @@ def test_python_task_resolves_no_image(monkeypatch, tmp_path):
 
     FakeDocker(monkeypatch, docker_missing=True)
     sub = Submitter(
+        store="pickle",
         environment=docker.Docker(image="tool"),
         cache_root=tmp_path,
         resolve_images="require",

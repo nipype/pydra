@@ -60,7 +60,9 @@ def test_explain_command_reads_result_directories(tmp_path):
     dirs = []
     for n in (1, 2):
         job = Job(
-            name="t", task=Add(a=n), submitter=Submitter(cache_root=tmp_path / str(n))
+            name="t",
+            task=Add(a=n),
+            submitter=Submitter(store="pickle", cache_root=tmp_path / str(n)),
         )
         job.run()
         dirs.append(job.cache_dir)

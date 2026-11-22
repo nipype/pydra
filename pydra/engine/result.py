@@ -7,6 +7,7 @@ import attrs
 import functools
 import inspect
 import io
+import json
 import pickle
 import time
 import os
@@ -25,6 +26,7 @@ from pydra.compose import workflow, base
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+    from pydra.engine.portable.store import Committed
 
 
 _SKELETONS = ("_make_skeleton_class", "_make_skeleton_enum")
@@ -136,6 +138,17 @@ class Result(ty.Generic[OutputsType]):
     """Whether the result was reused from an entry recorded in another context."""
     reused_in: dict[str, ty.Any] | None = None
     """The context it was reused in, when `cross_context`."""
+    committed: "Committed | None" = None
+    """What a `~pydra.engine.portable.store.PortableStore` publish returned for this result,
+    None for a result that was not published through one."""
+    stored: bool = True
+    """Whether the outputs are in the store; False when a `PortableStore` kept them
+    unpublished (an occupant of the address that this result does not equal, or an entry it
+    cannot read)."""
+
+    failure: str | None = None
+    """Why an errored result has no recorded error: a job reported complete whose result
+    could not be found or read, naming its work directory."""
 
     CLOUD_PICKLE_ATTRS = ("outputs", "task")
 
@@ -153,6 +166,9 @@ class Result(ty.Generic[OutputsType]):
         return state
 
     def __setstate__(self, state):
+        state.setdefault("committed", None)
+        state.setdefault("stored", True)
+        state.setdefault("failure", None)
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
                 state[attr] = _loads(state[attr])
@@ -175,6 +191,10 @@ class Result(ty.Generic[OutputsType]):
     @property
     def errors(self):
         if self.errored:
+            json_file = self.cache_dir / "_error.json"
+            if json_file.exists():
+                with open(json_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
             error_file = self.cache_dir / "_error.pklz"
             if error_file.exists():
                 with open(error_file, "rb") as f:
@@ -426,3 +446,24 @@ def record_error(error_path, error):
         cp.dump(full_error, fp)
 
     return error_path / "_error.pklz"
+
+
+def record_error_json(error_path, error, attempt=None):
+    """Write ``_error.json`` into ``error_path``, the work directory of a job whose store
+    commits no failure (RFC 0003 section 11). The same record as `record_error`, as JSON,
+    which `pydracli crash` reads without unpickling."""
+    try:
+        login_name = getpass.getuser()
+    except KeyError:
+        login_name = f"UID{os.getuid():d}"
+    full_error = {
+        "time of crash": strftime("%Y%m%d-%H%M%S"),
+        "login name": login_name,
+        "name with checksum": str(Path(error_path).name),
+        "attempt": attempt,
+        "error message": error if isinstance(error, (list, str)) else str(error),
+    }
+    target = Path(error_path) / "_error.json"
+    with atomic_write(target, "w") as fp:
+        json.dump(full_error, fp, default=str)
+    return target

@@ -177,7 +177,7 @@ def extract_function_inputs_and_outputs(
     #         "defined within the function scope so it is portable"
     #     )
     sig = inspect.signature(function)
-    type_hints = ty.get_type_hints(function)
+    type_hints = ty.get_type_hints(function, include_extras=True)
     input_types = {}
     input_defaults = {}
     has_varargs = False
@@ -434,7 +434,7 @@ def extract_fields_from_class(
         for field in get_fields(klass):
             if field.name not in skip_fields:
                 fields_dict[field.name] = field
-        type_hints = ty.get_type_hints(klass)
+        type_hints = ty.get_type_hints(klass, include_extras=True)
         for atr_name in dir(klass):
             if (
                 atr_name == "Outputs"

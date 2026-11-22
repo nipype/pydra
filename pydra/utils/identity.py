@@ -54,6 +54,9 @@ Record = dict[str, ty.Any]
 # inputs under ``template:<field>``, a name no field has
 TEMPLATE_PREFIX = "template:"
 
+# The digest of the providers of a task's provided fields, under a name no field has
+PROVIDED_KEY = "Provided"
+
 # The attributes of a field that shape the command line, besides its type (RFC 0004
 # section 5.1). Documentation (``help``) is left out, and so is everything that does not
 # decide what runs.
@@ -118,6 +121,14 @@ def field_digests(
         if "Outputs" in carried
         else type_digest(task.Outputs, cache)
     )
+    # which provider fills a field is part of the task's interface (RFC 0005 section
+    # 3.1); keyed only when a field is provided, so other records are as they were
+    if provided := {
+        f.name: f.provided
+        for f in fields.values()
+        if getattr(f, "provided", None) is not None
+    }:
+        digests[PROVIDED_KEY] = f"py@1:{hash_function(provided, cache=cache)}"
     if collect and not carried:
         task._code_modules = frozenset(cache.modules)
         task._code_refs = sorted(cache.refs)
@@ -195,6 +206,8 @@ def task_record(task: "Task") -> Record:
         "refs": list(task._code_refs or ()),
         "values": library_values(task),
     }
+    if PROVIDED_KEY in digests:
+        code["provided"] = digests.pop(PROVIDED_KEY)
     if _executor_is_code(task) and task._executor_name in digests:
         code["code"] = digests.pop(task._executor_name)
     if task._task_type() == "shell":
