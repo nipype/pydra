@@ -585,6 +585,25 @@ class Substrate(Protocol):
   broken and its jobs are `NotRun(held=True)` naming the class, the count, the latest cause and the class
   values (§6). senselab saw this on the cluster when four coordinators filled a partition's per-user
   submit limit (§9).
+  - **Start deadline.** A class also breaks ahead of the budget at a failed start, once its streak of
+    failed starts in a row has `PoolSettings.start_deadline_failures` failures (default 3) and
+    `PoolSettings.start_deadline_s` (default 120 s; None: off) has passed since the first, with no
+    worker of the class live (none ready, none pending). It is judged only at a failed attempt, so it
+    never preempts a due backed-off retry, and a pending start (a queued Slurm job, a slow load) is
+    waited for.
+  - **Streaks end with the work.** A streak ends when a worker of the class is ready, when the class
+    has no waiting jobs, and when work arrives at an idle class. A failure seen before an idle period
+    never breaks the class without a fresh attempt.
+  - **Lifting a break.** `WarmPool.release_hold(worker_class)`, or a `retry` (§7.1) of a job the break
+    held, lifts the coordinator's break and ends its streaks, so the next start is a fresh attempt.
+    Residency holds on storage are still lifted by `pydracli pool release-hold`.
+  - **Events.** Each failed start, listing, ticket write, encoding or poll, and each broken or released
+    class, is a `pydra.pool` log record whose `event` attribute names it.
+  - **Node-local storage.** `SlurmSubstrate.check_root`, called by `WarmPool` before the pool's tree
+    is made, refuses (`NodeLocalStorage`) a pool root or worker log directory that other nodes cannot
+    see. The filesystem type decides first: a network or parallel filesystem is shared, a memory
+    filesystem is local. Only for another or unknown type do the `/tmp`, `/var/tmp`, `/dev/shm` and
+    `$TMPDIR` prefixes decide. `allow_node_local=True` accepts one on a cluster of one node.
 
 ## 5. The worker protocol over shared storage
 
@@ -936,10 +955,10 @@ senselab's profiles differ the table says so (`rt/data/profiles/laptop.yaml:111-
 | content: the task raised, a command exited non-zero, an exception element of a batched call | the classifier's default for exceptions from the task's own code | retried until `content_attempts` (default 1, no retry, as pydra does today; senselab's default is 2), each retry under a `"restart"` generation (§5.5) | errored `Result`, or `Failed` when nothing ran |
 | resource at a call: out of memory, a job timeout | name table (`MemoryError`, `torch.OutOfMemoryError` by qualified name, no import), the worker's own cgroup OOM event; a timeout is an `expired` outcome written by the beater when a call's deadline passes (§5.3), acted on by the taker after a store lookup | the residency is reloaded (§4.4); a batched call is bisected; a lone job is moved up the ticket's `ladder` by the claim holder (§5.5) at most `resource_moves` times, counted from its `"ladder"` generations (default 2; senselab's field is `resource_replacements`, default 0), uncharged; a timeout moves only to a class with a larger `time` or another `gpu_type` | `Failed(ResourceExhausted)` once the ladder or the budget ends |
 | resource at a load | a load raising the above | an `UnfitRecord` is written for the residency and the class; the ticket's jobs move up the ladder, uncharged; a load is never an item | `Failed(Unplaceable)` when no larger class exists |
-| infrastructure: a load that failed otherwise, a broken environment, a lost service, a storage error | anything raised by the pool or an environment's start, and every unclassified exception there (flagged `gap`) | requeued on the same class, uncharged; after `infrastructure_replacements` failures of one residency in the current coordinator epoch (default 3; senselab's default is 6) the residency is held on its queue (`held-<epoch>-<label>`) | `NotRun(held=True)` for each of its jobs, reason naming the residency and the latest cause |
+| infrastructure: a load that failed otherwise, a broken environment, a lost service, a storage error | anything raised by the pool or an environment's start, and every unclassified exception there (flagged `gap`) | requeued on the same class, uncharged; after `infrastructure_replacements` failures of one residency in the current coordinator epoch (default 3; senselab's default is 6) the residency is held on its queue (`held-<epoch>-<label>`). A ticket write that raises puts its jobs back at the head of their queue, never dropped; a queue's streak of failed writes breaks its class by the start-deadline rule (§4.5); a job the codec cannot encode is not infrastructure but `Failed` on its own | `NotRun(held=True)` for each of its jobs, reason naming the residency, or the write, and the latest cause; `Failed` for an unencodable job |
 | hardware below a ticket's need: a `gpu_mem=None` class whose worker reads less device memory than the ticket declares | the claiming worker's re-judgement (§3.3, `WrongHardware`) | the worker writes `withdrawn` (reason `"refused"`, the memory read) and releases unrun; the coordinator's follower re-places the jobs from the next class up under fresh attempts, uncharged; later placements use the read memory | `Failed(Unplaceable)` when no larger class exists; otherwise none |
 | worker lost mid-ticket | a stale claim lease | taken over under fresh attempts (§5.5); a multi-job ticket split into halves; a lone job lost `crashes_charged` times | `Failed(JobCrashedWorker)` (content) |
-| workers of a class never start | missing ready marks | backoff; after `start_failures` (default 7) the class is broken | `NotRun(held=True)` for its queued jobs |
+| workers of a class never start | missing ready marks, a `start` that raises | backoff; after `start_failures` (default 7), or at a failed start once the streak has `start_deadline_failures` (default 3) over `start_deadline_s` (default 120 s) with no worker of the class live, the class is broken (§4.5); `release_hold` or a `retry` lifts it | `NotRun(held=True)` for its queued jobs, naming the latest start error |
 | cancel, `fail_fast` | the driver | the coordinator takes each unsettled ticket's claim by `try_take()`; an unclaimed or stale ticket gets `withdrawn` (reason `"cancel"`) for its unsettled jobs; a ticket with a live claim is left to its holder, whose results stay in the store for a later run | `NotRun(held=False)` for every cancelled job, at once |
 | policy refusal raised by a task or hook | the task | none | `Failed` per job |
 
@@ -992,7 +1011,9 @@ senselab's profiles differ the table says so (`rt/data/profiles/laptop.yaml:111-
 - **Same-checksum twins** are folded by the runner (RFC 0002 §3.1 at `6a9ececb`, "Sharing is the
   runner's") before they reach the pool; the pool's follow index (§5.5) folds what remains across runs.
 - **`retry(job)`** of a `NotRun(held=True)` job hands it out again; the pool puts it on its queue only once
-  the hold's epoch has passed or the hold is lifted (`pydracli pool release-hold`).
+  the hold's epoch has passed or the hold is lifted (`pydracli pool release-hold`). A retry of a job
+  that a class break held lifts the break, with a fresh failure streak (§4.5), as
+  `WarmPool.release_hold` does.
 
 ### 7.2 External drivers
 
@@ -1339,6 +1360,21 @@ for writing a process-owning provider, and the worker protocol as a reference pa
   placement; W6's `bench_pool_overhead` measures the latter.
 
 ## 13. Changes in revisions
+
+### Amendment to revision 4 (fail fast instead of hanging)
+
+A senselab GPU run hung with no error until the test's 700 s budget killed it. Its pool was on
+node-local `/tmp` under a `SlurmSubstrate`, so no worker could start, and the failures reached only
+log lines. The old `start_failures` budget would have broken the class only at about 15.5 minutes,
+and jobs dropped by a raising ticket write would have hung for ever.
+
+| Item | Change |
+|---|---|
+| A failed ticket write | §6 row "infrastructure": its jobs go back to the head of their queue, never dropped (they had been in no queue and no ticket, and no outcome came). A job the codec cannot encode is `Failed` alone. |
+| Start deadline | §4.5 "Failed starts", §6 row "workers of a class never start": `PoolSettings.start_deadline_s` and `start_deadline_failures`, judged at a failed attempt. A streak ends with the class's waiting work. Named apart from the driver's `fail_fast` (row "cancel, `fail_fast`"), which gives `NotRun(held=False)`. |
+| Lifting a break | §4.5, §7.1: `WarmPool.release_hold`, or a `retry` of a held job, lifts the coordinator's break. |
+| Pool events | §4.5: failed starts, listings, writes, encodings and polls, and broken and released classes, are `pydra.pool` log records carrying `event`. |
+| Node-local storage | §4.5: `SlurmSubstrate.check_root` refuses a pool other nodes cannot see, by filesystem type first. |
 
 ### Amendment to revision 4 (implementation of W12)
 
