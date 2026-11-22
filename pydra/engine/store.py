@@ -407,13 +407,16 @@ class ResultStore(ty.Protocol):
         Asked instead of ``read_succeeded`` and ``lookup`` when present (RFC 0002 section
         3.1): a ``Hit`` is settled as stored, a ``Verify`` is handed out with ``job.verify``
         set to its candidate, a ``Miss`` is handed out. ``probe=True`` (every released job
-        without ``lookup_before_dispatch``) answers ``Miss`` at the cost of an existence
-        check when the job's own address holds nothing. The store check of a workflow job
-        under its lease asks it too. See `PortableStore.find`.
+        without ``lookup_before_dispatch``, when the store has no ``present``) answers
+        ``Miss`` at the cost of an existence check when the job's own address holds
+        nothing. A job handed out after ``find(job)`` is marked ``looked_up`` and, under a
+        lease whose ``exclusive`` is False, is not looked up again under it; an exclusive
+        lease looks again. The store check of a workflow job under its lease asks it too.
+        See `PortableStore.find`.
     ``present(job) -> bool``
-        Whether the job's own address holds an entry, one existence check; a runner whose
-        driver reads off its thread (``GraphRunner.read_off_thread``) asks it of every
-        released job and reads only those that do.
+        Whether the job's own address holds an entry, one existence check; a runner
+        without ``lookup_before_dispatch`` asks it of every released job and asks
+        ``find(job)`` only of those that do.
     ``expected_hits(jobs) -> int``
         How many of ``jobs`` ``ready()`` may settle from the store, without a reuse being
         recorded; read by ``GraphRunner.plan``.

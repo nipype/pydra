@@ -1491,7 +1491,8 @@ class GraphRunner:
                 logger.debug("Looking up %s before its lease: %s", job.checksum, exc)
             else:
                 checked = True
-                result = self._accept(job, found)
+                # a workflow job's skip is ``frame.checked``, set below
+                result = self._accept(job, found, complete=False)
                 if result is not None:
                     job.hooks.pre_run(job)
                     job._cached_result = result
@@ -2011,8 +2012,9 @@ class GraphRunner:
                 Exception
             ) as exc:  # unreadable: dispatched, looked up under its lease
                 logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
-                found = None
-            result = self._accept(job, found)
+                result = self._accept(job, None)
+            else:
+                result = self._accept(job, found, complete=True)
             if result is None:
                 self._checked.add(job)  # not read again if a cap holds it back
                 rest.append(job)
@@ -2051,24 +2053,38 @@ class GraphRunner:
     def _find(self, job: Job, find: ty.Callable) -> "Result | None":
         """The result ``find`` serves the job, after marking it with the candidate of a
         `Verify` (and clearing the mark otherwise); None if it is to be dispatched. A
-        served job keeps the `Committed` of the entry, which later reads go by."""
+        served job keeps the `Committed` of the entry, which later reads go by. Without
+        ``lookup_before_dispatch`` the job's own address is checked first (``present``)
+        and ``find(job)`` asked only if it holds an entry; a job given a complete answer
+        is marked ``looked_up`` (see `Job.looked_up`)."""
+        present = getattr(self.store, "present", None)
+        complete = True
         try:
             if self.lookup_before_dispatch:
                 found = find(job)
+            elif present is not None:
+                found = find(job) if present(job) else None
+                complete = found is not None
             else:
                 found = find(job, probe=True)
+                complete = False
         except Exception as exc:  # unreadable: dispatched, looked up under its lease
             logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
             found = None
-        return self._accept(job, found)
+            complete = False
+        return self._accept(job, found, complete=complete)
 
-    def _accept(self, job: Job, found: ty.Any) -> "Result | None":
+    def _accept(
+        self, job: Job, found: ty.Any, complete: bool = False
+    ) -> "Result | None":
         """Mark the job with the candidate of a `Verify` (clearing the mark otherwise) and
-        return the result a `Hit` serves, keeping its `Committed`; None for anything else
-        """
+        return the result a `Hit` serves, keeping its `Committed`; None for anything else.
+        ``complete`` says ``found`` is the answer of ``find(job)``, every root and context
+        ranked: a job it does not serve is marked ``looked_up``."""
         job.verify = getattr(found, "candidate", None)
         result = getattr(found, "result", None)
-        if result is None or result.errored:
+        if result is None or result.errored:  # a PortableStore stores no failure
+            job.looked_up = complete
             return None
         if result.committed is not None:
             job.committed = result.committed
@@ -2250,6 +2266,7 @@ class GraphRunner:
             )
         del self._not_run[job]
         self._handed.discard(job)
+        job.looked_up = False  # its lookup before dispatch is stale: look again
         self._quiescent = False
 
     @property

@@ -661,18 +661,26 @@ class Submitter:
         """Whether the store serves the outer job of a call before it is leased, as
         ``ready()`` serves a job (RFC 0002 section 3.1): one existence check of its own
         address, and the entry read through the reuse hook only if there is one. A
-        `Verify` marks the job, which then runs."""
+        `Verify` marks the job, which then runs; a job given the answer of ``find(job)``
+        is marked ``looked_up`` (see `Job.looked_up`)."""
         find = getattr(self.store, "find", None)
         if find is None:
             return False
+        present = getattr(self.store, "present", None)
         try:
-            found = find(job, probe=True)
+            if present is None:
+                found, complete = find(job, probe=True), False
+            elif present(job):
+                found, complete = find(job), True
+            else:
+                return False
         except Exception as exc:  # run it, to be looked up under its lease
             logger.debug("Looking up %s before it is leased: %s", job.checksum, exc)
             return False
         job.verify = getattr(found, "candidate", None)
         result = getattr(found, "result", None)
         if result is None or result.errored:
+            job.looked_up = complete
             return False
         job.hooks.pre_run(job)
         job.committed = result.committed
