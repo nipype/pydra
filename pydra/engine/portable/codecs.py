@@ -25,6 +25,7 @@ from pathlib import Path
 
 from fileformats.core.fileset import FileSet
 
+from pydra.engine.absent import Absent
 from pydra.engine.portable.errors import (
     CorruptEntry,
     EntryFormatUnknown,
@@ -182,6 +183,8 @@ class Encoder:
             return {"$codec": tag, "value": self.encode(codec.encode(value), field)}
         if value is None or tp is bool:
             return value
+        if tp is Absent:  # RFC 0002 section 2.3(a)
+            return {"$absent": {"cause": value.cause, "source": value.source}}
         if tp is int:
             return value
         if tp is float:
@@ -437,6 +440,7 @@ _SINGLE = {
     "$path",
     "$array",
     "$npscalar",
+    "$absent",
 }
 _PAIRS = {
     "$codec": {"$codec", "value"},
@@ -635,6 +639,18 @@ class Decoder:
             raise ValueError("not a string")
         return Path(body)
 
+    def _absent(self, doc: dict, body: JSON, hashable: bool) -> Absent:
+        if not isinstance(body, dict) or set(body) != {"cause", "source"}:
+            raise ValueError("an $absent holds an object of 'cause' and 'source'")
+        cause, source = body["cause"], body["source"]
+        if not isinstance(cause, str) or not (
+            source is None or isinstance(source, str)
+        ):
+            raise ValueError(
+                "an $absent's cause is a string and its source a string or null"
+            )
+        return Absent(cause=cause, source=source)
+
     def _npscalar(self, doc: dict, body: JSON, hashable: bool) -> ty.Any:
         dtype_str, text = body
         if np is None:
@@ -766,6 +782,7 @@ _SIMPLE = {
     datetime.date,
     Path,
     os.PathLike,
+    Absent,
 }
 _CONTAINERS = {
     collections.abc.Sequence,
