@@ -4,6 +4,7 @@ asked again under a lease that excludes nobody (`_AlwaysHeld`); under an exclusi
 (de-duplicating, resumable or a rerun) the job looks again once the lease is taken, because
 another process may have published it meanwhile."""
 
+import cloudpickle as cp
 import pytest
 
 from pydra.compose import python, workflow
@@ -11,7 +12,7 @@ from pydra.engine.job import Job
 from pydra.engine.portable.reuse import Verdict
 from pydra.engine.portable.store import PortableStore
 from pydra.engine.portable.trust import Root
-from pydra.engine.runner import GraphRunner
+from pydra.engine.runner import GraphRunner, NotRun
 from pydra.engine.submitter import Submitter
 
 from .test_portable_store import TRUST, make
@@ -93,6 +94,8 @@ def test_leaf_miss_always_held_one_lookup(
 def test_leaf_probe_absent_still_looks_under_the_lease(tmp_path, monkeypatch):
     """A probe that finds nothing at the job's own address read nothing else, so the lookup under
     the lease, which covers read-only roots, is kept: an entry in one is served, not computed.
+    Before X6b the served entry held too; only the count (a ``probe=True`` call, now a
+    ``present`` check) differed, so this guards behaviour, not the double-lookup defect.
     """
     donor = make(tmp_path, "donor")
     populate(tmp_path, donor)
@@ -184,3 +187,50 @@ def test_outer_leaf_verify_asked_once(tmp_path, dedupe, asked):
         assert sub(Counted(x=1)).outputs.out == 2
     assert hook.asked == asked
     assert RUNS == [1]
+
+
+def test_leaf_pickled_to_a_worker_looks_again(tmp_path, monkeypatch):
+    """The mark never crosses a process boundary: a leaf marked by ``ready()`` and pickled to a
+    worker looks up the store under its `_AlwaysHeld` lease, so an entry published while it
+    waited (in a queue, say) is served, not recomputed."""
+    store = make(tmp_path, dedupe=False)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = runner_for(store, sub, OneLeaf(x=1), lookup_before_dispatch=True)
+        (job,) = runner.ready().dispatch
+        assert job.looked_up is True
+        worker = cp.loads(cp.dumps(job))
+        assert worker.looked_up is False
+        other = PortableStore(tmp_path / "root", trust=TRUST, dedupe=False)
+        with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
+            published = b(Counted(x=1))
+        assert published.committed.won is True
+        finds = spy(monkeypatch, worker.store, "find")
+        result = worker.run(rerun=worker.rerun)
+    assert len(finds) == 1
+    assert result.committed.served is True  # not recomputed
+    assert result.committed.entry == published.committed.entry
+
+
+def test_leaf_retried_looks_again(tmp_path, monkeypatch):
+    """A leaf reported `NotRun` and retried is not handed out on its old answer: the mark is
+    cleared, and the run under its `_AlwaysHeld` lease looks the store up again."""
+    store = make(tmp_path, dedupe=False)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = runner_for(store, sub, OneLeaf(x=1), lookup_before_dispatch=True)
+        (job,) = runner.ready().dispatch
+        assert job.looked_up is True
+        runner.complete(job, NotRun(reason="preempted", held=False))
+        runner.retry(job)
+        assert job.looked_up is False
+        other = PortableStore(tmp_path / "root", trust=TRUST, dedupe=False)
+        with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
+            published = b(Counted(x=1))
+        (again,) = runner.ready().dispatch
+        assert again is job
+        finds = spy(monkeypatch, store, "find")
+        runner.complete(job, job.run(rerun=job.rerun))
+        drive_with_run(runner)
+        assert runner.result().outputs.out == 2
+    assert len(leaf_finds(finds)) == 1
+    assert job.committed.served is True  # not recomputed
+    assert job.committed.entry == published.committed.entry

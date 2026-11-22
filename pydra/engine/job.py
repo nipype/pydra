@@ -203,7 +203,8 @@ class Job(ty.Generic[TaskType]):
         self.verify = None
         # Whether a runner or submitter asked the store's ``find(job)`` before dispatch and
         # was not served (``verify`` holds its answer): a run under a lease that excludes no
-        # other taker does not ask again (RFC 0002 section 3.1). Cleared by each run.
+        # other taker does not ask again (RFC 0002 section 3.1). Cleared by each run and
+        # by a retry, and never pickled.
         self.looked_up = False
         # A rerun under a store that replaces: set by the store's ``begin_rerun`` (RFC 0003
         # section 10); ``replaces`` is the output digest of the entry it evicts
@@ -250,6 +251,9 @@ class Job(ty.Generic[TaskType]):
         state.pop("_cached_result", None)
         state.pop("_held", None)
         state.pop("_awaiting_run", None)
+        # A lookup made before dispatch is current only for a run in this process: a job
+        # handed to a worker may wait in a queue, so it looks the store up again
+        state.pop("looked_up", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
         return state

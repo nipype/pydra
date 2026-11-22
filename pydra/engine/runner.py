@@ -1194,7 +1194,8 @@ class GraphRunner:
                 logger.debug("Looking up %s before its lease: %s", job.checksum, exc)
             else:
                 checked = True
-                result = self._accept(job, found)
+                # a workflow job's skip is ``frame.checked``, set below
+                result = self._accept(job, found, complete=False)
                 if result is not None:
                     job.hooks.pre_run(job)
                     job._cached_result = result
@@ -1773,8 +1774,8 @@ class GraphRunner:
         ranked: a job it does not serve is marked ``looked_up``."""
         job.verify = getattr(found, "candidate", None)
         result = getattr(found, "result", None)
-        job.looked_up = complete and (result is None or result.errored)
-        if result is None or result.errored:
+        if result is None or result.errored:  # a PortableStore stores no failure
+            job.looked_up = complete
             return None
         if result.committed is not None:
             job.committed = result.committed
@@ -1940,6 +1941,7 @@ class GraphRunner:
             )
         del self._not_run[job]
         self._handed.discard(job)
+        job.looked_up = False  # its lookup before dispatch is stale: look again
         self._quiescent = False
 
     @property
