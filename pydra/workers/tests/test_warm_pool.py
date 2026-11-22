@@ -1560,6 +1560,62 @@ def test_ticket_write_streak_ends_with_its_waiting_jobs(
     assert "cpu" not in pool._broken
 
 
+class _Vanishing(dict):
+    """A dict whose entries another thread removes while it is being iterated."""
+
+    def __iter__(self):
+        keys = list(super().__iter__())
+        for key in keys:
+            super().pop(key, None)
+        return iter(keys)
+
+
+def test_ending_streaks_races_no_submit(tmp_path, tasks, pools):
+    """A submit that ends a write streak while the follower ends it too neither raises nor leaves a
+    job half-registered: every job of the call is open, and none is reported."""
+    import threading
+    import time
+
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub, substrate=Recording())
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    pool._write_failing = _Vanishing(cpu=(0.0, 1, "OSError: Stale file handle"))
+    jobs = _round(sub, tasks, [1, 2])
+    pool.submit(jobs)  # work arrives at an idle class: its streaks end
+    assert all(job in pool._open for job in jobs) and reported == []
+
+    stop, errors = threading.Event(), []
+
+    def follower():
+        while not stop.is_set():
+            try:
+                with pool._lock:
+                    pool._write_failing["cpu"] = (0.0, 1, "OSError")
+                pool._end_streaks("cpu")
+            except Exception as err:  # pragma: no cover - the failure being tested
+                errors.append(err)
+
+    thread = threading.Thread(target=follower)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 0.5
+        n = 10
+        while time.monotonic() < deadline:
+            more = _round(sub, tasks, [n, n + 1])
+            n += 2
+            with pool._lock:  # an idle class again, so the next submit ends its streaks
+                pool._open.clear()
+                pool._by_key.clear()
+            pool._queue_jobs(more, handle=None)
+            assert all(job in pool._open for job in more)
+    finally:
+        stop.set()
+        thread.join()
+    assert errors == [] and reported == []
+    assert "cpu" not in pool._broken
+
+
 def test_the_deadline_never_breaks_ahead_of_a_due_retry(tmp_path, tasks, pools):
     """With ``poll_s`` longer than ``start_deadline_s``, one refused start does not break the class:
     the backed-off retry runs, and the class breaks only at the failed attempt that completes

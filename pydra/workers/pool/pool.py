@@ -1214,7 +1214,7 @@ class WarmPool:
             writing = {queue for queue, _ in batches}
             for queue in list(self._write_failing):
                 if queue not in writing:  # nothing waits to be written: the streak ends
-                    del self._write_failing[queue]
+                    self._write_failing.pop(queue, None)
         for queue, taken in batches:
             quantum = self._class[_queue_class(queue)].quantum_jobs
             groups: list[list[_Job]] = []
@@ -1233,7 +1233,8 @@ class WarmPool:
                     self._write_failed(queue, [j for g in groups[i:] for j in g], err)
                     break
             else:
-                self._write_failing.pop(queue, None)
+                with self._lock:
+                    self._write_failing.pop(queue, None)
 
     def _write_failed(self, queue: str, jobs: list[_Job], err: Exception) -> None:
         """Put the jobs of a failed ticket write, and those after them, back at the head of their
@@ -1247,8 +1248,8 @@ class WarmPool:
             self._waiting.setdefault(queue, collections.deque()).extendleft(
                 reversed(back)
             )
-        since, failures, _ = self._write_failing.get(queue, (now, 0, cause))
-        self._write_failing[queue] = (since, failures + 1, cause)
+            since, failures, _ = self._write_failing.get(queue, (now, 0, cause))
+            self._write_failing[queue] = (since, failures + 1, cause)
         logger.warning(
             "writing a ticket on %r failed (%s): %d job(s) wait for the next write",
             queue,
@@ -1971,13 +1972,15 @@ class WarmPool:
 
     def _end_streaks(self, name: str) -> None:
         """End the failure streaks of class ``name`` and of its queues' ticket writes: the next
-        attempt is a fresh one, not backed off."""
-        self._failures[name] = 0
-        self._failing_since.pop(name, None)
-        self._failed_at.pop(name, None)
-        for queue in list(self._write_failing):
-            if _queue_class(queue) == name:
-                del self._write_failing[queue]
+        attempt is a fresh one, not backed off. Called from the follower and from `submit`.
+        """
+        with self._lock:
+            self._failures[name] = 0
+            self._failing_since.pop(name, None)
+            self._failed_at.pop(name, None)
+            for queue in list(self._write_failing):
+                if _queue_class(queue) == name:
+                    self._write_failing.pop(queue, None)
 
     def release_hold(self, worker_class: str | None = None) -> list[str]:
         """Lift this coordinator's break of ``worker_class`` (of every broken class when None) and
