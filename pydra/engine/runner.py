@@ -995,7 +995,8 @@ class _Frame:
         self.workflow: "Workflow | None" = None
         self.graph: "DiGraph[NodeExecution] | None" = None
         self.retry_at: float | None = None
-        # whether ``find(job)`` was asked before the lease, which was then taken at once
+        # whether the lookup under the lease is skipped: ``find(job)`` was asked before a
+        # lease that excludes no other taker, taken without waiting
         self.checked: bool = False
         self.errors: list[str] = []
         self.entries: list[JobErrorEntry] = []
@@ -1212,13 +1213,17 @@ class GraphRunner:
         else:
             label = job.name
         frame = _Frame(job, parent, parent.path + (label,), owned=True)
-        frame.checked = checked
         self._child[job] = frame
         self._frames.append(frame)
         try:
             self._prepare(frame)
         except Exception as exc:  # a hook or the store refused: an entry, not a raise
             self._fail(frame, exc, "run")
+            return
+        # a lease that excludes other takers (de-duplicating, resumable or a rerun) may
+        # have been held by a process that published the job since the lookup: look again
+        # under it (RFC 0003 section 5.3)
+        frame.checked = checked and getattr(frame.lease, "exclusive", True) is False
 
     def _try_lease(self, frame: _Frame) -> None:
         now = time.monotonic()

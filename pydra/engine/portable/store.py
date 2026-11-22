@@ -3037,6 +3037,8 @@ class _AlwaysHeld:
 
     lost = None
     held = True
+    # it excludes no other taker, so a lookup made before taking it is still current
+    exclusive = False
 
     def __init__(self, checksum: str) -> None:
         self.checksum = checksum

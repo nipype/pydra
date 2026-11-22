@@ -49,9 +49,13 @@ def Fails(x: int) -> int:
     return boom.out
 
 
+BROKEN: list[str] = []
+
+
 def break_own_lease(job):
-    """Remove the de-duplication lease the workflow job holds: it is taken over."""
-    shutil.rmtree(job.store.acquire(job.checksum, job.context).lockfile)
+    """Remove the lease the job holds (de-duplicating or resumable): it is taken over."""
+    shutil.rmtree(job._acquire().lockfile)
+    BROKEN.append(job.checksum)
 
 
 @workflow.define
@@ -68,6 +72,14 @@ def NestFailsLeaseLost(x: int) -> int:
     )
     after = workflow.add(Add1(x=inner.out), name="after")
     return after.out
+
+
+@workflow.define
+def LeafLost(x: int) -> int:
+    boom = workflow.add(
+        Boom(x=x), hooks=TaskHooks(pre_run_task=break_own_lease), name="boom"
+    )
+    return boom.out
 
 
 @workflow.define
@@ -140,13 +152,14 @@ def test_workflow_hit_not_expanded(tmp_path, monkeypatch):
 
 def test_workflow_verify_expands(tmp_path):
     """A `Verify` for a nested workflow job marks it and expands it; its publish compares the
-    fresh outputs with the candidate, and the hook is asked once for the job."""
+    fresh outputs with the candidate. Under a lease that excludes no other taker (no
+    de-duplication) the hook is asked once for the job."""
     with Submitter(
         worker="debug", store=make(tmp_path), cache_root=tmp_path / "pc"
     ) as sub:
         assert sub(Two(x=1)).outputs.out == 3
     hook = ByTask(Two, Verdict.VERIFY)
-    store = make(tmp_path, reuse=hook)
+    store = make(tmp_path, reuse=hook, dedupe=False)
     with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
         runner = runner_for(store, sub, Nest(x=1))
         rounds = drive_with_run(runner)
@@ -236,11 +249,13 @@ def test_node_error_writes_error_json_publishes_nothing(tmp_path, lease):
     """
     task = NestFails(x=1) if lease == "held" else NestFailsLeaseLost(x=1)
     store = make(tmp_path, dedupe=True)
+    BROKEN.clear()
     with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
         runner = runner_for(store, sub, task)
         drive(sub, runner)
         inner = runner.exec_graph["inner"].job(None)
         assert runner.failed
+    assert BROKEN == ([] if lease == "held" else [inner.checksum])
     assert store.stored(inner.checksum) == []
     assert inner.committed is None
     assert inner.error_file.name == "_error.json" and inner.error_file.is_file()
@@ -284,3 +299,112 @@ def test_workflow_file_outputs_copied_into_entry(tmp_path):
     assert ref.fingerprint in wf_path.parts and ref.cdir in wf_path.parts
     assert wf_path != node_path
     assert not os.path.samefile(wf_path, node_path)
+
+
+def test_leaf_error_json_after_lease_lost(tmp_path):
+    """A leaf job whose de-duplication lease was taken over while it ran still writes
+    ``_error.json`` to its attempt's own work directory, and publishes nothing."""
+    store = make(tmp_path, dedupe=True)
+    BROKEN.clear()
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = runner_for(store, sub, LeafLost(x=1))
+        drive(sub, runner)
+        boom = runner.exec_graph["boom"].job(None)
+    assert BROKEN == [boom.checksum]
+    assert store.stored(boom.checksum) == []
+    assert boom.error_file.name == "_error.json" and boom.error_file.is_file()
+    assert json.loads(boom.error_file.read_text())["attempt"] == boom.attempt
+
+
+@pytest.mark.parametrize("kind", ["leaf", "workflow"])
+def test_resumable_job_writes_no_error_json_after_lease_lost(
+    tmp_path, monkeypatch, kind
+):
+    """A resumable job's work directory (``attempt="resume"``) is shared by its runs and
+    guarded by its lease, so a job whose lease was taken over writes no ``_error.json``
+    there: the new holder runs in that directory."""
+    monkeypatch.setattr(Job, "_can_resume", True)
+    store = make(tmp_path)
+    task = LeafLost(x=1) if kind == "leaf" else NestFailsLeaseLost(x=1)
+    name = "boom" if kind == "leaf" else "inner"
+    BROKEN.clear()
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = runner_for(store, sub, task)
+        drive(sub, runner)
+        job = runner.exec_graph[name].job(None)
+        assert runner.failed
+    assert job.checksum in BROKEN
+    assert job.cache_dir.name.startswith("resume-")
+    assert not job.error_file.exists()
+
+
+def test_dedupe_store_published_between_find_and_lease_not_expanded_again(
+    tmp_path, monkeypatch
+):
+    """Under a de-duplicating store, another process that publishes a nested workflow job
+    between this runner's ``find`` and its lease is found under the lease: the job is
+    ``workflow-stored`` and expanded once in all (RFC 0003 section 5.3)."""
+    store = make(tmp_path, dedupe=True)
+    real_prepare = GraphRunner._prepare
+
+    def prepare(self, frame):
+        if frame.job.name == "two":
+            with Submitter(
+                worker="debug", store=store, cache_root=tmp_path / "other"
+            ) as other:
+                assert other(Two(x=1)).outputs.out == 3
+        return real_prepare(self, frame)
+
+    monkeypatch.setattr(GraphRunner, "_prepare", prepare)
+    expansions = count_expansions(monkeypatch)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = runner_for(store, sub, Nest(x=1))
+        rounds = drive_with_run(runner)
+        assert runner.result().outputs.out == 4
+        two = runner.exec_graph["two"].job(None)
+    assert expansions.count("Two") == 1, expansions
+    assert [s.how for r in rounds for s in r.settled if s.job is two] == [
+        "workflow-stored"
+    ]
+
+
+def test_nested_workflow_waits_for_lease_then_reads_stored(tmp_path, monkeypatch):
+    """A nested workflow job whose de-duplication lease another holder keeps is waited for;
+    the holder's process publishes it and releases, and the waiter then finds it under the
+    lease and settles it as ``workflow-stored`` without expanding it."""
+    store = make(tmp_path, dedupe=True)
+    expansions = count_expansions(monkeypatch)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        like = Job(Two(x=1), submitter=sub, name="two")  # the nested job's address
+        holder = store.acquire(like.checksum, like.context)
+        holder.__enter__()
+        try:
+            runner = runner_for(store, sub, Nest(x=1))
+            rnd = runner.ready()
+            assert rnd.dispatch == [] and rnd.retry_after is not None
+            assert expansions == ["Nest"]
+            # the holder's process publishes it (another store object on the root, which
+            # does not wait for the lease held here)
+            other = make(tmp_path, dedupe=False)
+            with Submitter(
+                worker="debug", store=other, cache_root=tmp_path / "other"
+            ) as osub:
+                assert osub(Two(x=1)).outputs.out == 3
+        finally:
+            holder.__exit__(None, None, None)
+        assert expansions == ["Nest", "Two"]  # the holder's computation
+        rounds = [rnd]
+        deadline = time.monotonic() + 60
+        while not runner.done:
+            assert time.monotonic() < deadline
+            time.sleep(min(rnd.retry_after or 0, 0.5))
+            rnd = runner.ready()
+            rounds.append(rnd)
+            for job in rnd.dispatch:
+                runner.complete(job, job.run())
+        assert runner.result().outputs.out == 4
+        two = runner.exec_graph["two"].job(None)
+    assert expansions == ["Nest", "Two"]
+    assert [s.how for r in rounds for s in r.settled if s.job is two] == [
+        "workflow-stored"
+    ]

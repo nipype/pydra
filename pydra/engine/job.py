@@ -381,6 +381,14 @@ class Job(ty.Generic[TaskType]):
         under a store that has one, otherwise ``_error.pklz`` in its slot."""
         return self.cache_dir / ("_error.json" if self._has_work_dir else "_error.pklz")
 
+    def _may_record_error(self, lease) -> bool:
+        """Whether a failure may be recorded beside the job: always in an attempt's own
+        work directory, which no other run writes to; in a slot, or the work directory a
+        resumable job shares across runs, only while ``lease`` is still held."""
+        if self._has_work_dir and not self.can_resume:
+            return True
+        return lease_still_held(lease)
+
     def _record_error(self, error) -> Path:
         """Record ``error`` (a formatted traceback) beside the job."""
         if self._has_work_dir:
@@ -632,8 +640,7 @@ class Job(ty.Generic[TaskType]):
                 error = exc
         if error is not None:
             traceback = format_exception(type(error), error, error.__traceback__)
-            # a work directory is the attempt's own, so no taker of the lease writes there
-            if self._has_work_dir or lease_still_held(lease):
+            if self._may_record_error(lease):
                 self._record_error(traceback)
             result.errored = True
             self._errored = True
@@ -712,7 +719,7 @@ class Job(ty.Generic[TaskType]):
                 except Exception:
                     etype, eval, etr = sys.exc_info()
                     traceback = format_exception(etype, eval, etr)
-                    if lease_still_held(lease):
+                    if self._may_record_error(lease):
                         self._record_error(traceback)
                     result.errored = True
                     raise
@@ -792,7 +799,7 @@ class Job(ty.Generic[TaskType]):
                 except Exception:
                     etype, eval, etr = sys.exc_info()
                     traceback = format_exception(etype, eval, etr)
-                    if lease_still_held(lease):
+                    if self._may_record_error(lease):
                         self._record_error(traceback)
                     result.errored = True
                     self._errored = True
