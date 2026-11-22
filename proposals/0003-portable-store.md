@@ -359,6 +359,12 @@ Other notes:
   the lease is built with `LeaseSettings(holder="anonymous")`, a new setting under which the record
   holds only the random token and the start time, and messages say "another process". Nothing in
   `leases/` names a user, a host or a job.
+- **Bounds.** `PortableStore(lease_settings=...)` takes a `LeaseSettings`, as `PickleStore` does,
+  and every lease the store takes (de-duplication, resume and rerun) uses it. The default keeps the
+  #924 bounds. The holder is forced to `"anonymous"` whatever is passed, and the bounds are checked
+  again on construction. The settings are part of the store's constructor arguments, so a worker that
+  unpickles the store uses them too. A short `stale_after` lets a resume after a crash take the dead
+  holder's lease over within that bound instead of 300 s.
 - **Paths.** `DirectoryLease` works by path (`engine/lease.py:290`), not by descriptor. The store opens
   `leases/` by descriptor at start and refuses a symlink there (§9), and the lease directory holds no
   entry data, so a lease redirected by a race below `leases/` can block or duplicate work but cannot
