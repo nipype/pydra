@@ -81,7 +81,9 @@ def absence_triples(job: "Job") -> list[tuple[str, int, str]]:
     to the fields the checksum does not hash: every field of a task with a supplied
     checksum (``__checksum__`` or ``checksum=``), else the fields with
     ``container_path``. A task whose checksum pydra computes from hashed values sees an
-    ``Absent`` through its ``cause``, so it has none.
+    ``Absent`` through its ``cause``, so it has none. Besides those the runner recorded,
+    an ``Absent`` a field holds as a constant (a node of a nested workflow given one
+    through the workflow's input) counts, at index -1 or its position in a list.
 
     Parameters
     ----------
@@ -90,17 +92,27 @@ def absence_triples(job: "Job") -> list[tuple[str, int, str]]:
     """
     from pydra.utils.general import get_fields
 
-    accepted = getattr(job, "_accepted_absent", None) or ()
-    if not accepted:
-        return []
+    if getattr(job, "_propagated_absent", None) is not None:
+        return []  # its identity is the absence record, never suffixed
     task = job.task
+    fields = get_fields(task)
     if hasattr(task, "__checksum__"):
-        unseen = None
+        unseen = {f.name for f in fields}
     else:
-        unseen = {
-            f.name for f in get_fields(task) if getattr(f, "container_path", False)
-        }
-    return sorted(t for t in accepted if unseen is None or t[0] in unseen)
+        unseen = {f.name for f in fields if getattr(f, "container_path", False)}
+    if not unseen:
+        return []
+    accepted = set(getattr(job, "_accepted_absent", None) or ())
+    recorded = {t[0] for t in accepted}
+    for name in unseen - recorded:
+        value = getattr(task, name, None)
+        if isinstance(value, Absent):
+            accepted.add((name, WHOLE, value.cause))
+        elif isinstance(value, (list, tuple)):
+            accepted.update(
+                (name, i, v.cause) for i, v in enumerate(value) if isinstance(v, Absent)
+            )
+    return sorted(t for t in accepted if t[0] in unseen)
 
 
 _RESOLVING: contextvars.ContextVar[bool] = contextvars.ContextVar(
