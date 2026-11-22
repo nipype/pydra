@@ -26,7 +26,18 @@ if ty.TYPE_CHECKING:
     from pydra.utils.resources import ComputeResources
 
 
-__all__ = ["define", "add", "this", "arg", "out", "Task", "Outputs", "cast"]
+__all__ = [
+    "define",
+    "add",
+    "this",
+    "arg",
+    "out",
+    "Task",
+    "Outputs",
+    "cast",
+    "loop",
+    "LoopOutputs",
+]
 
 
 @attrs.define
@@ -325,6 +336,135 @@ def cast(field: ty.Any, new_type: type[U]) -> U:
         type=new_type,
         cast_from=field._cast_from if field._cast_from else field._type,
     )
+
+
+class LoopOutputs:
+    """The outputs of :func:`loop`: each output of the body from the last round that ran,
+    ``rounds`` (int, the number of rounds that ran) and ``converged`` (bool, the last round
+    that ran reported ``until`` true)"""
+
+    def __init__(self, **fields: ty.Any):
+        self.__dict__.update(fields)
+
+    def __repr__(self) -> str:
+        return f"LoopOutputs({', '.join(self.__dict__)})"
+
+
+def loop(
+    body: "type[Task]",
+    *,
+    until: str,
+    max_rounds: int,
+    index: str | None = None,
+    name: str | None = None,
+    **inputs: ty.Any,
+) -> LoopOutputs:
+    """Add a bounded loop to the workflow currently being constructed, unrolled into
+    ``max_rounds`` nodes ``<name>.0 … <name>.<max_rounds - 1>`` (RFC 0002 section 2.3(d))
+
+    Round 0 takes ``inputs``. Each later round takes, for every input of ``body`` that is
+    also an output of it, the previous round's output, and the rest of ``inputs``
+    unchanged; it runs unless the previous round's ``until`` output is true. Rounds after
+    the one that reported ``until`` true complete absent and are never dispatched.
+
+    With ``index=None`` the body is taken to be a pure fixed-point iteration: a round
+    whose inputs equal those of an earlier round has its checksum and is served that
+    round's result. A body that carries nothing forward, such as a retry or a poll, must
+    name an input in ``index``, which is given the round number so every round has its
+    own checksum.
+
+    Parameters
+    ----------
+    body : type[Task]
+        The task class of one round
+    until : str
+        The name of a ``bool`` output of ``body``; the loop stops after the first round
+        where it is true
+    max_rounds : int
+        The number of rounds unrolled, at least 1
+    index : str, optional
+        An input of ``body`` given the round number, 0 for the first round
+    name : str, optional
+        The prefix of the node names, by default the name of ``body``
+    **inputs
+        The inputs of the first round, and of every round for inputs ``body`` does not
+        carry forward
+
+    Returns
+    -------
+    LoopOutputs
+        Each output of ``body`` from the last round that ran, chosen on the rounds'
+        ``until`` outputs rather than on presence, so a content ``Absent`` that round
+        returned is returned as such; plus ``rounds`` and ``converged``
+    """
+    from pydra.compose.select import select
+    from pydra.utils.general import get_fields
+
+    if name is None:
+        name = body.__name__
+    if (
+        not isinstance(max_rounds, int)
+        or isinstance(max_rounds, bool)
+        or max_rounds < 1
+    ):
+        raise ValueError(
+            f"max_rounds of loop {name!r} must be an int >= 1, not {max_rounds!r}"
+        )
+    outputs = {f.name: f.type for f in get_fields(body.Outputs)}
+    if outputs.get(until) is not bool:
+        raise ValueError(
+            f"until={until!r} of loop {name!r} must name a bool output of {body.__name__}, "
+            f"whose outputs are {outputs}"
+        )
+    in_names = {f.name for f in get_fields(body)}
+    if index is not None and index not in in_names:
+        raise ValueError(
+            f"index={index!r} of loop {name!r} must name an input of {body.__name__}, "
+            f"whose inputs are {sorted(in_names)}"
+        )
+    for reserved in ("rounds", "converged"):
+        if reserved in outputs:
+            raise ValueError(
+                f"{body.__name__} has an output named {reserved!r}, which loop {name!r} "
+                "adds itself"
+            )
+    carried = sorted((in_names & set(outputs)) - {index})
+
+    rounds = []
+    for k in range(max_rounds):
+        round_inputs = dict(inputs)
+        if index is not None:
+            round_inputs[index] = k
+        if rounds:
+            round_inputs.update({f: getattr(rounds[-1], f) for f in carried})
+        rounds.append(
+            add(
+                body(**round_inputs),
+                name=f"{name}.{k}",
+                unless=getattr(rounds[-1], until) if rounds else None,
+            )
+        )
+
+    # The last round that ran is the first whose until is true, or else the last round:
+    # a round after the one reporting true never ran, and its until is an Absent.
+    gates = [getattr(r, until) for r in rounds[:-1]] + [True]
+
+    def last_round(field: str, values: list[ty.Any]) -> ty.Any:
+        merge = select(max_rounds)(
+            **{f"when_{k}": g for k, g in enumerate(gates)},
+            **{f"value_{k}": v for k, v in enumerate(values)},
+        )
+        return add(merge, name=f"{name}.{field}").out
+
+    selected = {
+        f: cast(last_round(f, [getattr(r, f) for r in rounds]), tp)
+        for f, tp in outputs.items()
+    }
+    selected["rounds"] = cast(last_round("rounds", list(range(1, max_rounds + 1))), int)
+    selected["converged"] = cast(
+        last_round("converged", [getattr(r, until) for r in rounds]), bool
+    )
+    return LoopOutputs(**selected)
 
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
