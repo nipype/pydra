@@ -361,10 +361,13 @@ Other notes:
   `leases/` names a user, a host or a job.
 - **Bounds.** `PortableStore(lease_settings=...)` takes a `LeaseSettings`, as `PickleStore` does,
   and every lease the store takes (de-duplication, resume and rerun) uses it. The default keeps the
-  #924 bounds. The holder is forced to `"anonymous"` whatever is passed, and the bounds are checked
-  again on construction. The settings are part of the store's constructor arguments, so a worker that
-  unpickles the store uses them too. A short `stale_after` lets a resume after a crash take the dead
-  holder's lease over within that bound instead of 300 s.
+  #924 bounds. The holder is forced to `"anonymous"` whatever is passed, and the setting is fixed at
+  construction; a worker that unpickles the store uses the same one. Processes on one root may use
+  different bounds. A holder records its `stale_after` in `holder.json` (it names no one), and a
+  taker treats a lease as stale only after the larger of its own `stale_after` and the holder's; a
+  record without one, written by an older pydra, counts as the default 300 s. So a process with
+  shorter bounds never takes over a live holder, and a short `stale_after` speeds up a resume after
+  a crash only when the crashed run used it too.
 - **Paths.** `DirectoryLease` works by path (`engine/lease.py:290`), not by descriptor. The store opens
   `leases/` by descriptor at start and refuses a symlink there (§9), and the lease directory holds no
   entry data, so a lease redirected by a race below `leases/` can block or duplicate work but cannot
