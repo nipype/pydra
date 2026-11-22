@@ -5,7 +5,6 @@ import pytest
 from pydra.engine.submitter import Submitter
 from pydra.compose import python, workflow
 from fileformats.generic import File, Directory
-import time
 from pydra.engine.tests.utils import (
     FileOrIntIdentity,
     FileAndIntIdentity,
@@ -96,9 +95,9 @@ def test_input_file_hash_3(tmp_path):
     # assert id(files_hash1["in_file"][filename]) == id(files_hash2["in_file"][filename])
 
     # recreating the file
-    time.sleep(2)  # ensure mtime is different
     with open(file, "w") as f:
         f.write("hello")
+    os.utime(file, (0, file.stat().st_mtime + 10))  # distinct mtime
 
     hash3 = a._hash
     # files_hash3 = deepcopy(my_inp.files_hash)
@@ -145,10 +144,12 @@ def test_input_file_hash_4(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
-    time.sleep(2)  # need the mtime to be different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
+    os.utime(
+        file_diffcontent, (0, file_diffcontent.stat().st_mtime + 10)
+    )  # distinct mtime
     hash3 = ListOfListOfFileOrIntIdentity(in_file=[[file_diffcontent, 3]])._hash
     assert hash1 != hash3
 
@@ -178,10 +179,12 @@ def test_input_file_hash_5(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
-    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
+    os.utime(
+        file_diffcontent, (0, file_diffcontent.stat().st_mtime + 10)
+    )  # distinct mtime
     hash3 = ListOfDictOfFileOrIntIdentity(
         in_file=[{"file": file_diffcontent, "int": 3}]
     )._hash

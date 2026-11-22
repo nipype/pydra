@@ -43,6 +43,21 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("any_worker", available_workers)
 
 
+def pytest_collection_modifyitems(items):
+    """Tag the parametrisations that need a real worker, so the fast tier
+    (``-m "not slow and not real_worker and not slurm"``) only runs the debug worker"""
+    for item in items:
+        callspec = getattr(item, "callspec", None)
+        if callspec is None:
+            continue
+        for name in ("worker", "any_worker"):
+            worker = callspec.params.get(name)
+            if worker == "slurm":
+                item.add_marker(pytest.mark.slurm)
+            elif worker in ("cf", "dask"):
+                item.add_marker(pytest.mark.real_worker)
+
+
 @pytest.fixture
 def cli_runner(catch_cli_exceptions: bool) -> ty.Callable[..., ty.Any]:
     def invoke(

@@ -3,7 +3,6 @@ import os
 import sys
 from hashlib import blake2b
 from pathlib import Path
-import time
 from unittest import mock
 import attrs
 import pytest
@@ -303,7 +302,6 @@ def test_bytes_repr_type2():
     T = ty.TypeVar("T")
 
     class MyClass(ty.Generic[T]):
-
         a: int
         b: str
 
@@ -500,8 +498,10 @@ def test_persistent_hash_cache(cache_path, text_file):
     assert hash_object(text_file, persistent_cache=cache_path) == modified_hash
 
     # Test that changes to the text file result in new hash
-    time.sleep(2)  # Need to ensure that the mtimes will be different
     text_file.fspath.write_text("bar")
+    os.utime(
+        text_file.fspath, (0, text_file.fspath.stat().st_mtime + 10)
+    )  # distinct mtime
     assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
     assert len(list(cache_path.iterdir())) == 2
 
@@ -533,7 +533,6 @@ def test_persistent_hash_cache_cleanup2(cache_path, text_file):
     persistent_cache = PersistentCache(cache_path, cleanup_period=-100)
     hash_object(text_file, persistent_cache=persistent_cache)
     assert len(list(cache_path.iterdir())) == 1
-    time.sleep(2)
     persistent_cache.clean_up()
     assert len(list(cache_path.iterdir())) == 0
 
@@ -552,7 +551,6 @@ def test_unhashable():
     """
 
     class A:
-
         def __bytes_repr__(self, cache: Cache) -> ty.Generator[bytes, None, None]:
             raise TypeError("unhashable")
 
