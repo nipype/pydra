@@ -269,7 +269,12 @@ class Absent:
     elements for another reason, such as an empty list, receives an empty list. The group is
     formed wherever the combine sits: a partial node records its absent sub-states, own and
     inherited, by the coordinates they fix, so a partial node downstream that combines the
-    inner axis forms the absent group too, through any chain of partial nodes.
+    inner axis forms the absent group too, through any chain of partial nodes. When the group
+    also keeps an axis of the combining node's own static split, one absent group is formed per
+    coordinate of that axis. A group that keeps an axis inside the absent sub-state has no
+    absent group, as that sub-state has no coordinates there. A group that keeps an axis of
+    another upstream output cannot be enumerated, so it raises `AbsentGroupError`, and the node
+    never seals.
   - A read of every element holds only the elements that exist: a node split over `[[0, 1],
     Absent]` reads as `[1, 2]`, as if the absent element were not there. A read of every group
     holds the `Absent` in place of each absent group (`[[1, 2], Absent]`). Neither read is ever
