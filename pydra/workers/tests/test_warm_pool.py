@@ -8,6 +8,7 @@ a worker in another process imports them as this one does.
 
 import asyncio
 import json
+import logging
 import os
 import signal
 import stat
@@ -1273,6 +1274,210 @@ def test_failed_starts_back_off(tmp_path, tasks, pools):
         starts.append(substrate.starts)
     # a start, its failure; after poll_s the next, its failure; then 2 x poll_s
     assert starts == [1, 1, 2, 2, 2, 3]
+
+
+class RefusesStarts(NeverStarts):
+    """A substrate whose every start raises, as an ``sbatch`` the scheduler refuses does."""
+
+    def start(self, cls, n):
+        from pydra.workers.pool.substrate import SubstrateError
+
+        self.starts += 1
+        raise SubstrateError("sbatch: error: invalid partition specified: gpuq")
+
+
+class Pending(NeverStarts):
+    """A substrate whose workers stay live, never ready, until `leave` ends them."""
+
+    def start(self, cls, n):
+        handles = super().start(cls, n)
+        self.handles.extend(handles)
+        return handles
+
+    def live(self):
+        return list(self.handles)
+
+    def leave(self):
+        self.handles.clear()
+
+
+class _Events(logging.Handler):
+    """The ``pydra.pool`` records emitted while it is installed."""
+
+    def __init__(self):
+        super().__init__(logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+    def __enter__(self):
+        logging.getLogger("pydra.pool").addHandler(self)
+        return self
+
+    def __exit__(self, *exc):
+        logging.getLogger("pydra.pool").removeHandler(self)
+
+    def named(self, event: str) -> list[logging.LogRecord]:
+        return [r for r in self.records if getattr(r, "event", None) == event]
+
+
+def test_a_failed_ticket_write_puts_the_jobs_back(tmp_path, tasks, pools, monkeypatch):
+    """A ticket write that raises leaves its jobs waiting, never dropped: they are still wanted, the
+    next write puts them, and the failure is a ``write_failed`` pool event."""
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub, substrate=Recording())
+    pool.bind(lambda job, outcome: None)
+    pool._queue_jobs(_round(sub, tasks, [1, 2]), handle=None)
+    put = pool.pool.put
+    calls = []
+
+    def failing_once(queue, ticket):
+        calls.append(queue)
+        if len(calls) == 1:
+            raise OSError("No space left on device")
+        return put(queue, ticket)
+
+    monkeypatch.setattr(pool.pool, "put", failing_once)
+    with _Events() as events:
+        pool._write()
+    assert _tickets(pool.root) == []
+    assert sorted(j.job.state_index for j in pool._waiting["cpu"]) == [0, 1]
+    assert pool._demand() == {"cpu": 1}  # still wanted: a worker is started for them
+    [event] = events.named("write_failed")
+    assert "No space left on device" in event.cause and event.queue == "cpu"
+    pool._write()
+    assert sum(len(t["jobs"]) for t in _tickets(pool.root)) == 2
+    assert "cpu" not in pool._waiting
+
+
+def test_ticket_writes_that_keep_failing_hold_the_jobs(
+    tmp_path, tasks, pools, monkeypatch
+):
+    """Ticket writes that keep failing for ``fail_fast_s`` break the class: the submitter gets
+    ``NotRun(held=True)`` naming the write error, and the run ends rather than hanging.
+    """
+
+    def failing(queue, ticket):
+        raise OSError("Read-only file system")
+
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=Recording(),
+        settings=_settings(fail_fast_s=0.5),
+    )
+    monkeypatch.setattr(pool.pool, "put", failing)
+    with pytest.raises(RunIncomplete) as info:
+        _drive(sub, tasks.Many(xs=[1, 2]), pool)
+    not_run = info.value.not_run
+    assert len(not_run) == 2
+    for _, outcome in not_run:
+        assert isinstance(outcome, NotRun) and outcome.held
+        assert "Read-only file system" in outcome.reason
+
+
+def test_refused_starts_hold_the_jobs_before_the_backoff_ladder_ends(
+    tmp_path, tasks, pools
+):
+    """A class whose every start is refused has no ready worker within ``fail_fast_s``: its jobs are
+    ``NotRun(held=True)`` naming the latest start error, well before ``start_failures`` backed-off
+    starts would have broken it."""
+    import time
+
+    poll, budget = 0.5, FaultBudgets().start_failures
+    ladder = sum(
+        poll * 2**i for i in range(budget - 1)
+    )  # seconds the budget alone takes
+    sub = _submitter(tmp_path)
+    substrate = RefusesStarts()
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=substrate,
+        settings=_settings(poll_s=poll, fail_fast_s=1.0),
+    )
+    began = time.monotonic()
+    with pytest.raises(RunIncomplete) as info:
+        _drive(sub, tasks.Many(xs=[1, 2]), pool)
+    took = time.monotonic() - began
+    assert took < ladder / 4, (took, ladder)
+    assert substrate.starts < budget
+    assert len(info.value.not_run) == 2
+    for _, outcome in info.value.not_run:
+        assert isinstance(outcome, NotRun) and outcome.held
+        assert "worker class 'cpu' is broken" in outcome.reason
+        assert "invalid partition specified: gpuq" in outcome.reason
+
+
+def test_a_pending_start_is_not_cut_short(tmp_path, tasks, pools):
+    """A start still pending when ``fail_fast_s`` has passed (a slow model load, a queued Slurm job)
+    is waited for; once it too leaves without a ready mark, the class breaks at once."""
+    sub = _submitter(tmp_path)
+    substrate = Pending()
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=substrate,
+        settings=_settings(poll_s=1.0, fail_fast_s=10.0),
+    )
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    pool._queue_jobs(_round(sub, tasks, [1]), handle=None)
+    pool._write()
+    pool._scale(100.0)  # starts one
+    substrate.leave()
+    pool._scale(100.5)  # it left without a ready mark: failed start 1
+    pool._scale(102.0)  # after the backoff, a second start, which stays pending
+    assert substrate.starts == 2 and not pool._broken
+    pool._scale(150.0)  # long past fail_fast_s, but a start is pending
+    assert not pool._broken and reported == []
+    substrate.leave()
+    pool._scale(151.0)  # the pending start failed too
+    assert "cpu" in pool._broken
+    assert len(reported) == 1 and reported[0][1].held
+
+
+def test_start_and_listing_failures_are_pool_events(tmp_path, tasks, pools):
+    """A failed listing, a refused start and a broken class are each a pool event (a ``pydra.pool``
+    log record carrying ``event``), not only a warning's text."""
+
+    class ListingFails(RefusesStarts):
+        listing = True
+
+        def live(self):
+            if self.listing:
+                raise OSError("squeue: error: slurm_load_jobs error: timed out")
+            return []
+
+    sub = _submitter(tmp_path)
+    substrate = ListingFails()
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=substrate,
+        settings=_settings(poll_s=1.0, fail_fast_s=5.0),
+    )
+    pool.bind(lambda job, outcome: None)
+    pool._queue_jobs(_round(sub, tasks, [1]), handle=None)
+    pool._write()
+    with _Events() as events:
+        pool._scale(100.0)
+        substrate.listing = False
+        pool._scale(101.0)
+        pool._scale(110.0)
+    [listing] = events.named("listing_failed")
+    assert "timed out" in listing.cause
+    started = events.named("start_failed")
+    assert "invalid partition" in started[0].cause
+    assert started[0].worker_class == "cpu" and started[0].failures == 1
+    [broken] = events.named("class_broken")
+    assert broken.worker_class == "cpu" and "invalid partition" in broken.cause
 
 
 def test_served_result_read_without_the_visibility_wait(

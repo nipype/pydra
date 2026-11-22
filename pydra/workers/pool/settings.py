@@ -58,6 +58,11 @@ class PoolSettings:
         the coordinator's process, on a thread of its own: that process needs the task's
         providers, its dependencies and, for a GPU task, a device (a re-check it cannot run is
         recorded as not run). A worker-side re-check is a follow-up.
+    fail_fast_s : float, optional
+        Seconds a worker class with work may go on failing before it is broken and its jobs are
+        ``NotRun(held=True)`` with the latest error, ahead of the ``start_failures`` budget: its
+        starts failing with no ready worker of the class and no start pending, or its ticket writes
+        failing. None: only the fault budgets break a class.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -72,6 +77,7 @@ class PoolSettings:
     target_wall_s: float = attrs.field(default=600.0, validator=_positive)
     unmeasured_workers: int = attrs.field(default=1, validator=_positive)
     recheck_fraction: float = attrs.field(default=0.0, validator=_fraction)
+    fail_fast_s: float | None = attrs.field(default=120.0, validator=_positive)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)
