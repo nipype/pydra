@@ -347,7 +347,8 @@ class Absent:
   named) is given `k+1`, and every other input is the loop's. Nothing is constructed for a round before
   the round before it has returned `False`, so the cost of a loop is the rounds it runs. `until` is read
   by the runner and must resolve to a `bool` or an `Absent`, as a gate must (§2.3(b)); anything else
-  fails the loop job with a `GateTypeError` naming the loop, `until` and the round. The loop's
+  fails the loop job with a `GateTypeError` naming the loop, `until` and the round; on a root the
+  runner does not own, it becomes an entry of the run, as it would for an owned root. The loop's
   `construct()` builds a new workflow on every call and is never cached, because the runner grows it.
 - **`carry`** maps a body input to the body output that feeds it in the next round. Left unset it is
   the inputs and outputs that share a name. A pair whose types do not match, a name that matches
@@ -382,11 +383,15 @@ class Absent:
   (`"error"` included), and `done` waits for that report. `plan()` lists a loop not yet entered as
   `deferred` and an entered one as `looping`, with the rounds done, its `max_rounds` if any and no
   element total, followed by its live rounds; `plan()` never adds a round. One `ready()` adds at most
-  64 rounds to a loop, so a loop replayed from the store returns to its driver between them.
-- **Memory.** The runner holds the two newest rounds of a loop and releases older ones, with their jobs,
-  their entries in its tables and, for a round that is a workflow, its frame; their results stay in the
-  store. Released under a store that commits nothing (a test harness), a round repeated by a cycle of
-  length two or more is computed again before the cycle stop. `runner.upstream(job)` is therefore valid
+  `MAX_ADVANCES` (`pydra.engine.loop`, 64) rounds to each loop, so a loop replayed from the store
+  returns to its driver between them. The cap is per loop: a split of n replayed loops may settle n
+  times as many rounds in one call, as a wide stored node settles all its elements in one call.
+- **Memory.** Between calls of `ready()` the runner holds the two newest rounds of a loop; older
+  rounds are released at the end of the call that superseded them, after its records (a workflow
+  round's absent nodes and unrunnable elements included) are collected, with their jobs, their entries
+  in its tables and, for a round that is a workflow, its frame. Their results stay in the store. Under a
+  store that commits nothing (a test harness), a round repeated by a cycle of length two or more whose
+  first occurrence was released in an earlier call is computed again before the cycle stop. `runner.upstream(job)` is therefore valid
   from the job's hand-out until its outcome is reported.
 - **Limits.** `body` must be a task class, so it carries no splitter of its own; a body that splits is
   a workflow that combines before `until`. Rounds of different elements' loops are separate dispatch
