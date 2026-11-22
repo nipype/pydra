@@ -412,52 +412,67 @@ class NodeExecution(ty.Generic[TaskType]):
         accepted : list[tuple[str, int, str]]
             The ``(field, element index, cause)`` of every accepted or dropped ``Absent``
         """
+        # step 1, the gates, read before any data input is resolved: a gated-off
+        # element is never looked up, shared or committed, nor are its data coerced
+        reads = {}
+        gates = {n: v for n, v in self.node.gates.items() if isinstance(v, bool)}
+        data = []
+        for name, value, state_index in self._lazy_reads(index):
+            reads[name] = (value, state_index)
+            if name not in self.node.gates:
+                data.append(name)
+                continue
+            gates[name] = value._get_value(
+                workflow=self.workflow, graph=self.graph, state_index=state_index
+            )
+        for name, value in gates.items():
+            if not isinstance(value, (bool, Absent)):
+                raise GateTypeError(
+                    f"The gate {name[1:]!r} of node {self.name!r} resolved to a "
+                    f"{type(value).__name__} ({value!r}): a gate must be a bool or an "
+                    "Absent, not a reference to one"
+                )
+            if isinstance(value, Absent):
+                absent, how, cause = value, "absent", value.cause
+            elif value is not (name == "_when"):
+                path = "/".join((*self.path, self.name))
+                absent, how, cause = (
+                    Absent(NOT_ROUTED, source=path),
+                    "gated",
+                    NOT_ROUTED,
+                )
+            else:
+                continue
+            # the task keeps its static inputs, and its data inputs, which are never
+            # read, hold the Absent it completes with
+            with resolving():
+                task = attrs.evolve(self.node._task, **dict.fromkeys(data, absent))
+            identity = absence_identity(
+                task_definition(task),
+                self._producer(reads.get(name), WHOLE),
+                (name, WHOLE, cause),
+            )
+            return task, (absent, identity, how), []
         resolved = {}
         combined = set()
-        reads = {}
-        # a gate given as a bool is known at construction; a lazy one is read below
-        gates = {n: v for n, v in self.node.gates.items() if isinstance(v, bool)}
         with resolving():
             if index is not None:
                 vals = self.state.states_val[index]
                 for name in self.node.input_names:
                     if (state_key := f"{self.name}.{name}") in vals:
                         resolved[name] = vals[state_key]
-            for name, value, state_index in self._lazy_reads(index):
-                reads[name] = (value, state_index)
-                read = value._get_value(
+            for name in data:
+                value, state_index = reads[name]
+                resolved[name] = value._get_value(
                     workflow=self.workflow, graph=self.graph, state_index=state_index
                 )
-                if name in self.node.gates:
-                    gates[name] = read
-                    continue
-                resolved[name] = read
                 if self._reads_combined(value, state_index):
                     combined.add(name)
             task = attrs.evolve(self.node._task, **resolved)
-        # step 1, the gates: a gated-off element is never looked up, shared or committed
         propagated = None
-        for name, value in gates.items():
-            if isinstance(value, Absent):
-                propagated = (name, WHOLE, value)
-                break
-            if not isinstance(value, bool):
-                raise GateTypeError(
-                    f"The gate {name[1:]!r} of node {self.name!r} resolved to a "
-                    f"{type(value).__name__} ({value!r}): a gate must be a bool or an "
-                    "Absent, not a reference to one"
-                )
-            if value is not (name == "_when"):
-                absent = Absent(NOT_ROUTED, source="/".join((*self.path, self.name)))
-                identity = absence_identity(
-                    task_definition(task),
-                    self._producer(reads.get(name), WHOLE),
-                    (name, WHOLE, absent.cause),
-                )
-                return task, (absent, identity, "gated"), []
         # step 2, propagation of Absent inputs
         accepted, dropped = [], {}
-        for field in get_fields(task) if propagated is None else []:
+        for field in get_fields(task):
             value = getattr(task, field.name)
             mode = getattr(field, "absent", None) or (
                 "accept" if field.name in combined else "propagate"

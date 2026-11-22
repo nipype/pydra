@@ -61,6 +61,12 @@ def Inc(a: int) -> int:
 
 
 @python.define
+def Bad(x: int) -> ty.Any:
+    """A payload of the wrong type, as a probe step gives when it fails"""
+    return "not-an-int"
+
+
+@python.define
 def Dec(a: int) -> int:
     return a - 1
 
@@ -229,6 +235,28 @@ def test_gate_precedes_absence(submitter):
     assert d.result.outputs.out.cause == "not-routed"
 
 
+@workflow.define
+def GatedOverMistypedData(x: int) -> int:
+    c = workflow.add(Check(x=x), name="C")
+    b = workflow.add(Bad(x=x), name="B")
+    d = workflow.add(Inc(a=b.out), name="D", when=c.out)
+    return d.out
+
+
+def test_gated_off_data_never_coerced(submitter):
+    """A gated-off element waits for its data upstreams but never resolves their values"""
+    runner = runner_for(submitter, GatedOverMistypedData(x=-1))
+    rnd = runner.ready()
+    for job in rnd.dispatch:  # C and B
+        runner.complete(job, run_inline(job))
+    rnd = runner.ready()
+    assert not runner.errors  # D's data is not resolved, so it cannot fail coercion
+    assert [(s.job.name, s.how) for s in rnd.settled] == [("D", "gated")]
+    assert rnd.settled[0].result.outputs.out.cause == "not-routed"
+    result = submitter(GatedOverMistypedData(x=-1))
+    assert result.outputs.out.cause == "not-routed"
+
+
 def test_gated_off_never_looked_up(tmp_path):
     store = CountingStore(tmp_path / "cache")
     with Submitter(worker="debug", store=store) as sub:
@@ -346,6 +374,24 @@ def test_select_first_true_and_none(submitter):
     assert submitter(Route(x=3)).outputs.out == 4
     assert submitter(Route(x=-3)).outputs.out == -4
     assert submitter(Route(x=0)).outputs.out.cause == "not-routed"
+
+
+def test_select_pickles_and_reloads():
+    """The callable module pickles by reference and survives a reload"""
+    import importlib
+
+    import cloudpickle as cp
+
+    import pydra.compose.select as module
+
+    assert cp.loads(cp.dumps(select)) is module
+    assert cp.loads(cp.dumps(select(2))) is select(2)
+    reloaded = importlib.reload(module)
+    assert (
+        cp.loads(cp.dumps(reloaded)) is reloaded
+    )  # still callable, still by reference
+    fields = set(attrs.fields_dict(reloaded(2)))
+    assert {"when_0", "when_1", "value_0", "value_1"} <= fields
 
 
 def test_select_passes_content_absent(submitter):

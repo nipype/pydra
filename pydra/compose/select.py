@@ -65,7 +65,12 @@ def select(n: int) -> "type[python.Task]":
 
 
 class _CallableModule(types.ModuleType):
-    """Lets ``pydra.compose.select`` be called as ``select(n)``"""
+    """Lets ``pydra.compose.select`` be called as ``select(n)``.
+
+    ``pydra.compose`` is a namespace package that other distributions extend, so it has
+    no ``__init__`` that could bind the function there; the module's class is swapped
+    instead. ``from pydra.compose.select import select`` also works.
+    """
 
     def __call__(self, n: int) -> "type[python.Task]":
         return select(n)
