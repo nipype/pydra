@@ -27,7 +27,12 @@ from pathlib import Path
 import attrs
 import cloudpickle as cp
 
-from pydra.engine.lease import DirectoryLease, LeaseSettings
+from pydra.engine.lease import (
+    HOLDER_FILE,
+    DirectoryLease,
+    LeaseSettings,
+    holder_stale_after,
+)
 from pydra.engine.portable.entry import (
     CorruptEntry,
     EntryFormat,
@@ -102,6 +107,7 @@ _RERANKS = 4
 _REPARSE = 0x400
 _WORK = "work"
 _LEASES = "leases"
+_LEASE_TOKEN = re.compile(r"^[0-9a-f]{32}$")  # a holder's directory in a lease
 _RESUME = "resume-"  # a resumable job's work directory, named as its lease
 _AUDIT = "audit"
 _COMMITTED = "_committed.json"
@@ -380,7 +386,10 @@ class PortableStore:
     lease_settings : LeaseSettings, optional
         How the store's leases (de-duplication, resume and rerun) beat, age and wait; see
         `~pydra.engine.lease.LeaseSettings`. The holder is always ``"anonymous"``: an entry
-        is portable, so its lease names no user, host or pid. Default ``LeaseSettings()``.
+        is portable, so its lease names no user, host or pid. A lease is stale only after
+        the larger of this ``stale_after`` and the one its holder recorded, so a process with
+        shorter bounds never takes over a live holder. Default ``LeaseSettings()``; read-only
+        after construction.
     """
 
     def __init__(
@@ -442,7 +451,7 @@ class PortableStore:
         self.on_commit = on_commit
         self.visibility_timeout = VISIBILITY_TIMEOUT
         self._work_policy = attrs.evolve(policy, verify_files="digest")
-        self.lease_settings = lease_settings
+        self._lease_settings = lease_settings
         self._make_root()
         expected = LayoutHeader.for_store(
             identity,
@@ -497,6 +506,11 @@ class PortableStore:
 
     def __reduce__(self) -> tuple:
         return (_rebuild, (self._args,))
+
+    @property
+    def lease_settings(self) -> LeaseSettings:
+        """The bounds of the store's leases, holder ``"anonymous"``; fixed at construction."""
+        return self._lease_settings
 
     def __repr__(self) -> str:
         return f"PortableStore({self.path!r}, trust={self.trust!r})"
@@ -1547,18 +1561,41 @@ class PortableStore:
                 self._sweep(work, e, age, now, report)
 
     def _lease_live(self, root: StorageDir, name: str, now: float) -> bool:
-        """Whether the lease ``<root>/leases/<name>.lock`` exists and was renewed within its
-        ``stale_after``; one that cannot be read is taken as live."""
+        """Whether the lease ``<root>/leases/<name>.lock`` exists and was renewed within the
+        larger of this store's ``stale_after`` and its holder's; one that cannot be read is
+        taken as live."""
         try:
             with root.child(_LEASES) as leases:
                 newest = self._newest_in(leases, f"{name}.lock")
+                record = self._holder_record(leases, f"{name}.lock")
         except (FileNotFoundError, WrongKindError):
             return False
         except OSError:
             return True
         if newest is None:  # not a directory: not a lease this store takes
             return False
-        return now - newest < self.lease_settings.stale_after
+        return now - newest < holder_stale_after(
+            record, self.lease_settings.stale_after
+        )
+
+    @staticmethod
+    def _holder_record(leases: StorageDir, name: str) -> dict | None:
+        """The holder record of the lease ``name``, or None if none can be read."""
+        try:
+            with leases.child(name) as lease:
+                for e in sorted(lease.scandir(), key=lambda e: e.name):
+                    if not _LEASE_TOKEN.match(e.name):
+                        continue
+                    try:
+                        with lease.child(e.name) as t, t.open_read(HOLDER_FILE) as f:
+                            record = json.loads(f.read())
+                    except (OSError, ValueError, WrongKindError):
+                        continue
+                    if isinstance(record, dict):
+                        return record
+        except (OSError, WrongKindError):
+            pass
+        return None
 
     @staticmethod
     def _newest_in(parent: StorageDir, name: str) -> float | None:

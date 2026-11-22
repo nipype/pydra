@@ -19,11 +19,12 @@ import typing as ty
 import uuid
 from pathlib import Path
 
+import attrs
 import pytest
 
 from pydra.compose import python
 from pydra.engine.job import Job
-from pydra.engine.lease import LeaseSettings, _describe
+from pydra.engine.lease import LeaseSettings, LeaseTimeout, _describe
 from pydra.engine.portable.entry import CorruptEntry, EntryNotTrusted
 from pydra.engine.portable.layout import cdir_for
 from pydra.engine.portable.store import PortableStore
@@ -535,13 +536,18 @@ def test_no_dedupe_lease_is_always_held(tmp_path):
         assert (tmp_path / "root" / "leases").is_dir() and lease.prove()
 
 
-def _plant_dead_holder(lockfile: Path) -> None:
-    """Leave the lease a crashed process held: a token directory nothing renews."""
+def _plant_dead_holder(lockfile: Path, stale_after: float | None) -> None:
+    """Leave the lease a crashed process held: a token directory nothing renews, whose
+    record carries ``stale_after`` (none, as an older pydra wrote it, if None)."""
     token_dir = lockfile / ("f" * 32)
     token_dir.mkdir(parents=True)
-    (token_dir / "holder.json").write_text(
-        json.dumps({"token": "f" * 32, "started": time.time()})
-    )
+    record = {"token": "f" * 32, "started": time.time()}
+    if stale_after is not None:
+        record["stale_after"] = stale_after
+    (token_dir / "holder.json").write_text(json.dumps(record))
+
+
+SHORT = LeaseSettings(stale_after=0.5, timeout=1, attribute_delay=0)
 
 
 def test_lease_settings_bound_takeover_of_a_dead_holder(tmp_path):
@@ -549,12 +555,61 @@ def test_lease_settings_bound_takeover_of_a_dead_holder(tmp_path):
     settings = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
     store = make(tmp_path, dedupe=True, lease_settings=settings)
     lease = store.acquire("python-abc", CTX)
-    _plant_dead_holder(lease.lockfile)
+    _plant_dead_holder(lease.lockfile, stale_after=0.5)
     start = time.monotonic()
     with lease:
         assert lease.held
         assert len(lease.broke) == 1
     assert time.monotonic() - start < 5  # the default would wait out 300 s
+
+
+def test_lease_settings_mixed_bounds_spare_a_live_holder(tmp_path):
+    """A process with shorter bounds does not take over a live holder that renews on
+    longer ones: it judges the lease by the holder's recorded ``stale_after``."""
+    a = make(tmp_path, dedupe=True)  # renews every 30 s
+    b = make(tmp_path, dedupe=True, lease_settings=attrs.evolve(SHORT, max_wait=1.5))
+    held = a.acquire("python-abc", CTX)
+    with held:
+        time.sleep(1.0)
+        # collect under the short bounds sees the lease as live (before prove renews it)
+        name = held.lockfile.name[: -len(".lock")]
+        with b._open() as root:
+            assert b._lease_live(root, name, time.time())
+        with pytest.raises(LeaseTimeout):
+            with b.acquire("python-abc", CTX):
+                pass
+        assert held.prove()
+
+
+def test_lease_settings_dead_holder_taken_over_after_the_longer_bound(tmp_path):
+    """A dead holder that recorded a longer ``stale_after`` is taken over after it, not
+    after the taker's, and the taker waits for it past its own ``timeout``."""
+    store = make(tmp_path, dedupe=True, lease_settings=SHORT)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=2.0)
+    start = time.monotonic()
+    with lease:
+        assert len(lease.broke) == 1
+    assert 2.0 <= time.monotonic() - start < 6
+
+
+def test_lease_settings_unrecorded_holder_judged_by_the_default(tmp_path):
+    """A holder an older pydra wrote, with no recorded bounds, is judged by the default
+    ``stale_after``, so short bounds do not take it over."""
+    store = make(
+        tmp_path, dedupe=True, lease_settings=attrs.evolve(SHORT, max_wait=1.5)
+    )
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=None)
+    with pytest.raises(LeaseTimeout):
+        with lease:
+            pass
+
+
+def test_lease_settings_read_only(tmp_path):
+    store = make(tmp_path)
+    with pytest.raises(AttributeError):
+        store.lease_settings = LeaseSettings(holder="named")
 
 
 def test_lease_settings_holder_forced_anonymous(tmp_path):
@@ -568,7 +623,9 @@ def test_lease_settings_holder_forced_anonymous(tmp_path):
     lease = store.acquire("python-abc", CTX)
     with lease:
         (holder,) = lease.lockfile.rglob("holder.json")
-        assert set(json.loads(holder.read_text())) == {"started", "token"}
+        record = json.loads(holder.read_text())
+        assert record == {**record, "stale_after": 10}
+        assert set(record) == {"started", "token", "stale_after"}
     # and on the copy a worker unpickles
     worker = pickle.loads(pickle.dumps(store))
     assert worker.lease_settings == settings
@@ -587,7 +644,12 @@ def test_lease_settings_invalid_bounds_raise(tmp_path):
 
 def test_lease_settings_default_unchanged(tmp_path):
     store = make(tmp_path)
-    assert store.lease_settings == LeaseSettings()
+    assert store.lease_settings.to_json() == {
+        "stale_after": 300.0,
+        "renew_fraction": 0.1,
+        "attribute_delay": 60.0,
+        "timeout": 600.0,
+    }
     assert store.lease_settings.holder == "anonymous"
     assert store.lease_settings.max_wait is None
     assert store.acquire("python-abc", CTX).settings is store.lease_settings
@@ -605,7 +667,7 @@ def test_anonymous_lease_holder_names_no_user(tmp_path):
         assert len(files) == 1
         text = files[0].read_text()
         record = json.loads(text)
-        assert set(record) == {"started", "token"}
+        assert set(record) == {"started", "token", "stale_after"}
         for secret in (getpass.getuser(), socket.gethostname(), str(os.getpid())):
             assert secret not in text.replace(record["token"], "")
         assert "python-abc" not in "".join(

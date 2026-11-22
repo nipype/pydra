@@ -158,9 +158,11 @@ class Lease(ty.Protocol):
 class LeaseSettings:
     """How a `DirectoryLease` beats, ages and waits.
 
-    A holder renews its lease every ``renew_fraction * stale_after`` seconds. Another
-    process takes the lease over once the newest mark the holder left is older than
-    ``stale_after`` on the storage clock.
+    A holder renews its lease every ``renew_fraction * stale_after`` seconds and records
+    its ``stale_after``. Another process takes the lease over once the newest mark the
+    holder left is older than the larger of its own ``stale_after`` and the holder's
+    (`holder_stale_after`) on the storage clock, so shorter bounds never take over a live
+    holder that runs on longer ones.
 
     A waiter behind a holder that keeps renewing waits for as long as the holder runs,
     as it would for any job it needs. ``timeout`` counts only time in which no renewal
@@ -211,8 +213,9 @@ class LeaseSettings:
         keeps renewing; None (default) for no cap.
     holder : {"named", "anonymous"}
         What the holder record names. ``"named"`` (default) writes the owner, host and pid;
-        ``"anonymous"`` writes only the token and the start time, and messages say "another
-        process", so nothing in the lease directory names a user, a host or a job.
+        ``"anonymous"`` writes only the token, the start time and ``stale_after``, and
+        messages say "another process", so nothing in the lease directory names a user,
+        a host or a job.
 
     Two settings are equal when their four staleness fields are (``stale_after``,
     ``renew_fraction``, ``attribute_delay``, ``timeout``); ``max_wait`` caps one
@@ -293,6 +296,22 @@ class LeaseSettings:
 _SETTINGS_FIELDS = ("stale_after", "renew_fraction", "attribute_delay", "timeout")
 
 
+def holder_stale_after(record: dict | None, own: float) -> float:
+    """The ``stale_after`` to judge a holder by: the larger of ``own`` and the one its
+    record carries. A record without one (an older pydra wrote it) counts as the default
+    `STALE_AFTER`; with no record at all, ``own``."""
+    if not isinstance(record, dict):
+        return own
+    recorded = record.get("stale_after", STALE_AFTER)
+    if (
+        isinstance(recorded, bool)
+        or not isinstance(recorded, (int, float))
+        or not 0 < recorded < float("inf")
+    ):
+        recorded = STALE_AFTER
+    return max(own, float(recorded))
+
+
 def _owner() -> str:
     try:
         return getpass.getuser()
@@ -358,10 +377,11 @@ class DirectoryLease:
 
     The lease is the directory ``lockfile``. Of the processes making it, one succeeds
     and holds the lease; it records itself in ``<lockfile>/<token>/holder.json``
-    (owner, host, pid and start time) under a random token. A heartbeat thread renews
+    (owner, host, pid, start time and ``stale_after``) under a random token. A heartbeat thread renews
     the lease every ``settings.renew_interval`` by making and removing an entry in the
     token directory. Another process takes the lease over once the newest mtime in it
-    is older than ``settings.stale_after``, measured on the storage server's clock (the
+    is older than ``settings.stale_after`` or the holder's recorded one, whichever is
+    larger, measured on the storage server's clock (the
     mtime of a file just created beside the lease), never this host's. Takeover renames
     the holder's token directory, so of several processes taking one lease over exactly
     one succeeds, and a holder that was taken over finds out at its next heartbeat or
@@ -427,6 +447,7 @@ class DirectoryLease:
     _refused: OSError | None = attrs.field(default=None, init=False, repr=False)
     _unreadable_since: float | None = attrs.field(default=None, init=False, repr=False)
     _deadline: float = attrs.field(default=0.0, init=False, repr=False)
+    _restarted: float = attrs.field(default=0.0, init=False, repr=False)
     _cap: float | None = attrs.field(default=None, init=False, repr=False)
     _delay: float = attrs.field(default=POLL_MIN, init=False, repr=False)
     _waiting: bool = attrs.field(default=False, init=False, repr=False)
@@ -517,6 +538,7 @@ class DirectoryLease:
         self._newest_seen, self._refused, self._delay = None, None, POLL_MIN
         self._unreadable_since = None
         now = self.monotonic()
+        self._restarted = now
         self._deadline = now + self.settings.timeout
         max_wait = self.settings.max_wait
         self._cap = now + max_wait if max_wait is not None else None
@@ -553,7 +575,11 @@ class DirectoryLease:
             except OSError:
                 pass
             return False
-        record = {"started": os.stat(token_dir).st_mtime, "token": token}
+        record = {
+            "started": os.stat(token_dir).st_mtime,
+            "token": token,
+            "stale_after": self.settings.stale_after,
+        }
         if self.settings.holder == "named":
             record = {
                 "owner": _owner(),
@@ -654,7 +680,17 @@ class DirectoryLease:
         self._last_seen = (holder, age)
         if not self._judgeable(unreadable, now):
             return False
-        if age <= self.settings.stale_after:
+        stale_after = holder_stale_after(holder, self.settings.stale_after)
+        if stale_after > self.settings.stale_after:
+            # wait for a dead holder with longer bounds as long as for one with ours
+            self._deadline = max(
+                self._deadline,
+                self._restarted
+                + self.settings.timeout
+                + stale_after
+                - self.settings.stale_after,
+            )
+        if age <= stale_after:
             return False
         tokens = [e for e in entries if _TOKEN.match(e)]
         if tokens:
@@ -837,7 +873,8 @@ class DirectoryLease:
         """Note the newest mark in the lease; restart the wait's bound if it advanced,
         since the holder has then been shown alive."""
         if self._newest_seen is not None and newest > self._newest_seen:
-            self._deadline = self.monotonic() + self.settings.timeout
+            self._restarted = self.monotonic()
+            self._deadline = self._restarted + self.settings.timeout
             self._refused = None
         if self._newest_seen is None or newest > self._newest_seen:
             self._newest_seen = newest
