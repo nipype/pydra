@@ -205,6 +205,12 @@ class Absent:
   in declaration order. Its `cause` is unchanged, and `source` keeps the node that produced it. A
   `"drop"` field on a combined value receives the list without its absent elements. `"accept"` passes
   the value as resolved.
+- **A propagated job has no task checksum.** Its checksum is the absence record, so no `checksum=`
+  hook ever receives an `Absent`: the task type, `-absent-` and the digest of the reader's task
+  definition (its executor and `Outputs` class, hashed as the checksum hashes them, without inputs),
+  the unsuffixed checksum of the job the `Absent` was read from, and the `(field, element index,
+  cause)` triple. Two tasks reading one `Absent` differ; one task reading it at several elements
+  has one identity, as its results are equal. Pickling such a job reads no context and no store.
 - **Absence the checksum may not see.** A field whose value pydra does not hash (the
   `container_path` exclusion at `compose/base/task.py:561`), and every field of a task with a
   supplied checksum (`__checksum__` or `checksum=`, `:489-507`), could change from a value to an
@@ -241,7 +247,11 @@ class Absent:
   hook or by building from the suffixed checksum (§3.5).
 - **Splitter inputs.** A splitter input that resolves to an `Absent` gives the node no elements.
   The node is absent as a whole, and a reader of it receives that `Absent` rather than an empty
-  `StateArray`, so absence is distinguishable from an empty list. Today a splitter over an upstream
+  `StateArray`, so absence is distinguishable from an empty list. A node whose state inherits that
+  node's is absent as a whole too, with the same `Absent`. A combining reader receives the
+  `Absent` and applies its mode: `"accept"` passes it, `"drop"` gives an empty list, `"propagate"`
+  completes the reader absent. Such nodes have no elements and so no `Settled`; they are reported
+  in `Round.absent_nodes` (§3.1). Today a splitter over an upstream
   output is resolved once the whole upstream is done (`start`, `submitter.py:1039-1075`). Per
   element, after E2, each upstream element's `Absent` gives that element's sub-state no elements.
   This case is specified with E2 and implemented after it (§4.3).
@@ -383,13 +393,23 @@ on a real job raises, as the run would; on a stand-in the worker is None. `PlanN
 under a rerun, as `ready()` skips the store then. The router is called once per node, so a stateful
 router sees these calls. Cost: one checksum per formable element, and one `expected_hits(jobs)` call
 (`PickleStore`: a single listing of its record directory) or one existence check per element.
+Elements that would complete absent (§2.3(a)) are counted in `PlanNode.absent`; they are not routed,
+placed or looked up. A node that would be absent as a whole is listed with `state="absent"` and no
+elements.
 
 @attrs.frozen
 class Round:
     dispatch: list[Job]           # each handed out once; job.rerun and job.attempt already set
     settled: list[Settled]        # completed inside this call, never dispatched
     unrunnable: list[Unrunnable]  # marked unrunnable inside this call
+    absent_nodes: list[AbsentNode]  # found absent as a whole inside this call, each once
     retry_after: float | None     # seconds until a waiting workflow lease is tried again
+
+@attrs.frozen
+class AbsentNode:
+    node: str                     # the node's workflow path and name
+    absent: Absent                # what every read of it receives
+    inherits: str | None          # the node whose absence its state inherits; None at the origin
 
 @attrs.frozen
 class Settled:
@@ -788,10 +808,10 @@ A system that runs jobs its own way, for example by passing references rather th
 runner = GraphRunner(task, store, on_error="raise_at_end", lookup_before_dispatch=True)
 while not runner.done:
     rnd = runner.ready()
-    record(rnd.settled, rnd.unrunnable)          # stored, shared, gated, absent; blocked
+    record(rnd.settled, rnd.unrunnable, rnd.absent_nodes)  # ...; blocked; absent nodes
     for job in rnd.dispatch:
         send(job, runner.upstream(job))          # which upstream jobs fed each input
-    if rnd.settled or rnd.unrunnable:
+    if rnd.settled or rnd.unrunnable or rnd.absent_nodes:
         continue                                 # their readers may be ready now
     for job, outcome in receive(timeout=rnd.retry_after):  # returns empty on timeout
         runner.complete(job, outcome)
@@ -808,8 +828,11 @@ What such a driver must and need not supply:
   type coercion accepts for any declared type is a follow-up.
 - **Every settled job is visible** in `Round.settled`, with how and, for absences, the cause, and
   every element blocked by a failure in `Round.unrunnable`, with the upstream nodes that blocked
-  it. A driver can therefore log every node as run, reused, typed-absent or blocked without the
-  audit hook.
+  it. A node absent as a whole has no job; it is reported once in `Round.absent_nodes`, with its
+  `Absent` and the node it inherits from, so following `inherits` from each entry rebuilds every
+  absent subgraph from the rounds alone. A driver can therefore log every node as run, reused,
+  typed-absent or blocked without the audit hook. A round with only absent nodes is progress, as
+  one with only settled jobs is: the driver calls `ready()` again.
 - **It must not block without a bound.** `receive` waits at most `retry_after` when that is set,
   because a workflow job waiting for its lease is advanced only by a later `ready()` (§3.1). A
   driver with nothing in flight and `retry_after` set is waiting, not stuck; it calls `stuck()`
