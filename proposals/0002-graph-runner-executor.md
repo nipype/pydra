@@ -72,7 +72,7 @@ jobs. The rest of this RFC does not refer to senselab.
 ## 2. The first question: can `State` and the graph express routing, conditional nodes, loops and typed absent values?
 
 A pipeline system layered on pydra wants, per node: typed ports, nesting, fan-out and gather,
-routing on a recorded predicate, bounded loops with distinct ids per round, and a typed absent value
+routing on a recorded predicate, loops with distinct ids per round, and a typed absent value
 that is not a failure. This section answers from the code which of these pydra has.
 
 ### 2.1 What pydra has
@@ -120,6 +120,9 @@ that is not a failure. This section answers from the code which of these pydra h
   type until a condition on its inputs holds. Nothing in the code prevents or supports it: no bound,
   no per-round naming, and each round is visible only after the previous one has run. A search of
   the test names on this branch found no recursive-workflow test; the tests were not read one by one.
+  Written that way, round `k` holds `k` open nested workflows, `k` leases and a work-directory path
+  `k` levels deep, and nothing is released until the innermost round returns. §2.3(d) adds a loop
+  whose rounds the runner instantiates one at a time inside one workflow job.
 - **No absent value.** The only "no value" in the engine is `attrs.NOTHING` for workflow outputs
   that the constructor has not yet set (`engine/workflow.py:136-138`, `:165-182`); it never flows
   along an edge. An upstream element either succeeds or fails. A failed element makes every reader
@@ -158,8 +161,9 @@ that is not a failure. This section answers from the code which of these pydra h
 ### 2.3 Proposal
 
 Gates and absent values change readiness and completion, so they belong where `ready()` and
-`complete()` live: in the runner. Loops and merges change only what is constructed, so they are
-helpers in `compose` over the gate. The `State` class itself does not change. The node's
+`complete()` live: in the runner. Merges change only what is constructed, so `select(n)` is a
+helper in `compose` over the gate. A loop is a workflow job whose graph the runner grows one round
+at a time, inside that job's frame only (§2.3(d)). The `State` class itself does not change. The node's
 upstream-state collection, its lazy reads and the graph's edges do (§2.3(b)). E2 is a `State`
 change and stays as 0001 plans it.
 
@@ -333,33 +337,77 @@ class Absent:
   (`submitter.py:1153-1157`); a variadic or list-of-lazy input is not. Nested-lazy resolution would
   remove the need and is not proposed here.
 
-**(d) Bounded loops, unrolled at construction: `workflow.loop(body, until="done", max_rounds=n, index=None)`.**
-- A helper in `compose/workflow.py`, not a runner feature. `until` names a `bool` output of `body`.
-  The helper adds `n` copies of `body` named `<name>.0` … `<name>.<n-1>` and wires round `k`'s
-  inputs from round `k-1`'s outputs. It gates round `k > 0` with `unless=<round k-1>.done`, so no
-  negation node is needed. A round whose predecessor was gated off reads `Absent` inputs and
-  propagates.
-- **Identity per round.** Node names differ per round; checksums need not. A round whose carried
-  outputs equal its inputs has the checksum of the round before. The helper offers two contracts:
-  - `index="<field>"`: the round number is passed to that input of `body`, so every round has its
-    own checksum. A retry or poll body, which carries nothing forward, must use this.
-  - `index=None`: the loop is a fixed-point iteration of a pure body. Equal rounds are equal
-    computations, so folding them onto one checksum is correct, and the loop's documentation says
-    so.
-- **Outputs.** The helper returns the body's outputs from the last round that ran, chosen with
-  `Select` on the gates (not on presence, so a last round that returns a content `Absent` is
-  returned as such). It adds `rounds` (int) and `converged` (bool: the last round that ran had
-  `done` true), so exhausting `max_rounds` is distinguishable from convergence.
-- Unused rounds complete absent at step 1 and cost one release each.
-- An unbounded loop stays what it is today: a nested workflow that constructs itself again. It is
-  not a static graph, and `plan()` marks it deferred.
+**(d) Loops, instantiated at run time: `workflow.loop(body, until="done", carry=None, index=None, max_rounds=None)`.**
+- `loop` returns a task class. Its inputs are `body`'s (without `index`); its outputs are `body`'s, with
+  their types, plus `rounds` (int), `converged` (bool) and `stopped` (str). Added to a workflow it is one
+  node: it can be split, gated and read like any other, and under a split there is one loop per element.
+- **Rounds.** The loop is a workflow job. The runner expands it with one node, `r0`, a copy of `body`
+  given the loop's inputs. When round `k` is done and its `until` output is `False`, the runner adds
+  `r<k+1>` to that job's graph: each `carry` input reads the named output of round `k`, `index` (if
+  named) is given `k+1`, and every other input is the loop's. Nothing is constructed for a round before
+  the round before it has returned `False`, so the cost of a loop is the rounds it runs. `until` is read
+  by the runner and must resolve to a `bool` or an `Absent`, as a gate must (§2.3(b)); anything else
+  fails the loop job with a `GateTypeError` naming the loop, `until` and the round. The loop's
+  `construct()` builds a new workflow on every call and is never cached, because the runner grows it.
+- **`carry`** maps a body input to the body output that feeds it in the next round. Left unset it is
+  the inputs and outputs that share a name. A pair whose types do not match, a name that matches
+  nothing, and an empty carry without `index` are refused at construction.
+- **Identity.** A round is an ordinary job: its checksum is `body`'s over that round's resolved inputs,
+  and it passes the precedence rule of §2.3(b) like any element. Two contracts:
+  - `index="<field>"`: the round number is an input, so every round has its own checksum. A retry or
+    poll body, which carries nothing forward, must use this.
+  - `index=None`: the loop iterates a pure body. A round whose inputs equal an earlier round's has its
+    checksum and is served its result.
+
+  The loop job has its own checksum, over its inputs, `body`'s definition and the loop's parameters
+  (`until`, `carry`, `index`, `max_rounds`, environment). A rerun of a finished loop is served whole
+  from that slot; where the slot is missing, each round is served from its own and the next is
+  instantiated from it. The runner keeps no loop state between runs.
+- **Stopping.** The loop ends after the first round for which one of these holds, tested in order:
+  `until` is an `Absent` (`stopped="absent"`); `until` is `True` (`"until"`); under `index=None`, the
+  round's checksum equals an earlier round's of this loop (`"cycle"`: the loop's state repeats from
+  here, so `until` can never become true; a fixed point is the case of length one, and a poll that
+  forgot its `index` stops after two rounds); `max_rounds` is set and reached (`"max-rounds"`).
+  `max_rounds` is optional and is only a stop: no graph, plan or store structure is sized by it. A
+  round that fails fails the loop job, whose error is the round's. A round reported `NotRun` leaves the
+  loop open until `retry`.
+- **Outputs.** `body`'s outputs are those of the last round instantiated. `converged` is that round's
+  `until` as returned: `True`, `False`, or the `Absent` with its cause. `rounds` is the number of
+  rounds instantiated, less a last round that completed absent by propagation. A carried `Absent`
+  reaches the next round through an ordinary lazy read, so the reading field's `absent` mode decides
+  whether that round runs. A gated-off loop is never entered: every output, `rounds`, `converged` and
+  `stopped` included, is `Absent("not-routed")`.
+- **What a driver sees.** Each round is in `Round.dispatch` or `Round.settled` under the loop's path as
+  `r<k>`. A loop that ends is reported once in `Round.loops` with its rounds and why it stopped
+  (`"error"` included), and `done` waits for that report. `plan()` lists a loop not yet entered as
+  `deferred` and an entered one as `looping`, with the rounds done, its `max_rounds` if any and no
+  element total, followed by its live rounds; `plan()` never adds a round. One `ready()` adds at most
+  64 rounds to a loop, so a loop replayed from the store returns to its driver between them.
+- **Memory.** The runner holds the two newest rounds of a loop and releases older ones, with their jobs,
+  their entries in its tables and, for a round that is a workflow, its frame; their results stay in the
+  store. Released under a store that commits nothing (a test harness), a round repeated by a cycle of
+  length two or more is computed again before the cycle stop. `runner.upstream(job)` is therefore valid
+  from the job's hand-out until its outcome is reported.
+- **Limits.** `body` must be a task class, so it carries no splitter of its own; a body that splits is
+  a workflow that combines before `until`. Rounds of different elements' loops are separate dispatch
+  groups, so they are not batched together; a loop whose rounds should batch across elements (one GPU
+  call over many recordings per round) puts the split inside a workflow `body` with an aggregate
+  `until`, and per-element early exit inside it is a gate on the element. One loop holds one workflow
+  lease for its whole life; under `PickleStore` a split of n loops holds n heartbeat threads, as n
+  nested workflows do.
 
 **Rejected:**
 - Routing as a splitter over a predicate inside `State`. The empty split already does this
   (§2.1), behind the same E2 barrier as any split over an upstream output; making it a `State`
   feature adds nothing the idiom lacks except what gates add without a `State` change.
-- A runner-native loop node. It needs a graph that grows during execution. Unrolling gives the same
-  semantics for bounded loops with a static graph, and leaves the runner's invariants unchanged.
+- Unrolling `max_rounds` copies at construction (the first R11). Memory and `plan()` cost grow with
+  the bound rather than with the rounds run, a loop over a split needs a merge across n rounds of one
+  state, and a while condition without a meaningful bound cannot be written. Since R6 and E2 the
+  runner already adds frames and blocks during a run; a loop adds rounds only inside the frame of its
+  own job, so no graph that a reader is wired into changes.
+- A loop as a nested workflow that contains a gated copy of itself (tail recursion). Round `k` holds
+  `k` open frames and leases, the path grows by one level per round, and nothing is released until
+  the innermost round returns.
 
 ## 3. The interface
 
@@ -411,7 +459,9 @@ router sees these calls. Cost: one checksum per formable element, and one `expec
 Elements that would complete absent (§2.3(a)) are counted in `PlanNode.absent`, and elements a gate
 switches off in `PlanNode.gated`, read from the predicate's result (§2.3(b)); neither is routed,
 placed or looked up. A node that would be absent as a whole is listed with `state="absent"` and no
-elements.
+elements. An entered loop (§2.3(d)) is listed as one entry with `state="looping"`,
+`PlanNode.rounds` (the rounds done so far), `PlanNode.max_rounds` and `elements=None`, followed by
+its live rounds; no round is instantiated by `plan()`.
 
 @attrs.frozen
 class Round:
@@ -419,7 +469,14 @@ class Round:
     settled: list[Settled]        # completed inside this call, never dispatched
     unrunnable: list[Unrunnable]  # marked unrunnable inside this call
     absent_nodes: list[AbsentNode]  # found absent as a whole inside this call, each once
+    loops: list[LoopClosed]       # loops that ended inside this call, each once (§2.3(d))
     retry_after: float | None     # seconds until a waiting workflow lease is tried again
+
+@attrs.frozen
+class LoopClosed:
+    loop: str                     # the loop job's path, element index or key included
+    rounds: int                   # as the loop's `rounds` output
+    stopped: Literal["until", "max-rounds", "cycle", "absent", "error"]
 
 @attrs.frozen
 class AbsentNode:
@@ -532,7 +589,9 @@ resolved from (`NodeExecution._upstream`, `submitter.py:1179-1196`), so a driver
 them from values. It lists data inputs only: a gate (§2.3(b)) is not an input of the task a driver
 sends, so it is not listed. It stays a 2-tuple after E2: the index is `None` when the upstream is unsealed
 or read whole, and the element's key is `job.state_key`. `Round.settled` is unchanged too;
-`Settled.job` carries `state_key`.
+`Settled.job` carries `state_key`. It is valid from the job's hand-out until its outcome is reported:
+a loop releases its older rounds (§2.3(d)), and `upstream()` of a job the runner no longer holds
+raises a `LookupError` naming it.
 
 **`stuck()`.** When `ready()` returns nothing, nothing is in flight, `retry_after` is `None` and
 `done` is false, the driver calls `stuck()`. It returns today's diagnosis (`submitter.py:634-701`)
@@ -825,10 +884,10 @@ A system that runs jobs its own way, for example by passing references rather th
 runner = GraphRunner(task, store, on_error="raise_at_end", lookup_before_dispatch=True)
 while not runner.done:
     rnd = runner.ready()
-    record(rnd.settled, rnd.unrunnable, rnd.absent_nodes)  # ...; blocked; absent nodes
+    record(rnd.settled, rnd.unrunnable, rnd.absent_nodes, rnd.loops)  # ...; loops ended
     for job in rnd.dispatch:
         send(job, runner.upstream(job))          # which upstream jobs fed each input
-    if rnd.settled or rnd.unrunnable or rnd.absent_nodes:
+    if rnd.settled or rnd.unrunnable or rnd.absent_nodes or rnd.loops:
         continue                                 # their readers may be ready now
     for job, outcome in receive(timeout=rnd.retry_after):  # returns empty on timeout
         runner.complete(job, outcome)
@@ -850,8 +909,9 @@ What such a driver must and need not supply:
   absent subgraph from the rounds alone. A driver can therefore log every node as run, reused,
   typed-absent, gated or blocked without the audit hook. `runner.done` stays false while any such
   record is unreported (a twin shared by the last `complete()` is settled after every node is
-  done), so the loop above sees every one. A round with only absent nodes is progress, as
-  one with only settled jobs is: the driver calls `ready()` again.
+  done), so the loop above sees every one. A round with only absent nodes, or only loops that
+  ended, is progress, as one with only settled jobs is: the driver calls `ready()` again. Each round
+  of a loop is an ordinary job, and a loop that ends is reported once in `Round.loops`.
 - **It must not block without a bound.** `receive` waits at most `retry_after` when that is set,
   because a workflow job waiting for its lease is advanced only by a later `ready()` (§3.1). A
   driver with nothing in flight and `retry_after` set is waiting, not stuck; it calls `stuck()`
@@ -900,7 +960,8 @@ What such a driver must and need not supply:
   nested workflow; equal-checksum jobs in different nested workflows run once.
 - **New and opt-in:** `GraphRunner`, `Round`, `Unrunnable`, `Outcome`, `Executor`, `Lease.try_take`,
   `ResultStore.read_succeeded` (optional), `RunIncomplete`, `Absent`, `absent=`, `when=`/`unless=`,
-  `select(n)`, `workflow.loop`.
+  `select(n)`, `workflow.loop`, `Round.loops`/`LoopClosed`, `PlanNode.rounds`/`max_rounds` and
+  the `"looping"` plan state.
 - **Changed internals:** `Submitter.expand_workflow`, `expand_workflow_async`,
   `get_runnable_tasks`, `fetch_finished` and `NodeExecution` move into `pydra.engine.runner`.
   `compose/workflow.py:388-394` calls the runner instead.
@@ -932,7 +993,7 @@ additions behind them.
 | E2 | partial `State` (0001 §3.1 step 2): per-element release of nested fan-out, `state_key`, the `"expansion"` phase and `Unrunnable.key`/`block`, including an `Absent` splitter input per element | R1 | 0001's; barrier kept for the six shapes of §2.2; corrects the ragged, empty, combined-source, mixed-scalar and static-combine cases (#945), whose checksums change; the `test_readiness` resplit and bad-input tests change expectations to keys |
 | R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the absence suffix for supplied checksums and unhashed fields; whole-node absence for a splitter input. A single value that is an `Absent` propagates under `"drop"` (it has no elements to drop); a combined read of a wholly absent node is that `Absent`, so `"drop"` gives an empty list. A whole-value `Absent` has element index -1 in its triple | R6, E2 | opt-in |
 | R10b | `when=`/`unless=`: node inputs, upstream states, lazy reads and edges; the precedence rule, with the gate read before data inputs are resolved; `Settled(how="gated")`, the gated-job identity and `PlanNode.gated`; a `bool` or an `Any`-typed lazy gate checked when read; `select(n)` (`pydra.compose.select`, a callable module, as `pydra.compose` is a namespace package; `from pydra.compose.select import select` also works) | R10a | opt-in |
-| R11 | `workflow.loop` with `index=`, `rounds`, `converged` | R10b | opt-in |
+| R11 | `workflow.loop` as a runtime while-loop: a `LoopTask` whose frame the runner grows one round at a time; `carry=`, `index=`, optional `max_rounds`; outputs `rounds`, `converged`, `stopped`; the cycle stop; a two-round memory window; `Round.loops`, `PlanNode.rounds`/`max_rounds` and state `"looping"`; `GraphRunner.done` waits for an open loop on an unowned root | R6, R10b, E2 | opt-in |
 
 RFC 0003's P8 depends on R4, which passes `Result.committed` through. Its P4 changes how
 `Job.result()` reads (§3.3), which the R3 adapter uses unchanged. The `find` and `attempt` parts of
@@ -976,6 +1037,6 @@ behaviours named.
   cancellation and infrastructure holds, and should `retry(job)` be public?
 - Does a run identity (an epoch passed to executors, so that a restarted coordinator can fence the
   old one's jobs) belong in the `Executor` protocol, or in the pool plugin (I)?
-- Should `workflow.loop` and `select` live in pydra or in a downstream package?
+- Should `select` live in pydra or in a downstream package? (`workflow.loop` needs the runner, so it lives in pydra.)
 - Should the deprecated `Submitter` methods be kept for one alpha, or removed in R2, given the 1.0
   alpha status?
