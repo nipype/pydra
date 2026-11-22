@@ -851,12 +851,16 @@ class NodeExecution(ty.Generic[TaskType]):
         # predecessor nodes can't be used until the State class can be partially
         # initialised with lazy-fields.
         if True:  # self.node.splitter:
+            # ``done`` refreshes each predecessor's status, so it is read before
+            # ``errored`` so that a predecessor that has just failed is not seen as
+            # done-and-successful, which would try to resolve its missing outputs
+            preds_done = [p.done for p in predecessors]
             if unrunnable := [p for p in predecessors if p.errored or p.unrunnable]:
                 self.unrunnable = {None: unrunnable}
                 self.blocked = {}
                 assert self.done
             else:
-                if all(p.done for p in predecessors):
+                if all(preds_done):
                     if not self.started:
                         self.start()
                     if self.node.state is None:

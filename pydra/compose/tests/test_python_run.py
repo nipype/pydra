@@ -819,6 +819,7 @@ def test_output_spec_func_4():
     assert outputs.out_list == 3.5
 
 
+@pytest.mark.real_worker
 def test_functask_callable(tmpdir):
     # no submitter or worker
     foo = FunAddTwo(a=1)
