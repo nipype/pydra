@@ -333,6 +333,12 @@ class Arg(Field):
         If True the input field can’t be provided by the user but it aggregates other
         input fields (for example the fields with argstr: -o {fldA} {fldB}), by default
         it is False
+    absent: "propagate" | "accept" | "drop" | None, optional
+        What the field does with a :class:`~pydra.engine.absent.Absent` value:
+        ``"propagate"`` completes the element absent without running it, ``"accept"``
+        passes the value as resolved, ``"drop"`` passes a combined value without its
+        absent elements. By default (None) a field that reads a single value propagates
+        and one that reads a combined value accepts
     """
 
     allowed_values: frozenset = attrs.field(factory=frozenset, converter=frozenset)
@@ -340,6 +346,12 @@ class Arg(Field):
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
     readonly: bool = False
+    absent: ty.Literal["propagate", "accept", "drop"] | None = attrs.field(
+        default=None,
+        validator=attrs.validators.optional(
+            attrs.validators.in_(("propagate", "accept", "drop"))
+        ),
+    )
 
     def _additional_descriptors(self, **kwargs) -> list[str]:
         """Get additional descriptors for the field"""

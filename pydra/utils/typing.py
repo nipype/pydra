@@ -225,9 +225,11 @@ class TypeParser(ty.Generic[T]):
             `coercible`/`not_coercible` parameters, then a TypeError is raised
         """
 
+        from pydra.engine.absent import Absent
+
         coerced: T
-        if obj is attrs.NOTHING:
-            coerced = attrs.NOTHING  # type: ignore[assignment]
+        if obj is attrs.NOTHING or isinstance(obj, Absent):
+            coerced = obj  # type: ignore[assignment]
         elif is_lazy(obj):
             try:
                 self.check_type(obj._type)
@@ -283,13 +285,23 @@ class TypeParser(ty.Generic[T]):
 
     def coerce(self, object_: ty.Any) -> T:
         """Attempts to coerce the given object to the type of the specified type"""
+        from pydra.engine.absent import Absent
+
         if self.pattern is None:
             return object_
+        # An Absent passes as the elements of a sequence (a combined value), one level deep
+        top_level_absent = (
+            {id(o) for o in object_ if isinstance(o, Absent)}
+            if isinstance(object_, (list, tuple, StateArray))
+            else set()
+        )
 
         def expand_and_coerce(obj, pattern: ty.Union[type, tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
             if obj is attrs.NOTHING:
                 return attrs.NOTHING
+            if id(obj) in top_level_absent:
+                return obj
             if not isinstance(pattern, tuple):
                 return coerce_basic(obj, pattern)
             origin, pattern_args = pattern

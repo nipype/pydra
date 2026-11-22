@@ -18,9 +18,13 @@ import attrs
 from pydra.engine.graph import DiGraph
 from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
+from pathlib import Path
 from pydra.engine.job import Job
+from pydra.engine.absent import WHOLE, Absent
 from pydra.engine.lease import LeaseLost
-from pydra.utils.general import is_workflow
+from pydra.engine.result import Result
+from pydra.utils.general import get_fields, is_workflow
+from pydra.utils.typing import StateArray
 
 logger = logging.getLogger("pydra.submitter")
 
@@ -28,7 +32,6 @@ if ty.TYPE_CHECKING:
     from pydra.compose.base import Task, Outputs
     from pydra.engine.node import Node
     from pydra.engine.plan import Plan
-    from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
     from pydra.engine.store import ResultStore
     from pydra.engine.workflow import Workflow
@@ -113,6 +116,11 @@ class NodeExecution(ty.Generic[TaskType]):
 
     graph: DiGraph["NodeExecution"] | None
 
+    # The jobs completed absent and not yet collected by the runner
+    _absent: list["Job[TaskType]"]
+    # The Absent a splitter input resolved to, which leaves the node no elements
+    absent: "Absent | None"
+
     # Descriptions of input-resolution errors not yet collected by ``Submitter``
     _resolution_errors: list[str]
     _resolution_entries: "list[JobErrorEntry]"
@@ -143,6 +151,8 @@ class NodeExecution(ty.Generic[TaskType]):
         self._resolution_errors = []
         self._resolution_entries = []
         self._progress = None
+        self._absent = []
+        self.absent = None
 
     @property
     def state(self):
@@ -187,8 +197,9 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def _new_job(self, index: int | None) -> "Job[TaskType]":
         """The job of an element, formed without being kept (:meth:`job` keeps it)"""
+        task, propagated, accepted = self._resolve(index)
         job = Job(
-            task=self._split_task(index),
+            task=task,
             submitter=self.submitter,
             environment=self.node._environment,
             name=self.node.name,
@@ -197,11 +208,14 @@ class NodeExecution(ty.Generic[TaskType]):
             state_index=index,
         )
         job.workflow_path = self.path
+        job._accepted_absent = accepted
+        job._propagated_absent = propagated
         return job
 
     def start(self) -> None:
         """Prepare the state of the node and record, for each of its elements, the
         upstream elements it reads"""
+        indices: range | list[int | None]
         if self.state:
             values = {}
             for name, value in self.node.state_values.items():
@@ -212,13 +226,20 @@ class NodeExecution(ty.Generic[TaskType]):
                         values[name] = value._get_value(
                             workflow=self.workflow, graph=self.graph
                         )
-                        if isinstance(value, LazyOutField):
-                            _check_splittable(self.name, name, values[name])
                     else:
                         values[name] = value
-            self.state.prepare_states(values)
-            self.state.prepare_inputs()
-            indices = range(len(self.state.states_ind))
+                    if isinstance(values[name], Absent):
+                        # absent as a whole: no elements, and readers get the Absent
+                        self.absent = values[name]
+                        break
+                    if isinstance(value, LazyOutField):
+                        _check_splittable(self.name, name, values[name])
+            if self.absent is not None:
+                indices = []
+            else:
+                self.state.prepare_states(values)
+                self.state.prepare_inputs()
+                indices = range(len(self.state.states_ind))
         else:
             indices = [None]
         self._tasks = dict.fromkeys(indices)
@@ -335,7 +356,32 @@ class NodeExecution(ty.Generic[TaskType]):
         index : int or None
             The state index of the element, None if the node has no state
         """
+        return self._resolve(index)[0]
+
+    def _resolve(
+        self, index: int | None
+    ) -> tuple["Task[OutputType]", Absent | None, list[tuple[str, int, str]]]:
+        """Resolve the task of one element, applying each input field's ``absent`` mode
+        (RFC 0002 section 2.3(a))
+
+        Parameters
+        ----------
+        index : int or None
+            The state index of the element, None if the node has no state
+
+        Returns
+        -------
+        task : Task
+            The element's task, a ``"drop"`` field's combined value without its absent
+            elements
+        propagated : Absent or None
+            The ``Absent`` the element completes with, of the first propagating field in
+            declaration order, None if it runs
+        accepted : list[tuple[str, int, str]]
+            The ``(field, element index, cause)`` of every accepted or dropped ``Absent``
+        """
         resolved = {}
+        combined = set()
         if index is not None:
             vals = self.state.states_val[index]
             for name in self.node.input_names:
@@ -345,7 +391,47 @@ class NodeExecution(ty.Generic[TaskType]):
             resolved[name] = value._get_value(
                 workflow=self.workflow, graph=self.graph, state_index=state_index
             )
-        return attrs.evolve(self.node._task, **resolved)
+            if self._reads_combined(value, state_index):
+                combined.add(name)
+        task = attrs.evolve(self.node._task, **resolved)
+        propagated, accepted, dropped = None, [], {}
+        for field in get_fields(task):
+            value = getattr(task, field.name)
+            mode = getattr(field, "absent", None) or (
+                "accept" if field.name in combined else "propagate"
+            )
+            if isinstance(value, Absent):
+                if mode != "accept":  # a whole value has no elements to drop
+                    propagated = value
+                    break
+                accepted.append((field.name, WHOLE, value.cause))
+            elif field.name in combined and isinstance(value, (list, StateArray)):
+                where = [i for i, v in enumerate(value) if isinstance(v, Absent)]
+                if not where:
+                    continue
+                if mode == "propagate":
+                    propagated = value[where[0]]
+                    break
+                accepted.extend((field.name, i, value[i].cause) for i in where)
+                if mode == "drop":
+                    dropped[field.name] = type(value)(
+                        v for v in value if not isinstance(v, Absent)
+                    )
+        if propagated is not None:
+            return task, propagated, []
+        if dropped:
+            task = attrs.evolve(task, **dropped)
+        return task, None, accepted
+
+    def _reads_combined(self, value: LazyField, state_index: int | None) -> bool:
+        """Whether a lazy input reads a combined value, a list of upstream elements,
+        rather than one element's value"""
+        if not isinstance(value, LazyOutField):
+            return False
+        upstream = self.graph.node(value._node.name)
+        return bool(upstream.state) and (
+            bool(upstream.state.combiner) or state_index is None
+        )
 
     def _upstream(
         self, index: int | None
@@ -443,9 +529,15 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def _release(self, index: int | None) -> None:
         """Queue the job of an element whose upstream elements have all succeeded, or
-        record the element as errored if its inputs cannot be resolved from them"""
+        record the element as errored if its inputs cannot be resolved from them. An
+        element whose propagating input holds an ``Absent`` completes absent at once: it
+        is never looked up, shared, dispatched or committed."""
         try:
-            job = self.queued[index] = self.job(index)
+            job = self.job(index)
+            if job._propagated_absent is not None:
+                self._complete_absent(job)
+                return
+            self.queued[index] = job
             job._awaiting_run = True
         except Exception as exc:
             name = self.name if index is None else f"{self.name}({index})"
@@ -456,6 +548,27 @@ class NodeExecution(ty.Generic[TaskType]):
             self._resolution_entries.append(
                 error_entry(self.name, index, exc, phase="resolution")
             )
+
+    def _complete_absent(self, job: "Job[TaskType]") -> None:
+        """Complete a job with the ``Absent`` it propagates as every output"""
+        absent = job._propagated_absent
+        outputs = job.task.Outputs(
+            **{f.name: absent for f in get_fields(job.task.Outputs)}
+        )
+        job._held = Result(
+            cache_dir=Path(job.cache_root),
+            outputs=outputs,
+            task=job.task,
+            stored=False,
+        )
+        job._awaiting_run = False
+        self.successful[job.state_index] = job
+        self._absent.append(job)
+
+    def pop_absent(self) -> list["Job[TaskType]"]:
+        """The jobs completed absent since the last call"""
+        jobs, self._absent = self._absent, []
+        return jobs
 
     def pop_resolution_errors(
         self, entries: "list[JobErrorEntry] | None" = None
@@ -598,7 +711,9 @@ class Settled:
         ``"stored"`` (its result was read from the store), ``"shared"`` (it has the
         checksum of a job that was handed out, whose outcome it takes),
         ``"workflow-stored"`` (a workflow job whose stored result was used, so it was not
-        expanded); ``"gated"`` and ``"absent"`` are reserved for gates and absent values
+        expanded), ``"absent"`` (a propagating input held an ``Absent``, which is every
+        output of its result; it was never looked up, shared or committed); ``"gated"``
+        is reserved for gates
     result : Result
         Its result
     """
@@ -1082,7 +1197,13 @@ class GraphRunner:
                 self._try_lease(frame)
             if frame.state != "expanding":
                 continue
-            for job in self._runnable_jobs(frame.graph):
+            jobs = self._runnable_jobs(frame.graph)
+            for node in frame.graph.nodes:
+                for job in node.pop_absent():
+                    self._handed.add(job)
+                    self._frame_of[job] = frame
+                    self._settled.append(Settled(job, "absent", job._held))
+            for job in jobs:
                 if is_workflow(job.task):
                     self._enter(job, frame)
                 else:

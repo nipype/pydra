@@ -41,7 +41,9 @@ class LazyField(ty.Generic[T], metaclass=abc.ABCMeta):
         the lazy-field"""
         from pydra.utils.typing import TypeParser
 
-        if self._cast_from:
+        from pydra.engine.absent import Absent
+
+        if self._cast_from and not isinstance(value, Absent):
             assert TypeParser.matches(value, self._cast_from)
             value = self._type(value)
         return value
@@ -219,7 +221,9 @@ class LazyOutField(LazyField[T]):
         # Get the execution node that the value is coming from
         upstream_node = graph.node(self._node.name)
 
-        if not upstream_node._tasks:  # No jobs, return empty state array
+        if not upstream_node._tasks:  # No jobs: the node's Absent, or an empty array
+            if upstream_node.absent is not None:
+                return upstream_node.absent
             return StateArray()
         if not upstream_node.state:  # Return the singular job
             value = retrieve_from_job(upstream_node.job(None))
