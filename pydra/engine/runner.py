@@ -995,6 +995,8 @@ class _Frame:
         self.workflow: "Workflow | None" = None
         self.graph: "DiGraph[NodeExecution] | None" = None
         self.retry_at: float | None = None
+        # whether ``find(job)`` was asked before the lease, which was then taken at once
+        self.checked: bool = False
         self.errors: list[str] = []
         self.entries: list[JobErrorEntry] = []
 
@@ -1181,7 +1183,25 @@ class GraphRunner:
         if job in self._child or job in self._handed:
             return
         job.rerun = self._inner_rerun
-        if not job.rerun and self._read_succeeded([job]) == []:
+        find = getattr(self.store, "find", None)
+        checked = False
+        if not job.rerun and find is not None:
+            # RFC 0002 section 3.1: the store check by ``find(job)``, before the lease
+            try:
+                found = find(job)
+            except Exception as exc:  # unreadable: checked again under the lease
+                logger.debug("Looking up %s before its lease: %s", job.checksum, exc)
+            else:
+                checked = True
+                result = self._accept(job, found)
+                if result is not None:
+                    job.hooks.pre_run(job)
+                    job._cached_result = result
+                    job._awaiting_run = False
+                    self._handed.add(job)
+                    self._settled.append(Settled(job, "workflow-stored", result))
+                    return
+        elif not job.rerun and self._read_succeeded([job]) == []:
             # stored with a success record: complete without a lease
             self._settled.append(Settled(job, "workflow-stored", job._cached_result))
             return
@@ -1192,6 +1212,7 @@ class GraphRunner:
         else:
             label = job.name
         frame = _Frame(job, parent, parent.path + (label,), owned=True)
+        frame.checked = checked
         self._child[job] = frame
         self._frames.append(frame)
         try:
@@ -1210,10 +1231,11 @@ class GraphRunner:
             return
         if delay is not None:
             frame.retry_at = now + delay
+            frame.checked = False  # another process may publish it meanwhile
             return
         job = frame.job
         rerun = self.rerun if frame.parent is None else job.rerun
-        if not rerun:
+        if not rerun and not frame.checked:
             try:
                 result = self._stored_workflow(job)
             except Exception as exc:

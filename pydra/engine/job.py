@@ -632,7 +632,8 @@ class Job(ty.Generic[TaskType]):
                 error = exc
         if error is not None:
             traceback = format_exception(type(error), error, error.__traceback__)
-            if lease_still_held(lease):
+            # a work directory is the attempt's own, so no taker of the lease writes there
+            if self._has_work_dir or lease_still_held(lease):
                 self._record_error(traceback)
             result.errored = True
             self._errored = True
