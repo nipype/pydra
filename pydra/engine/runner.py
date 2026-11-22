@@ -224,6 +224,9 @@ class NodeExecution(ty.Generic[TaskType]):
         self._absent = []
         self.absent = None
         self.absent_inherits = None
+        # the split inputs of a barrier node that read an Absent upstream element as an
+        # empty sub-state, each with the upstream node
+        self._emptied: dict[str, str] = {}
 
     @property
     def state(self):
@@ -353,6 +356,11 @@ class NodeExecution(ty.Generic[TaskType]):
         """Prepare the state of the node and record, for each of its elements, the
         upstream elements it reads"""
         indices: range | list[int | None]
+        try:
+            self._check_absent_combine()
+        except AbsentGroupError as exc:
+            self._fail_node(exc)
+            return
         if self.state:
             # a node whose state inherits one of a wholly absent node is absent too
             for upstream in self.state.other_states or {}:
@@ -423,6 +431,48 @@ class NodeExecution(ty.Generic[TaskType]):
                     )
             self.blocked[index] = upstream
 
+    def _absent_axes(self) -> dict[str, tuple[bool, str]]:
+        """The split inputs, of this node or of a node its state inherits, along which an
+        upstream element's ``Absent`` left a sub-state empty. Each maps to whether a
+        reader combining it forms the absent group (a chain of partial nodes does) and
+        the upstream node whose element was absent"""
+        axes = {name: (False, source) for name, source in self._emptied.items()}
+        if self.is_partial:
+            for ident, _, record in self._partial.absent:
+                if ident[0] == "block":
+                    for name, lf in self._partial.spec.inner.items():
+                        axes.setdefault(name, (True, lf._node.name))
+        for upstream in (self.state.other_states or {}) if self.state else ():
+            node = self.graph.node(upstream)
+            for name, (formed, source) in node._absent_axes().items():
+                formed = formed and node.is_partial
+                if axes.get(name, (True,))[0]:
+                    axes[name] = (formed, source)
+        return axes
+
+    def _check_absent_combine(self) -> None:
+        """Refuse a combine that keeps a group only an absent sub-state of an upstream
+        node would fill, when this node cannot form that group and give its reader the
+        ``Absent`` (it, or a node between, is not partial): raises ``AbsentGroupError``
+        """
+        state = self.state
+        if not state or not state.combiner or not state.splitter_rpn_final:
+            return
+        axes = {}
+        for upstream in state.other_states or {}:
+            node = self.graph.node(upstream)
+            for name, (formed, source) in node._absent_axes().items():
+                formed = formed and node.is_partial and self.is_partial
+                if axes.get(name, (True,))[0]:
+                    axes[name] = (formed, source)
+        for name in state.combiner:
+            if name in axes and not axes[name][0]:
+                raise AbsentGroupError(
+                    f"Node {self.name!r} combines {name!r}, along which an element of "
+                    f"{axes[name][1]!r} is an Absent: the reader of that element's group "
+                    "must receive the Absent, and only a chain of partial nodes forms it"
+                )
+
     def _check_barrier(self, values: dict) -> None:
         """Refuse what today's ``State`` gets silently wrong: a ragged or mixed inner
         input, an inner source that is combined, an upstream element that is an
@@ -447,7 +497,7 @@ class NodeExecution(ty.Generic[TaskType]):
             )
             if emptied:
                 if self.state.combiner:
-                    raise PydraStateError(
+                    raise AbsentGroupError(
                         f"Node {self.name!r} splits {name!r} over an upstream element of "
                         f"{source.name!r} that is an Absent and combines "
                         f"{self.state.combiner}: a reader of that element's absent "
@@ -457,6 +507,8 @@ class NodeExecution(ty.Generic[TaskType]):
                 # an absent sub-state is an empty one (in place: ``State`` reads it)
                 items = [[] if isinstance(i, Absent) else i for i in items]
                 values[name] = type(values[name])(items)
+                if not self.is_partial:  # a partial node forms its absent groups
+                    self._emptied[name] = source.name
             kinds = {len(i) if is_sequence(i) else None for i in items}
             if len(kinds) > 1:
                 note = " (an Absent upstream element is empty)" if emptied else ""
@@ -518,6 +570,11 @@ class NodeExecution(ty.Generic[TaskType]):
         if _has_succeeded(self, spec):
             return "ok"
         return "pending"
+
+    def _absent_substates(self) -> list:
+        """Each absent sub-state of a partial node, own or inherited, with the fields it
+        fixes in the node's path space and its ``(Absent, producer)``"""
+        return self._partial.absent if self.is_partial else []
 
     def _failed_blocks(self) -> list[tuple[ty.Any, dict]]:
         """Each failed or errored block of a partial node, own or inherited, with the
@@ -956,7 +1013,13 @@ class NodeExecution(ty.Generic[TaskType]):
                 elif mode == "error":
                     self._fail_node(self._mode_error)
                 elif mode == "partial":
-                    self._partial.start()
+                    try:
+                        self._check_absent_combine()
+                    except AbsentGroupError as exc:
+                        self._mode, self._partial = "error", None
+                        self._fail_node(exc)
+                    else:
+                        self._partial.start()
                 elif mode == "static" or all(preds_done):
                     self.start()
         if not self.started:
@@ -1059,6 +1122,12 @@ def _check_splittable(node: str, state_key: str, value: ty.Any) -> None:
         f"{type(value).__name__} ({value!r}): a value a splitter splits over must be a "
         "real sequence, not a reference to one"
     )
+
+
+class AbsentGroupError(PydraStateError):
+    """A combine that would keep the group of an upstream element whose output is an
+    ``Absent`` (RFC 0002 section 2.3(a)), on a path that cannot give that group's reader
+    the ``Absent``: a barrier node, or a node that is not partial, lies between"""
 
 
 class GateTypeError(TypeError):

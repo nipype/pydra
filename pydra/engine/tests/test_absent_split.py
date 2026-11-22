@@ -359,3 +359,77 @@ def test_barrier_reader_of_an_absent_substate(submitter):
     assert submitter(BarrierReader(ns=[-1])).outputs.out == []
     _, message = failed_with(submitter, BarrierReader(ns=[2, -1]), "C")
     assert "'C'" in message and "unequal lengths [0, 2]" in message
+
+
+# -- a combine downstream of the node whose sub-state is absent (review r1, I2, I3) ---------------------
+
+
+@workflow.define(outputs=["groups", "summary"])
+def PartialThenCombine(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(Ident().split("x", x=a.out), name="B")
+    c = workflow.add(Ident(x=b.out).combine("B.x"), name="C")
+    s = workflow.add(Summarize(vals=c.out), name="S")
+    return c.out, s.out
+
+
+@workflow.define(outputs=["groups", "summary", "dropped", "count"])
+def PartialChainThenCombine(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(Ident().split("x", x=a.out), name="B")
+    c = workflow.add(Inc(a=b.out), name="C")
+    d = workflow.add(Ident(x=c.out).combine("B.x"), name="D")
+    s = workflow.add(Summarize(vals=d.out), name="S")
+    g = workflow.add(GatherDrop(vals=d.out), name="G")
+    p = workflow.add(GatherPropagate(vals=d.out), name="P")
+    k = workflow.add(Count(vals=p.out), name="K")
+    return d.out, s.out, g.out, k.out
+
+
+def test_downstream_partial_combine_forms_the_absent_group(submitter):
+    out = submitter(PartialThenCombine(ns=[-1])).outputs
+    assert (out.groups, out.summary) == ([NO_LIST], ["absent:no-list"])
+    out = submitter(PartialThenCombine(ns=[2, -1])).outputs
+    assert (out.groups, out.summary) == ([[0, 1], NO_LIST], ["0,1", "absent:no-list"])
+    # through an uncombined partial node in between, and under each mode
+    out = submitter(PartialChainThenCombine(ns=[2, -1])).outputs
+    assert out.groups == [[1, 2], NO_LIST]
+    assert out.summary == ["1,2", "absent:no-list"]
+    assert out.dropped == [[1, 2], []]
+    assert out.count == [2, NO_LIST]
+
+
+@workflow.define(outputs=["groups", "summary"])
+def BarrierThenCombine(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(AddLength(b=a.out).split("a", a=a.out), name="B")  # a barrier
+    c = workflow.add(Ident(x=b.out).combine("B.a"), name="C")
+    s = workflow.add(Summarize(vals=c.out), name="S")
+    return c.out, s.out
+
+
+@workflow.define(outputs=["groups", "summary"])
+def BarrierChainThenCombine(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(AddLength(b=a.out).split("a", a=a.out), name="B")  # a barrier
+    c = workflow.add(Inc(a=b.out), name="C")
+    d = workflow.add(Ident(x=c.out).combine("B.a"), name="D")
+    s = workflow.add(Summarize(vals=d.out), name="S")
+    return d.out, s.out
+
+
+def test_combine_over_a_barrier_nodes_absent_substate_is_refused(submitter):
+    for task, node in (
+        (BarrierThenCombine(ns=[-1]), "C"),
+        (BarrierThenCombine(ns=[-1, -2]), "C"),
+        (BarrierChainThenCombine(ns=[-1]), "D"),
+    ):
+        runner = runner_for(submitter, task)
+        rounds = drive(runner)
+        assert not settled(rounds, node) and not settled(rounds, "S")
+        (entry,) = runner.entries
+        assert entry.job_name == node
+        assert entry.exception_type.endswith("AbsentGroupError")
+        assert "'B.a'" in entry.message and "'A'" in entry.message
+    # a combine that does not keep the absent element's group is not refused
+    assert submitter(BarrierReader(ns=[-1])).outputs.out == []

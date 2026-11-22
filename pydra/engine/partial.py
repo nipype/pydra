@@ -402,6 +402,10 @@ class PartialExpansion:
         # 2.3(a)), each with that ``Absent`` and the checksum of the job it came from
         self.absent_blocks: dict[tuple, tuple[Absent, str | None]] = {}
         self._group_blocks: dict[tuple, set] = defaultdict(set)  # group -> its blocks
+        # own and inherited absent sub-states, as (ident, the fields they fix in this
+        # node's path space, (Absent, producer)), for the groups readers combine them in
+        self.absent: list[tuple[ty.Any, dict, tuple[Absent, str | None]]] = []
+        self._inherited_absent: dict[tuple, tuple[Absent, str | None]] = {}
         self.closed: set[tuple] = set()
         self.open_groups: dict[tuple, dict] = {}  # open group key -> its fields
         self._open_index = _Index()
@@ -555,6 +559,19 @@ class PartialExpansion:
                     ex.unrunnable[block] = [source]
                 self.failed.append((("from", name, ident), prefixed))
                 self.version += 1
+            for ident, fields, record in source._absent_substates():
+                if (name, ident) in self.inherited:
+                    continue
+                self.inherited.add((name, ident))
+                prefixed = {("_" + name,) + p: c for p, c in fields.items()}
+                self.absent.append((("from", name, ident), prefixed, record))
+                self.version += 1
+                group_paths = self.spec.group_paths
+                if group_paths is not None and all(p in prefixed for p in group_paths):
+                    # a group of this node that only the absent sub-state would fill
+                    group = tuple(prefixed[p] for p in group_paths)
+                    self._add_group(group)
+                    self._inherited_absent.setdefault(group, record)
 
     @staticmethod
     def _fixes_final_key(source: "NodeExecution", fields: dict) -> bool:
@@ -718,6 +735,7 @@ class PartialExpansion:
             return
         if absent is not None:
             self.absent_blocks[bkey] = absent
+            self.absent.append((("block", bkey), dict(block.fields), absent))
         if spec.group_paths is not None and spec.group_by_block:
             for entry in expand_rpn(spec.rpn, skeleton):
                 group = tuple(entry.fields[p] for p in spec.group_paths)
@@ -767,9 +785,11 @@ class PartialExpansion:
         inner element's ``Absent`` left with no elements, None for any other group"""
         if not isinstance(group, tuple):
             return None
-        blocks = self._group_blocks.get(group)
-        if not blocks or self.groups.get(group):
+        if self.groups.get(group):
             return None
+        blocks = self._group_blocks.get(group)
+        if not blocks:  # a group only an upstream node's absent sub-state would fill
+            return self._inherited_absent.get(group)
         if all(b in self.absent_blocks for b in blocks):
             return self.absent_blocks[min(blocks, key=sort_key)]
         return None
