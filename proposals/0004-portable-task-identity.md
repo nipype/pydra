@@ -549,8 +549,10 @@ that is already resolved (`docker.py:36`, `singularity.py:16`, `base.py:133-137`
 - **Lmod.** The key carries the full module names (`fsl/6.0.7.9`, not `fsl`), and `Lmod.execute`
   loads those full names, so a worker whose tree has another default loads the keyed version or
   fails. They are resolved in the submitting process, once per process per module list: in a
-  child process whose `LOADEDMODULES` is cleared, `lmod python purge` and then `lmod python load`
-  of the requested names, reading `LOADEDMODULES` from the output (`environments/lmod.py:32-41`
+  child process, `lmod python purge` with the calling shell's modules still in place (so Lmod
+  unloads them and unwinds the `MODULEPATH` a loaded compiler added), then `lmod python load`
+  of the requested names in the purged environment, reading `LOADEDMODULES` from the output;
+  `Lmod.execute` purges and loads the same way (`environments/lmod.py:32-41`
   shows the output's form). An entry is kept when its name part (before the last `/`) equals a
   requested name or the requested name is a prefix of it; the dependencies a module pulls in and
   the modules of the calling shell are left out of the key and recorded, with `MODULEPATH`. A
