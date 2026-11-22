@@ -255,6 +255,55 @@ def test_gated_off_data_never_coerced(submitter):
     assert result.outputs.out.cause == "not-routed"
 
 
+@python.define
+def Names(n: int) -> list[str]:
+    return [f"u{i}" for i in range(n)]
+
+
+@python.define
+def Tagged(url: str, tag: str) -> str:
+    return url.upper() + tag
+
+
+@workflow.define
+def GatedUpstreamSplit(xs: list[int], n: int) -> list[str]:
+    c = workflow.add(Check().split(x=xs), name="C")
+    names = workflow.add(Names(n=n), name="N")
+    d = workflow.add(
+        Tagged(tag="!").split(["_C", "url"], url=names.out), name="D", when=c.out
+    )
+    return d.out
+
+
+@workflow.define
+def GatedStaticSplit(xs: list[int]) -> list[str]:
+    c = workflow.add(Check().split(x=xs), name="C")
+    d = workflow.add(
+        Tagged(tag="!").split(["_C", "url"], url=["u0", "u1"]), name="D", when=c.out
+    )
+    return d.out
+
+
+def test_gated_off_split_elements_keep_their_split_values(submitter):
+    """A gated-off element of a split node gets its own split value: a static one as it
+    is, one split from an upstream output as the Absent it completes with"""
+    out = submitter(GatedUpstreamSplit(xs=[1, -1], n=3)).outputs.out
+    assert out[:3] == ["U0!", "U1!", "U2!"]
+    assert [o.cause for o in out[3:]] == ["not-routed"] * 3
+    rounds = drive(runner_for(submitter, GatedUpstreamSplit(xs=[1, -1], n=3)))
+    gated = [s for s in settled(rounds, "D") if s.how == "gated"]
+    assert len(gated) == 3
+    assert all(s.job.task.url.cause == "not-routed" for s in gated)
+    assert all(s.job.task.tag == "!" for s in gated)
+
+    out = submitter(GatedStaticSplit(xs=[1, -1])).outputs.out
+    assert out[:2] == ["U0!", "U1!"]
+    assert [o.cause for o in out[2:]] == ["not-routed"] * 2
+    rounds = drive(runner_for(submitter, GatedStaticSplit(xs=[1, -1])))
+    gated = [s for s in settled(rounds, "D") if s.how == "gated"]
+    assert sorted(s.job.task.url for s in gated) == ["u0", "u1"]
+
+
 def test_gated_off_never_looked_up(tmp_path):
     store = CountingStore(tmp_path / "cache")
     with Submitter(worker="debug", store=store) as sub:

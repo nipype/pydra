@@ -443,10 +443,18 @@ class NodeExecution(ty.Generic[TaskType]):
                 )
             else:
                 continue
-            # the task keeps its static inputs, and its data inputs, which are never
+            # the task keeps its static inputs and its static split values; its data
+            # inputs and the split values taken from an upstream output, which are never
             # read, hold the Absent it completes with
+            values = dict.fromkeys(data, absent)
+            if index is not None:
+                vals = self.state.states_val[index]
+                for field in self.node.input_names:
+                    if (state_key := f"{self.name}.{field}") in vals:
+                        upstream = isinstance(self.node._task[field], LazyOutField)
+                        values[field] = absent if upstream else vals[state_key]
             with resolving():
-                task = attrs.evolve(self.node._task, **dict.fromkeys(data, absent))
+                task = attrs.evolve(self.node._task, **values)
             identity = absence_identity(
                 task_definition(task),
                 self._producer(reads.get(name), WHOLE),
