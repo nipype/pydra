@@ -30,7 +30,7 @@ source "$MODULESHOME/init/bash"
 module load apptainer
 command -v singularity >/dev/null || { echo "FAIL: no singularity on PATH"; exit 1; }
 export APPTAINER_CACHEDIR="$run/apptainer-cache" SINGULARITY_CACHEDIR="$run/apptainer-cache"
-export PYDRA_HASH_CACHE="$run/hashes"
+export PYDRA_HASH_CACHE="$run/hashes" PYDRA_IMAGE_CACHE="$run/images"
 
 gate() {  # gate <log> <expected passed>
     grep -Eq "^=+ $2 passed" "$1" || { echo "FAIL: expected $2 passed"; tail -5 "$1"; exit 1; }

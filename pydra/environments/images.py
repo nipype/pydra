@@ -126,3 +126,51 @@ def sif_digest(path: os.PathLike | str) -> str:
         )
         _SIF_DIGESTS[stat_key] = "sha256:" + bytes(hexdigest).decode()
     return _SIF_DIGESTS[stat_key]
+
+
+IMAGE_CACHE_ENV_VAR = "PYDRA_IMAGE_CACHE"
+
+
+def image_cache() -> Path:
+    """Where pulled images are kept: ``PYDRA_IMAGE_CACHE`` if set, otherwise ``images``
+    under pydra's user cache root"""
+    from pydra.utils.general import user_cache_root
+
+    try:
+        return Path(os.environ[IMAGE_CACHE_ENV_VAR])
+    except KeyError:
+        return user_cache_root() / "images"
+
+
+def local_sif(uri: str, digest: str) -> Path:
+    """A local SIF of ``uri``, a ``docker://<repository>@<digest>`` reference, pulled
+    the first time into ``<image cache>/sif/<digest>.sif`` and reused after that, so
+    running it never reaches a registry again. Concurrent first uses pull once: the
+    pull holds a lock and its file is renamed into place when complete."""
+    import fcntl
+    import tempfile
+    from pydra.environments import base
+
+    folder = image_cache() / "sif"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{digest.replace(':', '-')}.sif"
+    if target.is_file():
+        return target
+    with open(folder / f"{target.name}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if target.is_file():  # another process pulled it while we waited
+            return target
+        fd, partial = tempfile.mkstemp(dir=folder, prefix=f".{target.stem}-")
+        os.close(fd)
+        os.unlink(partial)  # pull refuses to overwrite a file
+        try:
+            rc, out, err = base.execute(["singularity", "pull", partial, uri])
+            if rc or not os.path.isfile(partial):
+                raise RuntimeError(
+                    f"singularity pull of {uri} exited with exit code {rc}:\n{err}{out}"
+                )
+            os.replace(partial, target)
+        finally:
+            if os.path.exists(partial):
+                os.unlink(partial)
+    return target

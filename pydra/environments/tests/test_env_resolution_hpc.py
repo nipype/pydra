@@ -78,10 +78,6 @@ def test_singularity_docker_uri_digest(monkeypatch, tmp_path):
     for name in "abc":
         Job(task=shell.define("whoami")(), name=name, submitter=job.submitter).resolved
     assert fake.asked == [("org/tool", "1")]
-    commands = _ran(monkeypatch)
-    env.execute(job)
-    assert f"docker://org/tool@{D1}" in commands[0]
-    assert not any(a.endswith(":1") or a.endswith(":latest") for a in commands[0])
     # a digest given is keyed with no lookup, and the tag in the URI is honoured
     fake.asked.clear()
     given = singularity.Singularity(image=f"docker://org/tool@{D1}").resolve()
@@ -208,12 +204,22 @@ def test_singularity_checksum_never_resolves(monkeypatch, tmp_path):
     assert fake.asked == []
 
 
-def _fake_singularity(tmp_path, monkeypatch, exit_code):
+def _fake_singularity(tmp_path, monkeypatch, exit_code=0, pull_sleep=0):
+    """A fake ``singularity``: ``pull <dest> <uri>`` writes ``dest`` (after
+    ``pull_sleep`` seconds); ``exec`` writes INFO lines to stderr and exits
+    ``exit_code``. Each call is logged, one line of arguments each."""
     bindir = tmp_path / "bin"
     bindir.mkdir()
+    log = tmp_path / "singularity.log"
     script = bindir / "singularity"
     script.write_text(textwrap.dedent(f"""\
             #!/bin/sh
+            echo "$*" >> "{log}"
+            if [ "$1" = pull ]; then
+                sleep {pull_sleep}
+                echo "SIF of $3" > "$2"
+                exit 0
+            fi
             echo "INFO:    Converting OCI blobs to SIF format" >&2
             echo "INFO:    Starting build..." >&2
             echo "ran"
@@ -221,6 +227,58 @@ def _fake_singularity(tmp_path, monkeypatch, exit_code):
             """))
     script.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PYDRA_IMAGE_CACHE", str(tmp_path / "images"))
+    return log
+
+
+@posix_only
+def test_docker_uri_pulled_once_to_a_local_sif(monkeypatch, tmp_path):
+    log = _fake_singularity(tmp_path, monkeypatch)
+    env = singularity.Singularity(image=f"docker://org/tool@{D1}")
+    for name in ("a", "b"):
+        job = _job(tmp_path / name, env)
+        assert job.resolved.key == f"docker@1:{D1}"
+        env.execute(job)
+    sif = tmp_path / "images" / "sif" / f"{D1.replace(':', '-')}.sif"
+    assert sif.read_text().strip() == f"SIF of docker://org/tool@{D1}"
+    calls = log.read_text().splitlines()
+    assert [c for c in calls if c.startswith("pull ")] == [
+        f"pull {calls[0].split()[1]} docker://org/tool@{D1}"
+    ]
+    execs = [c for c in calls if c.startswith("exec ")]
+    assert len(execs) == 2
+    assert all(str(sif) in c.split() and "docker://" not in c for c in execs)
+
+
+@posix_only
+def test_concurrent_first_use_pulls_once(monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    log = _fake_singularity(tmp_path, monkeypatch, pull_sleep=0.5)
+    with ThreadPoolExecutor(4) as pool:
+        paths = list(
+            pool.map(
+                lambda _: images.local_sif(f"docker://org/tool@{D1}", D1), range(4)
+            )
+        )
+    assert len(set(paths)) == 1 and Path(paths[0]).is_file()
+    assert sum(c.startswith("pull ") for c in log.read_text().splitlines()) == 1
+    assert not [
+        p
+        for p in Path(paths[0]).parent.iterdir()
+        if p.suffix != ".sif" and not p.name.endswith(".lock")
+    ]
+
+
+@posix_only
+def test_failed_pull_leaves_no_sif(monkeypatch, tmp_path):
+    _fake_singularity(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        base, "execute", lambda cmd, **kw: (255, "", "FATAL: registry unreachable")
+    )
+    with pytest.raises(RuntimeError, match="registry unreachable"):
+        images.local_sif(f"docker://org/tool@{D1}", D1)
+    assert not list((tmp_path / "images" / "sif").glob("*.sif"))
 
 
 @posix_only
@@ -252,6 +310,7 @@ def test_apptainer_docker_digest_runs(tmp_path, monkeypatch):
 
     monkeypatch.setenv("APPTAINER_CACHEDIR", str(tmp_path / "apptainer-cache"))
     monkeypatch.setenv("SINGULARITY_CACHEDIR", str(tmp_path / "apptainer-cache"))
+    monkeypatch.setenv("PYDRA_IMAGE_CACHE", str(tmp_path / "images"))
     env = singularity.Singularity(image="docker://alpine", tag="3.20")
     ref = env.resolve()
     assert ref.key.startswith("docker@1:sha256:")
@@ -266,6 +325,8 @@ def test_apptainer_docker_digest_runs(tmp_path, monkeypatch):
         result = sub(echo)
     assert result.outputs.stdout.strip() == "hi"
     assert result.context["environment"] == ref.key
+    digest = ref.key.removeprefix("docker@1:")
+    assert (tmp_path / "images" / "sif" / f"{digest.replace(':', '-')}.sif").is_file()
 
     # warm: the same digest again neither converts nor reaches a registry
     for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):

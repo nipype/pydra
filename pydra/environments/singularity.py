@@ -24,9 +24,10 @@ class Singularity(base.Container):
 
         * ``docker://``: a digest given or ``identity=`` is keyed with no lookup,
           otherwise the registry is asked once per tag per run; the key is the Docker
-          key of the same image (``docker@1:<digest>``) and the image runs as
-          ``docker://<repository>@<digest>``. A tag in the URI takes the place of
-          ``tag``.
+          key of the same image (``docker@1:<digest>``) and the reference carried is
+          ``docker://<repository>@<digest>``; a worker pulls it once into a local SIF
+          (`images.local_sif`) and runs that, so a run never reaches a registry. A tag
+          in the URI takes the place of ``tag``.
         * a ``.sif`` path is keyed by the sha256 of its content (``sif@1:sha256:<hex>``)
           and runs by its absolute path; before ``exec`` a worker compares the digest
           its own stat cache gives for the file (a stat once read) with the key. The key
@@ -96,6 +97,11 @@ class Singularity(base.Container):
                     f"The image {resolved.run!r} has the digest {found} here, but the "
                     f"job was keyed by {expected}"
                 )
+        image = resolved.run
+        _, digest = images.split_reference(image.partition("://")[2])
+        if image.startswith("docker://") and digest:
+            # exec of a docker:// URI asks the registry on every run, cached or not
+            image = str(images.local_sif(image, digest))
         # mounting all input locations
         mounts, values = self.get_bindings(job=job, root=self.root)
 
@@ -114,7 +120,7 @@ class Singularity(base.Container):
 
         job.cache_dir.mkdir(parents=True, exist_ok=True)
         values = base.execute(
-            singularity_args + [resolved.run] + job.task._command_args(values=values),
+            singularity_args + [image] + job.task._command_args(values=values),
             cwd=job.cache_dir,
         )
         output = dict(zip(keys, values))
