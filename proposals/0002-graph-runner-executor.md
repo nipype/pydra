@@ -305,8 +305,19 @@ class Absent:
   do: the upstream states are combined outer unless the node's own splitter says otherwise
   (`state.py:478-526`).
 - **Values.** `when` true or `unless` false: the element proceeds to step 2. Otherwise it completes
-  with every output `Absent(cause="not-routed", source=node)`. A gate that is itself `Absent`
-  propagates. A gate is typed `bool`; anything else is a wiring error.
+  with every output `Absent(cause="not-routed", source=node)` and is reported as
+  `Settled(how="gated")`. A gate that is itself `Absent` propagates (`how="absent"`). The gate is
+  read before the element's data inputs are resolved: an element that stops at step 1 waits for its
+  data upstreams, as for any input, but its data are never read or coerced. A gate is typed `bool`;
+  anything else is a wiring error. A plain `bool` (a workflow input, concrete at construction) is a
+  constant gate, and a lazy field typed `Any` is checked when read; a value that is neither a `bool`
+  nor an `Absent`, such as a driver's reference, is refused by `ready()` with a `TypeError` naming
+  the node and the gate.
+- **A gated-off job's identity** is an absence record, as for a propagated job (§2.3(a)): the task
+  type, `-absent-` and the digest of the reader's task definition, the unsuffixed checksum of the
+  job the gate was read from, and the triple `(_when or _unless, -1, "not-routed")`. Two nodes with
+  one task definition gated by one predicate element share it; their results differ only in
+  `source`, which is provenance. It is never looked up, shared or committed.
 
 **(c) Merging routes: `Select`, keyed on the gates.**
 - A route is gated branches plus a merge. The merge selects on the gates, not on presence: a
@@ -393,7 +404,8 @@ on a real job raises, as the run would; on a stand-in the worker is None. `PlanN
 under a rerun, as `ready()` skips the store then. The router is called once per node, so a stateful
 router sees these calls. Cost: one checksum per formable element, and one `expected_hits(jobs)` call
 (`PickleStore`: a single listing of its record directory) or one existence check per element.
-Elements that would complete absent (§2.3(a)) are counted in `PlanNode.absent`; they are not routed,
+Elements that would complete absent (§2.3(a)) are counted in `PlanNode.absent`, and elements a gate
+switches off in `PlanNode.gated`, read from the predicate's result (§2.3(b)); neither is routed,
 placed or looked up. A node that would be absent as a whole is listed with `state="absent"` and no
 elements.
 
@@ -513,7 +525,8 @@ dispatch and, separately, every job it completed itself, with how. Each job is h
 
 **`upstream(job)`** returns, for each lazy input, the upstream jobs and state indices it was
 resolved from (`NodeExecution._upstream`, `submitter.py:1179-1196`), so a driver need not recover
-them from values. It stays a 2-tuple after E2: the index is `None` when the upstream is unsealed
+them from values. It lists data inputs only: a gate (§2.3(b)) is not an input of the task a driver
+sends, so it is not listed. It stays a 2-tuple after E2: the index is `None` when the upstream is unsealed
 or read whole, and the element's key is `job.state_key`. `Round.settled` is unchanged too;
 `Settled.job` carries `state_key`.
 
@@ -831,7 +844,9 @@ What such a driver must and need not supply:
   it. A node absent as a whole has no job; it is reported once in `Round.absent_nodes`, with its
   `Absent` and the node it inherits from, so following `inherits` from each entry rebuilds every
   absent subgraph from the rounds alone. A driver can therefore log every node as run, reused,
-  typed-absent or blocked without the audit hook. A round with only absent nodes is progress, as
+  typed-absent, gated or blocked without the audit hook. `runner.done` stays false while any such
+  record is unreported (a twin shared by the last `complete()` is settled after every node is
+  done), so the loop above sees every one. A round with only absent nodes is progress, as
   one with only settled jobs is: the driver calls `ready()` again.
 - **It must not block without a bound.** `receive` waits at most `retry_after` when that is set,
   because a workflow job waiting for its lease is advanced only by a later `ready()` (§3.1). A
@@ -912,7 +927,7 @@ additions behind them.
 | R8 | `plan()` (subsumes J2) | R6, F2, B2 | opt-in |
 | E2 | partial `State` (0001 §3.1 step 2): per-element release of nested fan-out, `state_key`, the `"expansion"` phase and `Unrunnable.key`/`block`, including an `Absent` splitter input per element | R1 | 0001's; barrier kept for the six shapes of §2.2; corrects the ragged, empty, combined-source, mixed-scalar and static-combine cases (#945), whose checksums change; the `test_readiness` resplit and bad-input tests change expectations to keys |
 | R10a | `Absent`: hashing, `absent=` with its defaults, propagation at release, coercion, `WorkflowOutputs`, the absence suffix for supplied checksums and unhashed fields; whole-node absence for a splitter input. A single value that is an `Absent` propagates under `"drop"` (it has no elements to drop); a combined read of a wholly absent node is that `Absent`, so `"drop"` gives an empty list. A whole-value `Absent` has element index -1 in its triple | R6, E2 | opt-in |
-| R10b | `when=`/`unless=`: node inputs, upstream states, lazy reads and edges; the precedence rule; `select(n)` | R10a | opt-in |
+| R10b | `when=`/`unless=`: node inputs, upstream states, lazy reads and edges; the precedence rule, with the gate read before data inputs are resolved; `Settled(how="gated")`, the gated-job identity and `PlanNode.gated`; a `bool` or an `Any`-typed lazy gate checked when read; `select(n)` (`pydra.compose.select`, a callable module, as `pydra.compose` is a namespace package; `from pydra.compose.select import select` also works) | R10a | opt-in |
 | R11 | `workflow.loop` with `index=`, `rounds`, `converged` | R10b | opt-in |
 
 RFC 0003's P8 depends on R4, which passes `Result.committed` through. Its P4 changes how
