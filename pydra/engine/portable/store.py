@@ -377,6 +377,10 @@ class PortableStore:
     pickle : bool
         Whether writers to a new root may write pickle members; recorded when the root is
         created and read from the header after.
+    lease_settings : LeaseSettings, optional
+        How the store's leases (de-duplication, resume and rerun) beat, age and wait; see
+        `~pydra.engine.lease.LeaseSettings`. The holder is always ``"anonymous"``: an entry
+        is portable, so its lease names no user, host or pid. Default ``LeaseSettings()``.
     """
 
     def __init__(
@@ -394,7 +398,16 @@ class PortableStore:
         pickle: bool = False,
         reuse: ty.Any = "consistent",
         on_commit: ty.Callable | None = None,
+        lease_settings: LeaseSettings | None = None,
     ) -> None:
+        if lease_settings is None:
+            lease_settings = LeaseSettings()
+        elif not isinstance(lease_settings, LeaseSettings):
+            raise TypeError(
+                f"lease_settings must be a LeaseSettings, got {type(lease_settings).__name__}"
+            )
+        # evolve checks the bounds again
+        lease_settings = attrs.evolve(lease_settings, holder="anonymous")
         if trust not in TRUSTS:
             raise ValueError(f"trust must be one of {TRUSTS}, got {trust!r}")
         if trust == "shared" and work_dir is None:
@@ -415,6 +428,7 @@ class PortableStore:
             pickle=pickle,
             reuse=reuse,
             on_commit=on_commit,
+            lease_settings=lease_settings,
         )
         self.path = os.path.abspath(os.fspath(root))
         self.trust = trust
@@ -428,7 +442,7 @@ class PortableStore:
         self.on_commit = on_commit
         self.visibility_timeout = VISIBILITY_TIMEOUT
         self._work_policy = attrs.evolve(policy, verify_files="digest")
-        self._lease_settings = LeaseSettings(holder="anonymous")
+        self.lease_settings = lease_settings
         self._make_root()
         expected = LayoutHeader.for_store(
             identity,
@@ -1544,7 +1558,7 @@ class PortableStore:
             return True
         if newest is None:  # not a directory: not a lease this store takes
             return False
-        return now - newest < self._lease_settings.stale_after
+        return now - newest < self.lease_settings.stale_after
 
     @staticmethod
     def _newest_in(parent: StorageDir, name: str) -> float | None:
@@ -2885,7 +2899,7 @@ class PortableStore:
                 root.child(_LEASES, create=True, mode=self.policy.side_mode).close()
         leases = Path(self.path) / _LEASES
         return DirectoryLease(
-            checksum, leases, leases / f"{name}.lock", settings=self._lease_settings
+            checksum, leases, leases / f"{name}.lock", settings=self.lease_settings
         )
 
     # -- the ResultStore adapter ---------------------------------------------------------------------

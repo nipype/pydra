@@ -7,6 +7,7 @@ import getpass
 import hashlib
 import json
 import os
+import pickle
 import socket
 import stat
 import subprocess
@@ -534,6 +535,64 @@ def test_no_dedupe_lease_is_always_held(tmp_path):
         assert (tmp_path / "root" / "leases").is_dir() and lease.prove()
 
 
+def _plant_dead_holder(lockfile: Path) -> None:
+    """Leave the lease a crashed process held: a token directory nothing renews."""
+    token_dir = lockfile / ("f" * 32)
+    token_dir.mkdir(parents=True)
+    (token_dir / "holder.json").write_text(
+        json.dumps({"token": "f" * 32, "started": time.time()})
+    )
+
+
+def test_lease_settings_bound_takeover_of_a_dead_holder(tmp_path):
+    """A short ``stale_after`` takes a dead holder's lease over within that bound."""
+    settings = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
+    store = make(tmp_path, dedupe=True, lease_settings=settings)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile)
+    start = time.monotonic()
+    with lease:
+        assert lease.held
+        assert len(lease.broke) == 1
+    assert time.monotonic() - start < 5  # the default would wait out 300 s
+
+
+def test_lease_settings_holder_forced_anonymous(tmp_path):
+    """The holder record names no user or host even if a named holder is passed."""
+    settings = LeaseSettings(
+        stale_after=10, timeout=15, attribute_delay=0, holder="named"
+    )
+    store = make(tmp_path, dedupe=True, lease_settings=settings)
+    assert store.lease_settings.holder == "anonymous"
+    assert store.lease_settings == settings  # the staleness fields are kept
+    lease = store.acquire("python-abc", CTX)
+    with lease:
+        (holder,) = lease.lockfile.rglob("holder.json")
+        assert set(json.loads(holder.read_text())) == {"started", "token"}
+    # and on the copy a worker unpickles
+    worker = pickle.loads(pickle.dumps(store))
+    assert worker.lease_settings == settings
+    assert worker.lease_settings.holder == "anonymous"
+
+
+def test_lease_settings_invalid_bounds_raise(tmp_path):
+    """The store checks the bounds again, even of settings altered after construction."""
+    bad = LeaseSettings()
+    object.__setattr__(bad, "renew_fraction", 0.5)  # beats every 150 s of 300
+    with pytest.raises(ValueError, match="stale_after"):
+        make(tmp_path, lease_settings=bad)
+    with pytest.raises(TypeError, match="LeaseSettings"):
+        make(tmp_path, lease_settings={"stale_after": 1})
+
+
+def test_lease_settings_default_unchanged(tmp_path):
+    store = make(tmp_path)
+    assert store.lease_settings == LeaseSettings()
+    assert store.lease_settings.holder == "anonymous"
+    assert store.lease_settings.max_wait is None
+    assert store.acquire("python-abc", CTX).settings is store.lease_settings
+
+
 def test_anonymous_lease_holder_names_no_user(tmp_path):
     store = make(tmp_path)
     lease = store.acquire("python-abc", CTX)
@@ -634,10 +693,11 @@ def test_collect_removes_old_default_work_dirs_only(tmp_path, skew):  # noqa: F8
 def test_collect_spares_a_resume_dir_whose_lease_is_live(tmp_path, skew):  # noqa: F811
     """A resumable job's directory is old while its job runs (nothing is written at its top);
     the lease of the same hash, renewed by its holder, keeps it"""
-    store = aged_store(tmp_path, work=100)
     # the skewed clock makes everything at least SKEW old; a lease is stale after more
-    store._lease_settings = LeaseSettings(
-        holder="anonymous", stale_after=10 * SKEW, timeout=20 * SKEW
+    store = make(
+        tmp_path,
+        policy=StorePolicy(ages=StoreAges(work=100)),
+        lease_settings=LeaseSettings(stale_after=10 * SKEW, timeout=20 * SKEW),
     )
     job = _stub(None, can_resume=True)
     path = store.begin_run(job)

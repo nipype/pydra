@@ -206,8 +206,7 @@ def test_dedupe_workflow_lease_timeout_phase_lease(tmp_path):
     """Under a de-duplicating store a nested workflow job whose lease another runner keeps
     is waited for; past ``max_wait`` it is an entry with ``phase="lease"`` and its readers
     are unrunnable, and ``ready()`` does not raise."""
-    store = make(tmp_path, dedupe=True)
-    store._lease_settings = FOREVER
+    store = make(tmp_path, dedupe=True, lease_settings=FOREVER)
     log = os.devnull
     with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
         holder = GraphRunner(
