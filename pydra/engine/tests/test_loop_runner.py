@@ -2,12 +2,15 @@
 ``workflow.loop`` is added to the loop job's graph only once the round before it is done
 and its ``until`` output is false"""
 
+import typing as ty
+
 import pytest
 
 from pydra.compose import python, workflow
+from pydra.engine.absent import Absent
 from pydra.engine.job import Job
 from pydra.engine.result import Result
-from pydra.engine.runner import GraphRunner
+from pydra.engine.runner import Failed, GraphRunner, NotRun
 from pydra.engine.submitter import Submitter
 from pydra.utils.general import get_fields
 
@@ -206,3 +209,201 @@ def test_until_of_wrong_type_unowned_root(submitter):
     assert "until" in runner.errors[0]
     (entry,) = runner.entries
     assert entry.exception_type.endswith("GateTypeError")
+
+
+# -- stopping and the loop's outputs (L3) ------------------------------------------------------------
+
+
+@python.define(outputs=["x", "done"])
+def UnsureAt2(x: int) -> tuple[int, bool]:
+    """A content ``Absent`` until at ``x == 2``"""
+    if x == 2:
+        return x + 1, Absent(cause="unknown", source="UnsureAt2")
+    return x + 1, False
+
+
+@python.define(outputs=["x", "done"])
+def GoneAt1(x: int) -> tuple[int, bool]:
+    """A content ``Absent`` carried value at ``x == 1``, with until false"""
+    if x == 1:
+        return Absent(cause="gone", source="GoneAt1"), False
+    return x + 1, False
+
+
+@python.define(outputs=["x", "done"])
+def Clamp(x: int) -> tuple[int, bool]:
+    """Reaches the fixed point 0 and never reports done"""
+    return max(x - 1, 0), False
+
+
+@python.define(outputs=["x", "done"])
+def Flip(x: int) -> tuple[int, bool]:
+    """A cycle of length 2"""
+    return 1 - x, False
+
+
+@python.define(outputs=["x", "done"])
+def Poll(x: int, attempt: int = 0) -> tuple[int, bool]:
+    """Carries nothing new forward: its output equals its input"""
+    return x, False
+
+
+@python.define(outputs=["x", "done"])
+def BoomAt2(x: int) -> tuple[int, bool]:
+    if x == 2:
+        raise RuntimeError("boom at 2")
+    return x + 1, False
+
+
+@python.define(outputs=["x", "payload", "maybe", "items", "done"])
+def Typed(
+    x: int,
+) -> tuple[int, ty.Any, ty.Optional[int], list[int], bool]:
+    return x + 1, {"k": x}, x, list(range(x + 1)), x + 1 >= 2
+
+
+@python.define(outputs=["x", "payload", "done"])
+def Fetch(x: int) -> tuple[int, ty.Any, bool]:
+    """Converges at ``x == 2`` with a content ``Absent`` payload"""
+    if x >= 2:
+        return x, Absent(cause="missing", source="Fetch"), True
+    return x + 1, x, False
+
+
+@python.define(outputs=["n", "done"])
+def CountFrom(stop: int, n: int = 10) -> tuple[int, bool]:
+    return n + 1, n + 1 >= stop
+
+
+def settled(rounds, name=None):
+    return [s for r in rounds for s in r.settled if name is None or s.job.name == name]
+
+
+def loop_outputs(submitter, task):
+    result = submitter(task)
+    assert not result.errored
+    return result.outputs
+
+
+def test_content_absent_until_stops_absent(submitter):
+    """I1 probe W1: the round whose until is an Absent ran, and ends the loop"""
+    task = workflow.loop(UnsureAt2, until="done")(x=0)
+    rounds = drive(runner_for(submitter, task))
+    assert dispatched(rounds) == ["r0", "r1", "r2"]
+    out = loop_outputs(submitter, task)
+    assert out.stopped == "absent"
+    assert out.converged == Absent(cause="unknown", source="UnsureAt2")
+    assert (out.rounds, out.x) == (3, 3)
+
+
+def test_carried_absent_propagates_and_stops(submitter):
+    """I1 probe W2: round 1 returns x=Absent("gone") with until false; round 2 reads it
+    under propagate, completes absent without running, and ends the loop"""
+    task = workflow.loop(GoneAt1, until="done")(x=0)
+    rounds = drive(runner_for(submitter, task))
+    assert dispatched(rounds) == ["r0", "r1"]
+    (r2,) = settled(rounds, "r2")
+    assert r2.how == "absent"
+    out = loop_outputs(submitter, task)
+    assert out.stopped == "absent"
+    assert out.rounds == 2
+    assert out.converged == Absent(cause="gone", source="GoneAt1")
+    assert out.x == Absent(cause="gone", source="GoneAt1")
+
+
+def test_fixed_point_stops_on_cycle(submitter):
+    """2 -> 1 -> 0 -> 0: the repeated round is served, never dispatched, and ends it"""
+    task = workflow.loop(Clamp, until="done", max_rounds=20)(x=2)
+    rounds = drive(runner_for(submitter, task))
+    assert dispatched(rounds) == ["r0", "r1", "r2"]
+    (folded,) = settled(rounds, "r3")
+    assert folded.how in {"shared", "stored"}
+    jobs = {s.job.name: s.job for s in settled(rounds)}
+    jobs.update({j.name: j for r in rounds for j in r.dispatch})
+    assert jobs["r3"].checksum == jobs["r2"].checksum
+    out = loop_outputs(submitter, task)
+    assert (out.x, out.rounds, out.converged, out.stopped) == (0, 4, False, "cycle")
+
+
+def test_cycle_of_length_two(submitter):
+    task = workflow.loop(Flip, until="done", max_rounds=20)(x=0)
+    rounds = drive(runner_for(submitter, task))
+    assert dispatched(rounds) == ["r0", "r1"]
+    assert [s.how for s in settled(rounds, "r2")] in (["shared"], ["stored"])
+    out = loop_outputs(submitter, task)
+    assert (out.x, out.rounds, out.stopped) == (1, 3, "cycle")
+
+
+def test_index_gives_distinct_checksums(submitter):
+    task = workflow.loop(Poll, until="done", carry={}, index="attempt", max_rounds=3)(
+        x=7
+    )
+    rounds = drive(runner_for(submitter, task))
+    jobs = [j for r in rounds for j in r.dispatch]
+    assert [j.name for j in jobs] == ["r0", "r1", "r2"]
+    assert [j.task.attempt for j in jobs] == [0, 1, 2]
+    assert len({j.checksum for j in jobs}) == 3
+    out = loop_outputs(submitter, task)
+    assert (out.x, out.rounds, out.stopped) == (7, 3, "max-rounds")
+
+
+def test_poll_without_index_stops_after_two_rounds(submitter):
+    """A poll that forgot its index folds round 1 onto round 0 and stops, visibly"""
+    task = workflow.loop(Poll, until="done", carry={"x": "x"})(x=7)
+    rounds = drive(runner_for(submitter, task))
+    assert dispatched(rounds) == ["r0"]
+    assert [s.how for s in settled(rounds, "r1")] in (["shared"], ["stored"])
+    out = loop_outputs(submitter, task)
+    assert (out.rounds, out.converged, out.stopped) == (2, False, "cycle")
+
+
+def test_failed_round_fails_the_loop(submitter):
+    @workflow.define(outputs=["x"])
+    def Wf(x: int) -> int:
+        return workflow.add(workflow.loop(BoomAt2, until="done")(x=x), name="boom").x
+
+    def complete(job):
+        try:
+            return run_inline(job)
+        except RuntimeError as exc:
+            return Failed(exc)
+
+    runner = runner_for(submitter, Wf(x=0))
+    rounds = drive(runner, complete)
+    assert dispatched(rounds) == ["r0", "r1", "r2"]
+    assert runner.failed
+    (entry,) = runner.entries
+    assert entry.job_name == "boom"
+    assert "boom at 2" in entry.message
+
+
+def test_not_run_round_waits_for_retry(submitter):
+    runner = runner_for(submitter, CountLoop(n=0, stop=3))
+    (r0,) = runner.ready().dispatch
+    runner.complete(r0, run_inline(r0))
+    (r1,) = runner.ready().dispatch
+    runner.complete(r1, NotRun(reason="cancelled", held=False))
+    assert runner.ready().dispatch == []
+    assert runner.done and [j.name for j, _ in runner.not_run] == ["r1"]
+    runner.retry(r1)
+    rounds = drive(runner)
+    assert dispatched(rounds) == ["r1", "r2"]
+
+
+def test_untyped_and_optional_outputs_returned(submitter):
+    """B2: outputs typed Any, Optional[int] and list[int] are returned as computed"""
+    out = loop_outputs(submitter, workflow.loop(Typed, until="done")(x=0))
+    assert (out.x, out.payload, out.maybe, out.items) == (2, {"k": 1}, 1, [0, 1])
+    assert (out.rounds, out.stopped) == (2, "until")
+
+
+def test_last_round_content_absent_returned(submitter):
+    out = loop_outputs(submitter, workflow.loop(Fetch, until="done")(x=0))
+    assert out.payload == Absent(cause="missing", source="Fetch")
+    assert (out.rounds, out.converged, out.stopped) == (3, True, "until")
+
+
+def test_carried_input_default(submitter):
+    """N5: a carried input with a default the loop is not given starts from it"""
+    out = loop_outputs(submitter, workflow.loop(CountFrom, until="done")(stop=13))
+    assert (out.n, out.rounds) == (13, 3)

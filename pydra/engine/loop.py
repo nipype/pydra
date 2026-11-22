@@ -192,9 +192,19 @@ def read_until(frame: "_Frame") -> ty.Any:
 
 
 def decide(loop: LoopState, until: ty.Any, checksum: str) -> str | None:
-    """Why the loop ends after its newest round, None if another round follows"""
+    """Why the loop ends after its newest round, None if another round follows. The
+    tests are taken in order: an ``Absent`` until, a true until, a round whose checksum
+    an earlier round of the loop had (under ``index=None`` the loop's state repeats from
+    there, so until can never become true; a fixed point is the cycle of length one),
+    and ``max_rounds``"""
+    from pydra.engine.absent import Absent
+
+    if isinstance(until, Absent):
+        return "absent"
     if until:
         return "until"
+    if loop.spec.index is None and checksum in loop.seen:
+        return "cycle"
     if loop.spec.max_rounds is not None and loop.rounds >= loop.spec.max_rounds:
         return "max-rounds"
     return None
@@ -249,6 +259,10 @@ def advance(runner: "GraphRunner", frame: "_Frame") -> None:
     if loop.stopped is not None or not loop.last.done:
         return
     last = loop.last
+    if last.errored or last.unrunnable or last._node_error is not None:
+        # the round's error is the frame's, which fails the loop job when it finishes
+        loop.stopped = "error"
+        return
     try:
         until = read_until(frame)
     except Exception as exc:
@@ -261,4 +275,6 @@ def advance(runner: "GraphRunner", frame: "_Frame") -> None:
     if stopped is not None:
         loop.stopped = stopped
         return
+    if loop.spec.index is None:
+        loop.seen.add(checksum)
     instantiate(runner, frame)
