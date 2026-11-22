@@ -169,6 +169,7 @@ class TypeParser(ty.Generic[T]):
         superclass_auto_cast: bool = False,
         label: str = "",
         match_any_of_union: bool = False,
+        accepts_absent: bool = True,
     ):
         def expand_pattern(t):
             """Recursively expand the type arguments of the target type in nested tuples"""
@@ -202,6 +203,8 @@ class TypeParser(ty.Generic[T]):
         self.pattern = expand_pattern(tp)
         self.superclass_auto_cast = superclass_auto_cast
         self.match_any_of_union = match_any_of_union
+        # whether an Absent passes outside the runner's resolution of an element
+        self.accepts_absent = accepts_absent
 
     def __call__(self, obj: ty.Any) -> T:
         """Attempts to coerce the object to the specified type, unless the value is
@@ -228,7 +231,7 @@ class TypeParser(ty.Generic[T]):
         from pydra.engine.absent import Absent
 
         coerced: T
-        if obj is attrs.NOTHING or isinstance(obj, Absent):
+        if obj is attrs.NOTHING or (isinstance(obj, Absent) and self._absent_passes):
             coerced = obj  # type: ignore[assignment]
         elif is_lazy(obj):
             try:
@@ -283,6 +286,14 @@ class TypeParser(ty.Generic[T]):
                 ) from e
         return coerced
 
+    @property
+    def _absent_passes(self) -> bool:
+        """Whether an Absent passes coercion: for a field that accepts one, and for every
+        input field while the runner resolves an element's inputs"""
+        from pydra.engine.absent import is_resolving
+
+        return self.accepts_absent or is_resolving()
+
     def coerce(self, object_: ty.Any) -> T:
         """Attempts to coerce the given object to the type of the specified type"""
         from pydra.engine.absent import Absent
@@ -292,7 +303,7 @@ class TypeParser(ty.Generic[T]):
         # An Absent passes as the elements of a sequence (a combined value), one level deep
         top_level_absent = (
             {id(o) for o in object_ if isinstance(o, Absent)}
-            if isinstance(object_, (list, tuple, StateArray))
+            if self._absent_passes and isinstance(object_, (list, tuple, StateArray))
             else set()
         )
 

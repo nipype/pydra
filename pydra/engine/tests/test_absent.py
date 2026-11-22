@@ -3,6 +3,7 @@ field attribute, propagation at release and the absence suffix of a checksum tha
 see an accepted or dropped ``Absent``
 """
 
+import cloudpickle as cp
 import pytest
 
 from pydra.compose import python, shell, workflow
@@ -425,8 +426,145 @@ def test_absent_field_attribute_validated():
     assert python.arg(type=int).absent is None
 
 
-def test_coercion_passes_absent_for_typed_fields():
+def test_coercion_passes_absent_only_for_fields_that_accept_it():
     assert Describe(a=Absent("x")).a == Absent("x")
-    assert Gather(vals=[1, Absent("x"), 3]).vals == [1, Absent("x"), 3]
+    assert GatherDrop(vals=[1, Absent("x"), 3]).vals == [1, Absent("x"), 3]
+    assert Maybe(x=1).Outputs(out=Absent("x")).out == Absent("x")  # an output may be
+    with pytest.raises(TypeError):
+        Inc(a=Absent("x"))  # propagates by default: it is not accepted as a value
+    with pytest.raises(TypeError):
+        Gather(vals=[1, Absent("x"), 3])
     with pytest.raises(TypeError):
         Gather(vals=[1, "not-an-int-or-absent", 3])
+
+
+# -- downstream of a wholly absent node (fix round 1, B1) --------------------------------------------
+
+
+@workflow.define
+def ReadersOfAbsent(n: int) -> list[int]:
+    a = workflow.add(MaybeList(n=n), name="A")
+    b = workflow.add(Inc().split(a=a.out), name="B")
+    c = workflow.add(Inc(a=b.out), name="C")
+    d = workflow.add(Inc(a=c.out), name="D")
+    return d.out
+
+
+@python.define
+def Count(vals: list[str]) -> int:
+    return len(vals)
+
+
+@workflow.define(outputs=["gathered", "count"])
+def CombiningReadersOfAbsent(n: int):
+    a = workflow.add(MaybeList(n=n), name="A")
+    b = workflow.add(Inc().split(a=a.out).combine("a"), name="B")
+    g = workflow.add(Gather(vals=b.out), name="G")
+    c = workflow.add(Count(vals=g.out), name="C")
+    return g.out, c.out
+
+
+def test_non_combining_readers_of_absent_node_are_absent(submitter):
+    runner = GraphRunner(
+        ReadersOfAbsent(n=-1),
+        submitter.store,
+        submitter=submitter,
+        on_error="raise_at_end",
+    )
+    rounds = drive(runner)
+    assert [j.name for r in rounds for j in r.dispatch] == ["A"]
+    assert not runner.failed and not runner.entries
+    cause = Absent("no-list", "MaybeList")
+    for name in ("B", "C", "D"):
+        node = runner.exec_graph[name]
+        assert node.absent == cause and node._tasks == {}
+    assert submitter(ReadersOfAbsent(n=-1)).outputs.out == cause
+    assert submitter(ReadersOfAbsent(n=2)).outputs.out == [3, 4]
+
+
+def test_combining_readers_of_absent_node_get_an_empty_list(submitter):
+    runner = GraphRunner(
+        CombiningReadersOfAbsent(n=-1),
+        submitter.store,
+        submitter=submitter,
+        on_error="raise_at_end",
+    )
+    rounds = drive(runner)
+    assert [j.name for r in rounds for j in r.dispatch] == ["A", "G", "C"]
+    assert handed_job(runner, "G").task.vals == []
+    outputs = submitter(CombiningReadersOfAbsent(n=-1)).outputs
+    assert outputs.gathered == [] and outputs.count == 0
+    outputs = submitter(CombiningReadersOfAbsent(n=2)).outputs
+    assert outputs.gathered == ["1", "2"] and outputs.count == 2
+
+
+# -- a propagated job has no task checksum (fix round 1, B2, I1) -------------------------------------
+
+SEEN: list = []
+
+
+def strict_key(task, inputs):
+    SEEN.append(inputs["a"])
+    return "strict-" + str(int(inputs["a"]))
+
+
+@python.define(checksum=strict_key)
+def Strict(a: int) -> int:
+    return a * 2
+
+
+@workflow.define
+def StrictChain(x: int) -> int:
+    a = workflow.add(Maybe(x=x), name="A")
+    s = workflow.add(Strict(a=a.out), name="S")
+    return s.out
+
+
+def test_propagated_job_never_calls_checksum_hook(tmp_path):
+    SEEN.clear()
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        assert sub(StrictChain(x=-1)).outputs.out == Absent("negative", "Maybe")
+        assert sub(StrictChain(x=3)).outputs.out == 6
+    assert not any(isinstance(v, Absent) for v in SEEN)
+
+
+def test_propagated_identity_is_the_absence_record(submitter):
+    SEEN.clear()
+    runner = GraphRunner(
+        StrictChain(x=-1), submitter.store, submitter=submitter, on_error="raise_at_end"
+    )
+    drive(runner)
+    a, s = handed_job(runner, "A"), handed_job(runner, "S")
+    assert s._propagated_absent == Absent("negative", "Maybe")
+    assert s.checksum == s.unsuffixed_checksum
+    assert s.checksum.startswith("python-absent-") and "/" not in s.checksum
+    assert s.absent == []
+    # a function of the producer's checksum and the (field, index, cause) triple
+    other = GraphRunner(
+        StrictChain(x=-2), submitter.store, submitter=submitter, on_error="raise_at_end"
+    )
+    drive(other)
+    assert handed_job(other, "A").checksum != a.checksum
+    assert handed_job(other, "S").checksum != s.checksum
+    cp.loads(cp.dumps(s))  # pickling does not compute a task checksum either
+    assert not any(isinstance(v, Absent) for v in SEEN)
+
+
+def test_plan_counts_propagated_elements_without_store_reads(tmp_path):
+    SEEN.clear()
+    store = CountingStore(tmp_path / "cache")
+    with Submitter(worker="debug", store=store) as sub:
+        runner = GraphRunner(
+            StrictChain(x=-1),
+            store,
+            submitter=sub,
+            on_error="raise_at_end",
+            lookup_before_dispatch=True,
+        )
+        (a,) = runner.ready().dispatch
+        runner.complete(a, run_inline(a))
+        store.calls.clear()
+        nodes = {n.path: n for n in runner.plan().nodes}
+    assert nodes["S"].absent == 1 and nodes["S"].expected_hits == 0
+    assert store.calls == []
+    assert not any(isinstance(v, Absent) for v in SEEN)

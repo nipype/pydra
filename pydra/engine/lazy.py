@@ -223,7 +223,8 @@ class LazyOutField(LazyField[T]):
 
         if not upstream_node._tasks:  # No jobs: the node's Absent, or an empty array
             if upstream_node.absent is not None:
-                return upstream_node.absent
+                # combining the elements of a wholly absent node gives an empty list
+                return [] if upstream_node.state.combiner else upstream_node.absent
             return StateArray()
         if not upstream_node.state:  # Return the singular job
             value = retrieve_from_job(upstream_node.job(None))

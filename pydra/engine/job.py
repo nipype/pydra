@@ -233,8 +233,11 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
-        state.pop("_held", None)
         state.pop("_awaiting_run", None)
+        if self._propagated_absent is not None:
+            # completed absent: its result is in memory only, and it has no context
+            return state
+        state.pop("_held", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
         return state

@@ -20,7 +20,7 @@ from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
 from pathlib import Path
 from pydra.engine.job import Job
-from pydra.engine.absent import WHOLE, Absent
+from pydra.engine.absent import WHOLE, Absent, absence_identity, resolving
 from pydra.engine.lease import LeaseLost
 from pydra.engine.result import Result
 from pydra.utils.general import get_fields, is_workflow
@@ -209,7 +209,10 @@ class NodeExecution(ty.Generic[TaskType]):
         )
         job.workflow_path = self.path
         job._accepted_absent = accepted
-        job._propagated_absent = propagated
+        if propagated is not None:
+            # its identity is the absence record: the task's checksum is never computed
+            job._propagated_absent, identity = propagated
+            job._unsuffixed_checksum = job._checksum = identity
         return job
 
     def start(self) -> None:
@@ -217,8 +220,16 @@ class NodeExecution(ty.Generic[TaskType]):
         upstream elements it reads"""
         indices: range | list[int | None]
         if self.state:
+            # a node whose state inherits one of a wholly absent node is absent too
+            for upstream in self.state.other_states or {}:
+                inherited = self.graph.node(upstream).absent
+                if inherited is not None:
+                    self.absent = inherited
+                    break
             values = {}
             for name, value in self.node.state_values.items():
+                if self.absent is not None:
+                    break
                 if name in self.node.state.current_splitter_rpn:
                     if name in ("*", "."):
                         continue
@@ -360,9 +371,12 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def _resolve(
         self, index: int | None
-    ) -> tuple["Task[OutputType]", Absent | None, list[tuple[str, int, str]]]:
+    ) -> tuple[
+        "Task[OutputType]", tuple[Absent, str] | None, list[tuple[str, int, str]]
+    ]:
         """Resolve the task of one element, applying each input field's ``absent`` mode
-        (RFC 0002 section 2.3(a))
+        (RFC 0002 section 2.3(a)). A whole-value ``Absent`` propagates under ``"drop"``
+        too, as it has no elements to drop.
 
         Parameters
         ----------
@@ -374,26 +388,30 @@ class NodeExecution(ty.Generic[TaskType]):
         task : Task
             The element's task, a ``"drop"`` field's combined value without its absent
             elements
-        propagated : Absent or None
+        propagated : tuple[Absent, str] or None
             The ``Absent`` the element completes with, of the first propagating field in
-            declaration order, None if it runs
+            declaration order, and the job's identity
+            (:func:`~pydra.engine.absent.absence_identity`); None if it runs
         accepted : list[tuple[str, int, str]]
             The ``(field, element index, cause)`` of every accepted or dropped ``Absent``
         """
         resolved = {}
         combined = set()
-        if index is not None:
-            vals = self.state.states_val[index]
-            for name in self.node.input_names:
-                if (state_key := f"{self.name}.{name}") in vals:
-                    resolved[name] = vals[state_key]
-        for name, value, state_index in self._lazy_reads(index):
-            resolved[name] = value._get_value(
-                workflow=self.workflow, graph=self.graph, state_index=state_index
-            )
-            if self._reads_combined(value, state_index):
-                combined.add(name)
-        task = attrs.evolve(self.node._task, **resolved)
+        reads = {}
+        with resolving():
+            if index is not None:
+                vals = self.state.states_val[index]
+                for name in self.node.input_names:
+                    if (state_key := f"{self.name}.{name}") in vals:
+                        resolved[name] = vals[state_key]
+            for name, value, state_index in self._lazy_reads(index):
+                reads[name] = (value, state_index)
+                resolved[name] = value._get_value(
+                    workflow=self.workflow, graph=self.graph, state_index=state_index
+                )
+                if self._reads_combined(value, state_index):
+                    combined.add(name)
+            task = attrs.evolve(self.node._task, **resolved)
         propagated, accepted, dropped = None, [], {}
         for field in get_fields(task):
             value = getattr(task, field.name)
@@ -402,7 +420,7 @@ class NodeExecution(ty.Generic[TaskType]):
             )
             if isinstance(value, Absent):
                 if mode != "accept":  # a whole value has no elements to drop
-                    propagated = value
+                    propagated = (field.name, WHOLE, value)
                     break
                 accepted.append((field.name, WHOLE, value.cause))
             elif field.name in combined and isinstance(value, (list, StateArray)):
@@ -410,7 +428,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 if not where:
                     continue
                 if mode == "propagate":
-                    propagated = value[where[0]]
+                    propagated = (field.name, where[0], value[where[0]])
                     break
                 accepted.extend((field.name, i, value[i].cause) for i in where)
                 if mode == "drop":
@@ -418,10 +436,34 @@ class NodeExecution(ty.Generic[TaskType]):
                         v for v in value if not isinstance(v, Absent)
                     )
         if propagated is not None:
-            return task, propagated, []
+            name, element, absent = propagated
+            producer = self._producer(reads.get(name), element)
+            identity = absence_identity(
+                task._task_type(), producer, (name, element, absent.cause)
+            )
+            return task, (absent, identity), []
         if dropped:
-            task = attrs.evolve(task, **dropped)
+            with resolving():
+                task = attrs.evolve(task, **dropped)
         return task, None, accepted
+
+    def _producer(
+        self, read: tuple[LazyField, int | None] | None, element: int
+    ) -> str | None:
+        """The unsuffixed checksum of the upstream job a propagated ``Absent`` was read
+        from (the element of a combined read), None if it was not read from one"""
+        if read is None or not isinstance(read[0], LazyOutField):
+            return None
+        value, state_index = read
+        upstream = self.graph.node(value._node.name)
+        indices = list(upstream._read_indices(state_index))
+        if element != WHOLE and element < len(indices):
+            position = indices[element]
+        elif indices:
+            position = indices[0]
+        else:
+            return None
+        return upstream.job(position).unsuffixed_checksum
 
     def _reads_combined(self, value: LazyField, state_index: int | None) -> bool:
         """Whether a lazy input reads a combined value, a list of upstream elements,
@@ -463,6 +505,8 @@ class NodeExecution(ty.Generic[TaskType]):
         """
         if not self.state:
             return [None]
+        if self.absent is not None:  # absent as a whole: it has no elements
+            return range(0)
         if state_index is None or (self.state.combiner and not self.state.ind_l_final):
             return range(len(self.state.states_ind))
         return list(self.state.final_combined_ind_mapping[state_index])

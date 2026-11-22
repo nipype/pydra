@@ -48,6 +48,9 @@ class PlanNode:
         workflow job not yet expanded, a split over an upstream output)
     gated : int
         Elements a gate switches off; always 0 until gates exist
+    absent : int
+        Elements that complete absent because a propagating input holds an ``Absent``
+        (RFC 0002 section 2.3(a)); they are not looked up in the store, routed or placed
     placement : object, optional
         What the worker's executor's ``place(jobs)`` returned for the node's elements,
         when it has one (RFC 0005 section 7.4). Elements whose jobs cannot be formed yet are
@@ -65,6 +68,7 @@ class PlanNode:
     expected_hits: int
     state: ty.Literal["pending", "waiting", "deferred"]
     gated: int = 0
+    absent: int = 0
     placement: object | None = None
     provisional: bool = False
 
@@ -221,6 +225,8 @@ def _node(
         return None
     view = _view(node, frame.graph)
     jobs, unformed = _elements(view) if view is not None else ([], 0)
+    absent = sum(j._propagated_absent is not None for j in jobs)
+    jobs = [j for j in jobs if j._propagated_absent is None]
     workflow_node = is_workflow(node.node._task)
     if workflow_node and view is not None:
         if any(
@@ -258,6 +264,7 @@ def _node(
         worker=worker,
         expected_hits=_hits(runner, unhanded, listed),
         state="deferred" if deferred else "pending",
+        absent=absent,
         placement=placement,
         provisional=provisional,
     )
