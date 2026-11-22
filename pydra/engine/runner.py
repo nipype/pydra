@@ -20,7 +20,13 @@ from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
 from pathlib import Path
 from pydra.engine.job import Job
-from pydra.engine.absent import WHOLE, Absent, absence_identity, resolving
+from pydra.engine.absent import (
+    WHOLE,
+    Absent,
+    absence_identity,
+    resolving,
+    task_definition,
+)
 from pydra.engine.lease import LeaseLost
 from pydra.engine.result import Result
 from pydra.utils.general import get_fields, is_workflow
@@ -120,6 +126,8 @@ class NodeExecution(ty.Generic[TaskType]):
     _absent: list["Job[TaskType]"]
     # The Absent a splitter input resolved to, which leaves the node no elements
     absent: "Absent | None"
+    # The node whose state it inherits that absence from, None if its own splitter input
+    absent_inherits: str | None
 
     # Descriptions of input-resolution errors not yet collected by ``Submitter``
     _resolution_errors: list[str]
@@ -153,6 +161,7 @@ class NodeExecution(ty.Generic[TaskType]):
         self._progress = None
         self._absent = []
         self.absent = None
+        self.absent_inherits = None
 
     @property
     def state(self):
@@ -225,6 +234,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 inherited = self.graph.node(upstream).absent
                 if inherited is not None:
                     self.absent = inherited
+                    self.absent_inherits = upstream
                     break
             values = {}
             for name, value in self.node.state_values.items():
@@ -419,7 +429,12 @@ class NodeExecution(ty.Generic[TaskType]):
                 "accept" if field.name in combined else "propagate"
             )
             if isinstance(value, Absent):
-                if mode != "accept":  # a whole value has no elements to drop
+                if mode == "drop" and field.name in combined:
+                    # a combined read of a wholly absent node: nothing is left
+                    accepted.append((field.name, WHOLE, value.cause))
+                    dropped[field.name] = []
+                    continue
+                if mode != "accept":  # a single value has no elements to drop
                     propagated = (field.name, WHOLE, value)
                     break
                 accepted.append((field.name, WHOLE, value.cause))
@@ -439,7 +454,7 @@ class NodeExecution(ty.Generic[TaskType]):
             name, element, absent = propagated
             producer = self._producer(reads.get(name), element)
             identity = absence_identity(
-                task._task_type(), producer, (name, element, absent.cause)
+                task_definition(task), producer, (name, element, absent.cause)
             )
             return task, (absent, identity), []
         if dropped:
@@ -786,6 +801,28 @@ class Unrunnable:
     upstream: list[str]
 
 
+@attrs.frozen
+class AbsentNode:
+    """A node absent as a whole: a splitter input resolved to an ``Absent``, or its state
+    inherits that of such a node (RFC 0002 section 2.3(a)). It has no elements, so no job
+    of it is dispatched or settled; this is its record.
+
+    Attributes
+    ----------
+    node : str
+        The node's workflow path and name, ``"/"``-joined
+    absent : Absent
+        The ``Absent`` every read of it receives
+    inherits : str | None
+        The node, named as ``node``, whose absence its state inherits; None for the node
+        whose own splitter input is the ``Absent``
+    """
+
+    node: str
+    absent: Absent
+    inherits: str | None
+
+
 def node_label(node: "NodeExecution") -> str:
     """The name of a node with the path of the nested workflows that hold it"""
     return "/".join((*node.path, node.name))
@@ -802,6 +839,8 @@ class Round:
         path, then name); ``job.rerun`` and ``job.attempt`` are already set
     settled : list[Settled]
         The jobs completed by the runner since the last call, never dispatched
+    absent_nodes : list[AbsentNode]
+        The nodes found absent as a whole since the last call, each reported once
     unrunnable : list[Unrunnable]
         The elements marked unrunnable since the last call, each reported once
     retry_after : float | None
@@ -811,6 +850,7 @@ class Round:
     dispatch: list[Job] = attrs.field(factory=list)
     settled: list[Settled] = attrs.field(factory=list)
     unrunnable: list[Unrunnable] = attrs.field(factory=list)
+    absent_nodes: list[AbsentNode] = attrs.field(factory=list)
     retry_after: float | None = None
 
 
@@ -935,6 +975,7 @@ class GraphRunner:
         # reported by ``ready``
         self._settled: list[Settled] = []
         self._reported_unrunnable: set[tuple[int, int | None]] = set()
+        self._reported_absent_nodes: set[int] = set()
         # the same-checksum table: the job handed out for each checksum until its outcome
         # is reported, the twins held behind it, and the outcome once reported
         self._first: dict[str, Job] = {}
@@ -1374,9 +1415,10 @@ class GraphRunner:
         self._collect_resolution_errors()
         settled, self._settled = self._settled, []
         unrunnable = self._new_unrunnable()
+        absent_nodes = self._new_absent_nodes()
         retry_after = self._retry_after()
         self._quiescent = (
-            not (dispatch or settled or unrunnable)
+            not (dispatch or settled or unrunnable or absent_nodes)
             and retry_after is None
             and not self._in_flight
         )
@@ -1384,6 +1426,7 @@ class GraphRunner:
             dispatch=dispatch,
             settled=settled,
             unrunnable=unrunnable,
+            absent_nodes=absent_nodes,
             retry_after=retry_after,
         )
 
@@ -1465,6 +1508,22 @@ class GraphRunner:
                             upstream=[node_label(p) for p in upstream],
                         )
                     )
+        return found
+
+    def _new_absent_nodes(self) -> list[AbsentNode]:
+        """The nodes found absent as a whole that have not been reported yet"""
+        found = []
+        for frame in self._frames:
+            if frame.graph is None:
+                continue
+            for node in frame.graph.sorted_nodes:
+                if node.absent is None or id(node) in self._reported_absent_nodes:
+                    continue
+                self._reported_absent_nodes.add(id(node))
+                inherits = None
+                if node.absent_inherits is not None:
+                    inherits = node_label(frame.graph.node(node.absent_inherits))
+                found.append(AbsentNode(node_label(node), node.absent, inherits))
         return found
 
     def _read_succeeded(self, jobs: list[Job]) -> list[Job]:

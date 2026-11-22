@@ -42,10 +42,11 @@ class PlanNode:
         ``recorded(jobs)`` method (``PickleStore``) is asked for its recorded jobs and the
         others are looked up under that option. A store with neither (an adapter) reports 0. Only
         elements whose inputs are resolvable now have a checksum and are counted.
-    state : "pending" | "waiting" | "deferred"
+    state : "pending" | "waiting" | "deferred" | "absent"
         ``pending``: its elements are released or can be. ``waiting``: a workflow job
         whose lease another process holds. ``deferred``: what it holds is not known yet (a
-        workflow job not yet expanded, a split over an upstream output)
+        workflow job not yet expanded, a split over an upstream output). ``absent``: the
+        node will be absent as a whole (RFC 0002 section 2.3(a)), with no elements
     gated : int
         Elements a gate switches off; always 0 until gates exist
     absent : int
@@ -66,7 +67,7 @@ class PlanNode:
     resources: "ComputeResources | None"
     worker: str | None
     expected_hits: int
-    state: ty.Literal["pending", "waiting", "deferred"]
+    state: ty.Literal["pending", "waiting", "deferred", "absent"]
     gated: int = 0
     absent: int = 0
     placement: object | None = None
@@ -224,6 +225,15 @@ def _node(
     if node.done:
         return None
     view = _view(node, frame.graph)
+    if view is not None and view.absent is not None:
+        return PlanNode(
+            path="/".join((*node.path, node.name)),
+            elements=0,
+            resources=node.node._resources or node.node._task._resources,
+            worker=None,
+            expected_hits=0,
+            state="absent",
+        )
     jobs, unformed = _elements(view) if view is not None else ([], 0)
     absent = sum(j._propagated_absent is not None for j in jobs)
     jobs = [j for j in jobs if j._propagated_absent is None]

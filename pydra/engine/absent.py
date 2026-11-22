@@ -5,16 +5,17 @@ does with one through its ``absent`` attribute: ``"propagate"`` (the element com
 absent without being looked up, shared, dispatched or committed), ``"accept"`` (the value
 is passed as resolved) or ``"drop"`` (a combined value is passed without its absent
 elements). Left unset, a field that reads a single value propagates and one that reads a
-combined value accepts. A field whose whole value is an ``Absent`` propagates under
-``"drop"``, as there are no elements to drop; its triple has the element index -1
-(``WHOLE``).
+combined value accepts. A single value that is an ``Absent`` propagates under
+``"drop"``, as there are no elements to drop. The triple of an ``Absent`` that is a field's
+whole value has the element index -1 (``WHOLE``).
 
 Outside the runner's resolution of an element, an ``Absent`` passes the type coercion of
 an output field and of an input field whose ``absent`` is ``"accept"`` or ``"drop"``.
 
-A combined read of a node that is absent as a whole (a splitter input resolved to an
-``Absent``, or it inherits such a node's state) is an empty list; any other read of it is
-its ``Absent``.
+Every read of a node that is absent as a whole (a splitter input resolved to an
+``Absent``, or its state inherits such a node's) is that ``Absent``. A combining reader then
+applies its mode: ``"accept"`` passes the ``Absent``, ``"drop"`` an empty list, and
+``"propagate"`` completes the reader absent.
 
 A task whose checksum may not see an accepted or dropped ``Absent`` (a supplied checksum,
 or a field the checksum skips) has :func:`absence_suffix` of :func:`absence_triples`
@@ -39,6 +40,7 @@ __all__ = [
     "absence_identity",
     "absence_suffix",
     "absence_triples",
+    "task_definition",
 ]
 
 AbsentMode = ty.Literal["propagate", "accept", "drop"]
@@ -122,25 +124,49 @@ def is_resolving() -> bool:
     return _RESOLVING.get()
 
 
-def absence_identity(
-    task_type: str, producer: str | None, triple: tuple[str, int, str]
-) -> str:
-    """The checksum of a job that completes absent, made without the task's checksum,
-    so no ``checksum=`` hook ever sees an ``Absent``: ``<task type>-absent-`` and the hex
-    SHA-256 of the canonical JSON of ``[producer, [field, {"$int": index}, cause]]``
+def task_definition(task) -> tuple[str, str]:
+    """The task type and the hash of the task's definition without its inputs: its
+    executor (as the checksum hashes it, by code or declared version) and its outputs
+    class, as a normal checksum hashes them
 
     Parameters
     ----------
-    task_type : str
-        The task type, as it begins the task's checksum
+    task : Task
+        The task
+    """
+    from pydra.utils.hash import Cache, hash_function
+
+    cache = Cache(code_hash=task._code_hash)
+    executor = task._executor_name
+    parts = {"Outputs": hash_function(task.Outputs, cache=cache)}
+    if executor is not None:
+        parts[executor] = hash_function(task._hashed_value(executor), cache=cache)
+    return task._task_type(), hash_function(sorted(parts.items()))
+
+
+def absence_identity(
+    definition: tuple[str, str], producer: str | None, triple: tuple[str, int, str]
+) -> str:
+    """The checksum of a job that completes absent, made without the task's checksum,
+    so no ``checksum=`` hook ever sees an ``Absent``: ``<task type>-absent-`` and the hex
+    SHA-256 of the canonical JSON of
+    ``[definition hash, producer, [field, {"$int": index}, cause]]``. Different tasks
+    reading the same ``Absent`` differ; the same task reading it at several elements
+    has one identity, as its results are equal.
+
+    Parameters
+    ----------
+    definition : tuple[str, str]
+        The task type and the hash of the task's definition (:func:`task_definition`)
     producer : str, optional
         The unsuffixed checksum of the job the ``Absent`` was read from, None if it was
         not read from an upstream job
     triple : tuple[str, int, str]
         ``(field, element index, cause)`` of the propagated ``Absent``
     """
+    task_type, definition_hash = definition
     field, index, cause = triple
-    form = [producer, [field, {"$int": str(int(index))}, cause]]
+    form = [definition_hash, producer, [field, {"$int": str(int(index))}, cause]]
     return f"{task_type}-absent-" + hashlib.sha256(jcs(form)).hexdigest()
 
 

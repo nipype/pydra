@@ -451,17 +451,32 @@ def ReadersOfAbsent(n: int) -> list[int]:
 
 
 @python.define
-def Count(vals: list[str]) -> int:
+def Count(vals: list[int]) -> int:
     return len(vals)
 
 
-@workflow.define(outputs=["gathered", "count"])
+@python.define
+def Summarize(vals: list[int]) -> str:
+    """A combined read: its field accepts an ``Absent`` by default"""
+    if isinstance(vals, Absent):
+        return f"absent:{vals.cause}"
+    return ",".join(str(v) for v in vals)
+
+
+@python.define(inputs={"vals": python.arg(type=list[int], absent="propagate")})
+def GatherPropagate(vals) -> list[int]:
+    return list(vals)
+
+
+@workflow.define(outputs=["summary", "dropped", "propagated", "count"])
 def CombiningReadersOfAbsent(n: int):
     a = workflow.add(MaybeList(n=n), name="A")
     b = workflow.add(Inc().split(a=a.out).combine("a"), name="B")
-    g = workflow.add(Gather(vals=b.out), name="G")
-    c = workflow.add(Count(vals=g.out), name="C")
-    return g.out, c.out
+    s = workflow.add(Summarize(vals=b.out), name="S")
+    d = workflow.add(GatherDrop(vals=b.out), name="D")
+    p = workflow.add(GatherPropagate(vals=b.out), name="P")
+    c = workflow.add(Count(vals=p.out), name="C")
+    return s.out, d.out, p.out, c.out
 
 
 def test_non_combining_readers_of_absent_node_are_absent(submitter):
@@ -482,7 +497,8 @@ def test_non_combining_readers_of_absent_node_are_absent(submitter):
     assert submitter(ReadersOfAbsent(n=2)).outputs.out == [3, 4]
 
 
-def test_combining_readers_of_absent_node_get_an_empty_list(submitter):
+def test_combining_readers_of_absent_node_follow_their_mode(submitter):
+    cause = Absent("no-list", "MaybeList")
     runner = GraphRunner(
         CombiningReadersOfAbsent(n=-1),
         submitter.store,
@@ -490,12 +506,59 @@ def test_combining_readers_of_absent_node_get_an_empty_list(submitter):
         on_error="raise_at_end",
     )
     rounds = drive(runner)
-    assert [j.name for r in rounds for j in r.dispatch] == ["A", "G", "C"]
-    assert handed_job(runner, "G").task.vals == []
+    assert sorted(j.name for r in rounds for j in r.dispatch) == ["A", "D", "S"]
+    # accept: the value is the node's Absent, cause kept
+    assert handed_job(runner, "S").task.vals == cause
+    # drop: an empty list
+    assert handed_job(runner, "D").task.vals == []
+    # propagate: the reader is absent, and so is its own reader
+    settled = {s.job.name: s for r in rounds for s in r.settled}
+    assert settled["P"].how == "absent" and settled["C"].how == "absent"
+    assert settled["C"].result.outputs.out == cause
     outputs = submitter(CombiningReadersOfAbsent(n=-1)).outputs
-    assert outputs.gathered == [] and outputs.count == 0
+    assert outputs.summary == "absent:no-list"
+    assert outputs.dropped == [] and outputs.propagated == cause
+    assert outputs.count == cause
     outputs = submitter(CombiningReadersOfAbsent(n=2)).outputs
-    assert outputs.gathered == ["1", "2"] and outputs.count == 2
+    assert outputs.summary == "1,2" and outputs.dropped == [1, 2]
+    assert outputs.count == 2
+
+
+def test_round_reports_wholly_absent_nodes(submitter):
+    runner = GraphRunner(
+        ReadersOfAbsent(n=-1),
+        submitter.store,
+        submitter=submitter,
+        on_error="raise_at_end",
+    )
+    rounds = drive(runner)
+    reported = [e for r in rounds for e in r.absent_nodes]
+    cause = Absent("no-list", "MaybeList")
+    assert [(e.node, e.absent, e.inherits) for e in reported] == [
+        ("B", cause, None),
+        ("C", cause, "B"),
+        ("D", cause, "C"),
+    ]
+    # every node is visible from the rounds alone
+    seen = {j.name for r in rounds for j in r.dispatch}
+    seen |= {s.job.name for r in rounds for s in r.settled}
+    seen |= {e.node for e in reported}
+    assert seen == {"A", "B", "C", "D"}
+
+
+def test_plan_lists_a_node_that_will_be_wholly_absent(submitter):
+    runner = GraphRunner(
+        ReadersOfAbsent(n=-1),
+        submitter.store,
+        submitter=submitter,
+        on_error="raise_at_end",
+    )
+    (a,) = runner.ready().dispatch
+    runner.complete(a, run_inline(a))
+    nodes = {n.path: n for n in runner.plan().nodes}
+    assert nodes["B"].state == "absent" and nodes["B"].elements == 0
+    assert nodes["B"].expected_hits == 0
+    runner.close()
 
 
 # -- a propagated job has no task checksum (fix round 1, B2, I1) -------------------------------------
@@ -548,6 +611,53 @@ def test_propagated_identity_is_the_absence_record(submitter):
     assert handed_job(other, "S").checksum != s.checksum
     cp.loads(cp.dumps(s))  # pickling does not compute a task checksum either
     assert not any(isinstance(v, Absent) for v in SEEN)
+
+
+@python.define(outputs=["p", "q"])
+def Pair(a: int):
+    return a, a
+
+
+@python.define
+def Add(a: int, b: int) -> int:
+    return a + b
+
+
+@workflow.define(outputs=["i", "p", "s"])
+def ManyReaders(x: int):
+    a = workflow.add(Maybe(x=x), name="A")
+    i = workflow.add(Inc(a=a.out), name="I")
+    p = workflow.add(Pair(a=a.out), name="P")
+    s = workflow.add(Add(a=a.out).split(b=[1, 2]), name="S")
+    return i.out, p.p, s.out
+
+
+def test_absence_identity_includes_the_reader_task(submitter):
+    def identities():
+        runner = GraphRunner(
+            ManyReaders(x=-1),
+            submitter.store,
+            submitter=submitter,
+            on_error="raise_at_end",
+        )
+        drive(runner)
+        return {
+            name: handed_job(runner, *key).checksum
+            for name, key in {
+                "I": ("I",),
+                "P": ("P",),
+                "S0": ("S", 0),
+                "S1": ("S", 1),
+            }.items()
+        }
+
+    first = identities()
+    # different task types reading the same absent producer differ
+    assert len({first["I"], first["P"], first["S0"]}) == 3
+    # the same task type with the same absence is deterministic: across its elements
+    # (equal absent results) and across runs
+    assert first["S0"] == first["S1"]
+    assert identities() == first
 
 
 def test_plan_counts_propagated_elements_without_store_reads(tmp_path):
