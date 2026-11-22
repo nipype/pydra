@@ -1176,6 +1176,34 @@ def test_recheck_goes_through_the_verify_path(tmp_path, tasks, pools, monkeypatc
     assert all(len(sub.store.stored(r.checksum)) == 1 for r in parity)
 
 
+def test_recheck_of_a_looked_up_job_still_verifies(tmp_path, tasks, pools, monkeypatch):
+    """A job marked ``looked_up`` by the runner's lookup before dispatch (X6b) is re-checked as a
+    fresh attempt: the copy runs under the store's ``_reusable(lease, looked_up)`` call without
+    being served, and is verified against the committed entry (integration of W9 with X6b).
+    """
+    from pydra.engine.portable.reuse import PolicyReuse
+    from pydra.workers.pool.codec import PrivatePickle
+
+    seen = []
+
+    def compare(self, candidate, stored, fresh, fresh_digest, task):
+        seen.append(candidate.admitted_by)
+        raise ValueError("the hook refuses")
+
+    decode = PrivatePickle.decode
+
+    def decode_looked_up(self, data, store):
+        job = decode(self, data, store)
+        job.looked_up = True  # as if this process had looked it up before dispatch
+        return job
+
+    monkeypatch.setattr(PolicyReuse, "compare", compare)
+    monkeypatch.setattr(PrivatePickle, "decode", decode_looked_up)
+    _, parity, _, _ = _recheck_run(tmp_path, pools, tasks, tasks.Sames, 1.0)
+    assert seen == ["recheck", "recheck"]
+    assert len(parity) == 2 and all("the hook refuses" in r.reason for r in parity)
+
+
 # -- fix round 1: GPU verdicts across pools, attribution, the re-check thread, homes --------------
 
 

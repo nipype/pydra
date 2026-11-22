@@ -1619,7 +1619,9 @@ class WarmPool:
             False  # the follower is a thread: never change the process's directory
         )
         copy.verify = candidate
-        copy._reusable = lambda: None  # run, never serve the entry it verifies against
+        copy.looked_up = False  # a fresh attempt: no lookup made before it counts
+        # run, never serve the entry it verifies against (``_reusable(lease, looked_up)``)
+        copy._reusable = lambda *args, **kwargs: None
         ran = {"task": False}
         inner = copy._run_task
 
