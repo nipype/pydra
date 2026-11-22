@@ -43,13 +43,17 @@ class PlanNode:
         ``recorded(jobs)`` method (``PickleStore``) is asked for its recorded jobs and the
         others are looked up under that option. A store with neither (an adapter) reports 0. Only
         elements whose inputs are resolvable now have a checksum and are counted.
-    state : "pending" | "waiting" | "deferred"
+    state : "pending" | "waiting" | "deferred" | "absent"
         ``pending``: its elements are released or can be. ``waiting``: a workflow job
         whose lease another process holds. ``deferred``: what it holds is not known yet (a
         workflow job not yet expanded, a split over an upstream output none of whose
-        elements has been read)
+        elements has been read). ``absent``: the node will be absent as a whole (RFC 0002
+        section 2.3(a)), with no elements, so it is not routed, placed or looked up
     gated : int
         Elements a gate switches off; always 0 until gates exist
+    absent : int
+        Elements that complete absent because a propagating input holds an ``Absent``
+        (RFC 0002 section 2.3(a)); they are not looked up in the store, routed or placed
     placement : object, optional
         What the worker's executor's ``place(jobs)`` returned for the node's elements,
         when it has one (RFC 0005 section 7.4). Elements whose jobs cannot be formed yet are
@@ -70,8 +74,9 @@ class PlanNode:
     resources: "ComputeResources | None"
     worker: str | None
     expected_hits: int
-    state: ty.Literal["pending", "waiting", "deferred"]
+    state: ty.Literal["pending", "waiting", "deferred", "absent"]
     gated: int = 0
+    absent: int = 0
     placement: object | None = None
     provisional: bool = False
     known_elements: int | None = None
@@ -126,6 +131,8 @@ def _view(node: "NodeExecution", graph) -> "NodeExecution | None":
     twin._state = copy.deepcopy(node.node._state)
     view = NodeExecution(twin, node.submitter, node.workflow, node.path)
     view.graph = node.graph
+    if view._inherit_absent():  # absent as a whole, as the runner would make it
+        return view
     try:
         mode = view._classify()
         if mode == "error":
@@ -254,7 +261,20 @@ def _node(
     if node.done:
         return None
     view = _view(node, frame.graph)
+    if view is not None and view.absent is not None:
+        return PlanNode(
+            path="/".join((*node.path, node.name)),
+            elements=0,
+            resources=node.node._resources or node.node._task._resources,
+            worker=None,
+            expected_hits=0,
+            state="absent",
+            known_elements=0,
+        )
     jobs, unformed = _elements(view, node) if view is not None else ([], 0)
+    # elements completing absent are counted, and never routed, placed or looked up
+    absent = sum(j._propagated_absent is not None for j in jobs)
+    jobs = [j for j in jobs if j._propagated_absent is None]
     workflow_node = is_workflow(node.node._task)
     if workflow_node and view is not None:
         if any(
@@ -298,6 +318,7 @@ def _node(
         worker=worker,
         expected_hits=_hits(runner, unhanded, listed),
         state="deferred" if deferred else "pending",
+        absent=absent,
         placement=placement,
         provisional=provisional,
         known_elements=known,
