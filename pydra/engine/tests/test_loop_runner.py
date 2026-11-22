@@ -2,6 +2,7 @@
 ``workflow.loop`` is added to the loop job's graph only once the round before it is done
 and its ``until`` output is false"""
 
+import shutil
 import typing as ty
 
 import pytest
@@ -11,6 +12,7 @@ from pydra.engine.absent import Absent
 from pydra.engine.job import Job
 from pydra.engine.result import Result
 from pydra.engine.runner import Failed, GraphRunner, NotRun
+from pydra.engine.store import SUCCESS_DIR, PickleStore
 from pydra.engine.submitter import Submitter
 from pydra.utils.general import get_fields
 
@@ -407,3 +409,162 @@ def test_carried_input_default(submitter):
     """N5: a carried input with a default the loop is not given starts from it"""
     out = loop_outputs(submitter, workflow.loop(CountFrom, until="done")(stop=13))
     assert (out.n, out.rounds) == (13, 3)
+
+
+# -- split, gate, absence and the store (L4) ---------------------------------------------------------
+
+
+@python.define
+def Ident(v: int) -> int:
+    return v
+
+
+@python.define
+def Upto(n: int) -> list[int]:
+    return [4 * 2**k for k in range(n)]
+
+
+@python.define
+def Positive(x: int) -> bool:
+    return x > 0
+
+
+@python.define
+def MaybeAbsent(x: int) -> int:
+    if x < 0:
+        return Absent(cause="negative", source="MaybeAbsent")
+    return x
+
+
+@python.define(
+    inputs={"x": python.arg(type=int, absent="accept")}, outputs=["x", "done"]
+)
+def Accepting(x) -> tuple[int, bool]:
+    if isinstance(x, Absent):
+        return 0, True
+    return x, True
+
+
+HalveLoop = workflow.loop(Halve, until="done")
+
+
+@workflow.define(outputs=["x", "rounds"])
+def OverSplit(xs: list[int]) -> tuple[list[int], list[int]]:
+    s = workflow.add(Ident().split(v=xs), name="s")
+    loop = workflow.add(HalveLoop(x=s.out, target=1), name="halve")
+    return loop.x, loop.rounds
+
+
+@workflow.define(outputs=["x", "rounds"])
+def OverPartial(n: int) -> tuple[list[int], list[int]]:
+    up = workflow.add(Upto(n=n), name="up")
+    loop = workflow.add(HalveLoop(target=1).split(x=up.out), name="halve")
+    return loop.x, loop.rounds
+
+
+@workflow.define(outputs=["x", "rounds", "stopped"])
+def GatedLoop(x: int) -> tuple[int, int, str]:
+    pos = workflow.add(Positive(x=x), name="pos")
+    loop = workflow.add(HalveLoop(x=x, target=1), name="halve", when=pos.out)
+    return loop.x, loop.rounds, loop.stopped
+
+
+@workflow.define(outputs=["x", "rounds"])
+def AbsentIntoLoop(x: int, accept: bool) -> tuple[int, int]:
+    m = workflow.add(MaybeAbsent(x=x), name="m")
+    if accept:
+        loop = workflow.add(workflow.loop(Accepting, until="done")(x=m.out), name="lp")
+    else:
+        loop = workflow.add(HalveLoop(x=m.out, target=1), name="lp")
+    return loop.x, loop.rounds
+
+
+@workflow.define(outputs=["a", "b"])
+def TwoLoops(stop: int) -> tuple[int, int]:
+    a = workflow.add(workflow.loop(Count, max_rounds=10)(n=0, stop=stop), name="a")
+    b = workflow.add(workflow.loop(Count, max_rounds=11)(n=0, stop=stop), name="b")
+    return a.n, b.n
+
+
+def test_loop_downstream_of_split(submitter):
+    """B1: one loop per element, each with its own round count"""
+    rounds = drive(runner_for(submitter, OverSplit(xs=[16, 4])))
+    paths = sorted(
+        {j.workflow_path for r in rounds for j in r.dispatch if j.name[0] == "r"}
+    )
+    assert paths == [("halve[0]",), ("halve[1]",)]
+    out = loop_outputs(submitter, OverSplit(xs=[16, 4]))
+    assert (out.x, out.rounds) == ([1, 1], [4, 2])
+
+
+def test_loop_under_partial_split(submitter):
+    """A loop split over an upstream output (E2) loops per element"""
+    out = loop_outputs(submitter, OverPartial(n=3))  # 4, 8, 16
+    assert (out.x, out.rounds) == ([1, 1, 1], [2, 3, 4])
+
+
+def test_gated_off_loop_never_entered(submitter):
+    rounds = drive(runner_for(submitter, GatedLoop(x=-8)))
+    assert dispatched(rounds) == ["pos"]
+    (loop,) = settled(rounds, "halve")
+    assert loop.how == "gated"
+    out = loop_outputs(submitter, GatedLoop(x=-8))
+    for value in (out.x, out.rounds, out.stopped):
+        assert value == Absent(cause="not-routed", source="halve")
+    assert loop_outputs(submitter, GatedLoop(x=8)).rounds == 3
+
+
+def test_absent_input_propagates_or_is_accepted(submitter):
+    rounds = drive(runner_for(submitter, AbsentIntoLoop(x=-1, accept=False)))
+    assert dispatched(rounds) == ["m"]
+    assert [s.how for s in settled(rounds, "lp")] == ["absent"]
+    out = loop_outputs(submitter, AbsentIntoLoop(x=-1, accept=False))
+    assert out.x == out.rounds == Absent(cause="negative", source="MaybeAbsent")
+
+    rounds = drive(runner_for(submitter, AbsentIntoLoop(x=-1, accept=True)))
+    assert [n for n in dispatched(rounds) if n != "m"] == ["r0"]
+    out = loop_outputs(submitter, AbsentIntoLoop(x=-1, accept=True))
+    assert (out.x, out.rounds) == (0, 1)
+
+
+def test_rerun_of_finished_loop_is_workflow_stored(submitter):
+    loop_outputs(submitter, Outer(stop=4))
+    rounds = drive(runner_for(submitter, Outer(stop=4)))
+    assert [s.how for s in settled(rounds, "count")] == ["workflow-stored"]
+    assert not [s for s in settled(rounds) if s.job.name[0] == "r"]
+    assert [j for j in dispatched(rounds) if j[0] == "r"] == []
+
+
+def test_rerun_without_loop_slot_replays_rounds(tmp_path):
+    """The store is the loop's state: without the loop job's slot each round is read
+    from its own and the next is instantiated from it"""
+    cache_root = tmp_path / "pickled"
+    with Submitter(worker="debug", store=PickleStore(cache_root)) as submitter:
+        _replay_without_loop_slot(submitter, cache_root)
+
+
+def _replay_without_loop_slot(submitter, cache_root):
+    loop_outputs(submitter, Outer(stop=4))
+    checksum = CountLoop(n=0, stop=4)._checksum
+    shutil.rmtree(cache_root / checksum)
+    for record in (cache_root / SUCCESS_DIR).glob(f"{checksum}-*"):
+        record.unlink()
+    rounds = drive(runner_for(submitter, Outer(stop=4)))
+    assert [j for j in dispatched(rounds) if j[0] == "r"] == []
+    assert [(s.job.name, s.how) for s in settled(rounds) if s.job.name[0] == "r"] == [
+        (f"r{k}", "stored") for k in range(4)
+    ]
+    out = loop_outputs(submitter, Outer(stop=4))
+    assert (out.n, out.rounds) == (4, 4)
+
+
+def test_two_loops_with_equal_inputs_share_rounds(submitter):
+    rounds = drive(runner_for(submitter, TwoLoops(stop=3)))
+    ran = [(j.workflow_path, j.name) for r in rounds for j in r.dispatch]
+    shared = [(s.job.workflow_path, s.job.name, s.how) for s in settled(rounds)]
+    assert len(ran) == 3
+    assert sorted(path for path, _ in ran) in ([("a",)] * 3, [("b",)] * 3)
+    assert sorted(name for _, name, _ in shared) == ["r0", "r1", "r2"]
+    assert {how for *_, how in shared} <= {"shared", "stored"}
+    out = loop_outputs(submitter, TwoLoops(stop=3))
+    assert (out.a, out.b) == (3, 3)
