@@ -408,3 +408,135 @@ def test_nested_workflow_waits_for_lease_then_reads_stored(tmp_path, monkeypatch
     assert [s.how for r in rounds for s in r.settled if s.job is two] == [
         "workflow-stored"
     ]
+
+
+# -- with the absence suffix and gates (RFC 0002 R10a/R10b; integration/senselab merge) ------------
+
+
+@python.define
+def MaybeNeg(x: int) -> int:
+    from pydra.engine.absent import Absent
+
+    return Absent(cause="negative", source="MaybeNeg") if x < 0 else x
+
+
+def count_key(task, inputs):
+    """A supplied checksum from how many values are read, not from them, so an accepted
+    ``Absent`` is not seen by it and the job's checksum carries the absence suffix"""
+    return f"{type(task).__name__.lower()}-n{len(inputs['vals'])}"
+
+
+@python.define(
+    checksum=count_key, inputs={"vals": python.arg(type=list[int], absent="accept")}
+)
+def KeyedShow(vals) -> list[str]:
+    return [f"absent:{v.cause}" if hasattr(v, "cause") else str(v) for v in vals]
+
+
+@workflow.define(
+    checksum=count_key, inputs={"vals": workflow.arg(type=list[int], absent="accept")}
+)
+def KeyedShowWf(vals) -> list[str]:
+    return workflow.add(KeyedShow(vals=vals), name="show").out
+
+
+@workflow.define(outputs=["leaf", "wf"])
+def SuffixedReaders(xs: list[int], run: int):
+    a = workflow.add(MaybeNeg().split(x=xs).combine("x"), name="A")
+    leaf = workflow.add(KeyedShow(vals=a.out), name="leaf")
+    wf = workflow.add(KeyedShowWf(vals=a.out), name="wf")
+    return leaf.out, wf.out
+
+
+def suffixed_run(store, sub, xs, run):
+    # ``run`` changes the outer workflow's checksum only, so it is never served whole
+    runner = runner_for(store, sub, SuffixedReaders(xs=xs, run=run))
+    rounds = drive_with_run(runner)
+    jobs = {n: runner.exec_graph[n].job(None) for n in ("leaf", "wf")}
+    how = {
+        s.job.name: s.how for r in rounds for s in r.settled if s.job in jobs.values()
+    }
+    assert runner.errors == [], runner.errors
+    return runner.result().outputs, jobs, how
+
+
+def test_suffixed_checksum_publishes_and_is_found_under_suffixed_key(
+    tmp_path, monkeypatch
+):
+    """A leaf job and a workflow job whose checksum carries the absence suffix (a reader
+    that accepts an ``Absent`` its supplied checksum cannot see) publish under the suffixed
+    key, never the unsuffixed one, nor does the workflow's inner node, which is given the
+    ``Absent`` as a constant; the same readers in another run are served those entries, and
+    a run without the absence, whose checksums are unsuffixed, is not."""
+    store = make(tmp_path)
+    published = spy(monkeypatch, store, "publish")
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        outputs, jobs, _ = suffixed_run(store, sub, [1, -1, 3], 1)
+    shown = ["1", "absent:negative", "3"]
+    assert outputs.leaf == shown and outputs.wf == shown
+    keys = {args[0] for args, _ in published}
+    for name, job in jobs.items():
+        assert job.checksum != job.unsuffixed_checksum
+        assert job.checksum.startswith(job.unsuffixed_checksum + "-absent-")
+        assert job.checksum in keys and job.unsuffixed_checksum not in keys, name
+    suffixed = {n: j.checksum for n, j in jobs.items()}
+
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        outputs, jobs, how = suffixed_run(store, sub, [1, -1, 3], 2)
+    assert outputs.leaf == shown and outputs.wf == shown
+    assert {n: j.checksum for n, j in jobs.items()} == suffixed
+    assert how == {"leaf": "stored", "wf": "workflow-stored"}
+
+    published.clear()
+    expansions = count_expansions(monkeypatch)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        outputs, jobs, how = suffixed_run(store, sub, [1, 2, 3], 3)
+    assert outputs.leaf == ["1", "2", "3"] and outputs.wf == ["1", "2", "3"]
+    assert how == {}  # neither is served the entry published with the absence
+    assert "KeyedShowWf" in expansions
+    for job in jobs.values():
+        assert job.checksum == job.unsuffixed_checksum
+        assert job.checksum in {args[0] for args, _ in published}
+
+
+@python.define
+def Positive(x: int) -> bool:
+    return x > 0
+
+
+@workflow.define(outputs=["absent", "gated"])
+def AbsentAndGated(x: int):
+    a = workflow.add(MaybeNeg(x=x), name="A")
+    b = workflow.add(Add1(x=a.out), name="B")  # propagates A's Absent
+    c = workflow.add(Positive(x=x), name="C")
+    d = workflow.add(Boom(x=x), name="D", when=c.out)  # gated off: never runs
+    return b.out, d.out
+
+
+def test_absent_and_gated_jobs_take_no_lease_and_write_no_error_json(
+    tmp_path, monkeypatch
+):
+    """Under a de-duplicating `PortableStore`, whose leases exclude other takers, an
+    element completed absent and one gated off take no lease, publish nothing and write
+    no ``_error.json``, though ``Job._may_record_error`` would allow one in a work
+    directory"""
+    store = make(tmp_path, dedupe=True)
+    acquired = spy(monkeypatch, store, "acquire")
+    published = spy(monkeypatch, store, "publish")
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = runner_for(store, sub, AbsentAndGated(x=-1))
+        rounds = drive_with_run(runner)
+        outputs = runner.result().outputs
+        b = runner.exec_graph["B"].job(None)
+        d = runner.exec_graph["D"].job(None)
+    assert outputs.absent.cause == "negative" and outputs.gated.cause == "not-routed"
+    how = {s.job.name: s.how for r in rounds for s in r.settled}
+    assert how["B"] == "absent" and how["D"] == "gated"
+    assert d._gated and b._propagated_absent is not None
+    leased = {args[0] for args, _ in acquired}
+    keys = {args[0] for args, _ in published}
+    for job in (b, d):
+        assert job.checksum not in leased and job.checksum not in keys
+        assert job.attempt is None  # no attempt, so no work directory to write into
+    assert not list(tmp_path.rglob("_error.json"))
+    assert runner.entries == [] and runner.errors == []
