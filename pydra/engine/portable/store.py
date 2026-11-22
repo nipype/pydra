@@ -27,7 +27,12 @@ from pathlib import Path
 import attrs
 import cloudpickle as cp
 
-from pydra.engine.lease import DirectoryLease, LeaseSettings
+from pydra.engine.lease import (
+    HOLDER_FILE,
+    DirectoryLease,
+    LeaseSettings,
+    holder_stale_after,
+)
 from pydra.engine.portable.entry import (
     CorruptEntry,
     EntryFormat,
@@ -102,6 +107,7 @@ _RERANKS = 4
 _REPARSE = 0x400
 _WORK = "work"
 _LEASES = "leases"
+_LEASE_TOKEN = re.compile(r"^[0-9a-f]{32}$")  # a holder's directory in a lease
 _RESUME = "resume-"  # a resumable job's work directory, named as its lease
 _AUDIT = "audit"
 _COMMITTED = "_committed.json"
@@ -377,6 +383,14 @@ class PortableStore:
     pickle : bool
         Whether writers to a new root may write pickle members; recorded when the root is
         created and read from the header after.
+    lease_settings : LeaseSettings, optional
+        How the store's leases (de-duplication, resume and rerun) beat, age and wait; see
+        `~pydra.engine.lease.LeaseSettings`. The holder is always ``"anonymous"``: an entry
+        is portable, so its lease names no user, host or pid. A lease is stale only after
+        the larger of this ``stale_after`` and the one its holder recorded, at most
+        ``max_honoured_stale_after`` (`~pydra.engine.lease.holder_stale_after`), so a process
+        with shorter bounds never takes over a live holder. Default ``LeaseSettings()``;
+        read-only after construction.
     """
 
     def __init__(
@@ -394,7 +408,16 @@ class PortableStore:
         pickle: bool = False,
         reuse: ty.Any = "consistent",
         on_commit: ty.Callable | None = None,
+        lease_settings: LeaseSettings | None = None,
     ) -> None:
+        if lease_settings is None:
+            lease_settings = LeaseSettings()
+        elif not isinstance(lease_settings, LeaseSettings):
+            raise TypeError(
+                f"lease_settings must be a LeaseSettings, got {type(lease_settings).__name__}"
+            )
+        # evolve checks the bounds again
+        lease_settings = attrs.evolve(lease_settings, holder="anonymous")
         if trust not in TRUSTS:
             raise ValueError(f"trust must be one of {TRUSTS}, got {trust!r}")
         if trust == "shared" and work_dir is None:
@@ -415,6 +438,7 @@ class PortableStore:
             pickle=pickle,
             reuse=reuse,
             on_commit=on_commit,
+            lease_settings=lease_settings,
         )
         self.path = os.path.abspath(os.fspath(root))
         self.trust = trust
@@ -428,7 +452,7 @@ class PortableStore:
         self.on_commit = on_commit
         self.visibility_timeout = VISIBILITY_TIMEOUT
         self._work_policy = attrs.evolve(policy, verify_files="digest")
-        self._lease_settings = LeaseSettings(holder="anonymous")
+        self._lease_settings = lease_settings
         self._make_root()
         expected = LayoutHeader.for_store(
             identity,
@@ -483,6 +507,11 @@ class PortableStore:
 
     def __reduce__(self) -> tuple:
         return (_rebuild, (self._args,))
+
+    @property
+    def lease_settings(self) -> LeaseSettings:
+        """The bounds of the store's leases, holder ``"anonymous"``; fixed at construction."""
+        return self._lease_settings
 
     def __repr__(self) -> str:
         return f"PortableStore({self.path!r}, trust={self.trust!r})"
@@ -1533,18 +1562,46 @@ class PortableStore:
                 self._sweep(work, e, age, now, report)
 
     def _lease_live(self, root: StorageDir, name: str, now: float) -> bool:
-        """Whether the lease ``<root>/leases/<name>.lock`` exists and was renewed within its
-        ``stale_after``; one that cannot be read is taken as live."""
+        """Whether the lease ``<root>/leases/<name>.lock`` exists and was renewed within the
+        larger of this store's ``stale_after`` and its holder's; one that cannot be read is
+        taken as live."""
         try:
             with root.child(_LEASES) as leases:
                 newest = self._newest_in(leases, f"{name}.lock")
+                record, unreadable = self._holder_record(leases, f"{name}.lock")
         except (FileNotFoundError, WrongKindError):
             return False
         except OSError:
             return True
         if newest is None:  # not a directory: not a lease this store takes
             return False
-        return now - newest < self._lease_settings.stale_after
+        return now - newest < holder_stale_after(
+            record, self.lease_settings, unreadable=unreadable
+        )
+
+    @staticmethod
+    def _holder_record(leases: StorageDir, name: str) -> tuple[dict | None, bool]:
+        """The holder record of the lease ``name`` (None if none can be read), and whether
+        a record exists that could not be read."""
+        unreadable = False
+        try:
+            with leases.child(name) as lease:
+                for e in sorted(lease.scandir(), key=lambda e: e.name):
+                    if not _LEASE_TOKEN.match(e.name):
+                        continue
+                    try:
+                        with lease.child(e.name) as t, t.open_read(HOLDER_FILE) as f:
+                            record = json.loads(f.read())
+                    except (FileNotFoundError, ValueError, WrongKindError):
+                        continue
+                    except OSError:
+                        unreadable = True
+                        continue
+                    if isinstance(record, dict):
+                        return record, False
+        except (OSError, WrongKindError):
+            pass
+        return None, unreadable
 
     @staticmethod
     def _newest_in(parent: StorageDir, name: str) -> float | None:
@@ -2897,7 +2954,7 @@ class PortableStore:
                 root.child(_LEASES, create=True, mode=self.policy.side_mode).close()
         leases = Path(self.path) / _LEASES
         return DirectoryLease(
-            checksum, leases, leases / f"{name}.lock", settings=self._lease_settings
+            checksum, leases, leases / f"{name}.lock", settings=self.lease_settings
         )
 
     # -- the ResultStore adapter ---------------------------------------------------------------------

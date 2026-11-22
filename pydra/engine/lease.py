@@ -34,6 +34,10 @@ STALE_AFTER = 300.0
 """Default seconds, on the storage clock, after a lease's last heartbeat at which it is
 stale and another process takes it over (see `LeaseSettings`)."""
 
+MAX_HONOURED_STALE_AFTER = 4 * STALE_AFTER
+"""Default most seconds of a holder's recorded ``stale_after`` a taker honours (see
+`LeaseSettings`), or the taker's own ``stale_after`` if that is larger."""
+
 RENEW_FRACTION = 0.1
 """Default heartbeat interval as a fraction of ``stale_after``."""
 
@@ -162,9 +166,12 @@ class Lease(ty.Protocol):
 class LeaseSettings:
     """How a `DirectoryLease` beats, ages and waits.
 
-    A holder renews its lease every ``renew_fraction * stale_after`` seconds. Another
-    process takes the lease over once the newest mark the holder left is older than
-    ``stale_after`` on the storage clock.
+    A holder renews its lease every ``renew_fraction * stale_after`` seconds and records
+    its ``stale_after``. Another process takes the lease over once the newest mark the
+    holder left is older than the larger of its own ``stale_after`` and the holder's, at
+    most ``max_honoured_stale_after`` (`holder_stale_after`), on the storage clock. So
+    shorter bounds never take over a live holder that runs on longer ones up to the cap,
+    and a record of an absurd bound cannot keep a dead holder's lease forever.
 
     A waiter behind a holder that keeps renewing waits for as long as the holder runs,
     as it would for any job it needs. ``timeout`` counts only time in which no renewal
@@ -213,15 +220,23 @@ class LeaseSettings:
     max_wait : float | None
         Seconds after which any wait ends in `LeaseTimeout`, even behind a holder that
         keeps renewing; None (default) for no cap.
+    max_honoured_stale_after : float
+        Most seconds of a holder's recorded ``stale_after`` this process honours, and
+        what a holder record that exists but cannot be read counts as. Default
+        `MAX_HONOURED_STALE_AFTER` (four times the default ``stale_after``, 1200 s), or
+        ``stale_after`` if larger; it must be at least ``stale_after``. A waiter's
+        ``timeout`` stretches by at most ``max_honoured_stale_after - stale_after``.
     holder : {"named", "anonymous"}
         What the holder record names. ``"named"`` (default) writes the owner, host and pid;
-        ``"anonymous"`` writes only the token and the start time, and messages say "another
-        process", so nothing in the lease directory names a user, a host or a job.
+        ``"anonymous"`` writes only the token, the start time and ``stale_after``, and
+        messages say "another process", so nothing in the lease directory names a user,
+        a host or a job.
 
     Two settings are equal when their four staleness fields are (``stale_after``,
     ``renew_fraction``, ``attribute_delay``, ``timeout``); ``max_wait`` caps one
-    waiter and ``holder`` chooses what one holder writes, so both may differ between
-    processes sharing leases and neither is compared. `to_json` and `from_json`
+    waiter, ``max_honoured_stale_after`` bounds what one taker honours and ``holder``
+    chooses what one holder writes, so these may differ between processes sharing leases
+    and none is compared. `to_json` and `from_json`
     carry the same four fields.
     """
 
@@ -231,11 +246,23 @@ class LeaseSettings:
     attribute_delay: float = ATTRIBUTE_DELAY
     max_wait: float | None = attrs.field(default=None, eq=False)
     holder: ty.Literal["named", "anonymous"] = attrs.field(default="named", eq=False)
+    max_honoured_stale_after: float = attrs.field(
+        default=attrs.Factory(
+            lambda self: max(MAX_HONOURED_STALE_AFTER, self.stale_after),
+            takes_self=True,
+        ),
+        eq=False,
+    )
 
     def __attrs_post_init__(self):
         if self.holder not in ("named", "anonymous"):
             raise ValueError(
                 f"holder must be 'named' or 'anonymous' (got {self.holder!r})"
+            )
+        if not self.stale_after <= self.max_honoured_stale_after < float("inf"):
+            raise ValueError(
+                "max_honoured_stale_after must be finite and at least stale_after (got "
+                f"{self.max_honoured_stale_after} and {self.stale_after})"
             )
         if self.max_wait is not None and self.max_wait < 0:
             raise ValueError(f"max_wait must not be negative (got {self.max_wait})")
@@ -295,6 +322,28 @@ class LeaseSettings:
 
 
 _SETTINGS_FIELDS = ("stale_after", "renew_fraction", "attribute_delay", "timeout")
+
+
+def holder_stale_after(
+    record: dict | None, settings: LeaseSettings, *, unreadable: bool = False
+) -> float:
+    """The ``stale_after`` to judge a holder by: the larger of ``settings.stale_after``
+    and the one its record carries, at most ``settings.max_honoured_stale_after``.
+
+    A record without a valid one (an older pydra wrote it) counts as the default
+    `STALE_AFTER`. With no record, the cap if a record exists but could not be read
+    (``unreadable``, another user's on a shared root), otherwise the taker's own."""
+    own, cap = settings.stale_after, settings.max_honoured_stale_after
+    if not isinstance(record, dict):
+        return cap if unreadable else own
+    recorded = record.get("stale_after", STALE_AFTER)
+    if (
+        isinstance(recorded, bool)
+        or not isinstance(recorded, (int, float))
+        or not 0 < recorded < float("inf")
+    ):
+        recorded = STALE_AFTER
+    return min(max(own, float(recorded)), cap)
 
 
 def _owner() -> str:
@@ -368,10 +417,12 @@ class DirectoryLease:
 
     The lease is the directory ``lockfile``. Of the processes making it, one succeeds
     and holds the lease; it records itself in ``<lockfile>/<token>/holder.json``
-    (owner, host, pid and start time) under a random token. A heartbeat thread renews
-    the lease every ``settings.renew_interval`` by making and removing an entry in the
-    token directory. Another process takes the lease over once the newest mtime in it
-    is older than ``settings.stale_after``, measured on the storage server's clock (the
+    (owner, host, pid, start time and ``stale_after``) under a random token. A heartbeat
+    thread renews the lease every ``settings.renew_interval`` by making and removing an
+    entry in the token directory. Another process takes the lease over once the newest
+    mtime in it is older than `holder_stale_after` (``settings.stale_after`` or the
+    holder's recorded one, whichever is larger, at most
+    ``settings.max_honoured_stale_after``), measured on the storage server's clock (the
     mtime of a file just created beside the lease), never this host's. Takeover renames
     the holder's token directory, so of several processes taking one lease over exactly
     one succeeds, and a holder that was taken over finds out at its next heartbeat or
@@ -437,6 +488,8 @@ class DirectoryLease:
     _refused: OSError | None = attrs.field(default=None, init=False, repr=False)
     _unreadable_since: float | None = attrs.field(default=None, init=False, repr=False)
     _deadline: float = attrs.field(default=0.0, init=False, repr=False)
+    _restarted: float = attrs.field(default=0.0, init=False, repr=False)
+    _record_unreadable: bool = attrs.field(default=False, init=False, repr=False)
     _cap: float | None = attrs.field(default=None, init=False, repr=False)
     _delay: float = attrs.field(default=POLL_MIN, init=False, repr=False)
     _waiting: bool = attrs.field(default=False, init=False, repr=False)
@@ -527,6 +580,7 @@ class DirectoryLease:
         self._newest_seen, self._refused, self._delay = None, None, POLL_MIN
         self._unreadable_since = None
         now = self.monotonic()
+        self._restarted = now
         self._deadline = now + self.settings.timeout
         max_wait = self.settings.max_wait
         self._cap = now + max_wait if max_wait is not None else None
@@ -563,7 +617,11 @@ class DirectoryLease:
             except OSError:
                 pass
             return False
-        record = {"started": os.stat(token_dir).st_mtime, "token": token}
+        record = {
+            "started": os.stat(token_dir).st_mtime,
+            "token": token,
+            "stale_after": self.settings.stale_after,
+        }
         if self.settings.holder == "named":
             record = {
                 "owner": _owner(),
@@ -582,7 +640,9 @@ class DirectoryLease:
     # Judging and taking over
 
     def _read_holder(self) -> tuple[dict | None, list[str]]:
-        """The holder's record and the entries of the lease directory."""
+        """The holder's record and the entries of the lease directory. Sets
+        ``_record_unreadable`` if a record exists that could not be read."""
+        self._record_unreadable = False
         try:
             entries = os.listdir(self.lockfile)
         except NotADirectoryError:
@@ -596,7 +656,10 @@ class DirectoryLease:
                     record = json.loads(
                         (self.lockfile / entry / HOLDER_FILE).read_text()
                     )
-                except (OSError, ValueError):
+                except (FileNotFoundError, NotADirectoryError, ValueError):
+                    continue
+                except OSError:
+                    self._record_unreadable = True
                     continue
                 if isinstance(record, dict):
                     return record, entries
@@ -664,7 +727,20 @@ class DirectoryLease:
         self._last_seen = (holder, age)
         if not self._judgeable(unreadable, now):
             return False
-        if age <= self.settings.stale_after:
+        stale_after = holder_stale_after(
+            holder, self.settings, unreadable=self._record_unreadable
+        )
+        if stale_after > self.settings.stale_after:
+            # wait for a dead holder with longer bounds as long as for one with ours, up
+            # to max_honoured_stale_after
+            self._deadline = max(
+                self._deadline,
+                self._restarted
+                + self.settings.timeout
+                + stale_after
+                - self.settings.stale_after,
+            )
+        if age <= stale_after:
             return False
         tokens = [e for e in entries if _TOKEN.match(e)]
         if tokens:
@@ -847,7 +923,8 @@ class DirectoryLease:
         """Note the newest mark in the lease; restart the wait's bound if it advanced,
         since the holder has then been shown alive."""
         if self._newest_seen is not None and newest > self._newest_seen:
-            self._deadline = self.monotonic() + self.settings.timeout
+            self._restarted = self.monotonic()
+            self._deadline = self._restarted + self.settings.timeout
             self._refused = None
         if self._newest_seen is None or newest > self._newest_seen:
             self._newest_seen = newest
