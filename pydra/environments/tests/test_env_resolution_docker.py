@@ -23,7 +23,7 @@ class FakeDocker:
         self.inspected = []
         self.heads = []
         monkeypatch.setattr(base, "execute", self.execute)
-        monkeypatch.setattr(images, "registry_digest", self.head)
+        monkeypatch.setattr(images, "registry_manifest", self.head)
 
     def execute(self, cmd, strip=False, **kwargs):
         if self.docker_missing:
@@ -38,7 +38,8 @@ class FakeDocker:
 
     def head(self, repository, tag):
         self.heads.append((repository, tag))
-        return self.registry.get(f"{repository}:{tag}")
+        digest = self.registry.get(f"{repository}:{tag}")
+        return None if digest is None else (digest, None)
 
 
 def test_docker_given_digest_no_lookup(monkeypatch):
@@ -347,7 +348,7 @@ def test_registry_errors_leave_the_image_unresolved(monkeypatch):
         raise http.client.LineTooLong("header")
 
     monkeypatch.setattr(urllib.request, "urlopen", broken)
-    assert images.registry_digest("org/tool", "1") is None
+    assert images.registry_manifest("org/tool", "1") is None
 
 
 def test_environments_differing_only_in_tag_resolve_apart(monkeypatch, tmp_path):
@@ -412,3 +413,76 @@ def test_python_task_resolves_no_image(monkeypatch, tmp_path):
         task=Plus(a=1), name="j", submitter=sub, environment=docker.Docker(image="tool")
     )
     job.__getstate__()
+
+
+def test_docker_records_local_id_and_platform_digest(monkeypatch, tmp_path):
+    FakeDocker(monkeypatch, local={"org/tool:1": (ID, [f"org/tool@{D1}"])})
+    job = _job(tmp_path, docker.Docker(image="org/tool", tag="1"))
+    assert job.context["environment_facts"] == {"image_id": ID}
+    assert job.record["job"]["environment"] == f"docker@1:{D1}"
+    FakeDocker(monkeypatch)
+    monkeypatch.setattr(images, "registry_manifest", lambda repo, tag: (D1, D2))
+    ref = docker.Docker(image="org/tool", tag="2").resolve()
+    assert ref.key == f"docker@1:{D1}" and ref.recorded == {"platform_digest": D2}
+
+
+class _Response:
+    def __init__(self, headers, body=b""):
+        self.headers = headers
+        self.body = body
+
+    def read(self, *args):
+        body, self.body = self.body, b""
+        return body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def test_registry_manifest_reads_the_platform_from_the_index(monkeypatch):
+    import urllib.request
+
+    index = {
+        "manifests": [
+            {"digest": D1, "platform": {"os": "linux", "architecture": "s390x"}},
+            {"digest": D2, "platform": {"os": "linux", "architecture": "amd64"}},
+        ]
+    }
+    requests = []
+
+    def urlopen(request, timeout=None):
+        requests.append((request.get_method(), request.full_url))
+        if request.get_method() == "HEAD":
+            return _Response(
+                {
+                    "Docker-Content-Digest": ID,
+                    "Content-Type": "application/vnd.oci.image.index.v1+json",
+                }
+            )
+        return _Response({}, json.dumps(index).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(images, "host_platform", lambda: ("linux", "amd64"))
+    assert images.registry_manifest("ghcr.io/org/tool", "1") == (ID, D2)
+    assert requests == [
+        ("HEAD", "https://ghcr.io/v2/org/tool/manifests/1"),
+        ("GET", f"https://ghcr.io/v2/org/tool/manifests/{ID}"),
+    ]
+    # a single manifest is its own platform manifest, with no second request
+    requests.clear()
+
+    def single(request, timeout=None):
+        requests.append(request.get_method())
+        return _Response(
+            {
+                "Docker-Content-Digest": D1,
+                "Content-Type": "application/vnd.oci.image.manifest.v1+json",
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", single)
+    assert images.registry_manifest("ghcr.io/org/tool", "1") == (D1, D1)
+    assert requests == ["HEAD"]
