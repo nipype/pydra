@@ -285,12 +285,17 @@ def test_loop_under_split_with_an_absent_element(submitter):
     assert (out.x, out.rounds) == ([1, 1, 1], [2, 3, 2])
 
 
-# -- a barrier node cannot give a sub-state no elements, so it refuses --------------------------------
+# -- barrier nodes and barrier readers: an absent sub-state is an empty one -------------------------
 
 
 @python.define
 def AddLength(a: int, b: list[int]) -> int:
     return a + len(b)
+
+
+@python.define
+def Ident(x: int) -> int:
+    return x
 
 
 @workflow.define
@@ -301,11 +306,56 @@ def BarrierOverAbsent(ns: list[int]):
     return b.out
 
 
-def test_barrier_node_refuses_an_absent_upstream_element(submitter):
-    for ns in ([2, -1], [-1]):
-        runner = runner_for(submitter, BarrierOverAbsent(ns=ns))
-        rounds = drive(runner)
-        b = runner.exec_graph["B"]
-        assert b.mode == "barrier" and not settled(rounds, "B")
-        (entry,) = runner.entries
-        assert "is an Absent" in entry.message and "partial node" in entry.message
+@workflow.define
+def CombinedBarrierOverAbsent(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(AddLength(b=a.out).split("a", a=a.out).combine("a"), name="B")
+    return b.out
+
+
+@workflow.define
+def BarrierReader(ns: list[int]):
+    a = workflow.add(MaybeList().split("n", n=ns), name="A")
+    b = workflow.add(Inc().split("a", a=a.out), name="B")
+    # combines the block axis of partial node B but not its inner axis: a barrier reader
+    c = workflow.add(Ident(x=b.out).combine("A.n"), name="C")
+    return c.out
+
+
+def failed_with(sub, task, node):
+    runner = runner_for(sub, task)
+    rounds = drive(runner)
+    assert not settled(rounds, node)
+    (entry,) = runner.entries
+    return runner, entry.message
+
+
+def test_barrier_node_gives_an_absent_substate_no_elements(submitter):
+    runner = runner_for(submitter, BarrierOverAbsent(ns=[-1]))
+    rounds = drive(runner)
+    b = runner.exec_graph["B"]
+    assert b.mode == "barrier" and b._tasks == {} and not runner.entries
+    assert not settled(rounds, "B")
+    assert submitter(BarrierOverAbsent(ns=[-1])).outputs.out == []
+    assert submitter(BarrierOverAbsent(ns=[2, 2])).outputs.out == [2, 3, 2, 3]
+    # beside a present element, the empty sub-state is ragged, which today's State
+    # cannot index
+    _, message = failed_with(submitter, BarrierOverAbsent(ns=[2, -1]), "B")
+    assert "unequal lengths [0, 2]" in message and "Absent" in message
+
+
+def test_combining_barrier_node_refuses_an_absent_upstream_element(submitter):
+    # the reader of the absent group would need its Absent, which today's State has not
+    runner, message = failed_with(submitter, CombinedBarrierOverAbsent(ns=[-1]), "B")
+    assert runner.exec_graph["B"].mode == "barrier"
+    assert "combines" in message and "Absent" in message and "'A'" in message
+
+
+def test_barrier_reader_of_an_absent_substate(submitter):
+    runner = runner_for(submitter, BarrierReader(ns=[-1]))
+    rounds = drive(runner)
+    assert runner.exec_graph["C"].mode == "barrier" and not runner.entries
+    assert not settled(rounds, "C")
+    assert submitter(BarrierReader(ns=[-1])).outputs.out == []
+    _, message = failed_with(submitter, BarrierReader(ns=[2, -1]), "C")
+    assert "'C'" in message and "unequal lengths [0, 2]" in message

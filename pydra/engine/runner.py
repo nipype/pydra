@@ -442,19 +442,28 @@ class NodeExecution(ty.Generic[TaskType]):
                     f"{source.name!r}, which only a partial node can index"
                 )
             items = list(values[name]) if is_sequence(values[name]) else []
-            if source.name in (self.state.other_states or {}) and any(
+            emptied = source.name in (self.state.other_states or {}) and any(
                 isinstance(i, Absent) for i in items
-            ):
-                raise PydraStateError(
-                    f"Node {self.name!r} splits {name!r} over an upstream element of "
-                    f"{source.name!r} that is an Absent: only a partial node gives that "
-                    "element's sub-state no elements"
-                )
+            )
+            if emptied:
+                if self.state.combiner:
+                    raise PydraStateError(
+                        f"Node {self.name!r} splits {name!r} over an upstream element of "
+                        f"{source.name!r} that is an Absent and combines "
+                        f"{self.state.combiner}: a reader of that element's absent "
+                        "sub-state receives its Absent, which only a partial node can "
+                        "give"
+                    )
+                # an absent sub-state is an empty one (in place: ``State`` reads it)
+                items = [[] if isinstance(i, Absent) else i for i in items]
+                values[name] = type(values[name])(items)
             kinds = {len(i) if is_sequence(i) else None for i in items}
             if len(kinds) > 1:
+                note = " (an Absent upstream element is empty)" if emptied else ""
                 raise PydraStateError(
                     f"Node {self.name!r} splits {name!r} over upstream values of unequal "
-                    f"lengths {sorted(kinds, key=str)}, which only a partial node can index"
+                    f"lengths {sorted(kinds, key=str)}{note}, which only a partial node "
+                    "can index"
                 )
         for name in self.state.other_states:
             node = self.graph.node(name)
@@ -832,6 +841,8 @@ class NodeExecution(ty.Generic[TaskType]):
         upstream = self.graph.node(value._node.name)
         indices = upstream._read_elements(upstream._read_indices(state_index))
         if element != WHOLE and element < len(indices):
+            # a position in the value read; for a read of every group it is a group's,
+            # not an element's (identity only: a propagated job is never stored)
             position = indices[element]
         elif indices:
             position = indices[0]

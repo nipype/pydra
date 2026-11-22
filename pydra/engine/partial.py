@@ -762,21 +762,27 @@ class PartialExpansion:
             return source._partial.absent_producer(key)
         return None
 
-    def group_absent(self, group: tuple) -> "Absent | None":
-        """The ``Absent`` of a group whose every block an inner element's ``Absent`` left
-        with no elements (the first such block's), None for any other group"""
+    def _absent_record(self, group: ty.Any) -> "tuple[Absent, str | None] | None":
+        """The ``(Absent, producer)`` of the first block of a group whose every block an
+        inner element's ``Absent`` left with no elements, None for any other group"""
+        if not isinstance(group, tuple):
+            return None
         blocks = self._group_blocks.get(group)
         if not blocks or self.groups.get(group):
             return None
         if all(b in self.absent_blocks for b in blocks):
-            return self.absent_blocks[min(blocks, key=sort_key)][0]
+            return self.absent_blocks[min(blocks, key=sort_key)]
         return None
 
+    def group_absent(self, group: tuple) -> "Absent | None":
+        """The ``Absent`` of an absent group (see :meth:`_absent_record`), else None"""
+        record = self._absent_record(group)
+        return record[0] if record is not None else None
+
     def absent_producer(self, group: ty.Any) -> str | None:
-        """The producer recorded for an absent group (see :meth:`group_absent`)"""
-        if not isinstance(group, tuple) or self.group_absent(group) is None:
-            return None
-        return self.absent_blocks[min(self._group_blocks[group], key=sort_key)][1]
+        """The producer recorded for an absent group (see :meth:`_absent_record`)"""
+        record = self._absent_record(group)
+        return record[1] if record is not None else None
 
     def _add_group(self, group: tuple) -> None:
         if group in self.groups:
