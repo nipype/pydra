@@ -18,7 +18,7 @@ from pydra.utils.typing import StateArray, is_lazy
 if ty.TYPE_CHECKING:
     from pydra.engine.workflow import Workflow
     from pydra.engine.job import Job
-    from pydra.engine.lazy import LazyOutField
+    from pydra.engine.lazy import LazyField, LazyOutField
     from pydra.engine.graph import DiGraph
     from pydra.engine.runner import NodeExecution
     from pydra.environments.base import Environment
@@ -257,6 +257,9 @@ def add(
     environment: "Environment | None" = None,
     hooks: "TaskHooks | None" = None,
     resources: "ComputeResources | None" = None,
+    *,
+    when: "LazyField[bool] | None" = None,
+    unless: "LazyField[bool] | None" = None,
 ) -> OutputsType:
     """Add a node to the workflow currently being constructed
 
@@ -275,6 +278,11 @@ def add(
     resources : ComputeResources, optional
         The resources to request for the node, overriding those set when the task was
         defined
+    when : LazyField[bool], optional
+        A gate: each element of the node runs only where it is true, and otherwise
+        completes with every output ``Absent("not-routed")`` (RFC 0002 section 2.3(b))
+    unless : LazyField[bool], optional
+        A gate: each element of the node runs only where it is false
 
     Returns
     -------
@@ -282,7 +290,13 @@ def add(
         The outputs of the node
     """
     return this().add(
-        task, name=name, environment=environment, hooks=hooks, resources=resources
+        task,
+        name=name,
+        environment=environment,
+        hooks=hooks,
+        resources=resources,
+        when=when,
+        unless=unless,
     )
 
 

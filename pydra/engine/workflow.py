@@ -10,10 +10,10 @@ from pydra.compose import workflow
 from pydra.compose.base import Task, Outputs
 from pydra.engine.graph import DiGraph, INPUTS_NODE_NAME, OUTPUTS_NODE_NAME
 from pydra.engine import state
-from pydra.engine.lazy import LazyInField, LazyOutField
+from pydra.engine.lazy import LazyField, LazyInField, LazyOutField
 from pydra.utils.hash import hash_function, Cache
 from pydra.engine.state import State
-from pydra.engine.node import Node
+from pydra.engine.node import Node, check_gate
 from pydra.engine.hooks import (
     TaskHooks,
 )
@@ -241,6 +241,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         environment: Environment | None = None,
         hooks: TaskHooks | None = None,
         resources: ComputeResources | None = None,
+        *,
+        when: "LazyField[bool] | None" = None,
+        unless: "LazyField[bool] | None" = None,
     ) -> OutputsType:
         """Add a node to the workflow
 
@@ -258,6 +261,14 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             The hooks to run before or after the job, by default no hooks will be run
         resources : ComputeResources, optional
             The resources to request for the job, overriding those of the task definition
+        when : LazyField[bool], optional
+            A gate on the node, read at each element's state index like a data input:
+            an element runs only where it is true, and otherwise completes with every
+            output ``Absent("not-routed")``, never looked up, shared, dispatched or
+            committed (RFC 0002 section 2.3(b)). A gate that is itself ``Absent``
+            propagates
+        unless : LazyField[bool], optional
+            A gate as ``when``, under which an element runs only where it is false
 
         Returns
         -------
@@ -279,6 +290,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                 "Environments can only be used with 'shell' tasks not "
                 f"{task._task_type()!r} tasks ({task!r})"
             )
+        for gate, value in (("when", when), ("unless", unless)):
+            if value is not None:
+                check_gate(name, gate, value)
         node = Node[OutputsType](
             name=name,
             task=task,
@@ -286,6 +300,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             environment=environment,
             hooks=hooks,
             resources=resources,
+            when=when,
+            unless=unless,
         )
         self._nodes[name] = node
         return node.lzout
@@ -350,8 +366,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         # TODO: create connection is run twice
         for node in nodes:
             other_states = {}
-            for field in get_fields(node._task):
-                lf = node._task[field.name]
+            gates = node.gates if isinstance(node, Node) else node.node.gates
+            reads = [(f.name, node._task[f.name]) for f in get_fields(node._task)]
+            for name, lf in reads + list(gates.items()):
                 if isinstance(lf, LazyOutField):
                     # adding an edge to the graph if job id expecting output from a different job
 
@@ -360,7 +377,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         graph.add_edges((graph.node(lf._node.name), node))
                     if detailed:
                         graph.add_edges_description(
-                            (node.name, field.name, lf._node.name, lf._field)
+                            (node.name, name, lf._node.name, lf._field)
                         )
                     logger.debug("Connecting %s to %s", lf._node.name, node.name)
                     # adding a state from the previous job to other_states
@@ -372,28 +389,26 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         # treated as a containers
                         if (
                             node.state
-                            and f"{node.name}.{field.name}"
+                            and f"{node.name}.{name}"
                             in node.state._current_splitter_rpn
                         ):
-                            node.state._inner_container_ndim[
-                                f"{node.name}.{field.name}"
-                            ] = 1
+                            node.state._inner_container_ndim[f"{node.name}.{name}"] = 1
                         # adding task_name: (job.state, [a field from the connection]
                         if lf._node.name not in other_states:
                             other_states[lf._node.name] = (
                                 graph.node(lf._node.name).state,
-                                [field.name],
+                                [name],
                             )
                         else:
                             # if the job already exist in other_state,
                             # additional field name should be added to the list of fields
-                            other_states[lf._node.name][1].append(field.name)
+                            other_states[lf._node.name][1].append(name)
                 elif (
                     isinstance(lf, LazyInField) and detailed
                 ):  # LazyField with the wf input
                     # connections with wf input should be added to the detailed graph description
                     graph.add_edges_description(
-                        (node.name, field.name, INPUTS_NODE_NAME, lf._field)
+                        (node.name, name, INPUTS_NODE_NAME, lf._field)
                     )
 
             # if job has connections state has to be recalculated
