@@ -201,6 +201,10 @@ class Job(ty.Generic[TaskType]):
         # The stored entry the job runs against, set from a `Verify` by `_reusable` or by a
         # runner (`Candidate | None`; RFC 0003 section 7.1)
         self.verify = None
+        # Whether a runner or submitter asked the store's ``find(job)`` before dispatch and
+        # was not served (``verify`` holds its answer): a run under a lease that excludes no
+        # other taker does not ask again (RFC 0002 section 3.1). Cleared by each run.
+        self.looked_up = False
         # A rerun under a store that replaces: set by the store's ``begin_rerun`` (RFC 0003
         # section 10); ``replaces`` is the output digest of the entry it evicts
         self.replace = False
@@ -269,6 +273,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("attempt", None)
         self.__dict__.setdefault("committed", None)
         self.__dict__.setdefault("verify", None)
+        self.__dict__.setdefault("looked_up", False)
         self.__dict__.setdefault("replace", False)
         self.__dict__.setdefault("replaces", None)
         self.__dict__.setdefault("_work_dir_memo", None)
@@ -525,14 +530,20 @@ class Job(ty.Generic[TaskType]):
             return self.store.acquire(self.checksum, self.context, resumable=True)
         return self.store.acquire(self.checksum, self.context)
 
-    def _reusable(self) -> Result | None:
+    def _reusable(self, lease, looked_up: bool = False) -> Result | None:
         """The result a run under the lease can serve instead of computing: the stored
         result for the job, if any. A store with ``find`` answers through its reuse hook
         (RFC 0003 section 7.1): a `Verify` marks the job to verify against that entry (and
-        the job runs), anything else clears the mark. A work directory's ``_committed.json``
-        is the outcome of an earlier run and is never served to a new one."""
+        the job runs), anything else clears the mark. A job ``looked_up`` before dispatch
+        is not looked up again under a lease that excludes nobody (``exclusive`` False):
+        it keeps the mark that lookup set. An exclusive lease may have been held by a
+        process that published the job since, so it looks again (RFC 0003 section 5.3).
+        A work directory's ``_committed.json`` is the outcome of an earlier run and is
+        never served to a new one."""
         find = getattr(self.store, "find", None)
         if find is not None:
+            if looked_up and getattr(lease, "exclusive", True) is False:
+                return None
             found = find(self)
             self.verify = getattr(found, "candidate", None)
             result = getattr(found, "result", None)
@@ -675,11 +686,12 @@ class Job(ty.Generic[TaskType]):
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
         self._take_attempt()
+        looked_up, self.looked_up = self.looked_up, False
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         with lease:
             if not (rerun):
-                result = self._reusable()
+                result = self._reusable(lease, looked_up)
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     self._cached_result = result
@@ -759,11 +771,12 @@ class Job(ty.Generic[TaskType]):
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
         self._take_attempt()
+        looked_up, self.looked_up = self.looked_up, False
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         async with lease:
             if not rerun:
-                result = self._reusable()
+                result = self._reusable(lease, looked_up)
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     self._cached_result = result
