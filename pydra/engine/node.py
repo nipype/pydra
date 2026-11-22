@@ -41,6 +41,10 @@ class Node(ty.Generic[OutputType]):
     _hooks: "TaskHooks | None" = None
     _resources: "ComputeResources | None" = None
     _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False, repr=False)
+    _when: "lazy.LazyField[bool] | bool | None" = attrs.field(default=None, repr=False)
+    _unless: "lazy.LazyField[bool] | bool | None" = attrs.field(
+        default=None, repr=False
+    )
     _lzout: OutputType | None = attrs.field(
         init=False, default=None, eq=False, hash=False, repr=False
     )
@@ -101,6 +105,17 @@ class Node(ty.Generic[OutputType]):
     @property
     def input_values(self) -> tuple[tuple[str, ty.Any]]:
         return tuple(attrs_values(self._task).items())
+
+    @property
+    def gates(self) -> dict[str, "lazy.LazyField[bool] | bool"]:
+        """The node's gates (RFC 0002 section 2.3(b)), keyed by the names they have among
+        its inputs in its state: ``"_when"`` and ``"_unless"``. A lazy gate is an input of
+        the node, so the node takes its upstream's state as it would a data input's"""
+        return {
+            name: value
+            for name, value in (("_when", self._when), ("_unless", self._unless))
+            if value is not None
+        }
 
     @property
     def state_values(self) -> dict[str, ty.Any]:
@@ -210,7 +225,7 @@ class Node(ty.Generic[OutputType]):
     def _get_upstream_states(self) -> dict[str, tuple["State", list[str]]]:
         """Get the states of the upstream nodes that are connected to this node"""
         upstream_states = {}
-        for inpt_name, val in self.input_values:
+        for inpt_name, val in self.input_values + tuple(self.gates.items()):
             if (
                 isinstance(val, lazy.LazyOutField)
                 and val._node.state
@@ -234,3 +249,36 @@ class Node(ty.Generic[OutputType]):
         #     breakpoint()
         #     inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
         #     return None, inputs_dict
+
+
+def check_gate(node: str, gate: str, value: ty.Any) -> None:
+    """Refuse a gate that is neither a ``bool`` nor a lazy field typed ``bool`` (RFC 0002
+    section 2.3(b)).
+
+    A ``bool`` is a workflow input whose value is known when the workflow is constructed.
+    A lazy field typed ``Any`` passes, and its value is checked when it is read: an
+    external driver's predicate port may be typed ``Any`` (RFC 0002 section 3.5).
+
+    Parameters
+    ----------
+    node : str
+        The name of the gated node
+    gate : str
+        ``"when"`` or ``"unless"``
+    value : Any
+        What was given as the gate
+    """
+    from pydra.utils.typing import TypeParser
+
+    if isinstance(value, bool):
+        return
+    if not isinstance(value, lazy.LazyField):
+        raise TypeError(
+            f"The gate {gate!r} of node {node!r} must be a bool or a lazy field typed "
+            f"bool, not {value!r}"
+        )
+    inner, _ = TypeParser.strip_splits(value._type)
+    if inner is not bool and inner is not ty.Any:
+        raise TypeError(
+            f"The gate {gate!r} of node {node!r} must be typed bool, not {value._type}"
+        )

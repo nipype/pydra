@@ -116,6 +116,23 @@ def OneGate(where: str) -> str:
     return workflow.add(Gate(where=where), name="G").out
 
 
+@python.define
+def IsPos(x: int) -> bool:
+    return x > 0
+
+
+@python.define
+def Twice(x: int) -> int:
+    return 2 * x
+
+
+@workflow.define
+def GatedTwins(xs: list) -> list:
+    a = workflow.add(Echo().split(x=xs), name="A")
+    c = workflow.add(IsPos(x=a.out), name="C")
+    return workflow.add(Twice(x=a.out), name="D", when=c.out).out
+
+
 @workflow.define
 def GpuMany(xs: list) -> list:
     gpu = ComputeResources(gpus=1, gpu_type="h100")
@@ -780,6 +797,24 @@ def test_drive_passes_no_limit_to_batching_executor(tmp_path, tasks, pools):
     assert runner.done and not runner.failed
     assert runner.limits and set(runner.limits) == {None}
     assert len(_tickets(pool.root)) == 1  # one round, one ticket
+
+
+def test_gated_and_shared_elements_never_reach_the_pool(tmp_path, tasks, pools):
+    """Through ``drive`` and a ``WarmPool``: a gated-off element and a shared twin are settled by the
+    runner and never handed to the pool, and the run is done only after both are reported (RFC 0002
+    R7, R10b)"""
+    from pydra.engine.absent import Absent
+
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub)
+    runner = _drive(sub, tasks.GatedTwins(xs=[5, 5, -1]), pool)
+    assert runner.done and not runner.failed
+    ran = sorted((j.name, j.state_index) for j, _ in runner.reported)
+    assert ran == [("A", 0), ("A", 2), ("C", 0), ("C", 2), ("D", 0)]
+    assert not any(j._propagated_absent is not None for j, _ in runner.reported)
+    result = sub(tasks.GatedTwins(xs=[5, 5, -1]))
+    assert result.outputs.out[:2] == [10, 10]
+    assert isinstance(result.outputs.out[2], Absent)
 
 
 # -- coordinators and lifecycle ------------------------------------------------------------------

@@ -192,6 +192,8 @@ class Job(ty.Generic[TaskType]):
         self._accepted_absent: list[tuple[str, int, str]] = []
         # The Absent the job completes with instead of running, set likewise
         self._propagated_absent = None
+        # Whether that Absent is a gate's "not-routed" rather than a propagated one
+        self._gated = False
         self._uid = uuid4().hex
         self.hooks = hooks if hooks is not None else TaskHooks()
         self._errored = False
@@ -298,6 +300,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_unsuffixed_checksum", None)
         self.__dict__.setdefault("_accepted_absent", [])
         self.__dict__.setdefault("_propagated_absent", None)
+        self.__dict__.setdefault("_gated", False)
 
     @classmethod
     def check_etelemetry(cls) -> None:
