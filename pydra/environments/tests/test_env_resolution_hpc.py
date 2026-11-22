@@ -168,6 +168,21 @@ def test_sif_path_runs_as_given(monkeypatch, tmp_path):
     assert not any(a.endswith(":latest") for a in commands[0])
 
 
+def test_relative_sif_runs_by_its_absolute_path(monkeypatch, tmp_path):
+    path = _sif(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    env = singularity.Singularity(image="tool.sif")
+    job = _job(tmp_path, env)
+    assert job.resolved.run == str(path.resolve())
+    blob = cloudpickle.dumps(job)
+    monkeypatch.chdir(tmp_path / "cache")  # a worker elsewhere
+    worker_job = cloudpickle.loads(blob)
+    commands = _ran(monkeypatch)
+    worker_job.environment.execute(worker_job)
+    assert str(path.resolve()) in commands[0]
+    assert "tool.sif" not in [a for a in commands[0] if a != str(path.resolve())]
+
+
 def test_sif_missing_unresolved(tmp_path):
     env = singularity.Singularity(image=str(tmp_path / "absent.sif"))
     job = _job(tmp_path, env)
@@ -232,34 +247,91 @@ def test_singularity_exit_1_fails_with_stderr(monkeypatch, tmp_path):
 @no_win
 @need_singularity
 @pytest.mark.singularity
-def test_apptainer_docker_digest_runs(tmp_path):
+def test_apptainer_docker_digest_runs(tmp_path, monkeypatch):
+    import time
+
+    monkeypatch.setenv("APPTAINER_CACHEDIR", str(tmp_path / "apptainer-cache"))
+    monkeypatch.setenv("SINGULARITY_CACHEDIR", str(tmp_path / "apptainer-cache"))
     env = singularity.Singularity(image="docker://alpine", tag="3.20")
     ref = env.resolve()
     assert ref.key.startswith("docker@1:sha256:")
     assert ref.run.startswith("docker://alpine@sha256:")
-    assert ref.recorded.get("platform_digest", "").startswith("sha256:")
+    echo = shell.define("echo")(executable="echo", append_args=["hi"])
     with Submitter(
         environment=env,
-        cache_root=tmp_path,
+        cache_root=tmp_path / "cold",
+        telemetry=False,
+        resolve_images="require",
+    ) as sub:
+        result = sub(echo)
+    assert result.outputs.stdout.strip() == "hi"
+    assert result.context["environment"] == ref.key
+
+    # warm: the same digest again neither converts nor reaches a registry
+    for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        monkeypatch.setenv(var, "http://127.0.0.1:9")
+    for var in ("NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(var, raising=False)
+    warm = singularity.Singularity(image=ref.run)
+    start = time.perf_counter()
+    with Submitter(
+        environment=warm,
+        cache_root=tmp_path / "warm",
+        telemetry=False,
+        resolve_images="require",
+    ) as sub:
+        result = sub(echo)
+    print(f"warm apptainer exec: {(time.perf_counter() - start) * 1000:.0f} ms")
+    assert result.outputs.stdout.strip() == "hi"
+    assert "Converting" not in result.outputs.stderr
+    assert result.context["environment"] == ref.key
+
+
+@no_win
+@need_singularity
+@pytest.mark.singularity
+def test_apptainer_relative_sif_runs(tmp_path, monkeypatch):
+    import subprocess as sp
+
+    monkeypatch.setenv("APPTAINER_CACHEDIR", str(tmp_path / "apptainer-cache"))
+    monkeypatch.setenv("SINGULARITY_CACHEDIR", str(tmp_path / "apptainer-cache"))
+    images_dir = tmp_path / "images"
+    images_dir.mkdir()
+    sp.run(
+        ["singularity", "pull", "tool.sif", "docker://alpine:3.20"],
+        cwd=images_dir,
+        check=True,
+    )
+    monkeypatch.chdir(images_dir)
+    env = singularity.Singularity(image="tool.sif")
+    with Submitter(
+        environment=env,
+        cache_root=tmp_path / "cache",
         telemetry=False,
         resolve_images="require",
     ) as sub:
         result = sub(shell.define("echo")(executable="echo", append_args=["hi"]))
     assert result.outputs.stdout.strip() == "hi"
-    assert result.context["environment"] == ref.key
+    assert result.context["environment"].startswith("sif@1:sha256:")
 
 
 # Lmod -------------------------------------------------------------------------------
 
 
-def _fake_lmod(tmp_path, monkeypatch, loads):
-    """A fake ``$MODULESHOME/libexec/lmod``: ``loads`` maps the requested names
-    (space-joined) to the full names loaded, dependencies included. Each call is logged
-    with the ``LOADEDMODULES`` it saw."""
+def _fake_lmod(tmp_path, monkeypatch, loads, shell="shellmod/1.0", path="/tree/x"):
+    """A fake ``$MODULESHOME/libexec/lmod``. ``loads`` maps the requested names
+    (space-joined; ``"<MODULEPATH>|<names>"`` to match one ``MODULEPATH`` only) to the
+    full names loaded, dependencies included. ``purge`` unwinds ``MODULEPATH`` to
+    ``/tree/core`` only when it sees loaded modules, as Lmod does. Each call is logged
+    with the ``LOADEDMODULES`` and ``MODULEPATH`` it saw."""
     home = tmp_path / "lmod"
     (home / "libexec").mkdir(parents=True)
     log = tmp_path / "lmod.log"
-    cases = "\n".join(f"""  "{requested}")
+
+    def pattern(key):
+        return f'"{key}"' if "|" in key else f'*"|{key}"'
+
+    cases = "\n".join(f"""  {pattern(requested)})
     echo "os.environ['LOADEDMODULES'] = '{':'.join(full)}';"
     echo "os.environ['_LMFILES_'] = '{':'.join(f'/tree/{m}.lua' for m in full)}';"
     echo "os.environ['PATH'] = '/tree/bin';"
@@ -267,13 +339,16 @@ def _fake_lmod(tmp_path, monkeypatch, loads):
     script = home / "libexec" / "lmod"
     script.write_text(
         "#!/bin/sh\n"
-        f'echo "$* | ${{LOADEDMODULES-unset}}" >> "{log}"\n'
+        f'echo "$* | ${{LOADEDMODULES-unset}} | $MODULEPATH" >> "{log}"\n'
         'if [ "$2" = purge ]; then\n'
+        '  if [ -n "$LOADEDMODULES" ]; then\n'
+        "    echo \"os.environ['MODULEPATH'] = '/tree/core';\"\n"
+        "  fi\n"
         "  echo \"os.environ['LOADEDMODULES'] = '';\"\n"
         "  exit 0\n"
         "fi\n"
         "shift 2\n"
-        'case "$*" in\n'
+        'case "$MODULEPATH|$*" in\n'
         f"{cases}\n"
         "  *)\n"
         '    echo "_mlstatus = False"\n'
@@ -282,18 +357,20 @@ def _fake_lmod(tmp_path, monkeypatch, loads):
     )
     script.chmod(0o755)
     monkeypatch.setenv("MODULESHOME", str(home))
-    monkeypatch.setenv("MODULEPATH", "/tree/modules")
-    monkeypatch.setenv("LOADEDMODULES", "shellmod/1.0")
+    monkeypatch.setenv("MODULEPATH", path)
+    monkeypatch.setenv("LOADEDMODULES", shell)
     return log
+
+
+FSL = {
+    "fsl python/3.11": ["gcc/12.2", "fsl/6.0.7.9", "python/3.11.5"],
+    "fsl/6.0.7.9 python/3.11.5": ["gcc/12.2", "fsl/6.0.7.9", "python/3.11.5"],
+}
 
 
 @posix_only
 def test_lmod_full_names_and_mapping(monkeypatch, tmp_path):
-    log = _fake_lmod(
-        tmp_path,
-        monkeypatch,
-        {"fsl python/3.11": ["gcc/12.2", "fsl/6.0.7.9", "python/3.11.5"]},
-    )
+    log = _fake_lmod(tmp_path, monkeypatch, FSL)
     env = lmod.Lmod(modules=["fsl", "python/3.11"])
     job = _job(tmp_path, env)
     ref = job.resolved
@@ -305,31 +382,83 @@ def test_lmod_full_names_and_mapping(monkeypatch, tmp_path):
     assert facts["modules"] == {"fsl": "fsl/6.0.7.9", "python/3.11": "python/3.11.5"}
     assert facts["dependencies"] == ["gcc/12.2"]
     assert facts["shell_modules"] == ["shellmod/1.0"]
-    assert facts["modulepath"] == "/tree/modules"
+    assert facts["modulepath"] == "/tree/core"
     assert facts["tree"] == os.environ["MODULESHOME"]
     assert "gcc" not in ref.key and "shellmod" not in ref.key
-    # resolved in a child whose LOADEDMODULES is cleared: purge, then load
+    # purge with the shell's modules in place, so Lmod unwinds them; then load
     calls = log.read_text().splitlines()
-    assert calls[0].startswith("python purge |") and "shellmod" not in calls[0]
-    assert calls[1].startswith("python load fsl python/3.11 |")
-    assert "shellmod" not in calls[1]
+    assert calls[0] == "python purge | shellmod/1.0 | /tree/x"
+    assert calls[1] == "python load fsl python/3.11 |  | /tree/core"
     # once per module list per run
     Job(task=shell.define("whoami")(), name="k", submitter=job.submitter).resolved
     assert len(log.read_text().splitlines()) == 2
 
-    # the worker loads the full names
-    monkeypatch.setenv("LOADEDMODULES", "shellmod/1.0")
-    worker_job = cloudpickle.loads(cloudpickle.dumps(job))
-    loaded = []
-    monkeypatch.setattr(
-        lmod.Lmod,
-        "run_lmod_cmd",
-        classmethod(lambda cls, *args, env=None: loaded.append(args) or ""),
+
+@posix_only
+def test_lmod_shell_compiler_does_not_leak(monkeypatch, tmp_path):
+    hierarchy = "/tree/core:/tree/compiler/gcc12"
+    _fake_lmod(
+        tmp_path,
+        monkeypatch,
+        {
+            f"{hierarchy}|openmpi": ["openmpi/4.1.5"],
+            "gcc/12.2 openmpi": ["gcc/12.2", "openmpi/4.1.5"],
+            "gcc/11.2 openmpi": ["gcc/11.2", "openmpi/4.1.5"],
+        },
+        shell="gcc/12.2",
+        path=hierarchy,
     )
-    commands = _ran(monkeypatch)
+    # the shell's compiler does not select the build: it must be named, and keyed
+    assert lmod.Lmod(modules=["openmpi"]).resolve().unresolved
+    a = lmod.Lmod(modules=["gcc/12.2", "openmpi"]).resolve()
+    b = lmod.Lmod(modules=["gcc/11.2", "openmpi"]).resolve()
+    assert a.key == "lmod@1:gcc/12.2 openmpi/4.1.5"
+    assert a.key != b.key
+
+
+@posix_only
+def test_lmod_worker_purges_then_loads_the_keyed_names(monkeypatch, tmp_path):
+    log = _fake_lmod(tmp_path, monkeypatch, FSL)
+    job = _job(tmp_path, lmod.Lmod(modules=["fsl", "python/3.11"]))
+    job.resolved
+    blob = cloudpickle.dumps(job)
+    # the worker's shell has another compiler loaded
+    monkeypatch.setenv("LOADEDMODULES", "gcc/11.2")
+    monkeypatch.setenv("MODULEPATH", "/tree/core:/tree/compiler/gcc11")
+    log.write_text("")
+    worker_job = cloudpickle.loads(blob)
+    envs = []
+    monkeypatch.setattr(
+        base,
+        "execute",
+        lambda cmd, cwd=None, env=None, **kw: envs.append(env) or (0, "", ""),
+    )
     worker_job.environment.execute(worker_job)
-    assert loaded == [("python", "load", "fsl/6.0.7.9", "python/3.11.5")]
-    assert commands
+    calls = log.read_text().splitlines()
+    assert calls == [
+        "python purge | gcc/11.2 | /tree/core:/tree/compiler/gcc11",
+        "python load fsl/6.0.7.9 python/3.11.5 |  | /tree/core",
+    ]
+    assert envs[0]["LOADEDMODULES"] == "gcc/12.2:fsl/6.0.7.9:python/3.11.5"
+    assert envs[0]["PATH"] == "/tree/bin"
+
+
+@posix_only
+def test_lmod_worker_warns_when_dependencies_differ(monkeypatch, tmp_path, caplog):
+    _fake_lmod(tmp_path, monkeypatch, FSL)
+    job = _job(tmp_path, lmod.Lmod(modules=["fsl", "python/3.11"]))
+    job.resolved
+    blob = cloudpickle.dumps(job)
+    _fake_lmod(
+        tmp_path / "worker",
+        monkeypatch,
+        {"fsl/6.0.7.9 python/3.11.5": ["gcc/11.2", "fsl/6.0.7.9", "python/3.11.5"]},
+    )
+    worker_job = cloudpickle.loads(blob)
+    _ran(monkeypatch)
+    with caplog.at_level("WARNING", logger="pydra"):
+        worker_job.environment.execute(worker_job)
+    assert "gcc/11.2" in caplog.text and "gcc/12.2" in caplog.text
 
 
 @posix_only
@@ -338,6 +467,20 @@ def test_lmod_unknown_module_unresolved(monkeypatch, tmp_path):
     job = _job(tmp_path, lmod.Lmod(modules=["nosuch"]))
     assert job.resolved.unresolved
     assert "unknown" in job.context
+
+
+def test_lmod_name_mapping_needs_a_boundary():
+    match = lmod.Lmod._match
+    assert match("fsl", ["fslpy/1.0"]) is None
+    assert match("python/3.1", ["python/3.10.4"]) is None
+    assert match("python/3.10", ["python/3.10.4"]) == "python/3.10.4"
+    assert match("fsl/6.0", ["fsl/6.0.7.9"]) == "fsl/6.0.7.9"
+
+
+@posix_only
+def test_lmod_names_mapping_to_one_module_key_it_once(monkeypatch, tmp_path):
+    _fake_lmod(tmp_path, monkeypatch, {"fsl fsl/6": ["fsl/6.0.7.9"]})
+    assert lmod.Lmod(modules=["fsl", "fsl/6"]).resolve().key == "lmod@1:fsl/6.0.7.9"
 
 
 def test_lmod_absent_unresolved(monkeypatch, tmp_path):

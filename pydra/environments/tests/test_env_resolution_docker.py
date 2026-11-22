@@ -442,47 +442,34 @@ class _Response:
         return False
 
 
-def test_registry_manifest_reads_the_platform_from_the_index(monkeypatch):
+def test_registry_manifest_is_one_head(monkeypatch):
     import urllib.request
 
-    index = {
-        "manifests": [
-            {"digest": D1, "platform": {"os": "linux", "architecture": "s390x"}},
-            {"digest": D2, "platform": {"os": "linux", "architecture": "amd64"}},
-        ]
-    }
     requests = []
 
-    def urlopen(request, timeout=None):
-        requests.append((request.get_method(), request.full_url))
-        if request.get_method() == "HEAD":
+    def head(media_type, digest):
+        def urlopen(request, timeout=None):
+            requests.append(request.get_method())
             return _Response(
-                {
-                    "Docker-Content-Digest": ID,
-                    "Content-Type": "application/vnd.oci.image.index.v1+json",
-                }
+                {"Docker-Content-Digest": digest, "Content-Type": media_type}
             )
-        return _Response({}, json.dumps(index).encode())
 
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
-    monkeypatch.setattr(images, "host_platform", lambda: ("linux", "amd64"))
-    assert images.registry_manifest("ghcr.io/org/tool", "1") == (ID, D2)
-    assert requests == [
-        ("HEAD", "https://ghcr.io/v2/org/tool/manifests/1"),
-        ("GET", f"https://ghcr.io/v2/org/tool/manifests/{ID}"),
-    ]
-    # a single manifest is its own platform manifest, with no second request
+        return urlopen
+
+    # an index: its platform digest is not read, since a GET counts as a pull
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        head("application/vnd.oci.image.index.v1+json", ID),
+    )
+    assert images.registry_manifest("ghcr.io/org/tool", "1") == (ID, None)
+    assert requests == ["HEAD"]
+    # a single manifest is its own platform manifest
     requests.clear()
-
-    def single(request, timeout=None):
-        requests.append(request.get_method())
-        return _Response(
-            {
-                "Docker-Content-Digest": D1,
-                "Content-Type": "application/vnd.oci.image.manifest.v1+json",
-            }
-        )
-
-    monkeypatch.setattr(urllib.request, "urlopen", single)
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        head("application/vnd.oci.image.manifest.v1+json", D1),
+    )
     assert images.registry_manifest("ghcr.io/org/tool", "1") == (D1, D1)
     assert requests == ["HEAD"]

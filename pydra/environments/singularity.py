@@ -28,7 +28,8 @@ class Singularity(base.Container):
           ``docker://<repository>@<digest>``. A tag in the URI takes the place of
           ``tag``.
         * a ``.sif`` path is keyed by the sha256 of its content (``sif@1:sha256:<hex>``)
-          and runs as given; a worker checks the file's digest before ``exec``. The key
+          and runs by its absolute path; before ``exec`` a worker compares the digest
+          its own stat cache gives for the file (a stat once read) with the key. The key
           is exact for that file but not portable: a site that wants to share results
           names the ``docker://`` digest.
         * any other URI, a missing file or a directory is unresolved, and runs as before.
@@ -45,8 +46,9 @@ class Singularity(base.Container):
         if not path.is_file():
             return base.ResolvedRef(f"unresolved:singularity:{self.image}", self.image)
         digest = images.sif_digest(path)
+        run = str(path.resolve())  # exec runs in the job's directory
         return base.ResolvedRef(
-            f"sif@1:{digest}", self.image, {"sif_digest": digest}, {"path": str(path)}
+            f"sif@1:{digest}", run, {"sif_digest": digest}, {"path": run}
         )
 
     def _resolve_docker(self, reference: str) -> base.ResolvedRef:
@@ -82,7 +84,13 @@ class Singularity(base.Container):
         resolved = job.resolved
         expected = resolved.carried.get("sif_digest")
         if expected is not None:
-            found = images.sif_digest(resolved.run)
+            try:
+                found = images.sif_digest(resolved.run)
+            except OSError as e:
+                raise base.ImageResolutionError(
+                    f"The image {resolved.run!r} the job was keyed by cannot be read "
+                    f"here: {e}"
+                ) from e
             if found != expected:
                 raise base.ImageResolutionError(
                     f"The image {resolved.run!r} has the digest {found} here, but the "

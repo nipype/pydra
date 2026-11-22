@@ -2,7 +2,6 @@
 
 import hashlib
 import os
-import platform
 from pathlib import Path
 
 
@@ -39,24 +38,14 @@ _INDEX_TYPES = (
 )
 
 
-def host_platform() -> tuple[str, str]:
-    """``(os, architecture)`` of this host as image indexes name them"""
-    machine = platform.machine().lower()
-    arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64"}.get(
-        machine, machine
-    )
-    return "linux", arch
-
-
 def registry_manifest(
     repository: str, tag: str, timeout: float = 10
 ) -> tuple[str, str | None] | None:
-    """``(digest, platform digest)`` the registry reports for ``repository:tag``: the
-    digest is from a ``HEAD`` of its manifest, after an anonymous token if asked for one;
-    the platform digest is the manifest of this host's platform (`host_platform`), read
-    from the index when the digest names one, or the digest itself when it names a
-    single manifest, and ``None`` when it cannot be read. ``None`` when the digest
-    cannot be read. Nothing is pulled."""
+    """``(digest, platform digest)`` the registry reports for ``repository:tag``, from
+    one ``HEAD`` of its manifest (after an anonymous token if asked for one). The
+    platform digest is the digest itself when it names a single manifest, and ``None``
+    when it names an index. ``None`` when the digest cannot be read. Nothing is pulled.
+    """
     import re
     import json
     import http.client
@@ -72,16 +61,15 @@ def registry_manifest(
         if "/" not in name:
             name = f"library/{name}"
 
-    def head(token: str | None = None, method: str = "HEAD", ref: str = tag):
+    def head(token: str | None = None):
         headers = {"Accept": _MANIFEST_TYPES}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         request = urllib.request.Request(
-            f"https://{host}/v2/{name}/manifests/{ref}", method=method, headers=headers
+            f"https://{host}/v2/{name}/manifests/{tag}", method="HEAD", headers=headers
         )
         return urllib.request.urlopen(request, timeout=timeout)
 
-    token = None
     try:
         try:
             response = head()
@@ -98,8 +86,7 @@ def registry_manifest(
                 f"{params['realm']}?{urllib.parse.urlencode(query)}", timeout=timeout
             ) as auth:
                 body = json.load(auth)
-            token = body.get("token") or body.get("access_token")
-            response = head(token)
+            response = head(body.get("token") or body.get("access_token"))
         with response:
             digest = response.headers.get("Docker-Content-Digest")
             media_type = (response.headers.get("Content-Type") or "").split(";")[0]
@@ -107,19 +94,9 @@ def registry_manifest(
         return None
     if not (digest and digest.startswith("sha256:")):
         return None
-    if media_type not in _INDEX_TYPES:
-        return digest, digest if media_type else None
-    try:
-        with head(token, "GET", digest) as response:
-            index = json.load(response)
-        wanted = host_platform()
-        for entry in index.get("manifests", []):
-            plat = entry.get("platform", {})
-            if (plat.get("os"), plat.get("architecture")) == wanted:
-                return digest, entry.get("digest")
-    except (OSError, ValueError, TypeError, AttributeError, http.client.HTTPException):
-        pass
-    return digest, None
+    # an index's platform manifest would take a GET, which a registry such as Docker
+    # Hub counts as a pull; a single manifest is its own platform manifest
+    return digest, (digest if media_type and media_type not in _INDEX_TYPES else None)
 
 
 _SIF_DIGESTS: dict[tuple, str] = {}
