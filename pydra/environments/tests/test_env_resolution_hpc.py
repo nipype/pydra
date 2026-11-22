@@ -239,7 +239,8 @@ def test_docker_uri_pulled_once_to_a_local_sif(monkeypatch, tmp_path):
         job = _job(tmp_path / name, env)
         assert job.resolved.key == f"docker@1:{D1}"
         env.execute(job)
-    sif = tmp_path / "images" / "sif" / f"{D1.replace(':', '-')}.sif"
+    sif = images.local_sif_path(D1)
+    assert sif.parent == tmp_path / "images" / "sif"
     assert sif.read_text().strip() == f"SIF of docker://org/tool@{D1}"
     calls = log.read_text().splitlines()
     assert [c for c in calls if c.startswith("pull ")] == [
@@ -268,6 +269,56 @@ def test_concurrent_first_use_pulls_once(monkeypatch, tmp_path):
         for p in Path(paths[0]).parent.iterdir()
         if p.suffix != ".sif" and not p.name.endswith(".lock")
     ]
+
+
+@posix_only
+def test_sif_name_carries_the_platform(monkeypatch, tmp_path):
+    log = _fake_singularity(tmp_path, monkeypatch)
+    uri = f"docker://org/tool@{D1}"
+    monkeypatch.setattr(images, "host_platform", lambda: ("linux", "amd64", ""))
+    amd = images.local_sif(uri, D1)
+    monkeypatch.setattr(images, "host_platform", lambda: ("linux", "arm64", "v8"))
+    arm = images.local_sif(uri, D1)
+    assert amd != arm and amd.is_file() and arm.is_file()
+    assert "linux-amd64" in amd.name and "linux-arm64-v8" in arm.name
+    assert sum(c.startswith("pull ") for c in log.read_text().splitlines()) == 2
+
+
+@posix_only
+def test_lock_unavailable_pulls_unlocked(monkeypatch, tmp_path):
+    import errno
+    import fcntl
+
+    _fake_singularity(tmp_path, monkeypatch)
+
+    def nolock(fd, op):
+        raise OSError(errno.ENOSYS, "Function not implemented")
+
+    monkeypatch.setattr(fcntl, "flock", nolock)
+    sif = images.local_sif(f"docker://org/tool@{D1}", D1)
+    assert sif.read_text().strip() == f"SIF of docker://org/tool@{D1}"
+
+
+@posix_only
+def test_read_only_lock_file_pulls(monkeypatch, tmp_path):
+    _fake_singularity(tmp_path, monkeypatch)
+    sif = images.local_sif_path(D1)
+    sif.parent.mkdir(parents=True)
+    lock = sif.parent / f"{sif.name}.lock"
+    lock.write_text("")
+    lock.chmod(0o444)  # created by another user of a group-shared cache
+    try:
+        assert images.local_sif(f"docker://org/tool@{D1}", D1).is_file()
+    finally:
+        lock.chmod(0o644)
+
+
+def test_image_cache_prefers_apptainer_cachedir(monkeypatch, tmp_path):
+    monkeypatch.delenv("PYDRA_IMAGE_CACHE", raising=False)
+    monkeypatch.setenv("APPTAINER_CACHEDIR", str(tmp_path / "apptainer"))
+    assert images.image_cache() == tmp_path / "apptainer" / "pydra-sif"
+    monkeypatch.setenv("PYDRA_IMAGE_CACHE", str(tmp_path / "mine"))
+    assert images.image_cache() == tmp_path / "mine"
 
 
 @posix_only
@@ -325,8 +376,7 @@ def test_apptainer_docker_digest_runs(tmp_path, monkeypatch):
         result = sub(echo)
     assert result.outputs.stdout.strip() == "hi"
     assert result.context["environment"] == ref.key
-    digest = ref.key.removeprefix("docker@1:")
-    assert (tmp_path / "images" / "sif" / f"{digest.replace(':', '-')}.sif").is_file()
+    assert images.local_sif_path(ref.key.removeprefix("docker@1:")).is_file()
 
     # warm: the same digest again neither converts nor reaches a registry
     for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
