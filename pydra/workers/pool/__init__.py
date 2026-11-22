@@ -36,6 +36,7 @@ _EXPORTS = {
     "WarmPool": "pool",
     "ExternalSubstrate": "substrate",
     "LocalSubstrate": "substrate",
+    "NodeLocalStorage": "substrate",
     "Substrate": "substrate",
     "WorkerHandle": "substrate",
 }

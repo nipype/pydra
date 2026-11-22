@@ -30,6 +30,7 @@ from pydra.workers.pool.classes import WorkerClass
 __all__ = [
     "ExternalSubstrate",
     "LocalSubstrate",
+    "NodeLocalStorage",
     "SlurmSubstrate",
     "Substrate",
     "SubstrateError",
@@ -97,6 +98,54 @@ class SubstrateError(RuntimeError):
     def __init__(self, message: str, started: ty.Sequence[WorkerHandle] = ()):
         super().__init__(message)
         self.started = tuple(started)
+
+
+class NodeLocalStorage(ValueError):
+    """A pool path a substrate's workers on other nodes need is on storage only this node sees."""
+
+
+NODE_LOCAL_DIRS = ("/tmp", "/var/tmp", "/dev/shm")
+"""Directories that are node-local on a cluster node, besides ``$TMPDIR`` and the temp directory."""
+
+MEMORY_FILESYSTEMS = frozenset({"tmpfs", "ramfs", "devtmpfs"})
+"""Filesystem types whose contents live in one host's memory."""
+
+
+def _filesystem_type(path: Path) -> str | None:
+    """The type of the filesystem ``path`` is on, from the Linux mount table; None elsewhere."""
+    try:
+        mounts = Path("/proc/self/mounts").read_text().splitlines()
+    except OSError:
+        return None
+    found, length = None, -1
+    for line in mounts:
+        fields = line.split()
+        if len(fields) < 3:
+            continue
+        point = Path(fields[1].replace("\\040", " "))
+        if (point == path or point in path.parents) and len(str(point)) > length:
+            found, length = fields[2], len(str(point))
+    return found
+
+
+def node_local(path: os.PathLike) -> str | None:
+    """Why ``path`` is on storage only this node sees, or None when nothing shows it is: it is
+    under ``/tmp``, ``/var/tmp``, ``/dev/shm``, ``$TMPDIR`` or the temp directory, or on a memory
+    filesystem. A local disk is not detected: a head node may export one to the cluster.
+    """
+    import tempfile
+
+    real = Path(os.path.realpath(path))
+    for local in (*NODE_LOCAL_DIRS, os.environ.get("TMPDIR"), tempfile.gettempdir()):
+        if not local:
+            continue
+        where = Path(os.path.realpath(local))
+        if real == where or where in real.parents:
+            return f"{path} is under {local}, which is local to this node"
+    kind = _filesystem_type(real)
+    if kind in MEMORY_FILESYSTEMS:
+        return f"{path} is on a {kind} filesystem, held in this node's memory"
+    return None
 
 
 def _last_line(path: Path | None) -> str | None:
@@ -456,6 +505,10 @@ class SlurmSubstrate:
         The queue listing; default the process's, shared with `SlurmWorker`.
     clock, sleep : callable
         Monotonic seconds, and the wait before a resubmission.
+    allow_node_local : bool
+        Accept a pool root and worker log directory on storage only this node sees (`node_local`),
+        for a cluster of one node. Otherwise `attach` raises `NodeLocalStorage`, as a worker on
+        another node could reach neither.
     """
 
     def __init__(
@@ -470,8 +523,10 @@ class SlurmSubstrate:
         listing: ty.Any = None,
         clock: ty.Callable[[], float] = time.monotonic,
         sleep: ty.Callable[[float], None] = time.sleep,
+        allow_node_local: bool = False,
     ):
         self.per_user_cpu_cap = per_user_cpu_cap
+        self.allow_node_local = allow_node_local
         self.python = python
         self.submit_timeout = submit_timeout
         self.squeue_timeout = squeue_timeout
@@ -494,10 +549,31 @@ class SlurmSubstrate:
         return self._given_listing or slurm.shared_listing()
 
     def attach(self, attachment: Attachment) -> None:
-        """Submit workers for the pool ``attachment`` names; unset waits come from its settings."""
+        """Submit workers for the pool ``attachment`` names; unset waits come from its settings.
+
+        Raises
+        ------
+        NodeLocalStorage
+            The pool root or the worker log directory is on node-local storage, and
+            ``allow_node_local`` is False.
+        """
         from pydra.engine.lease import ATTRIBUTE_DELAY
         from pydra.workers.pool.settings import PoolSettings
 
+        if not self.allow_node_local:
+            root = Path(attachment.root)
+            for what, path in (
+                ("pool root", root),
+                ("worker log directory", root / "private" / "logs"),
+            ):
+                why = node_local(path)
+                if why is not None:
+                    raise NodeLocalStorage(
+                        f"a SlurmSubstrate's {what} must be on storage every node sees: {why}, "
+                        "so a worker on another node could reach neither the pool nor its log; "
+                        "open the pool on shared storage, or pass allow_node_local=True on a "
+                        "cluster of one node"
+                    )
         self._attachment = attachment
         self._swept = False
         for cls in attachment.classes:
