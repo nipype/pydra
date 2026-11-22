@@ -425,8 +425,9 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def _check_barrier(self, values: dict) -> None:
         """Refuse what today's ``State`` gets silently wrong: a ragged or mixed inner
-        input, an inner source that is combined, or a partial upstream node whose
-        elements today's ``State`` cannot index (raises ``PydraStateError``)"""
+        input, an inner source that is combined, an upstream element that is an
+        ``Absent``, or a partial upstream node whose elements today's ``State`` cannot
+        index (raises ``PydraStateError``)"""
         for name, value in self.node.state_values.items():
             if name not in values or not isinstance(value, LazyOutField):
                 continue
@@ -441,6 +442,14 @@ class NodeExecution(ty.Generic[TaskType]):
                     f"{source.name!r}, which only a partial node can index"
                 )
             items = list(values[name]) if is_sequence(values[name]) else []
+            if source.name in (self.state.other_states or {}) and any(
+                isinstance(i, Absent) for i in items
+            ):
+                raise PydraStateError(
+                    f"Node {self.name!r} splits {name!r} over an upstream element of "
+                    f"{source.name!r} that is an Absent: only a partial node gives that "
+                    "element's sub-state no elements"
+                )
             kinds = {len(i) if is_sequence(i) else None for i in items}
             if len(kinds) > 1:
                 raise PydraStateError(
@@ -826,6 +835,8 @@ class NodeExecution(ty.Generic[TaskType]):
             position = indices[element]
         elif indices:
             position = indices[0]
+        elif upstream.is_partial:  # an absent group: the job its Absent came from
+            return upstream._partial.absent_producer(state_index)
         else:
             return None
         return upstream.job(position).unsuffixed_checksum

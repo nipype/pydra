@@ -17,6 +17,11 @@ Every read of a node that is absent as a whole (a splitter input resolved to an
 applies its mode: ``"accept"`` passes the ``Absent``, ``"drop"`` an empty list, and
 ``"propagate"`` completes the reader absent.
 
+Per element (a partial node, after E2), an upstream element whose output is an ``Absent``
+gives that element's sub-state no elements. A read of a group all of whose sub-states are
+absent is the ``Absent``, and the reader applies its mode as above; a read of every element
+holds only the elements that exist. A barrier node refuses such an element.
+
 A task whose checksum may not see an accepted or dropped ``Absent`` (a supplied checksum,
 or a field the checksum skips) has :func:`absence_suffix` of :func:`absence_triples`
 appended to its job checksum.

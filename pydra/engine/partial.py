@@ -398,6 +398,10 @@ class PartialExpansion:
         self._cursors: dict[str, tuple] = {}
         self._reverse: dict[str, dict] = {}
         self.groups: dict[tuple, list[tuple]] = {}
+        # blocks an inner element's ``Absent`` left with no elements (RFC 0002 section
+        # 2.3(a)), each with that ``Absent`` and the checksum of the job it came from
+        self.absent_blocks: dict[tuple, tuple[Absent, str | None]] = {}
+        self._group_blocks: dict[tuple, set] = defaultdict(set)  # group -> its blocks
         self.closed: set[tuple] = set()
         self.open_groups: dict[tuple, dict] = {}  # open group key -> its fields
         self._open_index = _Index()
@@ -666,6 +670,7 @@ class PartialExpansion:
                     ex._become_absent(value)
                     return
                 _check_splittable(ex.name, term, value)
+        absent = None
         try:
             for term in rpn_terms(spec.rpn):
                 if term in spec.inner:
@@ -675,7 +680,13 @@ class PartialExpansion:
                     value = lf._get_value(
                         workflow=ex.workflow, graph=self.graph, state_index=key
                     )
-                    items = list(value) if is_sequence(value) else [value]
+                    if isinstance(value, Absent):
+                        # the upstream element's sub-state has no elements
+                        if absent is None:
+                            absent = (value, self._producer(lf, key))
+                        items = []
+                    else:
+                        items = list(value) if is_sequence(value) else [value]
                     base = {p: c for p, c in block.fields.items() if p[0] == "_" + u}
                     terms = {u: key} if u in spec.linked else {}
                     entries[term] = [
@@ -689,7 +700,7 @@ class PartialExpansion:
                     entries[term] = skeleton[term] = [
                         Entry(base, {}, {name: positions[name]})
                     ]
-            elements = expand_rpn(spec.rpn, entries)
+            elements = [] if absent is not None else expand_rpn(spec.rpn, entries)
         except Exception as exc:
             label = f"{ex.name}[block {key_text(bkey)}]"
             try:
@@ -705,9 +716,13 @@ class PartialExpansion:
             )
             self._set_status(bkey, "errored")
             return
+        if absent is not None:
+            self.absent_blocks[bkey] = absent
         if spec.group_paths is not None and spec.group_by_block:
             for entry in expand_rpn(spec.rpn, skeleton):
-                self._add_group(tuple(entry.fields[p] for p in spec.group_paths))
+                group = tuple(entry.fields[p] for p in spec.group_paths)
+                self._add_group(group)
+                self._group_blocks[group].add(bkey)
         for entry in elements:
             key = tuple(entry.fields[p] for p in spec.elem_paths)
             ex._tasks[key] = None
@@ -735,6 +750,33 @@ class PartialExpansion:
         state)"""
         positions = dict(zip(self.spec.sources, self.block_of[key]))
         return {term: positions[lf._node.name] for term, lf in self.spec.inner.items()}
+
+    def _producer(self, lf: LazyOutField, key: ty.Any) -> str | None:
+        """The unsuffixed checksum of the upstream job whose ``Absent`` a block read at
+        ``key``, None if no one job produced it"""
+        source = self.graph.node(lf._node.name)
+        elements = source._read_elements(source._read_indices(key))
+        if len(elements) == 1:
+            return source.job(elements[0]).unsuffixed_checksum
+        if not elements and source.is_partial:
+            return source._partial.absent_producer(key)
+        return None
+
+    def group_absent(self, group: tuple) -> "Absent | None":
+        """The ``Absent`` of a group whose every block an inner element's ``Absent`` left
+        with no elements (the first such block's), None for any other group"""
+        blocks = self._group_blocks.get(group)
+        if not blocks or self.groups.get(group):
+            return None
+        if all(b in self.absent_blocks for b in blocks):
+            return self.absent_blocks[min(blocks, key=sort_key)][0]
+        return None
+
+    def absent_producer(self, group: ty.Any) -> str | None:
+        """The producer recorded for an absent group (see :meth:`group_absent`)"""
+        if not isinstance(group, tuple) or self.group_absent(group) is None:
+            return None
+        return self.absent_blocks[min(self._group_blocks[group], key=sort_key)][1]
 
     def _add_group(self, group: tuple) -> None:
         if group in self.groups:
@@ -879,12 +921,17 @@ class PartialExpansion:
             if not spec.group_paths:
                 return [retrieve(ex.job(k)) for k in self.keys_by_rank]
             return StateArray(
-                [retrieve(ex.job(m)) for m in sorted(self.groups[g])]
-                for g in sorted(self.groups)
+                self._group_value(retrieve, g) for g in sorted(self.groups)
             )
         if spec.group_paths is None:
             return retrieve(ex.job(state_index))
-        return [retrieve(ex.job(m)) for m in sorted(self.groups[state_index])]
+        return self._group_value(retrieve, state_index)
+
+    def _group_value(self, retrieve: ty.Callable[["Job"], ty.Any], group: tuple):
+        """The members of a group, or its ``Absent`` if the group is absent"""
+        if (absent := self.group_absent(group)) is not None:
+            return absent
+        return [retrieve(self.ex.job(m)) for m in sorted(self.groups[group])]
 
     # ------------------------------------------------------------------------------
     # Today's ``State`` for a barrier reader
