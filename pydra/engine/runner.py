@@ -30,6 +30,7 @@ from pydra.engine.absent import (
     task_definition,
 )
 from pydra.engine.lease import LeaseLost
+from pydra.engine.loop import LoopState, advance, loop_label
 from pydra.engine.partial import (
     ALL,
     GroupRead,
@@ -1296,10 +1297,16 @@ class _Frame:
         self.checked: bool = False
         self.errors: list[str] = []
         self.entries: list[JobErrorEntry] = []
+        # the state of the loop whose rounds the runner adds to the graph, if the job
+        # is a loop (RFC 0002 section 2.3(d))
+        self.loop: "LoopState | None" = None
 
     @property
     def nodes_done(self) -> bool:
-        return all(n.done for n in self.graph.nodes)
+        """Whether every node is done and, for a loop, no round is to be added"""
+        return all(n.done for n in self.graph.nodes) and (
+            self.loop is None or self.loop.stopped is not None
+        )
 
 
 class GraphRunner:
@@ -1469,11 +1476,16 @@ class GraphRunner:
             submitter=self.submitter, path=frame.path
         )
         frame.state = "expanding"
+        spec = getattr(task, "_loop", None)
+        if spec is not None:  # a loop: its graph holds r0, and grows (`advance`)
+            frame.loop = LoopState(spec, frame.graph.node("r0"))
         if frame.job is not None:
             frame.job.return_values = {
                 "workflow": frame.workflow,
                 "exec_graph": frame.graph,
             }
+            if frame.loop is not None:
+                frame.job.return_values["loop"] = frame.loop
         self._collect_resolution_errors(frame)
 
     def _enter(self, job: Job, parent: _Frame) -> None:
@@ -1689,8 +1701,23 @@ class GraphRunner:
 
     def _settle_frames(self) -> None:
         for frame in reversed(list(self._frames)):
+            if frame.state == "expanding" and frame.loop is not None:
+                advance(self, frame)
             if frame.state == "expanding" and frame.owned and frame.nodes_done:
                 self._finish(frame)
+
+    def _fail_loop(self, frame: _Frame, exc: BaseException) -> None:
+        """Fail a loop whose ``until`` could not be read: its job, or the run when the
+        loop is the runner's own task and the runner does not own its job"""
+        if frame.owned:
+            self._finish(frame, exc)
+            return
+        self._failed = True
+        if self._first_error is None:
+            self._first_error = exc
+        label = loop_label(frame)
+        frame.errors.append(f"Loop {label!r} errored: {exc}")
+        frame.entries.append(error_entry(label, None, exc))
 
     def _name_stopped(self, frame: _Frame) -> None:
         """Add an entry, naming the failure that stopped the workflow, for each element
@@ -1800,6 +1827,8 @@ class GraphRunner:
             len(self._reading),
             len(self._checked),
             tuple(f.state for f in self._frames),
+            # a loop adds a round or closes
+            tuple((f.loop.rounds, f.loop.stopped) for f in self._frames if f.loop),
             tuple(
                 (
                     bool(n.started),
@@ -2413,8 +2442,8 @@ class GraphRunner:
         root = self._root
         if root.owned:
             finished = root.state == "finished"
-        else:
-            finished = all(n.done for n in root.graph.nodes)
+        else:  # an open loop is not done between a round and the next ``ready``
+            finished = root.nodes_done
         if self._unreported():
             return False
         return finished or (bool(self._not_run) and self._quiescent)

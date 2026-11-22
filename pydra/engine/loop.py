@@ -16,6 +16,7 @@ from pydra.utils.hash import hash_single
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
     from pydra.engine.hooks import TaskHooks
+    from pydra.engine.runner import GraphRunner, NodeExecution, _Frame
     from pydra.environments.base import Environment
     from pydra.utils.resources import ComputeResources
 
@@ -114,3 +115,150 @@ class LoopConstructor:
         )
         # placeholders: the loop's outputs are read from its last round when it stops
         return tuple(getattr(first, n) for n in spec.body_outputs) + (0, False, "")
+
+
+class LoopState:
+    """The runner's state of one loop instance, kept on the frame of its job
+
+    Attributes
+    ----------
+    spec : LoopSpec
+        The loop's parameters
+    rounds : int
+        The rounds instantiated so far
+    last : NodeExecution
+        The newest round
+    prev : NodeExecution | None
+        The round before it
+    seen : set[str]
+        The checksums of the completed rounds that did not end the loop, kept only when
+        ``spec.index`` is None
+    until : bool | Absent | None
+        The ``until`` value last read, None before the first round is done
+    stopped : str | None
+        Why the loop ended: ``"until"``, ``"max-rounds"``, ``"cycle"``, ``"absent"`` or
+        ``"error"``; None while it is open
+    """
+
+    def __init__(self, spec: LoopSpec, first: "NodeExecution"):
+        self.spec = spec
+        self.rounds = 1
+        self.last = first
+        self.prev: "NodeExecution | None" = None
+        self.seen: set[str] = set()
+        self.until: ty.Any = None
+        self.stopped: str | None = None
+
+    @property
+    def ran(self) -> int:
+        """The rounds instantiated, less a last round that completed absent by
+        propagation (it did not run)"""
+        absent = self.last.job(None)._propagated_absent is not None
+        return self.rounds - int(absent)
+
+
+def loop_label(frame: "_Frame") -> str:
+    """The path of a loop's job, its element index or key included"""
+    if frame.path:
+        return "/".join(frame.path)
+    if frame.job is not None:
+        return frame.job.name
+    return type(frame.workflow.inputs).__name__
+
+
+def read_until(frame: "_Frame") -> ty.Any:
+    """The ``until`` output of a loop's newest round, read as a gate is read: a
+    ``bool`` or an ``Absent``
+
+    Raises
+    ------
+    GateTypeError
+        It resolved to anything else, such as a reference an external driver completed
+        the round with
+    """
+    from pydra.engine.absent import Absent
+    from pydra.engine.runner import GateTypeError
+
+    loop = frame.loop
+    field = getattr(loop.last.node.lzout, loop.spec.until)
+    value = field._get_value(workflow=frame.workflow, graph=frame.graph)
+    if not isinstance(value, (bool, Absent)):
+        raise GateTypeError(
+            f"The until output {loop.spec.until!r} of loop {loop_label(frame)!r} "
+            f"resolved to a {type(value).__name__} ({value!r}) in round "
+            f"{loop.last.name!r}: it must be a bool or an Absent, not a reference to one"
+        )
+    return value
+
+
+def decide(loop: LoopState, until: ty.Any, checksum: str) -> str | None:
+    """Why the loop ends after its newest round, None if another round follows"""
+    if until:
+        return "until"
+    if loop.spec.max_rounds is not None and loop.rounds >= loop.spec.max_rounds:
+        return "max-rounds"
+    return None
+
+
+def instantiate(runner: "GraphRunner", frame: "_Frame") -> "NodeExecution":
+    """Add the next round to a loop's graph, wired lazily to the newest round's outputs,
+    and return it"""
+    from pydra.engine.runner import NodeExecution
+    from pydra.utils.general import attrs_values
+
+    loop = frame.loop
+    spec = loop.spec
+    workflow = frame.workflow
+    last = loop.last
+    k = loop.rounds
+    given = attrs_values(workflow.inputs)
+    inputs = {
+        n: given[n]
+        for n in spec.body_inputs
+        if n in given and given[n] is not attrs.NOTHING
+    }
+    for inp, outp in spec.carry:
+        inputs[inp] = getattr(last.node.lzout, outp)
+    if spec.index is not None:
+        inputs[spec.index] = k
+    outputs = workflow.add(
+        spec.body(**inputs),
+        name=f"r{k}",
+        environment=spec.environment,
+        hooks=spec.hooks,
+        resources=spec.resources,
+    )
+    new = NodeExecution(
+        workflow[f"r{k}"], runner.submitter, workflow=workflow, path=frame.path
+    )
+    new.graph = frame.graph
+    frame.graph.add_nodes(new)
+    frame.graph.add_edges((last, new))
+    # the workflow's outputs follow the newest round, so they hold no older round
+    for name in spec.body_outputs:
+        setattr(workflow.outputs, name, getattr(outputs, name))
+    loop.prev, loop.last = last, new
+    loop.rounds += 1
+    return new
+
+
+def advance(runner: "GraphRunner", frame: "_Frame") -> None:
+    """Close the loop of an expanding frame, or add its next round, once its newest
+    round is done; called by the runner on every pass of ``ready``"""
+    loop = frame.loop
+    if loop.stopped is not None or not loop.last.done:
+        return
+    last = loop.last
+    try:
+        until = read_until(frame)
+    except Exception as exc:
+        loop.stopped = "error"
+        runner._fail_loop(frame, exc)
+        return
+    loop.until = until
+    checksum = last.job(None).checksum
+    stopped = decide(loop, until, checksum)
+    if stopped is not None:
+        loop.stopped = stopped
+        return
+    instantiate(runner, frame)
