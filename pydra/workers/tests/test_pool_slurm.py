@@ -356,6 +356,7 @@ def test_pool_on_node_local_storage_refused_at_open(tmp_path):
         )
     assert str(tmp_path / "pool") in str(info.value)
     assert "allow_node_local" in str(info.value)
+    assert not (tmp_path / "pool").exists()  # refused before the pool's tree was made
 
 
 def test_allow_node_local_accepts_a_node_local_root(tmp_path):
@@ -372,15 +373,19 @@ def test_allow_node_local_accepts_a_node_local_root(tmp_path):
         ("/tmp/sl-1/pool", None, "xfs", True),
         ("/var/tmp/pool", None, "xfs", True),
         ("/dev/shm/pool", None, "tmpfs", True),
-        ("/scratch/job-7/pool", "/scratch/job-7", "lustre", True),
+        ("/tmp/sl-9/pool", "/tmp/sl-9", "xfs", True),
+        ("/scratch/job-7/pool", "/scratch/job-7", None, True),
+        ("/scratch/job-7/pool", "/scratch/job-7", "lustre", False),
+        ("/scratch/job-7/pool", "/scratch/job-7", "gpfs", False),
         ("/shared/lab/pool", None, "tmpfs", True),
         ("/shared/lab/pool", None, "nfs4", False),
         ("/shared/lab/pool", None, None, False),
     ],
 )
 def test_node_local_paths(monkeypatch, path, tmpdir, kind, local):
-    """`node_local` names a path under ``/tmp``, ``/var/tmp``, ``/dev/shm`` or ``$TMPDIR``, or on a
-    memory filesystem; a path on shared storage, or of an unknown filesystem type, passes.
+    """`node_local` decides by filesystem type first: a network or parallel filesystem is shared,
+    ``$TMPDIR`` on it included, and a memory filesystem is local. Otherwise a path under ``/tmp``,
+    ``/var/tmp``, ``/dev/shm`` or ``$TMPDIR`` is local, and any other passes.
     """
     if tmpdir is None:
         monkeypatch.delenv("TMPDIR", raising=False)
@@ -416,6 +421,7 @@ def test_filesystem_type_reads_the_longest_mount(tmp_path, monkeypatch):
         "rootfs / tmpfs rw 0 0\n"
         "server:/lab /shared nfs4 rw 0 0\n"
         "server:/lab/x /shared/lab\\040x nfs rw 0 0\n"
+        "server:/w /shared/a\\011b\\134c lustre rw 0 0\n"
     )
     real = Path
 
@@ -426,6 +432,7 @@ def test_filesystem_type_reads_the_longest_mount(tmp_path, monkeypatch):
     assert substrate_module._filesystem_type(real("/shared/lab/pool")) == "nfs4"
     assert substrate_module._filesystem_type(real("/shared/lab x/pool")) == "nfs"
     assert substrate_module._filesystem_type(real("/opt/pool")) == "tmpfs"
+    assert substrate_module._filesystem_type(real("/shared/a\tb\\c/pool")) == "lustre"
 
 
 # -- the per-user CPU cap ------------------------------------------------------------------------

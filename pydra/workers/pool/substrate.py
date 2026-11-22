@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -110,6 +111,37 @@ NODE_LOCAL_DIRS = ("/tmp", "/var/tmp", "/dev/shm")
 MEMORY_FILESYSTEMS = frozenset({"tmpfs", "ramfs", "devtmpfs"})
 """Filesystem types whose contents live in one host's memory."""
 
+SHARED_FILESYSTEMS = frozenset(
+    {
+        "nfs",
+        "nfs4",
+        "lustre",
+        "gpfs",
+        "beegfs",
+        "cifs",
+        "smb3",
+        "ceph",
+        "fuse.ceph",
+        "fuse.cephfs",
+        "panfs",
+        "wekafs",
+        "fuse.weka",
+        "glusterfs",
+        "fuse.glusterfs",
+        "orangefs",
+        "pvfs2",
+        "afs",
+        "fuse.sshfs",
+        "9p",
+    }
+)
+"""Network and parallel filesystem types, which other nodes can mount."""
+
+
+def _unescape(field: str) -> str:
+    """A mount-table field with its octal escapes (``\\040`` and the others) decoded."""
+    return re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), field)
+
 
 def _filesystem_type(path: Path) -> str | None:
     """The type of the filesystem ``path`` is on, from the Linux mount table; None elsewhere."""
@@ -122,29 +154,35 @@ def _filesystem_type(path: Path) -> str | None:
         fields = line.split()
         if len(fields) < 3:
             continue
-        point = Path(fields[1].replace("\\040", " "))
+        point = Path(_unescape(fields[1]))
         if (point == path or point in path.parents) and len(str(point)) > length:
             found, length = fields[2], len(str(point))
     return found
 
 
 def node_local(path: os.PathLike) -> str | None:
-    """Why ``path`` is on storage only this node sees, or None when nothing shows it is: it is
-    under ``/tmp``, ``/var/tmp``, ``/dev/shm``, ``$TMPDIR`` or the temp directory, or on a memory
-    filesystem. A local disk is not detected: a head node may export one to the cluster.
+    """Why ``path`` is on storage only this node sees, or None when nothing shows it is.
+
+    The filesystem type decides first: a network or parallel filesystem (`SHARED_FILESYSTEMS`) is
+    shared wherever it is mounted, ``$TMPDIR`` included, and a memory filesystem is local. Any other
+    type, or an unknown one, is local when the path is under ``/tmp``, ``/var/tmp``, ``/dev/shm``,
+    ``$TMPDIR`` or the temp directory. A local disk elsewhere is not detected: a head node may
+    export one to the cluster.
     """
     import tempfile
 
     real = Path(os.path.realpath(path))
+    kind = _filesystem_type(real)
+    if kind in SHARED_FILESYSTEMS:
+        return None
+    if kind in MEMORY_FILESYSTEMS:
+        return f"{path} is on a {kind} filesystem, held in this node's memory"
     for local in (*NODE_LOCAL_DIRS, os.environ.get("TMPDIR"), tempfile.gettempdir()):
         if not local:
             continue
         where = Path(os.path.realpath(local))
         if real == where or where in real.parents:
             return f"{path} is under {local}, which is local to this node"
-    kind = _filesystem_type(real)
-    if kind in MEMORY_FILESYSTEMS:
-        return f"{path} is on a {kind} filesystem, held in this node's memory"
     return None
 
 
@@ -507,8 +545,10 @@ class SlurmSubstrate:
         Monotonic seconds, and the wait before a resubmission.
     allow_node_local : bool
         Accept a pool root and worker log directory on storage only this node sees (`node_local`),
-        for a cluster of one node. Otherwise `attach` raises `NodeLocalStorage`, as a worker on
-        another node could reach neither.
+        for a cluster of one node. Otherwise `check_root` (and `attach`) raises
+        `NodeLocalStorage`, as a worker on another node could reach neither. It skips every check,
+        the memory-filesystem one included: under Slurm's per-job private ``/tmp``
+        (``job_container/tmpfs``) even a one-node cluster's workers cannot see the coordinator's.
     """
 
     def __init__(
@@ -548,6 +588,31 @@ class SlurmSubstrate:
 
         return self._given_listing or slurm.shared_listing()
 
+    def check_root(self, root: os.PathLike) -> None:
+        """Refuse a pool at ``root`` whose root or worker log directory is on node-local storage
+        (`node_local`), unless ``allow_node_local``; `WarmPool` calls it before it makes the pool.
+
+        Raises
+        ------
+        NodeLocalStorage
+            Either path is on node-local storage.
+        """
+        if self.allow_node_local:
+            return
+        root = Path(root)
+        for what, path in (
+            ("pool root", root),
+            ("worker log directory", root / "private" / "logs"),
+        ):
+            why = node_local(path)
+            if why is not None:
+                raise NodeLocalStorage(
+                    f"a SlurmSubstrate's {what} must be on storage every node sees: {why}, "
+                    "so a worker on another node could reach neither the pool nor its log; "
+                    "open the pool on shared storage, or pass allow_node_local=True on a "
+                    "cluster of one node"
+                )
+
     def attach(self, attachment: Attachment) -> None:
         """Submit workers for the pool ``attachment`` names; unset waits come from its settings.
 
@@ -560,20 +625,7 @@ class SlurmSubstrate:
         from pydra.engine.lease import ATTRIBUTE_DELAY
         from pydra.workers.pool.settings import PoolSettings
 
-        if not self.allow_node_local:
-            root = Path(attachment.root)
-            for what, path in (
-                ("pool root", root),
-                ("worker log directory", root / "private" / "logs"),
-            ):
-                why = node_local(path)
-                if why is not None:
-                    raise NodeLocalStorage(
-                        f"a SlurmSubstrate's {what} must be on storage every node sees: {why}, "
-                        "so a worker on another node could reach neither the pool nor its log; "
-                        "open the pool on shared storage, or pass allow_node_local=True on a "
-                        "cluster of one node"
-                    )
+        self.check_root(attachment.root)
         self._attachment = attachment
         self._swept = False
         for cls in attachment.classes:
