@@ -364,10 +364,13 @@ Other notes:
   #924 bounds. The holder is forced to `"anonymous"` whatever is passed, and the setting is fixed at
   construction; a worker that unpickles the store uses the same one. Processes on one root may use
   different bounds. A holder records its `stale_after` in `holder.json` (it names no one), and a
-  taker treats a lease as stale only after the larger of its own `stale_after` and the holder's; a
-  record without one, written by an older pydra, counts as the default 300 s. So a process with
-  shorter bounds never takes over a live holder, and a short `stale_after` speeds up a resume after
-  a crash only when the crashed run used it too.
+  taker treats a lease as stale only after the larger of its own `stale_after` and the holder's,
+  at most its `max_honoured_stale_after` (default four times the default `stale_after`, 1200 s). A
+  record without a `stale_after`, written by an older pydra, counts as the default 300 s; a record
+  that exists but cannot be read (another user's on a shared root) counts as the cap. So a process
+  with shorter bounds never takes over a live holder whose bounds are within the cap, a dead holder
+  that recorded an absurd bound is still taken over at the cap, and a short `stale_after` speeds up
+  a resume after a crash only when the crashed run used it too.
 - **Paths.** `DirectoryLease` works by path (`engine/lease.py:290`), not by descriptor. The store opens
   `leases/` by descriptor at start and refuses a symlink there (§9), and the lease directory holds no
   entry data, so a lease redirected by a race below `leases/` can block or duplicate work but cannot
