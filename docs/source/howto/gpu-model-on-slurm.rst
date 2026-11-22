@@ -98,8 +98,10 @@ option the substrate sets itself (``gres``, ``cpus-per-task``, ``mem``, ``time``
 and sets ``CUDA_VISIBLE_DEVICES``; a worker that finds hardware other than its class names (an
 ``a100`` class granted an H100) refuses to start. A class is broken, and its jobs are reported not
 run (held, never failed) with the latest start error, after ``FaultBudgets.start_failures`` failed
-starts or once its starts have failed for ``PoolSettings.fail_fast_s`` with no worker of the class
-ready or starting, whichever comes first.
+starts, or at a failed start once ``PoolSettings.start_deadline_failures`` starts have failed in a
+row over ``PoolSettings.start_deadline_s`` with no worker of the class ready or starting, whichever
+comes first. ``WarmPool.release_hold``, or a ``retry`` of a held job, gives the class a fresh
+attempt.
 
 Classes may also be read from a TOML, JSON or YAML file with
 :meth:`~pydra.workers.pool.classes.WorkerClass.load`.

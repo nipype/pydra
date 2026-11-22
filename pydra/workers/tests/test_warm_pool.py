@@ -1354,8 +1354,9 @@ def test_a_failed_ticket_write_puts_the_jobs_back(tmp_path, tasks, pools, monkey
 def test_ticket_writes_that_keep_failing_hold_the_jobs(
     tmp_path, tasks, pools, monkeypatch
 ):
-    """Ticket writes that keep failing for ``fail_fast_s`` break the class: the submitter gets
-    ``NotRun(held=True)`` naming the write error, and the run ends rather than hanging.
+    """Ticket writes that keep failing (``start_deadline_failures`` times over ``start_deadline_s``)
+    break the class: the submitter gets ``NotRun(held=True)`` naming the write error, and the run
+    ends rather than hanging.
     """
 
     def failing(queue, ticket):
@@ -1367,7 +1368,7 @@ def test_ticket_writes_that_keep_failing_hold_the_jobs(
         pools,
         sub,
         substrate=Recording(),
-        settings=_settings(fail_fast_s=0.5),
+        settings=_settings(start_deadline_s=0.5),
     )
     monkeypatch.setattr(pool.pool, "put", failing)
     with pytest.raises(RunIncomplete) as info:
@@ -1382,9 +1383,9 @@ def test_ticket_writes_that_keep_failing_hold_the_jobs(
 def test_refused_starts_hold_the_jobs_before_the_backoff_ladder_ends(
     tmp_path, tasks, pools
 ):
-    """A class whose every start is refused has no ready worker within ``fail_fast_s``: its jobs are
-    ``NotRun(held=True)`` naming the latest start error, well before ``start_failures`` backed-off
-    starts would have broken it."""
+    """A class whose every start is refused breaks once ``start_deadline_failures`` starts have failed
+    over ``start_deadline_s``: its jobs are ``NotRun(held=True)`` naming the latest start error,
+    well before ``start_failures`` backed-off starts would have broken it."""
     import time
 
     poll, budget = 0.5, FaultBudgets().start_failures
@@ -1398,7 +1399,7 @@ def test_refused_starts_hold_the_jobs_before_the_backoff_ladder_ends(
         pools,
         sub,
         substrate=substrate,
-        settings=_settings(poll_s=poll, fail_fast_s=1.0),
+        settings=_settings(poll_s=poll, start_deadline_s=1.0),
     )
     began = time.monotonic()
     with pytest.raises(RunIncomplete) as info:
@@ -1414,8 +1415,9 @@ def test_refused_starts_hold_the_jobs_before_the_backoff_ladder_ends(
 
 
 def test_a_pending_start_is_not_cut_short(tmp_path, tasks, pools):
-    """A start still pending when ``fail_fast_s`` has passed (a slow model load, a queued Slurm job)
-    is waited for; once it too leaves without a ready mark, the class breaks at once."""
+    """A start still pending when ``start_deadline_s`` has passed (a slow model load, a queued Slurm
+    job) is waited for; once it too leaves without a ready mark, the class breaks at once.
+    """
     sub = _submitter(tmp_path)
     substrate = Pending()
     pool = _warm(
@@ -1423,7 +1425,9 @@ def test_a_pending_start_is_not_cut_short(tmp_path, tasks, pools):
         pools,
         sub,
         substrate=substrate,
-        settings=_settings(poll_s=1.0, fail_fast_s=10.0),
+        settings=_settings(
+            poll_s=1.0, start_deadline_s=10.0, start_deadline_failures=2
+        ),
     )
     reported = []
     pool.bind(lambda job, outcome: reported.append((job, outcome)))
@@ -1434,7 +1438,7 @@ def test_a_pending_start_is_not_cut_short(tmp_path, tasks, pools):
     pool._scale(100.5)  # it left without a ready mark: failed start 1
     pool._scale(102.0)  # after the backoff, a second start, which stays pending
     assert substrate.starts == 2 and not pool._broken
-    pool._scale(150.0)  # long past fail_fast_s, but a start is pending
+    pool._scale(150.0)  # long past start_deadline_s, but a start is pending
     assert not pool._broken and reported == []
     substrate.leave()
     pool._scale(151.0)  # the pending start failed too
@@ -1461,7 +1465,7 @@ def test_start_and_listing_failures_are_pool_events(tmp_path, tasks, pools):
         pools,
         sub,
         substrate=substrate,
-        settings=_settings(poll_s=1.0, fail_fast_s=5.0),
+        settings=_settings(poll_s=1.0, start_deadline_s=5.0, start_deadline_failures=2),
     )
     pool.bind(lambda job, outcome: None)
     pool._queue_jobs(_round(sub, tasks, [1]), handle=None)
@@ -1478,6 +1482,192 @@ def test_start_and_listing_failures_are_pool_events(tmp_path, tasks, pools):
     assert started[0].worker_class == "cpu" and started[0].failures == 1
     [broken] = events.named("class_broken")
     assert broken.worker_class == "cpu" and "invalid partition" in broken.cause
+
+
+def test_a_stale_streak_never_breaks_a_class_without_a_start(tmp_path, tasks, pools):
+    """A failure streak ends when its class has no waiting jobs: after a failed start, a cancelled
+    run and an hour idle, a new run's first poll starts a worker rather than breaking the class.
+    """
+    from pydra.engine.executor import Handle
+
+    sub = _submitter(tmp_path)
+    substrate = Pending()
+    substrate.stop = lambda workers: [
+        substrate.handles.remove(w) for w in workers if w in substrate.handles
+    ]
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=substrate,
+        settings=_settings(
+            poll_s=1.0, start_deadline_s=120.0, start_deadline_failures=1
+        ),
+    )
+    pool.bind(lambda job, outcome: None)
+    jobs = _round(sub, tasks, [1])
+    handle = Handle(pool, tuple(jobs), set(jobs))
+    pool._queue_jobs(jobs, handle=handle)
+    pool._write()
+    pool._scale(100.0)  # start 1
+    substrate.leave()
+    pool._scale(100.5)  # failed start 1
+    pool._scale(102.0)  # start 2, pending
+    pool.cancel(handle)  # the run goes away
+    pool._scale(
+        103.0
+    )  # no waiting work: the pending surplus is stopped, the streak ends
+    starts = substrate.starts
+    pool._queue_jobs(_round(sub, tasks, [2]), handle=None)
+    pool._write()
+    pool._scale(4000.0)  # an hour later, a new run
+    assert "cpu" not in pool._broken
+    assert substrate.starts == starts + 1
+
+
+def test_ticket_write_streak_ends_with_its_waiting_jobs(
+    tmp_path, tasks, pools, monkeypatch
+):
+    """A queue's write streak ends when nothing waits to be written: one failed write, its jobs
+    cancelled, and a failed write an hour later does not break the class."""
+    from pydra.engine.executor import Handle
+
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=Recording(),
+        settings=_settings(start_deadline_s=0.05, start_deadline_failures=2),
+    )
+    pool.bind(lambda job, outcome: None)
+
+    def failing(queue, ticket):
+        raise OSError("Stale file handle")
+
+    monkeypatch.setattr(pool.pool, "put", failing)
+    jobs = _round(sub, tasks, [1])
+    handle = Handle(pool, tuple(jobs), set(jobs))
+    pool._queue_jobs(jobs, handle=handle)
+    pool._write()  # failed write 1
+    pool.cancel(handle)
+    pool._write()  # nothing waits: the streak ends
+    import time
+
+    time.sleep(0.1)
+    pool._queue_jobs(_round(sub, tasks, [2]), handle=None)
+    pool._write()  # failed write 1 of a fresh streak
+    assert "cpu" not in pool._broken
+
+
+def test_the_deadline_never_breaks_ahead_of_a_due_retry(tmp_path, tasks, pools):
+    """With ``poll_s`` longer than ``start_deadline_s``, one refused start does not break the class:
+    the backed-off retry runs, and the class breaks only at the failed attempt that completes
+    ``start_deadline_failures``."""
+    sub = _submitter(tmp_path)
+    substrate = RefusesStarts()
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=substrate,
+        settings=_settings(poll_s=150.0, start_deadline_s=120.0),
+    )
+    pool.bind(lambda job, outcome: None)
+    pool._queue_jobs(_round(sub, tasks, [1]), handle=None)
+    pool._write()
+    pool._scale(0.0)  # refused 1
+    pool._scale(150.0)  # the retry is due: refused 2
+    assert substrate.starts == 2 and "cpu" not in pool._broken
+    pool._scale(
+        299.0
+    )  # long past the deadline, but no retry is due yet: nothing judged
+    assert substrate.starts == 2 and "cpu" not in pool._broken
+    pool._scale(450.0)  # refused 3: the streak has its failures and its time
+    assert substrate.starts == 3 and "cpu" in pool._broken
+
+
+def test_an_unencodable_job_fails_alone(tmp_path, tasks, pools, monkeypatch):
+    """A job its codec cannot encode is ``Failed`` with the error on its own: the jobs beside it are
+    written, nothing is held, and the class is not broken."""
+    from pydra.engine.runner import Failed
+    from pydra.workers.pool.codec import PrivatePickle
+
+    encode = PrivatePickle.encode
+
+    def unpicklable_first(self, job):
+        if job.state_index == 0:
+            raise TypeError("cannot pickle '_thread.lock' object")
+        return encode(self, job)
+
+    monkeypatch.setattr(PrivatePickle, "encode", unpicklable_first)
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=Recording(),
+        settings=_settings(start_deadline_s=0.05, start_deadline_failures=1),
+    )
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    pool._queue_jobs(_round(sub, tasks, [1, 2, 3]), handle=None)
+    pool._write()
+    [(job, outcome)] = reported
+    assert job.state_index == 0 and isinstance(outcome, Failed)
+    assert "cannot pickle" in str(outcome.error)
+    assert sum(len(t["jobs"]) for t in _tickets(pool.root)) == 2
+    assert not pool._broken and "cpu" not in pool._waiting
+
+
+class Flaky:
+    """A `LocalSubstrate` whose starts are refused while ``refuse`` is set."""
+
+    def __new__(cls):
+        from pydra.workers.pool.substrate import LocalSubstrate, SubstrateError
+
+        class _Flaky(LocalSubstrate):
+            refuse = True
+
+            def start(self, worker_class, n):
+                if self.refuse:
+                    raise SubstrateError("sbatch: error: Socket timed out")
+                return super().start(worker_class, n)
+
+        return _Flaky()
+
+
+@pytest.mark.parametrize("lift", ["release_hold", "retry"])
+def test_a_broken_class_recovers(tmp_path, tasks, pools, lift):
+    """A class broken by refused starts recovers: after `WarmPool.release_hold`, or on a ``retry``
+    of the job it held, the next start is a fresh attempt, and once starts work the job runs.
+    """
+    sub = _submitter(tmp_path)
+    substrate = Flaky()
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=substrate,
+        settings=_settings(start_deadline_s=0.2, start_deadline_failures=2),
+    )
+    reported = []
+    pool.bind(lambda job, outcome: reported.append((job, outcome)))
+    jobs = _round(sub, tasks, [7])
+    pool.submit(jobs)
+    _wait(lambda: reported, "the job held when the class broke")
+    [(_, held)] = reported
+    assert isinstance(held, NotRun) and held.held and "Socket timed out" in held.reason
+    substrate.refuse = False
+    if lift == "release_hold":
+        assert pool.release_hold("cpu") == ["cpu"]
+    reported.clear()
+    pool.submit(jobs)  # the runner's retry hands the held job out again
+    _wait(lambda: reported, "the retried job's outcome")
+    [(job, outcome)] = reported
+    assert job is jobs[0]
+    assert not isinstance(outcome, NotRun) and not outcome.errored
+    assert "cpu" not in pool._broken
 
 
 def test_served_result_read_without_the_visibility_wait(

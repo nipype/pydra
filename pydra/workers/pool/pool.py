@@ -23,11 +23,14 @@ The pool is the submitting process's side of the protocol of `pydra.workers.pool
   sees a newer epoch stops writing and reports its open jobs ``NotRun`` (`PoolFenced`).
 - **Scaling** starts, per class, the workers its queues' waiting jobs want, while the substrate's
   ``can_start`` allows; a worker that leaves ``live()`` without a ready mark is a failed start, the
-  next start of its class backs off, and after ``start_failures`` consecutive ones, or once its
-  starts have failed for ``fail_fast_s`` with no worker of the class live, the class is broken and
-  its jobs are held with the latest start error. A failed ticket write puts its jobs back to wait;
-  writes that fail for ``fail_fast_s`` break the class too. Failed starts, listings and writes and
-  broken classes are pool events: ``pydra.pool`` log records with an ``event`` attribute.
+  next start of its class backs off, and after ``start_failures`` consecutive ones, or at a failed
+  start once a streak has ``start_deadline_failures`` failures and ``start_deadline_s`` has passed
+  since its first with no worker of the class live, the class is broken and its jobs are held with
+  the latest start error. A streak ends when the class has no waiting jobs. A failed ticket write
+  puts its jobs back to wait, and writes failing by the same rule break the class too; a job that
+  cannot be encoded is ``Failed`` alone. `release_hold`, or a ``retry`` of a held job, lifts the
+  break with a fresh streak. Failed starts, listings, writes and polls, and broken classes, are
+  pool events: ``pydra.pool`` log records with an ``event`` attribute.
 - **Lifecycle.** `close` writes the coordinator's ``ended`` mark; a coordinator that still holds the
   newest epoch then stops the workers its substrate lists. A pool outlives the runs driven on it:
   ``drive`` never closes it, so its workers stay resident from one run to the next; whoever made it
@@ -82,7 +85,12 @@ from pydra.workers.pool.calibration import (
     residency_key,
 )
 from pydra.workers.pool.classes import WorkerClass
-from pydra.workers.pool.codec import JobCodec, PrivatePickle, write_payload
+from pydra.workers.pool.codec import (
+    JobCodec,
+    PrivatePickle,
+    encode_payload,
+    store_payload,
+)
 from pydra.workers.pool import faults as _faults
 from pydra.workers.pool.faults import Classifier, FaultBudgets
 from pydra.workers.pool.placement import (
@@ -518,10 +526,12 @@ class WarmPool:
         self._failed_at: dict[str, float] = {}
         # class -> when its starts began failing in a row
         self._failing_since: dict[str, float] = {}
-        # queue -> when its ticket writes began failing in a row, and the latest error
-        self._write_failing: dict[str, tuple[float, str]] = {}
+        # queue -> when its ticket writes began failing in a row, how many, and the latest error
+        self._write_failing: dict[str, tuple[float, int, str]] = {}
         self._cause: dict[str, str] = {}
         self._broken: dict[str, str] = {}
+        # class -> the jobs held because it broke: a retry of one of them lifts the break
+        self._break_held: dict[str, set[JobKey]] = collections.defaultdict(set)
         self._listing_failures: dict[str, int] = collections.defaultdict(int)
         # when the substrate was last listed (or, never listed, first failed to be), and the
         # classes a ticket of which settled since then
@@ -538,6 +548,9 @@ class WarmPool:
         self._closed = False
         self.epoch: int | None = None
         self._lease = None
+        check_root = getattr(substrate, "check_root", None)
+        if check_root is not None:  # before the pool's tree is made
+            check_root(self.root)
         self.pool = PoolRoot.open(
             self.root, settings.lease, create=True, probe=probe, codec=codec.name
         )
@@ -859,6 +872,11 @@ class WarmPool:
         reports: list[tuple["Job", _Job | None, "Outcome"]] = []
         report = report or self._sole_report()
         startable = self._startable()
+        busy = {
+            _queue_class(j.queue if j.ticket is None else j.ticket.queue)
+            for j in self._open.values()
+            if j.twin_of is None
+        }
         for job in jobs:
             if is_workflow(job.task):
                 reports.append(
@@ -902,12 +920,20 @@ class WarmPool:
             j = _Job(
                 job, handle, key, placement.queue, ladder, residency, report=report
             )
-            broken = self._broken.get(placement.worker_class) or self._held.get(
+            name = placement.worker_class
+            if name in self._broken and key in self._break_held.get(name, ()):
+                self.release_hold(name)  # a retry of a job the break held
+            broken = self._broken.get(name) or self._held.get(
                 (placement.queue, _label(residency))
             )
             if broken is not None:
+                if name in self._broken:
+                    self._break_held[name].add(key)
                 reports.append((job, j, NotRun(broken, held=True)))
                 continue
+            if name not in busy:  # work arrives at an idle class: a fresh streak
+                self._end_streaks(name)
+                busy.add(name)
             self._open[job] = j
             self._by_key[key] = j
             self._unchecked.append(j)
@@ -1185,6 +1211,10 @@ class WarmPool:
                 if taken:
                     batches.append((queue, taken))
             self._waiting = {q: w for q, w in self._waiting.items() if w}
+            writing = {queue for queue, _ in batches}
+            for queue in list(self._write_failing):
+                if queue not in writing:  # nothing waits to be written: the streak ends
+                    del self._write_failing[queue]
         for queue, taken in batches:
             quantum = self._class[_queue_class(queue)].quantum_jobs
             groups: list[list[_Job]] = []
@@ -1207,8 +1237,9 @@ class WarmPool:
 
     def _write_failed(self, queue: str, jobs: list[_Job], err: Exception) -> None:
         """Put the jobs of a failed ticket write, and those after them, back at the head of their
-        queue's waiting jobs, never dropped; once the queue's writes have failed for
-        ``fail_fast_s``, break its class so that its jobs are held with the error."""
+        queue's waiting jobs, never dropped; once the queue's streak of failed writes has
+        ``start_deadline_failures`` failures over ``start_deadline_s``, break its class so that its
+        jobs are held with the error."""
         now = time.monotonic()
         cause = f"{type(err).__name__}: {err}"
         with self._lock:
@@ -1216,8 +1247,8 @@ class WarmPool:
             self._waiting.setdefault(queue, collections.deque()).extendleft(
                 reversed(back)
             )
-        since = self._write_failing.get(queue, (now, cause))[0]
-        self._write_failing[queue] = (since, cause)
+        since, failures, _ = self._write_failing.get(queue, (now, 0, cause))
+        self._write_failing[queue] = (since, failures + 1, cause)
         logger.warning(
             "writing a ticket on %r failed (%s): %d job(s) wait for the next write",
             queue,
@@ -1225,33 +1256,64 @@ class WarmPool:
             len(back),
             extra={"event": "write_failed", "queue": queue, "cause": cause},
         )
-        limit = self.settings.fail_fast_s
         cls = self._class.get(_queue_class(queue))
         if (
-            limit is not None
-            and now - since >= limit
-            and cls is not None
+            cls is not None
             and cls.name not in self._broken
+            and self._deadline_passed(since, failures + 1, now)
         ):
             self._break(
                 cls,
-                f"writing tickets on queue {queue!r} failed for {now - since:.0f}s; the "
-                f"latest: {cause}",
+                f"writing tickets on queue {queue!r} failed {failures + 1} times over "
+                f"{now - since:.0f}s; the latest: {cause}",
             )
 
+    def _deadline_passed(self, since: float, failures: int, now: float) -> bool:
+        """Whether a streak of ``failures`` failed attempts since ``since`` breaks its class."""
+        limit = self.settings.start_deadline_s
+        return (
+            limit is not None
+            and failures >= self.settings.start_deadline_failures
+            and now - since >= limit
+        )
+
     def _put(self, queue: str, group: list[_Job]) -> None:
+        """Write ``group`` as one ticket. A job its codec cannot encode is reported ``Failed`` on
+        its own; an error writing the payloads or the ticket is raised, for `_write` to requeue.
+        """
         group = [j for j in group if j.job in self._open]
-        if not group:
-            return
-        entries = []
+        encoded, failed = [], []
         for j in group:
-            entries.append(
-                TicketJob(
-                    checksum=j.key[0],
-                    fingerprint=j.key[1],
-                    payload=write_payload(self.codec, j.job, self.root),
+            try:
+                encoded.append((j, encode_payload(self.codec, j.job)))
+            except Exception as err:
+                logger.warning(
+                    "job %s cannot be encoded by %s: %s",
+                    j.job.name,
+                    self.codec.name,
+                    err,
+                    extra={
+                        "event": "encode_failed",
+                        "cause": f"{type(err).__name__}: {err}",
+                    },
                 )
+                failed.append((j, err))
+        if failed:
+            with self._lock:
+                for j, _ in failed:
+                    self._forget(j)
+            self._deliver([(j.job, j, Failed(err)) for j, err in failed])
+        if not encoded:
+            return
+        group = [j for j, _ in encoded]
+        entries = [
+            TicketJob(
+                checksum=j.key[0],
+                fingerprint=j.key[1],
+                payload=store_payload(self.codec, data, media, self.root),
             )
+            for j, (data, media) in encoded
+        ]
         while entries:
             ticket = Ticket(
                 queue=queue,
@@ -1736,6 +1798,7 @@ class WarmPool:
         self._listing_failures.clear()
         self._listed_at = now
         live_ids = {id(h) for h in live}
+        failed_now: set[str] = set()  # classes with a failed start in this pass
         for token, h in list(self._started.items()):
             if id(h) in live_ids:
                 if token not in self._ready and self.pool.worker_record(
@@ -1758,6 +1821,7 @@ class WarmPool:
                 now,
                 f"worker {token} left without a ready mark",
             )
+            failed_now.add(h.worker_class)
         wanted = self._demand()
         for cls in self.classes:
             name = cls.name
@@ -1768,15 +1832,8 @@ class WarmPool:
                 continue
             mine = [h for h in live if h.worker_class == name]
             want = wanted.get(name, 0)
-            failing = self._failing_for(name, now)
-            if want and not mine and failing is not None:
-                self._break(
-                    cls,
-                    f"no worker of the class became ready and every start failed for "
-                    f"{failing:.0f}s ({self._failures[name]} failed starts); the latest: "
-                    f"{self._cause.get(name)}",
-                )
-                continue
+            if not want:  # no waiting work: a failure streak never outlives it
+                self._end_streaks(name)
             self._idle[name] = 0 if want else self._idle[name] + 1
             if len(mine) < want and self._may_start(name, now):
                 for _ in range(want - len(mine)):
@@ -1785,7 +1842,8 @@ class WarmPool:
                     try:
                         handles = self.substrate.start(cls, 1)
                     except Exception as err:  # a refused submission: a failed start
-                        for h in getattr(err, "started", ()):
+                        started = getattr(err, "started", ())
+                        for h in started:
                             self._started[h.token] = h
                         self._start_failed(
                             name,
@@ -1793,10 +1851,25 @@ class WarmPool:
                             now,
                             "starting a worker failed",
                         )
+                        if not started:
+                            failed_now.add(name)
                         break
                     for h in handles:
                         self._started[h.token] = h
-            elif len(mine) > want:
+            if (
+                want
+                and not mine
+                and name in failed_now
+                and self._deadline_due(name, now)
+            ):
+                self._break(
+                    cls,
+                    f"no worker of the class became ready: {self._failures[name]} starts "
+                    f"failed in a row over {now - self._failing_since[name]:.0f}s; the "
+                    f"latest: {self._cause.get(name)}",
+                )
+                continue
+            if len(mine) > want:
                 pending = [h for h in mine if h.token not in self._ready]
                 surplus = pending[: len(mine) - want]
                 if not want and self._idle[name] >= self.settings.idle_polls:
@@ -1889,14 +1962,45 @@ class WarmPool:
             },
         )
 
-    def _failing_for(self, name: str, now: float) -> float | None:
-        """Seconds the starts of class ``name`` have failed in a row, once that reaches
-        ``fail_fast_s``; else None."""
-        limit = self.settings.fail_fast_s
+    def _deadline_due(self, name: str, now: float) -> bool:
+        """Whether the streak of failed starts of class ``name`` breaks it (`_deadline_passed`)."""
         since = self._failing_since.get(name)
-        if limit is None or since is None or not self._failures[name]:
-            return None
-        return now - since if now - since >= limit else None
+        return since is not None and self._deadline_passed(
+            since, self._failures[name], now
+        )
+
+    def _end_streaks(self, name: str) -> None:
+        """End the failure streaks of class ``name`` and of its queues' ticket writes: the next
+        attempt is a fresh one, not backed off."""
+        self._failures[name] = 0
+        self._failing_since.pop(name, None)
+        self._failed_at.pop(name, None)
+        for queue in list(self._write_failing):
+            if _queue_class(queue) == name:
+                del self._write_failing[queue]
+
+    def release_hold(self, worker_class: str | None = None) -> list[str]:
+        """Lift this coordinator's break of ``worker_class`` (of every broken class when None) and
+        end its failure streaks, so the next start is a fresh attempt; its jobs held meanwhile are
+        handed out again by the runner's ``retry``. A ``retry`` of a job the break held lifts it
+        too. Residency holds on storage are lifted by `release_hold` of this module
+        (``pydracli pool release-hold``). Return the classes released.
+        """
+        with self._lock:
+            names = [
+                n for n in self._broken if worker_class is None or n == worker_class
+            ]
+            for name in names:
+                del self._broken[name]
+                self._break_held.pop(name, None)
+                self._end_streaks(name)
+                logger.info(
+                    "worker class %r is released: its next start is a fresh attempt",
+                    name,
+                    extra={"event": "class_released", "worker_class": name},
+                )
+        self._wake.set()
+        return names
 
     def _break(self, cls: WorkerClass, cause: str | None = None) -> None:
         from pydra.workers.pool.worker import class_record
@@ -1935,6 +2039,10 @@ class WarmPool:
                 )
                 if why is None:
                     continue
+                name = _queue_class(queue)
+                if name in self._broken:
+                    self._break_held[name].add(j.key)
+                    self._break_held[name].update(t.key for t in j.twins)
                 self._unwait(j)
                 self._forget(j)
                 held.append((j.job, j, NotRun(why, held=True)))
