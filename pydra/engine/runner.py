@@ -1404,8 +1404,10 @@ class GraphRunner:
         # the jobs completed by the runner and the elements marked unrunnable, not yet
         # reported by ``ready``
         self._settled: list[Settled] = []
-        self._reported_unrunnable: set[tuple[int, int | None]] = set()
-        self._reported_absent_nodes: set[int] = set()
+        # keyed by node label, never by ``id(node)``: a loop releases nodes, whose ids
+        # may then be reused
+        self._reported_unrunnable: set[tuple[str, ty.Any]] = set()
+        self._reported_absent_nodes: set[str] = set()
         # the same-checksum table: the job handed out for each checksum until its outcome
         # is reported, the twins held behind it, and the outcome once reported
         self._first: dict[str, Job] = {}
@@ -1705,6 +1707,51 @@ class GraphRunner:
                 advance(self, frame)
             if frame.state == "expanding" and frame.owned and frame.nodes_done:
                 self._finish(frame)
+
+    def _release_node(self, frame: _Frame, ex: NodeExecution) -> None:
+        """Drop a done node of a loop's graph that no node still to run reads: from the
+        graph and the workflow, with its jobs, their entries in the runner's tables and
+        the frame of a workflow job, so the runner holds a loop's two newest rounds
+        only. Its predecessors must have been released before it."""
+        graph = frame.graph
+        graph.remove_nodes(ex)
+        graph.remove_nodes_connections(ex)
+        frame.workflow._nodes.pop(ex.name, None)
+        self._forget_reported(ex)
+        for job in (ex._tasks or {}).values():
+            if job is not None:
+                self._release_job(job)
+        # its lazy inputs hold the node before it, and so on back to the first round
+        ex.node._task = None
+        ex._tasks = None
+
+    def _forget_reported(self, node: NodeExecution) -> None:
+        """Drop the reported records of a released node, which is never read again"""
+        label = node_label(node)
+        self._reported_absent_nodes.discard(label)
+        for index in node.unrunnable:
+            self._reported_unrunnable.discard((label, index))
+
+    def _release_job(self, job: Job) -> None:
+        """Forget a job of a released node, and the frame it has if a workflow job"""
+        self._handed.discard(job)
+        self._in_flight.discard(job)
+        self._checked.discard(job)
+        self._waiting_twins.discard(job)
+        self._not_run.pop(job, None)
+        self._frame_of.pop(job, None)
+        checksum = job.checksum
+        if checksum not in self._first and not self._twins.get(checksum):
+            self._finished.pop(checksum, None)
+        child = self._child.pop(job, None)
+        if child is not None:
+            if child.graph is not None:
+                for node in child.graph.nodes:
+                    self._forget_reported(node)
+                    for inner in (node._tasks or {}).values():
+                        if inner is not None:
+                            self._release_job(inner)
+            self._frames.remove(child)
 
     def _fail_loop(self, frame: _Frame, exc: BaseException) -> None:
         """Fail a loop whose ``until`` could not be read: its job, or the run when the
@@ -2150,8 +2197,9 @@ class GraphRunner:
             if frame.graph is None:
                 continue
             for node in frame.graph.nodes:
+                label = node_label(node)
                 for index, upstream in list(node.unrunnable.items()):
-                    key = (id(node), index)
+                    key = (label, index)
                     if key in self._reported_unrunnable:
                         continue
                     self._reported_unrunnable.add(key)
@@ -2171,9 +2219,10 @@ class GraphRunner:
             if frame.graph is None:
                 continue
             for node in frame.graph.sorted_nodes:
-                if node.absent is None or id(node) in self._reported_absent_nodes:
+                label = node_label(node)
+                if node.absent is None or label in self._reported_absent_nodes:
                     continue
-                self._reported_absent_nodes.add(id(node))
+                self._reported_absent_nodes.add(label)
                 inherits = None
                 if node.absent_inherits is not None:
                     inherits = node_label(frame.graph.node(node.absent_inherits))
@@ -2310,15 +2359,32 @@ class GraphRunner:
         upstream node without a state and for an input that reads the upstream whole
         (combined, or the sequence a splitter splits over).
 
+        It is valid from the job's hand-out until its outcome is reported: a loop
+        releases its older rounds (RFC 0002 section 2.3(d)).
+
         Parameters
         ----------
         job : Job
             A leaf job handed out by :meth:`ready`
+
+        Raises
+        ------
+        LookupError
+            The runner no longer holds the job
         """
         frame = self._frame_of.get(job)
         if frame is None:
             frame = self._child[job].parent if job in self._child else self._root
-        node: NodeExecution = frame.graph.node(job.name)
+        try:
+            node: NodeExecution = frame.graph.node(job.name)
+        except KeyError:
+            node = None
+        if node is None or not any(j is job for j in (node._tasks or {}).values()):
+            raise LookupError(
+                f"Job {job.name!r} (path {'/'.join(job.workflow_path) or '-'}) is no "
+                "longer held by the runner: upstream() is valid from a job's hand-out "
+                "until its outcome is reported, and a loop releases its older rounds"
+            )
         if node.is_partial:
             index = job.state_key
             split, inputs_ind = (
@@ -2456,13 +2522,14 @@ class GraphRunner:
             if frame.graph is None:
                 continue
             for node in frame.graph.nodes:
+                label = node_label(node)
                 if any(
-                    (id(node), index) not in self._reported_unrunnable
+                    (label, index) not in self._reported_unrunnable
                     for index in node.unrunnable
                 ):
                     return True
                 if node.absent is not None and (
-                    id(node) not in self._reported_absent_nodes
+                    label not in self._reported_absent_nodes
                 ):
                     return True
         return False

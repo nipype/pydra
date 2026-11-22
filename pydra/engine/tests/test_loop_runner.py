@@ -2,8 +2,10 @@
 ``workflow.loop`` is added to the loop job's graph only once the round before it is done
 and its ``until`` output is false"""
 
+import gc
 import shutil
 import typing as ty
+import weakref
 
 import pytest
 
@@ -112,7 +114,7 @@ def test_rounds_added_one_at_a_time(submitter):
         rnd = runner.ready()
         assert len(rnd.dispatch) <= 1
         names += [j.name for j in rnd.dispatch]
-        assert [n.name for n in runner.exec_graph.nodes] == names
+        assert [n.name for n in runner.exec_graph.nodes] == names[-2:]
         for job in rnd.dispatch:
             runner.complete(job, run_inline(job))
     assert names == ["r0", "r1", "r2", "r3", "r4"]
@@ -330,8 +332,8 @@ def test_fixed_point_stops_on_cycle(submitter):
 def test_cycle_of_length_two(submitter):
     task = workflow.loop(Flip, until="done", max_rounds=20)(x=0)
     rounds = drive(runner_for(submitter, task))
-    assert dispatched(rounds) == ["r0", "r1"]
-    assert [s.how for s in settled(rounds, "r2")] in (["shared"], ["stored"])
+    # r0 is released when r2 is added, so a harness that commits nothing recomputes r2
+    assert dispatched(rounds) == ["r0", "r1", "r2"]
     out = loop_outputs(submitter, task)
     assert (out.x, out.rounds, out.stopped) == (1, 3, "cycle")
 
@@ -568,3 +570,86 @@ def test_two_loops_with_equal_inputs_share_rounds(submitter):
     assert {how for *_, how in shared} <= {"shared", "stored"}
     out = loop_outputs(submitter, TwoLoops(stop=3))
     assert (out.a, out.b) == (3, 3)
+
+
+# -- release: a two-round window (L5) ----------------------------------------------------------------
+
+
+@python.define
+def NoList(x: int) -> list[int]:
+    return Absent(cause="no-list", source="NoList")
+
+
+@workflow.define(outputs=["n", "done"])
+def CountWf(n: int, stop: int) -> tuple[int, bool]:
+    """A round that is a workflow, with a node absent as a whole in each round"""
+    gone = workflow.add(NoList(x=n), name="gone")
+    workflow.add(Ident().split(v=gone.out), name="each")
+    step = workflow.add(Count(n=n, stop=stop), name="step")
+    return step.n, step.done
+
+
+CountWfLoop = workflow.loop(CountWf, until="done")
+
+
+def test_released_rounds_are_freed(submitter):
+    """Only the two newest rounds are held: round 0's node and job are freed once
+    round 3 is done, and the runner's tables do not grow with the rounds"""
+    runner = runner_for(submitter, CountLoop(n=0, stop=200))
+    rnd = runner.ready()
+    (job,) = rnd.dispatch
+    node_ref = weakref.ref(runner.exec_graph.node("r0").node)
+    job_ref = weakref.ref(job)
+    sizes = []
+    for k in range(200):
+        assert job.name == f"r{k}"
+        runner.complete(job, run_inline(job))
+        del job, rnd
+        if k == 3:
+            gc.collect()
+            assert node_ref() is None and job_ref() is None
+        rnd = runner.ready()
+        sizes.append(
+            (len(runner._handed), len(runner._frame_of), len(runner._finished))
+        )
+        if not rnd.dispatch:
+            break
+        (job,) = rnd.dispatch
+        assert len(runner.exec_graph.nodes) <= 2
+    assert runner.done
+    assert all(max(size) <= 2 for size in sizes), sizes
+    out = loop_outputs(submitter, CountLoop(n=0, stop=200))
+    assert (out.n, out.rounds) == (200, 200)
+
+
+def test_workflow_rounds_release_child_frames(submitter):
+    """A round that is a workflow has a frame of its own, dropped with the round; each
+    round's absent-node record is reported, even where a released node's id is reused"""
+    runner = runner_for(submitter, CountWfLoop(n=0, stop=60))
+    frames = set()
+    records = []
+    for _ in range(2000):
+        if runner.done:
+            break
+        rnd = runner.ready()
+        records += [a.node for a in rnd.absent_nodes]
+        for job in rnd.dispatch:
+            runner.complete(job, run_inline(job))
+        frames.add(len(runner._frames))
+    assert runner.done
+    assert max(frames) <= 4, frames
+    assert records == [f"r{k}/each" for k in range(60)]
+
+
+def test_upstream_of_a_released_round_is_refused(submitter):
+    runner = runner_for(submitter, CountLoop(n=0, stop=5))
+    jobs = []
+    for _ in range(3):
+        (job,) = runner.ready().dispatch
+        runner.complete(job, run_inline(job))
+        jobs.append(job)
+    assert [j.name for j in jobs] == ["r0", "r1", "r2"]
+    (r3,) = runner.ready().dispatch  # r1 is released
+    assert [j.name for j, _ in runner.upstream(r3)["n"]] == ["r2"]
+    with pytest.raises(LookupError, match="r1"):
+        runner.upstream(jobs[1])

@@ -247,6 +247,8 @@ def instantiate(runner: "GraphRunner", frame: "_Frame") -> "NodeExecution":
     # the workflow's outputs follow the newest round, so they hold no older round
     for name in spec.body_outputs:
         setattr(workflow.outputs, name, getattr(outputs, name))
+    if loop.prev is not None:  # only the two newest rounds are held
+        runner._release_node(frame, loop.prev)
     loop.prev, loop.last = last, new
     loop.rounds += 1
     return new
