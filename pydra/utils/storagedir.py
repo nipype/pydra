@@ -51,6 +51,9 @@ DESCRIPTORS_SUPPORTED = (
 Trust = ty.Literal["shared", "private", "trusted"]
 
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+# FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+_FILE_SHARE_ALL = 0x1 | 0x2 | 0x4
+_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _COPY_BLOCK = 1024 * 1024
 _BINARY = getattr(os, "O_BINARY", 0)
 _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
@@ -267,6 +270,29 @@ def _check_name(name: str, strict: bool = False) -> None:
 def is_reparse(st: os.stat_result) -> bool:
     """Whether ``st`` is of a Windows reparse point (a symlink or a junction)."""
     return bool(getattr(st, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _open_read_shared(path: str) -> int:
+    """Windows: a read-only descriptor on the file ``path`` that shares reading, writing and
+    deletion, as a POSIX open does, opening a reparse point itself rather than its target.
+    """
+    import _winapi
+    import msvcrt
+
+    handle = _winapi.CreateFile(
+        path,
+        _winapi.GENERIC_READ,
+        _FILE_SHARE_ALL,
+        _winapi.NULL,
+        _winapi.OPEN_EXISTING,
+        _FILE_FLAG_OPEN_REPARSE_POINT,
+        _winapi.NULL,
+    )
+    try:
+        return msvcrt.open_osfhandle(handle, os.O_RDONLY)
+    except BaseException:
+        _winapi.CloseHandle(handle)
+        raise
 
 
 @attrs.frozen
@@ -545,7 +571,8 @@ class StorageDir:
             raise
 
     def open_read(self, name: str) -> ty.BinaryIO:
-        """Open the regular file ``name`` for reading, without following a symlink.
+        """Open the regular file ``name`` for reading, without following a symlink. The open
+        shares deletion on every platform: the file can be unlinked or renamed while it is read.
 
         Raises
         ------
@@ -561,7 +588,9 @@ class StorageDir:
             if st is not None and not stat.S_ISREG(st.st_mode):
                 raise _wrong_kind(self._sub(name), "regular file")
         try:
-            if self._path_mode:
+            if IS_WINDOWS:
+                fd = _open_read_shared(self._sub(name))
+            elif self._path_mode:
                 fd = os.open(self._sub(name), flags)
             else:
                 fd = os.open(name, flags, dir_fd=self._fd)
@@ -570,7 +599,8 @@ class StorageDir:
                 raise _wrong_kind(self._sub(name), "regular file") from err
             raise
         try:
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode) or is_reparse(st):
                 raise _wrong_kind(self._sub(name), "regular file")
             return os.fdopen(fd, "rb")
         except BaseException:

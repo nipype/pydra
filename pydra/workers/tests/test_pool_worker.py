@@ -418,35 +418,36 @@ def test_gathers_one_job_tickets_once_warm(pool, tasks):
     assert sorted(s["cold"] for s in samples) == [False] * 10 + [True]
 
 
-def test_samples_leave_resident_memory_out_of_the_per_job_figure(pool, tasks):
-    """A stand-in model of 1000 bytes loaded on the first job, and 10 bytes per job while it runs: the
-    warm samples hold the model as resident and their peaks add only the job's bytes."""
+def test_samples_never_report_the_processs_lifetime_memory(pool, tasks):
+    """A job with no resident state: its sample keeps the worker's baseline, and neither the
+    process's resident set after the call nor its lifetime peak is reported as the job's (memory is attributed to a
+    residency's load; ``test_pool_calibration`` covers that).
+    """
     for i in range(3):
         pool.put([pool.job(tasks.Echo(x=i), f"t{i}")])
     memory = {"current": 100, "peak": 100}
 
     def standing_in(x):
-        if memory["current"] == 100:
-            memory["current"] += 1000
+        memory["current"] += 1000
         memory["peak"] = max(memory["peak"], memory["current"] + 10)
 
     tasks.HOOK["echo"] = standing_in
     _, code = _run(pool, memory=lambda: (memory["current"], memory["peak"]))
     assert code == 0
     samples = [o["sample"] for o in pool.outcomes()]
-    warm = [s for s in samples if not s["cold"]]
-    assert min(s["resident_bytes"] for s in warm) == 1100
-    assert max(s["peak_bytes"] for s in samples) == 1110
+    assert len(samples) == 3
     assert {s["baseline_bytes"] for s in samples} == {100}
+    assert {(s["resident_bytes"], s["peak_bytes"]) for s in samples} == {(None, None)}
 
 
-def test_device_memory_read_once_per_claim_on_a_cuda_class(pool, tasks):
-    """On a CUDA class the device memory is read once before the first claim (the baseline) and once
-    per claim, never per job."""
+def test_device_memory_read_before_the_first_claim_and_at_each_load(pool, tasks):
+    """On a CUDA class the worker's own device bytes are read once before the first claim (the
+    baseline) and around each load, never per job: jobs with nothing to load read it once.
+    """
     cls = _class("gpu", device="cuda", gpus=1, gpu_mem="16G", quantum_jobs=4)
     for i in range(4):
         pool.put([pool.job(tasks.Echo(x=i), f"t{i}")], queue="gpu")
-    reads = iter([0, 1000, 1010])
+    reads = iter([0])
     _, code = _run(
         pool,
         cls,
@@ -456,8 +457,9 @@ def test_device_memory_read_once_per_claim_on_a_cuda_class(pool, tasks):
     assert code == 0 and next(reads, None) is None
     samples = [o["sample"] for o in pool.outcomes("gpu")]
     assert len(samples) == 4
-    assert {s["device_baseline_bytes"] for s in samples} == {0}
-    assert sorted(s["device_bytes"] for s in samples) == [1000, 1010, 1010, 1010]
+    assert {(s["device_baseline_bytes"], s["device_bytes"]) for s in samples} == {
+        (0, None)
+    }
 
 
 def test_a_jobs_outcome_is_settled_before_the_next_call(pool, tasks):
@@ -1418,27 +1420,88 @@ def test_pool_collect_removes_only_payloads_nothing_unsettled_names(pool, tasks)
     assert _run(pool)[1] == 0 and pool.kinds() == ["done", "done"]
 
 
+class _StepClock:
+    """A clock that moves ``step`` seconds each time it is read."""
+
+    def __init__(self, step: float):
+        self.step, self.now = step, 0.0
+
+    def __call__(self) -> float:
+        self.now += self.step
+        return self.now
+
+
+def _lease_entries(lease_dir: Path) -> list[Path]:
+    return [lease_dir, *lease_dir.glob("*"), *lease_dir.glob("*/*")]
+
+
 def test_orphan_exit_after_a_live_coordinator_goes_stale(pool):
     """A coordinator lease beaten by nobody is live until ``stale_after``, then the substrate worker
-    waits ``orphan_after_s`` more and exits, before its idle polls run out."""
+    waits ``orphan_after_s`` more and exits, before its idle polls run out.
+
+    The lease is beaten for the worker's first three judgements and then dated older than
+    ``stale_after``; the worker's clock moves 0.25 s per reading, so it judges five times without a
+    live coordinator (0 to 1.0 s) and exits on the sixth."""
     from pydra.workers.pool.worker import Worker
 
     epoch = pool.pool.take_epoch()
     lease = pool.pool.coordinator_lease(epoch, beat="external")
     assert lease.try_take() is None
+    lease_dir = pool.path / "coordinator" / str(epoch) / "lease"
     try:
         worker = Worker(
             pool.path,
             _class(),
             settings=_settings(idle_polls=400, orphan_after_s=1.0),
             substrate=True,
+            clock=_StepClock(0.25),
         )
+        judge, judged = worker._coordinator_live, []
+
+        def coordinator_live() -> bool:
+            when = time.time() - (0 if len(judged) < 3 else LEASE.stale_after + 60)
+            for p in _lease_entries(lease_dir):
+                os.utime(p, (when, when))
+            judged.append(judge())
+            return judged[-1]
+
+        worker._coordinator_live = coordinator_live
         assert worker.run() == 0
-        assert worker.live_polls > 0 and worker.polls < 400
-        # it waited orphan_after_s from the last live judgement, however slow each poll was
-        assert time.monotonic() - worker._last_live > 1.0
+        assert judged == [True] * 3 + [False] * 6
+        assert (worker.live_polls, worker.orphan_polls) == (3, 5)
+        assert worker.polls < 400
     finally:
         lease.__exit__(None, None, None)
+
+
+def test_orphan_wait_runs_from_the_first_judgement_without_a_coordinator(pool):
+    """The ``orphan_after_s`` wait begins when the worker first finds no live coordinator, not at
+    its last live judgement: a long pass between the two (a call) does not end the wait at once.
+    """
+    from pydra.workers.pool.worker import Worker
+
+    clock = _StepClock(0.0)
+    worker = Worker(
+        pool.path,
+        _class(),
+        settings=_settings(orphan_after_s=1.0),
+        substrate=True,
+        clock=clock,
+    )
+    live = [True]
+    worker._coordinator_live = lambda: live[0]
+    assert worker._orphaned() is False and worker.live_polls == 1
+    clock.now += 3600.0  # a call ran for an hour under a live coordinator
+    live[0] = False
+    assert worker._orphaned() is False and worker.orphan_polls == 1
+    clock.now += 1.0
+    assert worker._orphaned() is False and worker.orphan_polls == 2
+    clock.now += 0.5
+    assert worker._orphaned() is True
+    live[0] = True
+    assert worker._orphaned() is False
+    live[0] = False
+    assert worker._orphaned() is False  # a live judgement begins the wait again
 
 
 def test_orphan_exit_when_the_coordinator_ended(pool):

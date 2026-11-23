@@ -707,6 +707,42 @@ def test_wrong_kind_directory_where_a_member_is_expected_never_permission_error(
         root.open_read("adir")
 
 
+def test_a_file_open_for_reading_can_be_removed(root):
+    """A reader shares deletion: the file it holds can be unlinked under it, on every platform."""
+    with root.open_new("m", 0o600) as f:
+        f.write(b"x")
+    with root.open_read("m") as f:
+        root.unlink("m")
+        assert f.read() == b"x"
+    assert "m" not in root.names()
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows sharing modes")
+def test_open_read_while_another_handle_holds_delete_access(root):
+    """A file just renamed into place is still open, with DELETE access, by the call that renamed
+    it; a reader that does not share deletion meets a sharing violation (EACCES) then.
+    """
+    import _winapi
+
+    with root.open_new("m", 0o600) as f:
+        f.write(b"x")
+    delete, share_all = 0x00010000, 0x7
+    handle = _winapi.CreateFile(
+        os.path.join(root.path, "m"),
+        delete,
+        share_all,
+        _winapi.NULL,
+        _winapi.OPEN_EXISTING,
+        0,
+        _winapi.NULL,
+    )
+    try:
+        with root.open_read("m") as f:
+            assert f.read() == b"x"
+    finally:
+        _winapi.CloseHandle(handle)
+
+
 @pytest.mark.skipif(not IS_WINDOWS, reason="Windows read-only attribute")
 def test_windows_read_only_attribute(root):
     real = Path(root.path)
