@@ -1362,6 +1362,20 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 
 ## 13. Changes in revisions
 
+### Amendment to revision 4 (implementation of W5b)
+
+| Item | Change |
+|---|---|
+| Sessions | §3.1, §4.3 step 3: a worker runs a warm shell job through a `PoolSession`, one per (environment, resolved reference), served process-wide through W3's `serving`. A job of a new reference (a moved tag, an Lmod default) opens a session, and the idle session of the old reference is closed. At most `PoolSettings.max_warm_sessions` (default 4, unmeasured) stay open; opening one more closes the least recently used idle one. The worker passes `WorkerClass.mounts` as roots and no store or work root: the jobs' own writable roots (their cache root) cover those. |
+| Start and its failure | §4.3 step 3: the start runs before the call, on the loop thread, at the ticket (`WarmSession.prepare`, bound to the union of the ticket's roots) and again before each call when the handle was closed, spent (`max_jobs`) or reloaded. A failed start is a load fault (`_load_fault`): the ticket is requeued uncharged under a `restart` generation and a later claim starts it again, with the ordinary infrastructure-fault budget. `WarmSession(retry=True)` raises from `prepare` and never turns unwarmable; W3's default (cold for good) stays for direct users of `serving`. `Code.environment` is the carried reference of a warm shell job, so an `UnfitRecord` binds it. |
+| No deadline on the start | §4.3, §5.3: the start (a `docker run -d` with its pull, an `apptainer instance start` of a SIF it may build, the reaping) runs before the call record exists, so no call deadline bounds it, the loop neither proves the claim nor acts on `lost` meanwhile, and a drain cannot interrupt it. The beater keeps the claim alive throughout, so a stalled pull holds the ticket until the worker's own time limit kills it, and the orphaned container is reaped at the next warm start on that host. W5's provider `_load` has the same shape. A hung warm `exec` does not: it runs on the call thread. |
+| Stopping a command | §4.3 step 6: on a lost claim, an expired call (then acknowledged) or the end of a drain, the warm container running the call's command is closed (`WarmEnvironment.busy`), which ends the command; the next job starts a fresh one. A close that raised does not count as stopped. |
+| Roots before the call | A start reads a job's roots from its declared input values, not `Job.inputs`, which fixes the work directory (and copies files into it) and must wait for the attempt the call sets. |
+| Not in the residency | §3.1, §4.2: the environment key is not in a warm job's residency digest, and `place()` does not fill a ticket's `roots`. Shell jobs of every image share the `<class>` queue, and the worker computes the roots from the jobs it decodes. Consequences: a hold after repeated warm-start faults names the empty residency, so it covers every ticket of the class without resident state; `self._warm[queue]` and `group["cold"]` describe the queue, so a shell job's `Sample` taken right after a warm (re)start is marked warm. The pool facts' `environment` entry (`run`, `state`, `since_load`, `load_s`) is right per call. Follow-up: the environment key in the residency digest, `place()` filling `roots`, and warm environments as `ResidentSet` entries in place of the session list. |
+| Calibration | Container processes belong to dockerd or the Apptainer starter, not the worker's process groups, so `_held_bytes` and `CallMeter` see no shell job's memory, warm or cold. |
+| W3 follow-up: GPU flags | §3.1 table: only the warm start passes `--gpus` / `--nv` and `CUDA_VISIBLE_DEVICES`. The cold `Docker.execute` and `Singularity.execute`, which a warm environment's job still reaches beyond `max_mount_roots`, add neither, so on a `cuda` class that job runs without a GPU. |
+| Quantum | The end of a quantum does not close sessions: resident state is a cache (§4.2). |
+
 ### Amendment to revision 4 (implementation of W3)
 
 | Item | Change |
