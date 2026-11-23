@@ -1,7 +1,6 @@
 """``submit_many``: a round of jobs becomes arrays, with Slurm and SGE faked"""
 
 import asyncio
-import time
 from pathlib import Path
 import types
 import pytest
@@ -125,12 +124,10 @@ class FakeSge:
 
     def __init__(self):
         self.calls = []
-        self.first_qsub = None
 
     async def __call__(self, *cmd, hide_display=False, strip=False):
         self.calls.append(cmd)
         if cmd[0] == "qsub":
-            self.first_qsub = self.first_qsub or time.monotonic()
             return (
                 0,
                 f'Your job-array {len(self.calls)}.1-2:1 ("x") has been submitted',
@@ -189,12 +186,30 @@ def test_sge_round_is_one_array(sge_round):
     assert qsub[1:3] == ("-t", "1-3")
 
 
-def test_sge_no_collect_sleep(sge_round):
+class RecordedAsyncio:
+    """``asyncio`` as one module sees it, with each ``sleep`` recorded in ``calls`` (shared with a
+    fake's commands, so the order of sleeps and commands shows)"""
+
+    def __init__(self, calls: list):
+        self.calls = calls
+
+    def __getattr__(self, name):
+        return getattr(asyncio, name)
+
+    async def sleep(self, delay, *args, **kwargs):
+        self.calls.append(("sleep", delay))
+        return await asyncio.sleep(delay, *args, **kwargs)
+
+
+def test_sge_no_collect_sleep(sge_round, monkeypatch):
+    """The round's array is submitted without first sleeping to collect more jobs"""
     fake, make = sge_round
+    monkeypatch.setattr(sge, "asyncio", RecordedAsyncio(fake.calls))
     worker, jobs = make(2)
-    start = time.monotonic()
     assert asyncio.run(asyncio.wait_for(worker.submit_many(jobs), 30)) == [True] * 2
-    assert fake.first_qsub - start < 0.2
+    names = [c[0] for c in fake.calls]
+    assert "qsub" in names
+    assert "sleep" not in names[: names.index("qsub")]
 
 
 def test_collect_jobs_delay_warns():
