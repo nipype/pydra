@@ -843,17 +843,27 @@ and encoded, not produced. A root migrated under `@1` raises `StoreLayoutMismatc
 automatic checksum is not an `@2` checksum, so under `@2` it migrates only slots whose checksums were
 supplied: it is called with `supplied_checksums=True`, the caller's assertion, and publishes each slot
 with the key `{"scheme": "pydra-identity@2", "supplied": <checksum>}`. Without that flag it refuses
-an `@2` target, naming the identity. A slot wrongly asserted to be supplied is harmless: its checksum
-is never produced under `@2`, so no lookup reaches it. Under any other identity (`@1` kept
-explicitly, or a downstream one, §8.2) it behaves as above.
+an `@2` target, naming the identity. The assertion is accepted only for a cache keyed before
+`@2`: one whose `.pydra-identity` marker (RFC 0004 §9.1) is absent or names `pydra-identity@1`. A
+slot of such a cache wrongly asserted to be supplied is harmless: its checksum is never produced under
+`@2`, so no lookup reaches it. A cache whose marker names `pydra-identity@2` (every cache a current
+`Submitter` writes) refuses `supplied_checksums=True`, pointing to `legacy=`: its checksums are
+automatic `@2` digests, which lookups do reach, so a supplied-key record would be served in place of
+the job's own record and would misstate its provenance. Rebuilding the record from `_job.pklz` is not
+an option, since a `Submitter` writes that file only for remote or failed jobs. Such a cache is read
+through `legacy=` below, which publishes each result with the looked-up job's own record. A marker
+naming an unknown or newer scheme is refused, and so is an `@2` cache migrated into an `@1` target.
+Under any other identity (`@1` kept explicitly, or a downstream one, §8.2) it behaves as above.
 
 A run can also read an unmigrated cache in place: `PortableStore(legacy=[Root(cache_root,
 trust="private")])`. Legacy roots are read only when declared `private` or `trusted`, and a `private`
 one passes the ownership check of §6.4 on the cache root and on each slot directory it reads. A hit
 there is published into `<root>` under the stored context's fingerprint, not the current one, so the
-old cache is read once per result. It is published with the current job's key record, so under `@2`
-a `legacy=` root is useful only to jobs with a supplied checksum, the only `@2` checksums that name
-an old slot; for every other job it costs one `lstat` and finds nothing.
+old cache is read once per result. Legacy roots are read when a lookup ends with nothing served or
+verified (no candidate, every candidate skipped or unreadable), but not after a `REFUSE`, and once per
+lookup. A hit is published with the current job's key record, so under `@2` a `legacy=` root serves
+jobs whose checksums name its slots: supplied checksums in an `@1`-era cache, and every checksum in an
+`@2`-marked one; for every other job it costs one `lstat` and finds nothing.
 
 ### 8.2 From an existing store already in this shape
 
