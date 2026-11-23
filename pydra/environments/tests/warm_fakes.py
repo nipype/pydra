@@ -188,7 +188,12 @@ class FakeRuntime:
                 args = [self._map(binds, a, shadows) for a in args]
             except FileNotFoundError as e:
                 return 1, "", f"No such file or directory: {e}"
-            time.sleep(self.exec_delay)
+            # the command "runs" for exec_delay seconds; stopping its container ends it at once
+            until = time.monotonic() + self.exec_delay
+            while time.monotonic() < until:
+                if alive is not None and not alive():
+                    return 137, "", "killed"
+                time.sleep(min(0.02, max(until - time.monotonic(), 0)))
             if alive is not None and not alive():
                 return 137, "", "killed"
             proc = sp.run(

@@ -147,9 +147,15 @@ class Queue:
         self.store = store
         self.pool.put_class("cpu", class_record(_class()))
 
-    def jobs(self, tasks, prefix="j"):
+    def jobs(self, tasks, prefix="j", environment=None, resources=None):
         return [
-            Job(task=t, submitter=self.submitter, name=f"{prefix}{i}")
+            Job(
+                task=t,
+                submitter=self.submitter,
+                name=f"{prefix}{i}",
+                environment=environment,
+                resources=resources,
+            )
             for i, t in enumerate(tasks)
         ]
 
@@ -468,6 +474,221 @@ def test_drain_stops_the_warm_command(tmp_path, roots_below, queue_of, monkeypat
             thread.join(30)
     assert returned == [137]  # the command was killed with its container
     assert COMMITS == []
+
+
+def _recording_execs(fake, monkeypatch) -> list[tuple[int, float, float]]:
+    """``(return code, began, ended)`` of each ``docker exec`` the fake runs, on the monotonic clock."""
+    returned: list[tuple[int, float, float]] = []
+    execute = fake.execute
+
+    def recording(cmd, *args, **kwargs):
+        began = time.monotonic()
+        out = execute(cmd, *args, **kwargs)
+        if [str(c) for c in cmd[:2]] == ["docker", "exec"]:
+            returned.append((out[0], began, time.monotonic()))
+        return out
+
+    monkeypatch.setattr(base, "execute", recording)
+    return returned
+
+
+def test_transient_start_failure_is_a_load_fault_then_warm(
+    tmp_path, roots_below, queue_of, monkeypatch, caplog
+):
+    """A warm start that fails is a load fault (RFC 0005 section 4.3 step 3): the ticket's job is
+    requeued under a ``restart`` generation charged to no one, and the next claim of it starts the
+    container again and runs the job warm. A failed start never makes the environment cold for the
+    worker's life."""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    start = fake._start
+    failed = []
+
+    def flaky(cmd, flag):
+        fake.fail_start = not failed
+        failed.append(fake.fail_start)
+        try:
+            return start(cmd, flag)
+        finally:
+            fake.fail_start = False
+
+    monkeypatch.setattr(fake, "_start", flaky)
+    store = _store(tmp_path)
+    q = queue_of(store, docker.Docker(image=IMAGE, warm=True))
+    src = _input(tmp_path / "inputs" / "in.txt", "x\n")
+    (job,) = q.jobs([Cp(in_file=src)])
+    q.put([job])
+    with caplog.at_level("ERROR", logger="pydra.pool"):
+        q.work()
+
+    assert failed == [True, False]  # one failed start, one that worked
+    assert len(fake.execs) == 1 and fake.cold == []
+    assert any("loading the residency" in r.getMessage() for r in caplog.records)
+    gens = [
+        r
+        for _, r in q.pool.generations(
+            job.checksum, store.identity.fingerprint(job.context)
+        )
+    ]
+    assert [g["cause"] for g in gens] == ["put", "restart"]
+    assert not any(g.get("charged") for g in gens)
+    (commit,) = COMMITS
+    assert _env_facts(commit)["run"] == "warm"
+
+
+def test_unfit_record_code_names_the_warm_environment(tmp_path, queue_of):
+    """The code a load runs under names a warm shell job's carried reference (`Code.environment`), so
+    a record written under one image stops binding under another; other jobs name none.
+    """
+    from pydra.workers.pool.calibration import Code, code_of
+
+    src = _input(tmp_path / "inputs" / "in.txt", "x\n")
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
+    (warm,) = q.jobs([Cp(in_file=src)])
+    (cold,) = q.jobs([Cp(in_file=src)], environment=docker.Docker(image=IMAGE))
+    assert code_of(warm) == Code((), warm.resolved.key)
+    assert code_of(cold) == Code(())
+
+
+def test_new_reference_opens_a_fresh_session(tmp_path, queue_of, monkeypatch):
+    """A pool that outlives a run: run 2 resolves the same Lmod environment to another default. Its
+    jobs get a warm session of their own reference, not a cold run each, and the idle session of the
+    old reference is closed when the new one opens."""
+    version = ["2.0"]
+    events = []
+
+    def purge_and_load(names):
+        full = [n if "/" in n else f"{n}/{version[0]}" for n in names]
+        events.append(("load", full[0]))
+        env = dict(os.environ, TOOL_VERSION=full[0].split("/")[1])
+        return dict(os.environ), full, [f"/tree/{full[0]}.lua"], env
+
+    monkeypatch.setenv("MODULESHOME", str(tmp_path / "lmod"))
+    monkeypatch.setattr(lmod.Lmod, "_purge_and_load", staticmethod(purge_and_load))
+    monkeypatch.setattr(lmod.Lmod, "teardown", lambda self: events.append(("close",)))
+    env = lmod.Lmod(modules=["tool"], warm=True)
+    q = queue_of(_store(tmp_path), env)
+    q.put(q.jobs([_sh(f"echo $TOOL_VERSION {i}") for i in range(2)], "a"))
+    version[0] = "3.0"  # the default moved; run 2's submitter resolves again
+    run1, q.submitter = q.submitter, Submitter(
+        store=q.store, worker="debug", environment=env
+    )
+    run1.close()
+    q.put(q.jobs([_sh(f"echo $TOOL_VERSION {i}") for i in range(2, 4)], "b"))
+    events.clear()
+    q.work()
+
+    assert events == [
+        ("load", "tool/2.0"),
+        ("close",),
+        ("load", "tool/3.0"),
+        ("close",),
+    ]
+    assert [_env_facts(c)["run"] for c in COMMITS] == ["warm"] * 4
+
+
+def test_lost_claim_stops_the_warm_command(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """A claim lost while its job's command runs in the warm container: the worker closes the
+    container, so the command ends (137) at once rather than after its full run, and the worker,
+    still running, serves the next claim in a fresh container."""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    fake.exec_delay = 5.0
+    returned = _recording_execs(fake, monkeypatch)
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
+    srcs = [_input(tmp_path / "inputs" / f"in{i}.txt", f"{i}\n") for i in range(2)]
+    q.put(q.jobs([Cp(in_file=srcs[0])], "first"))
+    q.put(q.jobs([Cp(in_file=srcs[1])], "second"))
+    from pydra.workers.pool.worker import Worker
+
+    worker = Worker(
+        q.pool.path, _class(), settings=_settings(), device_memory=lambda: None
+    )
+
+    def lose():
+        while not fake.execs:
+            time.sleep(0.02)
+        fake.exec_delay = 0.0  # the commands after this one are quick
+        for token_dir in list(worker._held):
+            worker._on_lost(token_dir, "taken over")
+
+    threading.Thread(target=lose, daemon=True).start()
+    with pytest.MonkeyPatch.context() as m:
+        _never_resolve(m)
+        assert worker.run() == 0
+
+    code, began, ended = returned[0]
+    assert code == 137 and ended - began < 2.5  # stopped, not run to its end
+    assert len(fake.starts) >= 2  # the next claim got a fresh container
+    assert [c for c, _, _ in returned[1:]] and all(c == 0 for c, _, _ in returned[1:])
+    assert len(COMMITS) == 2  # both jobs, the lost one run again under a restart
+
+
+def test_expired_warm_call_acknowledged(tmp_path, roots_below, queue_of, monkeypatch):
+    """A warm call past its deadline: the worker stops its command by closing the container and
+    acknowledges the expiry at once, so the beater has nothing to kill; the worker recycles.
+    """
+    from pydra.engine.lease import BeaterClient, LeaseBeater
+    from pydra.utils.resources import ComputeResources
+    from pydra.workers.pool import worker as worker_module
+    from pydra.workers.pool.beater import EXPIRE
+    from pydra.workers.pool.worker import EXIT_RECYCLE, Worker
+
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    fake.exec_delay = 8.0
+    returned = _recording_execs(fake, monkeypatch)
+    # never kill this process: an acknowledgement that does not come shows as a late one
+    monkeypatch.setattr(
+        worker_module,
+        "pool_beater",
+        lambda grace, **kw: BeaterClient(
+            LeaseBeater(on_expire=EXPIRE, kill_after=None), **kw
+        ),
+    )
+    acks = []
+    ack = BeaterClient.ack_expired
+
+    def recording(self, token_dir):
+        acks.append(time.monotonic())
+        return ack(self, token_dir)
+
+    monkeypatch.setattr(BeaterClient, "ack_expired", recording)
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
+    src = _input(tmp_path / "inputs" / "in.txt", "x\n")
+    q.put(q.jobs([Cp(in_file=src)], resources=ComputeResources(time=1)))
+    worker = Worker(
+        q.pool.path,
+        _class(),
+        settings=_settings(timeout_grace=1.0),
+        device_memory=lambda: None,
+    )
+    assert worker.run() == EXIT_RECYCLE
+    for thread in threading.enumerate():
+        if thread.name == "pydra-pool-call":
+            thread.join(30)
+    ((code, began, ended),) = returned
+    assert code == 137 and ended - began < 6.0
+    assert (
+        acks and acks[0] - began < 6.0
+    )  # acknowledged when stopped, not after the command
+    assert COMMITS == []
+
+
+def test_warm_sessions_bounded_lru(tmp_path, roots_below, queue_of, monkeypatch):
+    """At most ``PoolSettings.max_warm_sessions`` warm sessions stay open in a worker: opening one
+    more closes the least recently used idle one."""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    envs = [docker.Docker(image=f"org/tool@sha256:{c * 64}", warm=True) for c in "234"]
+    q = queue_of(_store(tmp_path), envs[0])
+    for n, e in enumerate([0, 1, 2, 0]):
+        src = _input(tmp_path / "inputs" / f"in{n}.txt", f"{n}\n")
+        q.put(q.jobs([Cp(in_file=src)], f"t{n}-", environment=envs[e]))
+    q.work(settings=_settings(max_warm_sessions=2))
+
+    assert len(fake.starts) == 4 and fake.cold == []
+    # the third environment evicts the first; the first, back, evicts the second
+    assert fake.stopped[:2] == ["id0", "id1"]
+    assert sorted(fake.stopped) == ["id0", "id1", "id2", "id3"]
 
 
 # -- O5: real runtimes on a cluster node (``module load apptainer``; Lmod's MODULEPATH) -----------

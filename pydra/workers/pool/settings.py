@@ -67,6 +67,11 @@ class PoolSettings:
         attempt, never ahead of a due retry. None: only the fault budgets break a class.
     start_deadline_failures : int
         Failed attempts a streak needs, as well as ``start_deadline_s``, before it breaks the class.
+    max_warm_sessions : int
+        Warm environments (a started container, Apptainer instance or Lmod resolution, one per
+        environment and resolved reference) a worker keeps open; opening one more closes the least
+        recently used idle one. 4 by default (unmeasured): an idle container holds no device memory
+        and little host memory, so the bound is on processes, mounts and scratch directories.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -83,6 +88,7 @@ class PoolSettings:
     recheck_fraction: float = attrs.field(default=0.0, validator=_fraction)
     start_deadline_s: float | None = attrs.field(default=120.0, validator=_positive)
     start_deadline_failures: int = attrs.field(default=3, validator=_positive)
+    max_warm_sessions: int = attrs.field(default=4, validator=_positive)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)

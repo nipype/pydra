@@ -25,7 +25,9 @@ one loop:
    declared ``warm=True`` runs through the worker's warm session of that environment (`PoolSession`,
    served process-wide): started on the first such ticket bound to the union of the ticket's binding
    roots and the class's ``mounts``, restarted once when a ticket needs a root it lacks, run cold
-   beyond ``max_mount_roots`` or for another reference, always with the reference the job carries.
+   beyond ``max_mount_roots``, always with the reference the job carries. One session serves one
+   (environment, reference); at most ``max_warm_sessions`` stay open, the least recently used idle
+   one closed first. A start runs before the call, on this thread, and its failure is a load fault.
    The call record is written before
    the call and its deadline sent to the beater; ``done`` is written after it. Each call goes through
    the bisection engine (`pydra.workers.pool.bisect`): a resource fault or a crash reloads the
@@ -266,11 +268,22 @@ class _Call:
 
 
 class PoolSession(WarmSession):
-    """A worker's warm session of one environment: a `WarmSession` that also records, in the
-    ``environment`` entry of the job's pool facts, how its call ran (``run``: ``warm`` or ``cold``;
-    ``state``: ``cold`` for the first job of a start; ``since_load``; ``load_s``, the start's seconds).
-    The facts are recorded only: they never enter a job's checksum or slotted context.
+    """A worker's warm session of one environment and one resolved reference (``ref``): a
+    `WarmSession` with ``retry`` (a failed start is the worker's load fault, tried again by a later
+    ticket) that also records, in the ``environment`` entry of the job's pool facts, how its call ran
+    (``run``: ``warm`` or ``cold``; ``state``: ``cold`` for the first job of a start; ``since_load``;
+    ``load_s``, the start's seconds). The facts are recorded only: they never enter a job's checksum
+    or slotted context. ``used`` orders sessions for the worker's least-recently-used eviction.
     """
+
+    def __init__(self, environment, ref: tuple[str, str], **kwargs):
+        super().__init__(environment, retry=True, **kwargs)
+        self.ref = ref
+        self.used = 0
+
+    def accepts(self, job: "Job") -> bool:
+        """Whether ``job``'s environment is this session's and its reference this session's."""
+        return super().accepts(job) and self._ref(job) == self.ref
 
     def execute(self, job: "Job") -> dict[str, ty.Any]:
         cold_runs = self.cold_runs
@@ -279,9 +292,9 @@ class PoolSession(WarmSession):
         finally:
             self._note(job, self.cold_runs > cold_runs)
 
-    def _handle_for(self, job, needed=None, writable=None):
+    def _handle_for(self, job, needed=None, writable=None, raises=False):
         starts = self.starts
-        handle = super()._handle_for(job, needed, writable)
+        handle = super()._handle_for(job, needed, writable, raises)
         if self.starts > starts and self.handle is not None:
             logger.info(
                 "started the warm environment %s with %d binding roots (start %d) in %.2fs",
@@ -314,6 +327,23 @@ class PoolSession(WarmSession):
             since_load=since,
             load_s=None if self.start_s is None else round(self.start_s, 6),
         )
+
+
+class _Unresolved:
+    """A job as a warm session's roots read it before the job runs: its declared input values, not
+    `Job.inputs`, which fixes the job's work directory (and copies files into it) and must wait for
+    the attempt the call sets. Every other attribute is the job's."""
+
+    def __init__(self, job: "Job"):
+        from pydra.utils.general import attrs_values
+
+        self._job = job
+        self.inputs = {
+            k: v for k, v in attrs_values(job.task).items() if not k.startswith("_")
+        }
+
+    def __getattr__(self, name: str) -> ty.Any:
+        return getattr(self._job, name)
 
 
 def warm_shell_job(job: "Job") -> bool:
@@ -425,9 +455,11 @@ class Worker:
         self._lost: set[Path] = set()
         self._expired: set[Path] = set()
         self._warm: dict[str, int] = {}
-        # the warm sessions of the environments of this worker's shell jobs, served process-wide
+        # the warm sessions of the environments of this worker's shell jobs, each served process-wide
+        # by its `serving` block, at most ``settings.max_warm_sessions`` of them
         self.sessions: list[PoolSession] = []
-        self._serving = contextlib.ExitStack()
+        self._serving: dict[int, serving] = {}
+        self._uses = 0
         self._seq = 0
         self._filled_gpu_mem = False
         self._baseline_bytes: int | None = None
@@ -675,9 +707,8 @@ class Worker:
         try:
             from pydra.engine import resident
 
-            self._close_environments()
-            self._serving.close()
-            self.sessions = []
+            for session in list(self.sessions):
+                self._drop(session)
             resident.close_process_set()
             resident.set_process_device(None)
         finally:
@@ -939,10 +970,10 @@ class Worker:
             return
         try:
             load_s, loaded = self._load(jobs[0][1])
+            self._warm_environments([job for _, job in jobs])
         except Exception as exc:
             self._load_fault(claim, [e for e, _ in jobs], exc, jobs[0][1])
             return
-        self._warm_environments([job for _, job in jobs])
         queue = claim.queue
         cold = queue not in self._warm or loaded
         if cold:
@@ -1067,44 +1098,80 @@ class Worker:
         return took, loaded
 
     def _warm_environments(self, jobs: ty.Sequence["Job"]) -> None:
-        """Open the warm session of each warm environment among ``jobs``' shell jobs (once per
-        environment, served in this process for the worker's life), and start it, or restart it once,
-        bound to the union of the ticket's binding roots. A start that fails leaves its jobs to run
-        cold: correctness never depends on warmth."""
-        warm = [job for job in jobs if warm_shell_job(job)]
+        """Open the warm session of each (environment, reference) among ``jobs``' warm shell jobs
+        (`_session_for`) and start it, or restart it once, bound to the union of their binding roots.
+        A start that fails raises: the caller types it a load fault (RFC 0005 section 4.3 step 3), so
+        the ticket is released uncharged and a later claim tries the start again."""
+        warm = [_Unresolved(job) for job in jobs if warm_shell_job(job)]
+        touched: list[PoolSession] = []
         for job in warm:
-            if not any(s.accepts(job) for s in self.sessions):
-                session = PoolSession(
-                    job.environment, device=self._device(), roots=self.cls.mounts
-                )
-                self._serving.enter_context(serving(session, close=False))
-                self.sessions.append(session)
+            session = self._session_for(job)
+            if session not in touched:
+                touched.append(session)
+        for session in touched:
+            session.prepare(warm)
+
+    def _session_for(self, job: "Job") -> PoolSession:
+        """The session serving ``job``'s environment and reference, opened when there is none. An
+        idle session of the same environment under another reference (a moved tag, an Lmod default)
+        is closed first, and so is the least recently used idle session once
+        ``settings.max_warm_sessions`` are open."""
+        self._uses += 1
         for session in self.sessions:
-            try:
-                session.prepare(warm)
-            except Exception as err:
-                logger.warning(
-                    "preparing the warm environment %s failed, its jobs are judged one by "
-                    "one: %r",
-                    session.environment,
-                    err,
-                )
+            if session.accepts(job):
+                session.used = self._uses
+                return session
+        for session in list(self.sessions):
+            if session.environment == job.environment and not session.busy:
+                self._drop(session)
+        while len(self.sessions) >= self.settings.max_warm_sessions:
+            idle = [s for s in self.sessions if not s.busy]
+            if not idle:
+                break
+            self._drop(min(idle, key=lambda s: s.used))
+        ref = job.resolved if job.resolves_reference else job.environment.resolve()
+        session = PoolSession(
+            job.environment,
+            (ref.key, ref.run),
+            device=self._device(),
+            roots=self.cls.mounts,
+        )
+        session.used = self._uses
+        block = serving(session, close=False)
+        block.__enter__()
+        self._serving[id(session)] = block
+        self.sessions.append(session)
+        return session
+
+    def _drop(self, session: PoolSession) -> None:
+        """Stop serving ``session`` and close its environment."""
+        self.sessions.remove(session)
+        block = self._serving.pop(id(session), None)
+        if block is not None:
+            block.__exit__(None, None, None)
+        self._close_handle(session)
+
+    def _close_handle(self, session: PoolSession) -> bool:
+        """Close ``session``'s handle directly, not through the session, whose lock a call abandoned
+        in flight may hold; the session's next job starts it again. Whether it closed cleanly.
+        """
+        handle = session.handle
+        if handle is None:
+            return True
+        try:
+            handle.close()
+        except Exception as err:
+            logger.warning(
+                "closing the warm environment %s failed: %r", session.environment, err
+            )
+            return False
+        return True
 
     def _close_environments(self) -> None:
-        """Close every warm session's environment; the next job of one starts it again. The handle is
-        closed directly, not through the session, whose lock a call abandoned in flight may hold.
-        """
+        """Close every warm session's environment (`_close_handle`); the next job of one starts it
+        again."""
         for session in self.sessions:
-            handle = session.handle
-            try:
-                if handle is not None:
-                    handle.close()
-            except Exception as err:
-                logger.warning(
-                    "closing the warm environment %s failed: %r",
-                    session.environment,
-                    err,
-                )
+            self._close_handle(session)
 
     def _held_bytes(self) -> tuple[int | None, int | None]:
         """The host resident bytes and the device bytes of this worker's own processes (itself and
@@ -1407,6 +1474,9 @@ class Worker:
                     raise _machinery(exc)
                 try:
                     _, loaded = self._load(current)
+                    # a warm environment closed, spent or reloaded since the ticket's start is
+                    # started here, on the loop thread, as a load: never inside the call
+                    self._warm_environments([current])
                 except Exception as exc:
                     raise attach(exc, fault_of(exc, "load", self.classify))
                 if loaded:  # a reload after a fault: this call is cold
@@ -1797,19 +1867,13 @@ class Worker:
 
     def _stop_warm_command(self) -> bool:
         """Close each warm container that is running a job's command now, which ends that command;
-        its session starts a fresh container for its next job. Return whether one was closed.
-        """
+        its session starts a fresh container for its next job. Return whether one was closed cleanly:
+        a close that raised (logged) may have left the command running."""
         stopped = False
         for session in self.sessions:
             handle = session.handle
-            if (
-                isinstance(handle, WarmContainer)
-                and not handle.closed
-                and handle._lock.locked()
-            ):
-                with contextlib.suppress(Exception):
-                    handle.close()
-                stopped = True
+            if isinstance(handle, WarmContainer) and not handle.closed and handle.busy:
+                stopped = self._close_handle(session) or stopped
         return stopped
 
     def _classify_call(self, error: BaseException, phase: str) -> FaultRecord:
