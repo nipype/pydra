@@ -1,6 +1,8 @@
+import shutil
 import typing as ty
 import logging
 from pathlib import Path
+import attrs
 from pydra.compose import shell
 from pydra.environments import base, images
 
@@ -8,13 +10,56 @@ logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+    from pydra.engine.resident import Device
 
 
+def local_image(resolved: base.ResolvedRef) -> str:
+    """The image to run for ``resolved``: a ``docker://`` digest's local SIF
+    (`images.local_sif`), so a run never reaches a registry; a keyed ``.sif`` file
+    after its digest here is compared with the key; anything else as carried"""
+    expected = resolved.carried.get("sif_digest")
+    if expected is not None:
+        try:
+            found = images.sif_digest(resolved.run)
+        except OSError as e:
+            raise base.ImageResolutionError(
+                f"The image {resolved.run!r} the job was keyed by cannot be read "
+                f"here: {e}"
+            ) from e
+        if found != expected:
+            raise base.ImageResolutionError(
+                f"The image {resolved.run!r} has the digest {found} here, but the "
+                f"job was keyed by {expected}"
+            )
+    image = resolved.run
+    _, digest = images.split_reference(image.partition("://")[2])
+    if image.startswith("docker://") and digest:
+        # exec of a docker:// URI asks the registry on every run, cached or not
+        image = str(images.local_sif(image, digest))
+    return image
+
+
+def runtime() -> str:
+    """``apptainer`` where it is installed, otherwise ``singularity``"""
+    return "apptainer" if shutil.which("apptainer") else "singularity"
+
+
+@attrs.define
 class Singularity(base.Container):
     """Singularity/Apptainer environment.
 
     ``image`` is a ``docker://`` URI, a path to a ``.sif`` file, or another URI that
     Singularity pulls (``library://``, ``shub://``, ...)."""
+
+    def _warm_handle(
+        self,
+        ref: base.ResolvedRef,
+        roots: frozenset[Path],
+        device: "Device | None",
+        writable: frozenset[Path],
+        scratch: Path | None,
+    ) -> "WarmSingularity":
+        return WarmSingularity(self, ref, roots, device, writable, scratch)
 
     def _ref_key(self) -> ty.Hashable:
         return ("singularity", self.image, self.tag, self.identity)
@@ -82,26 +127,7 @@ class Singularity(base.Container):
                 f"{job.environment!r}, whose reference is the one carried with it"
             )
         # the reference the submitting process resolved and carried with the job
-        resolved = job.resolved
-        expected = resolved.carried.get("sif_digest")
-        if expected is not None:
-            try:
-                found = images.sif_digest(resolved.run)
-            except OSError as e:
-                raise base.ImageResolutionError(
-                    f"The image {resolved.run!r} the job was keyed by cannot be read "
-                    f"here: {e}"
-                ) from e
-            if found != expected:
-                raise base.ImageResolutionError(
-                    f"The image {resolved.run!r} has the digest {found} here, but the "
-                    f"job was keyed by {expected}"
-                )
-        image = resolved.run
-        _, digest = images.split_reference(image.partition("://")[2])
-        if image.startswith("docker://") and digest:
-            # exec of a docker:// URI asks the registry on every run, cached or not
-            image = str(images.local_sif(image, digest))
+        image = local_image(job.resolved)
         # mounting all input locations
         mounts, values = self.get_bindings(job=job, root=self.root)
 
@@ -132,6 +158,75 @@ class Singularity(base.Container):
                 f"{output['stderr']}{output['stdout']}"
             )
         return output
+
+
+class WarmSingularity(base.WarmContainer):
+    """One ``instance start -c --no-home`` of the image the job would run cold (a ``docker://``
+    digest's local SIF, never the URI), with the roots bound, then an ``exec`` in the instance per
+    job (RFC 0005 section 3.1), with ``HOME`` and ``TMPDIR`` set by ``env``. The instance's name
+    carries its owner's pid and host."""
+
+    devices: str | None = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.executable = runtime()
+
+    def _start(self) -> None:
+        image = local_image(self.ref)
+        cmd = [self.executable, "instance", "start", "-c", "--no-home"]
+        self.devices = base.visible_devices(self.device)
+        if self.devices is not None:
+            cmd.append("--nv")
+        for source, mounted, mode in self._mounts():
+            cmd.extend(["-B", f"{source}:{mounted}:{mode}"])
+        cmd.extend(self.environment.xargs)
+        cmd.extend([image, self.name])
+        rc, out, err = base.execute(cmd)
+        if rc:
+            raise RuntimeError(
+                f"'{self.executable} instance start' of {image!r} failed ({rc}): "
+                f"{err}{out}"
+            )
+
+    def _exec_command(
+        self, job: "Job", env: dict[str, str], args: list[str]
+    ) -> list[str]:
+        env = dict(env)
+        if self.devices is not None and self.devices != "all":
+            env["CUDA_VISIBLE_DEVICES"] = self.devices
+        return [
+            self.executable,
+            "exec",
+            "--pwd",
+            self.environment.mounted(job.cache_dir),
+            f"instance://{self.name}",
+            "env",
+            *(f"{name}={value}" for name, value in env.items()),
+            *args,
+        ]
+
+    def _stop(self) -> None:
+        base.execute([self.executable, "instance", "stop", self.name])
+
+    def _reap(self) -> None:
+        import json
+
+        rc, out, _ = base.execute([self.executable, "instance", "list", "--json"])
+        if rc:
+            return
+        try:
+            instances = json.loads(out or "{}").get("instances") or []
+        except (ValueError, AttributeError):
+            return
+        for instance in instances:
+            name = instance.get("instance", "")
+            parts = name.split("-", 4)
+            if name.startswith("pydra-warm-") and len(parts) == 5:
+                pid, host = parts[2], parts[4]
+                if pid.isdigit() and base.owner_dead(host, int(pid)):
+                    logger.info("Stopping the orphaned warm instance %s", name)
+                    base.execute([self.executable, "instance", "stop", name])
 
 
 # Alias so it can be referred to as singularity.Environment

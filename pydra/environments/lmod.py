@@ -39,6 +39,16 @@ class Lmod(base.Environment):
     def _ref_key(self) -> ty.Hashable:
         return ("lmod", tuple(self.modules))
 
+    def _warm_handle(
+        self,
+        ref: base.ResolvedRef,
+        roots: frozenset[Path],
+        device: ty.Any,
+        writable: frozenset[Path],
+        scratch: Path | None,
+    ) -> "WarmLmod":
+        return WarmLmod(self, ref, frozenset(), device)
+
     def resolve(self) -> base.ResolvedRef:
         """Resolve the modules to their full names once (RFC 0004 section 5.3): in a child process,
         ``lmod python purge`` with the calling shell's modules in place, then ``lmod python load``
@@ -126,7 +136,10 @@ class Lmod(base.Environment):
             )
         # the full names the submitting process resolved and carried with the job,
         # loaded after a purge as they were resolved, so the dependencies match
-        resolved = job.resolved
+        return self._run(job, self._loaded_environment(job.resolved))
+
+    def _loaded_environment(self, resolved: base.ResolvedRef) -> dict[str, str]:
+        """The environment after a purge and a load of the resolved full names"""
         names = resolved.run.split()
         _, loaded, _, env = self._purge_and_load(names)
         dependencies = [m for m in loaded if m not in names]
@@ -139,6 +152,10 @@ class Lmod(base.Environment):
                 dependencies,
                 recorded,
             )
+        return env
+
+    @staticmethod
+    def _run(job: "Job[shell.Task]", env: dict[str, str]) -> dict[str, int | str]:
         cmd_args = job.task._command_args(values=job.inputs)
         job.cache_dir.mkdir(parents=True, exist_ok=True)
         values = base.execute(cmd_args, env=env, cwd=job.cache_dir)
@@ -181,6 +198,23 @@ class Lmod(base.Environment):
             raise RuntimeError(f"Error running module cmd '{' '.join(args)}':\n{error}")
 
         return output
+
+
+class WarmLmod(base.WarmEnvironment):
+    """The resolved full names purged and loaded once, the resulting environment
+    mapping kept and each job run with it (RFC 0005 section 3.1). No process is kept;
+    the saving is the resolution."""
+
+    loaded: dict[str, str] | None = None
+
+    def _start(self) -> None:
+        self.loaded = self.environment._loaded_environment(self.ref)
+
+    def _execute(self, job: "Job[shell.Task]") -> dict[str, int | str]:
+        return Lmod._run(job, dict(self.loaded))
+
+    def _stop(self) -> None:
+        self.loaded = None
 
 
 # Alias so it can be referred to as lmod.Environment

@@ -12,7 +12,7 @@ import warnings
 from pathlib import Path
 from pydra.engine.context import RECORD, RECORDED_FIELDS
 from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
-from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
+from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX, WARM_PREFIX
 from pydra.engine.result import Result, load_result, record_error, save
 from pydra.utils.general import CACHE_FILE_MODE, ensure_list, atomic_write
 from pydra.utils.retry import Backoff
@@ -361,12 +361,12 @@ def reuse_policy(reuse: "str | ReusePolicy") -> ReusePolicy:
 
 
 def _is_store_internal(name: str) -> bool:
-    """Whether ``name`` in a cache root is a lease, a success record or a probe, not a
-    job's directory."""
+    """Whether ``name`` in a cache root is a lease, a success record, a probe or a warm
+    container's scratch directory, not a job's directory."""
     return (
         name.endswith(LEASE_SUFFIX)
         or name == SUCCESS_DIR
-        or name.startswith((PROBE_PREFIX, CLOCK_PREFIX))
+        or name.startswith((PROBE_PREFIX, CLOCK_PREFIX, WARM_PREFIX))
     )
 
 

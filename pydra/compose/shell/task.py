@@ -267,8 +267,11 @@ class ShellTask(base.Task[ShellOutputsType]):
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("cmdline",)
 
     def _run(self, job: "Job[ShellTask]", rerun: bool = True) -> None:
-        """Run the shell command."""
-        job.return_values = job.environment.execute(job)
+        """Run the shell command, through a warm environment serving this process
+        when one accepts the job (`pydra.environments.base.serving`)."""
+        from pydra.environments.base import run_shell
+
+        job.return_values = run_shell(job)
 
     @property
     def cmdline(self) -> str:
