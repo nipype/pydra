@@ -309,7 +309,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     - name: Build and push the Slurm image
       if: steps.exists.outputs.present != 'true'
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .github/slurm
         push: true
@@ -351,7 +351,7 @@ jobs:
       if: steps.pull.outputs.hit != 'true'
     - name: Build the Slurm image (layer cache keyed on the Dockerfile, which pins the base by digest)
       if: steps.pull.outputs.hit != 'true'
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .github/slurm
         load: true
