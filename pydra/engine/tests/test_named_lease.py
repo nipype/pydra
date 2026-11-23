@@ -1,6 +1,7 @@
 """The named lease and its cross-process beater (RFC 0005 §5.3, L0)."""
 
 import json
+import math
 import os
 import re
 import shutil
@@ -58,7 +59,7 @@ def callbacks(tmp_path, monkeypatch) -> str:
     return "l0_expiry_callbacks"
 
 
-def wait_for(condition, timeout: float = 10.0, step: float = 0.01) -> bool:
+def wait_for(condition, timeout: float = 60.0, step: float = 0.01) -> bool:
     deadline = time.monotonic() + timeout
     while not condition():
         if time.monotonic() > deadline:
@@ -222,7 +223,8 @@ def test_named_lease_take_beat_stale_takeover(tmp_path):
     assert lease.prove()
 
     lease._heartbeat.stopped.set()  # the holder stops beating, as if frozen
-    lease._heartbeat.join(5)
+    lease._heartbeat.join(60)
+    assert not lease._heartbeat.is_alive()
     clock = FakeTime(newest_mtime(lockfile))
     taker = DirectoryLease.at(
         lockfile,
@@ -262,7 +264,11 @@ def test_external_lease_starts_no_thread(tmp_path, enter):
         assert lease.try_take() is None
     assert lease.held and lease._heartbeat is None
     assert heartbeat_threads() == before
-    time.sleep(3 * FAST.renew_interval)
+    # three beats of a thread-beaten lease pass: a beat of this one would be due
+    other = DirectoryLease.at(tmp_path / "claims" / "other.lease", FAST)
+    with other:
+        was = beat_count(other.lockfile)
+        assert wait_for(lambda: beat_count(other.lockfile) >= was + 3), "never beaten"
     assert beat_count(lockfile) == 0  # nothing beats it
     assert lease.prove()
     lease.__exit__(None, None, None)
@@ -318,14 +324,19 @@ def test_lease_beaten_from_another_process(tmp_path):
             client.hold(lease)
         assert heartbeat_threads() == []  # no beat thread in the holder
         first = [beat_count(lease.lockfile) for lease in leases]
-        start = time.monotonic()
-        while time.monotonic() - start < 3 * CROSS.stale_after + 0.5:
+        # beaten for as many beats as span three stale bounds, a rival refused all along
+        beats = math.ceil(3 * CROSS.stale_after / CROSS.renew_interval)
+        deadline = time.monotonic() + 100  # bound only
+        while any(
+            beat_count(lease.lockfile) < was + beats
+            for lease, was in zip(leases, first)
+        ):
+            assert time.monotonic() < deadline, "not beaten often enough"
             for lease in leases:
                 rival = DirectoryLease.at(lease.lockfile, CROSS)
                 assert rival.try_take() is not None, "taken over while beaten"
             time.sleep(0.25)
-        for lease, was in zip(leases, first):
-            assert beat_count(lease.lockfile) > was
+        for lease in leases:
             assert lease.prove()
             assert lease.lost is None
         assert client.lost == {}
@@ -345,9 +356,9 @@ def test_beater_reports_loss(tmp_path):
         client.hold(lease)
         token_dir = lease.token_dir
         shutil.rmtree(rename_away(token_dir))
-        assert wait_for(lambda: lease.lost is not None, 5 * CROSS.renew_interval + 5)
+        assert wait_for(lambda: lease.lost is not None, 60)
         assert token_dir in client.lost
-        assert wait_for(lambda: seen == [token_dir], 5)  # called after the mark
+        assert wait_for(lambda: seen == [token_dir], 60)  # called after the mark
         assert not lease.prove()
         assert client.alive
 
@@ -358,15 +369,21 @@ def test_release_is_not_a_loss(tmp_path):
     lease = take(tmp_path / "ticket.lease")
     with BeaterClient(LeaseBeater()) as client:
         client.hold(lease)
-        time.sleep(CROSS.renew_interval + 1)  # beaten at least once
+        other = take(tmp_path / "other.lease")
+        client.hold(other)
+        assert wait_for(lambda: beat_count(lease.lockfile) >= 1, 60), "never beaten"
         token_dir = lease.token_dir
         client.release(token_dir)
         lease.__exit__(None, None, None)
         assert not lease.lockfile.exists()
-        time.sleep(2 * CROSS.renew_interval)  # a beat after the release would be due
+        # two beats of the other lease the beater holds: a beat after the release was due
+        was = beat_count(other.lockfile)
+        assert wait_for(lambda: beat_count(other.lockfile) >= was + 2), "not beaten"
         assert client.lost == {}
         assert lease.lost is None
         assert client.alive
+        client.release(other.token_dir)
+        other.__exit__(None, None, None)
 
 
 TAKER = textwrap.dedent("""\
@@ -446,7 +463,7 @@ def test_deadline_payload_reaches_callback(tmp_path, callbacks):
         client.hold(lease)
         client.deadline(lease.token_dir, time.time() + 0.3, payload)
         assert client.wait_expired(lease.token_dir, 30)
-        assert wait_for(lambda: when_expired, 10)  # on the callback thread
+        assert wait_for(lambda: when_expired, 60)  # on the callback thread
         assert when_expired == [True]
         received = json.loads(out.read_text())
         assert received == {"token_dir": str(lease.token_dir), "payload": payload}
@@ -464,7 +481,7 @@ def test_beater_eof(tmp_path):
         client.process.kill()
         assert client.wait_dead(30)
         assert not client.alive
-        assert wait_for(lambda: dead, 10)  # on_dead runs on the callback thread
+        assert wait_for(lambda: dead, 60)  # on_dead runs on the callback thread
         assert "end of file" in dead[0]
         with pytest.raises(BeaterDead):
             client.hold(lease)
@@ -483,11 +500,23 @@ def test_ack_timeout_is_beater_death(tmp_path, callbacks):
     try:
         client.hold(first)
         client.deadline(first.token_dir, time.time() - 1)  # the beater wedges
-        start = time.monotonic()
-        with pytest.raises(BeaterDead, match="acknowledge"):
+        bounds = []
+        real_wait_for = client._changed.wait_for
+
+        def wait_for_ack(predicate, timeout=None):
+            answered = real_wait_for(predicate, timeout)
+            bounds.append((timeout, answered))
+            return answered
+
+        client._changed.wait_for = wait_for_ack
+        bound = f"{SHORT.renew_interval:g}s"
+        with pytest.raises(
+            BeaterDead, match=f"did not acknowledge hold within {bound}"
+        ):
             client.hold(second)
-        waited = time.monotonic() - start
-        assert SHORT.renew_interval * 0.9 <= waited < SHORT.renew_interval + 5
+        del client._changed.wait_for
+        # one wait for the acknowledgement, given renew_interval, which ran out unanswered
+        assert bounds == [(SHORT.renew_interval, False)]
         assert not client.alive
         assert wait_for(lambda: client.process.poll() is not None, 30)  # stopped
         with pytest.raises(BeaterDead):
@@ -704,9 +733,11 @@ def test_holder_death_ends_beater(tmp_path, fork):
         child = pids["child"]
         proc.kill()
         proc.wait(30)
-        assert stops_beating(lockfile, 2 * CROSS.renew_interval, 60), "still beaten"
         if os.name == "posix":
-            assert wait_for(lambda: not pid_alive(pids["beater"]), 30)
+            # the beater, the only process that beats the lease, has exited
+            assert wait_for(lambda: not pid_alive(pids["beater"]), 60)
+        else:  # signal 0 would end the process on Windows: watch the beats instead
+            assert stops_beating(lockfile, 2 * CROSS.renew_interval, 60), "still beaten"
         if child is not None:
             assert pid_alive(child)  # the child outlived its parent, as intended
     finally:
@@ -717,7 +748,7 @@ def test_holder_death_ends_beater(tmp_path, fork):
 
 
 DRAINING = textwrap.dedent("""\
-    import json, signal, sys, time
+    import json, os, signal, sys, time
     from pathlib import Path
     from pydra.engine.lease import BeaterClient, DirectoryLease, LeaseBeater, LeaseSettings
     settings = LeaseSettings.from_json(json.loads(sys.argv[2]))
@@ -736,7 +767,15 @@ DRAINING = textwrap.dedent("""\
         while not stop and time.monotonic() < deadline:
             time.sleep(0.05)
         assert stop, "no SIGTERM"
-        time.sleep(2 * settings.renew_interval)  # the drain: settle what finished
+        # the drain: the beater outlived the SIGTERM, so each lease gains two beats
+        def beats(lease):
+            names = os.listdir(lease.token_dir)
+            return max([int(n[5:]) for n in names if n.startswith("beat-")] or [0])
+        was = [beats(lease) for lease in leases]
+        deadline = time.monotonic() + 60
+        while any(beats(lease) < w + 2 for lease, w in zip(leases, was)):
+            assert time.monotonic() < deadline, "not beaten after the SIGTERM"
+            time.sleep(0.05)
         assert client.alive and all(lease.prove() for lease in leases)
         for lease in leases:
             client.release(lease.token_dir)
@@ -764,7 +803,7 @@ def test_group_sigterm_leaves_the_beater_to_the_drain(tmp_path):
     try:
         assert proc.stdout.readline().strip() == "ready", proc.stderr.read()
         os.killpg(proc.pid, signal.SIGTERM)
-        out, err = proc.communicate(timeout=60)
+        out, err = proc.communicate(timeout=100)
         assert proc.returncode == 0, err
         assert "released" in out
         assert not list(tmp_path.glob("*.lease"))

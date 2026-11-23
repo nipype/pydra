@@ -22,6 +22,7 @@ from pydra.engine.lease import LeaseSettings
 from pydra.engine.runner import GraphRunner
 from pydra.engine.store import PickleStore
 from pydra.engine.submitter import Submitter, WorkflowError
+from pydra.engine.tests.test_runner import count_in_flight
 
 # a holder is taken over after one second without a renewal
 SETTINGS = LeaseSettings(stale_after=1, timeout=30, attribute_delay=0)
@@ -30,25 +31,53 @@ FOREVER = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, max_wait=
 
 
 @python.define
-def Span(x: int, logdir: str, hold: float = 0.4) -> int:
-    """Runs for ``hold`` seconds and records when"""
+def Span(
+    x: int, logdir: str, hold: float = 0.4, partners: int = 0, total: int = 0
+) -> int:
+    """Runs for ``hold`` seconds and records when; given ``partners``, first waits (a
+    bound only) until that many of the ``total`` jobs run at once, itself included, or
+    all have started"""
     start = time.time()
+    sync = Path(logdir + "-sync")
+    if partners:
+        sync.mkdir(exist_ok=True)
+        (sync / f"start-{x}").touch()
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            names = os.listdir(sync)
+            started = sum(n.startswith("start-") for n in names)
+            running = started - sum(n.startswith("end-") for n in names)
+            if running >= partners or started == total:
+                break
+            time.sleep(0.02)
     time.sleep(hold)
+    if partners:  # before its end is read, so a job that saw it running overlaps it
+        (sync / f"end-{x}").touch()
     (Path(logdir) / f"{os.getpid()}-{x}.span").write_text(f"{start} {time.time()}")
     return x
 
 
 @workflow.define
-def Inner(tag: int, logdir: str) -> list[int]:
-    s = workflow.add(Span(logdir=logdir).split(x=[tag * 10 + i for i in range(4)]))
+def Inner(tag: int, logdir: str, partners: int = 0, total: int = 0) -> list[int]:
+    s = workflow.add(
+        Span(logdir=logdir, partners=partners, total=total).split(
+            x=[tag * 10 + i for i in range(4)]
+        )
+    )
     return s.out
 
 
-def make_outer(nested: int):
+def make_outer(nested: int, partners: int = 0):
+    """``nested`` inner workflows of four jobs each; ``partners`` as for `Span`"""
+    total = 4 * nested if partners else 0
+
     @workflow.define
     def Outer(logdir: str) -> list[int]:
         outs = [
-            workflow.add(Inner(tag=t, logdir=logdir), name=f"in{t}").out
+            workflow.add(
+                Inner(tag=t, logdir=logdir, partners=partners, total=total),
+                name=f"in{t}",
+            ).out
             for t in range(nested)
         ]
         return outs[0]
@@ -68,16 +97,21 @@ def peak_overlap(logdir: Path) -> int:
     return peak
 
 
-def test_max_concurrent_caps_whole_run(tmp_path):
+def test_max_concurrent_caps_whole_run(tmp_path, monkeypatch):
+    in_flight = count_in_flight(monkeypatch)
     logdir = tmp_path / "spans"
     logdir.mkdir()
-    # the pool is larger than the cap whatever the host, so the cap is the bound
+    # the pool is larger than the cap whatever the host, so the cap is the bound; each
+    # job waits for four to run at once, so the cap is reached whatever the host's speed
     with Submitter(
         worker="cf", cache_root=tmp_path / "cache", max_concurrent=4, n_procs=8
     ) as sub:
-        sub(make_outer(8)(logdir=str(logdir)))
+        sub(make_outer(8, partners=4)(logdir=str(logdir)))
     assert len(list(logdir.glob("*.span"))) == 32
-    assert peak_overlap(logdir) == 4
+    # the cap: never more than four handed out without an outcome, across the nested
+    # workflows; and the cap is reached: four ran at once
+    assert in_flight["most"] <= 4 and in_flight["now"] == 0
+    assert peak_overlap(logdir) >= 4
 
 
 @python.define
@@ -175,18 +209,28 @@ HOLDER = textwrap.dedent("""
     )
     lease.__enter__()
     Path(spec["ready"]).touch()
-    time.sleep(spec["hold"])
+    if spec["gate"]:  # held until the test opens the gate (a bound only)
+        deadline = time.monotonic() + 60
+        while not Path(spec["gate"]).exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+    else:
+        time.sleep(spec["hold"])
     lease.__exit__(None, None, None)
     """)
 
 
-def spawn_holder(job, store, ready: Path, hold: float) -> subprocess.Popen:
+def spawn_holder(
+    job, store, ready: Path, hold: float = 0.0, gate: Path | None = None
+) -> subprocess.Popen:
+    """A process that takes ``job``'s lease, touches ``ready``, and releases it after
+    ``hold`` seconds or, given ``gate``, once ``gate`` exists"""
     spec = {
         "checksum": job.checksum,
         "cache_dir": str(job.cache_dir),
         "lockfile": str(store.lockfile(job.checksum, job.context)),
         "ready": str(ready),
         "hold": hold,
+        "gate": str(gate) if gate else None,
         "settings": {"stale_after": 1, "timeout": 30, "attribute_delay": 0},
     }
     return subprocess.Popen(
@@ -243,7 +287,8 @@ def test_second_submitter_waits_then_reads_stored(tmp_path, monkeypatch):
         assert first.result().outputs.out == 7
     assert len(log_lines(log)) == 1
     sub, runner = runner_for(root, Wrapped(log=str(log), hold=0.0))
-    holder = spawn_holder(runner.job, sub.store, ready, hold=2.0)
+    gate = tmp_path / "release"
+    holder = spawn_holder(runner.job, sub.store, ready, gate=gate)
     try:
         wait_for(ready, holder)
         expansions = count_expansions(monkeypatch)
@@ -252,11 +297,13 @@ def test_second_submitter_waits_then_reads_stored(tmp_path, monkeypatch):
             assert rnd.dispatch == []
             assert rnd.retry_after is not None
             assert not runner.done
+            gate.touch()  # the holder releases while the runner waits
             drive(sub, runner)
             assert runner.result().outputs.out == 7
         assert expansions == []
         assert not runner.errors
     finally:
+        gate.touch()
         finish(holder)
     assert len(log_lines(log)) == 1
 
@@ -818,23 +865,39 @@ def test_nested_arrays_by_path(any_worker, tmp_path):
 # The asynchronous driver waits on a workflow lease another process holds
 
 
-@pytest.mark.timeout(60)
-def test_async_driver_waits_on_a_held_workflow_lease(tmp_path):
+@pytest.mark.timeout(120)
+def test_async_driver_waits_on_a_held_workflow_lease(tmp_path, monkeypatch):
     """With nothing in flight, only the timed wake brings the driver back to the lease"""
+    from pydra.engine.lease import DirectoryLease
+
     log, root, ready = tmp_path / "runs.log", tmp_path / "cache", tmp_path / "held"
+    gate = tmp_path / "release"
     task = Wrapped(log=str(log), hold=0.0)
     store = PickleStore(root, lease_settings=SETTINGS)
+    tries = []
+    real_try_take = DirectoryLease.try_take
+
+    def try_take(self):
+        delay = real_try_take(self)
+        tries.append(delay)
+        if delay is not None:
+            gate.touch()  # the driver found it held: the holder may now release
+        return delay
+
+    monkeypatch.setattr(DirectoryLease, "try_take", try_take)
     with Submitter(worker="cf", store=store) as sub:
-        holder = spawn_holder(Job(task, submitter=sub, name="main"), store, ready, 1.5)
+        holder = spawn_holder(
+            Job(task, submitter=sub, name="main"), store, ready, gate=gate
+        )
         try:
             wait_for(ready, holder)
-            start = time.monotonic()
             result = sub(task)
-            waited = time.monotonic() - start
         finally:
+            gate.touch()
             finish(holder)
     assert result.outputs.out == 7
-    assert waited > 0.5  # it did wait for the holder
+    # it did wait for the holder: found the lease held, then took it once released
+    assert tries[0] is not None and tries[-1] is None
     assert len(log_lines(log)) == 1
 
 
@@ -899,34 +962,44 @@ def test_close_names_the_stopped_elements(tmp_path):
 
 
 @python.define
-def FailsOrHolds(x: int, hold: float = 3.0) -> int:
-    """Fails after a short wait when ``x`` is negative, otherwise runs for ``hold``"""
+def FailsOrHolds(x: int, gate: str = "") -> int:
+    """Fails at once when ``x`` is negative, otherwise runs until ``gate`` exists (a
+    60 s bound only)"""
     if x < 0:
-        time.sleep(0.5)
         raise ValueError("fails on a negative x")
-    time.sleep(hold)
+    deadline = time.monotonic() + 60
+    while gate and not Path(gate).exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
     return x
 
 
 @workflow.define
-def FailAlongsideSplit(xs: list[int]) -> list[int]:
+def FailAlongsideSplit(xs: list[int], gate: str) -> list[int]:
     workflow.add(FailsOrHolds(x=-1), name="f")
-    s = workflow.add(FailsOrHolds().split(x=xs), name="s")
+    s = workflow.add(FailsOrHolds(gate=gate).split(x=xs), name="s")
     return s.out
 
 
 def test_stopped_entries_only_for_elements_handed_out(tmp_path):
     """Under ``max_concurrent`` released elements held back by the cap were never handed
     out, so they get no "stopped" entry; only those handed out and unfinished do"""
-    with Submitter(
-        worker="cf",
-        cache_root=tmp_path,
-        on_error="fail_fast",
-        max_concurrent=2,
-        n_procs=4,
-    ) as sub:
-        with pytest.raises(WorkflowError) as raised:
-            sub(FailAlongsideSplit(xs=[10, 11, 12, 13, 14, 15]), raise_errors=True)
+    gate = tmp_path / "release"  # the elements of s run until the test opens it
+    try:
+        with Submitter(
+            worker="cf",
+            cache_root=tmp_path / "cache",
+            on_error="fail_fast",
+            max_concurrent=2,
+            n_procs=4,
+        ) as sub:
+            with pytest.raises(WorkflowError) as raised:
+                sub(
+                    FailAlongsideSplit(xs=[10, 11, 12, 13, 14, 15], gate=str(gate)),
+                    raise_errors=True,
+                )
+            gate.touch()  # s0 is still running; let it end so the pool closes
+    finally:
+        gate.touch()
     entries = raised.value.entries
     stopped = [(e.job_name, e.state_index) for e in entries if e.phase == "stopped"]
     # the cap of two leaves room for one element of ``s`` beside ``f``

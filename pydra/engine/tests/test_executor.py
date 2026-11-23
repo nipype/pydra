@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+import time
 import pytest
 from pydra.compose import python, workflow
 from pydra.engine.drivers import drive
@@ -217,7 +218,10 @@ def test_interrupt_cancels_open_handles(tmp_path, monkeypatch):
                     audit=sub.audit,
                 )
             )
-            await asyncio.sleep(0.3)
+            deadline = time.monotonic() + 60  # bound only
+            while len(ex.calls) < 4 or len(leases(tmp_path)) < 4:  # all four hang
+                assert time.monotonic() < deadline, (ex.calls, leases(tmp_path))
+                await asyncio.sleep(0.01)
             assert len(ex.calls) == 4
             assert len(leases(tmp_path)) == 4
             task.cancel()
@@ -267,7 +271,7 @@ def test_a_cancellation_raised_by_a_worker_ends_the_run(tmp_path):
 
     thread = threading.Thread(target=call, daemon=True)
     thread.start()
-    thread.join(20)
+    thread.join(60)
     assert not thread.is_alive(), "the run hangs: the cancelled job is never reported"
     assert outcome and outcome[0] is not None, "the run must not succeed"
 

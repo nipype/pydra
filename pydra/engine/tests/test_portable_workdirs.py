@@ -24,7 +24,7 @@ import pytest
 
 from pydra.compose import python
 from pydra.engine.job import Job
-from pydra.engine.lease import LeaseSettings, LeaseTimeout, _describe
+from pydra.engine.lease import POLL_MAX, LeaseSettings, LeaseTimeout, _describe
 from pydra.engine.portable.entry import CorruptEntry, EntryNotTrusted
 from pydra.engine.portable.layout import cdir_for
 from pydra.engine.portable.store import PortableStore
@@ -33,6 +33,7 @@ from pydra.engine.submitter import Submitter
 from pydra.scripts.cli import crash
 from pydra.utils.storagedir import IS_WINDOWS, StoreAges, StorePolicy
 
+from .test_lease import FakeTime, newest_mtime
 from .test_portable_quarantine import SKEW, age, aged_store, skew  # noqa: F401
 from .test_portable_store import (
     CTX,
@@ -552,17 +553,34 @@ def _plant_dead_holder(lockfile: Path, stale_after: float | None) -> None:
 SHORT = LeaseSettings(stale_after=0.5, timeout=1, attribute_delay=0)
 
 
+def _fake_clock(lease, limit: float = 3600.0) -> FakeTime:
+    """Drive ``lease``'s wait on a fake clock that starts at the newest mark in its
+    lockfile and moves only by the wait's own sleeps, so the time the wait took is the
+    fake clock's reading; a wait past ``limit`` fake seconds fails the test"""
+
+    def bounded(clock):
+        assert clock.t <= limit, f"still waiting after {clock.t:.0f} fake seconds"
+
+    clock = FakeTime(newest_mtime(lease.lockfile), on_sleep=bounded)
+    lease.clock, lease.monotonic, lease.sleep = (
+        clock.storage,
+        clock.monotonic,
+        clock.sleep,
+    )
+    return clock
+
+
 def test_lease_settings_bound_takeover_of_a_dead_holder(tmp_path):
     """A short ``stale_after`` takes a dead holder's lease over within that bound."""
     settings = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
     store = make(tmp_path, dedupe=True, lease_settings=settings)
     lease = store.acquire("python-abc", CTX)
     _plant_dead_holder(lease.lockfile, stale_after=0.5)
-    start = time.monotonic()
+    clock = _fake_clock(lease)
     with lease:
         assert lease.held
         assert len(lease.broke) == 1
-    assert time.monotonic() - start < 5  # the default would wait out 300 s
+    assert 0.5 < clock.t <= 0.5 + POLL_MAX  # the default would wait out 300 s
 
 
 def test_lease_settings_mixed_bounds_spare_a_live_holder(tmp_path):
@@ -572,14 +590,17 @@ def test_lease_settings_mixed_bounds_spare_a_live_holder(tmp_path):
     b = make(tmp_path, dedupe=True, lease_settings=attrs.evolve(SHORT, max_wait=1.5))
     held = a.acquire("python-abc", CTX)
     with held:
-        time.sleep(1.0)
-        # collect under the short bounds sees the lease as live (before prove renews it)
+        # a second on, past the short stale_after, collect under the short bounds sees
+        # the lease as live
         name = held.lockfile.name[: -len(".lock")]
         with b._open() as root:
-            assert b._lease_live(root, name, time.time())
+            assert b._lease_live(root, name, time.time() + 1.0)
+        waiting = b.acquire("python-abc", CTX)
+        clock = _fake_clock(waiting)  # its wait outlives the short stale_after
         with pytest.raises(LeaseTimeout):
-            with b.acquire("python-abc", CTX):
+            with waiting:
                 pass
+        assert clock.t > SHORT.stale_after
         assert held.prove()
 
 
@@ -589,10 +610,10 @@ def test_lease_settings_dead_holder_taken_over_after_the_longer_bound(tmp_path):
     store = make(tmp_path, dedupe=True, lease_settings=SHORT)
     lease = store.acquire("python-abc", CTX)
     _plant_dead_holder(lease.lockfile, stale_after=2.0)
-    start = time.monotonic()
+    clock = _fake_clock(lease)
     with lease:
         assert len(lease.broke) == 1
-    assert 2.0 <= time.monotonic() - start < 6
+    assert SHORT.timeout < 2.0 < clock.t <= 2.0 + POLL_MAX
 
 
 def test_lease_settings_huge_recorded_bound_is_capped(tmp_path):
@@ -607,10 +628,10 @@ def test_lease_settings_huge_recorded_bound_is_capped(tmp_path):
     with store._open() as root:
         assert store._lease_live(root, name, time.time())
         assert not store._lease_live(root, name, time.time() + 2.5)
-    start = time.monotonic()
+    clock = _fake_clock(lease)
     with lease:
         assert len(lease.broke) == 1
-    assert 2.0 <= time.monotonic() - start < 6
+    assert 2.0 < clock.t <= 2.0 + POLL_MAX
 
 
 def test_lease_settings_unreadable_holder_judged_by_the_cap(tmp_path):
@@ -628,10 +649,10 @@ def test_lease_settings_unreadable_holder_judged_by_the_cap(tmp_path):
         with store._open() as root:
             assert store._lease_live(root, name, time.time() + 1.0)
             assert not store._lease_live(root, name, time.time() + 2.5)
-        start = time.monotonic()
+        clock = _fake_clock(lease)
         with lease:
             assert len(lease.broke) == 1
-        assert 2.0 <= time.monotonic() - start < 6
+        assert 2.0 < clock.t <= 2.0 + POLL_MAX
     finally:
         if record.exists():
             record.chmod(0o600)

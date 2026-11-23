@@ -156,6 +156,9 @@ def test_worker_error_before_job_saved(tmp_path: Path):
 
     class FailingWorker(cf.Worker):
         _plugin_name = "failing-cf"
+        # the base class's, which is pickled by reference for the pool; this local
+        # class's cannot be pickled, which failed Add instead of reaching Divide
+        uncloudpickle_and_run = cf.Worker.uncloudpickle_and_run
 
         async def run(self, job, rerun=False):
             if job.name == "Divide":
@@ -163,13 +166,15 @@ def test_worker_error_before_job_saved(tmp_path: Path):
             return await super().run(job, rerun=rerun)
 
     wf = UnsafeDivisionWorkflow(a=10, b=5, denominator=2)
-    start = time.monotonic()
     with Submitter(worker=FailingWorker(n_procs=2), cache_root=tmp_path) as sub:
         result = sub(wf)
     assert result.errored
     # NB: if the workflow spins, the pytest timeout is raised within it and captured
-    # as a job error, so also check that it didn't take anywhere near that long
-    assert time.monotonic() - start < 45
+    # as a job error, so check that the error is the worker's and no timeout
+    (message,) = result.errors["error message"]
+    assert "Job 'Divide'" in message
+    assert "RuntimeError: worker was unable to run the job" in message
+    assert "Timeout" not in message
 
 
 def test_node_update_status_errored_running_job():

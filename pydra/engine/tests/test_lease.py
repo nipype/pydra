@@ -961,10 +961,13 @@ def test_try_take_keeps_its_bounds_between_attempts(tmp_path):
         stale_after=10, timeout=15, attribute_delay=0, max_wait=0.2
     )
     holder = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
-    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    clock = FakeTime(0.0)  # the wait's monotonic clock, moved past max_wait by hand
+    waiter = DirectoryLease(
+        "abc", tmp_path, lockfile, settings=settings, monotonic=clock.monotonic
+    )
     with holder:
         assert waiter.try_take() is not None
-        time.sleep(0.3)
+        clock.t += 0.3
         with pytest.raises(LeaseTimeout):
             waiter.try_take()
         assert not waiter.held
@@ -978,7 +981,7 @@ def test_try_take_takes_over_a_stale_lease(tmp_path):
     plant_foreign_lease(lockfile)
     settings = LeaseSettings(stale_after=0.3, timeout=10, attribute_delay=0)
     waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + 60
     while (delay := waiter.try_take()) is not None:
         assert time.monotonic() < deadline
         time.sleep(delay)
@@ -1063,7 +1066,7 @@ def test_waiter_takes_a_lease_released_while_it_reads_the_holder(
         if self.name == HOLDER_FILE and not refused.is_set():
             open_in.add(self.parent)
             reading.set()
-            refused.wait(10)  # held open until the holder's rename was refused
+            refused.wait(60)  # held open until the holder's rename was refused
             open_in.discard(self.parent)
         return real_read_text(self, *args, **kwargs)
 
@@ -1078,21 +1081,24 @@ def test_waiter_takes_a_lease_released_while_it_reads_the_holder(
     holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
     holder.__enter__()
     took = []
+    waiting = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
 
     def wait():
-        with DirectoryLease("abc", tmp_path, lockfile, settings=SLOW):
-            took.append(time.monotonic())
+        with waiting:
+            took.append(True)
 
     waiter = threading.Thread(target=wait)
     waiter.start()
-    assert reading.wait(10)
-    released = time.monotonic()
+    assert reading.wait(60)
     holder.__exit__(None, None, None)
-    waiter.join(SLOW.stale_after)
+    waiter.join(60)
     assert refused.is_set()
     assert holder.lost is None
     assert "taken over while held" not in caplog.text
-    assert took and took[0] - released < SLOW.stale_after / 2
+    # the holder's retried release went through, so the waiter took a released lease
+    # rather than taking over one left behind once it was stale
+    assert "could not be released" not in caplog.text
+    assert took and waiting.broke == []
 
 
 def test_released_remains_do_not_hold_the_lease(tmp_path):
@@ -1153,7 +1159,7 @@ def test_beat_that_fails_is_logged(tmp_path, monkeypatch, caplog):
     lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
     with lease:
         monkeypatch.setattr(os, "mkdir", mkdir)
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 60
         while "Could not renew" not in caplog.text and time.monotonic() < deadline:
             time.sleep(0.01)
         monkeypatch.setattr(os, "mkdir", real_mkdir)
@@ -1370,14 +1376,19 @@ def test_short_stale_after_release_refused_is_not_taken_over_mid_release(
     holder = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
     holder.__enter__()
     took = []
+    polled = threading.Event()
+
+    def poll(seconds):
+        polled.set()
+        time.sleep(seconds)
 
     def wait():
-        with DirectoryLease("abc", tmp_path, lockfile, settings=FAST):
+        with DirectoryLease("abc", tmp_path, lockfile, settings=FAST, sleep=poll):
             took.append(True)
 
     waiter = threading.Thread(target=wait)
     waiter.start()
-    time.sleep(0.2)
+    assert polled.wait(60)  # the waiter found the lease held and is waiting
     monkeypatch.setattr(os, "rename", rename)
     holder.__exit__(None, None, None)
     waiter.join(30)

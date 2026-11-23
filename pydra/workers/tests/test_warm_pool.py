@@ -1211,7 +1211,9 @@ def test_submit_and_cancel_stay_responsive_while_a_result_read_blocks(
     pool.bind(lambda job, outcome: reported.append((job, outcome)))
     (first,) = _round(sub, tasks, [1])
     pool.submit([first])
-    _wait(lambda: len(_tickets(pool.root)) == 1, "the first ticket")
+    # followed by the pool: its put is whole (the ticket file is written before the job's
+    # generation, and a ticket settled in between would get no outcome for the job)
+    _wait(lambda: len(pool._tickets) == 1, "the first ticket followed")
     _settle_ticket(pool.root, "cpu", _digest(_tickets(pool.root)[0]), "done")
     try:
         assert entered.wait(BOUND), "the follower did not read the result"
@@ -1421,27 +1423,17 @@ def test_refused_starts_hold_the_jobs_before_the_backoff_ladder_ends(
     """A class whose every start is refused breaks once ``start_deadline_failures`` starts have failed
     over ``start_deadline_s``: its jobs are ``NotRun(held=True)`` naming the latest start error,
     well before ``start_failures`` backed-off starts would have broken it."""
-    import time
-
-    poll, budget = 0.5, FaultBudgets().start_failures
-    ladder = sum(
-        poll * 2**i for i in range(budget - 1)
-    )  # seconds the budget alone takes
+    budget = FaultBudgets().start_failures
+    settings = _settings(poll_s=0.5, start_deadline_s=1.0)
+    # the backoff after failed starts 1 and 2 (0.5 s, then 1 s) puts start 3 past the
+    # deadline, so the deadline breaks the class at start 3, whatever the machine's speed
+    assert settings.start_deadline_failures == 3 < budget
     sub = _submitter(tmp_path)
     substrate = RefusesStarts()
-    pool = _warm(
-        tmp_path,
-        pools,
-        sub,
-        substrate=substrate,
-        settings=_settings(poll_s=poll, start_deadline_s=1.0),
-    )
-    began = time.monotonic()
+    pool = _warm(tmp_path, pools, sub, substrate=substrate, settings=settings)
     with pytest.raises(RunIncomplete) as info:
         _drive(sub, tasks.Many(xs=[1, 2]), pool)
-    took = time.monotonic() - began
-    assert took < ladder / 4, (took, ladder)
-    assert substrate.starts < budget
+    assert substrate.starts == settings.start_deadline_failures
     assert len(info.value.not_run) == 2
     for _, outcome in info.value.not_run:
         assert isinstance(outcome, NotRun) and outcome.held
@@ -1581,17 +1573,26 @@ def test_ticket_write_streak_ends_with_its_waiting_jobs(
         raise OSError("Stale file handle")
 
     monkeypatch.setattr(pool.pool, "put", failing)
+    import time
+    import threading
+
     jobs = _round(sub, tasks, [1])
     handle = Handle(pool, tuple(jobs), set(jobs))
     pool._queue_jobs(jobs, handle=handle)
     pool._write()  # failed write 1
     pool.cancel(handle)
     pool._write()  # nothing waits: the streak ends
-    import time
-
-    time.sleep(0.1)
-    pool._queue_jobs(_round(sub, tasks, [2]), handle=None)
-    pool._write()  # failed write 1 of a fresh streak
+    # an hour on, on the monotonic clock as this thread (the code under test) reads it
+    real_monotonic, me = time.monotonic, threading.current_thread()
+    with monkeypatch.context() as later:
+        later.setattr(
+            time,
+            "monotonic",
+            lambda: real_monotonic()
+            + (3600 if threading.current_thread() is me else 0),
+        )
+        pool._queue_jobs(_round(sub, tasks, [2]), handle=None)
+        pool._write()  # failed write 1 of a fresh streak
     assert "cpu" not in pool._broken
 
 

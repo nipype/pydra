@@ -197,7 +197,11 @@ def test_plan_constructor_workflow_deferred(submitter):
 class WaitingLease:
     lost = None
 
+    def __init__(self):
+        self.tries = 0
+
     def try_take(self):
+        self.tries += 1
         return 60.0
 
     def __exit__(self, *exc):
@@ -206,11 +210,14 @@ class WaitingLease:
 
 class WaitingStore(PickleStore):
     def acquire(self, checksum, context, **kwargs):
-        return WaitingLease()
+        lease = WaitingLease()
+        self.leases.append(lease)
+        return lease
 
 
-def test_plan_waiting_lease(tmp_path):
+def test_plan_waiting_lease(tmp_path, monkeypatch):
     store = WaitingStore(tmp_path / "cache")
+    store.leases = []
     sub = Submitter(worker="debug", store=store)
     task = Chain(x=1)
     job = Job(task, submitter=sub, name="main")
@@ -222,9 +229,13 @@ def test_plan_waiting_lease(tmp_path):
     (node,) = runner.plan().nodes
     assert node.state == "waiting" and node.elements == 1
     assert runner.stuck() is None
-    t = time.monotonic()
+    tries = [lease.tries for lease in store.leases]
+    slept = []
+    monkeypatch.setattr(time, "sleep", slept.append)
     runner.plan()
-    assert time.monotonic() - t < 1  # plan did not wait for or take the lease
+    # plan did not wait for or take the lease: no new lease, no new try, no sleep
+    assert [lease.tries for lease in store.leases] == tries == [1]
+    assert slept == []
 
 
 def test_plan_carries_executor_placement(tmp_path):

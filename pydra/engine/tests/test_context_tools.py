@@ -1,8 +1,8 @@
 import hashlib
 import os
 import stat
+import subprocess
 import sys
-import time
 from pathlib import Path
 import pytest
 from pydra.compose import python, shell
@@ -81,11 +81,22 @@ def test_owner_lookup_time_limited(bindir, tmp_path, monkeypatch):
     tool = _script(tmp_path / "opt" / "slowowner")
     (bindir / "slowowner").symlink_to(tool)
     monkeypatch.setattr(context, "OWNER_TIMEOUT", 0.2)
-    start = time.monotonic()
+    real_run = context.subprocess.run
+    queries = []
+
+    def recording(command, *args, **kwargs):
+        try:
+            return real_run(command, *args, **kwargs)
+        except subprocess.TimeoutExpired:
+            queries.append((Path(command[0]).name, kwargs.get("timeout"), "timed out"))
+            raise
+
+    monkeypatch.setattr(context.subprocess, "run", recording)
     tools = _tools(shell.define("slowowner")())
-    assert time.monotonic() - start < 10
     assert tools[0]["found"] is True
     assert tools[0]["owner"] is None
+    # each package-manager query was cut off at OWNER_TIMEOUT, not waited for
+    assert queries == [("dpkg", 0.2, "timed out"), ("rpm", 0.2, "timed out")]
 
 
 @posix
