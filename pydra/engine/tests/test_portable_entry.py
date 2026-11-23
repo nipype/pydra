@@ -17,6 +17,7 @@ from fileformats.core.mixin import WithSeparateHeader
 from fileformats.generic import Directory, File
 
 from pydra.compose import python
+from pydra.engine.absent import Absent
 from pydra.engine.job import Job
 from pydra.engine.portable import codecs
 from pydra.engine.portable.codecs import type_is_encodable
@@ -671,6 +672,41 @@ def test_empty_directory_is_unencodable(root, tmp_path, tags):
     d.mkdir()
     with pytest.raises(UnencodableOutput):
         publish(root, {"d": Directory(d)})
+
+
+def test_absent_row(root):
+    outputs = {
+        "a": Absent(cause="negative", source="Maybe"),
+        "b": [1, Absent(cause="no-list")],
+        "c": {"k": Absent(cause="not-routed", source="wf/D")},
+    }
+    enc = encoded(root, outputs)
+    assert enc["a"] == {"$absent": {"cause": "negative", "source": "Maybe"}}
+    assert enc["b"] == [1, {"$absent": {"cause": "no-list", "source": None}}]
+    back = read(root).outputs
+    assert back == outputs
+    assert (back["a"].source, back["b"][1].source) == (
+        "Maybe",
+        None,
+    )  # not hashed, kept
+    assert type_is_encodable(Absent)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"cause": "x"},
+        {"cause": "x", "source": None, "more": 1},
+        {"cause": 1, "source": None},
+        {"cause": "x", "source": 2},
+        ["x", None],
+    ],
+)
+def test_malformed_absent_is_corrupt(root, body):
+    publish(root, {"a": Absent(cause="x")})
+    edit_entry(root, lambda d: d["outputs"].update(a={"$absent": body}))
+    with pytest.raises(CorruptEntry):
+        read(root)
 
 
 class Point:
