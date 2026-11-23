@@ -500,6 +500,10 @@ class DirectoryLease:
         Who renews the lease once taken: a heartbeat thread in this process
         (default), or another process, a `LeaseBeater` reached through
         `BeaterClient`, given `token_dir`; with ``"external"`` no thread is started.
+    refused_since : float, optional
+        When, on ``monotonic``, an earlier lease object of the same ``lockfile`` began
+        seeing the refusals `LeaseRefused` bounds (its `refusing_since`), so a caller
+        that makes a lease per attempt still reaches the bound.
     """
 
     exclusive: ty.ClassVar[bool] = True
@@ -514,6 +518,7 @@ class DirectoryLease:
     beat: ty.Literal["thread", "external"] = attrs.field(
         default="thread", kw_only=True, validator=attrs.validators.in_(_BEATS)
     )
+    refused_since: float | None = attrs.field(default=None, kw_only=True, repr=False)
     broke: list[dict] = attrs.field(factory=list, init=False, repr=False)
     lost: str | None = attrs.field(default=None, init=False, repr=False)
     _token: str | None = attrs.field(default=None, init=False, repr=False)
@@ -543,6 +548,7 @@ class DirectoryLease:
         clock: ty.Callable[[], float] | None = None,
         monotonic: ty.Callable[[], float] = time.monotonic,
         sleep: ty.Callable[[float], None] = time.sleep,
+        refused_since: float | None = None,
     ) -> "DirectoryLease":
         """A named lease: the lease directory ``lockfile``, guarding no job.
 
@@ -556,6 +562,8 @@ class DirectoryLease:
             See `DirectoryLease`.
         clock, monotonic, sleep : callable, optional
             See `DirectoryLease`.
+        refused_since : float, optional
+            See `DirectoryLease`.
         """
         return cls(
             None,
@@ -566,7 +574,14 @@ class DirectoryLease:
             monotonic=monotonic,
             sleep=sleep,
             beat=beat,
+            refused_since=refused_since,
         )
+
+    @property
+    def refusing_since(self) -> float | None:
+        """When, on ``monotonic``, the refusals `LeaseRefused` bounds began, None while the
+        latest attempt saw none."""
+        return self._pending_since
 
     @property
     def held(self) -> bool:
@@ -624,7 +639,7 @@ class DirectoryLease:
         self._newest_seen, self._refused = None, None
         self._delay = self.settings.poll_min
         self._unreadable_since = None
-        self._pending, self._pending_since = None, None
+        self._pending, self._pending_since = None, self.refused_since
         now = self.monotonic()
         self._restarted = now
         self._deadline = now + self.settings.timeout
