@@ -2,6 +2,7 @@ import asyncio
 import errno
 import os
 import sys
+import time
 from pathlib import Path
 import cloudpickle
 import pytest
@@ -123,11 +124,15 @@ def test_lease_async_waits_for_holder(tmp_path):
 
     async def contend():
         held = store.acquire("abc", CTX).__enter__()
-        waiter = asyncio.ensure_future(store.acquire("abc", CTX).__aenter__())
-        await asyncio.sleep(0.3)
+        waiting = store.acquire("abc", CTX)
+        waiter = asyncio.ensure_future(waiting.__aenter__())
+        deadline = time.monotonic() + 60  # bound only
+        while waiting._last_seen == (None, None):  # until it has judged the holder
+            assert time.monotonic() < deadline, "the waiter never saw the holder"
+            await asyncio.sleep(0.01)
         assert not waiter.done()
         held.__exit__(None, None, None)
-        lease = await asyncio.wait_for(waiter, 10)
+        lease = await asyncio.wait_for(waiter, 60)
         assert lease.lockfile.exists()
         await lease.__aexit__(None, None, None)
         assert not lease.lockfile.exists()
