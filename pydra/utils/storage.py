@@ -93,19 +93,20 @@ class StorageCapabilities:
 
 def storage_now(directory: os.PathLike) -> float:
     """The current time on the storage holding ``directory``: the mtime of a file just
-    created in it, which the storage stamps. The file is removed when it can be: on
-    Windows another process (a scanner) may hold it open, and a refused removal does
-    not fail the read; stores skip names starting with `CLOCK_PREFIX`."""
+    created in it, which the storage stamps. The file is removed: on Windows it is
+    opened with ``os.O_TEMPORARY`` and goes on its last close."""
     probe = Path(directory) / f"{CLOCK_PREFIX}{uuid.uuid4().hex}"
-    fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    temporary = getattr(os, "O_TEMPORARY", 0)
+    fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL | temporary, 0o600)
     try:
         return os.fstat(fd).st_mtime
     finally:
         os.close(fd)
-        try:
-            os.unlink(probe)
-        except OSError:
-            pass
+        if not temporary:
+            try:
+                os.unlink(probe)
+            except FileNotFoundError:
+                pass
 
 
 def _refused(call: ty.Callable[[], object], *errnos: int) -> bool:

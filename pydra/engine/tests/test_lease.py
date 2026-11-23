@@ -1533,28 +1533,3 @@ def test_refused_for_good_on_windows_raises_lease_refused(
     assert not isinstance(err, LeaseTimeout) and isinstance(err, PermissionError)
     assert isinstance(err.error, PermissionError) and err.lockfile == lockfile
     assert release_patience(SLOW) <= clock.t < SLOW.timeout
-
-
-def test_try_take_when_the_storage_clock_probe_cannot_be_removed(tmp_path, monkeypatch):
-    """Judging a held lease reads the storage clock from a file it creates and removes. On
-    Windows another process (an antivirus scanner) can hold the new file open, so the
-    removal is refused; the clock was read, and the wait goes on instead of failing."""
-    lockfile = tmp_path / "abc.lock"
-    holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
-    assert holder.try_take() is None
-    real_unlink = os.unlink
-    refused = []
-
-    def unlink(path, *args, **kwargs):
-        if Path(path).name.startswith(storage.CLOCK_PREFIX):
-            refused.append(path)
-            raise sharing_violation(path)
-        return real_unlink(path, *args, **kwargs)
-
-    monkeypatch.setattr(os, "unlink", unlink)
-    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
-    delay = waiter.try_take()
-    assert refused and delay is not None and delay > 0
-    monkeypatch.setattr(os, "unlink", real_unlink)
-    holder.__exit__(None, None, None)
-    waiter.__exit__(None, None, None)
