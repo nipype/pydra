@@ -245,11 +245,18 @@ class ExactReuse:
 
 class ConsistentReuse:
     """Reuses results recorded under the same Python major.minor and implementation,
-    the same platform and environment, and the same versions of the distributions the
-    task reaches (``packages``), all of them known. The full Python version and the
-    other installed distributions (``installed``) may differ."""
+    the same platform and environment, the same versions of the distributions the
+    task reaches (``packages``), all of them known, and the same ``tools``. The full
+    Python version and the other installed distributions (``installed``) may differ."""
 
-    EQUAL = ("record", "implementation", "platform", "environment", "packages")
+    EQUAL = (
+        "record",
+        "implementation",
+        "platform",
+        "environment",
+        "packages",
+        "tools",
+    )
 
     def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
         return (
