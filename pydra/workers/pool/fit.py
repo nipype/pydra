@@ -5,7 +5,12 @@ from __future__ import annotations
 import math
 import typing as ty
 
-from pydra.workers.pool.calibration import Calibration, MemoryFit, hardware_of
+from pydra.workers.pool.calibration import (
+    Calibration,
+    MemoryFit,
+    TimeRecord,
+    hardware_of,
+)
 from pydra.workers.pool.classes import WorkerClass
 from pydra.workers.pool.placement import ClassTried, DeclaredFit, FitRequest
 
@@ -30,6 +35,32 @@ def _grants(cls: WorkerClass) -> dict[str, int | None]:
     return grants
 
 
+def probe_batch(
+    times: ty.Sequence["TimeRecord"], bound: int, min_samples: int, gain: float
+) -> int:
+    """The batch of the next call, from the seconds per unit measured at each batch size the
+    probe asks for (powers of two up to ``bound``; a tail call of another size is not
+    counted): a size measured by fewer than ``min_samples`` calls is asked for again; each
+    doubling is kept while it cuts the time per unit by at least ``gain``; then the fastest
+    size. One job per call while nothing is measured."""
+    measured = {
+        t.batch: t
+        for t in times
+        if t.batch <= bound and t.batch & (t.batch - 1) == 0  # a power of two
+    }
+    size, best = 1, None
+    while size <= bound:
+        record = measured.get(size)
+        if record is None or record.n < min_samples:
+            return size  # measure it
+        if best is not None and record.per_unit_s > (1 - gain) * best.per_unit_s:
+            break  # the doubling no longer pays
+        best = record
+        size *= 2
+    measured_enough = [t for t in measured.values() if t.n >= min_samples]
+    return min(measured_enough, key=lambda t: (t.per_unit_s, t.batch)).batch
+
+
 class MeasuredFit:
     """The measured fit rule over a `Calibration`.
 
@@ -48,8 +79,9 @@ class MeasuredFit:
     `batch`: ``max(1, floor((headroom × share − resident − m0) / (m1 × length)))``, ``length`` the
     longest of ``units``, at most the class's ``quantum_jobs``: the memory bound. It is 1 when ``m1``
     is unknown, or when ``m1 > 0`` and no unit is known, and ``quantum_jobs`` when ``m1`` was
-    measured as 0. Then, when per-job times at two or more
-    batch sizes within the bound are recorded, the fastest of them.
+    measured as 0. Within the bound the batch is probed
+    (`probe_batch`). A declared batch overrides the probe, capped by the memory bound: the task's
+    (``FitRequest.batch``), else the site's (``batch``); it is the batch while ``m1`` is unknown.
 
     Parameters
     ----------
@@ -58,9 +90,14 @@ class MeasuredFit:
         The fraction of a grant a residency may use; required, with no default.
     """
 
-    def __init__(self, calibration: Calibration, headroom: float):
+    def __init__(
+        self, calibration: Calibration, headroom: float, batch: int | None = None
+    ):
         if not 0 < headroom <= 1:
             raise ValueError(f"headroom is in (0, 1], not {headroom!r}")
+        if batch is not None and (isinstance(batch, bool) or batch < 1):
+            raise ValueError(f"batch must be a positive int, not {batch!r}")
+        self.batch_override = batch
         self.calibration = calibration
         self.headroom = headroom
         self._declared = DeclaredFit()
@@ -138,12 +175,13 @@ class MeasuredFit:
             f"{self.headroom:g} of the {resource} grant of {grant} bytes",
         )
 
-    def batch(
+    def memory_bound(
         self,
         request: FitRequest,
         cls: WorkerClass,
         units: ty.Sequence[float | None],
     ) -> int:
+        """The most jobs of ``request`` one call holds in memory on ``cls``; 1 unmeasured."""
         fit = self._memory(request, cls)
         _, share = _grant(cls)
         if fit is None or share is None or fit.m1 is None:
@@ -162,13 +200,32 @@ class MeasuredFit:
                 bound = cls.quantum_jobs
             else:
                 bound = max(1, min(cls.quantum_jobs, math.floor(room / per_job)))
-        if request.key is None:
-            return bound
-        times = [
-            t
-            for t in self.calibration.times(request.key, hardware_of(cls), request.task)
-            if t.batch <= bound
-        ]
-        if len({t.batch for t in times}) >= 2:
-            return min(times, key=lambda t: (t.per_job_s, t.batch)).batch
         return bound
+
+    def batch(
+        self,
+        request: FitRequest,
+        cls: WorkerClass,
+        units: ty.Sequence[float | None],
+    ) -> int:
+        declared = request.batch if request.batch is not None else self.batch_override
+        fit = self._memory(request, cls)
+        if fit is None or _grant(cls)[1] is None or fit.m1 is None:
+            return declared or 1
+        bound = self.memory_bound(request, cls, units)
+        if declared is not None:
+            return min(bound, declared)
+        if request.key is None:
+            return 1  # nothing to measure the probe against
+        return bound  # the ceiling the worker probes under
+
+    def probing(self, request: FitRequest, cls: WorkerClass) -> bool:
+        declared = request.batch if request.batch is not None else self.batch_override
+        fit = self._memory(request, cls)
+        return (
+            declared is None
+            and request.key is not None
+            and fit is not None
+            and _grant(cls)[1] is not None
+            and fit.m1 is not None
+        )

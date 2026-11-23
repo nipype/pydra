@@ -535,7 +535,8 @@ def test_directory_calibration_round_trip(tmp_path):
         5,
     )
     assert later.unfit("k") == [unfit] and later.parity("k") == [parity]
-    assert later.times("k", hardware_of(cls)) == [TimeRecord(1, 0.5, 5)]
+    # seconds per unit: these calls have units
+    assert later.times("k", hardware_of(cls)) == [TimeRecord(1, 0.2, 5)]
     assert (
         DirectoryCalibration(tmp_path / "cal", min_samples=6).memory(
             "k", hardware_of(cls)
@@ -654,18 +655,22 @@ def test_no_device_peak_is_no_device_fit(measured, tmp_path):
 
 
 def test_batch_through_place_with_unknown_length_is_one(measured, tmp_path):
-    """Through `place`, whose request carries no units: a measured per-unit memory gives a batch of
-    1, an unknown one too, and only a per-unit memory measured as 0 over real units gives the
-    ceiling."""
+    """Through `place`, whose request carries no units: a measured per-unit memory gives a memory
+    bound of 1, an unknown one too, and only a per-unit memory measured as 0 over real units gives
+    the ceiling. The job declares no batch, so the batch that runs (``Placement.batch``, what
+    ``plan()`` reports) is 1 in every case; the fit's figure is ``memory_bound``."""
     job, request, _ = measured
     cls = _class("cpu", mem=8 * GB, quantum_jobs=64)
     sloped = DirectoryCalibration(tmp_path / "sloped")
     _seed(sloped, request.key, cls, resident=1 * GB, m1=1.0 * GB)
     assert sloped.memory(request.key, hardware_of(cls)).m1 == pytest.approx(GB)
-    assert place(job, [cls], MeasuredFit(sloped, headroom=HEADROOM), ok).batch == 1
+    got = place(job, [cls], MeasuredFit(sloped, headroom=HEADROOM), ok)
+    assert (got.batch, got.memory_bound) == (1, 1)
     flat = DirectoryCalibration(tmp_path / "flat")
     _seed(flat, request.key, cls, resident=1 * GB, m1=0.0)
-    assert place(job, [cls], MeasuredFit(flat, headroom=HEADROOM), ok).batch == 64
+    got = place(job, [cls], MeasuredFit(flat, headroom=HEADROOM), ok)
+    # the memory bound is the ceiling the worker probes under
+    assert (got.batch, got.memory_bound, got.probe) == (64, 64, True)
     unknown = DirectoryCalibration(tmp_path / "unknown")
     for _ in range(3):
         unknown.record(
@@ -674,7 +679,8 @@ def test_batch_through_place_with_unknown_length_is_one(measured, tmp_path):
             )
         )
     assert unknown.memory(request.key, hardware_of(cls)).m1 is None
-    assert place(job, [cls], MeasuredFit(unknown, headroom=HEADROOM), ok).batch == 1
+    got = place(job, [cls], MeasuredFit(unknown, headroom=HEADROOM), ok)
+    assert (got.batch, got.memory_bound) == (1, 1)
 
 
 def attrs_evolve_sample(*, resident, peak, units, key, cls):
@@ -719,9 +725,16 @@ def test_times_and_memory_are_read_per_task(tmp_path):
     hardware = hardware_of(cls)
     (a,) = calibration.times("k", hardware, task="task-a")
     (b,) = calibration.times("k", hardware, task="task-b")
-    assert (a.per_job_s, b.per_job_s) == (1.0, 9.0)
+    assert (a.per_unit_s, b.per_unit_s) == (1.0, 9.0)
     assert calibration.memory("k", hardware, task="task-a").m0 == GB
     assert calibration.memory("k", hardware, task="task-b").m0 == 7 * GB
+
+
+def _warm_sample(cls, *, batch, units, wall):
+    sample = attrs_evolve_sample(
+        resident=None, peak=None, units=units, key="k", cls=cls
+    )
+    return attrs.evolve(sample, batch_size=batch, wall_s=wall)
 
 
 def test_unfit_record_binds_only_its_code():
@@ -921,28 +934,31 @@ def test_measured_fit_batch_rule(measured):
     )
     fit = MeasuredFit(Fixed(), headroom=HEADROOM)
     # share 40G; 0.9 x 40G - 10G - 2G = 24G; m1 x length = 0.5G x 4 = 2G; floor(12)
-    assert fit.batch(request, h100, [1.0, 4.0, None]) == 12
+    assert fit.memory_bound(request, h100, [1.0, 4.0, None]) == 12
     figures["times"] = (
         TimeRecord(1, 0.5, 3),
         TimeRecord(8, 0.1, 3),
         TimeRecord(12, 0.2, 3),
         TimeRecord(16, 0.01, 3),  # above the bound: not taken
     )
-    assert fit.batch(request, h100, [1.0, 4.0]) == 8
-    figures["times"] = (TimeRecord(4, 0.1, 3),)  # one batch size: the bound stands
-    assert fit.batch(request, h100, [4.0]) == 12
+    assert (
+        fit.batch(request, h100, [1.0, 4.0]) == 12
+    )  # the ceiling the worker probes under
+    assert fit.probing(request, h100)
     figures["times"] = ()
     figures["fit"] = MemoryFit(resident=40 * G, m0=0.0, m1=0.5 * G, n=6)
-    assert fit.batch(request, h100, [4.0]) == 1  # no room
+    assert fit.memory_bound(request, h100, [4.0]) == 1  # no room
     figures["fit"] = MemoryFit(resident=1 * G, m0=0.0, m1=0.0, n=6)
-    assert fit.batch(request, h100, [4.0]) == 64  # no per-job memory: a ticket's worth
+    assert (
+        fit.memory_bound(request, h100, [4.0]) == 64
+    )  # no per-job memory: a ticket's worth
     figures["fit"] = MemoryFit(resident=1 * G, m0=0.0, m1=1.0, n=6)
     assert (
-        fit.batch(request, h100, [4.0]) == 64
+        fit.memory_bound(request, h100, [4.0]) == 64
     )  # room for millions: capped at a ticket
     figures["fit"] = MemoryFit(resident=10 * G, m0=2 * G, m1=0.5 * G, n=6)
     assert (
-        fit.batch(request, h100, [None]) == 1
+        fit.memory_bound(request, h100, [None]) == 1
     )  # per-unit memory measured, length unknown
     figures["fit"] = MemoryFit(resident=10 * G, m0=2 * G, m1=None, n=6)
     assert fit.batch(request, h100, [4.0]) == 1  # per-unit memory unknown
@@ -1750,3 +1766,78 @@ def test_a_record_that_fails_to_encode_leaves_nothing_behind(tmp_path, monkeypat
 def test_measured_fit_has_no_headroom_of_its_own():
     with pytest.raises(TypeError):
         MeasuredFit(DirectoryCalibration("unused"))
+
+
+def _times(**per_unit):
+    """TimeRecords from ``b<size>=(seconds per unit, calls)``"""
+    return [TimeRecord(int(k[1:]), s, n) for k, (s, n) in per_unit.items()]
+
+
+@pytest.mark.parametrize(
+    "times,bound,expected",
+    [
+        ({}, 64, 1),  # nothing measured: one job per call
+        ({"b1": (1.0, 2)}, 64, 1),  # too few calls at 1: measure it again
+        ({"b1": (1.0, 3)}, 64, 2),  # measured: try twice it
+        ({"b1": (1.0, 3), "b2": (0.5, 1)}, 64, 2),  # too few at 2: measure it again
+        ({"b1": (1.0, 3), "b2": (0.6, 3), "b4": (0.4, 3)}, 64, 8),  # still falling
+        (
+            {"b1": (1.0, 3), "b2": (0.6, 3), "b4": (0.7, 3)},
+            64,
+            2,
+        ),  # it rose: the fastest
+        ({"b1": (1.0, 3), "b2": (1.01, 3)}, 64, 1),  # noise, not a gain: no doubling
+        ({"b1": (1.0, 3), "b2": (0.97, 3)}, 64, 2),  # under the gain: the fastest
+        # a tail call of 3 is not a size the probe asked for: it does not stop the doubling
+        ({"b1": (1.0, 3), "b2": (0.6, 3), "b3": (0.44, 3), "b4": (0.45, 3)}, 64, 8),
+        (
+            {"b1": (1.0, 3), "b2": (0.6, 3), "b4": (0.4, 3)},
+            6,
+            4,
+        ),  # the double won't fit
+        ({"b8": (0.1, 3), "b16": (0.01, 3)}, 12, 1),  # above the bound is not counted
+    ],
+)
+def test_the_batch_is_probed_over_increasing_sizes(times, bound, expected):
+    from pydra.workers.pool.fit import probe_batch
+
+    assert probe_batch(_times(**times), bound, min_samples=3, gain=0.05) == expected
+
+
+def test_times_are_per_unit_when_units_are_known(tmp_path):
+    from pydra.workers.pool.calibration import DirectoryCalibration
+
+    cal = DirectoryCalibration(tmp_path / "cal")
+    cls = WorkerClass("cpu", "cpu")
+    for batch, units, wall in [(2, 10.0, 5.0), (2, 40.0, 20.0), (2, 20.0, 10.0)]:
+        cal.record(_warm_sample(cls, batch=batch, units=units, wall=wall))
+    (record,) = cal.times("k", hardware_of(cls))
+    assert (record.batch, record.per_unit_s, record.n) == (2, 0.5, 3)
+
+
+def test_a_declared_batch_overrides_the_probe_within_the_memory_bound(measured):
+    _, request, _ = measured
+
+    class Fixed:
+        def memory(self, key, hardware, task=None):
+            return MemoryFit(resident=10 * G, m0=2 * G, m1=0.5 * G, n=6)
+
+        def unfit(self, key):
+            return ()
+
+        def times(self, key, hardware, task=None):
+            return (TimeRecord(1, 1.0, 3),)
+
+    h100 = WorkerClass(
+        "h100", "cuda", gpus=1, gpu_type="h100", gpu_mem=80 * G, workers_per_device=2,
+        quantum_jobs=64,
+    )  # fmt: skip
+    request = attrs.evolve(request, batch=None)
+    probed = MeasuredFit(Fixed(), headroom=HEADROOM)
+    assert probed.batch(request, h100, [4.0]) == 12 and probed.probing(request, h100)
+    site = MeasuredFit(Fixed(), headroom=HEADROOM, batch=6)
+    assert site.batch(request, h100, [4.0]) == 6 and not site.probing(request, h100)
+    assert site.batch(attrs.evolve(request, batch=3), h100, [4.0]) == 3
+    assert (
+        site.batch(attrs.evolve(request, batch=100), h100, [4.0]) == 12
+    )  # the memory bound

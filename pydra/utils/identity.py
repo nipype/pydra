@@ -70,6 +70,7 @@ DEFERRED = "deferred"
 
 # The digest of the providers of a task's provided fields, under a name no field has
 PROVIDED_KEY = "Provided"
+BATCHED_KEY = "Batched"
 
 # The attributes of a field that shape the command line, besides its type (RFC 0004
 # section 5.1). Documentation (``help``) is left out, and so is everything that does not
@@ -145,6 +146,9 @@ def field_digests(
         if getattr(f, "provided", None) is not None
     }:
         digests[PROVIDED_KEY] = f"py@1:{hash_function(provided, cache=cache)}"
+    # the batched callable's code (RFC 0005 section 4.4); keyed only when one is declared
+    if (batched := getattr(type(task), "_batched", None)) is not None:
+        digests[BATCHED_KEY] = f"py@1:{hash_function(batched, cache=cache)}"
     if collect and not carried:
         task._code_modules = frozenset(cache.modules)
         task._code_refs = sorted(cache.refs)
@@ -234,6 +238,8 @@ def task_record(task: "Task") -> Record:
     }
     if PROVIDED_KEY in digests:
         code["provided"] = digests.pop(PROVIDED_KEY)
+    if BATCHED_KEY in digests:
+        code["batched"] = digests.pop(BATCHED_KEY)
     if _executor_is_code(task) and task._executor_name in digests:
         code["code"] = digests.pop(task._executor_name)
     if task._task_type() == "shell":

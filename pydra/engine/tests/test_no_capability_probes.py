@@ -131,6 +131,16 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ): "psutil reports it on Windows only",
     ("workers/pool/samples.py", "os", "sched_getaffinity"): "Linux only",
     ("workers/pool/storage.py", "errno", "ESTALE"): "not defined on every platform",
+    (
+        "workers/pool/worker.py",
+        "batched",
+        "__module__",
+    ): "a callable may have no module",
+    (
+        "workers/pool/worker.py",
+        "batched",
+        "__qualname__",
+    ): "a callable may have no qualified name",
     ("workers/pool/worker.py", "group", "members"): "a resident object of any provider",
     ("workers/pool/worker.py", "obj", "group"): "a resident object of any provider",
     ("workers/pool/worker.py", "os", "O_NOFOLLOW"): "POSIX only",
