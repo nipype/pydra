@@ -71,6 +71,8 @@ def _work_under(base, checksum, fingerprint, attempt):
 
 def make(tmp_path, name="root", **kw):
     kw.setdefault("trust", TRUST)
+    # these tests publish synthetic checksums with no key record
+    kw.setdefault("identity", PydraIdentityV1())
     if kw["trust"] == "shared":  # a shared root has no default work directory
         kw.setdefault("work_dir", functools.partial(_work_under, tmp_path))
     return PortableStore(tmp_path / name, **kw)
@@ -337,11 +339,14 @@ def test_a_container_replaced_before_the_rename_is_walked_again(tmp_path, monkey
 
 SCRIPT = textwrap.dedent("""
     import os, signal, sys
+    from pydra.engine.portable.identity import PydraIdentityV1
     from pydra.engine.portable.store import PortableStore
     from pydra.utils.storagedir import StorageDir, StorePolicy
     root, when = sys.argv[1], sys.argv[2]
     policy = StorePolicy(sealed_mode=0o555) if when == "seal" else StorePolicy()
-    store = PortableStore(root, trust="private", policy=policy)
+    store = PortableStore(
+        root, trust="private", policy=policy, identity=PydraIdentityV1()
+    )
 
     def die():
         os.kill(os.getpid(), signal.SIGKILL)
@@ -377,6 +382,7 @@ def killed(tmp_path, when):
     return PortableStore(
         tmp_path / "root",
         trust=TRUST,
+        identity=PydraIdentityV1(),
         policy=StorePolicy(sealed_mode=0o555) if when == "seal" else StorePolicy(),
     )
 
@@ -647,9 +653,14 @@ def test_result_pickles_with_and_without_the_new_fields(tmp_path):
 
 @python.define
 def _PublishHere(root: str, value: int) -> str:
+    from pydra.engine.portable.identity import PydraIdentityV1
     from pydra.engine.portable.store import PortableStore
 
-    store = PortableStore(root, trust="private" if os.name != "nt" else "trusted")
+    store = PortableStore(
+        root,
+        trust="private" if os.name != "nt" else "trusted",
+        identity=PydraIdentityV1(),
+    )
     c = store.publish(
         "python-job", None, {"python": "x", "n": 1}, {"v": value}, None, None
     )
@@ -658,12 +669,13 @@ def _PublishHere(root: str, value: int) -> str:
 
 def test_publish_and_read(any_worker, tmp_path):
     root = tmp_path / "root"
-    PortableStore(root, trust=TRUST)  # the root is created here, in the test process
+    # the root is created here, in the test process
+    PortableStore(root, trust=TRUST, identity=PydraIdentityV1())
     with Submitter(worker=any_worker, cache_root=tmp_path / "pc") as sub:
         res = sub(_PublishHere(root=str(root), value=7))
     cdir, fingerprint, won, stored = res.outputs.out.split("|")
     assert (won, stored) == ("True", "True")
-    store = PortableStore(root, trust=TRUST)
+    store = PortableStore(root, trust=TRUST, identity=PydraIdentityV1())
     got = store.read(EntryRef(str(root), cdir, fingerprint), None)
     assert got.outputs == {"v": 7}
 

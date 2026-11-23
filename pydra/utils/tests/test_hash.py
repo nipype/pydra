@@ -1579,3 +1579,16 @@ def test_code_hash_notebook_class(monkeypatch):
         run("def f(x):\n    return Helper().f(x)\n")
         hashes.append(hash_function(namespace["f"]))
     assert hashes[0] != hashes[1]
+
+
+def test_walk_memo_drop_after_module_teardown(monkeypatch):
+    """A weakref callback that fires at interpreter exit, after the module globals are
+    cleared, does nothing instead of raising"""
+    from pydra.utils import hash as hash_module
+
+    def f():
+        pass
+
+    memo = hash_module._WalkMemo(f, ("k",))
+    monkeypatch.setattr(hash_module, "_walk_memo_lock", None)
+    memo._drop(None)

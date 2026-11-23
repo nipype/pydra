@@ -14,7 +14,7 @@ from pydra.environments import base, docker, images
 from pydra.engine.tests.test_portable_store import make
 from pydra.engine.tests.test_portable_submitter import drive_with_run
 from pydra.engine.tests.test_runner_flatten import count_expansions
-from pydra.utils.identity import record_checksum
+from pydra.utils.identity import is_deferred, record_checksum
 
 D1 = "sha256:" + "1" * 64
 D2 = "sha256:" + "2" * 64
@@ -413,3 +413,7 @@ def test_workflow_version_replaces_constructor_code_not_nodes(monkeypatch):
 
     with pytest.warns(UserWarning, match="version='1'"):
         workflow.define(Local, version="1")
+
+
+def test_is_deferred_accepts_deferred_nodes():
+    assert is_deferred({"nodes": "deferred"})

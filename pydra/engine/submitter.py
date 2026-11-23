@@ -48,6 +48,57 @@ from pydra.compose.base import Task, Outputs
 
 logger = logging.getLogger("pydra.submitter")
 
+IDENTITY_MARKER = ".pydra-identity"
+"""The file at the root of a `PickleStore` naming the identity scheme its slots are
+keyed under (RFC 0004 section 9.1)"""
+
+
+def check_identity_marker(root: Path) -> None:
+    """Read ``<root>/.pydra-identity`` and, unless it names this process's identity scheme,
+    log one line (when it names an older scheme, or is missing from a root that holds
+    slots: their results are recomputed once, as every key changed) and write it. One
+    read when the marker is current; a root that cannot be written is left as it is."""
+    from pydra.utils.identity import IDENTITY_SCHEME
+
+    path = Path(root) / IDENTITY_MARKER
+    try:
+        with open(path, encoding="utf-8") as f:
+            named: str | None = f.read(256).strip()
+    except FileNotFoundError:
+        named = None
+    except OSError:
+        return
+    if named == IDENTITY_SCHEME:
+        return
+    if named is None:
+        try:
+            with os.scandir(root) as entries:
+                held = any(e.name != IDENTITY_MARKER for e in entries)
+        except OSError:
+            held = False
+        if held:
+            logger.warning(
+                "%s holds results keyed before %s: every job runs again once, and its "
+                "results are then reused",
+                root,
+                IDENTITY_SCHEME,
+            )
+    else:
+        logger.warning(
+            "%s holds results keyed under %s, not %s: every job runs again once, and "
+            "its results are then reused",
+            root,
+            named or "an unnamed scheme",
+            IDENTITY_SCHEME,
+        )
+    tmp = path.with_name(f"{IDENTITY_MARKER}.{uuid4().hex}.tmp")
+    try:
+        tmp.write_text(IDENTITY_SCHEME + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+
+
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
     from pydra.engine.resident import Provider, ResidentSet
@@ -509,6 +560,8 @@ class Submitter:
         from pydra.engine.resident import check_task
 
         check_task(task, self)  # a wiring error is raised before anything runs
+        if isinstance(self.store, PickleStore):
+            check_identity_marker(self.store.cache_root)
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
             state = State(

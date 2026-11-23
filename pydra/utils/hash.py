@@ -1903,6 +1903,8 @@ class _WalkMemo:
         memo_ref = weakref.ref(self)
 
         def drop(_):
+            if _walk_memo_lock is None:  # module globals cleared at interpreter exit
+                return
             with _walk_memo_lock:
                 root = root_ref()
                 memos = _walk_memo.get(root) if root is not None else None

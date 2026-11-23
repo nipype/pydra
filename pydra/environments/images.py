@@ -137,14 +137,14 @@ _LOCK_WARNED: list[bool] = []
 
 
 def image_cache() -> Path:
-    """Where pulled images are kept: ``PYDRA_IMAGE_CACHE`` if set, otherwise
+    """Where pulled images are kept: ``PYDRA_IMAGE_CACHE`` if set and not empty, otherwise
     ``pydra-sif`` under ``APPTAINER_CACHEDIR`` (or ``SINGULARITY_CACHEDIR``) if set,
     otherwise ``images`` under pydra's user cache root, which is under ``$HOME``. On a
     cluster, set one of them to project or scratch storage: a SIF is the image's size.
     """
     from pydra.utils.general import user_cache_root
 
-    if IMAGE_CACHE_ENV_VAR in os.environ:
+    if os.environ.get(IMAGE_CACHE_ENV_VAR):  # an empty value is unset
         return Path(os.environ[IMAGE_CACHE_ENV_VAR])
     for var in ("APPTAINER_CACHEDIR", "SINGULARITY_CACHEDIR"):
         if os.environ.get(var):

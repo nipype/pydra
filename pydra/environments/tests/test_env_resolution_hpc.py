@@ -322,6 +322,16 @@ def test_image_cache_prefers_apptainer_cachedir(monkeypatch, tmp_path):
     assert images.image_cache() == tmp_path / "mine"
 
 
+def test_empty_image_cache_is_unset(monkeypatch, tmp_path):
+    # an empty value never names the working directory
+    monkeypatch.setenv("PYDRA_IMAGE_CACHE", "")
+    monkeypatch.setenv("APPTAINER_CACHEDIR", str(tmp_path / "apptainer"))
+    assert images.image_cache() == tmp_path / "apptainer" / "pydra-sif"
+    monkeypatch.delenv("APPTAINER_CACHEDIR")
+    monkeypatch.delenv("SINGULARITY_CACHEDIR", raising=False)
+    assert images.image_cache().is_absolute()
+
+
 @posix_only
 def test_failed_pull_leaves_no_sif(monkeypatch, tmp_path):
     _fake_singularity(tmp_path, monkeypatch)
