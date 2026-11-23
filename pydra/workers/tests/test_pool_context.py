@@ -537,7 +537,7 @@ def test_v1_and_picklestore_facts_audit_only(tmp_path, tasks, queue_of, kind):
     from pydra.engine.store import PickleStore
 
     if kind == "v1":
-        store = _store(tmp_path, on_commit=tasks.record_commit)
+        store = _store(tmp_path, PydraIdentityV1(), on_commit=tasks.record_commit)
     else:
         store = PickleStore(tmp_path / "store")
     q = queue_of(store)
