@@ -21,6 +21,7 @@ A pool is a directory on storage that every worker and the submitting process se
         held-<epoch>-<label>                  a hold of a residency on this queue
       follow/<job>/<g>                        generation g of a job: the ticket that holds it
       follow/<job>/<g>.started                attempt <pool id>.<g> was started, by which worker
+      payloads/<sha256>                       a job's payload, read by every attempt of the job
 
 ``<job>`` is ``<checksum>-<fingerprint>`` when that is a plain lower-case name of at most 200
 characters, else ``h-<sha256>`` of the two.
@@ -110,6 +111,7 @@ _ESTALE = getattr(errno, "ESTALE", None)
 _QUEUE_NAME = re.compile(r"^[^#\s/\\]+(#\S+)?$")
 _PLAIN_JOB = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,199}$")
 _SEQ = re.compile(r"^[0-9]{12}$")
+_HEX32 = re.compile(r"^[0-9a-f]{32}$")
 _SLOT = re.compile(r"^slot-([0-9]+)$")
 _JOBS = re.compile(r"^jobs-([0-9]+)-([1-9][0-9]*)$")
 _RES = re.compile(r"^res-([0-9]+)$")
@@ -736,6 +738,11 @@ class PoolRoot:
     def __repr__(self) -> str:
         return f"PoolRoot({str(self.path)!r}, pool_id={self.pool_id!r})"
 
+    @property
+    def lease_settings(self) -> LeaseSettings:
+        """The settings of every lease taken on this pool (anonymous holders)."""
+        return self._lease_settings
+
     # -- queues and tickets --------------------------------------------------------------
 
     def queue(self, name: str) -> _Queue:
@@ -867,9 +874,10 @@ class PoolRoot:
 
     def _segments(
         self, q: _Queue
-    ) -> ty.Iterator[tuple[int, StorageDir, list[int], set]]:
-        """Each live segment, open, oldest first from the oldest this process saw live; a full
-        segment whose slots are all resolved is retired on the way."""
+    ) -> ty.Iterator[tuple[int, StorageDir, list[int], set, dict[int, int]]]:
+        """Each live segment, open, oldest first from the oldest this process saw live, with its
+        slots, the resolved ones and each slot's job count; a full segment whose slots are all
+        resolved is retired on the way."""
         seq, prefix = q.oldest, True
         while True:
             segment = _child(q.segments, _seq(seq))
@@ -879,14 +887,14 @@ class PoolRoot:
                 names = _names(segment)
                 live = "retired" not in names
                 if live:
-                    slots, resolved, _ = _slots(names)
+                    slots, resolved, jobs = _slots(names)
                     full = len(slots) >= self.segment_items
                     live = not (full and resolved.issuperset(slots))
                     if not live:
                         _create(segment, "retired", b"")
                 if live:
                     prefix = False
-                    yield seq, segment, slots, resolved
+                    yield seq, segment, slots, resolved, jobs
                 elif prefix:
                     q.oldest = seq + 1
                     q.targets = {k: v for k, v in q.targets.items() if k[0] > seq}
@@ -903,6 +911,35 @@ class PoolRoot:
                 return None
             q.targets[(seq, n)] = target
         return q.targets[(seq, n)]
+
+    def oldest(self, queue: str) -> float | None:
+        """The storage mtime of the oldest slot of ``queue`` not marked resolved, None when there
+        is none: how long its oldest waiting ticket has waited (RFC 0005 section 4.2).
+        """
+        q = self.queue(queue)
+        walk = self._segments(q)
+        with contextlib.closing(walk):
+            for _, segment, slots, resolved, _ in walk:
+                for n in slots:
+                    if n in resolved:
+                        continue
+                    try:
+                        return segment.lstat(f"slot-{n}").st_mtime
+                    except OSError as err:
+                        if not _absent(err):
+                            raise
+        return None
+
+    def queues(self) -> list[str]:
+        """The names of the queues made on this pool."""
+        with _dir(self._root, "queues") as queues:
+            labels = _names(queues)
+        found = []
+        for label in labels:
+            q = self._by_label(label)
+            if q is not None:
+                found.append(q.name)
+        return sorted(found)
 
     def depth(self, queue: str) -> int:
         """An upper bound on the tickets of ``queue`` without a final outcome for every job."""
@@ -987,11 +1024,17 @@ class PoolRoot:
             return _read_record(d, f"{g}.started")
 
     def charges(self, checksum: str, fingerprint: str) -> dict[str, int]:
-        """A job's crash count (generations with ``charged``) and its ``resource_moves``
-        (``ladder`` generations at the ``call`` phase)."""
+        """A job's crash count (generations with ``charged``), its ``resource_moves``
+        (``ladder`` generations at the ``call`` phase) and its infrastructure requeues
+        (``restart`` generations at the ``call`` or ``load`` phase, `Claim.restart`)."""
         gens = [r for _, r in self.generations(checksum, fingerprint)]
         return {
             "crashes": sum(1 for r in gens if r.get("charged") is True),
+            "infrastructure": sum(
+                1
+                for r in gens
+                if r.get("cause") == "restart" and r.get("phase") in ("call", "load")
+            ),
             "resource_moves": sum(
                 1
                 for r in gens
@@ -1067,11 +1110,13 @@ class PoolRoot:
         job = (checksum, fingerprint)
         return self._holder(self.newest(*job), job)
 
-    def collect(self) -> int:
+    def collect(self, payload_age: float = 86400.0) -> int:
         """Remove each settled job's generations and started marks except the highest generation
-        and its mark, which keep numbering from restarting; return how many files went.
+        and its mark, which keep numbering from restarting, and each payload no unsettled ticket
+        names that is older than ``payload_age`` seconds (a payload is written before the ticket
+        that names it); return how many files went.
         """
-        removed = 0
+        removed = self._collect_payloads(payload_age)
         with _dir(self._root, "follow") as follow:
             for name in _names(follow):
                 d = _child(follow, name)
@@ -1096,6 +1141,81 @@ class PoolRoot:
                                 d.unlink(member)
                                 removed += 1
         return removed
+
+    def _collect_payloads(self, age: float) -> int:
+        payloads = _child(self._root, "payloads")
+        if payloads is None:
+            return 0
+        with payloads:
+            names = [n for n in _names(payloads) if FINGERPRINT.fullmatch(n)]
+            if not names:
+                return 0
+            live = self._live_payloads()
+            now = time.time()
+            removed = 0
+            for name in names:
+                if name in live:
+                    continue
+                try:
+                    if now - payloads.lstat(name).st_mtime < age:
+                        continue
+                    payloads.unlink(name)
+                    removed += 1
+                except OSError as err:
+                    if not _absent(err):
+                        raise
+            return removed
+
+    def _live_payloads(self) -> set[str]:
+        """The payload names every ticket not marked resolved names (a ticket without a slot, or
+        unreadable, keeps what it might name)."""
+        live: set[str] = set()
+        keep_all = False
+        with _dir(self._root, "queues") as queues:
+            labels = _names(queues)
+        for label in labels:
+            q = self._by_label(label)
+            if q is None:
+                continue
+            for name in _names(q.tickets):
+                digest = name[: -len(".json")] if name.endswith(".json") else ""
+                if not FINGERPRINT.fullmatch(digest):
+                    continue
+                if self._resolved(q, digest):
+                    continue
+                try:
+                    ticket = self._ticket(q, digest)
+                except CorruptTicket:
+                    ticket = None
+                if ticket is None:
+                    keep_all = True
+                    continue
+                for job in ticket.jobs:
+                    path = job.payload.get("path")
+                    if isinstance(path, str):
+                        live.add(os.path.basename(path))
+        if keep_all:
+            live.add("*")
+            return {"*"} | live | set(self._all_payloads())
+        return live
+
+    def _all_payloads(self) -> list[str]:
+        payloads = _child(self._root, "payloads")
+        if payloads is None:
+            return []
+        with payloads:
+            return _names(payloads)
+
+    def _resolved(self, q: _Queue, digest: str) -> bool:
+        slot = self._slot_of(q, digest)
+        if slot is None:
+            return False
+        seq, n = slot
+        segment = _child(q.segments, _seq(seq))
+        if segment is None:
+            return False
+        with segment:
+            return _read(segment, f"res-{n}") is not None
 
     def _job_of(self, record: dict, name: str) -> JobKey | None:
         """The job a follow directory ``name`` is for, from the ticket its generation names."""
@@ -1315,6 +1435,87 @@ class PoolRoot:
                     return n
                 n += 1
 
+    # -- worker classes and workers ------------------------------------------------------
+
+    def put_class(self, name: str, record: dict) -> None:
+        """Write ``classes/<name>.json``, the worker class as JCS, once; an existing one stays."""
+        queue_label(name)
+        with _dir(self._root, "classes") as classes:
+            _create(classes, f"{name}.json", jcs(record))
+
+    def worker_class(self, name: str) -> dict | None:
+        """The record of worker class ``name``, None when the pool has none."""
+        queue_label(name)
+        with _dir(self._root, "classes") as classes:
+            return _read_record(classes, f"{name}.json")
+
+    def worker_dir(self, token: str) -> StorageDir:
+        """``workers/<token>/``, made if missing."""
+        if not _HEX32.fullmatch(token):
+            raise ValueError(f"a worker token is 32 hex digits, not {token!r}")
+        with _dir(self._root, "workers") as workers:
+            return _dir(workers, token)
+
+    def write_worker_record(self, token: str, name: str, record: dict) -> None:
+        """Write the worker's record ``name`` (``ready.json``) once."""
+        with self.worker_dir(token) as d:
+            _create(d, name, jcs(record))
+
+    def worker_record(self, token: str, name: str) -> dict | None:
+        """The worker's record ``name``, None when absent."""
+        with _dir(self._root, "workers") as workers:
+            d = _child(workers, token)
+            if d is None:
+                return None
+            with d:
+                return _read_record(d, name)
+
+    def write_call(self, token: str, seq: int, record: dict) -> None:
+        """Write the call record ``workers/<token>/calls/<seq>.json`` by exclusive create, before
+        the call runs (RFC 0005 section 4.3 step 4)."""
+        with self.worker_dir(token) as w, _dir(w, "calls") as calls:
+            if _create(calls, f"{_seq(seq)}.json", jcs(record)) == "exists":
+                raise FileExistsError(
+                    errno.EEXIST, "a call record is written once", seq
+                )
+
+    def call_done(self, token: str, seq: int) -> None:
+        """Write ``<seq>.done`` once the call returned."""
+        with self.worker_dir(token) as w, _dir(w, "calls") as calls:
+            _create(calls, f"{_seq(seq)}.done", jcs({"uuid": uuid.uuid4().hex}))
+
+    def calls(self, token: str) -> list[tuple[int, dict, bool]]:
+        """Each readable call record of a worker, oldest first, with whether it is done."""
+        with _dir(self._root, "workers") as workers:
+            w = _child(workers, token)
+            if w is None:
+                return []
+            with w:
+                d = _child(w, "calls")
+                if d is None:
+                    return []
+                with d:
+                    names = set(_names(d))
+                    found = []
+                    for name in sorted(names):
+                        stem, dot, ext = name.partition(".")
+                        if ext != "json" or not _SEQ.fullmatch(stem):
+                            continue
+                        record = _read_record(d, name)
+                        if record is not None:
+                            done = (
+                                f"{stem}.done" in names
+                                or _read(d, f"{stem}.done") is not None
+                            )
+                            found.append((int(stem), record, done))
+                    return found
+
+    def in_flight(self, token: str) -> dict | None:
+        """A worker's newest call record without ``done``: the call it was running when it died."""
+        for _, record, done in reversed(self.calls(token)):
+            return None if done else record
+        return None
+
     # -- holds and coordinator epochs ----------------------------------------------------
 
     def hold(self, queue: str, epoch: int, label: str) -> None:
@@ -1393,6 +1594,7 @@ class PoolRoot:
         *,
         beat: ty.Literal["thread", "external"] = "thread",
         epoch: int | None = None,
+        max_jobs: int | None = None,
     ) -> "Claim | None":
         """Claim the oldest claimable ticket of ``queue``; None when there is none.
 
@@ -1410,6 +1612,8 @@ class PoolRoot:
             ``"external"`` and hands ``claim.lease`` to its `BeaterClient` at once.
         epoch : int, optional
             The coordinator epoch whose holds count; default the newest.
+        max_jobs : int, optional
+            Pass over tickets of more jobs than this (a warm worker gathering one-job tickets).
         """
         q = self.queue(queue)
         held = self.holds(queue, epoch)
@@ -1423,9 +1627,11 @@ class PoolRoot:
         q.missing = {d: at for d, at in q.missing.items() if now - at < interval}
         walk = self._segments(q)
         with contextlib.closing(walk):
-            for seq, segment, slots, resolved in walk:
+            for seq, segment, slots, resolved, counts in walk:
                 for n in slots:
                     if n in resolved:
+                        continue
+                    if max_jobs is not None and counts.get(n, 1) > max_jobs:
                         continue
                     digest = self._target(q, segment, seq, n)
                     if digest is None or digest in q.judged or digest in q.missing:
@@ -1659,6 +1865,23 @@ class Claim:
                     cause="restart",
                     prior=record["attempt"],
                 )
+
+    def restart(self, job: TicketJob, *, phase: str = "call") -> str:
+        """Write the job's next generation, ``restart`` at ``phase`` naming this ticket, before an
+        infrastructure fault releases it, so the requeue is counted (`PoolRoot.charges`); return
+        the new attempt."""
+        current = self.current(job)
+        if current is None:
+            raise ValueError(f"job {job.checksum} is not held by ticket {self.digest}")
+        _, record = self.pool._allocate(
+            job.key,
+            ticket=self.digest,
+            queue=self._q.label,
+            cause="restart",
+            phase=phase,
+            prior=current[1]["attempt"],
+        )
+        return record["attempt"]
 
     def outcome(
         self, job: TicketJob, attempt: str, kind: str, **fields: ty.Any

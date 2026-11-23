@@ -1620,3 +1620,23 @@ def test_max_wait_before_the_patience_names_the_refusal(tmp_path, monkeypatch, r
     assert not isinstance(excinfo.value, LeaseRefused)
     assert isinstance(excinfo.value.__cause__, PermissionError)
     assert "refusing" in str(excinfo.value)
+
+
+def test_newest_mark_reads_the_lease_as_a_waiter_does(tmp_path):
+    from pydra.engine.lease import newest_mark
+
+    lockfile = tmp_path / "abc.lock"
+    assert newest_mark(lockfile) is None
+    token_dir = plant_foreign_lease(lockfile)
+    old = newest_mtime(lockfile)
+    beat = old + 50
+    os.utime(token_dir / HOLDER_FILE, (beat, beat))  # a heartbeat on the holder record
+    assert newest_mark(lockfile) == pytest.approx(
+        max(beat, os.lstat(lockfile).st_mtime)
+    )
+    os.rename(
+        token_dir, lockfile / ("gone-" + token_dir.name)
+    )  # a takeover moved it aside
+    assert newest_mark(lockfile) == pytest.approx(
+        max(beat, os.lstat(lockfile).st_mtime)
+    )
