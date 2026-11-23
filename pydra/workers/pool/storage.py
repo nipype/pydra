@@ -70,6 +70,9 @@ __all__ = [
 
 IS_WINDOWS = sys.platform == "win32"
 
+STOP_MARK = "stop.json"
+"""The worker record a coordinator writes to stop a worker, which drains on it as on SIGTERM."""
+
 POOL_FORMAT = "pool@1"
 TICKET_FORMAT = "pool-ticket@1"
 OUTCOME_FORMAT = "pool-outcome@1"

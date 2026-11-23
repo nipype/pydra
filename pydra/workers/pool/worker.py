@@ -113,6 +113,7 @@ from pydra.workers.pool.storage import (
     PoolOwnerMismatch,
     PoolRoot,
     PoolSettingsMismatch,
+    STOP_MARK,
     TicketJob,
 )
 
@@ -724,33 +725,40 @@ class Worker:
 
     @contextlib.contextmanager
     def _signals(self) -> ty.Iterator[None]:
-        if threading.current_thread() is not threading.main_thread():
-            yield
-            return
+        """Drain on SIGTERM (in the main thread) and on the worker's `STOP_MARK`, which a thread
+        looks for every ``poll_s``: either sets ``stop`` and wakes the worker."""
 
-        def drain(signum, frame):
+        def drain(signum=None, frame=None):
             self.stop.set()
             self._wake.set()
 
-        previous = signal.signal(signal.SIGTERM, drain)
+        done = threading.Event()
+        watcher = threading.Thread(
+            target=self._watch_stop_mark,
+            args=(done, drain),
+            name="pydra-pool-stop-mark",
+            daemon=True,
+        )
+        watcher.start()
+        main = threading.current_thread() is threading.main_thread()
+        previous = signal.signal(signal.SIGTERM, drain) if main else None
         try:
             yield
         finally:
-            signal.signal(signal.SIGTERM, previous)
+            if main:
+                signal.signal(signal.SIGTERM, previous)
+            done.set()
+            watcher.join()
 
-    def _stopping(self) -> bool:
-        """Whether the worker drains: on SIGTERM, or once its coordinator wrote its ``stop.json``
-        mark, which is how it is stopped where there is no SIGTERM, as on Windows."""
-        if not self.stop.is_set() and self.token is not None:
-            try:
-                marked = self.pool.worker_record(self.token, "stop.json") is not None
-            except OSError:
-                marked = False
-            if marked:
+    def _watch_stop_mark(self, done: threading.Event, drain) -> None:
+        mark = self.pool.path / "workers" / self.token / STOP_MARK
+        while not self.stop.is_set():
+            if mark.exists():
                 logger.info("worker %s was told to stop: draining", self.token)
-                self.stop.set()
-                self._wake.set()
-        return self.stop.is_set()
+                drain()
+                return
+            if done.wait(self.settings.poll_s):
+                return
 
     def _device(self):
         """The device providers load on: the first granted GPU on a CUDA class (an index into
@@ -805,7 +813,7 @@ class Worker:
         current: str | None = None
         spent, began, idle = 0, time.monotonic(), 0
         self._orphan_since = None
-        while not self._stopping() and self.recycle is None:
+        while not self.stop.is_set() and self.recycle is None:
             if not self._refresh():
                 return EXIT_FAULTS
             if self.substrate and self._orphaned():
@@ -1001,7 +1009,7 @@ class Worker:
             self._device_read = True
         try:
             for claim in held:
-                if self._stopping() or self.recycle is not None:
+                if self.stop.is_set() or self.recycle is not None:
                     break
                 if self._lost_claim(claim) or self._held_here(claim):
                     continue
@@ -2277,7 +2285,10 @@ class Worker:
         interval = self.settings.lease.renew_interval
         proved, drain_until = time.monotonic(), None
         while not done.is_set():
-            self._wake.wait(interval)
+            wait = interval
+            if drain_until is not None:  # wake when the drain is over
+                wait = max(0.0, min(interval, drain_until - time.monotonic()))
+            self._wake.wait(wait)
             self._wake.clear()
             if done.is_set():
                 break
@@ -2305,7 +2316,7 @@ class Worker:
                 self.recycle = self.recycle or "a call passed its deadline"
                 if self._stop_call():
                     self._ack_expired(token_dir)
-            if self._stopping():
+            if self.stop.is_set():
                 if drain_until is None:
                     drain_until = time.monotonic() + self.settings.drain_s
                 elif time.monotonic() >= drain_until:
