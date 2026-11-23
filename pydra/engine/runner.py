@@ -10,7 +10,15 @@ from collections import defaultdict
 from datetime import datetime
 import logging
 import attrs
+import cloudpickle as cp
 from pydra.engine.graph import DiGraph
+from pydra.engine.progress import (
+    UNSET,
+    TrackedSet,
+    changed,
+    changes,
+    tracked,
+)
 from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.job import Job
@@ -101,6 +109,16 @@ class NodeExecution(ty.Generic[TaskType]):
     _resolution_entries: "list[JobErrorEntry]"
     # The progress of the predecessors when the blocked elements were last checked
     _progress: tuple | None
+
+    # the tables whose changes are progress for `GraphRunner.ready` (`progress.changed`)
+    _TRACKED = frozenset({"blocked", "successful", "errored", "unrunnable", "queued"})
+
+    def __setattr__(self, name, value):
+        if name in self._TRACKED:
+            value = tracked(value)
+            if self.__dict__.get(name, UNSET) != value:
+                changed()
+        super().__setattr__(name, value)
 
     def __init__(
         self,
@@ -237,37 +255,43 @@ class NodeExecution(ty.Generic[TaskType]):
         """Updates the status of the tasks in the node."""
         if not self.started:
             return
-        # Check to see if any previously queued tasks have completed
+        # A job handed to an executor is not polled: it is classified when its outcome
+        # is reported to ``GraphRunner.complete``, which holds the result on the job
         for index, job in list(self.queued.items()):
-            try:
-                is_done = job.done
-            except ValueError:
-                errored = True
-                is_done = False
-            else:
-                errored = False
-            if is_done:
+            status = self._reported_status(job)
+            if status is None:
+                continue
+            if status == "done":
                 self.successful[job.state_index] = self.queued.pop(index)
-            elif job.errored or errored:
+            elif status == "errored":
                 self.errored[job.state_index] = self.queued.pop(index)
-            elif not job._awaiting_run and job.run_start_time:
+            elif job.run_start_time:
                 self.running[job.state_index] = (
                     self.queued.pop(index),
                     job.run_start_time,
                 )
-        # Check to see if any previously running tasks have completed
         for index, (job, _) in list(self.running.items()):
-            try:
-                is_done = job.done
-            except ValueError:  # raised by Job.done if the job has errored
-                errored = True
-                is_done = False
-            else:
-                errored = False
-            if is_done:
+            status = self._reported_status(job)
+            if status == "done":
                 self.successful[job.state_index] = self.running.pop(index)[0]
-            elif job.errored or errored:
+            elif status == "errored":
                 self.errored[job.state_index] = self.running.pop(index)[0]
+
+    @staticmethod
+    def _reported_status(job: "Job") -> str | None:
+        """``"done"`` or ``"errored"`` for a job whose outcome is known, ``"pending"``
+        for one that is not handed out, ``None`` for one still awaiting its report"""
+        held = job._held
+        if held is not None:
+            return "errored" if held.errored else "done"
+        if job.errored:
+            return "errored"
+        if job._awaiting_run:
+            return None
+        try:
+            return "done" if job.done else "pending"
+        except ValueError:  # raised by Job.done if the job has errored
+            return "errored"
 
     @property
     def all_failed(self) -> bool:
@@ -462,17 +486,57 @@ def job_error(job: "Job", exc: BaseException) -> str:
     return f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
 
 
+class RecordedError(RuntimeError):
+    """An error recorded by a worker that could not be read back as the exception raised:
+    its message is the traceback's last line, :attr:`exception_type` the type's
+    qualified name (None if not recorded)"""
+
+    def __init__(self, message: str, exception_type: str | None = None):
+        super().__init__(message)
+        self.exception_type = exception_type
+
+
+def result_error(job: "Job", result: "Result") -> BaseException:
+    """The error of an errored result as its worker recorded it (``_error.pklz``): the
+    exception itself where it was pickled, else a `RecordedError`; a `RuntimeError`
+    naming the missing record when there is none. The recorded traceback is kept as
+    ``recorded_traceback``."""
+    recorded = result.errors or {}
+    error = recorded.get("error message")
+    if isinstance(error, BaseException):
+        return error
+    if isinstance(error, str):
+        error = [error]
+    if error:
+        text = "".join(error)
+        try:
+            exc = cp.loads(recorded["exception pickle"])
+        except Exception:  # not recorded, or its class cannot be loaded here
+            exc = None
+        if not isinstance(exc, BaseException):
+            last = text.rstrip().splitlines()[-1] if text.strip() else ""
+            exc = RecordedError(last, recorded.get("error type"))
+        exc.recorded_traceback = text  # type: ignore[attr-defined]
+        return exc
+    return RuntimeError(
+        f"Job {job.name!r} errored and left no error record in {str(job.cache_dir)!r}"
+    )
+
+
 def error_entry(
     job_name: str, state_index: int | None, exc: BaseException, phase: str = "run"
 ) -> JobErrorEntry:
     """The record of an exception"""
     exc_class = type(exc)
+    exception_type = exc.exception_type if isinstance(exc, RecordedError) else None
     return JobErrorEntry(
         job_name=job_name,
         state_index=state_index,
-        exception_type=f"{exc_class.__module__}.{exc_class.__qualname__}",
+        exception_type=exception_type
+        or f"{exc_class.__module__}.{exc_class.__qualname__}",
         message=str(exc),
-        traceback="".join(format_exception(exc_class, exc, exc.__traceback__)),
+        traceback=getattr(exc, "recorded_traceback", None)
+        or "".join(format_exception(exc_class, exc, exc.__traceback__)),
         phase=phase,
     )
 
@@ -556,7 +620,8 @@ class GraphRunner:
         self.exec_graph: DiGraph[NodeExecution] = self.workflow.execution_graph(
             submitter=submitter
         )
-        self._handed: set[Job] = set()
+        self._handed: set[Job] = TrackedSet()
+        self._done_prefix: dict[int, int] = {}
         self._errors: list[str] = []
         self._entries: list[JobErrorEntry] = []
         self._failed = False
@@ -576,24 +641,46 @@ class GraphRunner:
                 self._failed = True
 
     def _runnable(self) -> list[Job]:
-        return self._runnable_jobs(self.exec_graph)
+        return self._runnable_jobs(self.exec_graph, self._done_upto(self.exec_graph))
+
+    def _progress(self) -> int:
+        """The count of changes to the state a pass of :meth:`ready` reads: the jobs
+        handed out and the nodes' tables (`~pydra.engine.progress.changed`). ``ready``
+        repeats its pass until a pass hands out a job or leaves the count unchanged."""
+        return changes()
+
+    def _done_upto(self, graph: "DiGraph[NodeExecution]") -> int:
+        """The number of leading nodes of ``graph`` (in node order) that are done"""
+        nodes = graph.sorted_nodes
+        i = self._done_prefix.get(id(graph), 0)
+        while i < len(nodes) and nodes[i].done:
+            i += 1
+        self._done_prefix[id(graph)] = i
+        return i
 
     @staticmethod
-    def _runnable_jobs(graph: "DiGraph[NodeExecution]") -> list[Job]:
-        """The jobs of all the nodes that are released, in node order"""
-        jobs: list[Job] = []
+    def _window(
+        graph: "DiGraph[NodeExecution]", start: int = 0
+    ) -> list["NodeExecution"]:
+        """The nodes a pass of :meth:`ready` can change, in node order: from ``start``, the
+        nodes not done up to the first whose predecessors include a node not started"""
+        window: list[NodeExecution] = []
         not_started = set()
-        node: NodeExecution
-        for node in graph.sorted_nodes:
+        for node in graph.sorted_nodes[start:]:
             if node.done:
                 continue
-            # since the list is sorted (breadth-first) we can stop
-            # when we find a job that depends on any job that is already in jobs
-            preds = set(graph.predecessors[node.name])
-            if preds.intersection(not_started):
+            if not_started.intersection(graph.predecessors[node.name]):
                 break
             if not node.started:
                 not_started.add(node)
+            window.append(node)
+        return window
+
+    @staticmethod
+    def _runnable_jobs(graph: "DiGraph[NodeExecution]", start: int = 0) -> list[Job]:
+        """The jobs of all the nodes that are released, in node order, from ``start``"""
+        jobs: list[Job] = []
+        for node in GraphRunner._window(graph, start):
             jobs.extend(node.get_runnable_tasks(graph))
         return jobs
 
@@ -610,9 +697,13 @@ class GraphRunner:
         Round
             The jobs to dispatch, each handed out once, with ``job.rerun`` set
         """
-        candidates = [j for j in self._runnable() if j not in self._handed]
-        if candidates and not self._inner_rerun:
-            candidates = self._read_succeeded(candidates)
+        while True:
+            before = self._progress()
+            candidates = [j for j in self._runnable() if j not in self._handed]
+            if candidates and not self._inner_rerun:
+                candidates = self._read_succeeded(candidates)
+            if candidates or self._progress() == before:
+                break
         if limit is not None and len(candidates) > limit:
             if limit > 0:
                 logger.info(
@@ -660,8 +751,10 @@ class GraphRunner:
             A job from :meth:`ready`
         outcome : Result | Failed | None
             What came of running it. A :class:`Failed` is recorded as the job's error and
-            the elements that read the job become unrunnable; None when the worker
-            returned no result
+            the elements that read the job become unrunnable. A ``Result`` is held on the
+            job as given (whatever attributes it carries stay on it), so readers use it
+            without a store read; an errored one is a failure of the run. None when the
+            worker returned no result
         """
         job._awaiting_run = False
         if isinstance(outcome, Failed):
@@ -672,8 +765,14 @@ class GraphRunner:
                 self._first_error = exc
             self._errors.append(job_error(job, exc))
             self._entries.append(error_entry(job.name, job.state_index, exc))
-        elif outcome is not None and outcome.errored:
-            self._failed = True
+        else:
+            job._held = outcome
+            if outcome is not None and outcome.errored:
+                exc = result_error(job, outcome)
+                job._errored = True
+                self._failed = True
+                self._errors.append(job_error(job, exc))
+                self._entries.append(error_entry(job.name, job.state_index, exc))
         self._collect_resolution_errors()
 
     def stuck(self) -> str | None:
@@ -718,7 +817,7 @@ class GraphRunner:
     @property
     def done(self) -> bool:
         """Whether every node of the graph has completed"""
-        return all(n.done for n in self.exec_graph.nodes)
+        return self._done_upto(self.exec_graph) == len(self.exec_graph.sorted_nodes)
 
     @property
     def entries(self) -> list[JobErrorEntry]:

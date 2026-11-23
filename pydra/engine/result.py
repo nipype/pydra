@@ -387,8 +387,11 @@ def create_checksum(name, inputs):
     return "-".join((name, inputs))
 
 
-def record_error(error_path, error):
-    """Write an error file."""
+def record_error(error_path, error, exception: BaseException | None = None):
+    """Write an error file: ``error`` (traceback lines) and, when given, the exception's
+    qualified type and, if it can be pickled, the exception pickled on its own
+    (``"exception pickle"``), so a reader that cannot unpickle it still reads the rest.
+    """
 
     error_message = str(error)
 
@@ -411,6 +414,16 @@ def record_error(error_path, error):
         "name with checksum": name_checksum,
         "error message": error,
     }
+    if exception is not None:
+        exc_class = type(exception)
+        full_error["error type"] = f"{exc_class.__module__}.{exc_class.__qualname__}"
+        try:
+            pickled = cp.dumps(exception)
+            cp.loads(pickled)
+        except Exception:
+            pass
+        else:
+            full_error["exception pickle"] = pickled
 
     with atomic_write(error_path / "_error.pklz") as fp:
         cp.dump(full_error, fp)
