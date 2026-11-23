@@ -1,8 +1,8 @@
 """Job payloads of a worker pool (RFC 0005 section 5.2).
 
-A ticket names each job's payload, never a pickle: either a file in the job's work directory and its
-sha256, read only after the ownership walk of RFC 0003 section 6.4 passes for that directory and the
-digest matches, or JSON carried in the ticket by a codec whose jobs are JSON.
+A ticket names each job's payload, never a pickle: either a file ``<pool root>/payloads/<sha256>``,
+read only after the ownership walk of RFC 0003 section 6.4 passes for that directory and the digest
+matches, or JSON carried in the ticket by a codec whose jobs are JSON.
 """
 
 from __future__ import annotations
@@ -24,16 +24,16 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
 
 __all__ = [
-    "JOB_FILE",
     "JobCodec",
     "PayloadMismatch",
+    "PAYLOADS",
     "PrivatePickle",
     "read_payload",
     "write_payload",
 ]
 
-JOB_FILE = "_job.pklz"
-"""The payload file in a job's work directory."""
+PAYLOADS = "payloads"
+"""The directory of a pool's payload files, under its root, each named by its sha256."""
 JSON_MEDIA = "application/json"
 
 
@@ -91,17 +91,19 @@ def _make_private_dir(path: Path) -> None:
         os.chmod(path, 0o700)
 
 
-def write_payload(codec: JobCodec, job: "Job", work_dir: os.PathLike) -> dict:
+def write_payload(codec: JobCodec, job: "Job", root: os.PathLike) -> dict:
     """Encode ``job`` and return its payload for a ticket.
 
     A JSON encoding is returned inline as ``{"codec", "sha256", "json"}``, the digest taken of its
-    JCS form. Any other is written once to ``<work_dir>/_job.pklz`` (``0o600``; the directory made
-    ``0o700`` if absent), and ``{"codec", "path", "sha256"}`` is returned.
+    JCS form. Any other is written once to ``<root>/payloads/<sha256>`` (``0o600``; the directory
+    made ``0o700`` if absent) under the pool's ``root``, and ``{"codec", "path", "sha256"}`` is
+    returned; it is read by every attempt of the job and removed only by
+    `~pydra.workers.pool.storage.PoolRoot.collect` once no unsettled ticket names it.
 
     Raises
     ------
     PayloadMismatch
-        The work directory already holds a different payload.
+        The payload file holds other bytes than its name digests.
     """
     data, media = codec.encode(job)
     if media == JSON_MEDIA:
@@ -112,17 +114,14 @@ def write_payload(codec: JobCodec, job: "Job", work_dir: os.PathLike) -> dict:
             "sha256": hashlib.sha256(canonical).hexdigest(),
             "json": value,
         }
-    work_dir = Path(work_dir).absolute()
-    _make_private_dir(work_dir)
-    with StorageDir.open_root(work_dir, POLICY, trust="trusted") as handle:
-        if _create(handle, JOB_FILE, data) == "exists":
-            raise PayloadMismatch(f"{work_dir / JOB_FILE} holds another job")
-        handle.set_mode(FILE_MODE, JOB_FILE)
-    return {
-        "codec": codec.name,
-        "path": str(work_dir / JOB_FILE),
-        "sha256": hashlib.sha256(data).hexdigest(),
-    }
+    digest = hashlib.sha256(data).hexdigest()
+    where = Path(root).absolute() / PAYLOADS
+    _make_private_dir(where)
+    with StorageDir.open_root(where, POLICY, trust="trusted") as handle:
+        if _create(handle, digest, data) == "exists":
+            raise PayloadMismatch(f"{where / digest} holds other bytes")
+        handle.set_mode(FILE_MODE, digest)
+    return {"codec": codec.name, "path": str(where / digest), "sha256": digest}
 
 
 def read_payload(codec: JobCodec, payload: dict, store: ty.Any) -> "Job":

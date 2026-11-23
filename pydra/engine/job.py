@@ -64,6 +64,7 @@ logger = logging.getLogger("pydra")
 if ty.TYPE_CHECKING:
     from pydra.engine.submitter import Submitter
     from pydra.engine.portable.store import Committed
+    from pydra.engine.lease import Lease
     from pydra.compose.base import Arg
 
 TaskType = ty.TypeVar("TaskType", bound=Task)
@@ -129,6 +130,11 @@ class Job(ty.Generic[TaskType]):
     carry the attempt. None for a job never handed out (settled or stored)."""
     committed: "Committed | None" = None
     """What this process's `PortableStore` publish returned for the job."""
+    claim: "Lease | None" = None
+    """The claim lease of the worker-pool ticket the job runs under, set by the pool worker (RFC 0005
+    section 4.3). Under a store with work directories it is the job's de-duplication lease, and under
+    any store it is proved immediately before the result is published: a lost claim refuses the
+    publish with `LeaseLost`. Never pickled."""
 
     def __init__(
         self,
@@ -217,6 +223,7 @@ class Job(ty.Generic[TaskType]):
         self._stored_contexts = None
         self.attempt = None
         self.committed = None
+        self.claim = None
         # The stored entry the job runs against, set from a `Verify` by `_reusable` or by a
         # runner (`Candidate | None`; RFC 0003 section 7.1)
         self.verify = None
@@ -272,6 +279,7 @@ class Job(ty.Generic[TaskType]):
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
         state.pop("_awaiting_run", None)
+        state.pop("claim", None)
         # A lookup made before dispatch is current only for a run in this process: a job
         # handed to a worker may wait in a queue, so it looks the store up again
         state.pop("looked_up", None)
@@ -306,6 +314,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_stored_contexts", None)
         self.__dict__.setdefault("attempt", None)
         self.__dict__.setdefault("committed", None)
+        self.__dict__.setdefault("claim", None)
         self.__dict__.setdefault("verify", None)
         self.__dict__.setdefault("looked_up", False)
         self.__dict__.setdefault("replace", False)
@@ -622,7 +631,26 @@ class Job(ty.Generic[TaskType]):
         runs, so a store with work directories guards it whatever its de-duplication."""
         if self.can_resume:
             return self.store.acquire(self.checksum, self.context, resumable=True)
+        if self.claim is not None and self._has_work_dir:
+            return _ClaimSlot(self.claim, self.checksum)
         return self.store.acquire(self.checksum, self.context)
+
+    def _prove_claim(self, result: Result) -> None:
+        """Before a result is published under a worker pool's claim, prove the claim (RFC 0005
+        section 4.3 step 4); an errored result publishes nothing and is not checked.
+
+        Raises
+        ------
+        LeaseLost
+            The claim was lost: the result is not published.
+        """
+        if self.claim is None or result.errored:
+            return
+        if not lease_still_held(self.claim):
+            raise LeaseLost(
+                f"the claim under which {self.name!r} ran was lost: its result is not published",
+                self.claim.lockfile,
+            )
 
     def _reusable(self, lease, looked_up: bool = False) -> Result | None:
         """The result a run under the lease can serve instead of computing: the stored
@@ -849,6 +877,7 @@ class Job(ty.Generic[TaskType]):
                 finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
+                    self._prove_claim(result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
@@ -932,6 +961,7 @@ class Job(ty.Generic[TaskType]):
                 finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
+                    self._prove_claim(result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
@@ -1262,3 +1292,43 @@ def load_job(job_pkl: os.PathLike) -> "Job[TaskType]":
     with open(job_pkl, "rb") as fp:
         job = cp.load(fp)
     return job
+
+
+class _ClaimSlot:
+    """The de-duplication lease of a job run under a worker pool's claim: held while the claim is,
+    proved through it, and beaten by the worker's beater, never by a thread of its own.
+    """
+
+    def __init__(self, claim, checksum: str) -> None:
+        self.claim = claim
+        self.checksum = checksum
+        self.cache_dir = None
+
+    @property
+    def lost(self):
+        return self.claim.lost
+
+    @property
+    def held(self) -> bool:
+        return not self.lost
+
+    def prove(self) -> bool:
+        return lease_still_held(self.claim)
+
+    def try_take(self) -> None:
+        return None
+
+    def __enter__(self) -> "_ClaimSlot":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    async def __aenter__(self) -> "_ClaimSlot":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    def __repr__(self) -> str:
+        return f"_ClaimSlot({self.checksum!r})"

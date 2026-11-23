@@ -458,6 +458,51 @@ class _Heartbeat(threading.Thread):
             last_ok = time.monotonic()
 
 
+def _newest_mtime(
+    lockfile: Path, entries: list[str]
+) -> tuple[float | None, OSError | None]:
+    """The newest mtime of the lease at ``lockfile``, its entries and theirs (the holder
+    record and heartbeats), so a renewal shows even where a directory's own mtime is
+    reported late, and the error of a mark that exists but could not be read. The mtime
+    is None if the lease is gone.
+
+    A mark that is gone is skipped. The children of an entry that cannot be listed are
+    not marks; one that is listed but cannot be read is reported."""
+    mtimes, unreadable = [], None
+    paths = [lockfile]
+    for entry in entries:
+        paths.append(lockfile / entry)
+        try:
+            paths.extend(lockfile / entry / e for e in os.listdir(paths[-1]))
+        except OSError:
+            pass
+    for path in paths:
+        try:
+            mtimes.append(os.lstat(path).st_mtime)
+        except OSError as err:
+            if err.errno not in (errno.ENOENT, errno.ENOTDIR, _ESTALE):
+                unreadable = err
+    try:  # read again after listing, so a takeover renamed meanwhile shows
+        mtimes.append(os.lstat(lockfile).st_mtime)
+    except FileNotFoundError:
+        return None, unreadable
+    except OSError as err:
+        unreadable = err
+    return (max(mtimes) if mtimes else None), unreadable
+
+
+def newest_mark(lockfile: os.PathLike) -> float | None:
+    """The newest mark of the lease at ``lockfile``, read as a waiter reads it (see
+    `DirectoryLease`); None when the lease is gone. One reader for every process that judges
+    whether a lease is beaten."""
+    lockfile = Path(lockfile)
+    try:
+        entries = os.listdir(lockfile)
+    except OSError:
+        entries = []
+    return _newest_mtime(lockfile, entries)[0]
+
+
 @attrs.define
 class DirectoryLease:
     """A lease taken by ``mkdir`` and kept alive by a heartbeat.
@@ -737,34 +782,7 @@ class DirectoryLease:
         return record or None
 
     def _newest_mtime(self, entries: list[str]) -> tuple[float | None, OSError | None]:
-        """The newest mtime of the lease, its entries and theirs (the holder record
-        and heartbeats), so a renewal shows even where a directory's own mtime is
-        reported late, and the error of a mark that exists but could not be read.
-        The mtime is None if the lease is gone.
-
-        A mark that is gone is skipped. The children of an entry that cannot be
-        listed are not marks; one that is listed but cannot be read is reported."""
-        mtimes, unreadable = [], None
-        paths = [self.lockfile]
-        for entry in entries:
-            paths.append(self.lockfile / entry)
-            try:
-                paths.extend(self.lockfile / entry / e for e in os.listdir(paths[-1]))
-            except OSError:
-                pass
-        for path in paths:
-            try:
-                mtimes.append(os.lstat(path).st_mtime)
-            except OSError as err:
-                if err.errno not in (errno.ENOENT, errno.ENOTDIR, _ESTALE):
-                    unreadable = err
-        try:  # read again after listing, so a takeover renamed meanwhile shows
-            mtimes.append(os.lstat(self.lockfile).st_mtime)
-        except FileNotFoundError:
-            return None, unreadable
-        except OSError as err:
-            unreadable = err
-        return (max(mtimes) if mtimes else None), unreadable
+        return _newest_mtime(self.lockfile, entries)
 
     def _judge(self) -> bool:
         """Take over the lease if it is stale; whether it was removed."""

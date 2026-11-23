@@ -728,6 +728,7 @@ def test_ticket_carries_ladder_and_moves_up_it(tmp_path):
     assert new.ladder == ("gpu-b200",) and new.queue == "gpu-h100-80"
     assert pool.charges(job.checksum, job.fingerprint) == {
         "crashes": 0,
+        "infrastructure": 0,
         "resource_moves": 1,
     }
     assert pool.follow(job.checksum, job.fingerprint) == moved
