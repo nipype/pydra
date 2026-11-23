@@ -28,7 +28,9 @@ __all__ = [
     "PayloadMismatch",
     "PAYLOADS",
     "PrivatePickle",
+    "encode_payload",
     "read_payload",
+    "store_payload",
     "write_payload",
 ]
 
@@ -105,7 +107,24 @@ def write_payload(codec: JobCodec, job: "Job", root: os.PathLike) -> dict:
     PayloadMismatch
         The payload file holds other bytes than its name digests.
     """
-    data, media = codec.encode(job)
+    return store_payload(codec, *encode_payload(codec, job), root)
+
+
+def encode_payload(codec: JobCodec, job: "Job") -> tuple[bytes, str]:
+    """``job`` encoded by ``codec``, as ``(data, media type)``: the half of `write_payload` that
+    touches no storage, so its errors are the job's own."""
+    return codec.encode(job)
+
+
+def store_payload(codec: JobCodec, data: bytes, media: str, root: os.PathLike) -> dict:
+    """The ticket payload of ``data``, encoded by ``codec``: the half of `write_payload` that writes
+    the payload file (see there).
+
+    Raises
+    ------
+    PayloadMismatch
+        The payload file holds other bytes than its name digests.
+    """
     if media == JSON_MEDIA:
         value = json.loads(data)
         canonical = jcs(value)

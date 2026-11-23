@@ -31,8 +31,10 @@ from pydra.workers import slurm
 from pydra.workers.pool.classes import WorkerClass
 from pydra.workers.pool.faults import FaultBudgets
 from pydra.workers.pool.settings import PoolSettings
+from pydra.workers.pool import substrate as substrate_module
 from pydra.workers.pool.substrate import (
     Attachment,
+    NodeLocalStorage,
     SlurmSubstrate,
     SubstrateError,
 )
@@ -123,6 +125,8 @@ def fake_slurm(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_SLURM", str(state))
     monkeypatch.setattr(slurm, "_SHARED_LISTING", slurm.QueueListing())
+    # the fake cluster is this host, and its pools live under the temp directory
+    monkeypatch.setattr(substrate_module, "node_local", lambda path: None)
     yield state
     hung = _hung(state)
     for pid in hung:
@@ -338,6 +342,106 @@ def test_a_class_passes_the_qos_its_site_requires(tmp_path, fake_slurm, key, exp
 def test_start_before_attach_refused(tmp_path, fake_slurm):
     with pytest.raises(RuntimeError, match="attach"):
         SlurmSubstrate().start(_cls(), 1)
+
+
+# -- node-local storage --------------------------------------------------------------------------
+
+
+def test_pool_on_node_local_storage_refused_at_open(tmp_path):
+    """A pool opened under the temp directory with a `SlurmSubstrate` raises `NodeLocalStorage` at
+    once, naming the root: a worker on another node could reach neither it nor its log.
+    """
+    from pydra.workers.pool.pool import WarmPool
+
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+    with pytest.raises(NodeLocalStorage, match="pool root") as info:
+        WarmPool(
+            tmp_path / "pool",
+            [_cls()],
+            SlurmSubstrate(),
+            store=sub.store,
+            settings=PoolSettings(lease=LEASE, poll_s=0.05),
+            probe=False,
+        )
+    assert str(tmp_path / "pool") in str(info.value)
+    assert "allow_node_local" in str(info.value)
+    assert not (tmp_path / "pool").exists()  # refused before the pool's tree was made
+
+
+def test_allow_node_local_accepts_a_node_local_root(tmp_path):
+    """``allow_node_local=True`` (a cluster of one node) attaches a pool under the temp directory."""
+    sub = SlurmSubstrate(allow_node_local=True)
+    root = tmp_path / "pool"
+    sub.attach(Attachment(root, root / "private" / "settings.json", pool_id=POOL_ID))
+    assert sub.prefix.startswith(f"pydra-{POOL_ID}-e")
+
+
+@pytest.mark.parametrize(
+    "path, tmpdir, kind, local",
+    [
+        ("/tmp/sl-1/pool", None, "xfs", True),
+        ("/var/tmp/pool", None, "xfs", True),
+        ("/dev/shm/pool", None, "tmpfs", True),
+        ("/tmp/sl-9/pool", "/tmp/sl-9", "xfs", True),
+        ("/scratch/job-7/pool", "/scratch/job-7", None, True),
+        ("/scratch/job-7/pool", "/scratch/job-7", "lustre", False),
+        ("/scratch/job-7/pool", "/scratch/job-7", "gpfs", False),
+        ("/shared/lab/pool", None, "tmpfs", True),
+        ("/shared/lab/pool", None, "nfs4", False),
+        ("/shared/lab/pool", None, None, False),
+    ],
+)
+def test_node_local_paths(monkeypatch, path, tmpdir, kind, local):
+    """`node_local` decides by filesystem type first: a network or parallel filesystem is shared,
+    ``$TMPDIR`` on it included, and a memory filesystem is local. Otherwise a path under ``/tmp``,
+    ``/var/tmp``, ``/dev/shm`` or ``$TMPDIR`` is local, and any other passes.
+    """
+    if tmpdir is None:
+        monkeypatch.delenv("TMPDIR", raising=False)
+    else:
+        monkeypatch.setenv("TMPDIR", tmpdir)
+    monkeypatch.setattr(substrate_module, "_filesystem_type", lambda p: kind)
+    monkeypatch.setattr("tempfile.gettempdir", lambda: "/tmp")
+    why = substrate_module.node_local(path)
+    assert (why is not None) is local
+    if local:
+        assert path in why
+
+
+def test_worker_log_directory_on_node_local_storage_refused(tmp_path, monkeypatch):
+    """A worker log directory that resolves to node-local storage (a symlink to ``/tmp``) is refused
+    even when the pool root is shared."""
+    monkeypatch.setattr(
+        substrate_module,
+        "node_local",
+        lambda p: "it is under /tmp" if Path(p).name == "logs" else None,
+    )
+    root = tmp_path / "pool"
+    with pytest.raises(NodeLocalStorage, match="worker log directory"):
+        SlurmSubstrate().attach(
+            Attachment(root, root / "private" / "settings.json", pool_id=POOL_ID)
+        )
+
+
+def test_filesystem_type_reads_the_longest_mount(tmp_path, monkeypatch):
+    """The filesystem type of a path is its longest mount point's, from the mount table."""
+    table = tmp_path / "mounts"
+    table.write_text(
+        "rootfs / tmpfs rw 0 0\n"
+        "server:/lab /shared nfs4 rw 0 0\n"
+        "server:/lab/x /shared/lab\\040x nfs rw 0 0\n"
+        "server:/w /shared/a\\011b\\134c lustre rw 0 0\n"
+    )
+    real = Path
+
+    def mounts(name, *args):
+        return table if name == "/proc/self/mounts" else real(name, *args)
+
+    monkeypatch.setattr(substrate_module, "Path", mounts)
+    assert substrate_module._filesystem_type(real("/shared/lab/pool")) == "nfs4"
+    assert substrate_module._filesystem_type(real("/shared/lab x/pool")) == "nfs"
+    assert substrate_module._filesystem_type(real("/opt/pool")) == "tmpfs"
+    assert substrate_module._filesystem_type(real("/shared/a\tb\\c/pool")) == "lustre"
 
 
 # -- the per-user CPU cap ------------------------------------------------------------------------
@@ -1316,13 +1420,14 @@ def test_restarted_coordinator_never_exceeds_max_workers(
 @pytest.mark.skipif(not shutil.which("sbatch"), reason="needs a Slurm scheduler")
 def test_slurm_substrate_real(tmp_path, tasks):
     """On a real Slurm cluster a pool starts its worker with one ``sbatch``, the worker runs the
-    round and its log is under the pool's private directory; closing the pool cancels it.
+    round and its log is under the pool's private directory; closing the pool cancels it. The
+    pool is under the temp directory, which the CI container's one node is the only one to see.
     """
     from pydra.engine.drivers import drive
     from pydra.workers.pool.pool import WarmPool
 
     sub = Submitter(cache_root=tmp_path / "store", worker="debug")
-    substrate = SlurmSubstrate()
+    substrate = SlurmSubstrate(allow_node_local=True)
     pool = WarmPool(
         tmp_path / "pool",
         [_cls(cpus=1, max_workers=1)],
