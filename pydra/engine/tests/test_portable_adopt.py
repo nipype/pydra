@@ -662,3 +662,88 @@ def test_cli_store_adopt_exits_nonzero_when_misfiled(tmp_path):
     assert (
         tmp_path / HEADER_NAME
     ).exists()  # adopted; the entry is quarantined on read
+
+
+# -- fix round 2: names compared as a case- and normalization-insensitive filesystem would
+
+
+@pytest.mark.parametrize(
+    "dirs",
+    [
+        dirs_with(quarantine="STORE@7"),  # the entries, case-folded
+        dirs_with(staging="Store@7"),
+        dirs_with(staging="TRASH"),  # staging and quarantine, case-folded
+        dirs_with(quarantine="Leases"),
+        dirs_with(staging="WORK"),
+        dirs_with(quarantine="Audit"),
+        dirs_with(staging="PYDRA-STORE.JSON"),
+        dirs_with(quarantine=".PYDRA-STORE." + "A" * 32 + ".TMP"),
+        dirs_with(sidecars={"provenance": "Trash/x@1"}),
+        dirs_with(sidecars={"provenance": "STORE@7/x@1"}),
+        dirs_with(staging="sidecars"),  # the default sidecar root
+        dirs_with(quarantine="SideCars"),
+    ],
+)
+def test_adopt_refuses_dirs_folded_alike(tmp_path, dirs):
+    tree.build_tree(tmp_path, n=1)
+    with pytest.raises(AdoptRefused):
+        do_adopt(tmp_path, header=attrs.evolve(header(), dirs=dirs))
+    assert (tmp_path / tree.VERSION).is_dir()
+    assert not (tmp_path / HEADER_NAME).exists()
+
+
+def test_layout_names_fold_unicode_normalization():
+    from pydra.engine.portable.layout import StoreLayoutMismatch, check_layout_names
+
+    nfc, nfd = "café@1", "café@1"
+    for dirs in (
+        {"staging": nfd, "quarantine": "q", "sidecars": {}},
+        {"staging": "s", "quarantine": "CAFÉ@1", "sidecars": {}},
+        {"staging": "xé", "quarantine": "X" + "é", "sidecars": {}},
+    ):
+        with pytest.raises(StoreLayoutMismatch) as err:
+            check_layout_names(dirs, nfc, "sha256-2")
+        assert err.value.key == "dirs"
+
+
+@pytest.mark.parametrize("quarantine", ["RESULTS@1", "Leases", "Work", "sidecars"])
+def test_hand_edited_header_folded_names_refused(tmp_path, quarantine):
+    from pydra.engine.portable.layout import StoreLayoutMismatch
+
+    PortableStore(tmp_path, trust="trusted")
+    _edit_header(
+        tmp_path,
+        dirs={"staging": "staging", "quarantine": quarantine, "sidecars": {}},
+    )
+    with pytest.raises(StoreLayoutMismatch) as err:
+        PortableStore(tmp_path, trust="trusted")
+    assert err.value.key == "dirs"
+
+
+@pytest.mark.parametrize("old", ["TMP", "Trash", "STORE@7", "LEASES"])
+def test_adopt_refuses_old_entries_folded_alike(tmp_path, old):
+    tree.build_tree(tmp_path, n=1)
+    names = "not the name of a version directory|one of the directories|as its entries"
+    with pytest.raises(AdoptRefused, match=names):
+        adopt(
+            tmp_path,
+            old_entries=old,
+            header=header(),
+            identity=ToyIdentity(),
+            entry_format=ToyFormat(),
+        )
+    assert not (tmp_path / HEADER_NAME).exists()
+
+
+def test_sidecar_mapped_under_sidecars_allowed(tmp_path):
+    from pydra.engine.portable.layout import check_layout_names
+
+    check_layout_names(
+        {"staging": "s", "quarantine": "q", "sidecars": {"p": "sidecars/p@1"}},
+        "results@1",
+        "sha256-2",
+    )
+    entry = tree.build_tree(tmp_path, n=1)[0]
+    dirs = dirs_with(sidecars={"provenance": "sidecars/provenance@1"})
+    do_adopt(tmp_path, header=attrs.evolve(header(), dirs=dirs))
+    assert isinstance(open_store(tmp_path).find(job_of(entry)), Hit)

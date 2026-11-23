@@ -29,13 +29,14 @@ from pydra.engine.portable.layout import (
     _FORMAT_RE,
     FORMAT_MAJOR,
     HEADER_NAME,
-    RESERVED_NAMES,
     LayoutHeader,
     StoreLayoutMismatch,
     _component,
     _differing_key,
     cdir_for,
     check_layout_names,
+    fold,
+    is_reserved,
     open_layout,
     read_header,
     shard_for,
@@ -126,11 +127,11 @@ def _check_header(
         check_layout_names(header.dirs, header.entries, header.shard)
     except StoreLayoutMismatch as err:
         raise AdoptRefused(str(err)) from None
-    if not _component(old_entries) or old_entries in RESERVED_NAMES:
+    if not _component(old_entries) or is_reserved(old_entries):
         raise AdoptRefused(
             f"{old_entries!r} is not the name of a version directory under the root"
         )
-    if old_entries in {parts[0] for parts in _side_paths(header)}:
+    if fold(old_entries) in {fold(parts[0]) for parts in _side_paths(header)}:
         raise AdoptRefused(
             f"{old_entries!r} is one of the directories the header names in dirs, not a "
             "version directory"
@@ -150,7 +151,7 @@ def _check_header(
             f"the header's {key!r} is not that of the identity and entry format given: "
             f"{getattr(header, key, header.identity)!r}"
         )
-    if header.entries == old_entries:
+    if fold(header.entries) == fold(old_entries):
         raise AdoptRefused(
             f"the header names {old_entries!r} as its entries: adoption renames the old "
             "version directory to a new name, which fences the writers that predate the "

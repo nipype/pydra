@@ -9,6 +9,7 @@ import os
 import re
 import time
 import typing as ty
+import unicodedata
 import uuid
 
 import attrs
@@ -32,6 +33,8 @@ __all__ = [
     "open_layout",
     "read_header",
     "check_layout_names",
+    "fold",
+    "is_reserved",
     "cdir_for",
     "shard_for",
 ]
@@ -433,6 +436,24 @@ def open_layout(
 SHARD_RULES = ("sha256-2", "prefix2")
 RESERVED_NAMES = frozenset({"leases", "work", "audit", HEADER_NAME})
 """Names under the root that the store owns whatever the header says"""
+SIDECAR_ROOT = "sidecars"
+"""Where a sidecar the header does not map is kept; never staging or quarantine"""
+_TEMP_FOLDED = re.compile(_TEMP_RE.pattern, re.IGNORECASE)
+
+
+def fold(name: str) -> str:
+    """``name`` as a case-insensitive, normalization-insensitive filesystem (APFS, NTFS)
+    compares it: NFC, then case-folded. Names the store must keep apart are compared
+    folded on every platform."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def is_reserved(name: str) -> bool:
+    """Whether ``name``, folded, is one the store owns under the root whatever the header
+    says: ``leases``, ``work``, ``audit``, the header or a header temporary."""
+    return fold(name) in {fold(n) for n in RESERVED_NAMES} or bool(
+        _TEMP_FOLDED.fullmatch(unicodedata.normalize("NFC", name))
+    )
 
 
 def _component(name: ty.Any) -> bool:
@@ -449,10 +470,12 @@ def check_layout_names(dirs: ty.Any, entries: str, shard: ty.Any) -> None:
     """Refuse a ``dirs`` or ``shard`` under which ``collect`` or a writer could reach what is
     not theirs: ``staging``, ``quarantine`` and the first component of each sidecar
     directory must be single path components (a sidecar a relative path of them), staging
-    and quarantine must differ and no sidecar may start at either, and none may be
-    ``entries``, ``leases``, ``work``, ``audit``, the header or a header temporary; ``shard``
-    must be a known rule. A header can be written by anyone who can write the root
-    (RFC 0003 section 6.4), so these are checked wherever a store takes them from one.
+    and quarantine must differ, neither may be ``sidecars`` (where an unmapped sidecar is
+    kept), no sidecar may start at either, and none may be ``entries``, ``leases``,
+    ``work``, ``audit``, the header or a header temporary; ``shard`` must be a known rule.
+    Names are compared `fold`-ed, as a case- and normalization-insensitive filesystem
+    compares them, on every platform. A header can be written by anyone who can write the
+    root (RFC 0003 section 6.4), so these are checked wherever a store takes them from one.
 
     Raises
     ------
@@ -473,8 +496,11 @@ def check_layout_names(dirs: ty.Any, entries: str, shard: ty.Any) -> None:
     for key, name in (("staging", staging), ("quarantine", quarantine)):
         if not _component(name):
             refuse(f"{key} {name!r} is not a single path component")
-    if staging == quarantine:
+    if fold(staging) == fold(quarantine):
         refuse("staging and quarantine are one directory")
+    for key, name in (("staging", staging), ("quarantine", quarantine)):
+        if fold(name) == fold(SIDECAR_ROOT):
+            refuse(f"{key} {name!r} is where unmapped sidecars are kept")
     sidecars = dirs.get("sidecars") or {}
     if not isinstance(sidecars, ty.Mapping):
         refuse("sidecars is not a mapping")
@@ -485,11 +511,11 @@ def check_layout_names(dirs: ty.Any, entries: str, shard: ty.Any) -> None:
         )
         if not parts or not all(_component(p) for p in parts):
             refuse(f"the sidecar {name!r} at {relative!r} is not a path below the root")
-        if parts[0] in (staging, quarantine):
+        if fold(parts[0]) in (fold(staging), fold(quarantine)):
             refuse(f"the sidecar {name!r} is inside {parts[0]!r}")
         tops.add(parts[0])
     for top in tops:
-        if top == entries or top in RESERVED_NAMES or _TEMP_RE.fullmatch(top):
+        if fold(top) == fold(entries) or is_reserved(top):
             refuse(f"{top!r} is a name the store owns")
 
 
