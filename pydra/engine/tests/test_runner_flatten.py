@@ -50,9 +50,9 @@ def Span(
                 break
             time.sleep(0.02)
     time.sleep(hold)
-    (Path(logdir) / f"{os.getpid()}-{x}.span").write_text(f"{start} {time.time()}")
-    if partners:
+    if partners:  # before its end is read, so a job that saw it running overlaps it
         (sync / f"end-{x}").touch()
+    (Path(logdir) / f"{os.getpid()}-{x}.span").write_text(f"{start} {time.time()}")
     return x
 
 
