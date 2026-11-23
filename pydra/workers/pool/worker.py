@@ -6,7 +6,8 @@ lease settings differ from its own in a staleness field (`EXIT_SETTINGS`) or the
 not match the class (`EXIT_HARDWARE`), then writes ``ready.json``, claims tickets of the class's
 queues, loads each ticket's residency once, runs its jobs through ``Job.run``, and settles each
 job's sample and outcome. A call that fails goes through the bisection engine
-(`pydra.workers.pool.bisect`) and the pool's fault budgets.
+(`pydra.workers.pool.bisect`) and the pool's fault budgets. Samples, and loads that ran out of
+memory, are kept in the pool's calibration directory.
 
 It exits after ``idle_polls`` empty polls, on SIGTERM once finished jobs are settled and the
 rest released, after ``orphan_after_s`` without a live coordinator, and recycles
@@ -58,9 +59,18 @@ from pydra.workers.pool.faults import (
     attached,
     fault_of,
 )
-from pydra.workers.pool.samples import (
-    HardwareClass,
+from pydra.workers.pool.calibration import (
+    DirectoryCalibration,
     Sample,
+    UnfitRecord,
+    code_of,
+    hardware_of,
+    residency_key,
+    task_key,
+)
+from pydra.workers.pool.samples import (
+    CallMeter,
+    HardwareClass,
     device_memory,
     host_memory,
     read_hardware,
@@ -291,11 +301,17 @@ class Worker:
     substrate : bool
         Started by a substrate: exit after ``orphan_after_s`` without a live coordinator.
     hardware, memory, device_memory : callable
-        Read the hardware, this process's ``(current, peak)`` host bytes and device-wide bytes.
+        Read the hardware, this process's ``(current, peak)`` host bytes, and the device bytes of
+        this worker's own processes (default: this process and its providers' process groups).
+    meter : CallMeter
+        Reads each call's host and device peaks where they are cheap (`CallMeter`), over this
+        worker's own processes.
     codec : JobCodec
     token : str, optional
         The worker's token (32 hex digits), named by the substrate that started it so that its
         coordinator finds its ready mark; default a fresh one.
+    clock : callable
+        Seconds on a monotonic clock, which times the ``orphan_after_s`` wait.
     """
 
     def __init__(
@@ -310,9 +326,11 @@ class Worker:
         substrate: bool = False,
         hardware: ty.Callable[[], HardwareClass] = read_hardware,
         memory: ty.Callable[[], tuple[int | None, int | None]] = host_memory,
-        device_memory: ty.Callable[[], int | None] = device_memory,
+        device_memory: ty.Callable[[], int | None] | None = None,
+        meter: CallMeter | None = None,
         codec: JobCodec | None = None,
         token: str | None = None,
+        clock: ty.Callable[[], float] = time.monotonic,
     ):
         self.root = Path(root)
         self._token_arg = token
@@ -327,8 +345,17 @@ class Worker:
         self.substrate = substrate
         self.hardware = hardware
         self.memory = memory
-        self.device_memory = device_memory
+        self.device_memory = (
+            device_memory if device_memory is not None else self._own_device_memory
+        )
+        self.meter = meter if meter is not None else CallMeter()
+        # residency key -> (host bytes, device bytes) gained across its load in this worker
+        self._load_bytes: dict[str, tuple[int | None, int | None]] = {}
         self.codec = codec or PrivatePickle()
+        self.calibration: DirectoryCalibration | None = DirectoryCalibration(
+            self.root / "calibration"
+        )
+        self._calibration_warned = False
         self.pool: PoolRoot | None = None
         self.client: BeaterClient | None = None
         self.cls: WorkerClass | None = None
@@ -339,7 +366,7 @@ class Worker:
             0  # loop passes on which a coordinator was judged live (substrate)
         )
         self.orphan_polls = (
-            0  # loop passes since then with none live, before the orphan exit
+            0  # passes with none live since the last live one, before the orphan exit
         )
         self.served: list[tuple[str, str]] = []
         self.claims: list[int] = []
@@ -368,7 +395,9 @@ class Worker:
         self._scanned = (
             False  # whether every epoch was searched since the newest changed
         )
-        self._last_live = time.monotonic()
+        self._clock = clock
+        # the first judgement with no live coordinator since the last live one, on ``clock``
+        self._orphan_since: float | None = None
         self._pinged = 0.0
 
     # -- the run -------------------------------------------------------------------------------
@@ -435,6 +464,24 @@ class Worker:
         if found is not None:
             self._recorded = True
         self._faults_epoch, record = found if found is not None else (None, {})
+        where = record.get("calibration")
+        home = (
+            Path(where)
+            if isinstance(where, str) and where
+            else self.root / "calibration"
+        )
+        if home.parent.is_dir():
+            self.calibration = DirectoryCalibration(home)
+        else:
+            # a coordinator's path not mounted here: never a calibration tree local to this node
+            if not self._calibration_warned:
+                self._calibration_warned = True
+                logger.warning(
+                    "the pool's calibration directory %s is not reachable here (its parent is "
+                    "absent): this worker records no samples or unfit loads",
+                    home,
+                )
+            self.calibration = None
         if self._faults_arg is None:
             budgets = record.get("budgets")
             self.faults = (
@@ -642,7 +689,7 @@ class Worker:
         quantum_jobs, quantum_s = self.cls.quantum_jobs, self.cls.quantum_s
         current: str | None = None
         spent, began, idle = 0, time.monotonic(), 0
-        self._last_live = time.monotonic()
+        self._orphan_since = None
         while not self.stop.is_set() and self.recycle is None:
             if not self._refresh():
                 return EXIT_FAULTS
@@ -798,11 +845,16 @@ class Worker:
         )
 
     def _orphaned(self) -> bool:
+        """Whether ``orphan_after_s`` has passed on ``clock`` since the first judgement that
+        found no live coordinator after the last that found one."""
         if self._coordinator_live():
-            self._last_live = time.monotonic()
+            self._orphan_since = None
             self.live_polls += 1
             return False
-        if time.monotonic() - self._last_live > self.settings.orphan_after_s:
+        now = self._clock()
+        if self._orphan_since is None:
+            self._orphan_since = now
+        if now - self._orphan_since > self.settings.orphan_after_s:
             return True
         self.orphan_polls += 1
         return False
@@ -828,7 +880,7 @@ class Worker:
     # -- running claims ------------------------------------------------------------------------
 
     def _run_held(self, held: list[Claim], claim_s: float) -> None:
-        group: dict[str, ty.Any] = {"claim_s": claim_s, "device": None, "read": False}
+        group: dict[str, ty.Any] = {"claim_s": claim_s}
         if self.cls.device == "cuda" and not self._device_read:
             self._device_baseline = self.device_memory()
             self._device_read = True
@@ -864,7 +916,7 @@ class Worker:
         try:
             load_s, loaded = self._load(jobs[0][1])
         except Exception as exc:
-            self._load_fault(claim, [e for e, _ in jobs], exc)
+            self._load_fault(claim, [e for e, _ in jobs], exc, jobs[0][1])
             return
         queue = claim.queue
         cold = queue not in self._warm or loaded
@@ -985,6 +1037,9 @@ class Worker:
             return 0.0, False
         self._add_providers(job)
         rs = resident.process_set()
+        keys = [resident.spec_key(job.task, f, n) for f, n in fields]
+        fresh = any(k not in rs for k in keys)
+        before = self._held_bytes() if fresh else None
         began, loaded = time.monotonic(), False
         for field, name in fields:
             provider = resident.find_provider(job, name)
@@ -998,7 +1053,46 @@ class Worker:
                 footprint=provider.footprint(spec),
             )
             rs.release(key)
-        return time.monotonic() - began, loaded
+        took = time.monotonic() - began
+        if before is not None:
+            after = self._held_bytes()
+            self._load_bytes[residency_key(keys)] = tuple(  # type: ignore[assignment]
+                None if a is None or b is None else max(0, a - b)
+                for a, b in zip(after, before)
+            )
+        return took, loaded
+
+    def _held_bytes(self) -> tuple[int | None, int | None]:
+        """The host resident bytes and the device bytes of this worker's own processes (itself and
+        its providers' process groups), now; host None when any of them cannot be read.
+        """
+        from pydra.workers.pool import samples
+
+        device = self.device_memory() if self.cls.device == "cuda" else None
+        host = self.memory()[0]
+        for pid in self._own_pids():
+            if host is None:
+                break
+            if pid != os.getpid():
+                rss = samples.process_rss(pid)
+                host = None if rss is None else host + rss
+        return host, device
+
+    def _own_pids(self) -> list[int]:
+        """This process and the processes its resident providers started."""
+        from pydra.engine import resident
+
+        pids = {os.getpid()}
+        for _, obj in resident.process_set().items():
+            group = getattr(obj, "group", None)
+            members = getattr(group, "members", None)
+            if callable(members):
+                with contextlib.suppress(Exception):
+                    pids.update(members())
+        return sorted(pids)
+
+    def _own_device_memory(self) -> int | None:
+        return device_memory(self._own_pids())
 
     def _add_providers(self, job: "Job") -> None:
         submitter = job.submitter
@@ -1008,18 +1102,62 @@ class Worker:
                 submitter.providers = (*self.providers, *own)
 
     def _load_fault(
-        self, claim: Claim, entries: list[TicketJob], exc: BaseException
+        self,
+        claim: Claim,
+        entries: list[TicketJob],
+        exc: BaseException,
+        job: "Job | None" = None,
     ) -> None:
-        """A load failed: a resource fault moves the ticket's jobs up the ladder (`_resource`);
-        anything else is one infrastructure fault of the residency (`_infrastructure`). The claim is
-        released."""
+        """A load failed: a resource fault is kept as an `UnfitRecord` (`_unfit`) and moves the
+        ticket's jobs up the ladder (`_resource`); anything else is one infrastructure fault of the
+        residency (`_infrastructure`). The claim is released."""
         fault = fault_of(exc, "load", self.classify)
         logger.error("loading the residency of %s failed: %r", claim.digest, exc)
         if fault.kind == "resource":
+            if fault.reason == "oom":
+                self._unfit(claim, exc, job)
             self._resource(claim, entries, fault, "load")
         else:
             self._infrastructure(claim, entries, fault, {"stop": False}, phase="load")
         self._release(claim)
+
+    def _unfit(self, claim: Claim, exc: BaseException, job: "Job | None") -> None:
+        """Keep a load of the ticket's residency that ran out of memory as an `UnfitRecord`: host
+        memory when a `MemoryError` is in the exception's chain, else the device's; the grant is
+        the class's host memory, or its share of a device; the code is the providers' versions.
+        """
+        key = residency_key(claim.ticket.residency)
+        if key is None:
+            return
+        host = any(isinstance(link, MemoryError) for link in _faults._chain(exc))
+        resource: ty.Literal["device", "host"] = (
+            "host" if host or not self.cls.gpus else "device"
+        )
+        if resource == "host":
+            grant = self.cls.mem
+        else:
+            grant = (
+                None
+                if self.cls.gpu_mem is None
+                else self.cls.gpu_mem // self.cls.workers_per_device
+            )
+        code = None if job is None else code_of(job, self.providers)
+        if code is None:
+            logger.warning(
+                "an out-of-memory load of %s is not recorded: its providers' versions cannot "
+                "be read here, and a record of no code would never bind",
+                claim.digest,
+            )
+            return
+        record = UnfitRecord(
+            key, resource, grant, self.cls.name, code, worker=self.token
+        )
+        if self.calibration is None:
+            return
+        try:
+            self.calibration.record(record)
+        except OSError as err:
+            logger.warning("could not record an unfit load: %s", err)
 
     def _gap(self, fault: FaultRecord) -> None:
         """Report an unclassified exception from the pool's machinery, once per type."""
@@ -1261,7 +1399,7 @@ class Worker:
                 if record is None or record.phase != "load":
                     raise
                 # a load inside the call: never split or retried; every open job of the ticket
-                self._load_fault(claim, claim.open_jobs() or [entry], exc)
+                self._load_fault(claim, claim.open_jobs() or [entry], exc, job)
                 group["stop"] = True
                 return "stopped"
             verdict = self._settle_job(claim, entry, settled, state, group, tries)
@@ -1356,7 +1494,12 @@ class Worker:
         if deadline is not None:
             with contextlib.suppress(BeaterDead):  # then the loop enforces it
                 self.client.deadline(token_dir, deadline, payload)
+        metered = self.meter.start(self._own_pids())
         call = self._run_call(claim, job, deadline, payload)
+        try:
+            peaks = self.meter.stop(metered)
+        except Exception:
+            peaks = (None, None)
         if call.abandoned and self.stop.is_set() and not call.expired:
             claim.drained(entry, self.token)
         if not call.abandoned:
@@ -1373,7 +1516,9 @@ class Worker:
             self._lost.add(token_dir)
             return "lost"
         self._warm[claim.queue] = self._warm.get(claim.queue, 0) + 1
-        return call, self._sample(claim, entry, call.wall, group)
+        return call, self._sample(
+            claim, entry, call.wall, group, peaks, task=task_key(job.task)
+        )
 
     def _run_call(
         self,
@@ -1538,20 +1683,38 @@ class Worker:
 
         resident.close_process_set()
         self._warm.clear()
+        self._load_bytes.clear()
         group["reload"] = True
 
     # -- settling ------------------------------------------------------------------------------
 
     def _sample(
-        self, claim: Claim, entry: TicketJob, wall: float, group: dict
+        self,
+        claim: Claim,
+        entry: TicketJob,
+        wall: float,
+        group: dict,
+        peaks: tuple[int | None, int | None] = (None, None),
+        task: str | None = None,
     ) -> Sample:
-        current, peak = self.memory()
-        device = None
-        if self.cls.device == "cuda":
-            if not group["read"]:
-                group["device"] = self.device_memory()
-                group["read"] = True
-            device = group["device"]
+        """The job's sample, its memory attributed to its residency: the bytes gained across the
+        residency's load in this worker, and the call's peaks above what was held before it.
+        """
+        from pydra.engine import resident
+        from pydra.engine.resident import ResidentKey
+
+        key = residency_key(claim.ticket.residency)
+        mine = {ResidentKey(**k) for k in claim.ticket.residency}
+        others = len([k for k in resident.process_set().keys() if k not in mine])
+        host_load, device_load = (
+            self._load_bytes.get(key, (None, None)) if key else (None, None)
+        )
+        host_peak, device_peak = peaks
+        resident_bytes = (
+            None
+            if self._baseline_bytes is None or host_load is None
+            else self._baseline_bytes + host_load
+        )
         since = self._warm.get(claim.queue, 1) - 1
         return Sample(
             wall_s=wall,
@@ -1559,16 +1722,31 @@ class Worker:
             batch_size=1,
             units=entry.units,
             baseline_bytes=self._baseline_bytes,
-            resident_bytes=current,
-            peak_bytes=peak,
-            device_baseline_bytes=None if device is None else self._device_baseline,
-            device_bytes=device,
+            resident_bytes=resident_bytes,
+            peak_bytes=(
+                None
+                if resident_bytes is None or host_peak is None
+                else resident_bytes + host_peak
+            ),
+            device_baseline_bytes=(
+                self._device_baseline if self.cls.device == "cuda" else None
+            ),
+            device_bytes=device_load,
             load_s=group.get("load_s", 0.0),
             cold=bool(group.get("cold", False)),
             since_load=max(since, 0),
             reload=bool(group.get("reload", False)),
             worker=self.token,
             ended=time.time(),
+            key=key,
+            hardware=hardware_of(self.cls),
+            device_peak_bytes=(
+                None
+                if device_load is None or device_peak is None
+                else device_load + device_peak
+            ),
+            others=others,
+            task=task,
         )
 
     def _settle(
@@ -1592,6 +1770,11 @@ class Worker:
                 }
             )
             fields["sample"] = record
+            if sample.key is not None and self.calibration is not None:
+                try:
+                    self.calibration.record(sample)
+                except OSError as err:
+                    logger.warning("could not record a sample: %s", err)
         written = claim.outcome(entry, attempt, kind, **fields)
         if written is None:
             self._lost.add(claim.lease.token_dir)

@@ -1,6 +1,5 @@
 """Placement of a job on a worker class, and the fit that judges it."""
 
-import hashlib
 import typing as ty
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -30,11 +29,58 @@ class ClassTried:
 
 @attrs.frozen
 class FitRequest:
-    """What a fit judges: resident state, resources and the job's size."""
+    """What a fit judges: resident state, resources and the job's size.
+
+    Attributes
+    ----------
+    residency : tuple of ResidentKey
+        The job's resident keys, in field order.
+    resources : ComputeResources
+    units : float, optional
+        The job's size in the task's own units, when it declares one.
+    key : str, optional
+        The residency digest (`pydra.engine.resident.residency_digest`); None without resident
+        state.
+    code : Code, optional
+        The code a load of the residency runs under (`pydra.workers.pool.calibration.code_of`);
+        None when it cannot be read where the job is placed.
+    task : str, optional
+        The code identity of the job's task (`pydra.workers.pool.calibration.task_key`), which
+        selects the samples a measured fit reads.
+    """
 
     residency: tuple[ty.Any, ...]
     resources: ComputeResources
     units: float | None = None
+    key: str | None = None
+    code: ty.Any = None
+    task: str | None = None
+
+
+def fit_request(job: "Job", providers: Sequence[ty.Any] = ()) -> FitRequest:
+    """The request ``job`` makes of a class: its resources, resident keys, residency digest and the
+    code its providers load under (``providers`` before the job's own). A job whose resident keys
+    cannot be read yet (a stand-in of ``plan()``, its inputs lazy) has none."""
+    from pydra.engine import resident
+    from .calibration import code_of, residency_key, task_key
+
+    res = job.resources if job.resources is not None else ComputeResources()
+    try:
+        residency = tuple(
+            resident.spec_key(job.task, f, p)
+            for f, p in resident.provided_fields(job.task)
+        )
+    except Exception:
+        residency = ()
+    if not residency:
+        return FitRequest(residency=(), resources=res)
+    return FitRequest(
+        residency=residency,
+        resources=res,
+        key=residency_key(residency),
+        code=code_of(job, providers),
+        task=task_key(job.task),
+    )
 
 
 class Fit(ty.Protocol):
@@ -160,23 +206,22 @@ def _order(cls: WorkerClass):
     )
 
 
-def residency_digest(residency: Sequence[ty.Any]) -> str:
-    joined = "\n".join(sorted(str(k) for k in residency))
-    return hashlib.sha256(joined.encode()).hexdigest()[:16]
-
-
 def place(
     job: "Job",
     classes: Sequence[WorkerClass],
     fit: Fit,
     can_start: CanStart,
+    *,
+    request: FitRequest | None = None,
 ) -> "Placement | Unplaceable":
     """Map a job to a worker class and a queue, before anything is written.
 
-    Reads the job's resources only; the job and its checksum are untouched.
+    Reads the job's resources and resident keys (``request``, default `fit_request`); the job and
+    its checksum are untouched. A routed residency's queue is ``<class>#<residency digest>``.
     """
-    res = job.resources if job.resources is not None else ComputeResources()
-    request = FitRequest(residency=(), resources=res, units=None)
+    if request is None:
+        request = fit_request(job)
+    res = request.resources
     tried: list[ClassTried] = []
     candidates = []
     for cls in classes:
@@ -196,8 +241,8 @@ def place(
         walked.append(result)
         if result.verdict in ("fits", "unknown"):
             queue = cls.name
-            if request.residency and res.residency == "route":
-                queue = f"{cls.name}#{residency_digest(request.residency)}"
+            if request.key is not None and res.residency == "route":
+                queue = f"{cls.name}#{request.key}"
             return Placement(
                 worker_class=cls.name,
                 queue=queue,

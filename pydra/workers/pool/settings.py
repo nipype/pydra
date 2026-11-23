@@ -9,6 +9,11 @@ from pydra.engine.lease import LeaseSettings
 __all__ = ["PoolSettings"]
 
 
+def _fraction(_inst, attribute, value) -> None:
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"{attribute.name} is in [0, 1], not {value!r}")
+
+
 def _positive(_inst, attribute, value) -> None:
     if value is not None and value <= 0:
         raise ValueError(f"{attribute.name} must be positive, not {value!r}")
@@ -48,6 +53,8 @@ class PoolSettings:
     squeue_timeout : float
         Seconds a worker waits for ``squeue`` to report its allocation's end when Slurm sets no
         ``SLURM_JOB_END_TIME``.
+    recheck_fraction : float
+        Fraction of settled jobs re-run alone and compared (RFC 0005 section 4.4); 0: none.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -63,6 +70,7 @@ class PoolSettings:
     unmeasured_workers: int = attrs.field(default=1, validator=_positive)
     preemption_budget: int = attrs.field(default=3, validator=attrs.validators.ge(0))
     squeue_timeout: float = attrs.field(default=60.0, validator=_positive)
+    recheck_fraction: float = attrs.field(default=0.0, validator=_fraction)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)

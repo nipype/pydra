@@ -1390,7 +1390,9 @@ def test_pool_passes_faults_and_classify_to_its_workers(tmp_path, tasks, pools):
     """`WarmPool` hands its fault budgets and classifier to the workers it starts, and warns of
     neither: ``content_attempts=2`` retries a task that fails once, and a classifier passed by
     reference reaches the worker (a call's exception, content by default, holds the residency under
-    a classifier that types it infrastructure). ``calibration`` still warns."""
+    a classifier that types it infrastructure). A `DirectoryCalibration` is taken without a warning
+    and its directory is handed to the workers; any other calibration warns that workers write
+    to the pool's own directory, the default."""
     from pydra.workers.pool.faults import FaultBudgets
 
     sub = _submitter(tmp_path)
@@ -1419,8 +1421,22 @@ def test_pool_passes_faults_and_classify_to_its_workers(tmp_path, tasks, pools):
     [(_, held)] = info.value.not_run  # the default classifier would fail it as content
     assert held.held and "1 infrastructure faults" in held.reason
 
-    with pytest.warns(UserWarning, match="calibration"):
-        _warm(tmp_path / "calibrated", pools, sub, calibration=object())
+    from pydra.workers.pool.calibration import DirectoryCalibration
+
+    given = DirectoryCalibration(tmp_path / "given")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        calibrated = _warm(tmp_path / "calibrated", pools, sub, calibration=given)
+    assert calibrated.calibration is given
+
+    def home(warm):
+        record = warm.root / "coordinator" / str(warm.epoch) / "faults.json"
+        return json.loads(record.read_text())["calibration"]
+
+    assert home(calibrated) == str(given.root.absolute())
+    assert home(pool) == str(tmp_path / "pool" / "calibration")
+    with pytest.warns(UserWarning, match="workers write"):
+        _warm(tmp_path / "other", pools, sub, calibration=object())
 
 
 # -- resumed runs -------------------------------------------------------------------------------
