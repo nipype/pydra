@@ -8,7 +8,8 @@ caller to move up the ladder; a lone job's crash is run again until it has been 
 completed afterwards is reported (``survived``) and charged to no job. Any other raise fails each
 job of the call with that fault; a non-`Exception` propagates, and a load fault is raised out
 unchanged. An
-exception element of a batched return is that job's content fault and never a trigger.
+exception element of a batched return is that job's fault and never a trigger: content, or the
+record attached to it (a job's own run that raised, typed by the caller's classifier).
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import typing as ty
 
 import attrs
 
-from pydra.workers.pool.faults import Classifier, FaultRecord, fault_of
+from pydra.workers.pool.faults import Classifier, FaultRecord, attached, fault_of
 
 __all__ = ["Abandon", "Settled", "bisect"]
 
@@ -159,8 +160,10 @@ def bisect(
             return
         for i, output in zip(indices, outputs):
             if isinstance(output, BaseException):
+                record = attached(output) if isinstance(output, Exception) else None
                 settled[i] = Settled(
-                    fault=FaultRecord(
+                    fault=record
+                    or FaultRecord(
                         "content", type(output).__name__, str(output)[:2000], "call"
                     ),
                     error=output,

@@ -61,6 +61,10 @@ class PoolSettings:
         Failed attempts a streak needs, with ``start_deadline_s``, to break a class.
     max_warm_sessions : int
         Warm environments a worker keeps open (least recently used idle one closed first).
+    probe_samples : int
+        Calls a batch size needs before the batch probe judges it.
+    probe_gain : float
+        The cut in seconds per unit a doubled batch must give for the probe to keep doubling.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -80,6 +84,8 @@ class PoolSettings:
     start_deadline_s: float | None = attrs.field(default=120.0, validator=_positive)
     start_deadline_failures: int = attrs.field(default=3, validator=_positive)
     max_warm_sessions: int = attrs.field(default=4, validator=_positive)
+    probe_samples: int = attrs.field(default=3, validator=_positive)
+    probe_gain: float = attrs.field(default=0.05, validator=_fraction)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)

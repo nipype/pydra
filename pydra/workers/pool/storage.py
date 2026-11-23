@@ -341,6 +341,7 @@ class Ticket:
     jobs: tuple[TicketJob, ...] = attrs.field(converter=_tuple)
     residency: tuple[dict, ...] = attrs.field(default=(), converter=_tuple, hash=False)
     batch: int | None = None
+    probe: bool = False
     roots: tuple[str, ...] = attrs.field(default=(), converter=_tuple)
     ladder: tuple[str, ...] = attrs.field(default=(), converter=_tuple)
     time: float | None = None
@@ -362,6 +363,7 @@ class Ticket:
             "node": self.node,
             "residency": list(self.residency),
             "batch": self.batch,
+            "probe": self.probe,
             "roots": list(self.roots),
             "ladder": list(self.ladder),
             "time": self.time,
@@ -386,6 +388,7 @@ class Ticket:
                 jobs=[TicketJob.from_json(j) for j in record["jobs"]],
                 residency=record.get("residency", ()),
                 batch=record.get("batch"),
+                probe=bool(record.get("probe", False)),
                 roots=record.get("roots", ()),
                 ladder=record.get("ladder", ()),
                 time=record.get("time"),

@@ -224,6 +224,18 @@ jobs move to the next class of their ladder without being charged, and later pla
 class that was too small.
 
 
+Batched calls
+-------------
+
+A task declared ``python.define(batched=many, units=size, batch=n)`` lets a worker run several
+of a ticket's jobs in one call of ``many``, ordered by ``units`` so a call pads little. ``batch``
+is the author's size, capped by the memory bound a ``MeasuredFit`` measures. Without it, under a
+``MeasuredFit``, each worker probes the size call by call from the pool's calibration: one job per
+call until ``PoolSettings.probe_samples`` calls are measured, then twice the size while the
+seconds per unit fall by at least ``PoolSettings.probe_gain``, then the fastest size, never above
+the memory bound. A site can fix the size for every batched task with ``MeasuredFit(batch=n)``.
+``plan()`` reports the size a call takes, or the ceiling a probe runs under (``probe``).
+
 Inspecting a pool
 -----------------
 

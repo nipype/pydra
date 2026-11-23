@@ -121,6 +121,9 @@ class Job(ty.Generic[TaskType]):
     # The ``pool`` section a pool worker computed for this call (``pool-facts@1``, RFC 0005
     # section 8), None elsewhere; see `_record_pool_facts`
     pool_facts: dict[str, ty.Any] | None = None
+    # This job's element of a batched call a pool worker made (RFC 0005 section 4.4), as a
+    # 1-tuple holding its return value or its exception; None when the task runs alone
+    batched_element: tuple[ty.Any] | None = None
 
     _inputs: dict[str, ty.Any] | None = None
     _run_start_time: datetime | None
@@ -284,6 +287,8 @@ class Job(ty.Generic[TaskType]):
         state.pop("_cached_result", None)
         state.pop("_awaiting_run", None)
         state.pop("claim", None)
+        # a batched call's element belongs to that call: a rerun from the pickle runs the task
+        state.pop("batched_element", None)
         # A lookup made before dispatch is current only for a run in this process: a job
         # handed to a worker may wait in a queue, so it looks the store up again
         state.pop("looked_up", None)

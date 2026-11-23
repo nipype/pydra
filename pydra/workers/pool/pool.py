@@ -204,6 +204,11 @@ class _Job:
     # jobs of other runs with its key, submitted while it was open: they settle with it
     twins: "list[_Job]" = attrs.field(factory=list)
     twin_of: "_Job | None" = None
+    # the most jobs of its residency one call takes (`Placement.batch`), and its units
+    batch: int | None = None
+    # whether ``batch`` is a ceiling the worker probes under (`Placement.probe`)
+    probe: bool = False
+    units: float | None = None
 
 
 def ticket_time(jobs: ty.Iterable["Job"]) -> float | None:
@@ -228,6 +233,21 @@ class _Ticket:
     judged: float = 0.0
     recheck: bool = False
     foreign: bool = False  # of a class this coordinator does not start
+
+
+def _ticket_batch(group: "list[_Job]") -> int | None:
+    """The most jobs of a ticket one call takes: the least `Placement.batch` of its jobs (1 for a
+    task that declares no ``batch``, as `place` makes it), for a task declared ``batched``; None
+    otherwise, or when a job's is unknown."""
+    from pydra.compose.python import PythonTask
+
+    task = group[0].job.task
+    if not isinstance(task, PythonTask) or type(task)._batched is None:
+        return None
+    sizes = [j.batch for j in group]
+    if any(b is None for b in sizes):
+        return None
+    return min(sizes)
 
 
 def _queue_class(queue: str) -> str:
@@ -815,8 +835,11 @@ class WarmPool:
         job: "Job",
         above: str | None = None,
         startable: ty.Callable[[WorkerClass], "bool | str"] | None = None,
-    ) -> tuple[Placement | Unplaceable, tuple[str, ...], tuple[dict, ...]]:
-        """The job's placement, the rest of its ladder (as queue names) and its residency."""
+    ) -> tuple[
+        Placement | Unplaceable, tuple[str, ...], tuple[dict, ...], float | None
+    ]:
+        """The job's placement, the rest of its ladder (as queue names), its residency and its
+        units."""
         from pydra.engine import resident
 
         can_start = startable or self._startable()
@@ -829,7 +852,7 @@ class WarmPool:
         request = fit_request(job, self._providers())
         placement = place(job, classes, self.fit, can_start, request=request)
         if isinstance(placement, Unplaceable):
-            return placement, (), ()
+            return placement, (), (), None
         res = job.resources if job.resources is not None else ComputeResources()
         fields = resident.provided_fields(job.task)
         residency = tuple(
@@ -849,6 +872,7 @@ class WarmPool:
             attrs.evolve(placement, queue=placement.worker_class + suffix),
             ladder,
             residency,
+            request.units,
         )
 
     def _queue_jobs(
@@ -902,7 +926,9 @@ class WarmPool:
                     primary.twins.append(twin)
                     self._open[job] = twin
                     continue
-                placement, ladder, residency = self._placement(job, startable=startable)
+                placement, ladder, residency, units = self._placement(
+                    job, startable=startable
+                )
             except Exception as exc:
                 reports.append((job, None, Failed(exc)))
                 continue
@@ -910,7 +936,16 @@ class WarmPool:
                 reports.append((job, None, Failed(UnplaceableJob(placement))))
                 continue
             j = _Job(
-                job, handle, key, placement.queue, ladder, residency, report=report
+                job,
+                handle,
+                key,
+                placement.queue,
+                ladder,
+                residency,
+                report=report,
+                batch=placement.batch,
+                probe=placement.probe,
+                units=units,
             )
             name = placement.worker_class
             if name in self._broken and key in self._break_held.get(name, ()):
@@ -1314,6 +1349,7 @@ class WarmPool:
                 checksum=j.key[0],
                 fingerprint=j.key[1],
                 payload=store_payload(self.codec, data, media, self.root),
+                units=j.units,
             )
             for j, (data, media) in encoded
         ]
@@ -1325,6 +1361,8 @@ class WarmPool:
                 residency=group[0].residency,
                 ladder=group[0].ladder,
                 time=ticket_time(j.job for j in group),
+                batch=_ticket_batch(group),
+                probe=all(j.probe for j in group),
             )
             try:
                 digest = self.pool.put(queue, ticket)

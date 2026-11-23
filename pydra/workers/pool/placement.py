@@ -65,6 +65,9 @@ class FitRequest:
     resources : ComputeResources
     units : float, optional
         The job's size in the task's own units, when it declares one.
+    batch : int, optional
+        The task's declared batch (``python.define(batch=)``): the most jobs of one batched call
+        its author states; None when it declares none.
     key : str, optional
         The residency digest (`pydra.engine.resident.residency_digest`); None without resident
         state.
@@ -82,13 +85,16 @@ class FitRequest:
     key: str | None = None
     code: ty.Any = None
     task: str | None = None
+    batch: int | None = None
 
 
 def fit_request(job: "Job", providers: Sequence[ty.Any] = ()) -> FitRequest:
-    """The request ``job`` makes of a class: its resources, resident keys, residency digest and the
-    code its providers load under (``providers`` before the job's own). A job whose resident keys
-    cannot be read yet (a stand-in of ``plan()``, its inputs lazy) has none."""
+    """The request ``job`` makes of a class: its resources, resident keys, residency digest, the
+    code its providers load under (``providers`` before the job's own) and its units (the task's
+    ``units``, `pydra.compose.python.units_of`). A job whose resident keys cannot be read yet (a
+    stand-in of ``plan()``, its inputs lazy) has none, nor units."""
     from pydra.engine import resident
+    from pydra.compose.python import PythonTask
     from .calibration import code_of, residency_key, task_key
 
     res = job.resources if job.resources is not None else ComputeResources()
@@ -98,16 +104,34 @@ def fit_request(job: "Job", providers: Sequence[ty.Any] = ()) -> FitRequest:
             for f, p in resident.provided_fields(job.task)
         )
     except Exception:
-        residency = ()
-    if not residency:
         return FitRequest(residency=(), resources=res)
+    units = job_units(job)
+    batch = type(job.task)._batch if isinstance(job.task, PythonTask) else None
+    if not residency:
+        return FitRequest(residency=(), resources=res, units=units, batch=batch)
     return FitRequest(
         residency=residency,
         resources=res,
+        units=units,
+        batch=batch,
         key=residency_key(residency),
         code=code_of(job, providers),
         task=task_key(job.task),
     )
+
+
+def job_units(job: "Job") -> float | None:
+    """The job's size in its task's own units (`pydra.compose.python.units_of`); None for a task
+    that declares no ``units``, or whose inputs are not all set yet."""
+    from pydra.compose.python import PythonTask, units_of
+    from pydra.utils.typing import is_lazy
+
+    task = job.task
+    if not isinstance(task, PythonTask) or type(task)._units is None:
+        return None
+    if any(is_lazy(v) for v in attrs.asdict(task, recurse=False).values()):
+        return None
+    return units_of(task)
 
 
 class Fit(ty.Protocol):
@@ -119,14 +143,29 @@ class Fit(ty.Protocol):
     ) -> int:
         """The most jobs of this residency one call takes."""
 
+    def memory_bound(
+        self, request: FitRequest, cls: WorkerClass, units: Sequence[float | None]
+    ) -> int:
+        """The most jobs one call holds in memory; 1 when not measured."""
+
+    def probing(self, request: FitRequest, cls: WorkerClass) -> bool:
+        """Whether `batch` is a ceiling a worker probes under, call by call."""
+
 
 @attrs.frozen
 class Placement:
+    """Where a job runs. ``batch`` is the most jobs of its residency one call takes (what
+    ``plan()`` reports): a declared batch, else, with ``probe``, the ceiling a worker probes
+    under. ``memory_bound`` is the fit's memory bound (1 when not measured).
+    """
+
     worker_class: str
     queue: str
     tried: tuple[ClassTried, ...]
     batch: int
     roots: frozenset[Path] = frozenset()
+    memory_bound: int | None = None
+    probe: bool = False
 
 
 @attrs.frozen
@@ -154,7 +193,7 @@ def _fmt(n: "int | None") -> str:
 class DeclaredFit:
     """Judge from declared figures: device memory, host memory and time.
 
-    No figure to compare gives ``"unknown"``. ``batch`` returns 1.
+    No figure to compare gives ``"unknown"``. ``batch`` returns the task's declared batch, else 1.
     """
 
     def judge(self, request: FitRequest, cls: WorkerClass) -> ClassTried:
@@ -199,7 +238,13 @@ class DeclaredFit:
         return ClassTried(cls.name, "fits", "declared figures fit")
 
     def batch(self, request, cls, units) -> int:
+        return request.batch or 1
+
+    def memory_bound(self, request, cls, units) -> int:
         return 1
+
+    def probing(self, request, cls) -> bool:
+        return False
 
 
 def _candidate_reason(res: ComputeResources, cls: WorkerClass) -> "str | None":
@@ -270,10 +315,13 @@ def place(
             queue = cls.name
             if request.key is not None and res.residency == "route":
                 queue = f"{cls.name}#{request.key}"
+            units = [request.units]
             return Placement(
                 worker_class=cls.name,
                 queue=queue,
                 tried=tuple(walked),
-                batch=fit.batch(request, cls, [request.units]),
+                batch=fit.batch(request, cls, units),
+                memory_bound=fit.memory_bound(request, cls, units),
+                probe=fit.probing(request, cls),
             )
     return Unplaceable(tried=tuple(tried + walked), request=res)
