@@ -119,6 +119,7 @@ def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwa
             rerun=False,
             lockfile=tmp_path / f"c{i}-key.lock",
             state_index=i if split else None,
+            workflow_path=(),
         )
         for i in range(n)
     ]
@@ -233,6 +234,19 @@ def test_different_shapes_are_not_mixed_in_one_array(tmp_path, monkeypatch):
     assert arrays == ["--array=0-1", "--array=0-1"]
     cpus = [("--cpus-per-task=4" in c) for c in fake.of("sbatch")]
     assert sorted(cpus) == [False, True]
+
+
+def test_array_key_has_workflow_path(tmp_path, monkeypatch):
+    """Node names repeat across nested workflows, so two jobs of equal name,
+    resources, cache root and rerun flag are one array only in one workflow"""
+    fake, worker, jobs = make(tmp_path, monkeypatch, 4)
+    for job in jobs[:2]:
+        job.workflow_path = ("a",)
+    for job in jobs[2:]:
+        job.workflow_path = ("b",)
+    assert run_all(worker, jobs) == [True] * 4
+    arrays = sorted(a for c in fake.of("sbatch") for a in c if a.startswith("--array"))
+    assert arrays == ["--array=0-1", "--array=0-1"]
 
 
 @pytest.mark.parametrize("args", ["-o /x/o-%j.out", "--error=/x/e-%j.err"])

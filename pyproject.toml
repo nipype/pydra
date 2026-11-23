@@ -78,6 +78,7 @@ test = [
     "pytest-env >=1.1",
     "pytest-xdist >=3.6",
     "pytest-timeout >=2.3",
+    "nest_asyncio",
     "pympler >=1.1",
     "fileformats-extras[application,image] >=0.22.2",
     "numpy >=1.26",

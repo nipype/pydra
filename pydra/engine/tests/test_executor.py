@@ -1,6 +1,7 @@
 """Executors and the asynchronous driver"""
 
 import asyncio
+import threading
 import time
 import pytest
 from pydra.compose import python, workflow
@@ -237,6 +238,47 @@ def test_interrupt_cancels_open_handles(tmp_path, monkeypatch):
         assert LeaseHang.cancelled == 4  # every run coroutine was cancelled
         assert not leases(tmp_path)  # and released its lease
         assert not ex._tasks  # nothing is left scheduled
+
+
+@python.define
+def Inc(x: int) -> int:
+    return x + 1
+
+
+@workflow.define
+def IncTwice(x: int) -> int:
+    first = workflow.add(Inc(x=x), name="first")
+    second = workflow.add(Inc(x=first.out), name="second")
+    return second.out
+
+
+class CancelsSecond(base.Worker):
+    _plugin_name = "cancels-second"
+
+    async def run(self, job, rerun=False):
+        if job.name == "second":
+            raise asyncio.CancelledError
+        return job.run(rerun=rerun)
+
+
+@pytest.mark.timeout(60, method="thread")
+def test_a_cancellation_raised_by_a_worker_ends_the_run(tmp_path):
+    # the run happens on a daemon thread so a regression fails the join instead of hanging the suite
+    outcome = []
+
+    def call():
+        try:
+            with Submitter(worker=CancelsSecond(), cache_root=tmp_path) as sub:
+                sub(IncTwice(x=1), raise_errors=True)
+            outcome.append(None)
+        except BaseException as exc:
+            outcome.append(exc)
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    thread.join(60)
+    assert not thread.is_alive(), "the run hangs: the cancelled job is never reported"
+    assert outcome and outcome[0] is not None, "the run must not succeed"
 
 
 def leases(root):

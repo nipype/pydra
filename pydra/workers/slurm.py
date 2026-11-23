@@ -205,10 +205,10 @@ class SlurmWorker(base.Worker):
     async def submit_many(self, jobs, done=None):
         """Submit the jobs of one round together and wait for all of them.
 
-        The elements of a split node that share a name, resources, cache root and
-        rerun flag go to ``sbatch --array`` in chunks of at most ``max_array_size``; any
-        other job is its own ``sbatch``. Returns, in order, ``True`` for a job that
-        completed and the exception that ended it otherwise.
+        The elements of a split node that share a workflow path, name, resources,
+        cache root and rerun flag go to ``sbatch --array`` in chunks of at most
+        ``max_array_size``; any other job is its own ``sbatch``. Returns, in order,
+        ``True`` for a job that completed and the exception that ended it otherwise.
 
         Parameters
         ----------
@@ -246,6 +246,7 @@ class SlurmWorker(base.Worker):
         for i, job in enumerate(jobs):
             if self._array_eligible(job):
                 key = (
+                    tuple(job.workflow_path),
                     job.name,
                     repr(job.resources),
                     str(job.cache_root),
