@@ -24,6 +24,7 @@ from pydra.compose import workflow, base
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+    from pydra.engine.portable.store import Committed
 
 
 _SKELETONS = ("_make_skeleton_class", "_make_skeleton_enum")
@@ -132,6 +133,13 @@ class Result(ty.Generic[OutputsType]):
     """Whether the result was reused from an entry recorded in another context."""
     reused_in: dict[str, ty.Any] | None = None
     """The context it was reused in, when `cross_context`."""
+    committed: "Committed | None" = None
+    """What a `~pydra.engine.portable.store.PortableStore` publish returned for this result,
+    None for a result that was not published through one."""
+    stored: bool = True
+    """Whether the outputs are in the store; False when a `PortableStore` kept them
+    unpublished (an occupant of the address that this result does not equal, or an entry it
+    cannot read)."""
 
     CLOUD_PICKLE_ATTRS = ("outputs", "task")
 
@@ -143,6 +151,8 @@ class Result(ty.Generic[OutputsType]):
         return state
 
     def __setstate__(self, state):
+        state.setdefault("committed", None)
+        state.setdefault("stored", True)
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
                 state[attr] = _loads(state[attr])
