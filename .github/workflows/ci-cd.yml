@@ -114,7 +114,7 @@ jobs:
     if: needs.plan.outputs.run == 'true'
     runs-on: ${{ matrix.os }}
     # `long`: the fast tier's Windows job, which runs no cf tests but is the slowest runner
-    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && 25 || 15 }}
+    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 35 || 25) || 15 }}
     strategy:
       # Full tier: every OS x Python 3.11-3.15, plus pre-release and minimum dependency
       # variants. Fast tier: Python 3.13 only (see the plan job).
@@ -144,7 +144,7 @@ jobs:
       - name: Show tox config
         run: tox c
       - name: Run tox
-        run: tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && 900 || 300 }}
+        run: tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 1500 || 900) || 300 }}
       # The portable store's own tests use `trusted` roots on Windows, where `private` holds only
       # under %LOCALAPPDATA% (the runner's temporary directory is there): run them again as
       # `private`, the trust of a Submitter's default store (RFC 0003 section 6.4)
