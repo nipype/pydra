@@ -2,6 +2,7 @@ import ast
 import gc
 import importlib
 import importlib.util
+import json
 import linecache
 import re
 import os
@@ -14,7 +15,7 @@ import uuid
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest import mock
 import attrs
 import cloudpickle
@@ -221,42 +222,48 @@ def test_hash_object_known_values(obj: object, expected: str):
     assert hash_object(obj).hex() == expected
 
 
+def _path_repr(path) -> bytes:
+    """A path is its string, as RFC 0004 section 6.2 digests it: ``{"$path": <str>}``"""
+    return b'{"$path":' + json.dumps(os.fspath(path)).encode() + b"}"
+
+
 def test_pathlike_reprs(tmp_path):
-    cls = tmp_path.__class__
-    prefix = f"{cls.__module__}.{cls.__name__}"
     # Directory
-    assert join_bytes_repr(tmp_path) == f"{prefix}:{tmp_path}".encode()
+    assert join_bytes_repr(tmp_path) == _path_repr(tmp_path)
     # Non-existent file
     empty_file = tmp_path / "empty"
-    assert join_bytes_repr(empty_file) == f"{prefix}:{empty_file}".encode()
+    assert join_bytes_repr(empty_file) == _path_repr(empty_file)
     # Existent file
     empty_file.touch()
-    assert join_bytes_repr(empty_file) == f"{prefix}:{empty_file}".encode()
+    assert join_bytes_repr(empty_file) == _path_repr(empty_file)
 
     class MyPathLike:
         def __fspath__(self):
             return "/tmp"
 
-    prefix = f"{__name__}.MyPathLike"
-    assert join_bytes_repr(MyPathLike()) == f"{prefix}:/tmp".encode()
+    # the class, and its module, are not part of the value
+    assert join_bytes_repr(MyPathLike()) == _path_repr("/tmp")
+    assert join_bytes_repr(PurePosixPath("/tmp")) == _path_repr("/tmp")
+
+
+def test_pathlike_with_a_lone_surrogate_has_no_repr():
+    with pytest.raises(UnicodeEncodeError):
+        join_bytes_repr(Path("bad\udcffname"))
 
 
 def test_hash_pathlikes(tmp_path, hasher):
-    cls = tmp_path.__class__
-    prefix = f"{cls.__module__}.{cls.__name__}"
-
     # Directory
     h = hasher.copy()
-    h.update(f"{prefix}:{tmp_path}".encode())
+    h.update(_path_repr(tmp_path))
     assert hash_object(tmp_path) == h.digest()
 
     # Non-existent file
     empty_file = tmp_path / "empty"
     h = hasher.copy()
-    h.update(f"{prefix}:{empty_file}".encode())
+    h.update(_path_repr(empty_file))
     assert hash_object(empty_file) == h.digest()
 
-    # Existent file
+    # Existent file: the same digest as when it did not exist
     empty_file.touch()
     assert hash_object(empty_file) == h.digest()
 
@@ -264,9 +271,8 @@ def test_hash_pathlikes(tmp_path, hasher):
         def __fspath__(self):
             return "/tmp"
 
-    prefix = f"{__name__}.MyPathLike"
     h = hasher.copy()
-    h.update(f"{prefix}:/tmp".encode())
+    h.update(_path_repr("/tmp"))
     assert hash_object(MyPathLike()) == h.digest()
 
 
@@ -460,7 +466,7 @@ def test_registration_conflict():
         def __fspath__(self):
             return "pathlike"
 
-    assert join_bytes_repr(MyClass(1)) == f"{__name__}.MyClass:pathlike".encode()
+    assert join_bytes_repr(MyClass(1)) == _path_repr("pathlike")
 
     class MyNewClass(MyClass):
         def __bytes_repr__(self, cache: Cache):

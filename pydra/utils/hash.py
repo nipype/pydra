@@ -2,6 +2,7 @@
 
 import builtins
 import dataclasses
+import json
 import sys
 import os
 import ast
@@ -35,6 +36,7 @@ import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
 import fileformats.core.exceptions
+from pydra.utils.digest import holds_references
 from pydra.utils.general import (
     STDLIB_MODULES,
     add_exc_note,
@@ -222,7 +224,8 @@ class PersistentCache:
             pass
         key_path = self.location / blake2b(str(key).encode()).hexdigest()
         if key_path.exists():
-            return Hash(key_path.read_bytes())
+            self._hashes[key] = Hash(key_path.read_bytes())
+            return self._hashes[key]
         # Two processes may both calculate the same hash; each replaces the entry
         # atomically with the same bytes, so no lock is needed
         hsh = calculate_hash()
@@ -293,6 +296,8 @@ class Cache:
     # being walked now (a class whose method reads an instance of the class)
     classes: ty.Dict[type, str] = attrs.field(factory=dict)
     _classes_open: ty.Set[type] = attrs.field(factory=set)
+    # objects made while hashing that the cache, keyed by their ``id``, must not outlive
+    keepalive: ty.List[ty.Any] = attrs.field(factory=list, repr=False)
 
     def __getitem__(self, object_id: int) -> Hash:
         return self._hashes[object_id]
@@ -515,8 +520,10 @@ def bytes_repr_slice(obj: slice, cache: Cache) -> Iterator[bytes]:
 
 @register_serializer
 def bytes_repr_pathlike(obj: os.PathLike, cache: Cache) -> Iterator[bytes]:
-    cls = obj.__class__
-    yield f"{cls.__module__}.{cls.__name__}:{os.fspath(obj)}".encode()
+    # a path is its string, whatever class holds it: neither its content nor its module
+    text = os.fsdecode(obj)
+    # a lone surrogate has no digest form: ``encode`` raises
+    yield b'{"$path":' + json.dumps(text, ensure_ascii=False).encode() + b"}"
 
 
 @register_serializer
@@ -731,17 +738,12 @@ def _file_entry(path: str, name: str) -> tuple | None:
     return (name, st.st_mtime_ns, st.st_size, st.st_ino, st.st_ctime_ns)
 
 
-def fileset_cache_key(fspaths: ty.Sequence[Path]) -> CacheKey | None:
-    """The persistent hash cache key of the files and directories at ``fspaths``.
-
-    The key holds ``(path, mtime, size, inode, ctime)`` of each file, and of every file
-    beneath each directory by its relative path, along with the relative path of every
-    subdirectory. Each file's times are read with ``fstat`` on a descriptor opened on it.
-    On Windows ``ctime`` is the creation time and the inode can be 0 on network shares;
-    the key then rests on mtime and size.
-
-    Returns None, so that the hash is not stored, if a file cannot be opened or any
-    file's mtime or ctime is within ``TIMESTAMP_RESOLUTION_NS`` of now.
+def _fileset_stat_key(
+    fspaths: ty.Sequence[Path],
+) -> ty.Tuple[ty.Optional[CacheKey], bool]:
+    """The ``(path, mtime, size, inode, ctime)`` key of the files and directories at
+    ``fspaths`` (see `fileset_cache_key`) and whether every file's mtime and ctime is
+    older than ``TIMESTAMP_RESOLUTION_NS``. The key is None if a file cannot be opened.
     """
     entries: list[tuple] = []
     for fspath in fspaths:
@@ -758,11 +760,73 @@ def fileset_cache_key(fspaths: ty.Sequence[Path]) -> CacheKey | None:
                 for f in sorted(files)
             )
     if any(entry is None for entry in entries):
-        return None
+        return None, False
     settled = time_ns() - TIMESTAMP_RESOLUTION_NS
-    if any(max(entry[1], entry[4]) >= settled for entry in entries if len(entry) > 1):
-        return None
-    return CacheKey(tuple(entries))
+    return CacheKey(tuple(entries)), not any(
+        max(entry[1], entry[4]) >= settled for entry in entries if len(entry) > 1
+    )
+
+
+def fileset_cache_key(fspaths: ty.Sequence[Path]) -> ty.Optional[CacheKey]:
+    """The persistent hash cache key of the files and directories at ``fspaths``.
+
+    The key holds ``(path, mtime, size, inode, ctime)`` of each file, and of every file
+    beneath each directory by its relative path, along with the relative path of every
+    subdirectory. Each file's times are read with ``fstat`` on a descriptor opened on it.
+    On Windows ``ctime`` is the creation time and the inode can be 0 on network shares;
+    the key then rests on mtime and size.
+
+    Returns None, so that the hash is not stored, if a file cannot be opened or any
+    file's mtime or ctime is within ``TIMESTAMP_RESOLUTION_NS`` of now.
+    """
+    key, settled = _fileset_stat_key(fspaths)
+    return key if settled else None
+
+
+FILESET_MEMORY_CACHE_SIZE = 1024
+# The ``(key, sha256)`` members of file sets by their stat key, held in memory for the
+# process: those computed from settled files and those a store verified when it decoded
+# them (`prime_fileset_members`)
+_fileset_memory = _LRUCache(FILESET_MEMORY_CACHE_SIZE)
+
+FileMembers = ty.List[ty.Tuple[str, str]]
+
+
+def fileset_members(
+    fileset: FileSet,
+    calculate: ty.Callable[[FileSet], FileMembers],
+    cache: ty.Optional[Cache] = None,
+) -> FileMembers:
+    """The ``(key, content sha256)`` members of ``fileset`` as ``calculate`` gives them,
+    from the in-memory cache, else the persistent cache (RFC 0004 section 6.2: the
+    stat-to-digest cache is used for ``file@1``), else computed. Files changed within
+    ``TIMESTAMP_RESOLUTION_NS`` are computed and not stored."""
+    key, settled = _fileset_stat_key(sorted(fileset.fspaths))
+    if key is None:
+        return calculate(fileset)
+    hit = _fileset_memory.get(key)
+    if hit is not None:
+        return list(hit)
+    if not settled:
+        return calculate(fileset)
+    if cache is None:
+        cache = Cache()
+    raw = cache.persistent.get_or_calculate_hash(
+        CacheKey(("file@1-members",) + key),
+        lambda: json.dumps(calculate(fileset)).encode(),
+    )
+    members = [(k, h) for k, h in json.loads(raw)]
+    _fileset_memory.put(key, members)
+    return list(members)
+
+
+def prime_fileset_members(fileset: FileSet, members: FileMembers) -> None:
+    """Keep ``members`` as those of ``fileset`` in memory, with no settle window. For a
+    store that has checked the files against their recorded digests and holds them
+    sealed read-only (RFC 0004 section 6.2); the persistent cache is not written."""
+    key, _ = _fileset_stat_key(sorted(fileset.fspaths))
+    if key is not None:
+        _fileset_memory.put(key, list(members))
 
 
 @register_serializer(FileSet)
@@ -2067,8 +2131,17 @@ if HAVE_NUMPY:
     @register_serializer(numpy.ndarray)
     def bytes_repr_numpy(obj: numpy.ndarray, cache: Cache) -> Iterator[bytes]:
         yield f"{obj.__class__.__module__}{obj.__class__.__name__}:{obj.size}:".encode()
-        if obj.dtype == "object":
-            yield from bytes_repr_sequence_contents(iter(obj.ravel()), cache)
+        if isinstance(obj, numpy.ma.MaskedArray):
+            # the data under a mask is not the value: the mask is
+            yield b"mask:"
+            yield numpy.ma.getmaskarray(obj).tobytes(order="C")
+        if holds_references(obj.dtype):
+            # the bytes of such an array are pointers: digest the elements, at any depth
+            yield f"{obj.dtype}:{obj.shape}:".encode()
+            elements = obj.ravel().tolist()
+            # the cache is keyed by ``id``, so these temporaries must outlive this call
+            cache.keepalive.append(elements)
+            yield from bytes_repr_sequence_contents(elements, cache)
         else:
             yield obj.tobytes(order="C")
 
