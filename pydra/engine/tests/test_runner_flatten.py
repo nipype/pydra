@@ -957,34 +957,44 @@ def test_close_names_the_stopped_elements(tmp_path):
 
 
 @python.define
-def FailsOrHolds(x: int, hold: float = 3.0) -> int:
-    """Fails after a short wait when ``x`` is negative, otherwise runs for ``hold``"""
+def FailsOrHolds(x: int, gate: str = "") -> int:
+    """Fails at once when ``x`` is negative, otherwise runs until ``gate`` exists (a
+    60 s bound only)"""
     if x < 0:
-        time.sleep(0.5)
         raise ValueError("fails on a negative x")
-    time.sleep(hold)
+    deadline = time.monotonic() + 60
+    while gate and not Path(gate).exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
     return x
 
 
 @workflow.define
-def FailAlongsideSplit(xs: list[int]) -> list[int]:
+def FailAlongsideSplit(xs: list[int], gate: str) -> list[int]:
     workflow.add(FailsOrHolds(x=-1), name="f")
-    s = workflow.add(FailsOrHolds().split(x=xs), name="s")
+    s = workflow.add(FailsOrHolds(gate=gate).split(x=xs), name="s")
     return s.out
 
 
 def test_stopped_entries_only_for_elements_handed_out(tmp_path):
     """Under ``max_concurrent`` released elements held back by the cap were never handed
     out, so they get no "stopped" entry; only those handed out and unfinished do"""
-    with Submitter(
-        worker="cf",
-        cache_root=tmp_path,
-        on_error="fail_fast",
-        max_concurrent=2,
-        n_procs=4,
-    ) as sub:
-        with pytest.raises(WorkflowError) as raised:
-            sub(FailAlongsideSplit(xs=[10, 11, 12, 13, 14, 15]), raise_errors=True)
+    gate = tmp_path / "release"  # the elements of s run until the test opens it
+    try:
+        with Submitter(
+            worker="cf",
+            cache_root=tmp_path / "cache",
+            on_error="fail_fast",
+            max_concurrent=2,
+            n_procs=4,
+        ) as sub:
+            with pytest.raises(WorkflowError) as raised:
+                sub(
+                    FailAlongsideSplit(xs=[10, 11, 12, 13, 14, 15], gate=str(gate)),
+                    raise_errors=True,
+                )
+            gate.touch()  # s0 is still running; let it end so the pool closes
+    finally:
+        gate.touch()
     entries = raised.value.entries
     stopped = [(e.job_name, e.state_index) for e in entries if e.phase == "stopped"]
     # the cap of two leaves room for one element of ``s`` beside ``f``
