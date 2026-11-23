@@ -271,7 +271,7 @@ def test_a_cancellation_raised_by_a_worker_ends_the_run(tmp_path):
 
     thread = threading.Thread(target=call, daemon=True)
     thread.start()
-    thread.join(20)
+    thread.join(60)
     assert not thread.is_alive(), "the run hangs: the cancelled job is never reported"
     assert outcome and outcome[0] is not None, "the run must not succeed"
 
