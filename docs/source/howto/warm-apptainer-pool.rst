@@ -90,7 +90,13 @@ What a worker does with a warm environment
 * A later ticket that needs a root the instance lacks restarts it once, bound to the union of the
   old roots and the new ones. A job that would need more than the environment's
   ``max_mount_roots`` roots (16 by default) runs cold, with ``apptainer exec`` of the image, in the
-  same worker. A job keyed by another reference of the same environment also runs cold.
+  same worker. On a ``cuda`` class that cold run gets no GPU flags (``--nv``, ``--gpus``): only the
+  warm start passes them, so keep a GPU tool's jobs within ``max_mount_roots``.
+* Each resolved reference has its own instance: when a tag or an Lmod default moves between two
+  runs on a pool that stays up, the second run's jobs start an instance of the new reference, and
+  the idle instance of the old one is stopped. A worker keeps at most
+  ``PoolSettings.max_warm_sessions`` instances (4 by default) and stops the least recently used
+  idle one to start another.
 * Each job gets its own ``HOME``, removed when it ends, and the instance's ``/tmp`` is emptied after
   each job, so no job sees what another wrote there. ``max_jobs=<n>`` on the environment restarts
   the instance after ``n`` jobs, for a tool known to leak.
@@ -98,10 +104,18 @@ What a worker does with a warm environment
   A command still running when a claim is lost or the drain ends is stopped with its instance; the
   next job starts a fresh one. An instance a killed worker left behind on a host is removed by the
   next warm start there, never one of another user or another process that is still alive.
-* A failed start does not fail any job: the environment's jobs run cold in that worker.
+* A failed start is a load fault and fails no job: the ticket goes back on the queue uncharged,
+  and the next claim of it starts the instance again. Repeated failures
+  (``FaultBudgets.infrastructure_replacements`` in one coordinator epoch) hold the ticket's
+  residency, as for a model that does not load. The environment is not yet part of a ticket's
+  residency, so that hold covers every ticket of the class without resident state, until
+  ``pydracli pool release-hold`` lifts it.
+* The start runs before the job's call, so no call deadline bounds it: a slow image pull or SIF
+  build holds the ticket until it ends or the worker's own time limit stops it.
 
-Each job's ``pool`` facts (``Result.runtime.pool``, and the execute context under a store that
-records them) carry an ``environment`` entry: ``run`` (``warm`` or ``cold``), ``state`` (``cold``
+Each job's ``pool`` facts carry an ``environment`` entry. They reach the audit record and, under
+``PickleStore``, ``Result.runtime.pool``; under a ``PortableStore`` whose identity lists ``pool``
+in ``recorded_only`` they are in the stored execute context. The entry holds ``run`` (``warm`` or ``cold``), ``state`` (``cold``
 for the first job of a start), ``since_load`` (jobs the instance ran before this one) and
 ``load_s`` (seconds the start took). These are recorded only; they never select a slot.
 
