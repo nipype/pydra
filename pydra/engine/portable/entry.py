@@ -144,6 +144,11 @@ class EntryFormat(ty.Protocol):
         an entry's checksum where its directory name is a hash of it)."""
         ...
 
+    def member_records(self, entry: StorageDir) -> dict[str, dict]:
+        """The ``sha256`` and ``size`` the entry records for each member, checked for form
+        but not against the members."""
+        ...
+
     def read(
         self,
         entry: StorageDir,
@@ -283,6 +288,12 @@ class PydraEntryV1:
 
     # -- reading -----------------------------------------------------------------------
 
+    def member_records(self, entry: StorageDir) -> dict[str, dict]:
+        doc = _json(_read_file(entry, "entry.json"), "entry.json")
+        if not isinstance(doc, dict) or not isinstance(doc.get("members"), dict):
+            raise CorruptEntry("entry.json lacks members")
+        return _checked_members(doc["members"])
+
     def identify(self, entry: StorageDir) -> tuple[str, str]:
         """The ``checksum`` and ``writer`` that ``entry.json`` records.
 
@@ -397,18 +408,7 @@ class PydraEntryV1:
             raise MisfiledEntry(
                 f"the entry records fingerprint {doc['fingerprint']!r}, found at {fingerprint!r}"
             )
-        members: dict[str, dict] = doc["members"]
-        for name, rec in members.items():
-            if not (
-                isinstance(name, str)
-                and isinstance(rec, dict)
-                and isinstance(rec.get("size"), int)
-                and not isinstance(rec.get("size"), bool)
-                and isinstance(rec.get("sha256"), str)
-                and FINGERPRINT.fullmatch(rec["sha256"])
-            ):
-                raise CorruptEntry(f"entry.json has a malformed member {name!r}")
-            _check_member_name(name)
+        members = _checked_members(doc["members"])
         top = {n for n in members if "/" not in n}
         unlisted = sorted(
             n for n in names if n not in ("entry.json", "files") and n not in top
@@ -521,17 +521,32 @@ def _open_member(entry: StorageDir, name: str) -> ty.BinaryIO:
             d.close()
 
 
-def read_capped(f: ty.BinaryIO, name: str, cap: int = JSON_CAP) -> bytes:
+def read_capped(f: ty.BinaryIO, name: str, cap: int | None = JSON_CAP) -> bytes:
     """The bytes of the open file ``f`` (named ``name`` in errors), read in blocks of
-    `READ_BLOCK`; `CorruptEntry` past ``cap`` bytes."""
+    `READ_BLOCK`; `CorruptEntry` past ``cap`` bytes (None: no cap)."""
     chunks: list[bytes] = []
     total = 0
     while block := f.read(READ_BLOCK):
         chunks.append(block)
         total += len(block)
-        if total > cap:
+        if cap is not None and total > cap:
             raise CorruptEntry(f"{name} is larger than {cap} bytes")
     return b"".join(chunks)
+
+
+def _checked_members(members: dict) -> dict[str, dict]:
+    for name, rec in members.items():
+        if not (
+            isinstance(name, str)
+            and isinstance(rec, dict)
+            and isinstance(rec.get("size"), int)
+            and not isinstance(rec.get("size"), bool)
+            and isinstance(rec.get("sha256"), str)
+            and FINGERPRINT.fullmatch(rec["sha256"])
+        ):
+            raise CorruptEntry(f"entry.json has a malformed member {name!r}")
+        _check_member_name(name)
+    return members
 
 
 def _read_file(entry: StorageDir, name: str) -> bytes:

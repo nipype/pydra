@@ -1,6 +1,7 @@
 """PortableStore publish and read (RFC 0003 sections 5.1, 5.2, 6.2 and 7.2)."""
 
 import errno
+import functools
 import os
 import pickle
 import stat
@@ -9,6 +10,7 @@ import sys
 import textwrap
 import threading
 import time
+import uuid
 from pathlib import Path
 
 import cloudpickle
@@ -72,8 +74,14 @@ def retry_clock(monkeypatch):
     return clock
 
 
+def _work_under(base, checksum, fingerprint, attempt):
+    return Path(base) / "work" / attempt
+
+
 def make(tmp_path, name="root", **kw):
     kw.setdefault("trust", TRUST)
+    if kw["trust"] == "shared":  # a shared root has no default work directory
+        kw.setdefault("work_dir", functools.partial(_work_under, tmp_path))
     return PortableStore(tmp_path / name, **kw)
 
 
@@ -500,8 +508,8 @@ def test_group_writable_root_second_writer(tmp_path):
     policy = StorePolicy(container_mode=0o775, side_mode=0o775)
     old = os.umask(0o077)
     try:
-        first = PortableStore(tmp_path / "root", trust="shared", policy=policy)
-        second = PortableStore(tmp_path / "root", trust="shared", policy=policy)
+        first = make(tmp_path, trust="shared", policy=policy)
+        second = make(tmp_path, trust="shared", policy=policy)
         a = publish(first)
         b = publish(second, context=CTX2)  # same checksum directory, another entry
         c = publish(second, checksum="python-new")  # a new shard and checksum directory
@@ -585,6 +593,7 @@ class _Lost:
 
 
 def _result(job, outputs, **kw):
+    job.attempt = job.attempt or uuid.uuid4().hex  # a job handed out has one
     return Result(
         outputs=outputs,
         cache_dir=job.cache_dir,
