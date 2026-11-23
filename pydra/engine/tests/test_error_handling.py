@@ -156,8 +156,8 @@ def test_worker_error_before_job_saved(tmp_path: Path):
 
     class FailingWorker(cf.Worker):
         _plugin_name = "failing-cf"
-        # the base class's, which a spawned process can unpickle; this local class's
-        # cannot, which failed Add instead of reaching Divide
+        # the base class's, which is pickled by reference for the pool; this local
+        # class's cannot be pickled, which failed Add instead of reaching Divide
         uncloudpickle_and_run = cf.Worker.uncloudpickle_and_run
 
         async def run(self, job, rerun=False):
