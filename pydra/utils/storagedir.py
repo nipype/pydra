@@ -921,3 +921,14 @@ def copy_hashed(src: Path, dst: StorageDir, name: str, mode: int) -> tuple[str, 
                     pass
             raise
     return digest.hexdigest(), size
+
+
+def is_within(path: "os.PathLike[str] | str", root: "os.PathLike[str] | str") -> bool:
+    """Whether ``path`` is ``root`` or below it, with symlinks resolved; False when they
+    are on different drives"""
+    real = os.path.realpath(os.fspath(path))
+    top = os.path.realpath(os.fspath(root))
+    try:
+        return os.path.commonpath([real, top]) == top
+    except ValueError:  # another drive
+        return False

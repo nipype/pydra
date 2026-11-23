@@ -46,9 +46,17 @@ class StoreIdentity(ty.Protocol):
     name: str
     fingerprint_name: str
     recorded_only: frozenset[str]
+    scheme: int | None
+    """The ``pydra-identity`` version whose checksums this identity looks up; None for
+    another scheme."""
 
     def key(self, job: "Job") -> KeyRecord:
         """The record the job's checksum is the digest of, or None."""
+        ...
+
+    def supplied_key(self, checksum: str) -> KeyRecord:
+        """The key record of a checksum supplied from outside (a migrated slot), or None
+        for an identity that records no keys."""
         ...
 
     def check_key(self, checksum: str, key: KeyRecord) -> bool:
@@ -93,6 +101,10 @@ class PydraIdentityV1:
     recorded_only: frozenset[str] = attrs.field(factory=frozenset, converter=_fields)
     name: ty.ClassVar[str] = "pydra-identity@1"
     fingerprint_name: ty.ClassVar[str] = "pydra-context@1"
+    scheme: ty.ClassVar[int | None] = 1
+
+    def supplied_key(self, checksum: str) -> KeyRecord:
+        return None
 
     @recorded_only.validator
     def _strings(self, _attribute: ty.Any, value: frozenset[str]) -> None:
@@ -135,6 +147,10 @@ class PydraIdentityV2(PydraIdentityV1):
         validator=PydraIdentityV1._strings,
     )
     name: ty.ClassVar[str] = IDENTITY_SCHEME
+    scheme: ty.ClassVar[int | None] = 2
+
+    def supplied_key(self, checksum: str) -> KeyRecord:
+        return {"scheme": IDENTITY_SCHEME, "supplied": checksum}
 
     def key(self, job: "Job") -> KeyRecord:
         """The job's record as carried with it from the submitting process, never rebuilt
