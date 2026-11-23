@@ -590,7 +590,6 @@ class _Queue:
         )  # claim leases the storage refuses, since when
         self.missing: dict[str, float] = {}  # tickets found missing or corrupt, when
         self.faults: list[tuple[str, str]] = []
-        self.residency: str | None = None  # the residency label of the queue's tickets
 
     def close(self) -> None:
         for sub in self._SUBDIRS:
@@ -1589,6 +1588,26 @@ class PoolRoot:
             )
         _create(self.queue(queue).dir, f"held-{epoch}-{label}", b"")
 
+    def infrastructure_fault(
+        self, queue: str, epoch: int, label: str, record: dict
+    ) -> int:
+        """Record an infrastructure fault of the residency ``label`` on ``queue`` in coordinator
+        epoch ``epoch`` (``faults/<epoch>-<label>/<n>``, by exclusive create); return how many that
+        residency has had in that epoch, this one included (RFC 0005 section 6)."""
+        if not isinstance(epoch, int) or epoch < 1 or not FINGERPRINT.fullmatch(label):
+            raise ValueError(
+                f"a fault names an epoch from 1 and a residency label: {epoch}, {label}"
+            )
+        with _dir(self.queue(queue).dir, "faults") as faults:
+            with _dir(faults, f"{epoch}-{label}") as d:
+                numbers = sorted(int(n) for n in _names(d) if _GEN.fullmatch(n))
+                n = numbers[-1] + 1 if numbers else 0
+                while True:
+                    data = jcs({**record, "uuid": uuid.uuid4().hex})
+                    if _create(d, str(n), data) != "exists":
+                        return n + 1
+                    n += 1
+
     def holds(self, queue: str, epoch: int | None = None) -> dict[str, int]:
         """Each residency label held on ``queue`` by ``epoch`` (default: the newest epoch) or a newer
         one, with the newest such epoch."""
@@ -1651,6 +1670,28 @@ class PoolRoot:
             with coordinator.child(str(epoch)) as d:
                 _create(d, "ended", b"")
 
+    def write_faults(self, epoch: int, record: dict) -> None:
+        """Write coordinator epoch ``epoch``'s fault budgets and classifier reference,
+        ``coordinator/<epoch>/faults.json``, once (RFC 0005 section 6): every worker reads them
+        (`faults`), whoever started it."""
+        with _dir(self._root, "coordinator") as coordinator:
+            with coordinator.child(str(epoch)) as d:
+                _create(d, "faults.json", jcs(record))
+
+    def faults(self, epoch: int | None = None) -> tuple[int, dict] | None:
+        """The newest coordinator epoch that wrote a fault record (only ``epoch``, when given), and
+        the record; None when none did."""
+        with _dir(self._root, "coordinator") as coordinator:
+            for epoch in [epoch] if epoch is not None else reversed(self.epochs()):
+                d = _child(coordinator, str(epoch))
+                if d is None:
+                    continue
+                with d:
+                    record = _read_record(d, "faults.json")
+                if record is not None:
+                    return epoch, record
+        return None
+
     def coordinator_lease(
         self, epoch: int, *, beat: ty.Literal["thread", "external"] = "thread"
     ) -> DirectoryLease:
@@ -1691,10 +1732,11 @@ class PoolRoot:
             Pass over tickets of more jobs than this (a warm worker gathering one-job tickets).
         """
         q = self.queue(queue)
+        # judged ticket by ticket: a class's queue may carry several residencies (a
+        # residency="ignore" job shares it with plain ones), so one held residency never skips
+        # it; a routed queue (``<class>#<digest>``) carries one, so any hold there skips it
         held = self.holds(queue, epoch)
-        if (
-            held and q.residency in held
-        ):  # every ticket of a queue has the queue's residency
+        if held and "#" in queue:
             return None
         now = self.monotonic()
         interval = self.settings.renew_interval
@@ -1729,8 +1771,6 @@ class PoolRoot:
         if ticket is None:
             q.faults.append((digest, "missing"))
             q.missing[digest] = self.monotonic()
-        else:
-            q.residency = ticket.residency_label
         return ticket
 
     def take(

@@ -1020,7 +1020,8 @@ def test_outcomes_wait_for_the_expected_count(tmp_path, monkeypatch):
 
 def test_claim_stats_flat_on_a_large_live_segment(tmp_path, monkeypatch):
     """A claim on a segment of many taken, resolved slots stats no listed name: a cold claim costs
-    the same stats at 30 and 300 slots; and a queue whose residency is held is not walked.
+    the same stats at 30 and 300 slots; and the tickets of a held residency are passed over without
+    an attempt to take their claims (a queue may carry several residencies, so it is walked).
     """
 
     def stats(root: Path, tickets: int) -> int:
@@ -1053,14 +1054,14 @@ def test_claim_stats_flat_on_a_large_live_segment(tmp_path, monkeypatch):
     ticket = _ticket("h", residency=({"kind": "provider", "name": "m"},))
     for i in range(5):
         pool.put("cpu", _ticket(f"h{i}", residency=ticket.residency))
-    assert pool.claim("cpu") is not None  # learns the queue's residency
+    assert pool.claim("cpu") is not None
     pool.hold("cpu", 1, ticket.residency_label)
-    walked = []
-    real_target = PoolRoot._target
+    taken = []
+    real_take = PoolRoot._take
     monkeypatch.setattr(
-        PoolRoot, "_target", lambda self, *a: walked.append(a) or real_target(self, *a)
+        PoolRoot, "_take", lambda self, *a: taken.append(a) or real_take(self, *a)
     )
-    assert pool.claim("cpu", epoch=1) is None and walked == []
+    assert pool.claim("cpu", epoch=1) is None and taken == []
 
 
 def test_half_done_move_repaired_after_collect(tmp_path, monkeypatch):

@@ -1236,10 +1236,11 @@ def _infrastructure(exc, phase):
     return FaultRecord("infrastructure", type(exc).__name__, str(exc), phase, gap=True)
 
 
-def test_infrastructure_faults_are_bounded_per_job(pool, tasks):
+def test_infrastructure_faults_hold_the_residency(pool, tasks):
     """Under a classifier that types every exception infrastructure, a job that always fails is
     requeued under ``restart`` generations at the ``call`` phase and, at
-    ``infrastructure_replacements``, settles ``failed`` with an ``InfrastructureFault``.
+    ``infrastructure_replacements`` faults of its residency, the residency is held and the job is
+    settled ``held``.
     """
     job = pool.job(tasks.Fail(x=1), "infra")
     pool.put([job])
@@ -1251,10 +1252,11 @@ def test_infrastructure_faults_are_bounded_per_job(pool, tasks):
         ("restart", "call"),
         ("restart", "call"),
     ]
-    [failed] = pool.outcomes()
-    assert failed["outcome"] == "failed" and failed["attempt"] == gens[-1]["attempt"]
-    assert failed["fault"]["type"] == "InfrastructureFault"
-    assert "3 infrastructure faults" in failed["fault"]["message"]
+    [held] = pool.outcomes()
+    assert held["outcome"] == "held" and held["attempt"] == gens[-1]["attempt"]
+    assert held["fault"]["type"] == "RuntimeError"
+    assert "3 infrastructure faults" in held["reason"]
+    assert len(pool.pool.holds("cpu")) == 1
 
 
 def test_requeued_ticket_reclaimed_while_gathering(pool, tasks):
@@ -1267,7 +1269,7 @@ def test_requeued_ticket_reclaimed_while_gathering(pool, tasks):
     _, code = _run(pool, _class(quantum_jobs=4), classify=_infrastructure)
     assert code == 0
     assert [g["cause"] for g in pool.generations(job)] == ["put", "restart", "restart"]
-    assert [o["outcome"] for o in pool.outcomes()] == ["failed"]
+    assert [o["outcome"] for o in pool.outcomes()] == ["held"]
 
 
 def test_crash_budget_fails_a_job_crashed_worker(pool, tasks):
@@ -1594,11 +1596,11 @@ def test_bound_loads_on_the_process_device(tmp_path, tasks):
     assert tasks.LOADS == [("recorder", Device("cuda", 0))]
 
 
-def test_load_infrastructure_faults_are_bounded(pool, tasks):
+def test_load_infrastructure_faults_hold_the_residency(pool, tasks):
     """A provider whose load always fails (an infrastructure fault under the default classifier):
     each fault writes a ``restart`` generation at the ``load`` phase, and at
-    ``infrastructure_replacements`` every job of the ticket is ``failed`` (``InfrastructureFault``),
-    so the worker stops reclaiming it and exits on idle."""
+    ``infrastructure_replacements`` the residency is held and every job of the ticket is ``held``, so the worker stops reclaiming it and exits on idle.
+    """
     _providers(pool, tasks)
     jobs = [pool.job(tasks.UseBroken(model="m", x=i), f"b{i}") for i in range(2)]
     pool.put(jobs)
@@ -1612,12 +1614,12 @@ def test_load_infrastructure_faults_are_bounded(pool, tasks):
             ("restart", "load"),
             ("restart", "load"),
         ]
-    failed = pool.outcomes()
-    assert sorted(o["outcome"] for o in failed) == ["failed", "failed"]
-    for o in failed:
-        assert o["fault"]["type"] == "InfrastructureFault"
-        assert "3 infrastructure faults" in o["fault"]["message"]
-        assert "load" in o["fault"]["message"]
+    held = pool.outcomes()
+    assert sorted(o["outcome"] for o in held) == ["held", "held"]
+    for o in held:
+        assert o["fault"]["type"] == "FileNotFoundError"
+        assert "3 infrastructure faults" in o["reason"]
+        assert "at load" in o["reason"]
     assert [kind for kind, _ in tasks.LOADS] == ["broken"] * 3
 
 
