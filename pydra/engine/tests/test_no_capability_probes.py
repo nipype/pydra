@@ -121,6 +121,7 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "fut_combiner",
     ): "in the base branch, unchanged here",
     ("workers/cf.py", "os", "sched_getaffinity"): "Linux only",
+    ("workers/pool/storage.py", "errno", "ESTALE"): "not defined on every platform",
     ("workers/slurm.py", "os", "getuid"): "POSIX only",
 }
 
