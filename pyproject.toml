@@ -121,6 +121,9 @@ documentation = "https://nipype.github.io/pydra/"
 homepage = "https://nipype.github.io/pydra/"
 repository = "https://github.com/nipype/pydra.git"
 
+# Providers of ``provided`` task fields (RFC 0005): ``<name> = "<module>:<Provider>"``
+[project.entry-points."pydra.providers"]
+
 [project.scripts]
 pydracli = "pydra.scripts.cli:cli"
 

@@ -237,6 +237,9 @@ class Job(ty.Generic[TaskType]):
         self.cache_root = submitter.cache_root
         self.store = submitter.store
         self._run_start_time = None
+        from pydra.engine.resident import check_providers
+
+        check_providers(self)
 
     @property
     def cache_root(self):
@@ -833,7 +836,7 @@ class Job(ty.Generic[TaskType]):
                     self.audit.audit_task(job=self)
                 try:
                     self.audit.monitor()
-                    self.task._run(self, rerun)
+                    self._run_task(rerun)
                     result.outputs = self.task.Outputs._from_job(self)
                     self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
                 except Exception:
@@ -946,6 +949,25 @@ class Job(ty.Generic[TaskType]):
         if self._has_work_dir:
             self._cached_result = result
         return result
+
+    def _run_task(self, rerun: bool) -> None:
+        """Run the task. The state of each provided field is bound for the duration of
+        the run and handed to the task through ``provided_values``; a task with no
+        provided field costs nothing here."""
+        from pydra.engine.resident import provided_fields
+
+        self.provided_values = {}
+        if not provided_fields(self.task):
+            self.task._run(self, rerun)
+            return
+        from pydra.engine import resident
+
+        with resident.bound(self) as values:
+            self.provided_values = values
+            try:
+                self.task._run(self, rerun)
+            finally:
+                self.provided_values = {}
 
     def _remove_info_file(self):
         """Remove the job's ``<uid>_info.json``; one that cannot be removed is logged
