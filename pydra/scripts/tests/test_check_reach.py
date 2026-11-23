@@ -1,5 +1,6 @@
 import importlib
 import itertools
+import json
 from pathlib import Path
 import sys
 import textwrap
@@ -343,12 +344,17 @@ def test_cli_lists_and_exits_1(project):
     assert clean.exit_code == 0
 
 
-def test_cli_file_input_from_a_path(project, tmp_path):
-    data = tmp_path / "a.txt"
+@pytest.mark.parametrize("folder", ["plain", "back\\slash"])
+def test_cli_file_input_from_a_path(project, tmp_path, folder):
+    """A path holding backslashes, as every Windows path does, given as a JSON string"""
+    if folder != "plain" and sys.platform == "win32":
+        folder = "back"  # a separator here: the tmp_path itself holds backslashes
+    data = tmp_path / folder / "a.txt"
+    data.parent.mkdir()
     data.write_text("abc")
     result = CliRunner().invoke(
         cli,
-        ["check-reach", f"{project.__name__}:Size", '{"in_file": "%s"}' % data],
+        ["check-reach", f"{project.__name__}:Size", json.dumps({"in_file": str(data)})],
     )
     assert result.exit_code == 0, result.output
 
