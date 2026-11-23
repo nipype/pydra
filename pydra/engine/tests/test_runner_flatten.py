@@ -22,6 +22,7 @@ from pydra.engine.lease import LeaseSettings
 from pydra.engine.runner import GraphRunner
 from pydra.engine.store import PickleStore
 from pydra.engine.submitter import Submitter, WorkflowError
+from pydra.engine.tests.test_runner import count_in_flight
 
 # a holder is taken over after one second without a renewal
 SETTINGS = LeaseSettings(stale_after=1, timeout=30, attribute_delay=0)
@@ -96,7 +97,8 @@ def peak_overlap(logdir: Path) -> int:
     return peak
 
 
-def test_max_concurrent_caps_whole_run(tmp_path):
+def test_max_concurrent_caps_whole_run(tmp_path, monkeypatch):
+    in_flight = count_in_flight(monkeypatch)
     logdir = tmp_path / "spans"
     logdir.mkdir()
     # the pool is larger than the cap whatever the host, so the cap is the bound; each
@@ -106,7 +108,10 @@ def test_max_concurrent_caps_whole_run(tmp_path):
     ) as sub:
         sub(make_outer(8, partners=4)(logdir=str(logdir)))
     assert len(list(logdir.glob("*.span"))) == 32
-    assert peak_overlap(logdir) == 4
+    # the cap: never more than four handed out without an outcome, across the nested
+    # workflows; and the cap is reached: four ran at once
+    assert in_flight["most"] <= 4 and in_flight["now"] == 0
+    assert peak_overlap(logdir) >= 4
 
 
 @python.define
