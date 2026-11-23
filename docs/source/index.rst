@@ -151,6 +151,7 @@ See the full reference documentation for Pydra
    howto/create-task-package
    howto/port-from-nipype
    howto/gpu-model-on-slurm
+   howto/warm-apptainer-pool
    howto/process-owning-provider
 
 .. toctree::
