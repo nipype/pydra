@@ -80,9 +80,10 @@ class FitRequest:
 
 
 def fit_request(job: "Job", providers: Sequence[ty.Any] = ()) -> FitRequest:
-    """The request ``job`` makes of a class: its resources, resident keys, residency digest and the
-    code its providers load under (``providers`` before the job's own). A job whose resident keys
-    cannot be read yet (a stand-in of ``plan()``, its inputs lazy) has none."""
+    """The request ``job`` makes of a class: its resources, resident keys, residency digest, the
+    code its providers load under (``providers`` before the job's own) and its units (the task's
+    ``units``, `pydra.compose.python.units_of`). A job whose resident keys cannot be read yet (a
+    stand-in of ``plan()``, its inputs lazy) has none, nor units."""
     from pydra.engine import resident
     from .calibration import code_of, residency_key
 
@@ -93,15 +94,31 @@ def fit_request(job: "Job", providers: Sequence[ty.Any] = ()) -> FitRequest:
             for f, p in resident.provided_fields(job.task)
         )
     except Exception:
-        residency = ()
-    if not residency:
         return FitRequest(residency=(), resources=res)
+    units = job_units(job)
+    if not residency:
+        return FitRequest(residency=(), resources=res, units=units)
     return FitRequest(
         residency=residency,
         resources=res,
+        units=units,
         key=residency_key(residency),
         code=code_of(job, providers),
     )
+
+
+def job_units(job: "Job") -> float | None:
+    """The job's size in its task's own units (`pydra.compose.python.units_of`); None for a task
+    that declares no ``units``, or whose inputs are not all set yet."""
+    from pydra.compose.python import PythonTask, units_of
+    from pydra.utils.typing import is_lazy
+
+    task = job.task
+    if not isinstance(task, PythonTask) or type(task)._units is None:
+        return None
+    if any(is_lazy(v) for v in attrs.asdict(task, recurse=False).values()):
+        return None
+    return units_of(task)
 
 
 class Fit(ty.Protocol):
