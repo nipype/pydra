@@ -1956,3 +1956,11 @@ def test_a_custom_entry_format_is_bound_to_the_store(tmp_path):
 
     store = make(tmp_path, entry_format=Custom())
     assert len(bound) == 1 and store.format.identity is bound[0][0]
+
+
+def test_visibility_timeout_follows_the_store_lease_settings(tmp_path):
+    from pydra.engine.lease import LeaseSettings
+
+    local = LeaseSettings(attribute_delay=0)
+    store = make(tmp_path, lease_settings=local)
+    assert store.visibility_timeout == local.visibility_timeout

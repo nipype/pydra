@@ -7,6 +7,7 @@ import getpass
 import hashlib
 import json
 import os
+import pickle
 import socket
 import stat
 import subprocess
@@ -18,12 +19,13 @@ import typing as ty
 import uuid
 from pathlib import Path
 
+import attrs
 import pytest
 
 from pydra.compose import python, workflow
 from pydra.engine.runner import GraphRunner
 from pydra.engine.job import Job
-from pydra.engine.lease import LeaseSettings, _describe
+from pydra.engine.lease import POLL_MAX, LeaseSettings, LeaseTimeout, _describe
 from pydra.engine.portable.entry import CorruptEntry, EntryNotTrusted
 from pydra.engine.portable.layout import cdir_for
 from pydra.engine.portable.store import PortableStore
@@ -32,6 +34,7 @@ from pydra.engine.submitter import Submitter
 from pydra.scripts.cli import crash
 from pydra.utils.storagedir import IS_WINDOWS, StoreAges, StorePolicy
 
+from .test_lease import FakeTime, newest_mtime
 from .test_portable_quarantine import SKEW, age, aged_store, skew  # noqa: F401
 from .test_portable_store import (
     CTX,
@@ -704,6 +707,190 @@ def test_no_dedupe_lease_is_always_held(tmp_path):
         assert (tmp_path / "root" / "leases").is_dir() and lease.prove()
 
 
+def _plant_dead_holder(lockfile: Path, stale_after: float | None) -> None:
+    """Leave the lease a crashed process held: a token directory nothing renews, whose
+    record carries ``stale_after`` (none, as an older pydra wrote it, if None)."""
+    token_dir = lockfile / ("f" * 32)
+    token_dir.mkdir(parents=True)
+    record = {"token": "f" * 32, "started": time.time()}
+    if stale_after is not None:
+        record["stale_after"] = stale_after
+    (token_dir / "holder.json").write_text(json.dumps(record))
+
+
+SHORT = LeaseSettings(stale_after=0.5, timeout=1, attribute_delay=0)
+
+
+def _fake_clock(lease, limit: float = 3600.0) -> FakeTime:
+    """Drive ``lease``'s wait on a fake clock that starts at the newest mark in its
+    lockfile and moves only by the wait's own sleeps, so the time the wait took is the
+    fake clock's reading; a wait past ``limit`` fake seconds fails the test"""
+
+    def bounded(clock):
+        assert clock.t <= limit, f"still waiting after {clock.t:.0f} fake seconds"
+
+    clock = FakeTime(newest_mtime(lease.lockfile), on_sleep=bounded)
+    lease.clock, lease.monotonic, lease.sleep = (
+        clock.storage,
+        clock.monotonic,
+        clock.sleep,
+    )
+    return clock
+
+
+def test_lease_settings_bound_takeover_of_a_dead_holder(tmp_path):
+    """A short ``stale_after`` takes a dead holder's lease over within that bound."""
+    settings = LeaseSettings(stale_after=0.5, timeout=10, attribute_delay=0)
+    store = make(tmp_path, dedupe=True, lease_settings=settings)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=0.5)
+    clock = _fake_clock(lease)
+    with lease:
+        assert lease.held
+        assert len(lease.broke) == 1
+    assert 0.5 < clock.t <= 0.5 + POLL_MAX  # the default would wait out 300 s
+
+
+def test_lease_settings_mixed_bounds_spare_a_live_holder(tmp_path):
+    """A process with shorter bounds does not take over a live holder that renews on
+    longer ones: it judges the lease by the holder's recorded ``stale_after``."""
+    a = make(tmp_path, dedupe=True)  # renews every 30 s
+    b = make(tmp_path, dedupe=True, lease_settings=attrs.evolve(SHORT, max_wait=1.5))
+    held = a.acquire("python-abc", CTX)
+    with held:
+        # a second on, past the short stale_after, collect under the short bounds sees
+        # the lease as live
+        name = held.lockfile.name[: -len(".lock")]
+        with b._open() as root:
+            assert b._lease_live(root, name, time.time() + 1.0)
+        waiting = b.acquire("python-abc", CTX)
+        clock = _fake_clock(waiting)  # its wait outlives the short stale_after
+        with pytest.raises(LeaseTimeout):
+            with waiting:
+                pass
+        assert clock.t > SHORT.stale_after
+        assert held.prove()
+
+
+def test_lease_settings_dead_holder_taken_over_after_the_longer_bound(tmp_path):
+    """A dead holder that recorded a longer ``stale_after`` is taken over after it, not
+    after the taker's, and the taker waits for it past its own ``timeout``."""
+    store = make(tmp_path, dedupe=True, lease_settings=SHORT)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=2.0)
+    clock = _fake_clock(lease)
+    with lease:
+        assert len(lease.broke) == 1
+    assert SHORT.timeout < 2.0 < clock.t <= 2.0 + POLL_MAX
+
+
+def test_lease_settings_huge_recorded_bound_is_capped(tmp_path):
+    """A dead holder recording an absurd ``stale_after`` is honoured only up to the
+    taker's ``max_honoured_stale_after``: the waiter takes it over by then, and collect
+    sees it as stale after the cap."""
+    capped = attrs.evolve(SHORT, max_honoured_stale_after=2.0)
+    store = make(tmp_path, dedupe=True, lease_settings=capped)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=1e9)
+    name = lease.lockfile.name[: -len(".lock")]
+    planted = newest_mtime(lease.lockfile)  # judged against the storage marks
+    with store._open() as root:
+        assert store._lease_live(root, name, planted)
+        assert not store._lease_live(root, name, planted + 2.5)
+    clock = _fake_clock(lease)
+    with lease:
+        assert len(lease.broke) == 1
+    assert 2.0 < clock.t <= 2.0 + POLL_MAX
+
+
+def test_lease_settings_unreadable_holder_judged_by_the_cap(tmp_path):
+    """A holder record another user's process left unreadable counts as the cap."""
+    capped = attrs.evolve(SHORT, max_honoured_stale_after=2.0)
+    store = make(tmp_path, dedupe=True, lease_settings=capped)
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=0.5)
+    (record,) = lease.lockfile.rglob("holder.json")
+    record.chmod(0)
+    try:
+        if os.access(record, os.R_OK):
+            pytest.skip("the record stays readable (running as root)")
+        name = lease.lockfile.name[: -len(".lock")]
+        planted = newest_mtime(lease.lockfile)  # judged against the storage marks
+        with store._open() as root:
+            assert store._lease_live(root, name, planted + 1.0)
+            assert not store._lease_live(root, name, planted + 2.5)
+        clock = _fake_clock(lease)
+        with lease:
+            assert len(lease.broke) == 1
+        assert 2.0 < clock.t <= 2.0 + POLL_MAX
+    finally:
+        if record.exists():
+            record.chmod(0o600)
+
+
+def test_lease_settings_unrecorded_holder_judged_by_the_default(tmp_path):
+    """A holder an older pydra wrote, with no recorded bounds, is judged by the default
+    ``stale_after``, so short bounds do not take it over."""
+    store = make(
+        tmp_path, dedupe=True, lease_settings=attrs.evolve(SHORT, max_wait=1.5)
+    )
+    lease = store.acquire("python-abc", CTX)
+    _plant_dead_holder(lease.lockfile, stale_after=None)
+    with pytest.raises(LeaseTimeout):
+        with lease:
+            pass
+
+
+def test_lease_settings_read_only(tmp_path):
+    store = make(tmp_path)
+    with pytest.raises(AttributeError):
+        store.lease_settings = LeaseSettings(holder="named")
+
+
+def test_lease_settings_holder_forced_anonymous(tmp_path):
+    """The holder record names no user or host even if a named holder is passed."""
+    settings = LeaseSettings(
+        stale_after=10, timeout=15, attribute_delay=0, holder="named"
+    )
+    store = make(tmp_path, dedupe=True, lease_settings=settings)
+    assert store.lease_settings.holder == "anonymous"
+    assert store.lease_settings == settings  # the staleness fields are kept
+    lease = store.acquire("python-abc", CTX)
+    with lease:
+        (holder,) = lease.lockfile.rglob("holder.json")
+        record = json.loads(holder.read_text())
+        assert record == {**record, "stale_after": 10}
+        assert set(record) == {"started", "token", "stale_after"}
+    # and on the copy a worker unpickles
+    worker = pickle.loads(pickle.dumps(store))
+    assert worker.lease_settings == settings
+    assert worker.lease_settings.holder == "anonymous"
+
+
+def test_lease_settings_invalid_bounds_raise(tmp_path):
+    """The store checks the bounds again, even of settings altered after construction."""
+    bad = LeaseSettings()
+    object.__setattr__(bad, "renew_fraction", 0.5)  # beats every 150 s of 300
+    with pytest.raises(ValueError, match="stale_after"):
+        make(tmp_path, lease_settings=bad)
+    with pytest.raises(TypeError, match="LeaseSettings"):
+        make(tmp_path, lease_settings={"stale_after": 1})
+
+
+def test_lease_settings_default_unchanged(tmp_path):
+    store = make(tmp_path)
+    got = store.lease_settings
+    assert (got.stale_after, got.renew_fraction, got.attribute_delay, got.timeout) == (
+        300.0,
+        0.1,
+        60.0,
+        600.0,
+    )
+    assert store.lease_settings.holder == "anonymous"
+    assert store.lease_settings.max_wait is None
+    assert store.acquire("python-abc", CTX).settings is store.lease_settings
+
+
 def test_anonymous_lease_holder_names_no_user(tmp_path):
     store = make(tmp_path)
     lease = store.acquire("python-abc", CTX)
@@ -716,7 +903,7 @@ def test_anonymous_lease_holder_names_no_user(tmp_path):
         assert len(files) == 1
         text = files[0].read_text()
         record = json.loads(text)
-        assert set(record) == {"started", "token"}
+        assert set(record) == {"started", "token", "stale_after"}
         secrets = [getpass.getuser(), socket.gethostname(), str(os.getpid())]
         if hasattr(os, "getuid"):
             secrets.append(str(os.getuid()))
@@ -727,6 +914,7 @@ def test_anonymous_lease_holder_names_no_user(tmp_path):
                     assert secret not in value, key
         assert isinstance(record["started"], float)
         assert isinstance(record["token"], str)
+        assert isinstance(record["stale_after"], (int, float))
         assert "python-abc" not in "".join(
             p.name for p in lease.lockfile.parent.iterdir()
         )
@@ -812,10 +1000,11 @@ def test_collect_removes_old_default_work_dirs_only(tmp_path, skew):  # noqa: F8
 def test_collect_spares_a_resume_dir_whose_lease_is_live(tmp_path, skew):  # noqa: F811
     """A resumable job's directory is old while its job runs (nothing is written at its top);
     the lease of the same hash, renewed by its holder, keeps it"""
-    store = aged_store(tmp_path, work=100)
     # the skewed clock makes everything at least SKEW old; a lease is stale after more
-    store._lease_settings = LeaseSettings(
-        holder="anonymous", stale_after=10 * SKEW, timeout=20 * SKEW
+    store = make(
+        tmp_path,
+        policy=StorePolicy(ages=StoreAges(work=100)),
+        lease_settings=LeaseSettings(stale_after=10 * SKEW, timeout=20 * SKEW),
     )
     job = _stub(None, can_resume=True)
     path = store.begin_run(job)

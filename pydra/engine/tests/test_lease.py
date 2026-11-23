@@ -24,6 +24,9 @@ from pydra.engine.lease import (
     LeaseSettings,
     LeaseTimeout,
     LeaseUnavailable,
+    POLL_MAX,
+    STALE_AFTER,
+    holder_stale_after,
     release_patience,
 )
 from pydra.engine.job import load_and_run
@@ -87,15 +90,16 @@ class FakeTime:
 SLOW = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0)
 
 
-def plant_foreign_lease(lockfile: Path) -> Path:
-    """Plant the lease directory a process on another host left, return its token dir."""
+def plant_foreign_lease(lockfile: Path, stale_after: float | None = 0.1) -> Path:
+    """Plant the lease directory a process on another host left, return its token dir.
+    Its recorded ``stale_after`` is by default shorter than any test's, so the taker's
+    bound decides; None records none, as an older pydra did."""
     token_dir = lockfile / ("f" * 32)
     token_dir.mkdir(parents=True)
-    (token_dir / HOLDER_FILE).write_text(
-        json.dumps(
-            {"owner": "someone", "host": FOREIGN_HOST, "pid": DEAD_PID, "started": 0}
-        )
-    )
+    record = {"owner": "someone", "host": FOREIGN_HOST, "pid": DEAD_PID, "started": 0}
+    if stale_after is not None:
+        record["stale_after"] = stale_after
+    (token_dir / HOLDER_FILE).write_text(json.dumps(record))
     return token_dir
 
 
@@ -113,6 +117,81 @@ def newest_mtime(lockfile: Path) -> float:
 def test_directory_lease_is_a_lease(tmp_path):
     assert isinstance(DirectoryLease("abc", tmp_path, tmp_path / "abc.lock"), Lease)
     assert isinstance(PickleStore(tmp_path).acquire("abc", {}), Lease)
+
+
+def test_holder_records_its_stale_after(tmp_path):
+    lease = DirectoryLease("abc", tmp_path, tmp_path / "abc.lock", settings=FAST)
+    with lease:
+        assert lease.holder()["stale_after"] == FAST.stale_after
+
+
+CAPPED = LeaseSettings(
+    stale_after=10, timeout=15, attribute_delay=0, max_honoured_stale_after=40
+)
+
+
+@pytest.mark.parametrize(
+    "record, unreadable, expected",
+    [
+        (None, False, 10),
+        (None, True, 40),
+        ({"stale_after": 20}, False, 20),
+        ({"stale_after": 5}, False, 10),
+        ({"stale_after": 1e9}, False, 40),
+        ({}, False, 40),
+        ({"stale_after": True}, False, 40),
+        ({"stale_after": "20"}, False, 40),
+        ({"stale_after": -1}, False, 40),
+        ({"stale_after": float("inf")}, False, 40),
+    ],
+)
+def test_holder_stale_after(record, unreadable, expected):
+    assert holder_stale_after(record, CAPPED, unreadable=unreadable) == expected
+
+
+def test_max_honoured_stale_after_default_and_bounds():
+    assert LeaseSettings().max_honoured_stale_after == 4 * STALE_AFTER
+    assert (
+        LeaseSettings(stale_after=2000, timeout=3000).max_honoured_stale_after == 2000
+    )
+    with pytest.raises(ValueError, match="max_honoured_stale_after"):
+        LeaseSettings(stale_after=10, timeout=15, max_honoured_stale_after=5)
+
+
+def test_huge_recorded_bound_is_taken_over_by_the_cap(tmp_path):
+    """The waiter's bound stretches at most to the cap, so a record of 1e9 cannot hold
+    every waiter forever."""
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile, stale_after=1e9)
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, CAPPED)
+    with lease:
+        assert len(lease.broke) == 1
+        assert 40 < clock.t <= 40 + POLL_MAX
+
+
+def test_holder_with_longer_bounds_taken_over_after_them(tmp_path):
+    """A dead holder that recorded a longer ``stale_after`` is taken over after it, and
+    the waiter's bound stretches by the difference, so it does not give up first."""
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile, stale_after=20)
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, SLOW)  # stale after 10, timeout 15
+    with lease:
+        assert lease.held
+        assert len(lease.broke) == 1
+        assert 20 < clock.t <= 20 + POLL_MAX
+
+
+def test_holder_without_recorded_bounds_judged_by_the_default(tmp_path):
+    """A holder an older pydra wrote is taken over after the default ``stale_after``."""
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile, stale_after=None)
+    clock = FakeTime(newest_mtime(lockfile))
+    lease = clock.lease(tmp_path, lockfile, SLOW)
+    with lease:
+        assert len(lease.broke) == 1
+        assert STALE_AFTER < clock.t <= STALE_AFTER + POLL_MAX
 
 
 def test_lease_records_holder_and_releases(tmp_path):
