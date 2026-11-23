@@ -1700,6 +1700,10 @@ def make_lambda():
     return lambda a: a - 1
 
 
+def make_scale():
+    return lambda a: a * 1.5
+
+
 pair = (lambda a: a + 1, lambda a: a * 2)
 
 
@@ -1893,22 +1897,28 @@ def test_by_value_replaced_code_is_not_trusted(tmp_path, monkeypatch):
 
 def test_by_value_code_differing_in_a_constant_is_not_trusted(tmp_path, monkeypatch):
     """The code stamp covers the constants: code that differs from the hashed code
-    only in a constant does not take its carried encoding"""
+    only in a constant does not take its carried encoding. A float is loaded from
+    ``co_consts`` on every minor (small ints are instruction arguments since 3.14)"""
     module = _by_value_module(tmp_path, monkeypatch)
-    func = module.make_lambda()
+    func = module.make_scale()
     old = hash_module._function_code(func, Cache())
     control = cloudpickle.dumps(func)
     func.__code__ = func.__code__.replace(
-        co_consts=tuple(
-            2 if type(c) is int and c == 1 else c for c in func.__code__.co_consts
-        )
+        co_consts=tuple(2.5 if c == 1.5 else c for c in func.__code__.co_consts)
     )
-    assert func(5) == 3
+    assert func(2) == 5.0
     payload = cloudpickle.dumps(func)
     monkeypatch.delitem(sys.modules, module.__name__)
     assert hash_module._function_code(_loads_by_value(control), Cache()) == old
     code = hash_module._function_code(_loads_by_value(payload), Cache())
     assert code.startswith(b"bytecode@")
+
+
+def test_code_stamp_tells_small_int_constants_apart():
+    """Code differing only in a small int, an instruction argument since 3.14 rather
+    than a member of ``co_consts``, has another code stamp"""
+    one, two = (lambda: 1).__code__, (lambda: 2).__code__
+    assert hash_module._code_stamp(one) != hash_module._code_stamp(two)
 
 
 def test_by_value_pickled_before_hashing_without_source_is_bytecode(
