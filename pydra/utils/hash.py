@@ -1705,10 +1705,11 @@ def _class_source_file(klass: type) -> str | None:
     function compiled in a class body of `klass`'s qualified name, but not from that
     file (unpickled by value, so named ``"<dynamic-code>"`` by cloudpickle >= 3.1.3,
     or named after another file), does not have the code compiled from it, or `klass`
-    is not held by its module and its constant attributes are not those the file's
-    definition assigns (see `_constants_match`). Such a class is a copy unpickled
-    where the file of its module holds another definition (another ``__main__``, an
-    edited file)."""
+    is not held by its module, is not a local class (cloudpickle reduces the
+    qualified name of a local class it unpickles to its name), and its constant
+    attributes are not those the file's definition assigns (see `_constants_match`).
+    Such a class is a copy unpickled where the file of its module holds another
+    definition (another ``__main__``, an edited file)."""
     try:
         source_file = inspect.getsourcefile(klass)
     except (OSError, TypeError):
@@ -1725,8 +1726,12 @@ def _class_source_file(klass: type) -> str | None:
                 lines = _source_lines(klass, source_file)
             if not _compiled_from(f, source_file, lines):
                 return None
-    if _owner_name(klass) is None and not _constants_match(
-        klass, source_file, lines or _source_lines(klass, source_file)
+    if (
+        _owner_name(klass) is None
+        and "<locals>" not in klass.__qualname__
+        and not _constants_match(
+            klass, source_file, lines or _source_lines(klass, source_file)
+        )
     ):
         return None
     return source_file
@@ -1735,9 +1740,9 @@ def _class_source_file(klass: type) -> str | None:
 def _constants_match(klass: type, source_file: str, lines: list[str]) -> bool:
     """Whether a definition of a class of `klass`'s name in a source (at
     ``__firstlineno__`` if `klass` has it) assigns each attribute of `klass` that holds
-    a constant (see `_STAMPED_CONSTANTS`), and that the definition assigns a literal
-    at the top of its body, the value `klass` holds; True if there is no such
-    definition"""
+    a constant (see `_STAMPED_CONSTANTS`), and to which the last top-level statement
+    of the definition binding it assigns a literal, the value `klass` holds; True if
+    there is no such definition"""
     first = getattr(klass, "__firstlineno__", None)
     nodes = [
         node
@@ -1749,21 +1754,29 @@ def _constants_match(klass: type, source_file: str, lines: list[str]) -> bool:
     held = vars(klass)
 
     def matches(node: ast.ClassDef) -> bool:
+        # the value the last top-level statement binding each name gives it, None if
+        # it is not a literal
+        last: dict[str, ast.expr | None] = {}
         for stmt in node.body:
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                target, value = stmt.targets[0], stmt.value
-            elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
-                target, value = stmt.target, stmt.value
-            else:
-                continue
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        last[target.id] = stmt.value
+            elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign)):
+                if isinstance(stmt.target, ast.Name):
+                    last[stmt.target.id] = (
+                        stmt.value if isinstance(stmt, ast.AnnAssign) else None
+                    )
+            elif isinstance(stmt, (*_FUNCTION_DEFS, ast.ClassDef)):
+                last[stmt.name] = None
+        for name, value in last.items():
             if not (
-                isinstance(target, ast.Name)
-                and isinstance(value, ast.Constant)
-                and not target.id.startswith("__")
-                and type(held.get(target.id)) in _STAMPED_CONSTANTS
+                isinstance(value, ast.Constant)
+                and not name.startswith("__")
+                and type(held.get(name)) in _STAMPED_CONSTANTS
             ):
                 continue
-            literal, attribute = value.value, held[target.id]
+            literal, attribute = value.value, held[name]
             if type(literal) is not type(attribute) or literal != attribute:
                 return False
         return True
@@ -1852,7 +1865,9 @@ def _carried_class_encoding(klass: type) -> bytes | None:
 
 def _carry_class_encoding(klass: type, encoding: bytes) -> None:
     """Carry `encoding` on `klass` with its class stamp (see `CARRIED_ENCODING_ATTR`),
-    unless the class does not take attributes"""
+    unless it is library code (see `is_library`) or does not take attributes"""
+    if is_library(klass):
+        return
     carried = (_class_stamp(klass), encoding)
     if vars(klass).get(CARRIED_ENCODING_ATTR) != carried:
         try:

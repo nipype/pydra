@@ -2263,6 +2263,22 @@ class Const:
     flag = True
 
 
+class Dup:
+    x = 1
+    x = 2
+
+
+def make_counted():
+    class Counter:
+        n = 0
+
+    class Twice:
+        x = 1
+        x = 2
+
+    return Counter, Twice
+
+
 def make_obj(n):
     return Obj(n)
 
@@ -2579,7 +2595,8 @@ def test_class_encoded_from_its_file_follows_an_edit(tmp_path, monkeypatch):
     module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
     code = hash_module._class_code(module.Obj, Cache())
     path = Path(module.__file__)
-    path.write_text(path.read_text().replace("x = 1", "x = 1  # edited\n    y = 2"))
+    source = path.read_text()
+    path.write_text(source.replace("class Obj:\n    x = 1", "class Obj:\n    y = 2"))
     os.utime(path, ns=(time.time_ns() + 10**9,) * 2)
     edited = hash_module._class_code(module.Obj, Cache())
     assert edited.startswith(b"class:ast@1:") and edited != code
@@ -2644,3 +2661,65 @@ def test_by_value_class_is_classified_as_its_parent_classified_it(
     for klass in classes:
         hash_module.class_digest(klass)
     assert classified(classes) == [False, False, False, False]
+
+
+def test_local_class_constants_are_not_checked_where_it_is_defined(
+    tmp_path, monkeypatch
+):
+    """The constants of a local class in the process that defines it are not checked
+    against its file: a name assigned twice, or an attribute changed at run time, keeps
+    the class's `ast@1` encoding and digest"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    counter, twice = module.make_counted()
+    assert hash_module._class_code(twice, Cache()).startswith(b"class:ast@1:")
+    expected = hash_module.class_digest(counter)
+    counter.n += 1
+    monkeypatch.setattr(hash_module, "_walk_memo", weakref.WeakKeyDictionary())
+    monkeypatch.setattr(hash_module, "_function_bytes_cache", hash_module._LRUCache(16))
+    assert hash_module._class_code(counter, Cache()).startswith(b"class:ast@1:")
+    assert hash_module.class_digest(counter) == expected
+
+
+def test_by_value_class_constants_are_checked_against_the_last_assignment(
+    tmp_path, monkeypatch
+):
+    """A class pickled by value before it is hashed is checked against the value the
+    last assignment of a name in its module file's definition gives"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / Path(module.__file__).name).write_text(_CLASS_BY_VALUE_SOURCE)
+    code = (
+        "import importlib; from pydra.utils import hash as H; "
+        f"m = importlib.import_module({module.__name__!r}); "
+        "print(H._class_code(m.Dup, H.Cache()).decode('latin-1'))"
+    )
+    own = (
+        subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            check=True,
+            cwd=str(tmp_path.parent),
+            env={**os.environ, "PYTHONPATH": str(other)},
+        )
+        .stdout.decode()
+        .strip()
+    )
+    [(_, copy)] = _digests_in_subprocess(
+        tmp_path, module, [module.Dup], extra_path=other
+    )
+    assert own.startswith("class:ast@1:")
+    assert copy == own
+
+
+def test_library_class_carries_no_encoding(monkeypatch):
+    """Digesting a library class leaves no carried encoding on it"""
+    import string
+
+    monkeypatch.delattr(string.Template, "__pydra_hash_bytes__", raising=False)
+    try:
+        hash_module.class_digest(string.Template)
+        assert "__pydra_hash_bytes__" not in vars(string.Template)
+    finally:
+        if "__pydra_hash_bytes__" in vars(string.Template):
+            delattr(string.Template, "__pydra_hash_bytes__")
