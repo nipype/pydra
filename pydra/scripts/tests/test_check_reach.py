@@ -6,6 +6,7 @@ import textwrap
 import typing as ty
 
 from click.testing import CliRunner
+import cloudpickle as cp
 import pytest
 
 import pydra.engine
@@ -187,6 +188,36 @@ def test_callable_input_is_reached(project):
 def test_user_class_instance_input_is_reached(project):
     h = project.helpers
     assert check_reach(project.MethodOnInput, {"x": 1, "o": h.Obj()}) == []
+
+
+@pytest.fixture
+def by_value(project):
+    """The project's modules pickled by value, as a script's are"""
+    modules = [project, project.helpers]
+    for module in modules:
+        cp.register_pickle_by_value(module)
+    yield lambda obj: cp.loads(cp.dumps(obj))
+    for module in modules:
+        cp.unregister_pickle_by_value(module)
+
+
+@pytest.mark.parametrize(
+    "task", ["Direct", "ClassUse", "Nested", "SameModule", "Generated"]
+)
+def test_task_pickled_by_value_reports_no_false_miss(project, by_value, task):
+    """A task whose function and helpers were unpickled by value (RFC 0004 T1, T2)
+    runs only code the walk reached or code it does not read as user code"""
+    assert reach_report(by_value(getattr(project, task)), {"x": 2}) == ([], [])
+
+
+def test_inputs_pickled_by_value_report_no_false_miss(project, by_value):
+    h = project.helpers
+    assert reach_report(project.CallsInput, {"x": 1, "f": by_value(h.direct)}) == (
+        [],
+        [],
+    )
+    for obj in (by_value(h.Obj()), by_value(h.Obj)()):
+        assert reach_report(project.MethodOnInput, {"x": 1, "o": obj}) == ([], [])
 
 
 def test_helper_in_a_thread_reported(project):
