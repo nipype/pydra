@@ -1085,10 +1085,11 @@ def _encode_function_code(
 
 def _module_source(obj: types.FunctionType) -> tuple[str, list[str]] | None:
     """The file and lines of the loaded module named by the globals of `obj`, for code
-    pickled by value: code whose ``co_filename`` cloudpickle (>= 3.1.3) replaced with
-    ``"<dynamic-code>"``, or that names a file that is not there. None for other code,
-    such as code generated into another pseudo-file (``<string>``, ``<attrs generated
-    ...>``), or if the module is not loaded."""
+    whose ``co_filename`` cloudpickle (>= 3.1.3) replaced with ``"<dynamic-code>"`` on
+    pickling it by value, or that names a path ``os.stat`` cannot read (a file that
+    is not there, or one inside a zip archive, whose source the module's loader
+    gives). None for other code, such as code generated into another pseudo-file
+    (``<string>``, ``<attrs generated ...>``), or if the module is not loaded."""
     filename = obj.__code__.co_filename
     if filename != _BY_VALUE_FILENAME and (
         filename.startswith("<") or os.path.exists(filename)
@@ -1100,7 +1101,7 @@ def _module_source(obj: types.FunctionType) -> tuple[str, list[str]] | None:
         return None
     try:
         source_file = inspect.getsourcefile(module)
-        if not source_file or source_file == filename:
+        if not source_file:
             return None
         lines, _ = inspect.findsource(module)
     except (OSError, TypeError):
@@ -1505,7 +1506,10 @@ def _carry_encoding(obj: types.FunctionType, encoding: bytes) -> None:
         setattr(obj, CARRIED_ENCODING_ATTR, carried)
 
 
-# The code objects this process encoded from their own source file, by id
+# The code objects this process encoded from the file named by their own
+# co_filename, by id. Code matched only through its carried encoding or its module's
+# file (see `_recovered_encoding`) is never registered, so it keeps taking a carried
+# encoding first
 _encoded_codes: "weakref.WeakValueDictionary[int, types.CodeType]" = (
     weakref.WeakValueDictionary()
 )
@@ -1549,7 +1553,8 @@ def _function_code(obj: types.FunctionType, cache: Cache) -> bytes:
         _mark_encoded_here(code)
         _carry_encoding(obj, cached)
         return cached
-    # code naming a file that is not there is matched only where it can be checked
+    # code naming a path that cannot be read (missing, or inside a zip archive) is
+    # matched only where it can be checked against compiled code
     encoded = (
         _encode_function_code(obj)
         if mtime_ns is not None or source_file.startswith("<")

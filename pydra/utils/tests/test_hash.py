@@ -13,6 +13,7 @@ import time
 import types
 import uuid
 import weakref
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
 from pathlib import Path, PurePosixPath
@@ -2041,6 +2042,8 @@ def test_by_value_set_constant_keeps_its_hash_under_other_seeds(tmp_path, monkey
     assert any(isinstance(c, frozenset) for c in func.__code__.co_consts)
     expected = hash_function(func)
     payload = cloudpickle.dumps(func)
+    # the carried encoding is then the only source, under every cloudpickle version
+    Path(module.__file__).unlink()
     for seed in ("1", "2", "3"):
         result = subprocess.run(
             [sys.executable, "-c", _HASH_IN_SUBPROCESS],
@@ -2051,6 +2054,41 @@ def test_by_value_set_constant_keeps_its_hash_under_other_seeds(tmp_path, monkey
             env={**os.environ, "PYTHONHASHSEED": seed},
         )
         assert result.stdout.decode().strip() == expected
+
+
+_ZIP_SOURCE = """\
+def helper(x):
+    return x + 1
+
+
+def make():
+    def inner(a):
+        return a * 2
+
+    return inner
+"""
+
+
+def test_zip_imported_code_keeps_its_encoding(tmp_path, monkeypatch):
+    """Code imported from a zip archive (zipapp, egg, PEX) names a path inside the
+    archive, which ``os.stat`` cannot read; its source comes through the module's
+    loader and it keeps its `ast@1` encoding"""
+    plain = _by_value_module(tmp_path, monkeypatch, _ZIP_SOURCE)
+    name = f"pydra_t1_zip_{uuid.uuid4().hex[:12]}"
+    archive = tmp_path / "lib.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr(f"{name}.py", _ZIP_SOURCE)
+    monkeypatch.syspath_prepend(str(archive))
+    zipped = importlib.import_module(name)
+    monkeypatch.setitem(sys.modules, name, zipped)
+    assert not os.path.exists(zipped.helper.__code__.co_filename)
+    for zip_func, plain_func in (
+        (zipped.helper, plain.helper),
+        (zipped.make(), plain.make()),
+    ):
+        code = hash_module._function_code(zip_func, Cache())
+        assert code.startswith(b"ast@1:")
+        assert code == hash_module._function_code(plain_func, Cache())
 
 
 def test_generated_code_is_not_recovered_from_the_module(tmp_path, monkeypatch):
