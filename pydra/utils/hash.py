@@ -34,6 +34,7 @@ import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from fileformats.generic import FsObject
 import fileformats.core.exceptions
+from pydra.utils.digest import holds_references
 from pydra.utils.general import (
     STDLIB_MODULES,
     add_exc_note,
@@ -283,6 +284,8 @@ class Cache:
     # the `code_digest`s of the functions hashed with a declared version, by their
     # ``module.qualname==version``
     declared: ty.Dict[str, ty.Set[str]] = attrs.field(factory=dict)
+    # objects made while hashing that the cache, keyed by their ``id``, must not outlive
+    keepalive: ty.List[ty.Any] = attrs.field(factory=list, repr=False)
 
     def __getitem__(self, object_id: int) -> Hash:
         return self._hashes[object_id]
@@ -1795,8 +1798,13 @@ if HAVE_NUMPY:
     @register_serializer(numpy.ndarray)
     def bytes_repr_numpy(obj: numpy.ndarray, cache: Cache) -> Iterator[bytes]:
         yield f"{obj.__class__.__module__}{obj.__class__.__name__}:{obj.size}:".encode()
-        if obj.dtype == "object":
-            yield from bytes_repr_sequence_contents(iter(obj.ravel()), cache)
+        if holds_references(obj.dtype):
+            # the bytes of such an array are pointers: digest the elements, at any depth
+            yield f"{obj.dtype}:{obj.shape}:".encode()
+            elements = obj.ravel().tolist()
+            # the cache is keyed by ``id``, so these temporaries must outlive this call
+            cache.keepalive.append(elements)
+            yield from bytes_repr_sequence_contents(elements, cache)
         else:
             yield obj.tobytes(order="C")
 
