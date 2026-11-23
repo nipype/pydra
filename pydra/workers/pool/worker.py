@@ -7,7 +7,8 @@ not match the class (`EXIT_HARDWARE`), then writes ``ready.json``, claims ticket
 queues, loads each ticket's residency once, runs its jobs through ``Job.run``, and settles each
 job's sample and outcome. A call that fails goes through the bisection engine
 (`pydra.workers.pool.bisect`) and the pool's fault budgets. Samples, and loads that ran out of
-memory, are kept in the pool's calibration directory.
+memory, are kept in the pool's calibration directory. A shell job whose environment is declared
+``warm=True`` runs in the worker's warm session of that environment (`PoolSession`).
 
 It exits after ``idle_polls`` empty polls, on SIGTERM once finished jobs are settled and the
 rest released, after ``orphan_after_s`` without a live coordinator, and recycles
@@ -44,6 +45,7 @@ from pydra.engine.lease import (
     LeaseLost,
     newest_mark,
 )
+from pydra.environments.base import WarmContainer, WarmSession, serving
 from pydra.utils.storagedir import StoreUnavailable
 from pydra.workers.pool.beater import expiry_payload, pool_beater
 from pydra.workers.pool.classes import WorkerClass, parse_size
@@ -59,6 +61,7 @@ from pydra.workers.pool.faults import (
     attached,
     fault_of,
 )
+from pydra.workers.pool.placement import warm_environment_label
 from pydra.workers.pool.calibration import (
     DirectoryCalibration,
     Sample,
@@ -99,6 +102,7 @@ __all__ = [
     "EXIT_REUSED",
     "EXIT_SETTINGS",
     "EXIT_USAGE",
+    "PoolSession",
     "Worker",
     "WrongHardware",
     "check_hardware",
@@ -106,6 +110,7 @@ __all__ = [
     "class_record",
     "main",
     "run_worker",
+    "warm_shell_job",
 ]
 
 logger = logging.getLogger("pydra.pool")
@@ -282,6 +287,103 @@ def claims_fit(
     return ends_at - now >= max(quantum_s, call_timeout or 0)
 
 
+class PoolSession(WarmSession):
+    """A worker's warm session of one environment and one resolved reference (``ref``): a
+    `WarmSession` with ``retry`` (a failed start is the worker's load fault, tried again by a later
+    ticket) that also records, in the ``environment`` entry of the job's pool facts, how its call ran
+    (``run``: ``warm`` or ``cold``; ``state``: ``cold`` for the first job of a start; ``since_load``;
+    ``load_s``, the start's seconds). The facts are recorded only: they never enter a job's checksum
+    or slotted context. ``used`` orders sessions for the worker's least-recently-used eviction.
+    """
+
+    def __init__(self, environment, ref: tuple[str, str], **kwargs):
+        super().__init__(environment, retry=True, **kwargs)
+        self.ref = ref
+        self.used = 0
+        self.label: str | None = None  # the environment's hold label
+
+    def accepts(self, job: "Job") -> bool:
+        """Whether ``job``'s environment is this session's and its reference this session's."""
+        return super().accepts(job) and self._ref(job) == self.ref
+
+    def execute(self, job: "Job") -> dict[str, ty.Any]:
+        cold_runs = self.cold_runs
+        try:
+            return super().execute(job)
+        finally:
+            self._note(job, self.cold_runs > cold_runs)
+
+    def _handle_for(self, job, needed=None, writable=None, raises=False):
+        starts = self.starts
+        handle = super()._handle_for(job, needed, writable, raises)
+        if self.starts > starts and self.handle is not None:
+            logger.info(
+                "started the warm environment %s with %d binding roots (start %d) in %.2fs",
+                self.handle.key.spec,
+                len(self.handle.roots),
+                self.starts,
+                self.start_s or 0.0,
+                extra={"event": "warm-start"},
+            )
+        return handle
+
+    def _note(self, job: "Job", cold: bool) -> None:
+        facts = job.pool_facts
+        if not isinstance(facts, dict):
+            return
+        entry = next(
+            (e for e in facts.get("residency", ()) if e.get("kind") == "environment"),
+            None,
+        )
+        handle = self.handle
+        if entry is None:
+            return
+        if cold or handle is None:
+            entry.update(run="cold", state="cold", since_load=0, load_s=None)
+            return
+        since = max(handle.jobs_run - 1, 0)
+        entry.update(
+            run="warm",
+            state="cold" if since == 0 else "warm",
+            since_load=since,
+            load_s=None if self.start_s is None else round(self.start_s, 6),
+        )
+
+
+class WarmStartFailed(Exception):
+    """A warm environment did not start: ``error`` is the start's own error, ``label`` the
+    environment's hold label (`pydra.workers.pool.placement.warm_environment_label`)."""
+
+    def __init__(self, error: BaseException, label: str | None):
+        super().__init__(str(error))
+        self.error = error
+        self.label = label
+
+
+class _Unresolved:
+    """A job as a warm session's roots read it before the job runs: its declared input values, not
+    `Job.inputs`, which fixes the job's work directory (and copies files into it) and must wait for
+    the attempt the call sets. Every other attribute is the job's."""
+
+    def __init__(self, job: "Job"):
+        from pydra.utils.general import attrs_values
+
+        self._job = job
+        self.inputs = {
+            k: v for k, v in attrs_values(job.task).items() if not k.startswith("_")
+        }
+
+    def __getattr__(self, name: str) -> ty.Any:
+        return getattr(self._job, name)
+
+
+def warm_shell_job(job: "Job") -> bool:
+    """Whether ``job`` is a shell job whose environment is declared ``warm=True``."""
+    from pydra.compose.shell.task import Task as ShellTask
+
+    return isinstance(job.task, ShellTask) and job.environment.warm_requested
+
+
 class Worker:
     """A pool worker of one class; `run` is the loop of RFC 0005 section 4.3.
 
@@ -383,6 +485,11 @@ class Worker:
         self._lost: set[Path] = set()
         self._expired: set[Path] = set()
         self._warm: dict[str, int] = {}
+        # the warm sessions of the environments of this worker's shell jobs, each served process-wide
+        # by its `serving` block, at most ``settings.max_warm_sessions`` of them
+        self.sessions: list[PoolSession] = []
+        self._serving: dict[int, serving] = {}
+        self._uses = 0
         self._seq = 0
         self._filled_gpu_mem = False
         self._baseline_bytes: int | None = None
@@ -674,6 +781,8 @@ class Worker:
         try:
             from pydra.engine import resident
 
+            for session in list(self.sessions):
+                self._drop(session)
             resident.close_process_set()
             resident.set_process_device(None)
         finally:
@@ -933,8 +1042,16 @@ class Worker:
             return
         if self._refuse(claim, jobs):
             return
+        if self._environment_held(claim, jobs):
+            return
         try:
             load_s, loaded = self._load(jobs[0][1])
+            self._warm_environments([job for _, job in jobs])
+        except WarmStartFailed as exc:
+            self._load_fault(
+                claim, [e for e, _ in jobs], exc.error, jobs[0][1], label=exc.label
+            )
+            return
         except Exception as exc:
             self._load_fault(claim, [e for e, _ in jobs], exc, jobs[0][1])
             return
@@ -1084,6 +1201,86 @@ class Worker:
             )
         return took, loaded
 
+    def _warm_environments(self, jobs: ty.Sequence["Job"]) -> None:
+        """Open the warm session of each (environment, reference) among ``jobs``' warm shell jobs
+        (`_session_for`) and start it, or restart it once, bound to the union of their binding roots.
+        A start that fails raises `WarmStartFailed` naming the environment's hold label, which the
+        caller types a load fault of that label (RFC 0005 section 4.3 step 3)."""
+        warm = [_Unresolved(job) for job in jobs if warm_shell_job(job)]
+        touched: list[PoolSession] = []
+        for job in warm:
+            session = self._session_for(job)
+            if session not in touched:
+                touched.append(session)
+        for session in touched:
+            try:
+                session.prepare(warm)
+            except Exception as err:
+                raise WarmStartFailed(err, session.label) from err
+
+    def _session_for(self, job: "Job") -> PoolSession:
+        """The session serving ``job``'s environment and reference, opened when there is none. An
+        idle session of the same environment under another reference (a moved tag, an Lmod default)
+        is closed first, and so is the least recently used idle session once
+        ``settings.max_warm_sessions`` are open."""
+        self._uses += 1
+        for session in self.sessions:
+            if session.accepts(job):
+                session.used = self._uses
+                return session
+        for session in list(self.sessions):
+            if session.environment == job.environment and not session.busy:
+                self._drop(session)
+        while len(self.sessions) >= self.settings.max_warm_sessions:
+            idle = [s for s in self.sessions if not s.busy]
+            if not idle:
+                break
+            self._drop(min(idle, key=lambda s: s.used))
+        ref = job.resolved if job.resolves_reference else job.environment.resolve()
+        session = PoolSession(
+            job.environment,
+            (ref.key, ref.run),
+            device=self._device(),
+            roots=self.cls.mounts,
+        )
+        session.used = self._uses
+        session.label = warm_environment_label(job)
+        block = serving(session, close=False)
+        block.__enter__()
+        self._serving[id(session)] = block
+        self.sessions.append(session)
+        return session
+
+    def _drop(self, session: PoolSession) -> None:
+        """Stop serving ``session`` and close its environment."""
+        self.sessions.remove(session)
+        block = self._serving.pop(id(session), None)
+        if block is not None:
+            block.__exit__(None, None, None)
+        self._close_handle(session)
+
+    def _close_handle(self, session: PoolSession) -> bool:
+        """Close ``session``'s handle directly, not through the session, whose lock a call abandoned
+        in flight may hold; the session's next job starts it again. Whether it closed cleanly.
+        """
+        handle = session.handle
+        if handle is None:
+            return True
+        try:
+            handle.close()
+        except Exception as err:
+            logger.warning(
+                "closing the warm environment %s failed: %r", session.environment, err
+            )
+            return False
+        return True
+
+    def _close_environments(self) -> None:
+        """Close every warm session's environment (`_close_handle`); the next job of one starts it
+        again."""
+        for session in self.sessions:
+            self._close_handle(session)
+
     def _held_bytes(self) -> tuple[int | None, int | None]:
         """The host resident bytes and the device bytes of this worker's own processes (itself and
         its providers' process groups), now; host None when any of them cannot be read.
@@ -1129,10 +1326,12 @@ class Worker:
         entries: list[TicketJob],
         exc: BaseException,
         job: "Job | None" = None,
+        label: str | None = None,
     ) -> None:
         """A load failed: a resource fault is kept as an `UnfitRecord` (`_unfit`) and moves the
         ticket's jobs up the ladder (`_resource`); anything else is one infrastructure fault of the
-        residency (`_infrastructure`). The claim is released."""
+        residency (`_infrastructure`), or of the warm environment whose hold label is ``label``. The
+        claim is released."""
         fault = fault_of(exc, "load", self.classify)
         logger.error("loading the residency of %s failed: %r", claim.digest, exc)
         if fault.kind == "resource":
@@ -1140,7 +1339,9 @@ class Worker:
                 self._unfit(claim, exc, job)
             self._resource(claim, entries, fault, "load")
         else:
-            self._infrastructure(claim, entries, fault, {"stop": False}, phase="load")
+            self._infrastructure(
+                claim, entries, fault, {"stop": False}, phase="load", label=label
+            )
         self._release(claim)
 
     def _unfit(self, claim: Claim, exc: BaseException, job: "Job | None") -> None:
@@ -1199,17 +1400,25 @@ class Worker:
         group: dict,
         sample: Sample | None = None,
         phase: str = "call",
+        label: str | None = None,
     ) -> str:
-        """One infrastructure fault of the ticket's residency at ``phase`` (``call`` or ``load``):
-        below the budget its jobs are requeued, uncharged, each under a ``restart`` generation
-        written now; at it the residency is held (`_count_fault`). The caller releases the ticket.
-        Return ``"held"`` or ``"stopped"``."""
+        """One infrastructure fault of the ticket's residency at ``phase`` (``call`` or ``load``), or
+        of the warm environment ``label`` names: below the budget its jobs are requeued, uncharged,
+        each under a ``restart`` generation written now; at it the residency or the environment is
+        held (`_count_fault`). The caller releases the ticket. Return ``"held"`` or ``"stopped"``.
+        """
         group["stop"] = True
         entries = [e for e in entries if claim.current(e) is not None]
         if not entries:
             return "stopped"
         return self._count_fault(
-            claim, fault, phase, requeue=entries, group=group, sample=sample
+            claim,
+            fault,
+            phase,
+            requeue=entries,
+            group=group,
+            sample=sample,
+            label=label,
         )
 
     def _count_fault(
@@ -1221,17 +1430,21 @@ class Worker:
         requeue: list[TicketJob],
         group: dict,
         sample: Sample | None = None,
+        label: str | None = None,
     ) -> str:
-        """Record an infrastructure fault of the ticket's residency for the newest coordinator epoch.
+        """Record an infrastructure fault of the ticket's residency for the newest coordinator epoch,
+        or of the warm environment whose hold label is ``label`` (a failed warm start).
         Below ``infrastructure_replacements`` faults in that epoch, ``requeue``'s jobs are requeued
-        under ``restart`` generations; at it the residency is held on its queue
+        under ``restart`` generations; at it the residency (or the environment) is held on its queue
         (``held-<epoch>-<label>``), remembered by this worker so that no gathered ticket of it runs,
         and every open job of the ticket is settled ``held`` with a reason naming the residency and
-        the latest cause (RFC 0005 section 6)."""
+        the latest cause, and ``hold`` naming the label (RFC 0005 section 6). A held environment
+        holds only the tickets with a job of it (`_environment_held`)."""
         self._gap(fault)
         epochs = self.pool.epochs()
         epoch = epochs[-1] if epochs else 1
-        label = claim.ticket.residency_label
+        what = "residency" if label is None else "warm environment"
+        label = label or claim.ticket.residency_label
         budget = self.faults.infrastructure_replacements
         count = self.pool.infrastructure_fault(
             claim.queue,
@@ -1248,8 +1461,9 @@ class Worker:
             for entry in requeue:
                 claim.restart(entry, phase=phase)
             logger.warning(
-                "infrastructure fault %d of residency %s on %r in epoch %d at %s: %s: %s%s",
+                "infrastructure fault %d of %s %s on %r in epoch %d at %s: %s: %s%s",
                 count,
+                what,
                 label,
                 claim.queue,
                 epoch,
@@ -1261,7 +1475,7 @@ class Worker:
             return "stopped"
         self.pool.hold(claim.queue, epoch, label)
         reason = (
-            f"residency {label} held on queue {claim.queue!r} after {count} infrastructure "
+            f"{what} {label} held on queue {claim.queue!r} after {count} infrastructure "
             f"faults in coordinator epoch {epoch} (the budget is {budget}); the latest, at "
             f"{phase}: {fault.type}: {fault.message}"
         )
@@ -1273,7 +1487,7 @@ class Worker:
             current = claim.current(entry)
             if current is None:
                 continue
-            fields = {"reason": reason, "fault": fault.to_json()}
+            fields = {"reason": reason, "fault": fault.to_json(), "hold": label}
             if sample is not None and entry.key in faulted:
                 self._settle(
                     claim, entry, current[1]["attempt"], "held", sample, **fields
@@ -1281,6 +1495,37 @@ class Worker:
             else:
                 claim.outcome(entry, current[1]["attempt"], "held", **fields)
         return "held"
+
+    def _environment_held(
+        self, claim: Claim, jobs: list[tuple[TicketJob, "Job"]]
+    ) -> bool:
+        """Whether a job of the ticket runs in a warm environment held on its queue (by any worker,
+        in the newest coordinator epoch, until ``pydracli pool release-hold`` lifts the label); if
+        so settle the ticket's open jobs ``held``, unrun and unloaded. A ticket with no job of a held
+        environment runs: a broken image holds only its own tickets, never the class's other work.
+        """
+        labels = {warm_environment_label(job) for _, job in jobs} - {None}
+        if not labels:
+            return False
+        hit = sorted(labels & set(self.pool.holds(claim.queue)))
+        if not hit:
+            return False
+        label = hit[0]
+        own = self._holds.get((claim.queue, label))
+        reason = (
+            own[1]
+            if own is not None
+            else f"warm environment {label} held on queue {claim.queue!r} after repeated "
+            "failed starts"
+        )
+        fields: dict[str, ty.Any] = {"reason": reason, "hold": label}
+        if own is not None:
+            fields["fault"] = own[2].to_json()
+        for entry in claim.open_jobs():
+            current = claim.current(entry)
+            if current is not None:
+                claim.outcome(entry, current[1]["attempt"], "held", **fields)
+        return True
 
     def _held_here(self, claim: Claim) -> bool:
         """Whether this worker held the claim's residency in the newest coordinator epoch and the
@@ -1382,6 +1627,11 @@ class Worker:
                     raise _machinery(exc)
                 try:
                     _, loaded = self._load(current)
+                    # a warm environment closed, spent or reloaded since the ticket's start is
+                    # started here, on the loop thread, as a load: never inside the call
+                    self._warm_environments([current])
+                except WarmStartFailed as exc:
+                    raise attach(exc, fault_of(exc.error, "load", self.classify))
                 except Exception as exc:
                     raise attach(exc, fault_of(exc, "load", self.classify))
                 if loaded:  # a reload after a fault: this call is cold
@@ -1421,7 +1671,13 @@ class Worker:
                 if record is None or record.phase != "load":
                     raise
                 # a load inside the call: never split or retried; every open job of the ticket
-                self._load_fault(claim, claim.open_jobs() or [entry], exc, job)
+                self._load_fault(
+                    claim,
+                    claim.open_jobs() or [entry],
+                    exc,
+                    job,
+                    label=exc.label if isinstance(exc, WarmStartFailed) else None,
+                )
                 group["stop"] = True
                 return "stopped"
             verdict = self._settle_job(claim, entry, settled, state, group, tries)
@@ -1575,6 +1831,8 @@ class Worker:
                     "load_s": None if load_s is None else round(load_s, 6),
                 }
             )
+        if warm_shell_job(job):
+            residency.insert(0, self._environment_fact(job))
         hw = self._hardware or HardwareClass()
         gpu = hw.gpus[0] if hw.gpus else None
         return {
@@ -1595,6 +1853,30 @@ class Worker:
             "residency": residency,
             "batch": {"size": 1, "index": 0},
             "losses_survived": self._losses(claim, entry),
+        }
+
+    @staticmethod
+    def _environment_fact(job: "Job") -> dict:
+        """The ``environment`` entry of a warm shell job's pool facts, keyed by the reference the job
+        carries (never resolved here); `PoolSession` fills in how the call ran."""
+        from pydra.engine.resident import ResidentKey
+
+        env = job.environment
+        try:
+            name = env.plugin_name()
+            ref = job.resolved if job.resolves_reference else env.resolve()
+            key: str | None = ResidentKey("environment", name, ref.key).digest()
+        except Exception:
+            name, key = type(env).__name__, None
+        return {
+            "key": key,
+            "kind": "environment",
+            "name": name,
+            "version": None,
+            "state": "cold",
+            "since_load": 0,
+            "load_s": None,
+            "run": "cold",
         }
 
     def _losses(self, claim: Claim, entry: TicketJob) -> int:
@@ -1727,16 +2009,18 @@ class Worker:
     def _stop_call(self) -> bool:
         """Stop the call in flight where it runs in a process-owning provider's process: stop each
         such provider's group and evict it from the process's resident set, so the next job loads
-        afresh rather than reaching a dead process. An in-process call cannot be stopped. Return
-        whether any provider was stopped."""
+        afresh rather than reaching a dead process; where it is a warm container's command, close
+        the container (`_stop_warm_command`). An in-process call cannot be stopped. Return whether
+        any provider or warm command was stopped."""
+        command = self._stop_warm_command()
         if "pydra.engine.procgroup" not in sys.modules:
-            return False
+            return command
         from pydra.engine import resident
         from pydra.engine.procgroup import ProcessHandle
 
         rs = resident.existing_process_set()
         if rs is None:
-            return False
+            return command
         stopped = False
         for key, obj in rs.items():
             if isinstance(obj, ProcessHandle):
@@ -1746,6 +2030,17 @@ class Worker:
                 stopped = True
         if stopped:
             self._warm.clear()
+        return stopped or command
+
+    def _stop_warm_command(self) -> bool:
+        """Close each warm container that is running a job's command now, which ends that command;
+        its session starts a fresh container for its next job. Return whether one was closed cleanly:
+        a close that raised (logged) may have left the command running."""
+        stopped = False
+        for session in self.sessions:
+            handle = session.handle
+            if isinstance(handle, WarmContainer) and not handle.closed and handle.busy:
+                stopped = self._close_handle(session) or stopped
         return stopped
 
     def _classify_call(self, error: BaseException, phase: str) -> FaultRecord:
@@ -1771,6 +2066,7 @@ class Worker:
         from pydra.engine import resident
 
         resident.close_process_set()
+        self._close_environments()
         self._warm.clear()
         self._load_bytes.clear()
         group["reload"] = True

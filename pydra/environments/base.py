@@ -9,6 +9,7 @@ import hashlib
 import shutil
 import tempfile
 import threading
+import time
 import uuid
 from copy import copy
 import attrs
@@ -652,6 +653,11 @@ class WarmEnvironment:
             raise
         self.started = True
 
+    @property
+    def busy(self) -> bool:
+        """Whether a job runs in it now"""
+        return self._lock.locked()
+
     def covers(self, job: "Job") -> bool:
         """Whether ``job`` can run here: the same environment, keyed by the same
         reference, with its bindings inside `roots` and its writable bindings inside
@@ -841,6 +847,11 @@ class WarmSession:
     scratch : Path, optional
         Where the handle keeps its scratch directory; the first job's cache root by
         default
+    retry : bool
+        Whether a failed start is tried again by a later job: `prepare` then raises
+        the start's error (a pool worker types it a load fault), and a job whose
+        start fails in `execute` runs cold alone. By default a failed start runs every
+        later job of the session cold
 
     Attributes
     ----------
@@ -848,6 +859,8 @@ class WarmSession:
         How many times a handle was started
     cold_runs : int
         How many jobs ran cold
+    start_s : float, optional
+        The seconds the latest start took
     """
 
     def __init__(
@@ -857,11 +870,14 @@ class WarmSession:
         roots: ty.Sequence[Path] = (),
         writable: ty.Sequence[Path] = (),
         scratch: Path | None = None,
+        *,
+        retry: bool = False,
     ):
         if device is None:
             from pydra.engine.resident import process_device
 
             device = process_device()
+        self.retry = retry
         self.environment = environment
         self.device = device
         self.base_writable = frozenset(top_root(Path(r)) for r in writable)
@@ -872,11 +888,18 @@ class WarmSession:
         self.starts = 0
         self.cold_runs = 0
         self.unwarmable = False
+        self.start_s: float | None = None
         self._lock = threading.RLock()
 
     def accepts(self, job: "Job") -> bool:
         """Whether ``job``'s environment is this session's"""
         return job.environment == self.environment
+
+    @property
+    def busy(self) -> bool:
+        """Whether a job runs in its handle now"""
+        handle = self.handle
+        return handle is not None and handle.busy
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         """Run ``job`` warm when the rules allow it, otherwise cold"""
@@ -888,7 +911,42 @@ class WarmSession:
                 return handle.execute(job)
         return job.environment.execute(job)
 
-    def _handle_for(self, job: "Job") -> WarmEnvironment | None:
+    def prepare(self, jobs: ty.Sequence["Job"]) -> None:
+        """Start the handle, or restart it once, for a group of jobs (a pool ticket):
+        bound to the union of the binding roots of the jobs it accepts that are keyed
+        by the first one's reference, so that the group needs no further restart. A
+        handle that already covers them, is open and has jobs left before
+        ``max_jobs`` is kept; a union beyond ``max_mount_roots`` starts nothing, and
+        each job is then judged alone by `execute`. With ``retry``, a failed start
+        raises its error."""
+        with self._lock:
+            env = self.environment
+            if self.unwarmable or not env.warm_requested:
+                return
+            mine = [j for j in jobs if self.accepts(j)]
+            if not mine:
+                return
+            ref = self._ref(mine[0])
+            mine = [j for j in mine if self._ref(j) == ref]
+            writable = frozenset().union(*(env.writable_roots(j) for j in mine))
+            needed = frozenset().union(*(env.binding_roots(j) for j in mine))
+            self._handle_for(mine[0], needed | writable, writable, raises=self.retry)
+
+    def _ref(self, job: "Job") -> tuple[str, str]:
+        ref = job.resolved if job.resolves_reference else self.environment.resolve()
+        return ref.key, ref.run
+
+    def _handle_for(
+        self,
+        job: "Job",
+        needed: frozenset[Path] | None = None,
+        writable: frozenset[Path] | None = None,
+        raises: bool = False,
+    ) -> WarmEnvironment | None:
+        """The handle to run ``job`` on, started or restarted as the rules say, or
+        ``None`` to run it cold. With ``needed`` (and ``writable``), the roots of a
+        group of jobs (`prepare`): a handle covering them is kept and none is returned.
+        With ``raises``, a failed start raises its error"""
         env = self.environment
         if self.unwarmable or not env.warm_requested or not self.accepts(job):
             return None
@@ -899,8 +957,11 @@ class WarmSession:
             ref.run,
         ):
             return None  # one reference per session
-        writable = env.writable_roots(job)
-        needed = env.binding_roots(job) | writable
+        group = needed is not None
+        if writable is None:
+            writable = env.writable_roots(job)
+        if needed is None:
+            needed = env.binding_roots(job) | writable
         if handle is None:
             if self.scratch is None and isinstance(env, Container):
                 self.scratch = Path(job.cache_root).absolute()
@@ -912,7 +973,15 @@ class WarmSession:
                 roots, writable = roots | {scratch_root}, writable | {scratch_root}
         else:
             spent = env.max_jobs is not None and handle.jobs_run >= env.max_jobs
-            if not spent and handle.covers(job):
+            if group:
+                if (
+                    not spent
+                    and not handle.closed
+                    and needed <= handle.roots
+                    and writable <= handle.writable
+                ):
+                    return None  # covered
+            elif not spent and handle.covers(job):
                 return handle
             roots, writable = handle.roots | needed, handle.writable | writable
         if len(roots) > env.max_mount_roots:
@@ -924,23 +993,28 @@ class WarmSession:
             )
             return None
         self.close()
+        began = time.monotonic()
         try:
             handle = env.warm(
                 roots, self.device, ref=ref, writable=writable, scratch=self.scratch
             )
         except Exception as e:
+            if raises:
+                raise
             logger.warning(
-                "The warm environment %s did not start, its jobs run cold: %s",
+                "The warm environment %s did not start, %s: %s",
                 ref.key,
+                "this job runs cold" if self.retry else "its jobs run cold",
                 e,
             )
-            self.unwarmable = True
+            self.unwarmable = not self.retry
             return None
         if handle is None:
             self.unwarmable = True
             return None
         self.handle = handle
         self.starts += 1
+        self.start_s = time.monotonic() - began
         return handle if handle.covers(job) else None
 
     def close(self) -> None:

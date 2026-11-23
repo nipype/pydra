@@ -59,6 +59,8 @@ class PoolSettings:
         Seconds of a failure streak after which a class with waiting jobs is broken; None: never.
     start_deadline_failures : int
         Failed attempts a streak needs, with ``start_deadline_s``, to break a class.
+    max_warm_sessions : int
+        Warm environments a worker keeps open (least recently used idle one closed first).
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -77,6 +79,7 @@ class PoolSettings:
     recheck_fraction: float = attrs.field(default=0.0, validator=_fraction)
     start_deadline_s: float | None = attrs.field(default=120.0, validator=_positive)
     start_deadline_failures: int = attrs.field(default=3, validator=_positive)
+    max_warm_sessions: int = attrs.field(default=4, validator=_positive)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)
