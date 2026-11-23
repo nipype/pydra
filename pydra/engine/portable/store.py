@@ -42,11 +42,11 @@ from pydra.engine.portable.entry import (
     PydraEntryV1,
     StoredEntry,
 )
-from pydra.engine.portable.errors import UnencodableOutput
+from pydra.engine.portable.errors import KeyMismatch, UnencodableOutput
 from pydra.engine.portable.identity import (
     Context,
     KeyRecord,
-    PydraIdentityV1,
+    PydraIdentityV2,
     StoreIdentity,
 )
 from pydra.engine.portable.layout import (
@@ -338,6 +338,12 @@ def _rebuild(args: dict[str, ty.Any]) -> "PortableStore":
     return PortableStore(**args)
 
 
+def _record_of(key: KeyRecord) -> "dict[str, ty.Any] | None":
+    """``Result.record`` of an entry: its key record (``pydra-identity@2``), or None for an
+    identity whose key is None"""
+    return dict(key) if isinstance(key, ty.Mapping) else None
+
+
 class PortableStore:
     """A result store whose entries any process, host or user can publish and read.
 
@@ -348,7 +354,7 @@ class PortableStore:
     trust : {"shared", "private", "trusted"}
         What this process asserts about who can write the root (RFC 0003 section 6.4).
     identity : StoreIdentity
-        The key, context and fingerprint of an entry.
+        The key, context and fingerprint of an entry; default ``pydra-identity@2``.
     entry_format : EntryFormat
         What is inside an entry. A `PydraEntryV1` is given this store's identity, trust and the
         header's ``pickle`` flag.
@@ -398,7 +404,7 @@ class PortableStore:
         root: os.PathLike,
         *,
         trust: Trust = "shared",
-        identity: StoreIdentity = PydraIdentityV1(),
+        identity: StoreIdentity = PydraIdentityV2(),
         entry_format: EntryFormat = PydraEntryV1(),
         policy: StorePolicy = StorePolicy(),
         readonly: ty.Sequence[Root] = (),
@@ -944,6 +950,8 @@ class PortableStore:
 
         Raises
         ------
+        KeyMismatch
+            The store's identity refuses ``key`` for ``checksum``; nothing is written.
         StoreNotWritable
             This user cannot write a directory the publish needs.
         UnencodableOutput
@@ -951,6 +959,11 @@ class PortableStore:
         StoreUnavailable
             Any other ``OSError``.
         """
+        if not self.identity.check_key(checksum, key):
+            raise KeyMismatch(
+                f"the key record given for {checksum!r} does not digest to it under "
+                f"{self.identity.name}, so no read would accept the entry"
+            )
         cdir = cdir_for(checksum)
         shard = shard_for(cdir, checksum, self.header.shard)
         fingerprint = self.identity.fingerprint(context)
@@ -1862,6 +1875,7 @@ class PortableStore:
             task=task,
             context=dict(stored.context),
             stored=True,
+            record=_record_of(stored.key),
         )
 
     @staticmethod
@@ -2444,6 +2458,7 @@ class PortableStore:
             task=job.task,
             context=dict(job.context),
             stored=False,
+            record=_record_of(self.identity.key(job)),
         )
 
     def _committed_doc(self, job: "Job", wd: Path, settled: bool) -> dict | None:

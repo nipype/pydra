@@ -2,6 +2,7 @@
 the environment and the identities of the installed distributions. It is never part
 of the job checksum; a reuse policy (see :mod:`pydra.engine.store`) compares it."""
 
+import csv
 import dataclasses
 import functools
 import hashlib
@@ -11,8 +12,10 @@ import logging
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
+import time
 import types
 import typing as ty
 import uuid
@@ -21,9 +24,12 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 import attrs
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
 from pydra.utils.general import STDLIB_MODULES, get_fields
 from pydra.utils.hash import (
     _module_is_library,
+    _owners,
+    forget_owners,
     check_code_hash,
     code_hash_default,
     library_modules,
@@ -32,16 +38,13 @@ from pydra.utils.hash import (
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
-    from pydra.environments.base import Environment
+    from pydra.environments.base import Environment, ResolvedRef
 
 logger = logging.getLogger("pydra")
 
-RECORD = 3
+RECORD = 4
 """The version of the record's layout, stored under ``"record"``. Records of other
 versions are never reused under ``"consistent"`` or ``"exact"``."""
-
-GIT_TIMEOUT = 30
-"""Seconds a ``git`` call identifying an editable install may take."""
 
 
 def _platform() -> str:
@@ -86,19 +89,6 @@ def _file_bytes(path: Path) -> bytes:
         return b"<missing>"
 
 
-def _git(directory: Path, *args: str) -> str | None:
-    try:
-        done = subprocess.run(
-            ["git", "-C", str(directory), *args],
-            capture_output=True,
-            timeout=GIT_TIMEOUT,
-            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return done.stdout.decode(errors="surrogateescape") if not done.returncode else None
-
-
 IDENTITY_MAX_FILES = 10_000
 """Most files a local install's identity reads; above it the identity is unknown."""
 
@@ -126,35 +116,6 @@ def _capped_digest(root: Path, files: list[Path]) -> str:
     return _digest(
         os.path.relpath(f, root).encode() + b"\0" + _file_bytes(f) for f in files
     )
-
-
-def _git_identity(root: Path, paths: list[Path]) -> str | None:
-    """``git:<commit>``, followed by a digest of the modified and untracked files in
-    `paths` that are not ignored, if `root` is in a git checkout"""
-    commit = _git(root, "rev-parse", "HEAD")
-    top = _git(root, "rev-parse", "--show-toplevel")
-    status = _git(
-        root,
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--",
-        *(str(p) for p in paths),
-    )
-    if not commit or not top or status is None:
-        return None
-    top_dir = Path(top.strip())
-    entries = status.split("\0")
-    changed = [
-        top_dir / entry[3:]
-        for i, entry in enumerate(entries)
-        if len(entry) > 3 and not (i and entries[i - 1][:1] == "R")
-    ]
-    identity = f"git:{commit.strip()}"
-    if changed:
-        identity += "+" + _capped_digest(top_dir, sorted(changed))
-    return identity
 
 
 def _package_files(paths: list[Path]) -> list[Path]:
@@ -242,15 +203,29 @@ class _Installed:
     def reason(self) -> str | None:
         return self.identified[1]
 
+    @property
+    def keyed(self) -> str | None:
+        """The identity a checksum is keyed by: `identity`, except that an install from
+        an index is keyed by its public version, leaving out the local segment
+        (``+cu121``), which names a build for a platform and is recorded, not keyed
+        (RFC 0004 section 4.1)"""
+        identity = self.identity
+        if identity is None or self.direct:
+            return identity
+        try:
+            return Version(identity).public
+        except InvalidVersion:
+            return identity
+
 
 def _identify(installed: _Installed) -> tuple[str | None, str | None]:
     """The identity of an installed distribution, or why it is unknown. The identity
-    is its version, followed by the commit or archive hash it was installed from, or
-    for an install from a local directory by ``git:<commit>[+<digest of changed
-    files>]`` for an editable install in a git checkout, a digest of its packages'
-    files for another editable install, and a digest of the files it installed (its
-    ``RECORD``) otherwise. An editable install's packages are read up to
-    `IDENTITY_MAX_FILES` and `IDENTITY_MAX_BYTES`."""
+    is its version, followed by the commit or archive hash it was installed from. An
+    install from a local directory, editable or not, has no version in it: it is
+    ``dir:<digest of its files>``, read from the files of its packages for an editable
+    install and from its ``RECORD`` entries outside ``*.dist-info`` otherwise. An
+    editable install's packages are read up to `IDENTITY_MAX_FILES` and
+    `IDENTITY_MAX_BYTES`."""
     version, direct = installed.version, installed.direct
     if not version:
         return None, "it has no version"
@@ -276,16 +251,31 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
         if not paths:
             return None, f"no package of it was found under {root!r}"
         try:
-            identity = _git_identity(Path(root), paths) or (
-                "dir:" + _capped_digest(Path(root), _package_files(paths))
-            )
+            identity = "dir:" + _capped_digest(Path(root), _package_files(paths))
         except _TooLarge as e:
             return None, str(e)
-        return f"{version}@{identity}", None
+        return identity, None
     record = installed.dist.read_text("RECORD")
     if not record:
         return None, "it was installed from a local source without a RECORD"
-    return f"{version}@record:{_digest([record.encode()])}", None
+    return f"dir:{_record_digest(record)}", None
+
+
+def _record_digest(record: str) -> str:
+    """A digest of the hashed ``path,hash`` entries of a ``RECORD`` that stay inside the
+    install, leaving out ``*.dist-info/`` and the scripts outside it (``../``): what was
+    installed, not how or where. ``direct_url.json``, ``INSTALLER`` and an installer's
+    own files differ between two installs of the same files"""
+    entries = set()
+    for row in csv.reader(record.splitlines()):
+        if (
+            len(row) >= 2
+            and row[1]
+            and ".dist-info/" not in row[0]
+            and not row[0].startswith(("../", "/"))
+        ):
+            entries.add((row[0], row[1]))
+    return _digest(f"{path},{hash_}".encode() for path, hash_ in sorted(entries))
 
 
 def _direct_url(dist) -> ty.Any:
@@ -423,27 +413,6 @@ def reached_modules(task: "Task") -> set[str] | None:
     }
 
 
-def _owners(module: str) -> list[str] | None:
-    """The distributions that installed `module`: the one whose files include the
-    module's file, or whose editable source holds it, or for a module without a file
-    (a namespace package) those providing its top-level name; None if there is none"""
-    distributions = _distributions()
-    candidates = _package_distributions().get(module.partition(".")[0], [])
-    file = getattr(sys.modules.get(module), "__file__", None)
-    if not file:
-        return [c for c in candidates if c in distributions] or None
-    path = _norm(file)
-    for name in candidates:
-        if name in distributions and path in distributions[name].files:
-            return [name]
-    roots = [
-        (len(d.editable_root), d.name)
-        for d in distributions.values()
-        if d.editable_root and d.holds(path)
-    ]
-    return [max(roots)[1]] if roots else None
-
-
 @functools.cache
 def _requirements(name: str) -> frozenset[str]:
     """The installed distributions `name` requires, transitively, under the markers of
@@ -486,13 +455,174 @@ def package_versions(modules: ty.Iterable[str]) -> dict[str, str | None]:
     return dict(sorted(versions.items()))
 
 
-def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
+REPOSITORY_FIELD = "environment_repository"
+"""The context field naming the repository an image came from. It is not compared
+between contexts and not part of a slot's name."""
+
+FACTS_FIELD = "environment_facts"
+"""The context field holding what an environment's resolution found besides its key
+(`ResolvedRef.recorded`): a local image id, the per-platform manifest digest, the Lmod
+tree, ``MODULEPATH`` and dependency modules. Recorded like `REPOSITORY_FIELD`."""
+
+RECORDED_FIELDS = frozenset({REPOSITORY_FIELD, FACTS_FIELD})
+"""The context fields that are recorded only: not compared, not part of a slot's name"""
+
+
+OWNER_TIMEOUT = 2.0
+"""Seconds each package-manager query for a tool's owner may take"""
+
+_StatKey = tuple[str, int, int, int, int]
+_SHA_MEMO: dict[_StatKey, str] = {}
+_OWNER_MEMO: dict[_StatKey, dict[str, str] | None] = {}
+_CONDA_PREFIX = re.compile(r"^(?P<prefix>.+?)[/\\](?:bin|Scripts|Library[/\\]bin)[/\\]")
+
+
+def _stat_key(path: str) -> _StatKey | None:
+    """What identifies the file at `path` as it stands: ctime and inode cannot be kept
+    by a rewrite in place or a rename, as mtime can"""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (path, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _tool_digest(path: str, key: _StatKey | None) -> str | None:
+    """The sha256 of the file at `path`, once per process for a file as it stands"""
+    if key is None:
+        return None
+    if key not in _SHA_MEMO:
+        try:
+            sha = hashlib.sha256()
+            with open(path, "rb") as f:
+                for block in iter(lambda: f.read(1 << 20), b""):
+                    sha.update(block)
+        except OSError:
+            return None
+        _SHA_MEMO[key] = sha.hexdigest()
+    return _SHA_MEMO[key]
+
+
+def _query(command: list[str]) -> str | None:
+    """The first line of the stdout of `command` if it succeeds within
+    `OWNER_TIMEOUT`, else None"""
+    if shutil.which(command[0]) is None:
+        return None
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            timeout=OWNER_TIMEOUT,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = completed.stdout.splitlines()
+    return lines[0] if completed.returncode == 0 and lines else None
+
+
+def _tool_owner(path: str, key: _StatKey | None) -> dict[str, str] | None:
+    """The owner of the file at `path`, looked up once per process for a file as it
+    stands, a failed or timed-out lookup (None) included (see `_lookup_owner`)"""
+    if key is None:
+        return None
+    if key not in _OWNER_MEMO:
+        _OWNER_MEMO[key] = _lookup_owner(path)
+    return _OWNER_MEMO[key]
+
+
+def _lookup_owner(path: str) -> dict[str, str] | None:
+    """The package that provides the file at `path`, read from the path (Homebrew
+    ``Cellar/<name>/<version>``), from a conda ``conda-meta`` record, or from ``dpkg -S``
+    / ``rpm -qf``; the conda scan and each query take at most `OWNER_TIMEOUT`;
+    None if it cannot be read"""
+    match = re.search(r"[/\\]Cellar[/\\]([^/\\]+)[/\\]([^/\\]+)[/\\]", path)
+    if match:
+        return {"manager": "homebrew", "name": match[1], "version": match[2]}
+    match = _CONDA_PREFIX.match(path)
+    if match:
+        meta = Path(match["prefix"]) / "conda-meta"
+        relative = Path(path).relative_to(match["prefix"]).as_posix()
+        try:
+            records = sorted(meta.glob("*.json"))
+        except OSError:
+            records = []
+        deadline = time.monotonic() + OWNER_TIMEOUT
+        for record in records:
+            if time.monotonic() >= deadline:
+                break
+            try:
+                data = json.loads(record.read_text())
+            except (OSError, ValueError):
+                continue
+            if relative in data.get("files", ()):
+                return {
+                    "manager": "conda",
+                    "name": data.get("name"),
+                    "version": data.get("version"),
+                }
+    line = _query(["dpkg", "-S", path])
+    if line and ": " in line:
+        return {"manager": "dpkg", "name": line.split(": ")[0].split(":")[0]}
+    line = _query(["rpm", "-qf", path])
+    if line and "not owned" not in line:
+        return {"manager": "rpm", "name": line}
+    return None
+
+
+def _tool_record(executable: str) -> dict[str, ty.Any]:
+    """What the submitting host resolves `executable` to, recorded and not keyed
+    (RFC 0004 section 5.2): ``found: false`` alone when it resolves to nothing, which is
+    the same on every lookup"""
+    found = shutil.which(executable)
+    if found is None:
+        return {"executable": executable, "found": False}
+    path = os.path.realpath(found)
+    key = _stat_key(path)
+    return {
+        "executable": executable,
+        "found": True,
+        "path": path,
+        "sha256": _tool_digest(path, key),
+        "owner": _tool_owner(path, key),
+    }
+
+
+def job_tools(task: "Task", environment: "Environment") -> list[dict[str, ty.Any]]:
+    """The ``tools`` of a job's context: a record (`_tool_record`) for the program of
+    a shell task's executable and for that of its ``version_command``, run natively;
+    empty for other tasks, and for a container or module environment, whose host does
+    not run the tool"""
+    from pydra.environments.native import Native
+
+    if task._task_type() != "shell" or not (
+        environment is None or isinstance(environment, Native)
+    ):
+        return []
+    executable = task.executable
+    names = [executable if isinstance(executable, str) else executable[0]]
+    command = getattr(task, "_version_command", None)
+    if command:
+        names.append(command[0])
+    return [_tool_record(name) for name in sorted(set(names))]
+
+
+def job_context(
+    task: "Task", environment: "Environment", resolved: "ResolvedRef | None" = None
+) -> dict[str, ty.Any]:
     """The record of the context a job of `task` runs in under `environment`:
 
     * ``record``: the layout's version (`RECORD`);
     * ``python``: the interpreter's full version, ``implementation``: its name;
     * ``platform``: the OS, machine and C library;
-    * ``environment``: the environment's checksum;
+    * ``environment``: the environment's resolved key (`Job.resolved`), or its
+      checksum when none is given;
+    * ``environment_repository``: where a container image is pulled from, when its
+      reference carries one; recorded only (`REPOSITORY_FIELD`), so mirrors share slots;
+    * ``environment_facts``: what the resolution found besides its key, when it found
+      anything (`FACTS_FIELD`); recorded only;
     * ``packages``: the identities of the distributions that installed the library
       modules the task reaches (see `reached_modules`), and of those they require,
       None if the modules cannot be determined;
@@ -502,8 +632,11 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
       (the task's own, those of a workflow's nodes, those of tasks passed as inputs),
       the `code_digest` of each by ``module.qualname==version``, which the version
       stands for (see `pydra.engine.store.check_declared_code`);
-    * ``unknown``: present when any of ``packages`` is unknown, set to a value unique
-      to this process, so the result is reused by no other process.
+    * ``tools``: where the submitting host resolves the tools a native shell task runs,
+      with the file's digest and owning package (`job_tools`); recorded, not keyed;
+    * ``unknown``: present when any of ``packages`` is unknown, or the job's tool version
+      is unresolved (`pydra.engine.job.Job.context`), set to a value unique to this
+      process, so the result is reused by no other process.
     """
     if task._declared_code is None and not hasattr(task, "__checksum__"):
         task._hash  # collects the modules and the code of declared versions reached
@@ -511,10 +644,15 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
     packages = None if modules is None else package_versions(modules)
     context = {
         **process_context(),
-        "environment": environment.checksum(),
+        "environment": environment.checksum() if resolved is None else resolved.key,
         "packages": packages,
         "installed": _installed_digest(frozenset(packages or ())),
+        "tools": job_tools(task, environment),
     }
+    if resolved is not None and "repository" in resolved.carried:
+        context[REPOSITORY_FIELD] = resolved.carried["repository"]
+    if resolved is not None and resolved.recorded:
+        context[FACTS_FIELD] = dict(resolved.recorded)
     if task._declared_code:
         context["code"] = dict(task._declared_code)
     if packages is None or None in packages.values():
@@ -535,4 +673,7 @@ def clear_caches() -> None:
         process_context,
     ):
         cached.cache_clear()
+    forget_owners()
+    _SHA_MEMO.clear()
+    _OWNER_MEMO.clear()
     _warned.clear()

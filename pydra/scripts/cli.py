@@ -132,6 +132,103 @@ def check_versions_command(table, update):
     sys.exit(1 if problems else 0)
 
 
+_MISSING = "(missing)"
+_WALK_HINT = (
+    " (the two sites classify code differently: check PYDRA_CODE_HASH and "
+    "PYDRA_USER_PACKAGES on both)"
+)
+
+
+def _flatten(value, prefix=""):
+    if isinstance(value, dict) and (value or not prefix):
+        for key in sorted(value):
+            yield from _flatten(value[key], f"{prefix}.{key}" if prefix else key)
+    else:
+        yield prefix, value
+
+
+def _triple(item) -> str:
+    """``field[index]: cause`` of one absence triple of a key record, or its JSON when it
+    is not ``[field, {"$int": index} or index, cause]``"""
+    if isinstance(item, list) and len(item) == 3:
+        field, index, cause = item
+        if isinstance(index, dict) and set(index) == {"$int"}:
+            index = index["$int"]
+        return f"{field}[{index}]: {cause}"
+    return json.dumps(item)
+
+
+def _shown(record: dict) -> dict:
+    absent = record.get("absent")
+    if not isinstance(absent, list):
+        return record
+    return {**record, "absent": [_triple(t) for t in absent]}
+
+
+def explain_records(one: dict, two: dict) -> list[str]:
+    """The fields where two identity records differ, one ``"<field>: <one> -> <two>"``
+    line each, with the dotted path of a nested field. A difference in ``walk`` names
+    the settings that cause it. Absence triples (``absent``) are shown as
+    ``field[index]: cause``."""
+    left, right = dict(_flatten(_shown(one))), dict(_flatten(_shown(two)))
+    lines = []
+    for path in sorted(left.keys() | right.keys()):
+        a, b = left.get(path, _MISSING), right.get(path, _MISSING)
+        if a == b:
+            continue
+        shown_a = a if a == _MISSING else json.dumps(a)
+        shown_b = b if b == _MISSING else json.dumps(b)
+        lines.append(
+            f"{path}: {shown_a} -> {shown_b}"
+            + (_WALK_HINT if path.startswith("walk.") else "")
+        )
+    return lines
+
+
+def load_record(path: str | Path) -> dict:
+    """The identity record at ``path``: a JSON file, a portable store entry (the key of its
+    ``entry.json``), or the cache directory of a job whose ``_result.pklz`` holds it
+    (`pydra.engine.result.Result.record`)"""
+    path = Path(path)
+    if path.is_dir() and (path / "entry.json").is_file():
+        record = json.loads((path / "entry.json").read_text()).get("key")
+        if not isinstance(record, dict):
+            raise click.ClickException(
+                f"{path} is an entry with no key record (written under pydra-identity@1)"
+            )
+        return record
+    if path.is_dir():
+        result_file = path / "_result.pklz"
+        if not result_file.exists():
+            raise click.ClickException(
+                f"{path} has no _result.pklz: only a finished job holds its identity record"
+            )
+        with open(result_file, "rb") as f:
+            record = getattr(cp.load(f), "record", None)
+        if record is None:
+            raise click.ClickException(
+                f"{path} holds no identity record (its result was written before "
+                "pydra-identity@2)"
+            )
+        return record
+    return json.loads(path.read_text())
+
+
+@cli.command(context_settings=CONTEXT_SETTINGS)
+@click.argument("first", type=click.Path(exists=True, resolve_path=True))
+@click.argument("second", type=click.Path(exists=True, resolve_path=True))
+def explain(first, second):
+    """Show the fields where the identity records of two jobs differ. FIRST and SECOND
+    are each a JSON record file or the cache directory of a finished job; exits with 1
+    if the records differ."""
+    lines = explain_records(load_record(first), load_record(second))
+    if not lines:
+        click.echo("the records are identical")
+    for line in lines:
+        click.echo(line)
+    sys.exit(1 if lines else 0)
+
+
 @cli.group(context_settings=CONTEXT_SETTINGS)
 def store():
     """Maintain a portable result store."""

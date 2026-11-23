@@ -179,10 +179,20 @@ class Task(ty.Generic[OutputsType]):
     _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
     # the library modules reached when the checksum was last computed
     _code_modules = attrs.field(default=None, init=False, eq=False, repr=False)
+    # the references to library code, with identities, reached when it was last computed
+    _code_refs = attrs.field(default=None, init=False, eq=False, repr=False)
     # the `code_digest`s of the functions with declared versions the checksum reached
     # (its own, its nodes', its inputs'), by ``module.qualname==version``, when it was
     # last computed
     _declared_code = attrs.field(default=None, init=False, eq=False, repr=False)
+
+    # The digests of the fields and of the ``Outputs`` class computed by the process that
+    # submitted the job, each with the value it was computed from, set by
+    # `_carry_digests` when the job is unpickled (a worker may not be able to read the
+    # source) and None in the submitting process (pydra issue #936). A digest is used
+    # only while its field still holds that same object, and a ``Result`` does not
+    # pickle them.
+    _carried = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
     BASE_ATTRS = ()
@@ -476,36 +486,65 @@ class Task(ty.Generic[OutputsType]):
 
     @property
     def _hash(self):
-        hsh, self._hashes = self._compute_hashes()
-        return hsh
+        """The sha256 of the RFC 8785 form of the task's identity record (see
+        `pydra.utils.identity.task_record`), or of its inputs and the task type for a
+        task whose checksum is supplied"""
+        from pydra.utils.identity import record_checksum, task_record
+
+        if hasattr(self, "__checksum__"):
+            return self._compute_hashes()[0]
+        record = task_record(self)
+        return record_checksum(record).removeprefix(f"{record['kind']}-")
 
     @property
     def _checksum(self):
-        """The job checksum: the value returned by the class's
-        ``__checksum__(self, inputs) -> str`` if it defines one (or is given one by
-        ``define(checksum=...)``), when no input is hashed, otherwise the task type and
-        the hash of the inputs. A supplied value must identify the task as well as its
-        inputs, as jobs with equal checksums share one result and run only once."""
-        if hasattr(self, "__checksum__"):
-            checksum = self.__checksum__(self._checksum_inputs(hashed=False))
-            if not isinstance(checksum, str):
-                raise TypeError(
-                    f"__checksum__ of {type(self).__name__} must return a str, "
-                    f"not {checksum!r}"
+        """The task's checksum: the digest of its identity record, which is
+        ``"<kind>-<sha256>"`` (see `pydra.utils.identity.record_checksum`), or the value
+        returned by the class's ``__checksum__(self, inputs) -> str`` if it defines one
+        (or is given one by ``define(checksum=...)``). A supplied value must identify
+        the task as well as its inputs, as jobs with equal checksums share one result
+        and run only once."""
+        from pydra.utils.identity import record_checksum, task_record
+
+        return record_checksum(task_record(self))
+
+    def _carry_digests(self) -> None:
+        """Keep the digests the submitting process computed (``_hashes``), so a process
+        that unpickles the task never recomputes them from source, which it may not be
+        able to read. Only the fields that hold files are hashed again (see
+        `pydra.utils.identity.field_digests`): their content can change between the
+        submission and the run."""
+        from pydra.utils.identity import TEMPLATE_PREFIX
+
+        if self._hashes:
+            self._carried = {
+                name: (
+                    (None, digest)
+                    if name == "Outputs" or name.startswith(TEMPLATE_PREFIX)
+                    else (getattr(self, name, None), digest)
                 )
-            if (
-                checksum in ("", ".", "..")
-                or "\0" in checksum
-                or any(
-                    sep and sep in checksum for sep in ("/", "\\", os.sep, os.altsep)
-                )
-            ):
-                raise ValueError(
-                    f"__checksum__ of {type(self).__name__} must return a single path "
-                    f"component, not {checksum!r}"
-                )
-            return checksum
-        return f"{self._task_type()}-{self._hash}"
+                for name, digest in self._hashes.items()
+            }
+
+    def _supplied_checksum(self) -> str:
+        """The checksum returned by ``__checksum__``, which must be a single path
+        component"""
+        checksum = self.__checksum__(self._checksum_inputs(hashed=False))
+        if not isinstance(checksum, str):
+            raise TypeError(
+                f"__checksum__ of {type(self).__name__} must return a str, "
+                f"not {checksum!r}"
+            )
+        if (
+            checksum in ("", ".", "..")
+            or "\0" in checksum
+            or any(sep and sep in checksum for sep in ("/", "\\", os.sep, os.altsep))
+        ):
+            raise ValueError(
+                f"__checksum__ of {type(self).__name__} must return a single path "
+                f"component, not {checksum!r}"
+            )
+        return checksum
 
     def _hashed_value(self, name: str) -> ty.Any:
         """The value of field ``name`` as it enters the hash: the code of the executor
@@ -515,7 +554,7 @@ class Task(ty.Generic[OutputsType]):
         if name == self._executor_name:
             if isinstance(value, types.FunctionType):
                 return TaskFunction(value, version=self._version)
-            if self._version is not None:
+            if self._version is not None and self._task_type() != "shell":
                 return (
                     f"version:{value.__module__}.{value.__qualname__}=={self._version}"
                 )
@@ -525,8 +564,10 @@ class Task(ty.Generic[OutputsType]):
         """Detects any changes in the hashed values between the current inputs and the
         previously calculated values. The executor is not rehashed: its hash is only
         computed by the process that submits the job."""
+        previous = self._hashes
         _, new_hashes = self._compute_hashes(exclude=self._executor_name)
-        return [k for k, v in new_hashes.items() if v != self._hashes[k]]
+        self._hashes = previous
+        return [k for k, v in new_hashes.items() if v != previous[k]]
 
     def _element_checksums(self) -> list[str]:
         """The supplied checksums of the elements of a split task, in state order"""
@@ -567,30 +608,17 @@ class Task(ty.Generic[OutputsType]):
 
     def _compute_hashes(
         self, exclude: str | None = None
-    ) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
-        """Compute a basic hash for any given set of fields, leaving out `exclude`"""
-        inp_dict = self._checksum_inputs()
-        inp_dict.pop(exclude, None)
-        # Include the outputs class, just in case any names or types have changed
-        inp_dict["Outputs"] = self.Outputs
-        # Which provider fills a field is part of the task's interface; keyed only when
-        # a field is provided, so other checksums are as they were
-        if provided := {
-            f.name: f.provided
-            for f in get_fields(self)
-            if getattr(f, "provided", None) is not None
-        }:
-            inp_dict["Provided"] = provided
-        hash_cache = Cache(code_hash=self._code_hash)
-        field_hashes = {
-            k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
-        }
+    ) -> ty.Tuple[bytes, ty.Dict[str, str]]:
+        """Compute the digests of the fields of the identity record, leaving out
+        `exclude`. Without `exclude` they are kept as ``_hashes``, with the library
+        modules and declared code the walk reaches (see
+        `pydra.utils.identity.field_digests`)"""
+        from pydra.utils.identity import field_digests
+
+        digests = field_digests(self, exclude, collect=exclude is None)
         if exclude is None:
-            self._code_modules = frozenset(hash_cache.modules)
-            self._declared_code = {
-                k: ",".join(sorted(v)) for k, v in sorted(hash_cache.declared.items())
-            }
-        return hash_function(sorted(field_hashes.items())), field_hashes
+            self._hashes = digests
+        return hash_function(sorted(digests.items())), digests
 
     def _rule_violations(self) -> list[str]:
         """Check rules and returns a list of errors."""
@@ -718,12 +746,14 @@ def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
         keys = obj._element_checksums() if obj._splitter else [obj._checksum]
         yield f"__checksum__={keys},".encode()
     else:
-        for field in get_fields(obj):
-            yield f"{field.name}=".encode()
-            yield hash_single(obj._hashed_value(field.name), cache)
-            yield b","
-            if getattr(field, "provided", None) is not None:
-                yield f"provided={field.provided!r},".encode()
+        # the task's own checksum: its record without the job's fields, so the command
+        # template and a declared version are in it (RFC 0004 section 3.1)
+        checksum = obj._checksum
+        cache.modules |= obj._code_modules or set()
+        cache.refs |= set(obj._code_refs or ())
+        for name, digests in (obj._declared_code or {}).items():
+            cache.declared.setdefault(name, set()).update(digests.split(","))
+        yield f"_checksum={checksum},".encode()
     yield b"_splitter="
     yield hash_single(obj._splitter, cache)
     yield b",_combiner="

@@ -83,6 +83,9 @@ class JobErrorEntry:
         ``"run"`` if the job ran and errored, ``"resolution"`` if its inputs could
         not be resolved from its upstream results, so it never ran, ``"expansion"`` if
         a block of a partial node could not be expanded, so it has no element,
+        ``"keying"`` if its checksum could not be computed (its version command, its
+        environment reference under ``resolve_images="require"``, or an input value
+        raised), so it never ran,
         ``"lease"`` if the lease of a workflow job could not be taken, ``"commit"`` if
         its result could not be committed (the lease was lost), ``"stopped"`` if the
         job was handed out but the run ended before it completed (its message names
@@ -1615,7 +1618,9 @@ class GraphRunner:
         job.rerun = self._inner_rerun
         find = getattr(self.store, "find", None)
         checked = False
-        if not job.rerun and find is not None:
+        if job.deferred:
+            pass  # never served whole: expanded, each node looked up under its own key
+        elif not job.rerun and find is not None:
             # RFC 0002 section 3.1: the store check by ``find(job)``, before the lease
             try:
                 found = find(job)
@@ -1670,7 +1675,7 @@ class GraphRunner:
             return
         job = frame.job
         rerun = self.rerun if frame.parent is None else job.rerun
-        if not rerun and not frame.checked:
+        if not rerun and not frame.checked and not job.deferred:
             try:
                 result = self._stored_workflow(job)
             except Exception as exc:
@@ -1977,12 +1982,34 @@ class GraphRunner:
                     how = "gated" if job._gated else "absent"
                     self._settled.append(Settled(job, how, job._held))
             for job in jobs:
+                if job in self._handed or not self._keyed(job, frame):
+                    continue
                 if is_workflow(job.task):
                     self._enter(job, frame)
                 else:
                     self._frame_of[job] = frame
                     leaves.append(job)
         return leaves
+
+    def _keyed(self, job: Job, frame: _Frame) -> bool:
+        """Compute the checksum of a released job inside the per-job error handling (RFC
+        0004 section 4.3): one that cannot be computed (a version command, a reference
+        under ``resolve_images="require"`` or an input value raised) is recorded as the
+        job's error, phase ``"keying"``, its readers become unrunnable and the rest of
+        the run continues under ``on_error``"""
+        try:
+            job.checksum
+        except Exception as exc:
+            job._errored = True
+            job._awaiting_run = False
+            self._handed.add(job)
+            self._failed = True
+            if self._first_error is None:
+                self._first_error = exc
+            frame.errors.append(job_error(job, exc))
+            frame.entries.append(job_entry(job, exc, phase="keying"))
+            return False
+        return True
 
     def _progress(self) -> tuple:
         """The state of the graph that one pass of :meth:`ready` can advance

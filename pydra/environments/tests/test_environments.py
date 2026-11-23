@@ -12,8 +12,22 @@ import pytest
 
 def makedir(path: Path, name: str) -> Path:
     newdir = path / name
-    newdir.mkdir()
+    newdir.mkdir(mode=0o700)  # a portable root must be private, whatever the umask
     return newdir
+
+
+@no_win
+def test_makedir_root_is_a_private_store_root_under_a_group_umask(tmp_path):
+    """A cluster's umask 002 would make a plain mkdir 0o775, which the default store
+    refuses as not private"""
+    import os
+
+    old = os.umask(0o002)
+    try:
+        root = makedir(tmp_path, "cache")
+    finally:
+        os.umask(old)
+    Submitter(cache_root=root)
 
 
 def drop_stderr(dct: dict[str, ty.Any]):
@@ -73,7 +87,9 @@ def test_docker_1(tmp_path):
 
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("docker")),
+        submitter=Submitter(
+            environment=dock, store="pickle", cache_root=newcache("docker")
+        ),
         name="docker",
     )
     outputs_dict = dock.execute(shelly_job)
@@ -116,7 +132,9 @@ def test_docker_1_subm(tmp_path, dock):
     shelly = shell.define(cmd)()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("docker")),
+        submitter=Submitter(
+            environment=dock, store="pickle", cache_root=newcache("docker")
+        ),
         name="docker",
     )
     assert shelly.cmdline == cmd
@@ -148,7 +166,9 @@ def test_singularity_1(tmp_path):
     shelly = Shelly()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("singu")),
+        submitter=Submitter(
+            environment=sing, store="pickle", cache_root=newcache("singu")
+        ),
         name="singu",
     )
     assert shelly.cmdline == cmd
@@ -180,7 +200,9 @@ def test_singularity_1_subm(tmp_path, worker):
     shelly = Shelly()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("singu")),
+        submitter=Submitter(
+            environment=sing, store="pickle", cache_root=newcache("singu")
+        ),
         name="singu",
     )
     assert shelly.cmdline == cmd
@@ -219,10 +241,12 @@ def shelly_with_input_factory(filename, executable) -> shell.Task:
     return Shelly(**({} if filename is None else {"file": filename}))
 
 
-def make_job(task: shell.Task, tempdir: Path, name: str):
+def make_job(task: shell.Task, tempdir: Path, name: str, environment=None):
     return Job(
         task=task,
-        submitter=Submitter(store="pickle", cache_root=makedir(tempdir, name)),
+        submitter=Submitter(
+            environment=environment, store="pickle", cache_root=makedir(tempdir, name)
+        ),
         name=name,
     )
 
@@ -304,7 +328,7 @@ def test_docker_fileinp(tmp_path):
         f.write("hello ")
 
     shelly = shelly_with_input_factory(filename=filename, executable="cat")
-    outputs_dict = dock.execute(make_job(shelly, tmp_path, "docker"))
+    outputs_dict = dock.execute(make_job(shelly, tmp_path, "docker", dock))
 
     with Submitter(
         environment=dock, store="pickle", cache_root=newcache("shell_sub")
@@ -335,7 +359,7 @@ def test_docker_fileinp_subm(tmp_path, worker):
         f.write("hello ")
 
     shelly = shelly_with_input_factory(filename=filename, executable="cat")
-    shelly_job = make_job(shelly, tmp_path, "docker_job")
+    shelly_job = make_job(shelly, tmp_path, "docker_job", dock)
     outputs_dict = dock.execute(shelly_job)
 
     with Submitter(
@@ -449,7 +473,12 @@ def test_shell_fileout(tmp_path):
     outputs = shelly(
         environment=native.Environment(), store="pickle", cache_root=call_cache
     )
-    assert Path(outputs.file_copy).parent.parent == call_cache / shelly._checksum
+    job = Job(
+        name="shelly",
+        task=shelly,
+        submitter=Submitter(environment=native.Environment()),
+    )
+    assert Path(outputs.file_copy).parent.parent == call_cache / job.checksum
     assert Path(outputs.file_copy).name == "file_copy.txt"
 
 

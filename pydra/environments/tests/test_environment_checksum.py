@@ -21,21 +21,12 @@ def test_checksum_distinguishes_environments():
 @pytest.mark.parametrize("env", [docker.Docker, singularity.Singularity])
 def test_identity_replaces_image_resolution(env, monkeypatch):
     def fail(self):
-        raise AssertionError("must not resolve a digest when identity is given")
+        raise AssertionError("a checksum must not resolve the image")
 
-    monkeypatch.setattr(env, "_resolve_digest", fail)
+    monkeypatch.setattr(env, "resolve", fail)
     a = env(image="busybox", identity="sha256:1")
     assert a.checksum() == env(image="other", identity="sha256:1").checksum()
     assert a.checksum() != env(image="busybox", identity="sha256:2").checksum()
-
-
-@pytest.mark.parametrize("env", [docker.Docker, singularity.Singularity])
-def test_rebuilt_image_changes_checksum_via_digest(env, monkeypatch):
-    digest = ["sha256:a"]
-    monkeypatch.setattr(env, "_resolve_digest", lambda self: digest[0])
-    before = env(image="busybox").checksum()
-    digest[0] = "sha256:b"
-    assert env(image="busybox").checksum() != before
 
 
 @attrs.define
@@ -59,10 +50,14 @@ def _run(tmp_path, env, worker="debug"):
     return job
 
 
-def test_environment_checksum_recorded_not_in_job_checksum(tmp_path):
+def test_environment_checksum_recorded_and_in_shell_job_checksum(tmp_path):
     a = _run(tmp_path / "a", Tagged(tag="a"))
     b = _run(tmp_path / "b", Tagged(tag="b"))
-    assert a.checksum == b.checksum
+    # the job's checksum is the digest of its record, which names the environment
+    # (RFC 0004 section 3.1), where the task's checksum does not
+    assert a.checksum != b.checksum
+    assert a.task._checksum == b.task._checksum
+    assert a.record["job"]["environment"] == Tagged(tag="a").checksum()
     assert a.result().context["environment"] == Tagged(tag="a").checksum()
     assert b.result().context["environment"] == Tagged(tag="b").checksum()
     assert a.result().context["environment"] != b.result().context["environment"]
@@ -79,47 +74,6 @@ def test_default_environment_records_native_checksum(tmp_path):
         _run(tmp_path, None).result().context["environment"]
         == native.Native().checksum()
     )
-
-
-def test_digest_resolved_once_per_process(monkeypatch):
-    calls = []
-
-    def resolve(self):
-        calls.append(1)
-        return "sha256:a"
-
-    monkeypatch.setattr(docker.Docker, "_resolve_digest", resolve)
-    env = docker.Docker(image="busybox")
-    assert env.checksum() == env.checksum()
-    assert len(calls) == 1
-
-
-def test_unresolved_digest_is_not_cached(monkeypatch):
-    digests = [None, "sha256:a"]
-    monkeypatch.setattr(docker.Docker, "_resolve_digest", lambda self: digests.pop(0))
-    env = docker.Docker(image="busybox")
-    assert env.checksum() != env.checksum()
-
-
-def test_docker_digest_never_pulls_and_tolerates_no_docker(monkeypatch):
-    from pydra.environments import base
-
-    commands = []
-
-    def missing(cmd, strip=False):
-        commands.append(cmd)
-        return 1, "", "no such image"
-
-    monkeypatch.setattr(base, "execute", missing)
-    assert docker.Docker(image="busybox")._resolve_digest() is None
-    assert [c[1] for c in commands] == ["image"]
-
-    def no_docker(cmd, strip=False):
-        raise FileNotFoundError("docker")
-
-    monkeypatch.setattr(base, "execute", no_docker)
-    env = docker.Docker(image="busybox")
-    assert env.checksum() == env.checksum()
 
 
 def test_environment_checksum_recorded_under_each_worker(worker, tmp_path):

@@ -53,6 +53,87 @@ from pydra.compose.base import Task, Outputs
 
 logger = logging.getLogger("pydra.submitter")
 
+IDENTITY_MARKER = ".pydra-identity"
+"""The file at the root of a `PickleStore` naming the identity scheme its slots are
+keyed under (RFC 0004 section 9.1)"""
+
+
+_MARKER_WARNED: set[str] = set()  # the roots a marker line was logged for
+
+
+def _scheme_version(named: str) -> int | None:
+    """``N`` of ``pydra-identity@N``, else None"""
+    prefix, _, version = named.partition("@")
+    if prefix != "pydra-identity" or not version.isdigit():
+        return None
+    return int(version)
+
+
+def _warn_once(root: Path, message: str, *args: ty.Any) -> None:
+    key = os.fspath(root)
+    if key not in _MARKER_WARNED:
+        _MARKER_WARNED.add(key)
+        logger.warning(message, root, *args)
+
+
+def check_identity_marker(root: Path) -> None:
+    """Read ``<root>/.pydra-identity``. When it names an older scheme, or is missing from a
+    root that holds slots, log one line (their results are recomputed once, as every key
+    changed) and write it. A marker naming a newer or an unknown scheme is left as it is,
+    with one line, so installs sharing a cache never flip it. One read when the marker is
+    current; a root that cannot be written is left as it is. Each root is logged at most
+    once per process."""
+    from pydra.utils.identity import IDENTITY_SCHEME
+
+    path = Path(root) / IDENTITY_MARKER
+    try:
+        with open(path, encoding="utf-8") as f:
+            named: str | None = f.read(256).strip()
+    except FileNotFoundError:
+        named = None
+    except OSError:
+        return
+    if named == IDENTITY_SCHEME:
+        return
+    if named is None:
+        try:
+            with os.scandir(root) as entries:
+                held = any(e.name != IDENTITY_MARKER for e in entries)
+        except OSError:
+            held = False
+        if held:
+            _warn_once(
+                root,
+                "%s holds results keyed before %s: every job runs again once, and its "
+                "results are then reused",
+                IDENTITY_SCHEME,
+            )
+    else:
+        version = _scheme_version(named)
+        if version is None or version >= _scheme_version(IDENTITY_SCHEME):
+            _warn_once(
+                root,
+                "%s is marked as keyed under %s, which this pydra (%s) does not write: "
+                "its results are not reused here, and the marker is left as it is",
+                named or "an unnamed scheme",
+                IDENTITY_SCHEME,
+            )
+            return
+        _warn_once(
+            root,
+            "%s holds results keyed under %s, not %s: every job runs again once, and "
+            "its results are then reused",
+            named,
+            IDENTITY_SCHEME,
+        )
+    tmp = path.with_name(f"{IDENTITY_MARKER}.{uuid4().hex}.tmp")
+    try:
+        tmp.write_text(IDENTITY_SCHEME + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+
+
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
     from pydra.engine.resident import Provider, ResidentSet
@@ -236,6 +317,11 @@ class Submitter:
         is emitted when a ``FileSet`` output lies outside the cache directory). The
         ``pre_run_task``/``post_run_task`` hooks see the caller's directory, and audit
         messages without an explicit ``message_dir`` go to ``<cache_dir>/messages``
+    resolve_images : str, optional
+        What to do with a container image that cannot be resolved to a digest, a local
+        image id or a ``.sif`` content digest, or Lmod modules that cannot be resolved to
+        full names: "best-effort" (default) runs the reference as written and the result
+        is used by this process only, "require" raises ``ImageResolutionError``
     providers : iterable of Provider, optional
         Providers of the task fields marked ``provided`` (see
         :mod:`pydra.engine.resident`), besides those registered under the
@@ -296,6 +382,7 @@ class Submitter:
         on_error: OnError | None = None,
         telemetry: bool = True,
         chdir: bool = True,
+        resolve_images: ty.Literal["best-effort", "require"] = "best-effort",
         providers: "ty.Iterable[Provider] | None" = None,
         **kwargs,
     ):
@@ -326,6 +413,12 @@ class Submitter:
                         f"the executor {worker!r} publishes to {pool_store!r}, not to the "
                         f"store given, {store!r}; give the submitter the executor's store"
                     )
+        if resolve_images not in ("best-effort", "require"):
+            raise ValueError(
+                f"resolve_images must be 'best-effort' or 'require', not {resolve_images!r}"
+            )
+        self.resolve_images = resolve_images
+        self._resolved_refs: dict = {}  # environment references, resolved once per run
         self.chdir = chdir
         self.providers = tuple(providers) if providers is not None else ()
         self._resident_set = None
@@ -554,6 +647,8 @@ class Submitter:
         from pydra.engine.resident import check_task
 
         check_task(task, self)  # a wiring error is raised before anything runs
+        if isinstance(self.store, PickleStore):
+            check_identity_marker(self.store.cache_root)
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
             state = State(

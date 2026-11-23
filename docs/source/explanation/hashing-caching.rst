@@ -50,10 +50,35 @@ hash follows the code they reach:
 
 A function or class outside the tier is identified by its qualified name. Library code,
 the standard library, packages installed in ``site-packages`` and pydra itself, is
-always identified by its qualified name, never its code: its version is not part of the
-hash. The ``PYDRA_USER_PACKAGES`` environment variable overrides that boundary with a
+never identified by its code. The standard library is identified by its qualified name.
+A function or class of an installed distribution is identified by its qualified name
+and the distribution that owns it and its identity (``lib:numpy==2.1.0:numpy.add``): the
+public version of an index install (the local label such as ``+cu121`` names a build for
+a platform and is recorded in the context, not keyed), ``version@commit`` of a VCS
+install, ``version@hash`` of an archive. An install from a local directory, editable
+(library code when named with ``-mypkg``) or not, has no version in its identity: it is
+``dir:<digest of its files>``, so the same code has one key whatever git, the install
+commit or the install path: every file of the packages of an editable install (data
+included), and the hashed ``RECORD`` entries outside ``*.dist-info`` that stay inside a
+non-editable one. The engine itself (``pydra.compose``, ``pydra.engine``,
+``pydra.environments``, ``pydra.utils``, ``pydra.workers``, ``pydra.scripts``) is
+referenced by qualified name with no identity, like the standard library; the context
+records pydra's identity. ``pydra.tasks.*`` is keyed by the distribution that owns it. The
+identity record lists the references in ``task.refs``. The owner is the distribution whose
+``RECORD`` lists the module's file, else the one distribution that
+``importlib.metadata.packages_distributions()`` names for its top-level package. An
+extension module that no distribution owns is referenced as ``lib:?:`` and its results
+are not reused by other processes; a pure-Python module that none owns is hashed as user
+code, and does not make the context unknown. Only the distributions that code reaches directly are keyed, not what they
+require, and the distributions that own the library types of the input values (a numpy
+array, a pandas frame) are keyed too. The ``PYDRA_USER_PACKAGES`` environment variable overrides that boundary with a
 comma-separated list of packages, ``mypkg`` to hash an installed package as user code
-and ``-mypkg`` to treat one (for instance an editable install) as library code. Set the
+and ``-mypkg`` to treat one (for instance an editable install) as library code. **Set it
+the same way on every site that should share results:** a package installed as a wheel on
+a cluster is library code keyed by name and version, and the same package in an editable
+checkout on a laptop is user code keyed by its source, so the two sites compute different
+checksums for the same code, unless both set ``PYDRA_USER_PACKAGES=mypkg``. The ``walk``
+field of the identity record carries the overrides, so a mismatch is named. Set the
 tier per task with ``python.define(code_hash=...)`` or ``workflow.define(code_hash=...)``,
 or for all tasks with the ``PYDRA_CODE_HASH`` environment variable.
 
@@ -164,11 +189,13 @@ recorded in different contexts never overwrite each other:
 
 A distribution is identified by its version and, when it was not installed from an
 index, by what it was installed from, which is read only for the distributions a task
-reaches: the commit or archive hash it records; for an editable install, the commit
-of its git checkout and a digest of the files modified or untracked there, or outside
-git a digest of all its files, in both cases only those of its own packages and up to
-``IDENTITY_MAX_FILES`` files and ``IDENTITY_MAX_BYTES`` bytes; for another install
-from a local directory, a digest of the files it installed (its ``RECORD``). What
+reaches: the commit or archive hash it records; for an install from a local directory,
+editable or not, ``dir:`` and a digest of its files, with no version (so the same code
+has one identity whatever git, the install commit or the install path). For an editable
+install the digest covers every file of its own packages, data included, and notes
+beside the packages do not count; it is read up to ``IDENTITY_MAX_FILES`` files and
+``IDENTITY_MAX_BYTES`` bytes. For another install from a local directory it covers the
+hashed ``RECORD`` entries outside ``*.dist-info`` that stay inside the install. What
 still cannot be identified (a module no distribution installed, an editable install
 whose source is gone or that is over those limits) is unknown, and is logged with the
 reason. A result

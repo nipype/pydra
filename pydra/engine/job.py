@@ -14,11 +14,17 @@ import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
 from pydra.utils.hash import hash_function
+from pydra.utils.identity import (
+    is_deferred,
+    job_record,
+    record_checksum,
+    rehashed_in_worker,
+)
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
 from pydra.engine.absent import absence_suffix, absence_triples
-from pydra.engine.context import job_context
+from pydra.engine.context import _nonce, job_context
 from pydra.engine.lease import LeaseLost, LeaseTimeout
 from pydra.engine.store import (
     check_declared_code,
@@ -47,7 +53,11 @@ from pydra.engine.result import save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
-from pydra.environments.base import Environment
+from pydra.environments.base import (
+    Environment,
+    ImageResolutionError,
+    ResolvedRef,
+)
 from pydra.utils.resources import ComputeResources
 from pydra.utils.etelemetry import check_latest_version
 
@@ -186,6 +196,8 @@ class Job(ty.Generic[TaskType]):
 
         self.allow_cache_override = True
         self._checksum = None
+        self._record = None
+        self._resolved = None
         self._unsuffixed_checksum = None
         # The (field, element index, cause) of every Absent an input field accepted or
         # dropped, set by the graph runner when it forms the job
@@ -259,8 +271,11 @@ class Job(ty.Generic[TaskType]):
         return self.name
 
     def __getstate__(self):
-        # Carry the checksum, so a worker never rehashes the task's code
+        # Carry the checksum, so a worker never rehashes the task's code, and the
+        # environment's resolved reference, which the worker runs and never resolves
         self.checksum
+        if self.resolves_reference:
+            self.resolved
         # The task stays an object in the state, so it is serialised in the job's own
         # stream, and jobs pickled together (a workflow's node jobs) share one memo.
         # A Job therefore requires cloudpickle: the stdlib pickle cannot serialise the
@@ -288,6 +303,9 @@ class Job(ty.Generic[TaskType]):
         ):  # a job pickled before the task was inlined
             state["task"] = cp.loads(state["task"])
         self.__dict__.update(state)
+        self._received = True  # a worker: it runs the reference it was handed
+        # the digests the submitting process computed are not computed again here
+        self.task._carry_digests()
         # _cached_result is excluded from __getstate__; ensure it always exists
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
@@ -296,6 +314,8 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("_record", None)
+        self.__dict__.setdefault("_resolved", None)
         self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
         self.__dict__.setdefault("attempt", None)
@@ -337,10 +357,10 @@ class Job(ty.Generic[TaskType]):
 
     @property
     def unsuffixed_checksum(self) -> str:
-        """The checksum of the task, without the absence suffix of
+        """The digest of the job's record (`record`), without the absence suffix of
         :attr:`checksum` (RFC 0002 section 2.3(a))"""
         if self._unsuffixed_checksum is None:
-            self._unsuffixed_checksum = self.task._checksum
+            self._unsuffixed_checksum = record_checksum(self.record)
         return self._unsuffixed_checksum
 
     @property
@@ -350,6 +370,51 @@ class Job(ty.Generic[TaskType]):
         :func:`~pydra.engine.absent.absence_triples`); their suffix is appended to
         :attr:`checksum`"""
         return absence_triples(self)
+
+    @property
+    def resolves_reference(self) -> bool:
+        """Whether the job's environment reference is resolved, carried and run: a shell
+        task in an environment that resolves one (a container image, Lmod modules). A
+        python task has nothing to resolve, whatever environment it was given."""
+        from pydra.compose.shell.task import Task as ShellTask
+
+        return bool(getattr(self.environment, "resolves", False)) and isinstance(
+            self.task, ShellTask
+        )
+
+    @property
+    def resolved(self) -> "ResolvedRef":
+        """The environment's reference, resolved once in the submitting process and
+        carried with the job: the record keys its ``key`` and the worker executes its
+        ``run``. It is resolved again when the job's environment is replaced."""
+        held = self._resolved
+        if held is None or held[0] is not self.environment:
+            if self.__dict__.get("_received"):
+                raise ImageResolutionError(
+                    "This job reached a worker without the reference its submitting "
+                    "process resolved, and a worker never resolves it again"
+                )
+            ref = resolve_reference(self.environment, self.submitter)
+            held = self._resolved = (self.environment, ref)
+        return held[1]
+
+    @property
+    def deferred(self) -> bool:
+        """Whether the job's record holds ``"deferred"`` at any depth of a workflow's
+        ``nodes`` (RFC 0004 section 4.3): its entry is written, and a lookup of it is a
+        miss by rule, so the job is expanded and each node is looked up under its own key
+        """
+        return is_deferred(self.record)
+
+    @property
+    def record(self) -> dict[str, ty.Any]:
+        """The identity record the job's checksum is the digest of (see
+        `pydra.utils.identity.job_record`), built once in the submitting process and
+        carried with the job to the worker. ``Job.record``, ``Job.checksum`` and
+        ``PydraIdentityV2.key`` use the carried record and never rebuild it."""
+        if self._record is None:
+            self._record = job_record(self)
+        return self._record
 
     @property
     def context(self) -> dict[str, ty.Any]:
@@ -364,9 +429,19 @@ class Job(ty.Generic[TaskType]):
             self.checksum  # collects the library modules the task's code reaches
             identity = getattr(self.store, "identity", None)
             if identity is None:
-                self._context = job_context(self.task, self.environment)
+                self._context = job_context(
+                    self.task,
+                    self.environment,
+                    self.resolved if self.resolves_reference else None,
+                )
             else:
                 self._context = identity.context(self, "lookup")
+            tool_version = self.record.get("job", {}).get("tool_version")
+            if isinstance(tool_version, dict) or (
+                self.resolves_reference and self.resolved.unresolved
+            ):
+                # a tool not found here: the result is used by this process only
+                self._context = {**self._context, "unknown": _nonce()}
             self._stored_contexts = check_declared_code(
                 self.store, self.checksum, self._context, self.task
             )
@@ -611,7 +686,10 @@ class Job(ty.Generic[TaskType]):
         it keeps the mark that lookup set. An exclusive lease may have been held by a
         process that published the job since, so it looks again (RFC 0003 section 5.3).
         A work directory's ``_committed.json`` is the outcome of an earlier run and is
-        never served to a new one."""
+        never served to a new one. A deferred workflow job (`deferred`) is never served
+        whole."""
+        if is_workflow(self.task) and self.deferred:
+            return None
         find = getattr(self.store, "find", None)
         if find is not None:
             if looked_up and getattr(lease, "exclusive", True) is False:
@@ -686,6 +764,7 @@ class Job(ty.Generic[TaskType]):
             cache_dir=self.cache_dir,
             task=self.task,
             context=self.context,
+            record=self.record,
         )
         self.hooks.pre_run_task(self)
         self.audit.start_audit(
@@ -714,6 +793,7 @@ class Job(ty.Generic[TaskType]):
                 cache_dir=self.cache_dir,
                 task=self.task,
                 context=self.context,
+                record=self.record,
             )
         if error is None:
             try:
@@ -786,6 +866,7 @@ class Job(ty.Generic[TaskType]):
                     cache_dir=self.cache_dir,
                     task=self.task,
                     context=self.context,
+                    record=self.record,
                 )
                 self.hooks.pre_run_task(self)
                 self.audit.start_audit(
@@ -871,6 +952,7 @@ class Job(ty.Generic[TaskType]):
                     cache_dir=self.cache_dir,
                     task=self.task,
                     context=self.context,
+                    record=self.record,
                 )
                 self.hooks.pre_run_task(self)
                 self.audit.start_audit(
@@ -1073,8 +1155,6 @@ class Job(ty.Generic[TaskType]):
             return result
 
     def _check_for_hash_changes(self):
-        from pydra.utils.typing import TypeParser
-
         if hasattr(self.task, "__checksum__"):
             if (checksum := self.task._checksum) != self.unsuffixed_checksum:
                 raise RuntimeError(
@@ -1088,8 +1168,7 @@ class Job(ty.Generic[TaskType]):
         # execution (scalar/pure-Python values are immutable from Pydra's
         # perspective). Skip the expensive full recomputation in that common case.
         if not any(
-            TypeParser.contains_type(FileSet, f.type)
-            or hasattr(getattr(self.task, f.name), "__bytes_repr__")
+            rehashed_in_worker(f, getattr(self.task, f.name))
             for f in get_fields(self.task)
         ):
             logger.debug(
@@ -1102,8 +1181,12 @@ class Job(ty.Generic[TaskType]):
             return
         hash_changes = self.task._hash_changes()
         details = ""
+        fields = attr.fields_dict(type(self.task))
         for changed in hash_changes:
-            field = getattr(attr.fields(type(self.task)), changed)
+            if changed not in fields:  # the digest of the Outputs class
+                details += f"- {changed}: the digest changed\n"
+                continue
+            field = fields[changed]
             hash_function(getattr(self.task, changed))
             val = getattr(self.task, changed)
             field_type = type(val)
@@ -1147,6 +1230,26 @@ class Job(ty.Generic[TaskType]):
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
+
+
+def resolve_reference(environment: "Environment", submitter: ty.Any) -> "ResolvedRef":
+    """The reference of ``environment``, resolved once per run of ``submitter`` (its
+    ``_resolved_refs``); raises `ImageResolutionError` for one that cannot be resolved
+    under ``Submitter(resolve_images="require")``"""
+    memo = getattr(submitter, "_resolved_refs", None)
+    key = environment._ref_key()
+    if memo is not None and key is not None and key in memo:
+        ref = memo[key]
+    else:
+        ref = environment.resolve()
+        if memo is not None and key is not None:
+            memo[key] = ref
+    if ref.unresolved and getattr(submitter, "resolve_images", None) == "require":
+        raise ImageResolutionError(
+            f"The environment reference {ref.run!r} could not be resolved and "
+            "Submitter(resolve_images='require') was given"
+        )
+    return ref
 
 
 def has_lazy(obj):

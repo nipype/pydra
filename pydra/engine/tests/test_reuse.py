@@ -117,6 +117,7 @@ def test_context_recorded(tmp_path):
         "environment": Tagged(tag="a").checksum(),
         "packages": packages,
         "installed": _installed_digest(frozenset(packages)),
+        "tools": [],
     }
     assert ("unknown" in job.context) == (None in packages.values())
     assert job.context["python"] == platform.python_version()
@@ -425,18 +426,23 @@ def GoldenWf(a: int) -> int:
 
 
 def test_tasks_without_hook_keep_checksums(monkeypatch):
-    """Checksums of tasks without the hook, as computed at 277bee99 (the versioned
-    task's since its code part was tagged ``version:``)"""
+    """Checksums of tasks without the hook under ``pydra-identity@2`` (RFC 0004 I1):
+    the sha256 of the identity record"""
+    # the record carries the walk classification, which these environment variables set
+    monkeypatch.delenv("PYDRA_USER_PACKAGES", raising=False)
+    monkeypatch.delenv("PYDRA_CODE_HASH", raising=False)
+    # the goldens are the ``pydra-identity@2`` values of RFC 0004 I5a (the shell template
+    # in the record, no ``help`` in the ``Outputs`` digest), not a regression of the I1 ones
     # the module name depends on pytest's import mode, and is part of a declared version
     monkeypatch.setattr(inc_one, "__module__", "pydra.engine.tests.test_reuse")
     for task, checksum in [
         (
             python.define(inc_one, version="1")(a=1),
-            "python-6ca65772cc28b9f1e7fd898de2855234",
+            "python-30bf0a2070e7af623b0d8b69ea743788b7f591911d7b0a00bcd8b51423c6b807",
         ),
         (
             shell.define("echo <text:str>")(text="hi"),
-            "shell-e04edfe0da3d1efc0d8eb9466535b1fe",
+            "shell-7e46c37d2ba3e525c51669f3450f028983ec062ebb3722848ceee1b853c94154",
         ),
     ]:
         assert not hasattr(task, "__checksum__")
@@ -444,8 +450,11 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
 
 
 def test_code_hashed_tasks_keep_checksums(monkeypatch):
-    """Checksums of tasks whose function's code is hashed, the same on every Python
-    version (measured on 3.11 to 3.15)"""
+    """Checksums of tasks whose function's code is hashed under ``pydra-identity@2``,
+    the same on every Python version (the record's digests are the ``ast@1`` hashes)"""
+    # the record carries the walk classification, which these environment variables set
+    monkeypatch.delenv("PYDRA_USER_PACKAGES", raising=False)
+    monkeypatch.delenv("PYDRA_CODE_HASH", raising=False)
     # the workflow references AddOne, library code, by its function's qualified name,
     # which depends on pytest's import mode
     function = get_fields(AddOne).function.default
@@ -454,8 +463,8 @@ def test_code_hashed_tasks_keep_checksums(monkeypatch):
     module.AddOne = AddOne
     monkeypatch.setitem(sys.modules, module.__name__, module)
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == (
-        "python-463063b196ab62ce6c8c1a59e2bdd535",
-        "workflow-a815524df9154efcde7afe5ecfb6d0a6",
+        "python-0cfc1056f01b6c67859ac0ebda07faf7a32b6d0d3881b957f3ebe3cf551ed7d5",
+        "workflow-1d3154ff6cadd852e0a1e8a81a6191519dc0a52e171c11774660be1f7cd3946b",
     )
 
 

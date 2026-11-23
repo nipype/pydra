@@ -2,6 +2,7 @@ import ast
 import gc
 import importlib
 import importlib.util
+import json
 import linecache
 import re
 import os
@@ -14,7 +15,7 @@ import uuid
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest import mock
 import attrs
 import cloudpickle
@@ -35,7 +36,7 @@ from pydra.utils.hash import (
 import shutil
 import random
 from fileformats.generic import Directory, File
-from pydra.utils.hash import hash_function
+from pydra.utils.hash import hash_function, type_digest
 from pydra.utils.tests.utils import (
     Concatenate,
     OtherSpecificFuncTask,
@@ -221,42 +222,48 @@ def test_hash_object_known_values(obj: object, expected: str):
     assert hash_object(obj).hex() == expected
 
 
+def _path_repr(path) -> bytes:
+    """A path is its string, as RFC 0004 section 6.2 digests it: ``{"$path": <str>}``"""
+    return b'{"$path":' + json.dumps(os.fspath(path)).encode() + b"}"
+
+
 def test_pathlike_reprs(tmp_path):
-    cls = tmp_path.__class__
-    prefix = f"{cls.__module__}.{cls.__name__}"
     # Directory
-    assert join_bytes_repr(tmp_path) == f"{prefix}:{tmp_path}".encode()
+    assert join_bytes_repr(tmp_path) == _path_repr(tmp_path)
     # Non-existent file
     empty_file = tmp_path / "empty"
-    assert join_bytes_repr(empty_file) == f"{prefix}:{empty_file}".encode()
+    assert join_bytes_repr(empty_file) == _path_repr(empty_file)
     # Existent file
     empty_file.touch()
-    assert join_bytes_repr(empty_file) == f"{prefix}:{empty_file}".encode()
+    assert join_bytes_repr(empty_file) == _path_repr(empty_file)
 
     class MyPathLike:
         def __fspath__(self):
             return "/tmp"
 
-    prefix = f"{__name__}.MyPathLike"
-    assert join_bytes_repr(MyPathLike()) == f"{prefix}:/tmp".encode()
+    # the class, and its module, are not part of the value
+    assert join_bytes_repr(MyPathLike()) == _path_repr("/tmp")
+    assert join_bytes_repr(PurePosixPath("/tmp")) == _path_repr("/tmp")
+
+
+def test_pathlike_with_a_lone_surrogate_has_no_repr():
+    with pytest.raises(UnicodeEncodeError):
+        join_bytes_repr(Path("bad\udcffname"))
 
 
 def test_hash_pathlikes(tmp_path, hasher):
-    cls = tmp_path.__class__
-    prefix = f"{cls.__module__}.{cls.__name__}"
-
     # Directory
     h = hasher.copy()
-    h.update(f"{prefix}:{tmp_path}".encode())
+    h.update(_path_repr(tmp_path))
     assert hash_object(tmp_path) == h.digest()
 
     # Non-existent file
     empty_file = tmp_path / "empty"
     h = hasher.copy()
-    h.update(f"{prefix}:{empty_file}".encode())
+    h.update(_path_repr(empty_file))
     assert hash_object(empty_file) == h.digest()
 
-    # Existent file
+    # Existent file: the same digest as when it did not exist
     empty_file.touch()
     assert hash_object(empty_file) == h.digest()
 
@@ -264,9 +271,8 @@ def test_hash_pathlikes(tmp_path, hasher):
         def __fspath__(self):
             return "/tmp"
 
-    prefix = f"{__name__}.MyPathLike"
     h = hasher.copy()
-    h.update(f"{prefix}:/tmp".encode())
+    h.update(_path_repr("/tmp"))
     assert hash_object(MyPathLike()) == h.digest()
 
 
@@ -276,7 +282,7 @@ def test_bytes_repr_custom_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_slots_obj():
@@ -287,7 +293,7 @@ def test_bytes_repr_slots_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_slots():
@@ -296,7 +302,7 @@ def test_bytes_repr_attrs_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_no_slots():
@@ -305,7 +311,7 @@ def test_bytes_repr_attrs_no_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_type1():
@@ -331,29 +337,33 @@ def test_bytes_repr_type2():
     obj_repr = join_bytes_repr(MyClass[int])
     assert re.match(
         (
-            rb"type:\(origin:\(type:\(__dict__:\(str:6:method=.{16},\),annotations:\(str:1:a=.{16},"
-            rb"str:1:b=.{16},\),mro:\(type:\(typing.Generic\)\)\)\),args:\(type:\(builtins.int\)\)\)"
+            rb"type:\(origin:\(type:\(.*\.MyClass,class:\(class@1:[0-9a-f]{64}\)\)\),"
+            rb"args:\(type:\(builtins.int\)\)\)"
         ),
         obj_repr,
     )
 
 
+def type_token(tp) -> bytes:
+    """The digest of a type as it appears inside another type's bytes"""
+    return type_digest(tp).removeprefix("type@1:").encode()
+
+
+def union_repr(*members) -> bytes:
+    """A union is the sorted digests of its members, so its spelling and the Python
+    minor do not matter"""
+    return b"type:(union:(" + b",".join(sorted(type_token(m) for m in members)) + b"))"
+
+
 def test_bytes_special_form1():
-    obj_repr = join_bytes_repr(ty.Union[int, float])
-    assert obj_repr == (
-        b"type:(origin:(type:(typing.Union)),args:(type:(builtins.int)"
-        b"type:(builtins.float)))"
-    )
+    assert join_bytes_repr(ty.Union[int, float]) == union_repr(int, float)
+    assert join_bytes_repr(ty.Union[float, int]) == union_repr(int, float)
 
 
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form1a():
-    obj_repr = join_bytes_repr(int | float)
-    assert re.match(
-        rb"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(builtins.int\)"
-        rb"type:\(builtins.float\)\)\)",
-        obj_repr,
-    )
+    assert join_bytes_repr(int | float) == union_repr(int, float)
+    assert join_bytes_repr(float | int) == join_bytes_repr(ty.Union[int, float])
 
 
 def test_bytes_special_form2():
@@ -362,21 +372,12 @@ def test_bytes_special_form2():
 
 
 def test_bytes_special_form3():
-    obj_repr = join_bytes_repr(ty.Optional[Path])
-    assert obj_repr == (
-        b"type:(origin:(type:(typing.Union)),args:(type:(pathlib.Path)"
-        b"type:(builtins.NoneType)))"
-    )
+    assert join_bytes_repr(ty.Optional[Path]) == union_repr(Path, type(None))
 
 
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form3a():
-    obj_repr = join_bytes_repr(Path | None)
-    assert re.match(
-        rb"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(pathlib.Path\)"
-        rb"type:\(builtins.NoneType\)\)\)",
-        obj_repr,
-    )
+    assert join_bytes_repr(Path | None) == join_bytes_repr(ty.Optional[Path])
 
 
 def test_bytes_special_form4():
@@ -465,7 +466,7 @@ def test_registration_conflict():
         def __fspath__(self):
             return "pathlike"
 
-    assert join_bytes_repr(MyClass(1)) == f"{__name__}.MyClass:pathlike".encode()
+    assert join_bytes_repr(MyClass(1)) == _path_repr("pathlike")
 
     class MyNewClass(MyClass):
         def __bytes_repr__(self, cache: Cache):
@@ -726,18 +727,21 @@ def test_hash_task(tmp_path):
 
 
 def test_bytes_repr_annotated_type():
-    """The metadata of annotated types doesn't change the hash"""
+    """The metadata of an annotated type is part of its digest (RFC 0004 section 5.1)"""
 
     @attrs.define(frozen=True)
     class Marker:
         format: type
 
     annotated = ty.Annotated[ty.Union[Json, Yaml], Marker(Json)]
-    assert hash_function(annotated) == hash_function(ty.Union[Json, Yaml])
+    assert hash_function(annotated) != hash_function(ty.Union[Json, Yaml])
     assert hash_function(annotated) == hash_function(
+        ty.Annotated[ty.Union[Json, Yaml], Marker(Json)]
+    )
+    assert hash_function(annotated) != hash_function(
         ty.Annotated[ty.Union[Json, Yaml], Marker(Yaml)]
     )
-    assert hash_function(ty.List[annotated]) == hash_function(
+    assert hash_function(ty.List[annotated]) != hash_function(
         ty.List[ty.Union[Json, Yaml]]
     )
     assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])
@@ -788,6 +792,16 @@ _HASH_IN_SUBPROCESS = (
 )
 
 
+@pytest.mark.xfail(
+    condition=tuple(map(int, cloudpickle.__version__.split(".")[:3])) >= (3, 1, 3),
+    reason=(
+        "cloudpickle 3.1.3 sets co_filename to '<dynamic-code>' on a function it pickles "
+        "by value, so a process without the source hashes its bytecode (pydra issue "
+        "#936). A worker does not hash it: it takes the digests carried from the "
+        "submitting process, and rehashes only files and values with __bytes_repr__ "
+        "(test_identity_classes.py::test_worker_without_source_uses_the_carried_digests)"
+    ),
+)
 def test_hash_function_pickled_by_value():
     """A function pickled by value, as the cf worker sends it, keeps its hash in
     another process"""
@@ -1041,6 +1055,32 @@ def load_modules(tmp_path, monkeypatch):
         sys.modules.pop(name, None)
 
 
+_owner_of = hash_module.owner_of
+
+
+@pytest.fixture(autouse=True)
+def _forget_owners():
+    """Modules of the same name are loaded from new directories by each test, so no
+    owner is kept between them"""
+    _owner_of.cache_clear()
+    yield
+    _owner_of.cache_clear()
+
+
+@pytest.fixture
+def owned_libpkg(monkeypatch):
+    """``libpkg`` is owned by an installed distribution, so it is library code known
+    by its name and version, not an unowned module walked as user code"""
+    real = hash_module.owner_of
+    monkeypatch.setattr(
+        hash_module,
+        "owner_of",
+        lambda module: (
+            ("libpkg", "1.0") if module.partition(".")[0] == "libpkg" else real(module)
+        ),
+    )
+
+
 def _code_hash(func, code_hash: str) -> str:
     return hash_function(func, cache=Cache(code_hash=code_hash))
 
@@ -1134,7 +1174,7 @@ def _lib_f(load_modules, h=2, name="h"):
 
 
 @pytest.mark.parametrize("code_hash", _TIERS)
-def test_code_hash_library_by_name(load_modules, code_hash):
+def test_code_hash_library_by_name(load_modules, owned_libpkg, code_hash):
     """Code installed in site-packages is identified by its qualified name, never its
     code"""
     base = _code_hash(_lib_f(load_modules), code_hash)
@@ -1153,12 +1193,13 @@ def test_code_hash_library_objects_by_name():
     def f(x):
         return numpy.add(numpy.mean(x), os.environ)
 
+    numpy_version = hash_module.owner_of("numpy")[1].encode()
     encoded = b"".join(bytes_repr(f, Cache()))
-    assert b"global:numpy=module:numpy" in encoded
+    assert b"global:numpy=module:numpy==%s:numpy" % numpy_version in encoded
     assert b"global:os=module:os" in encoded
 
 
-def test_code_hash_library_instances_by_name(load_modules):
+def test_code_hash_library_instances_by_name(load_modules, owned_libpkg):
     _, main = load_modules(
         {
             "libpkg.state": "class Config:\n    pass\n\nCONFIG = Config()\n",
@@ -1169,10 +1210,11 @@ def test_code_hash_library_instances_by_name(load_modules):
         },
         directory="site-packages",
     )
+    numpy_version = hash_module.owner_of("numpy")[1].encode()
     encoded = b"".join(bytes_repr(main.f, Cache()))
-    assert b"global:CONFIG=lib:libpkg.state.CONFIG" in encoded
+    assert b"global:CONFIG=lib:libpkg==1.0:libpkg.state.CONFIG" in encoded
     assert b"global:environ=lib:os.environ" in encoded
-    assert b"global:add=lib:numpy.add" in encoded
+    assert b"global:add=lib:numpy==%s:numpy.add" % numpy_version in encoded
 
 
 @pytest.mark.parametrize(
@@ -1186,7 +1228,9 @@ def test_code_hash_user_packages_exclude(load_modules, monkeypatch, setting, cha
 
 
 @pytest.mark.parametrize("setting,changed", [("", False), ("libpkg", True)])
-def test_code_hash_user_packages_include(load_modules, monkeypatch, setting, changed):
+def test_code_hash_user_packages_include(
+    load_modules, owned_libpkg, monkeypatch, setting, changed
+):
     """``PYDRA_USER_PACKAGES`` names an installed package to make it user code"""
     monkeypatch.setenv(hash_module.USER_PACKAGES_ENV_VAR, setting)
     base = _code_hash(_lib_f(load_modules), "user")

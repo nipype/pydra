@@ -11,7 +11,7 @@ import time
 import typing as ty
 import warnings
 from pathlib import Path
-from pydra.engine.context import RECORD
+from pydra.engine.context import RECORD, RECORDED_FIELDS
 from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
 from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
 from pydra.engine.result import Result, load_result, save
@@ -245,11 +245,18 @@ class ExactReuse:
 
 class ConsistentReuse:
     """Reuses results recorded under the same Python major.minor and implementation,
-    the same platform and environment, and the same versions of the distributions the
-    task reaches (``packages``), all of them known. The full Python version and the
-    other installed distributions (``installed``) may differ."""
+    the same platform and environment, the same versions of the distributions the
+    task reaches (``packages``), all of them known, and the same ``tools``. The full
+    Python version and the other installed distributions (``installed``) may differ."""
 
-    EQUAL = ("record", "implementation", "platform", "environment", "packages")
+    EQUAL = (
+        "record",
+        "implementation",
+        "platform",
+        "environment",
+        "packages",
+        "tools",
+    )
 
     def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
         return (
@@ -379,9 +386,8 @@ def lease_still_held(lease: Lease) -> bool:
 
 def context_key(context: Context) -> str:
     """The name of the slot holding results recorded in ``context``."""
-    return hashlib.sha256(
-        json.dumps(dict(context), sort_keys=True).encode()
-    ).hexdigest()[:16]
+    slotted = {k: v for k, v in context.items() if k not in RECORDED_FIELDS}
+    return hashlib.sha256(json.dumps(slotted, sort_keys=True).encode()).hexdigest()[:16]
 
 
 @ty.runtime_checkable

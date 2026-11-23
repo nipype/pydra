@@ -1,6 +1,7 @@
 """Job I/O definitions."""
 
 from pathlib import Path
+import copy
 import typing as ty
 import attrs
 import functools
@@ -132,6 +133,9 @@ class Result(ty.Generic[OutputsType]):
     context: dict[str, ty.Any] = attrs.field(factory=dict)
     """The execution context that produced the result, recorded beside it (see
     `pydra.engine.context.job_context`)."""
+    record: dict[str, ty.Any] | None = None
+    """The identity record the job's checksum is the digest of (see
+    `pydra.utils.identity.job_record`)."""
     cross_context: bool = False
     """Whether the result was reused from an entry recorded in another context."""
     reused_in: dict[str, ty.Any] | None = None
@@ -152,6 +156,12 @@ class Result(ty.Generic[OutputsType]):
 
     def __getstate__(self):
         state = attrs_values(self)
+        task = state["task"]
+        if getattr(task, "_carried", None) is not None:
+            # the digests carried to a worker end with its run
+            task = copy.copy(task)
+            task._carried = None
+            state["task"] = task
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
                 state[attr] = cp.dumps(state[attr])

@@ -174,6 +174,7 @@ See the full reference documentation for Pydra
 
    reference/api
    reference/worker-protocol
+   reference/identity-v2
    genindex
    modindex
    reference/glossary

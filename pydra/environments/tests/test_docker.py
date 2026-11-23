@@ -120,9 +120,15 @@ def test_docker_st_1(run_function, worker, tmp_path):
         environment=docker.Environment(image="busybox"),
         store="pickle",
     )
-    # the working directory in the container is the job's slot, below its checksum
+    # the working directory in the container is the job's slot, below the checksum of
+    # the job, which includes its environment
+    element = Job(
+        name="docky",
+        task=attrs.evolve(docky, executable=cmd[0]),
+        submitter=Submitter(environment=docker.Environment(image="busybox")),
+    )
     assert PurePosixPath(outputs.stdout[0].strip()).parent == PurePosixPath(
-        f"/mnt/pydra{tmp_path}/{attrs.evolve(docky, executable=cmd[0])._checksum}"
+        f"/mnt/pydra{tmp_path}/{element.checksum}"
     )
     assert outputs.stdout[1] == "root\n"
     assert outputs.return_code[0] == outputs.return_code[1] == 0
@@ -648,11 +654,12 @@ def test_execute_creates_the_slot_directory(tmp_path, monkeypatch):
     from pydra.environments import base
 
     monkeypatch.setattr(base, "execute", lambda *args, **kwargs: (0, "", ""))
+    env = docker.Environment(image=f"busybox@sha256:{'1' * 64}")
     job = Job(
         task=shell.define("whoami")(),
         name="job",
-        submitter=Submitter(store="pickle", cache_root=tmp_path),
+        submitter=Submitter(environment=env, store="pickle", cache_root=tmp_path),
     )
     assert not job.cache_dir.parent.exists()
-    docker.Environment(image="busybox").execute(job)
+    env.execute(job)
     assert job.cache_dir.is_dir()

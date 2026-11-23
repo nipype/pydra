@@ -21,7 +21,7 @@ from pydra.engine.runner import GraphRunner
 from pydra.engine.submitter import Submitter
 
 from .test_portable_reuse import Scripted
-from .test_portable_store import make
+from .test_portable_store import make_v2 as make
 from .test_portable_submitter import Add1, Two, WriteFile, drive_with_run
 from .test_runner_flatten import AfterWrapped, count_expansions, drive
 
