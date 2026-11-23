@@ -23,6 +23,7 @@ from pydra.utils.identity import (
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
+from pydra.engine.absent import absence_suffix, absence_triples
 from pydra.engine.context import _nonce, job_context
 from pydra.engine.lease import LeaseLost, LeaseTimeout
 from pydra.engine.store import (
@@ -187,6 +188,14 @@ class Job(ty.Generic[TaskType]):
         self._checksum = None
         self._record = None
         self._resolved = None
+        self._unsuffixed_checksum = None
+        # The (field, element index, cause) of every Absent an input field accepted or
+        # dropped, set by the graph runner when it forms the job
+        self._accepted_absent: list[tuple[str, int, str]] = []
+        # The Absent the job completes with instead of running, set likewise
+        self._propagated_absent = None
+        # Whether that Absent is a gate's "not-routed" rather than a propagated one
+        self._gated = False
         self._uid = uuid4().hex
         self.hooks = hooks if hooks is not None else TaskHooks()
         self._errored = False
@@ -264,11 +273,14 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
-        state.pop("_held", None)
         state.pop("_awaiting_run", None)
         # A lookup made before dispatch is current only for a run in this process: a job
         # handed to a worker may wait in a queue, so it looks the store up again
         state.pop("looked_up", None)
+        if self._propagated_absent is not None:
+            # completed absent: its result is in memory only, and it has no context
+            return state
+        state.pop("_held", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
         return state
@@ -301,6 +313,10 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("replace", False)
         self.__dict__.setdefault("replaces", None)
         self.__dict__.setdefault("_work_dir_memo", None)
+        self.__dict__.setdefault("_unsuffixed_checksum", None)
+        self.__dict__.setdefault("_accepted_absent", [])
+        self.__dict__.setdefault("_propagated_absent", None)
+        self.__dict__.setdefault("_gated", False)
 
     @classmethod
     def check_etelemetry(cls) -> None:
@@ -323,8 +339,24 @@ class Job(ty.Generic[TaskType]):
         """
         if self._checksum is not None:
             return self._checksum
-        self._checksum = record_checksum(self.record)
+        self._checksum = self.unsuffixed_checksum + absence_suffix(self.absent)
         return self._checksum
+
+    @property
+    def unsuffixed_checksum(self) -> str:
+        """The digest of the job's record (`record`), without the absence suffix of
+        :attr:`checksum` (RFC 0002 section 2.3(a))"""
+        if self._unsuffixed_checksum is None:
+            self._unsuffixed_checksum = record_checksum(self.record)
+        return self._unsuffixed_checksum
+
+    @property
+    def absent(self) -> list[tuple[str, int, str]]:
+        """The sorted ``(field, element index, cause)`` of every accepted or dropped
+        ``Absent`` the task's checksum may not see (see
+        :func:`~pydra.engine.absent.absence_triples`); their suffix is appended to
+        :attr:`checksum`"""
+        return absence_triples(self)
 
     @property
     def resolves_reference(self) -> bool:
@@ -1057,10 +1089,11 @@ class Job(ty.Generic[TaskType]):
 
     def _check_for_hash_changes(self):
         if hasattr(self.task, "__checksum__"):
-            if (checksum := self.task._checksum) != self.checksum:
+            if (checksum := self.task._checksum) != self.unsuffixed_checksum:
                 raise RuntimeError(
                     f"The checksum supplied by the '{self.name}' job of {type(self)} type "
-                    f"changed during its execution, from {self.checksum!r} to {checksum!r}"
+                    f"changed during its execution, from {self.unsuffixed_checksum!r} to "
+                    f"{checksum!r}"
                 )
             return
         # For tasks whose input fields contain no FileSet types and no values

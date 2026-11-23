@@ -254,7 +254,13 @@ def make_converter(
         field_type = field.type
     checker_label = f"'{field.name}' field of {interface_name} interface"
     type_checker = TypeParser[field_type](
-        field_type, label=checker_label, superclass_auto_cast=True
+        field_type,
+        label=checker_label,
+        superclass_auto_cast=True,
+        accepts_absent=(
+            isinstance(field, Out)
+            or getattr(field, "absent", None) in ("accept", "drop")
+        ),
     )
     converters = []
     if field_type in (MultiInputObj, MultiInputFile):

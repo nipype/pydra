@@ -53,7 +53,7 @@ def drive_inline(
                     raise runner.first_error
             if fail_fast and runner.failed:
                 break
-            if rnd.dispatch or rnd.settled or rnd.unrunnable:
+            if rnd.dispatch or rnd.settled or rnd.unrunnable or rnd.absent_nodes:
                 continue  # their readers may be ready now
             if runner.done:
                 break
@@ -202,7 +202,7 @@ async def drive(
                 break
             if not in_flight and runner.done:
                 break
-            if (rnd.settled or rnd.unrunnable) and not rnd.dispatch:
+            if (rnd.settled or rnd.unrunnable or rnd.absent_nodes) and not rnd.dispatch:
                 continue  # their readers may be ready now
             reading = getattr(runner, "reading", 0)
             if (
