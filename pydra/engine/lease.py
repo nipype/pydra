@@ -27,6 +27,7 @@ from pathlib import Path
 import attrs
 from pydra.utils.general import atomic_write
 from pydra.utils.storage import require_lease_storage, storage_now
+from pydra.utils.storagedir import IS_WINDOWS
 
 logger = logging.getLogger("pydra")
 
@@ -71,12 +72,11 @@ HOLDER_FILE = "holder.json"
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
 _BEATS = ("thread", "external")
 _ESTALE = getattr(errno, "ESTALE", None)
-IS_WINDOWS = sys.platform == "win32"
 
 
 def _delete_pending(err: OSError) -> bool:
-    """Whether ``err`` may be Windows refusing a mkdir on, or in, a directory pending
-    deletion: one removed while another handle to it is still open."""
+    """Whether ``err`` may be Windows refusing a mkdir on, in or a listing of a
+    directory pending deletion: one removed while another handle to it is open."""
     return IS_WINDOWS and isinstance(err, PermissionError)
 
 
@@ -121,6 +121,17 @@ class LeaseUnavailable(LeaseTimeout):
         error: OSError,
     ):
         super().__init__(message, lockfile, holder, age)
+        self.error = error
+
+
+class LeaseRefused(PermissionError):
+    """The storage kept refusing to make or list the lease directory for longer than
+    `release_patience`: a permission problem, not a lease another process holds.
+    ``error`` is the refusal."""
+
+    def __init__(self, message: str, lockfile: Path, error: OSError):
+        super().__init__(error.errno, message, str(lockfile))
+        self.lockfile = lockfile
         self.error = error
 
 
@@ -331,6 +342,13 @@ class LeaseSettings:
 _SETTINGS_FIELDS = ("stale_after", "renew_fraction", "attribute_delay", "timeout")
 
 
+def release_patience(settings: LeaseSettings) -> float:
+    """Most seconds a refusal explained by another process's open handle is retried: a
+    release renaming its directory aside, and on Windows a mkdir or listing of a lease
+    directory pending deletion."""
+    return min(RELEASE_PATIENCE, MISSED_BEATS * settings.renew_interval)
+
+
 def holder_stale_after(
     record: dict | None, settings: LeaseSettings, *, unreadable: bool = False
 ) -> float:
@@ -493,6 +511,8 @@ class DirectoryLease:
     )
     _newest_seen: float | None = attrs.field(default=None, init=False, repr=False)
     _refused: OSError | None = attrs.field(default=None, init=False, repr=False)
+    _pending: OSError | None = attrs.field(default=None, init=False, repr=False)
+    _pending_since: float | None = attrs.field(default=None, init=False, repr=False)
     _unreadable_since: float | None = attrs.field(default=None, init=False, repr=False)
     _deadline: float = attrs.field(default=0.0, init=False, repr=False)
     _restarted: float = attrs.field(default=0.0, init=False, repr=False)
@@ -551,7 +571,12 @@ class DirectoryLease:
 
     def holder(self) -> dict | None:
         """The record of the process holding the lease, None if none can be read."""
-        return self._read_holder()[0]
+        try:
+            return self._read_holder()[0]
+        except PermissionError as err:
+            if not _delete_pending(err):
+                raise
+            return None
 
     def prove(self) -> bool:
         """Whether this process still holds the lease, asked of the storage: a
@@ -586,6 +611,7 @@ class DirectoryLease:
         self.broke, self.lost, self._last_seen = [], None, (None, None)
         self._newest_seen, self._refused, self._delay = None, None, POLL_MIN
         self._unreadable_since = None
+        self._pending, self._pending_since = None, None
         now = self.monotonic()
         self._restarted = now
         self._deadline = now + self.settings.timeout
@@ -604,9 +630,7 @@ class DirectoryLease:
         except PermissionError as err:
             if not _delete_pending(err):
                 raise
-            # held: a release removed the lease while a handle to it was open. A
-            # refusal that persists ends the wait in LeaseUnavailable
-            self._refused = err
+            self._refused = self._pending = err
             return False
         token = uuid.uuid4().hex
         token_dir = self.lockfile / token
@@ -616,9 +640,10 @@ class DirectoryLease:
             # the lease was removed as empty by a process taking it over or
             # releasing; APFS answers EINVAL instead of ENOENT when the rmdir races
             # this mkdir, Windows a PermissionError
-            if err.errno in (errno.ENOENT, errno.EINVAL, _ESTALE) or _delete_pending(
-                err
-            ):
+            if _delete_pending(err):
+                self._refused = self._pending = err
+                return False
+            if err.errno in (errno.ENOENT, errno.EINVAL, _ESTALE):
                 return False
             raise
         try:
@@ -728,11 +753,16 @@ class DirectoryLease:
         """Take over the lease if it is stale; whether it was removed."""
         try:
             st = os.lstat(self.lockfile)
+            if not os.path.isdir(self.lockfile) or os.path.islink(self.lockfile):
+                return self._judge_legacy(st)
+            holder, entries = self._read_holder()
         except FileNotFoundError:
             return True
-        if not os.path.isdir(self.lockfile) or os.path.islink(self.lockfile):
-            return self._judge_legacy(st)
-        holder, entries = self._read_holder()
+        except PermissionError as err:
+            if not _delete_pending(err):
+                raise
+            self._pending = err  # held: the name stays until the last handle closes
+            return False
         if entries and all(e.startswith("gone-") for e in entries):
             return self._clear_remains(entries)
         now = self._now()  # before the marks: a stall after this only shrinks the age
@@ -984,6 +1014,7 @@ class DirectoryLease:
         )
 
     def _attempt(self) -> bool:
+        self._pending = None
         if self._try_take():
             return True
         return self._judge() and self._try_take()
@@ -994,6 +1025,7 @@ class DirectoryLease:
         if self._attempt():
             return None
         now = self.monotonic()
+        self._check_pending(now)
         if self._cap is not None and now >= self._cap:
             raise self._timeout(capped=True)
         if now >= self._deadline:
@@ -1002,6 +1034,26 @@ class DirectoryLease:
         delay = min(self._delay, bound - now)
         self._delay = min(self._delay * 2, POLL_MAX)
         return delay
+
+    def _check_pending(self, now: float) -> None:
+        """Raise `LeaseRefused` once refusals that a directory pending deletion explains
+        have lasted `release_patience`."""
+        if self._pending is None:
+            self._pending_since = None
+            return
+        if self._pending_since is None:
+            self._pending_since = now
+        patience = release_patience(self.settings)
+        if now - self._pending_since < patience:
+            return
+        err = self._pending
+        raise LeaseRefused(
+            f"Cannot take the lease {self.lockfile}: the storage refused to make or list "
+            f"it for {patience:.1f}s ({err.strerror or err}). Check that this user can "
+            f"write {self.lockfile.parent}",
+            lockfile=self.lockfile,
+            error=err,
+        ) from err
 
     # Releasing
 
@@ -1040,7 +1092,7 @@ class DirectoryLease:
         if token is None:
             return
         token_dir, gone = self.lockfile / token, self.lockfile / f"gone-{token}"
-        patience = min(RELEASE_PATIENCE, MISSED_BEATS * self.settings.renew_interval)
+        patience = release_patience(self.settings)
         give_up = self.monotonic() + patience
         delay = min(POLL_MIN / 5, patience / 4)
         while True:
