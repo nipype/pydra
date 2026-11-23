@@ -108,6 +108,7 @@ from pydra.workers.pool.settings import PoolSettings
 from pydra.workers.pool.storage import (
     JobHeld,
     ListingBehind,
+    STOP_MARK,
     PoolRoot,
     Ticket,
     TicketJob,
@@ -593,6 +594,7 @@ class WarmPool:
                 codec_ref,
                 pool_id=self.pool.pool_id,
                 classes=self.classes,
+                pool_settings=settings,
             )
             attach = getattr(substrate, "attach", None)
             if attach is not None:
@@ -776,13 +778,24 @@ class WarmPool:
                         )
                         live = list(self._started.values())
                     if live:
-                        self.substrate.stop(live)
+                        self._stop_workers(live)
         finally:
             try:
                 if self._lease is not None:
                     self._lease.__exit__(None, None, None)
             finally:
                 self.pool.close()
+
+    def _stop_workers(self, handles: ty.Sequence[WorkerHandle]) -> None:
+        """Write each worker's `STOP_MARK`, then stop them with the substrate."""
+        for h in handles:
+            try:
+                self.pool.write_worker_record(h.token, STOP_MARK, {"at": time.time()})
+            except (OSError, ValueError) as err:
+                logger.warning(
+                    "writing the stop mark of worker %s failed: %s", h.token, err
+                )
+        self.substrate.stop(handles)
 
     def place(self, jobs: ty.Sequence["Job"]) -> list[Placement | Unplaceable]:
         """Each job's placement, as `submit` would make it, for ``plan()`` (RFC 0005 section 7.4)."""
@@ -1913,7 +1926,7 @@ class WarmPool:
                     surplus = mine
                 if surplus:
                     self._stopped.update(h.token for h in surplus)
-                    self.substrate.stop(surplus)
+                    self._stop_workers(surplus)
 
     def _listing_failed(self, err: Exception, now: float) -> None:
         """Count a failed listing against each class with work that shows no progress: no live
@@ -2166,7 +2179,9 @@ def collect_pool(root: os.PathLike, payload_age: float = 86400.0) -> dict:
     """`PoolRoot.collect` (settled jobs' older generations, payloads no unsettled ticket names),
     `PoolRoot.collect_settled` (tickets resolved more than ``payload_age`` ago, with their marks and
     outcomes), then the directories of ended coordinators below the newest epoch, which stays
-    so that no epoch number is taken twice."""
+    so that no epoch number is taken twice, and the directories of workers stopped before they
+    started (holding only a `STOP_MARK` older than ``payload_age`` and than the pool's
+    ``max_honoured_stale_after``)."""
     import shutil
 
     with _open_existing(root) as pool:
@@ -2179,4 +2194,22 @@ def collect_pool(root: os.PathLike, payload_age: float = 86400.0) -> dict:
             if (where / "ended").exists():
                 shutil.rmtree(where, ignore_errors=True)
                 gone.append(epoch)
-        return {"files": removed, "tickets": tickets, "coordinators": gone}
+        swept = []
+        mark_age = max(payload_age, pool.settings.max_honoured_stale_after)
+        workers = pool.path / "workers"
+        for d in sorted(workers.iterdir()) if workers.is_dir() else []:
+            mark = d / STOP_MARK
+            try:
+                only_mark = [e.name for e in d.iterdir()] == [STOP_MARK]
+                old = time.time() - mark.stat().st_mtime >= mark_age
+            except OSError:
+                continue
+            if only_mark and old:
+                shutil.rmtree(d, ignore_errors=True)
+                swept.append(d.name)
+        return {
+            "files": removed,
+            "tickets": tickets,
+            "coordinators": gone,
+            "workers": swept,
+        }

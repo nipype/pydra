@@ -28,6 +28,9 @@ import attrs
 
 from pydra.workers.pool.classes import WorkerClass
 
+if ty.TYPE_CHECKING:
+    from pydra.workers.pool.settings import PoolSettings
+
 __all__ = [
     "ExternalSubstrate",
     "LocalSubstrate",
@@ -226,6 +229,7 @@ class Attachment:
     pool_id: str = ""
     epoch: int | None = None  # the coordinator's epoch, set once it is taken
     classes: tuple[WorkerClass, ...] = ()  # the classes the pool places jobs on
+    pool_settings: PoolSettings | None = None  # the settings the pool's workers run on
 
 
 def worker_argv(python: str, at: Attachment, cls: WorkerClass, token: str) -> list[str]:
@@ -296,6 +300,24 @@ def visible_devices(timeout: float = 20.0) -> list[str]:
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
+def drain_bound(settings: "PoolSettings") -> float:
+    """Most seconds a worker takes to stop once its stop mark is written: it looks for the mark
+    every ``poll_s``, waits ``drain_s`` for a call in flight, then releases its claims, retried
+    for `release_patience`."""
+    from pydra.engine.lease import release_patience
+
+    return settings.poll_s + settings.drain_s + release_patience(settings.lease)
+
+
+def shutdown_bound(settings: "PoolSettings") -> float:
+    """Most seconds a worker takes to shut down once drained: a provider's process group stopped
+    on the default timeouts, then its worker lease released."""
+    from pydra.engine.lease import release_patience
+    from pydra.engine.procgroup import KILL_TIMEOUT, TERM_TIMEOUT
+
+    return TERM_TIMEOUT + KILL_TIMEOUT + release_patience(settings.lease)
+
+
 class LocalSubstrate:
     """Starts worker processes on this host, each in its own session, under the submitting process.
 
@@ -311,8 +333,10 @@ class LocalSubstrate:
         The most CPUs (``cls.cpus``, 1 when unset) the live workers may hold together.
     python : str
         The interpreter that runs the workers.
-    stop_wait : float
-        Seconds `stop` waits for a worker given SIGTERM before it kills its process group.
+    stop_wait : float, optional
+        Seconds `stop` waits for a worker to drain and exit before it kills its process group;
+        at least `drain_bound` of the pool's settings. Default `drain_bound` plus
+        `shutdown_bound`.
     """
 
     def __init__(
@@ -321,17 +345,42 @@ class LocalSubstrate:
         *,
         per_user_cpu_cap: int | None = None,
         python: str = sys.executable,
-        stop_wait: float = 30.0,
+        stop_wait: float | None = None,
     ):
         self._devices = None if devices is None else [str(d) for d in devices]
         self.per_user_cpu_cap = per_user_cpu_cap
         self.python = python
+        self._stop_wait_arg = stop_wait
         self.stop_wait = stop_wait
         self.handles: list[WorkerHandle] = []
         self._attachment: Attachment | None = None
 
     def attach(self, attachment: Attachment) -> None:
-        """Start workers for the pool ``attachment`` names."""
+        """Start workers for the pool ``attachment`` names.
+
+        Raises
+        ------
+        ValueError
+            The attachment carries no ``pool_settings``, or ``stop_wait`` is shorter than
+            their `drain_bound`.
+        """
+        from pydra.engine.lease import release_patience
+
+        settings = attachment.pool_settings
+        if settings is None:
+            raise ValueError(
+                "a LocalSubstrate needs the pool's settings on its attachment, to bound "
+                "stop_wait"
+            )
+        self.stop_wait = self._stop_wait_arg
+        if self.stop_wait is None:
+            self.stop_wait = drain_bound(settings) + shutdown_bound(settings)
+        if self.stop_wait < drain_bound(settings):
+            raise ValueError(
+                f"stop_wait {self.stop_wait:g}s is shorter than a worker may need to stop: "
+                f"poll_s {settings.poll_s:g} + drain_s {settings.drain_s:g} + release "
+                f"{release_patience(settings.lease):g} = {drain_bound(settings):g}s"
+            )
         self._attachment = attachment
 
     @property
@@ -429,14 +478,16 @@ class LocalSubstrate:
         return handle
 
     def stop(self, workers: ty.Sequence[WorkerHandle]) -> None:
-        """SIGTERM each worker (it settles what finished and releases the rest), then kill the
-        process group of any still running after ``stop_wait``."""
+        """Let each worker drain on its stop mark (`WarmPool` writes it first) and, on POSIX, on
+        SIGTERM; kill the process group of any still running after ``stop_wait``. No signal is
+        sent on Windows."""
         running = [
             h for h in workers if h.process is not None and h.process.poll() is None
         ]
-        for h in running:
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                h.process.send_signal(signal.SIGTERM)
+        if not IS_WINDOWS:
+            for h in running:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    h.process.send_signal(signal.SIGTERM)
         deadline = time.monotonic() + self.stop_wait
         for h in running:
             try:

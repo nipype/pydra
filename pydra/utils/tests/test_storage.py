@@ -85,3 +85,46 @@ def test_storage_now_reads_the_storage_clock(tmp_path):
     now = storage_now(tmp_path)
     assert before - 5 < now < time.time() + 5
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.fixture
+def clock_calls(monkeypatch):
+    """Record the flags of ``os.open`` and refuse every ``os.unlink`` of a clock probe, as
+    when a scanner holds the new file open; the calls are recorded."""
+    real_open, calls = os.open, {"flags": [], "unlink": []}
+    fake_temporary = 1 << 29
+
+    def open_(path, flags, *args, **kwargs):
+        calls["flags"].append(flags)
+        return real_open(path, flags & ~fake_temporary, *args, **kwargs)
+
+    def unlink(path, *args, **kwargs):
+        calls["unlink"].append(path)
+        raise PermissionError(errno.EACCES, "The process cannot access the file", path)
+
+    monkeypatch.setattr(os, "open", open_)
+    monkeypatch.setattr(os, "unlink", unlink)
+    calls["temporary"] = fake_temporary
+    return calls
+
+
+def test_storage_now_probe_is_deleted_on_close_on_windows(
+    tmp_path, monkeypatch, clock_calls
+):
+    """Where ``os.O_TEMPORARY`` exists (Windows) the probe is opened delete-on-close and
+    never unlinked, so another process holding it open neither fails the read nor
+    leaves it behind."""
+    monkeypatch.setattr(os, "O_TEMPORARY", clock_calls["temporary"], raising=False)
+    storage_now(tmp_path)
+    (flags,) = clock_calls["flags"]
+    assert flags & clock_calls["temporary"]
+    assert clock_calls["unlink"] == []
+
+
+def test_storage_now_raises_a_refused_removal_elsewhere(
+    tmp_path, monkeypatch, clock_calls
+):
+    monkeypatch.delattr(os, "O_TEMPORARY", raising=False)
+    with pytest.raises(PermissionError):
+        storage_now(tmp_path)
+    assert len(clock_calls["unlink"]) == 1

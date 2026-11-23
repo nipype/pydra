@@ -1953,8 +1953,15 @@ def test_rerun_after_collect_fresh_attempt(tmp_path, tasks, pools):
     )
     assert first.done
     (ticket,) = _tickets(tmp_path / "pool")
-    report = collect_pool(tmp_path / "pool", payload_age=0)
-    assert report["tickets"] == 1 and _tickets(tmp_path / "pool") == []
+    # the driver sees the job done before the worker's release resolves the ticket
+    collected = []
+
+    def collect() -> bool:
+        collected.append(collect_pool(tmp_path / "pool", payload_age=0)["tickets"])
+        return sum(collected) == 1
+
+    _wait(collect, "the ticket to resolve and be collected")
+    assert _tickets(tmp_path / "pool") == []
     again = _drive(
         sub,
         tasks.Marks(xs=[1], where=str(marks)),
@@ -1968,6 +1975,194 @@ def test_rerun_after_collect_fresh_attempt(tmp_path, tasks, pools):
     assert [g["cause"] for g in gens][-1] == "put"
     attempts = {g["attempt"] for g in gens}
     assert len(attempts) == len(gens) and gens[-1]["attempt"].endswith(".1")
+
+
+HOLD_RELEASE = """
+import os
+
+if os.environ.get("PYDRA_TEST_HOLD_RELEASE"):
+    import time
+    from pathlib import Path
+
+    from pydra.workers.pool import storage
+
+    root = Path(os.environ["PYDRA_TEST_HOLD_RELEASE"])
+    release = storage.Claim.release
+
+    def held(self, *args, **kwargs):
+        # the release of a claim whose ticket is resolved waits until the worker is told to stop
+        if self.resolved():
+            deadline = time.monotonic() + 120
+            while not list(root.glob("workers/*/stop.json")):
+                if time.monotonic() > deadline:
+                    break
+                time.sleep(0.05)
+        return release(self, *args, **kwargs)
+
+    storage.Claim.release = held
+"""
+
+# stopping a worker waits this long before it kills; a cap on the drain, not a time it should take
+STOP_WAIT = 30.0
+
+
+@pytest.fixture
+def windows_stop(monkeypatch):
+    """Stop workers as on Windows: `LocalSubstrate` takes its Windows path, and any signal sent to
+    a process kills it at once (TerminateProcess). The signals sent are recorded by pid.
+    """
+    from pydra.workers.pool import substrate
+
+    monkeypatch.setattr(substrate, "IS_WINDOWS", True)
+    signals = []
+
+    def terminate(self, sig):
+        signals.append((self.pid, sig))
+        os.kill(self.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+
+    monkeypatch.setattr(subprocess.Popen, "send_signal", terminate)
+    return signals
+
+
+def _only_the_mark_ends(**kwargs):
+    """Pool settings under which a worker exits on its stop mark only: never idle or orphaned."""
+    return _settings(idle_polls=10**6, orphan_after_s=10**6, **kwargs)
+
+
+def test_stop_without_signals_lets_the_release_finish(
+    tmp_path, tasks, pools, monkeypatch, windows_stop
+):
+    """A pool closed while its worker is between a ticket's ``done`` outcome and its release lets
+    the release finish, so the ticket resolves, and the worker exits on its stop mark without a
+    signal."""
+    from pydra.workers.pool.pool import collect_pool
+    from pydra.workers.pool.substrate import LocalSubstrate
+
+    hold = tmp_path / "hold"
+    hold.mkdir()
+    (hold / "sitecustomize.py").write_text(HOLD_RELEASE)
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join([str(hold), os.environ.get("PYTHONPATH", "")])
+    )
+    monkeypatch.setenv("PYDRA_TEST_HOLD_RELEASE", str(tmp_path / "pool"))
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=LocalSubstrate(stop_wait=STOP_WAIT),
+        settings=_only_the_mark_ends(),
+    )
+    assert _drive(sub, tasks.Marks(xs=[1], where=str(marks)), pool).done
+    assert collect_pool(tmp_path / "pool", payload_age=0)["tickets"] == 1
+    (handle,) = pool.substrate.handles
+    assert handle.process.poll() == 0
+    assert [sig for pid, sig in windows_stop if pid == handle.process.pid] == []
+
+
+def test_stop_mark_drains_a_call_longer_than_the_renewal(
+    tmp_path, tasks, pools, windows_stop
+):
+    """A worker inside a call when its pool closes drains on the stop mark as on SIGTERM: it stops
+    waiting for the call after ``drain_s`` and releases its claim before ``stop_wait`` kills it,
+    though its renewal interval, when its call monitor wakes, is longer than ``stop_wait``.
+    """
+    from pydra.workers.pool.storage import PoolRoot
+    from pydra.workers.pool.substrate import LocalSubstrate
+
+    lease = LeaseSettings(
+        stale_after=3 * STOP_WAIT, renew_fraction=0.4, attribute_delay=0.0
+    )
+    assert lease.renew_interval > STOP_WAIT
+    gate = tmp_path / "gate"
+    gate.mkdir()
+    sub = _submitter(tmp_path)
+    pool = _warm(
+        tmp_path,
+        pools,
+        sub,
+        substrate=LocalSubstrate(stop_wait=STOP_WAIT),
+        settings=_only_the_mark_ends(lease=lease, drain_s=0.5),
+    )
+    pool.bind(lambda job, outcome: None)
+    pool.submit(_round(sub, tasks, None, task=tasks.OneGate(where=str(gate))))
+    _wait(lambda: (gate / "first").exists(), "the worker to start the job")
+    pool.close()  # the job never ends: only a drain releases its claim
+    (handle,) = pool.substrate.handles
+    assert handle.process.poll() == 0
+    assert [sig for pid, sig in windows_stop if pid == handle.process.pid] == []
+    with PoolRoot.open(tmp_path / "pool", lease, create=False, probe=False) as raw:
+        claim = raw.claim(
+            "cpu"
+        )  # a claim left unreleased would be live for stale_after
+        assert claim is not None
+        claim.release()
+
+
+def test_stop_wait_shorter_than_the_drain_is_refused(tmp_path, pools):
+    """A `LocalSubstrate` whose ``stop_wait`` is shorter than a worker needs to notice its stop
+    mark (``poll_s``), drain (``drain_s``) and release (`release_patience`) is refused.
+    """
+    from pydra.workers.pool.substrate import LocalSubstrate
+
+    sub = _submitter(tmp_path)
+    with pytest.raises(ValueError, match="stop_wait"):
+        _warm(
+            tmp_path,
+            pools,
+            sub,
+            substrate=LocalSubstrate(stop_wait=1.0),
+            settings=_settings(drain_s=5.0),
+        )
+
+
+def test_collect_sweeps_the_stop_mark_of_a_worker_that_never_started(tmp_path):
+    """Stopping a worker before it started leaves its directory holding only its stop mark.
+    Collect removes it once older than ``payload_age`` and than the pool's
+    ``max_honoured_stale_after``, the floor that covers a worker still starting; it keeps a
+    younger one and a started worker's."""
+    from pydra.workers.pool.pool import collect_pool
+    from pydra.workers.pool.storage import STOP_MARK, PoolRoot
+
+    never, starting, started = "a" * 32, "e" * 32, "b" * 32
+    with PoolRoot.open(tmp_path / "pool", LEASE) as raw:
+        for token in (never, starting, started):
+            raw.write_worker_record(token, STOP_MARK, {"at": 0})
+        raw.write_worker_record(started, "ready.json", {"class": "cpu"})
+    workers = tmp_path / "pool" / "workers"
+    old = workers.stat().st_mtime - LEASE.max_honoured_stale_after - 1
+    for token in (never, started):
+        os.utime(workers / token / STOP_MARK, (old, old))
+    report = collect_pool(tmp_path / "pool", payload_age=0)
+    assert report["workers"] == [never]
+    assert not (workers / never).exists()
+    assert (workers / starting / STOP_MARK).exists()
+    assert (workers / started / STOP_MARK).exists()
+
+
+def test_local_substrate_needs_the_pools_drain_bound(tmp_path):
+    """`LocalSubstrate` checks ``stop_wait`` against the drain bound of the settings the
+    attachment carries, and refuses an attachment without them; its default ``stop_wait`` adds
+    the shutdown bound to the drain bound."""
+    from pydra.workers.pool.substrate import (
+        Attachment,
+        LocalSubstrate,
+        drain_bound,
+        shutdown_bound,
+    )
+
+    settings = _settings()
+    with pytest.raises(ValueError, match="settings"):
+        LocalSubstrate().attach(Attachment(tmp_path, tmp_path / "settings.json"))
+    local = LocalSubstrate()
+    local.attach(Attachment(tmp_path, tmp_path / "s.json", pool_settings=settings))
+    assert local.stop_wait == drain_bound(settings) + shutdown_bound(settings)
+    with pytest.raises(ValueError, match="stop_wait"):
+        LocalSubstrate(stop_wait=drain_bound(settings) / 2).attach(
+            Attachment(tmp_path, tmp_path / "s.json", pool_settings=settings)
+        )
 
 
 def _without_the_run_cache(tmp_path, tasks, pools, store):

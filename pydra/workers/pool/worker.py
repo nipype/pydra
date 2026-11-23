@@ -113,6 +113,7 @@ from pydra.workers.pool.storage import (
     PoolOwnerMismatch,
     PoolRoot,
     PoolSettingsMismatch,
+    STOP_MARK,
     TicketJob,
 )
 
@@ -665,6 +666,11 @@ class Worker:
                     self.token,
                 )
                 return EXIT_REUSED
+            if self.pool.worker_record(self.token, STOP_MARK) is not None:
+                logger.info(
+                    "worker %s was stopped before it started: exiting", self.token
+                )
+                return EXIT_OK
             self.pool.worker_dir(self.token).close()
             lease = DirectoryLease.at(
                 self.pool.path / "workers" / self.token / "lease",
@@ -724,19 +730,52 @@ class Worker:
 
     @contextlib.contextmanager
     def _signals(self) -> ty.Iterator[None]:
-        if threading.current_thread() is not threading.main_thread():
-            yield
-            return
+        """Drain on SIGTERM (in the main thread) and on the worker's `STOP_MARK`, which a thread
+        looks for every ``poll_s``: either sets ``stop`` and wakes the worker."""
 
-        def drain(signum, frame):
+        def drain(signum=None, frame=None):
             self.stop.set()
             self._wake.set()
 
-        previous = signal.signal(signal.SIGTERM, drain)
+        done = threading.Event()
+        watcher = threading.Thread(
+            target=self._watch_stop_mark,
+            args=(done, drain),
+            name="pydra-pool-stop-mark",
+            daemon=True,
+        )
+        watcher.start()
+        main = threading.current_thread() is threading.main_thread()
+        previous = signal.signal(signal.SIGTERM, drain) if main else None
         try:
             yield
         finally:
-            signal.signal(signal.SIGTERM, previous)
+            if main:
+                signal.signal(signal.SIGTERM, previous)
+            done.set()
+            watcher.join(self.settings.poll_s)  # a read stuck on hung storage is left
+
+    def _watch_stop_mark(self, done: threading.Event, drain) -> None:
+        failing = False
+        while not self.stop.is_set():
+            try:
+                marked = self.pool.worker_record(self.token, STOP_MARK) is not None
+            except OSError as err:
+                if not failing:
+                    logger.warning(
+                        "reading the stop mark of worker %s failed, retrying: %s",
+                        self.token,
+                        err,
+                    )
+                failing, marked = True, False
+            else:
+                failing = False
+            if marked:
+                logger.info("worker %s was told to stop: draining", self.token)
+                drain()
+                return
+            if done.wait(self.settings.poll_s):
+                return
 
     def _device(self):
         """The device providers load on: the first granted GPU on a CUDA class (an index into
@@ -2263,7 +2302,10 @@ class Worker:
         interval = self.settings.lease.renew_interval
         proved, drain_until = time.monotonic(), None
         while not done.is_set():
-            self._wake.wait(interval)
+            wait = interval
+            if drain_until is not None:  # wake when the drain is over
+                wait = max(0.0, min(interval, drain_until - time.monotonic()))
+            self._wake.wait(wait)
             self._wake.clear()
             if done.is_set():
                 break
