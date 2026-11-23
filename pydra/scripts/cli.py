@@ -361,8 +361,11 @@ def store_migrate(
     policy,
 ):
     """Publish the results of the PickleStore cache at CACHE_ROOT into the portable store
-    at ROOT under their stored contexts (RFC 0003 section 8.1). A slot whose lease is held is
-    reported busy; run again to migrate it."""
+    at ROOT under their stored contexts (RFC 0003 section 8.1). ROOT is created if it is
+    missing, and must not be inside CACHE_ROOT. A slot whose lease is held is reported busy;
+    run again to migrate it. A slot whose equal entry is already in ROOT is reported present.
+    A cache marked pydra-identity@2 refuses --supplied-checksums: read it in place with
+    PortableStore(legacy=...) instead."""
     from pydra.engine.portable.migrate import MigrationRefused, migrate
 
     if not trust_source:
@@ -389,7 +392,7 @@ def store_migrate(
     click.echo(
         ", ".join(
             f"{report.count(s)} {s}"
-            for s in ("migrated", "skipped", "busy", "unencodable")
+            for s in ("migrated", "present", "skipped", "busy", "unencodable")
         )
     )
 

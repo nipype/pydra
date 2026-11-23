@@ -23,7 +23,7 @@ from pydra.engine.portable.migrate import (
     MigrationReport,
     migrate,
 )
-from pydra.engine.portable.reuse import Hit, Miss
+from pydra.engine.portable.reuse import Hit, Miss, PolicyReuse, Verdict
 from pydra.engine.portable.store import PortableStore
 from pydra.engine.portable.trust import Root
 from pydra.engine.result import Result
@@ -33,7 +33,7 @@ from pydra.scripts.cli import cli
 from pydra.utils.identity import IDENTITY_SCHEME
 from pydra.utils.storagedir import IS_WINDOWS
 
-from .test_portable_store import IDENT, TRUST, make, make_v2, posix_only
+from .test_portable_store import IDENT, TRUST, corrupt, make, make_v2, posix_only
 
 CTX = {"python": "3.12", "platform": "test", "n": 1}
 CTX_NOW = {"python": "3.12", "platform": "test", "n": 2}
@@ -326,32 +326,96 @@ def test_portable_root_refused_as_source(tmp_path):
         migrate(source.path, make(tmp_path), trust_source=True)
 
 
-def test_real_pickle_cache_served_without_recompute(tmp_path):
-    """A cache a `Submitter` wrote (marked pydra-identity@2) serves its jobs from the
-    portable store after migration"""
+def _submitter_cache(tmp_path) -> Path:
     from pydra.engine.submitter import Submitter
 
     cache = tmp_path / "cache"
     with Submitter(worker="debug", store="pickle", cache_root=cache) as sub:
         assert sub(Add(a=4)).outputs.out == 6
     assert (cache / IDENTITY_MARKER).read_text().strip() == IDENTITY_SCHEME
+    return cache
+
+
+def test_v2_marked_cache_refuses_supplied_checksums(tmp_path):
+    """Its checksums are automatic @2 digests: a supplied-key record would misstate them"""
+    cache = _submitter_cache(tmp_path)
+    before = tree(cache)
     target = PortableStore(tmp_path / "root", trust=TRUST, pickle=True)
-    report = migrate(cache, target, trust_source=True, supplied_checksums=True)
-    assert report.count("migrated") == 1, report
+    with pytest.raises(MigrationRefused, match="legacy="):
+        migrate(cache, target, trust_source=True, supplied_checksums=True)
+    assert tree(cache) == before
+
+
+def test_real_v2_cache_served_through_legacy_with_its_record(tmp_path):
+    """A cache a `Submitter` wrote (marked pydra-identity@2) is read in place through
+    ``legacy=``; the entry it publishes carries the job's own record, not a supplied one
+    """
+    from pydra.engine.submitter import Submitter
+
+    cache = _submitter_cache(tmp_path)
+    before = tree(cache)
+    target = PortableStore(
+        tmp_path / "root",
+        trust=TRUST,
+        pickle=True,
+        legacy=[Root(cache, trust="private")],
+    )
     with Submitter(worker="debug", store=target) as sub:
         result = sub(Add(a=4))
     assert result.outputs.out == 6
     assert result.committed.served
+    assert result.record is not None and "supplied" not in result.record
+    assert result.record["scheme"] == IDENTITY_SCHEME
+    assert tree(cache) == before
 
 
-def test_migrate_twice_is_idempotent(tmp_path):
+def test_migrate_twice_reports_present(tmp_path):
     cache = tmp_path / "cache"
     write_slot(cache)
     target = make(tmp_path)
     migrate(cache, target, trust_source=True)
-    assert [s.status for s in migrate(cache, target, trust_source=True).slots] == [
-        "migrated"
-    ]
+    report = migrate(cache, target, trust_source=True)
+    assert [s.status for s in report.slots] == ["present"]
+    assert report.count("present") == 1 and report.count("migrated") == 0
+
+
+def staging_of(store) -> list:
+    return os.listdir(Path(store.path) / "staging")
+
+
+def test_conflicting_slot_leaves_no_staged_copy(tmp_path):
+    cache = tmp_path / "cache"
+    write_slot(cache, out=3)
+    target = make(tmp_path)
+    target.publish(SUM, None, CTX, {"out": 99}, None, None)
+    for _ in range(2):
+        (slot,) = migrate(cache, target, trust_source=True).slots
+        assert slot.status == "skipped" and "other outputs" in slot.reason
+        assert staging_of(target) == []
+    assert outputs_of(target.read(entry_ref(target, SUM, CTX), None)) == {"out": 99}
+
+
+def test_target_inside_source_refused(tmp_path):
+    cache = tmp_path / "cache"
+    write_slot(cache)
+    with pytest.raises(MigrationRefused, match="inside"):
+        migrate(cache, make(tmp_path, "cache/portable"), trust_source=True)
+
+
+@posix_only
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0, reason="root writes anywhere"
+)
+def test_read_only_cache_refused_clearly(tmp_path):
+    cache = tmp_path / "cache"
+    write_slot(cache)
+    target = make(tmp_path)
+    os.chmod(cache, 0o555)
+    try:
+        with pytest.raises(MigrationRefused, match="lease"):
+            migrate(cache, target, trust_source=True)
+    finally:
+        os.chmod(cache, 0o755)
 
 
 # -- legacy= roots -----------------------------------------------------------------------------
@@ -463,6 +527,104 @@ def test_legacy_survives_pickling(tmp_path):
     assert isinstance(store.find(job()), Hit)
 
 
+def test_legacy_read_after_a_corrupt_own_entry(tmp_path):
+    """The own entry at the job's address is quarantined: the same lookup reads legacy"""
+    cache = tmp_path / "cache"
+    write_slot(cache, out=4)
+    store = legacy_store(tmp_path, cache)
+    store.publish(SUM, None, CTX, {"out": 4}, None, None)
+    corrupt(store.entry_path(SUM, CTX))
+    found = store.find(job(context=CTX))
+    assert isinstance(found, Hit)
+    assert outputs_of(found.result) == {"out": 4}
+
+
+class SkipOwn(PolicyReuse):
+    """Skips every entry of this store's own root that was there before legacy was read"""
+
+    def __init__(self, skipped):
+        from pydra.engine.store import AnyReuse
+
+        super().__init__(AnyReuse())
+        self.skipped = skipped
+
+    def verdict(self, candidate, current, task):
+        if candidate.entry.fingerprint in self.skipped:
+            return Verdict.SKIP
+        return Verdict.SERVE
+
+
+class RefuseAll(PolicyReuse):
+    def __init__(self):
+        from pydra.engine.store import AnyReuse
+
+        super().__init__(AnyReuse())
+
+    def verdict(self, candidate, current, task):
+        return Verdict.REFUSE
+
+
+def test_legacy_read_when_every_candidate_is_skipped(tmp_path):
+    cache = tmp_path / "cache"
+    write_slot(cache, out=5)
+    store = legacy_store(tmp_path, cache, reuse=SkipOwn({IDENT.fingerprint(CTX_NOW)}))
+    store.publish(SUM, None, CTX_NOW, {"out": 1}, None, None)
+    found = store.find(job(context=CTX_NOW))
+    assert isinstance(found, Hit)
+    assert outputs_of(found.result) == {"out": 5}
+    assert found.result.committed.entry == entry_ref(store, SUM, CTX)
+
+
+def test_legacy_not_read_after_a_refuse(tmp_path, monkeypatch):
+    cache = tmp_path / "cache"
+    write_slot(cache)
+    store = legacy_store(tmp_path, cache, reuse=RefuseAll())
+    store.publish(SUM, None, CTX_NOW, {"out": 1}, None, None)
+    called = []
+    monkeypatch.setattr(
+        migrate_mod, "publish_legacy", lambda *a: called.append(a) or False
+    )
+    assert isinstance(store.find(job(context=CTX_NOW)), Miss)
+    assert called == []
+    assert not store.entry_path(SUM, CTX).exists()
+
+
+def test_legacy_read_once_per_lookup(tmp_path, monkeypatch):
+    cache = tmp_path / "cache"
+    write_slot(cache, errored=True)
+    store = legacy_store(tmp_path, cache)
+    called = []
+    real = migrate_mod.publish_legacy
+    monkeypatch.setattr(
+        migrate_mod, "publish_legacy", lambda *a: called.append(1) or real(*a)
+    )
+    assert isinstance(store.find(job()), Miss)
+    assert called == [1]
+
+
+def test_legacy_v2_marked_cache_skipped_by_v1_store(tmp_path, caplog):
+    cache = tmp_path / "cache"
+    write_slot(cache)
+    mark(cache, IDENTITY_SCHEME)
+    store = legacy_store(tmp_path, cache)
+    with caplog.at_level("WARNING", logger="pydra"):
+        assert isinstance(store.find(job()), Miss)
+    assert any("legacy root" in r.getMessage() for r in caplog.records)
+    assert not store.entry_path(SUM, CTX).exists()
+
+
+def test_legacy_first_slot_of_a_fingerprint_taken(tmp_path):
+    """Two slots of one stored context (directories named differently): the first in path
+    order is the one ranked"""
+    cache = tmp_path / "cache"
+    write_slot(cache, out=6, ctxkey="0" * 16)
+    write_slot(cache, errored=True, ctxkey="f" * 16)
+    store = legacy_store(tmp_path, cache)
+    found = store.find(job(context=CTX))
+    assert isinstance(found, Hit)
+    assert outputs_of(found.result) == {"out": 6}
+
+
 # -- pydracli store ----------------------------------------------------------------------------
 
 
@@ -538,3 +700,5 @@ def test_cli_store_help_lists_migrate():
     assert result.exit_code == 0
     for name in ("adopt", "collect", "migrate"):
         assert name in result.output
+    result = CliRunner().invoke(cli, ["store", "migrate", "--help"])
+    assert "created" in result.output

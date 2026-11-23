@@ -8,6 +8,7 @@ Neither copies a job or error pickle, a lease or a success record, and neither r
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import logging
@@ -53,8 +54,9 @@ logger = logging.getLogger("pydra")
 RESULT_FILE = "_result.pklz"
 V1_SCHEME = "pydra-identity@1"
 _JSON_CAP = 1 << 20
+_DENIED = (errno.EACCES, errno.EPERM, errno.EROFS)
 
-Status = ty.Literal["migrated", "skipped", "busy", "unencodable"]
+Status = ty.Literal["migrated", "present", "skipped", "busy", "unencodable"]
 
 
 class MigrationRefused(ValueError):
@@ -70,9 +72,11 @@ class MigratedSlot:
     checksum : str
     ctxkey : str
         The slot's directory name, which the migrated entry does not keep.
-    status : {"migrated", "skipped", "busy", "unencodable"}
-        ``busy``: its lease was held, so a later call migrates it. ``unencodable``: an output
-        has no codec in the target, so the slot stays unmigrated.
+    status : {"migrated", "present", "skipped", "busy", "unencodable"}
+        ``present``: the target already held an equal entry at its address (an earlier
+        migration, or the same job run again). ``busy``: its lease was held, so a later call
+        migrates it. ``unencodable``: an output has no codec in the target, so the slot stays
+        unmigrated.
     reason : str or None
         Why it was not migrated.
     """
@@ -259,7 +263,10 @@ def migrate(
         The caller's assertion that the slots' checksums were supplied (``checksum=``). It is
         required when ``target`` is ``pydra-identity@2``, whose automatic checksums no old slot
         carries; each slot is then published with the key ``{"scheme": "pydra-identity@2",
-        "supplied": <checksum>}``. Other identities are given no key record.
+        "supplied": <checksum>}``. It is refused for a cache whose ``.pydra-identity``
+        names ``pydra-identity@2`` or later: its checksums are automatic digests, which a
+        supplied-key record would misstate, so such a cache is read through ``legacy=``,
+        which publishes each job's own record. Other identities are given no key record.
     on_slot : callable, optional
         Called with each `MigratedSlot` as it is decided.
 
@@ -270,7 +277,9 @@ def migrate(
     MigrationRefused
         ``target`` is ``pydra-identity@2`` without ``supplied_checksums``; the cache's
         ``.pydra-identity`` marker names a scheme the target cannot hold (see
-        `check_scheme`); or ``source`` is a portable store.
+        `check_scheme`), or names ``pydra-identity@2`` with ``supplied_checksums``;
+        ``source`` is a portable store, or holds the target's root; or a slot's lease cannot be
+        made in the cache (it is read-only).
     """
     if trust_source is not True:
         raise ValueError(
@@ -286,6 +295,16 @@ def migrate(
             "migrated, and supplied_checksums=True asserts that they were"
         )
     path = os.path.abspath(os.fspath(source))
+    real = os.path.realpath(path)
+    try:
+        inside = os.path.commonpath([real, os.path.realpath(target.path)]) == real
+    except ValueError:  # another drive
+        inside = False
+    if inside:
+        raise MigrationRefused(
+            f"the target's root {target.path} is inside the cache {path}; migrate into a root "
+            "outside it"
+        )
     slots: list[MigratedSlot] = []
     with StorageDir.open_root(path, StorePolicy(), trust="trusted") as root:
         try:
@@ -298,6 +317,14 @@ def migrate(
             )
         scheme = read_marker(root)
         check_scheme(scheme, name)
+        version = 1 if scheme is None else _scheme_version(scheme)
+        if supplied_checksums and version is not None and version >= 2:
+            raise MigrationRefused(
+                f"the cache is keyed under {scheme}: its checksums are automatic digests of "
+                "job records, which a supplied-key record would misstate. Read it in place "
+                "with PortableStore(legacy=[Root(cache_root, trust=...)]), which publishes "
+                "each job's result with its own record when the job is looked up"
+            )
         for checksum in _dirs(root):
             if _is_store_internal(checksum):
                 continue
@@ -333,6 +360,14 @@ def _migrate_slot(
         wait = lease.try_take()
     except LeaseTimeout:
         wait = 0.0
+    except OSError as err:
+        if err.errno not in _DENIED:
+            raise
+        raise MigrationRefused(
+            f"the lease of {checksum}/{ctxkey} cannot be made in {path} ({err.strerror}): "
+            "migrate takes each slot's lease, so the cache must be writable; to read a "
+            "read-only cache, give it to a store as legacy="
+        ) from err
     if wait is not None:
         return MigratedSlot(checksum, ctxkey, "busy", "its lease is held")
     try:
@@ -356,13 +391,14 @@ def _migrate_slot(
     finally:
         lease.__exit__(None, None, None)
     if not committed.stored:
+        target.discard_kept(committed)
         return MigratedSlot(
             checksum,
             ctxkey,
             "skipped",
             "the target holds another entry at its address, with other outputs",
         )
-    return MigratedSlot(checksum, ctxkey, "migrated")
+    return MigratedSlot(checksum, ctxkey, "migrated" if committed.won else "present")
 
 
 def publish_legacy(store: "PortableStore", job: "Job") -> bool:
@@ -444,4 +480,5 @@ def _legacy_hit(store: "PortableStore", job: "Job", path: str, trust: Trust) -> 
                     continue
                 if committed.stored:
                     return True
+                store.discard_kept(committed)
     return False
