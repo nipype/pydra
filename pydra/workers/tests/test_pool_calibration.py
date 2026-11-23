@@ -658,18 +658,21 @@ def test_no_device_peak_is_no_device_fit(measured, tmp_path):
 
 
 def test_batch_through_place_with_unknown_length_is_one(measured, tmp_path):
-    """Through `place`, whose request carries no units: a measured per-unit memory gives a batch of
-    1, an unknown one too, and only a per-unit memory measured as 0 over real units gives the
-    ceiling."""
+    """Through `place`, whose request carries no units: a measured per-unit memory gives a memory
+    bound of 1, an unknown one too, and only a per-unit memory measured as 0 over real units gives
+    the ceiling. The job declares no batch, so the batch that runs (``Placement.batch``, what
+    ``plan()`` reports) is 1 in every case; the fit's figure is ``memory_bound``."""
     job, request, _ = measured
     cls = _class("cpu", mem=8 * GB, quantum_jobs=64)
     sloped = DirectoryCalibration(tmp_path / "sloped")
     _seed(sloped, request.key, cls, resident=1 * GB, m1=1.0 * GB)
     assert sloped.memory(request.key, hardware_of(cls)).m1 == pytest.approx(GB)
-    assert place(job, [cls], MeasuredFit(sloped), ok).batch == 1
+    got = place(job, [cls], MeasuredFit(sloped), ok)
+    assert (got.batch, got.memory_bound) == (1, 1)
     flat = DirectoryCalibration(tmp_path / "flat")
     _seed(flat, request.key, cls, resident=1 * GB, m1=0.0)
-    assert place(job, [cls], MeasuredFit(flat), ok).batch == 64
+    got = place(job, [cls], MeasuredFit(flat), ok)
+    assert (got.batch, got.memory_bound) == (1, 64)
     unknown = DirectoryCalibration(tmp_path / "unknown")
     for _ in range(3):
         unknown.record(
@@ -678,7 +681,8 @@ def test_batch_through_place_with_unknown_length_is_one(measured, tmp_path):
             )
         )
     assert unknown.memory(request.key, hardware_of(cls)).m1 is None
-    assert place(job, [cls], MeasuredFit(unknown), ok).batch == 1
+    got = place(job, [cls], MeasuredFit(unknown), ok)
+    assert (got.batch, got.memory_bound) == (1, 1)
 
 
 def attrs_evolve_sample(*, resident, peak, units, key, cls):

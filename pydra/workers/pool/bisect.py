@@ -11,7 +11,8 @@ crash whose jobs all completed afterwards was survived: it is reported (``surviv
 environment's fault, charged to no job. Any other raise from a whole call fails each of its jobs
 with that fault. Only `Exception` instances are typed; anything else propagates. A load is never
 split or retried as a request: a fault whose record says ``load`` is raised out unchanged. An
-exception element of a batched return is that job's content fault and never a trigger.
+exception element of a batched return is that job's fault and never a trigger: content, or the
+record attached to it (a job's own run that raised, typed by the caller's classifier).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import typing as ty
 
 import attrs
 
-from pydra.workers.pool.faults import Classifier, FaultRecord, fault_of
+from pydra.workers.pool.faults import Classifier, FaultRecord, attached, fault_of
 
 __all__ = ["Abandon", "Settled", "bisect"]
 
@@ -163,8 +164,10 @@ def bisect(
             return
         for i, output in zip(indices, outputs):
             if isinstance(output, BaseException):
+                record = attached(output) if isinstance(output, Exception) else None
                 settled[i] = Settled(
-                    fault=FaultRecord(
+                    fault=record
+                    or FaultRecord(
                         "content", type(output).__name__, str(output)[:2000], "call"
                     ),
                     error=output,

@@ -14,7 +14,8 @@ one loop:
    is handed to the beater before anything runs under it. A claim that took a stale one over places
    its jobs again under fresh attempts first: a lone open job under a ``takeover`` generation, charged
    as a crash only when it was alone in the dead worker's in-flight call; two or more are split; a job
-   whose attempt expired is looked up in the store, then typed a timeout (a resource fault).
+   whose attempt expired is looked up in the store, then typed a timeout (a resource fault); two or
+   more expired jobs (a batched call's) are split in halves, uncharged, instead.
 3. **Re-judge** the ticket against the hardware read (a class whose ``gpu_mem`` was unknown): a ticket
    needing more device memory is withdrawn, reason ``refused``, and nothing runs. **Load** its
    residency through the process's `ResidentSet`, on the granted device (the process device, which
@@ -32,7 +33,11 @@ one loop:
    the call and its deadline sent to the beater; ``done`` is written after it. Each call goes through
    the bisection engine (`pydra.workers.pool.bisect`): a resource fault or a crash reloads the
    residency; a lone job out of memory moves up the ladder, and one that crashes is run again under a
-   charged ``restart`` generation until ``crashes_charged``. An infrastructure fault requeues the job;
+   charged ``restart`` generation until ``crashes_charged``. A ticket whose ``batch`` is above 1 and
+   whose jobs are Python tasks declared ``batched`` runs as calls of at most ``batch`` jobs of one
+   residency, ordered by units: the batched function once, then each job's ``Job.run`` with its
+   element, so each job keeps its checksum, stored result and outcome; a taker splits a lost call's
+   jobs apart from the ticket's other open jobs. An infrastructure fault requeues the job;
    at ``infrastructure_replacements`` faults of the residency in the coordinator's epoch the residency
    is held on its queue and the ticket's open jobs are settled ``held``.
 5. **Settle** each job as it finishes: its `Sample` (kept too in the pool's calibration directory,
@@ -254,6 +259,35 @@ def _machinery(exc: Exception) -> Exception:
 
 
 # -- the worker --------------------------------------------------------------------------------
+
+
+def _batch_fact(batch: tuple[int, int], batched: ty.Callable | None) -> dict:
+    """The ``batch`` entry of the pool facts: the call's size, the job's index in it and, when a
+    batched function ran, ``batched`` and that function's ``module:qualname``."""
+    fact: dict[str, ty.Any] = {"size": batch[0], "index": batch[1]}
+    if batched is not None:
+        fact["batched"] = True
+        fact["function"] = (
+            f"{getattr(batched, '__module__', '?')}:"
+            f"{getattr(batched, '__qualname__', type(batched).__qualname__)}"
+        )
+    return fact
+
+
+def _raised_from(exc: BaseException, element: ty.Any) -> bool:
+    """Whether ``exc`` is ``element`` or has it in its ``__cause__``/``__context__`` chain."""
+    seen: set[int] = set()
+    link: BaseException | None = exc
+    while link is not None and id(link) not in seen:
+        if link is element:
+            return True
+        seen.add(id(link))
+        link = link.__cause__ or link.__context__
+    return False
+
+
+_SKIPPED = object()
+"""A batched call's element for a job it left out (superseded or withdrawn): nothing is written."""
 
 
 class _Call:
@@ -968,8 +1002,8 @@ class Worker:
         if claim.took_over:
             if not self._take_over(claim):
                 return
-        else:
-            self._expired_pass(claim)
+        elif not self._expired_pass(claim):
+            return
         entries = claim.open_jobs()
         jobs: list[tuple[TicketJob, "Job"]] = []
         for entry in entries:
@@ -998,6 +1032,10 @@ class Worker:
         if cold:
             self._warm[queue] = 0
         group["load_s"], group["cold"], group["reload"] = load_s, cold, False
+        batch = self._batch_size(claim, jobs)
+        if batch > 1:
+            self._run_batches(claim, jobs, group, batch)
+            return
         for entry, job in jobs:
             if (
                 self.stop.is_set()
@@ -1013,6 +1051,73 @@ class Worker:
             if self._held_here(claim):
                 return
             self._run_job(claim, entry, job, group)
+            if self._lost_claim(claim) or group.get("stop"):
+                if self._lost_claim(claim):
+                    self._abandon(claim, "it was lost")
+                return
+            group["load_s"], group["cold"] = 0.0, False
+
+    @staticmethod
+    def _batch_size(claim: Claim, jobs: list[tuple[TicketJob, "Job"]]) -> int:
+        """The most jobs one call of the ticket takes: its ``batch`` when every job is a Python
+        task declared ``batched``, else 1."""
+        from pydra.compose.python import PythonTask
+
+        if not claim.ticket.batch or claim.ticket.batch < 2:
+            return 1
+        if all(
+            isinstance(job.task, PythonTask) and type(job.task)._batched is not None
+            for _, job in jobs
+        ):
+            return claim.ticket.batch
+        return 1
+
+    @staticmethod
+    def _calls(
+        jobs: list[tuple[TicketJob, "Job"]], batch: int
+    ) -> list[list[tuple[TicketJob, "Job"]]]:
+        """The ticket's jobs as calls of at most ``batch``: only jobs of one task class and one
+        residency share a call, ordered by units (unknown last) so that a call pads little.
+        """
+        from pydra.engine import resident
+
+        groups: dict[tuple, list[tuple[TicketJob, "Job"]]] = {}
+        for entry, job in jobs:
+            key = (type(job.task), resident.residency_digest(job))
+            groups.setdefault(key, []).append((entry, job))
+        calls = []
+        for members in groups.values():
+            members.sort(key=lambda p: (p[0].units is None, p[0].units or 0.0))
+            calls.extend(members[i : i + batch] for i in range(0, len(members), batch))
+        return calls
+
+    def _run_batches(
+        self,
+        claim: Claim,
+        jobs: list[tuple[TicketJob, "Job"]],
+        group: dict,
+        batch: int,
+    ) -> None:
+        """Run the ticket's jobs as batched calls (`_calls`), each through `_run_batch`, under the
+        checks a lone job's call has before it runs."""
+        for members in self._calls(jobs, batch):
+            if (
+                self.stop.is_set()
+                or self.recycle is not None
+                or self._lost_claim(claim)
+            ):
+                return
+            if not claim.lease.prove():
+                self._abandon(claim, "its proof failed")
+                return
+            if self._held_here(claim):
+                return
+            members = [
+                (e, j) for e, j in members if self._within_crash_budget(claim, e)
+            ]
+            if not members:
+                continue
+            self._run_batch(claim, members, group)
             if self._lost_claim(claim) or group.get("stop"):
                 if self._lost_claim(claim):
                     self._abandon(claim, "it was lost")
@@ -1638,6 +1743,276 @@ class Worker:
             return "moved"
         return self._infrastructure(claim, [entry], fault, group, sample)
 
+    def _run_batch(
+        self, claim: Claim, members: list[tuple[TicketJob, "Job"]], group: dict
+    ) -> None:
+        """Run ``members`` as one batched call through the bisection engine, retried per job up to
+        ``content_attempts``, and settle each job on its own (RFC 0005 section 4.4).
+
+        A call starts each job's attempt (a job superseded or withdrawn meanwhile is left out,
+        nothing written), loads the residency, then runs the task's ``batched`` once and each job's
+        ``Job.run`` with its element (`_invoke_batch`), so every job keeps its own checksum, work
+        directory, audit, stored result and outcome. A crash or a resource fault of the whole call is
+        bisected by the engine, a half that completed keeping its results; an exception element is
+        that job's content fault. A call that ended without a verdict (lost, expired, stopped)
+        settles nothing.
+        """
+        tries = 0
+        used: set = set()  # jobs whose decoded object a call already ran
+        pending = self._unserved(claim, members)
+        while pending:
+            tries += 1
+            jobs = {e.key: j for e, j in pending}
+            attempts: dict = {}
+            samples: dict = {}
+            verdict: list[str] = []
+
+            def call(batch: list[TicketJob], jobs=jobs, attempts=attempts) -> list:
+                started = []
+                out: list = [_SKIPPED] * len(batch)
+                try:
+                    for i, item in enumerate(batch):
+                        attempt = claim.start(item, self.token)
+                        if (
+                            attempt is None
+                        ):  # superseded or withdrawn: nothing is written
+                            continue
+                        current = jobs[item.key]
+                        if item.key in used:
+                            current = self._decode(claim, item, attempt)
+                            if current is None:
+                                continue
+                        used.add(item.key)
+                        attempts[item.key] = attempt
+                        started.append((i, item, current, attempt))
+                except Exception as exc:
+                    raise _machinery(exc)
+                if not started:
+                    return out
+                try:
+                    _, loaded = self._load(started[0][2])
+                except Exception as exc:
+                    raise attach(exc, fault_of(exc, "load", self.classify))
+                if loaded:  # a reload after a fault: this call is cold
+                    group["cold"] = True
+                    self._warm[claim.queue] = 0
+                try:
+                    ran = self._invoke_batch(claim, started, group)
+                except Exception as exc:
+                    raise _machinery(exc)
+                if isinstance(ran, str):
+                    verdict.append(ran)
+                    raise Abandon(ran)
+                done, sampled = ran
+                if (
+                    done.error is not None
+                ):  # the whole call raised: its record is attached
+                    raise done.error
+                for (i, item, _, _), (result, error) in zip(started, done.result):
+                    samples[item.key] = sampled
+                    out[i] = result if error is None else error
+                return out
+
+            survived: list[FaultRecord] = []
+            entries = [e for e, _ in pending]
+            try:
+                settled = engine.bisect(
+                    entries,
+                    call,
+                    classify=self._classify_call,
+                    reload=lambda fault: self._reload(group),
+                    lost=lambda item: self.pool.charges(*item.key)["crashes"],
+                    crashes_charged=self.faults.crashes_charged,
+                    survived=survived.append,
+                )
+            except Abandon:
+                return
+            except Exception as exc:
+                record = attached(exc)
+                if record is None or record.phase != "load":
+                    raise
+                # a load inside the call: never split or retried; every open job of the ticket
+                self._load_fault(
+                    claim, claim.open_jobs() or entries, exc, pending[0][1]
+                )
+                group["stop"] = True
+                return
+            retry = []
+            # the jobs that completed first, so that a fault that holds the residency settles
+            # only the jobs it leaves open
+            order = sorted(
+                zip(pending, settled), key=lambda pair: pair[1].fault is not None
+            )
+            faulted: list[TicketJob] = (
+                []
+            )  # jobs of the call with an infrastructure fault
+            fault, sample = None, None
+            for (entry, job), one in order:
+                if one.value is _SKIPPED and one.fault is None:
+                    continue
+                if self._lost_claim(claim):
+                    break
+                state = {
+                    "attempt": attempts.get(entry.key),
+                    "sample": samples.get(entry.key),
+                }
+                if state["attempt"] is None:
+                    continue
+                if (
+                    one.fault is not None
+                    and one.fault.kind == "infrastructure"
+                    and not one.charged
+                ):
+                    faulted.append(entry)
+                    fault, sample = one.fault, state["sample"]
+                    continue
+                if self._settle_job(claim, entry, one, state, group, tries) == "retry":
+                    retry.append((entry, job))
+            if faulted and not self._lost_claim(claim):
+                # one call's infrastructure faults are one fault of the residency
+                self._infrastructure(claim, faulted, fault, group, sample)
+            for fault in survived:
+                self._survived(claim, fault, group)
+            if group.get("stop") or self._lost_claim(claim):
+                return
+            pending = retry
+
+    def _unserved(
+        self, claim: Claim, members: list[tuple[TicketJob, "Job"]]
+    ) -> list[tuple[TicketJob, "Job"]]:
+        """``members`` less each job the store already holds a result for (find before run, RFC
+        0005 section 5.5), which settles ``done`` (served) under its current attempt and is left
+        out of the batched call; a job to be rerun is always run."""
+        left = []
+        for entry, job in members:
+            if not getattr(job, "rerun", False) and self._found(job):
+                current = claim.current(entry)
+                if current is not None:
+                    claim.outcome(entry, current[1]["attempt"], "done", served=True)
+                continue
+            left.append((entry, job))
+        return left
+
+    @staticmethod
+    def _found(job: "Job") -> bool:
+        """Whether the job's store serves a result for it that is not errored."""
+        find = getattr(getattr(job, "store", None), "find", None)
+        if find is None:
+            return False
+        try:
+            result = getattr(find(job), "result", None)
+        except Exception:
+            return False
+        return result is not None and not getattr(result, "errored", False)
+
+    def _invoke_batch(
+        self,
+        claim: Claim,
+        started: list[tuple[int, TicketJob, "Job", str]],
+        group: dict,
+    ) -> "tuple[_Call, Sample] | str":
+        """Run the started jobs as one batched call: the call record naming every job before, its
+        deadline (the sum of the jobs' times) sent to the beater, ``done`` after. On the call thread
+        the task's ``batched`` runs once on the jobs' inputs, then each job's ``Job.run`` with its
+        element, each job proving the claim before its own publish. ``_Call.result`` is one
+        ``(result, error)`` per job; ``_Call.error`` is set, with its fault attached, when the
+        batched call raised a crash, a resource fault or any fault other than content as a whole (a
+        content raise is every job's element). Return the call and the call's sample (shared by its
+        jobs), or ``lost``, ``expired`` or ``stopped``."""
+        size = len(started)
+        listed = []
+        limits: list[float | None] = []
+        for index, (_, entry, job, attempt) in enumerate(started):
+            job.attempt = attempt
+            job._work_dir_memo = None
+            job.chdir = False
+            job.claim = claim.lease
+            job.batched_element = None
+            self._add_providers(job)
+            job.pool_facts = self.pool_facts(
+                claim,
+                entry,
+                job,
+                attempt,
+                group,
+                batch=(size, index),
+                batched=type(job.task)._batched,
+            )
+            listed.append(
+                {
+                    "checksum": entry.checksum,
+                    "fingerprint": entry.fingerprint,
+                    "attempt": attempt,
+                }
+            )
+            limits.append(self._time_limit(job))
+        limit = None if any(t is None for t in limits) else sum(limits)
+        jobs = [job for _, _, job, _ in started]
+
+        def batched() -> list:
+            return self._batched_call(jobs)
+
+        units = [entry.units for _, entry, _, _ in started]
+        padded = (
+            None if any(u is None for u in units) else max(units) * size  # type: ignore
+        )
+        return self._call(
+            claim,
+            started[0][1],
+            jobs[0],
+            listed,
+            limit,
+            group,
+            batched,
+            size=size,
+            units=padded,
+        )
+
+    def _batched_call(self, jobs: list["Job"]) -> list:
+        """On the call thread: the task's ``batched`` on the jobs' inputs (each a list, a provided
+        field the one state they share), then each job's ``Job.run`` with its element. A content
+        raise of the whole call, or a return of the wrong length, is every job's element; any other
+        raise propagates with its fault attached."""
+        from pydra.compose.python import batched_inputs
+        from pydra.engine import resident
+
+        first = jobs[0]
+        try:
+            with resident.bound(first) as provided:
+                elements = list(
+                    type(first.task)._batched(
+                        **batched_inputs([job.task for job in jobs], provided)
+                    )
+                )
+        except BaseException as exc:  # noqa: B036 - typed below, or every job's element
+            if isinstance(exc, Exception):
+                fault = fault_of(exc, "call", self._classify_call)
+                if fault.kind != "content" or fault.crash or fault.phase == "load":
+                    raise attach(exc, fault)
+            elements = [exc] * len(jobs)
+        if len(elements) != len(jobs):
+            mismatch = ValueError(
+                f"a batched call of {len(jobs)} jobs returned {len(elements)} elements"
+            )
+            elements = [mismatch] * len(jobs)
+        results: list[tuple[ty.Any, BaseException | None]] = []
+        for job, element in zip(jobs, elements):
+            job.batched_element = (element,)
+            try:
+                results.append(
+                    (job.run(rerun=bool(getattr(job, "rerun", False))), None)
+                )
+            except LeaseLost:
+                raise  # the claim is lost: no job after this one publishes either
+            except BaseException as exc:  # noqa: B036 - that job's own error
+                if isinstance(exc, Exception) and not _raised_from(exc, element):
+                    # raised by the job's own run, not its element: typed as a lone call's is
+                    attach(exc, fault_of(exc, "call", self._classify_call))
+                results.append((None, exc))
+            finally:
+                job.batched_element = None
+        return results
+
     def _survived(self, claim: Claim, fault: FaultRecord, group: dict) -> None:
         """A crash whose job completed afterwards: an infrastructure fault of the residency, charged
         to no job (senselab's ``_survived``); at the budget the residency is held."""
@@ -1655,9 +2030,6 @@ class Worker:
         job.claim = claim.lease
         self._add_providers(job)
         job.pool_facts = self.pool_facts(claim, entry, job, attempt, group)
-        self._seq += 1
-        seq = self._seq
-        token_dir = claim.lease.token_dir
         listed = [
             {
                 "checksum": entry.checksum,
@@ -1665,11 +2037,44 @@ class Worker:
                 "attempt": attempt,
             }
         ]
-        limit = None
+        return self._call(
+            claim,
+            entry,
+            job,
+            listed,
+            self._time_limit(job),
+            group,
+            None,
+            size=1,
+            units=entry.units,
+        )
+
+    def _time_limit(self, job: "Job") -> float | None:
+        """The job's share of a call's deadline: its declared ``time``, else ``call_timeout``."""
         if job.resources is not None and job.resources.time:
-            limit = float(job.resources.time)
-        elif self.settings.call_timeout is not None:
-            limit = self.settings.call_timeout
+            return float(job.resources.time)
+        return self.settings.call_timeout
+
+    def _call(
+        self,
+        claim: Claim,
+        entry: TicketJob,
+        job: "Job",
+        listed: list[dict],
+        limit: float | None,
+        group: dict,
+        fn: ty.Callable[[], ty.Any] | None,
+        *,
+        size: int,
+        units: float | None,
+    ) -> "tuple[_Call, Sample] | str":
+        """Run one call of the jobs ``listed`` (``fn``, or ``job.run``): the call record before,
+        ``done`` after, the deadline ``limit`` seconds (plus ``timeout_grace``) away sent to the
+        beater. Return the call and its sample, or ``lost``, ``expired`` or ``stopped``.
+        """
+        self._seq += 1
+        seq = self._seq
+        token_dir = claim.lease.token_dir
         deadline = (
             None if limit is None else time.time() + limit + self.settings.timeout_grace
         )
@@ -1694,7 +2099,7 @@ class Worker:
             with contextlib.suppress(BeaterDead):  # then the loop enforces it
                 self.client.deadline(token_dir, deadline, payload)
         metered = self.meter.start(self._own_pids())
-        call = self._run_call(claim, job, deadline, payload)
+        call = self._run_call(claim, job, deadline, payload, fn)
         try:
             peaks = self.meter.stop(metered)
         except Exception:
@@ -1713,17 +2118,28 @@ class Worker:
             self._lost.add(token_dir)
             return "lost"
         self._warm[claim.queue] = self._warm.get(claim.queue, 0) + 1
-        return call, self._sample(claim, entry, call.wall, group, peaks)
+        return call, self._sample(
+            claim, entry, call.wall, group, peaks, size=size, units=units
+        )
 
     def pool_facts(
-        self, claim: Claim, entry: TicketJob, job: "Job", attempt: str, group: dict
+        self,
+        claim: Claim,
+        entry: TicketJob,
+        job: "Job",
+        attempt: str,
+        group: dict,
+        batch: tuple[int, int] = (1, 0),
+        batched: ty.Callable | None = None,
     ) -> dict:
         """The ``pool`` section of the call's execute context (``pool-facts@1``, RFC 0005 section 8),
         from state this worker already holds: the worker, its host and class, the pool attempt, the
         hardware it read at start, each resident's key, provider and version with whether this call
-        loaded it, the batch and the job's survived losses. The job's `PortableStore` records it in
-        the execute context when its identity lists ``pool`` in ``recorded_only``; the job sends it
-        to its audit and ``Result.runtime`` in any case."""
+        loaded it, the batch (its size, the job's index in it and, for a batched call, the batched
+        function that ran) and the job's survived losses. The
+        job's `PortableStore` records it in the execute context when its identity lists ``pool`` in
+        ``recorded_only``; the job sends it to its audit and ``Result.runtime`` in any case.
+        """
         from pydra.engine import resident
 
         cold = bool(group.get("cold", False))
@@ -1767,7 +2183,7 @@ class Worker:
                 "cpus": hw.cpus,
             },
             "residency": residency,
-            "batch": {"size": 1, "index": 0},
+            "batch": _batch_fact(batch, batched),
             "losses_survived": self._losses(claim, entry),
         }
 
@@ -1813,9 +2229,11 @@ class Worker:
         job: "Job",
         deadline: float | None = None,
         payload: dict | None = None,
+        fn: ty.Callable[[], ty.Any] | None = None,
     ) -> _Call:
-        """Run ``job.run`` on a thread; meanwhile prove the claim every renewal interval, act on the
-        beater's ``lost`` and ``expired``, and on SIGTERM wait ``drain_s`` before abandoning.
+        """Run ``fn`` (default ``job.run``) on a thread; meanwhile prove the claim every renewal
+        interval, act on the beater's ``lost`` and ``expired``, and on SIGTERM wait ``drain_s``
+        before abandoning.
 
         The beater is pinged every renewal interval, so a hung one is found. While the beater is
         dead the claim is not proved (a proof renews it, and nothing else beats it), and the call's
@@ -1828,7 +2246,11 @@ class Worker:
 
         def target() -> None:
             try:
-                call.result = job.run(rerun=bool(getattr(job, "rerun", False)))
+                call.result = (
+                    fn()
+                    if fn is not None
+                    else job.run(rerun=bool(getattr(job, "rerun", False)))
+                )
             except BaseException as exc:  # noqa: B036 - reported to the worker's loop
                 call.error = exc
             finally:
@@ -1994,9 +2416,13 @@ class Worker:
         wall: float,
         group: dict,
         peaks: tuple[int | None, int | None] = (None, None),
+        *,
+        size: int = 1,
+        units: float | None = None,
     ) -> Sample:
-        """The job's sample, its memory attributed to its residency: the bytes gained across the
-        residency's load in this worker, and the call's peaks above what was held before it.
+        """The call's sample, its memory attributed to its residency: the bytes gained across the
+        residency's load in this worker, and the call's peaks above what was held before it;
+        ``size`` jobs in the call, ``units`` its padded units (the longest job's times ``size``).
         """
         from pydra.engine import resident
         from pydra.engine.resident import ResidentKey
@@ -2017,8 +2443,8 @@ class Worker:
         return Sample(
             wall_s=wall,
             claim_s=group["claim_s"],
-            batch_size=1,
-            units=entry.units,
+            batch_size=size,
+            units=units,
             baseline_bytes=self._baseline_bytes,
             resident_bytes=resident_bytes,
             peak_bytes=(
@@ -2153,6 +2579,10 @@ class Worker:
         """
         open_entries: list[TicketJob] = []
         charged: dict[tuple[str, str], bool] = {}
+        in_call: list[TicketJob] = []  # open jobs of the lost holder's in-flight call
+        expired: list[TicketJob] = (
+            []
+        )  # jobs of the lost holder's call that passed its deadline
         for entry in claim.ticket.jobs:
             current = claim.current(entry)
             if current is None:
@@ -2164,30 +2594,103 @@ class Worker:
             if kind in FINAL:
                 continue
             if kind == "expired":
-                self._expired_job(claim, entry)
+                expired.append(entry)
                 continue
             if kind is not None:
                 continue
             mark = self.pool.started(*entry.key, g)
-            charged[entry.key] = mark is not None and self._was_alone_in_call(
-                mark.get("worker"), entry, attempt
-            )
+            listed = self._call_jobs(None if mark is None else mark.get("worker"))
+            this = {
+                "checksum": entry.checksum,
+                "fingerprint": entry.fingerprint,
+                "attempt": attempt,
+            }
+            charged[entry.key] = mark is not None and listed == [this]
+            if mark is not None and this in listed:
+                in_call.append(entry)
             open_entries.append(entry)
-        if len(open_entries) >= 2:
-            claim.split(charged=charged)
-            self._release(claim)
-            return False
-        for entry in open_entries:
-            if self._stored(entry):  # a committed result settles done, uncharged
+        # a job the store holds settles done, uncharged, before anything is split or run again
+        for entry in list(open_entries):
+            if self._stored(entry):
                 attempt = claim.takeover(entry, charged=False)
                 claim.outcome(entry, attempt, "done", served=True)
-                continue
+                open_entries.remove(entry)
+                if entry in in_call:
+                    in_call.remove(entry)
+        expired = self._expired_left(claim, expired)
+        if len(expired) >= 2:
+            # a batched call that passed its deadline is bisected, uncharged: only a lone job of
+            # it is typed a timeout and moved up the ladder
+            rest = [open_entries] if open_entries else []
+            self._split_expired(claim, expired, rest, charged)
+            return False
+        for entry in expired:
+            self._expired_job(claim, entry)
+        if len(open_entries) >= 2:
+            rest = [e for e in open_entries if e not in in_call]
+            if in_call and rest:
+                # the lost call's jobs apart from the rest, halved: a batched call's crashing
+                # job is alone after at most log2 of its call's size more calls
+                self._split_apart(claim, in_call, [rest], charged)
+            else:
+                claim.split(charged=charged)
+                self._release(claim)
+            return False
+        for entry in open_entries:
             claim.takeover(entry, charged=charged.get(entry.key, False))
         return True
 
-    def _expired_pass(self, claim: Claim) -> None:
-        """Type each job whose current attempt in this ticket expired (a claim released after its
-        deadline passed, rather than left to go stale)."""
+    def _expired_left(self, claim: Claim, expired: list[TicketJob]) -> list[TicketJob]:
+        """The jobs of ``expired`` the store holds no result for; each one it holds (its call
+        published it before the deadline was acted on) settles done under a fresh, uncharged
+        ``takeover`` attempt. A lone expired job is left for `_expired_job`, which looks it up.
+        """
+        if len(expired) < 2:
+            return expired
+        left = []
+        for entry in expired:
+            if self._stored(entry):
+                attempt = claim.takeover(entry, charged=False)
+                claim.outcome(entry, attempt, "done", served=True)
+            else:
+                left.append(entry)
+        return left
+
+    def _split_expired(
+        self,
+        claim: Claim,
+        expired: list[TicketJob],
+        rest: list[list[TicketJob]],
+        charged: dict,
+    ) -> None:
+        """`_split_apart` for jobs whose attempt expired: each first takes a fresh, uncharged
+        ``takeover`` attempt in this ticket, which the move withdraws, so the ticket resolves.
+        """
+        for entry in expired:
+            claim.takeover(entry, charged=False)
+        self._split_apart(claim, expired, rest, charged)
+
+    def _split_apart(
+        self,
+        claim: Claim,
+        jobs: list[TicketJob],
+        rest: list[list[TicketJob]],
+        charged: dict,
+    ) -> None:
+        """Move ``jobs`` into two half-tickets and each group of ``rest`` into its own, on the
+        ticket's queue (cause ``split``, each job under a fresh generation, charged as ``charged``
+        says), and release the claim."""
+        half = (len(jobs) + 1) // 2
+        parts = [jobs[:half], jobs[half:], *rest]
+        claim.move([p for p in parts if p], claim.queue, cause="split", charged=charged)
+        self._release(claim)
+
+    def _expired_pass(self, claim: Claim) -> bool:
+        """Type the jobs whose current attempt in this ticket expired (a claim released after its
+        deadline passed, rather than left to go stale): two or more are split in halves, uncharged,
+        apart from the ticket's open jobs, and the claim released (False); a lone one is typed a
+        timeout (`_expired_job`). Return whether this worker runs the ticket."""
+        expired = []
         for entry in claim.ticket.jobs:
             current = claim.current(entry)
             if current is None:
@@ -2196,26 +2699,27 @@ class Worker:
                 claim.queue, claim.digest, entry, current[1]["attempt"]
             )
             if found is not None and found.get("outcome") == "expired":
-                self._expired_job(claim, entry)
-
-    def _was_alone_in_call(
-        self, token: str | None, entry: TicketJob, attempt: str
-    ) -> bool:
-        """Whether the lost attempt was the only job of its worker's in-flight call."""
-        if not isinstance(token, str) or len(token) != 32:
+                expired.append(entry)
+        expired = self._expired_left(claim, expired)
+        if len(expired) >= 2:
+            others = claim.open_jobs()
+            self._split_expired(claim, expired, [others] if others else [], {})
             return False
+        for entry in expired:
+            self._expired_job(claim, entry)
+        return True
+
+    def _call_jobs(self, token: str | None) -> list[dict]:
+        """The jobs of worker ``token``'s in-flight call (a call record with no ``done``), as the
+        record lists them; empty when there is none or it cannot be read."""
+        if not isinstance(token, str) or len(token) != 32:
+            return []
         try:
             record = self.pool.in_flight(token)
         except (OSError, ValueError):
-            return False
-        if record is None:
-            return False
-        jobs = record.get("jobs") or []
-        return len(jobs) == 1 and jobs[0] == {
-            "checksum": entry.checksum,
-            "fingerprint": entry.fingerprint,
-            "attempt": attempt,
-        }
+            return []
+        jobs = (record or {}).get("jobs") or []
+        return jobs if isinstance(jobs, list) else []
 
     def _expired_job(self, claim: Claim, entry: TicketJob) -> None:
         """A job whose attempt passed its deadline: under a fresh, uncharged ``takeover`` attempt,

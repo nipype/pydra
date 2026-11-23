@@ -19,7 +19,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.utils.resources import ComputeResources
 
-__all__ = ["arg", "out", "define", "Task", "Outputs"]
+__all__ = ["arg", "out", "define", "Task", "Outputs", "units_of", "batched_inputs"]
 
 
 @attrs.define
@@ -102,6 +102,9 @@ def define(
     resources: "ComputeResources | None" = None,
     code_hash: str | None = None,
     checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
+    batched: ty.Callable[..., ty.Sequence[ty.Any]] | None = None,
+    units: ty.Callable[..., float | None] | None = None,
+    batch: int | None = None,
 ) -> "Task":
     """
     Create an interface for a function or a class.
@@ -152,6 +155,24 @@ def define(
         as the task's ``__checksum__``: its return value is the job checksum and
         neither the function nor the input values are hashed. It must identify the task as
         well as its inputs, as jobs with equal checksums share one result and run once
+    batched: callable, optional
+        The task over several jobs in one call, for a warm pool worker (RFC 0005 section
+        4.4): ``batched(**inputs)`` takes each input as a list with one element per job, a
+        provided field as the one state its jobs share, and returns one element per job,
+        that job's return value as the function would return it, or the exception that job
+        raised. Each job's result is published under its own checksum. Its results must
+        equal the function's on each job alone. Never part of the checksum; the function
+        runs wherever jobs are not batched.
+    units: callable, optional
+        A job's size in the task's own units (seconds of audio, voxels), called with the
+        job's inputs that its signature names and returning a number or None. A pool orders
+        the jobs of a batched call by it and fits memory against it. Never part of the
+        checksum.
+    batch: int, optional
+        The most jobs one batched call takes, the author's statement: a pool's fit takes it
+        as the batch, or the measured memory bound when that is smaller. Without it a
+        batched task runs one job per call. Never part of the checksum; an edit of the
+        batched function does not invalidate stored results either.
 
     Returns
     -------
@@ -234,6 +255,16 @@ def define(
             )
         defn._version = version
         defn._code_hash = None if code_hash is None else check_code_hash(code_hash)
+        for what, value in (("batched", batched), ("units", units)):
+            if value is not None and not callable(value):
+                raise TypeError(f"{what} must be callable, not {value!r}")
+        if batch is not None and (
+            isinstance(batch, bool) or not isinstance(batch, int) or batch < 1
+        ):
+            raise ValueError(f"batch must be a positive int, not {batch!r}")
+        defn._batched = batched
+        defn._units = units
+        defn._batch = batch
         return defn
 
     if wrapped is not None:
@@ -274,15 +305,27 @@ PythonOutputsType = ty.TypeVar("PythonOutputsType", bound=PythonOutputs)
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonTask(base.Task[PythonOutputsType]):
     _executor_name = "function"
+    # The task over several jobs in one call, and a job's size, set by `define` (RFC 0005
+    # section 4.4). Class attributes, never fields, so neither enters the checksum.
+    _batched: ty.ClassVar[ty.Callable[..., ty.Sequence[ty.Any]] | None] = None
+    _units: ty.ClassVar[ty.Callable[..., float | None] | None] = None
+    _batch: ty.ClassVar[int | None] = None  # the declared most jobs of one batched call
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
-        # Prepare the inputs to the function
-        inputs = asdict(self)
-        del inputs["function"]
-        # A provided field is handed the state its provider loaded from the spec
-        inputs.update(getattr(job, "provided_values", None) or {})
-        # Run the actual function
-        returned = self.function(**inputs)
+        element = getattr(job, "batched_element", None)
+        if element is not None:
+            # this job's element of a batched call that already ran (`batched_inputs`)
+            (returned,) = element
+            if isinstance(returned, BaseException):
+                raise returned
+        else:
+            # Prepare the inputs to the function
+            inputs = asdict(self)
+            del inputs["function"]
+            # A provided field is handed the state its provider loaded from the spec
+            inputs.update(getattr(job, "provided_values", None) or {})
+            # Run the actual function
+            returned = self.function(**inputs)
         # Collect the outputs and save them into the job.return_values dictionary
         return_names = [f.name for f in get_fields(self.Outputs)]
         if returned is None:
@@ -304,6 +347,38 @@ class PythonTask(base.Task[PythonOutputsType]):
             raise RuntimeError(
                 f"expected {len(return_names)} elements, but {returned} were returned"
             )
+
+
+def units_of(task: PythonTask) -> float | None:
+    """The task's size in its own units: its class's ``units`` called with the inputs its
+    signature names (all of them when it takes ``**kwargs``); None without one."""
+    units = getattr(type(task), "_units", None)
+    if units is None:
+        return None
+    inputs = asdict(task)
+    inputs.pop("function", None)
+    params = inspect.signature(units).parameters.values()
+    if not any(p.kind is p.VAR_KEYWORD for p in params):
+        names = {p.name for p in params}
+        inputs = {k: v for k, v in inputs.items() if k in names}
+    value = units(**inputs)
+    return None if value is None else float(value)
+
+
+def batched_inputs(
+    tasks: ty.Sequence[PythonTask], provided: dict[str, ty.Any]
+) -> dict[str, ty.Any]:
+    """The keyword arguments of a batched call of ``tasks`` (one task class): each input as a
+    list over the tasks, and each provided field as the one state ``provided`` holds."""
+    inputs: dict[str, ty.Any] = {}
+    for task in tasks:
+        values = asdict(task)
+        del values["function"]
+        for name, value in values.items():
+            if name not in provided:
+                inputs.setdefault(name, []).append(value)
+    inputs.update(provided)
+    return inputs
 
 
 # Alias ShellTask to Task so we can refer to it by shell.Task
