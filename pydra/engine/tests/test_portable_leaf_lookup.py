@@ -15,7 +15,7 @@ from pydra.engine.portable.trust import Root
 from pydra.engine.runner import GraphRunner, NotRun
 from pydra.engine.submitter import Submitter
 
-from .test_portable_store import TRUST, make
+from .test_portable_store import TRUST, make_v2 as make
 from .test_portable_submitter import drive_with_run
 from .test_portable_workflow_jobs import ByTask, spy
 
@@ -169,7 +169,7 @@ def test_leaf_published_between_lookup_and_lease_served(
         (job,) = rnd.dispatch
         assert runs(tmp_path) == []
         # process B: its own store over the same root
-        other = PortableStore(tmp_path / "root", trust=TRUST)
+        other = make(tmp_path)
         with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
             published = b(Counted(x=1))
         assert runs(tmp_path) == [1]
@@ -208,7 +208,7 @@ def test_leaf_pickled_to_a_worker_looks_again(tmp_path, monkeypatch):
         assert job.looked_up is True
         worker = cp.loads(cp.dumps(job))
         assert worker.looked_up is False
-        other = PortableStore(tmp_path / "root", trust=TRUST, dedupe=False)
+        other = make(tmp_path, dedupe=False)
         with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
             published = b(Counted(x=1))
         assert published.committed.won is True
@@ -232,7 +232,7 @@ def test_leaf_retried_looks_again(tmp_path, monkeypatch):
         runner.complete(job, NotRun(reason="preempted", held=False))
         runner.retry(job)
         assert job.looked_up is False
-        other = PortableStore(tmp_path / "root", trust=TRUST, dedupe=False)
+        other = make(tmp_path, dedupe=False)
         with Submitter(worker="debug", store=other, cache_root=tmp_path / "pcB") as b:
             published = b(Counted(x=1))
         assert runs(tmp_path) == [1]  # B computed it

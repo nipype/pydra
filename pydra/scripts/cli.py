@@ -147,11 +147,30 @@ def _flatten(value, prefix=""):
         yield prefix, value
 
 
+def _triple(item) -> str:
+    """``field[index]: cause`` of one absence triple of a key record, or its JSON when it
+    is not ``[field, {"$int": index} or index, cause]``"""
+    if isinstance(item, list) and len(item) == 3:
+        field, index, cause = item
+        if isinstance(index, dict) and set(index) == {"$int"}:
+            index = index["$int"]
+        return f"{field}[{index}]: {cause}"
+    return json.dumps(item)
+
+
+def _shown(record: dict) -> dict:
+    absent = record.get("absent")
+    if not isinstance(absent, list):
+        return record
+    return {**record, "absent": [_triple(t) for t in absent]}
+
+
 def explain_records(one: dict, two: dict) -> list[str]:
     """The fields where two identity records differ, one ``"<field>: <one> -> <two>"``
     line each, with the dotted path of a nested field. A difference in ``walk`` names
-    the settings that cause it."""
-    left, right = dict(_flatten(one)), dict(_flatten(two))
+    the settings that cause it. Absence triples (``absent``) are shown as
+    ``field[index]: cause``."""
+    left, right = dict(_flatten(_shown(one))), dict(_flatten(_shown(two)))
     lines = []
     for path in sorted(left.keys() | right.keys()):
         a, b = left.get(path, _MISSING), right.get(path, _MISSING)
@@ -167,9 +186,18 @@ def explain_records(one: dict, two: dict) -> list[str]:
 
 
 def load_record(path: str | Path) -> dict:
-    """The identity record at ``path``: a JSON file, or the cache directory of a job whose
-    ``_result.pklz`` holds it (`pydra.engine.result.Result.record`)"""
+    """The identity record at ``path``: a JSON file, a portable store entry (the key of its
+    ``entry.json``), or the cache directory of a job whose ``_result.pklz`` holds it
+    (`pydra.engine.result.Result.record`)"""
     path = Path(path)
+    if path.is_dir() and (path / "entry.json").is_file():
+        record = json.loads((path / "entry.json").read_text()).get("key")
+        if not isinstance(record, dict):
+            raise click.ClickException(
+                f"{path} is an entry with no key record (one written before "
+                "pydra-identity@2)"
+            )
+        return record
     if path.is_dir():
         result_file = path / "_result.pklz"
         if not result_file.exists():

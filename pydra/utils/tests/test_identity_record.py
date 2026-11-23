@@ -207,7 +207,6 @@ def test_job_keeps_record_and_pickles_it():
     assert clone.checksum == job.checksum
 
 
-@pytest.mark.xfail(strict=True, reason="I8 maps StoredEntry.key to Result.record")
 def test_result_keeps_record_under_the_default_store(tmp_path):
     from pydra.engine.submitter import Submitter
 
@@ -374,7 +373,7 @@ def test_hash_changes_with_no_executor_name():
 def test_result_record_through_worker_and_async(any_worker, tmp_path):
     from pydra.engine.submitter import Submitter
 
-    with Submitter(worker=any_worker, store="pickle", cache_root=tmp_path) as sub:
+    with Submitter(worker=any_worker, cache_root=tmp_path) as sub:
         result = sub(Add(a=3))
     assert result.record is not None
     assert record_checksum(result.record) == Add(a=3)._checksum
@@ -384,7 +383,7 @@ def test_result_record_through_worker_and_async(any_worker, tmp_path):
     def Wf(a: int) -> int:
         return workflow.add(Add(a=a)).out
 
-    with Submitter(worker=any_worker, store="pickle", cache_root=tmp_path) as sub:
+    with Submitter(worker=any_worker, cache_root=tmp_path) as sub:
         wf_result = sub(Wf(a=3))
     # a workflow job's record is the task's plus the run facts of its nodes (a python
     # node has none), so its checksum is not the task's (RFC 0004 section 4.3)

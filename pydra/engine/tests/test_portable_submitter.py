@@ -28,7 +28,7 @@ from pydra.workers import base
 
 from .test_portable_quarantine import quarantined
 from .test_portable_reuse import Scripted
-from .test_portable_store import TRUST, make, posix_only
+from .test_portable_store import TRUST, make_v2 as make, posix_only
 
 cloudpickle.register_pickle_by_value(sys.modules[__name__])
 

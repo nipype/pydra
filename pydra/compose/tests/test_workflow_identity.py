@@ -11,10 +11,10 @@ from pydra.engine.job import Job
 from pydra.engine.runner import GraphRunner
 from pydra.engine.submitter import Submitter
 from pydra.environments import base, docker, images
-from pydra.engine.tests.test_portable_store import make
+from pydra.engine.tests.test_portable_store import make_v2 as make
 from pydra.engine.tests.test_portable_submitter import drive_with_run
 from pydra.engine.tests.test_runner_flatten import count_expansions
-from pydra.utils.identity import record_checksum
+from pydra.utils.identity import is_deferred, record_checksum
 
 D1 = "sha256:" + "1" * 64
 D2 = "sha256:" + "2" * 64

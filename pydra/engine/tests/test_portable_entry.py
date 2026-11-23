@@ -115,7 +115,11 @@ def publish(
     writer="w1",
 ):
     """Stage an entry in ``staging/`` and rename it to its address, as the store will."""
-    fmt = fmt if fmt is not None else PydraEntryV1(pickle=False, trust=TRUST)
+    fmt = (
+        fmt
+        if fmt is not None
+        else PydraEntryV1(identity=IDENT, pickle=False, trust=TRUST)
+    )
     fp = IDENT.fingerprint(context)
     staging_parent = root.child("staging", create=True)
     name = uuid.uuid4().hex
@@ -134,7 +138,11 @@ def publish(
 def read(
     root, *, fmt=None, checksum=CHECKSUM, fp=FP, task=None, trust=TRUST, policy=None
 ):
-    fmt = fmt if fmt is not None else PydraEntryV1(pickle=False, trust=TRUST)
+    fmt = (
+        fmt
+        if fmt is not None
+        else PydraEntryV1(identity=IDENT, pickle=False, trust=TRUST)
+    )
     root_ = root
     path = entry_path(root, checksum, fp)
     entry = root_
@@ -210,7 +218,7 @@ def test_root_and_ref_values():
 
 
 def test_format_names_and_patterns():
-    fmt = PydraEntryV1()
+    fmt = PydraEntryV1(identity=IDENT)
     assert (fmt.name, fmt.entries) == ("pydra-entry@1", "results@1")
     members = fmt.members()
     sha = "ab" * 32
@@ -357,7 +365,7 @@ def test_dict_order_does_not_change_digest(root, tmp_path):
 
 def test_naive_datetime_refused_under_shared(root):
     naive = datetime.datetime(2024, 1, 2, 3, 4, 5)
-    shared = PydraEntryV1(pickle=False, trust="shared")
+    shared = PydraEntryV1(identity=IDENT, pickle=False, trust="shared")
     with pytest.raises(UnencodableOutput) as err:
         publish(root, {"when": naive}, fmt=shared)
     assert err.value.field == "when" and err.value.type is datetime.datetime
@@ -516,7 +524,7 @@ def test_reference_arrays_are_unencodable_without_pickle(root, name, value):
     "name,value", _reference_arrays()[:2], ids=lambda v: v if isinstance(v, str) else ""
 )
 def test_subclass_arrays_are_pickled_where_allowed(root, name, value):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(root, {"v": value}, fmt=fmt)
     got = read(root, fmt=fmt).outputs["v"]
     assert type(got) is type(value)
@@ -841,7 +849,7 @@ def test_context_is_read_with_its_bytes(root):
     for part in entry_path(root).relative_to(root.path).parts:
         entry = entry.child(part)
     with entry:
-        ctx, raw = PydraEntryV1().context(entry)
+        ctx, raw = PydraEntryV1(identity=IDENT).context(entry)
     assert ctx == CTX
     assert raw == (entry_path(root) / "context.json").read_bytes()
     assert json.loads(raw)["format"] == "pydra-entry@1"
@@ -881,7 +889,7 @@ def test_misfiled_by_checksum_and_by_fingerprint(root):
     entry = root
     for part in entry_path(root).relative_to(root.path).parts:
         entry = entry.child(part)
-    fmt = PydraEntryV1()
+    fmt = PydraEntryV1(identity=IDENT)
     with entry:
         with pytest.raises(MisfiledEntry):
             fmt.read(entry, "python-other", FP, None, TRUST, root=root)
@@ -1094,9 +1102,9 @@ def test_fileset_paths_cannot_leave_their_set(root, tmp_path, tags, path):
 def test_writer_pickles_only_where_allowed(root):
     value = {"v": np.ma.MaskedArray(np.arange(3), mask=[0, 1, 0])}
     for fmt in (
-        PydraEntryV1(pickle=False, trust="private"),
-        PydraEntryV1(pickle=False, trust="trusted"),
-        PydraEntryV1(pickle=True, trust="shared"),
+        PydraEntryV1(identity=IDENT, pickle=False, trust="private"),
+        PydraEntryV1(identity=IDENT, pickle=False, trust="trusted"),
+        PydraEntryV1(identity=IDENT, pickle=True, trust="shared"),
     ):
         with pytest.raises(UnencodableOutput):
             publish(root, value, fmt=fmt)
@@ -1110,7 +1118,7 @@ def test_shared_never_opens_pkl(root, tmp_path, monkeypatch):
         def __reduce__(self):
             return (open, (str(marker), "w"))
 
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(root, {"a": 1, "p": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
     (pkl,) = list(entry_path(root).glob("*.pkl"))
     os.chmod(pkl, 0o644)
@@ -1142,7 +1150,7 @@ def test_shared_never_opens_pkl(root, tmp_path, monkeypatch):
 
 @posix_only
 def test_private_and_trusted_read_a_pickle_member(root):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     value = np.ma.MaskedArray(np.arange(4), mask=[0, 1, 0, 0])
     publish(root, {"v": value}, fmt=fmt)
     enc = entry_json(root)["outputs"]["v"]
@@ -1160,7 +1168,7 @@ def test_private_and_trusted_read_a_pickle_member(root):
 
 @posix_only
 def test_pickle_from_another_interpreter_is_not_served(root):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
     edit_entry(root, lambda d: d["outputs"]["v"].update(python="2.7"))
     with pytest.raises(EntryFormatUnknown):
@@ -1169,7 +1177,7 @@ def test_pickle_from_another_interpreter_is_not_served(root):
 
 @posix_only
 def test_private_ownership_walk_rejects_group_writable_shard(root, monkeypatch):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
     path = entry_path(root)
     rel = list(path.relative_to(root.path).parts)
@@ -1195,7 +1203,7 @@ def test_private_ownership_walk_rejects_group_writable_shard(root, monkeypatch):
 
 @posix_only
 def test_private_walk_rejects_another_owner_and_symlinks(root, monkeypatch, tmp_path):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
     path = entry_path(root)
     (pkl,) = list(path.glob("*.pkl"))
@@ -1388,7 +1396,7 @@ def test_a_second_name_in_one_set_is_recorded_as_a_member(root, tmp_path, tags):
 
 
 def _two_pickles(root):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(
         root,
         {"a": np.ma.MaskedArray(np.arange(2)), "b": np.ma.MaskedArray(np.arange(3))},
@@ -1537,7 +1545,7 @@ def test_float_tag_accepts_the_written_forms(root):
 
 
 def test_read_takes_the_root_it_is_given(root):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
     entry_dir = entry_path(root)
     quarantine = root.child("quarantine", create=True)
@@ -1561,7 +1569,7 @@ def test_read_takes_the_root_it_is_given(root):
 
 @posix_only
 def test_private_walk_checks_the_handle_is_the_address(root):
-    fmt = PydraEntryV1(pickle=True, trust="private")
+    fmt = PydraEntryV1(identity=IDENT, pickle=True, trust="private")
     publish(root, {"v": np.ma.MaskedArray(np.arange(2))}, fmt=fmt)
     other = fmt.identity.fingerprint({**CTX, "n": 99})
     publish(
@@ -1899,6 +1907,6 @@ def test_bind_gives_the_format_its_stores_identity_pickle_and_trust():
     class Other(PydraIdentityV1):
         pass
 
-    bound = PydraEntryV1().bind(Other(), True, "private")
+    bound = PydraEntryV1(identity=IDENT).bind(Other(), True, "private")
     assert isinstance(bound, PydraEntryV1) and isinstance(bound.identity, Other)
     assert (bound.pickle, bound.trust) == (True, "private")
