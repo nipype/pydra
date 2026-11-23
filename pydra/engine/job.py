@@ -14,7 +14,12 @@ import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
 from pydra.utils.hash import hash_function
-from pydra.utils.identity import job_record, record_checksum, rehashed_in_worker
+from pydra.utils.identity import (
+    is_deferred,
+    job_record,
+    record_checksum,
+    rehashed_in_worker,
+)
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
@@ -344,24 +349,17 @@ class Job(ty.Generic[TaskType]):
                     "This job reached a worker without the reference its submitting "
                     "process resolved, and a worker never resolves it again"
                 )
-            memo = getattr(self.submitter, "_resolved_refs", None)
-            key = self.environment._ref_key()
-            if memo is not None and key is not None and key in memo:
-                ref = memo[key]
-            else:
-                ref = self.environment.resolve()
-                if memo is not None and key is not None:
-                    memo[key] = ref
-            if (
-                ref.unresolved
-                and getattr(self.submitter, "resolve_images", None) == "require"
-            ):
-                raise ImageResolutionError(
-                    f"The environment reference {ref.run!r} could not be resolved and "
-                    "Submitter(resolve_images='require') was given"
-                )
+            ref = resolve_reference(self.environment, self.submitter)
             held = self._resolved = (self.environment, ref)
         return held[1]
+
+    @property
+    def deferred(self) -> bool:
+        """Whether the job's record holds ``"deferred"`` at any depth of a workflow's
+        ``nodes`` (RFC 0004 section 4.3): its entry is written, and a lookup of it is a
+        miss by rule, so the job is expanded and each node is looked up under its own key
+        """
+        return is_deferred(self.record)
 
     @property
     def record(self) -> dict[str, ty.Any]:
@@ -620,7 +618,10 @@ class Job(ty.Generic[TaskType]):
         it keeps the mark that lookup set. An exclusive lease may have been held by a
         process that published the job since, so it looks again (RFC 0003 section 5.3).
         A work directory's ``_committed.json`` is the outcome of an earlier run and is
-        never served to a new one."""
+        never served to a new one. A deferred workflow job (`deferred`) is never served
+        whole."""
+        if is_workflow(self.task) and self.deferred:
+            return None
         find = getattr(self.store, "find", None)
         if find is not None:
             if looked_up and getattr(lease, "exclusive", True) is False:
@@ -1129,6 +1130,26 @@ class Job(ty.Generic[TaskType]):
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
+
+
+def resolve_reference(environment: "Environment", submitter: ty.Any) -> "ResolvedRef":
+    """The reference of ``environment``, resolved once per run of ``submitter`` (its
+    ``_resolved_refs``); raises `ImageResolutionError` for one that cannot be resolved
+    under ``Submitter(resolve_images="require")``"""
+    memo = getattr(submitter, "_resolved_refs", None)
+    key = environment._ref_key()
+    if memo is not None and key is not None and key in memo:
+        ref = memo[key]
+    else:
+        ref = environment.resolve()
+        if memo is not None and key is not None:
+            memo[key] = ref
+    if ref.unresolved and getattr(submitter, "resolve_images", None) == "require":
+        raise ImageResolutionError(
+            f"The environment reference {ref.run!r} could not be resolved and "
+            "Submitter(resolve_images='require') was given"
+        )
+    return ref
 
 
 def has_lazy(obj):

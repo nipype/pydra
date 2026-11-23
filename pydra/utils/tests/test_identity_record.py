@@ -381,5 +381,7 @@ def test_result_record_through_worker_and_async(any_worker, tmp_path):
 
     with Submitter(worker=any_worker, store="pickle", cache_root=tmp_path) as sub:
         wf_result = sub(Wf(a=3))
-    assert wf_result.record == task_record(Wf(a=3))
-    assert record_checksum(wf_result.record) == Wf(a=3)._checksum
+    # a workflow job's record is the task's plus the run facts of its nodes (a python
+    # node has none), so its checksum is not the task's (RFC 0004 section 4.3)
+    assert wf_result.record == dict(task_record(Wf(a=3)), nodes={})
+    assert record_checksum(wf_result.record) != Wf(a=3)._checksum

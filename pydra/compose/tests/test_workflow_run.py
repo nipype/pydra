@@ -2770,12 +2770,10 @@ def test_wf_state_cachelocations(worker: str, tmp_path: Path):
     assert runs1 > 0
     assert count_runs(run_log) == runs1
 
-    # checking all directories
-
-    # checking if the second worky didn't run again
-    # checking all directories
-
-    assert results1.cache_dir == results2.cache_dir
+    # the implicit workflow holding a split workflow node is deferred (RFC 0004 section
+    # 4.3): it is expanded and committed to its own cache, and each element is served
+    # from the read-only cache, so nothing ran again
+    assert results2.cache_dir.is_relative_to(cache_root2)
 
 
 def test_wf_state_cachelocations_forcererun(worker: str, tmp_path: Path):
