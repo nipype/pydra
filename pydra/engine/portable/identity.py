@@ -71,6 +71,14 @@ def _fields(value: ty.Iterable[str]) -> frozenset[str]:
     return frozenset(value) | RECORDED_FIELDS
 
 
+POOL_FIELD = "pool"
+"""The section a pool worker adds to the execute context (RFC 0005 section 8)"""
+
+
+def _v2_fields(value: ty.Iterable[str]) -> frozenset[str]:
+    return _fields(value) | {POOL_FIELD}
+
+
 @attrs.frozen
 class PydraIdentityV1:
     """``pydra-identity@1``: pydra's checksum is not the digest of a stored record, the context
@@ -115,8 +123,15 @@ class PydraIdentityV1:
 class PydraIdentityV2(PydraIdentityV1):
     """``pydra-identity@2`` (RFC 0004 section 3.1): the checksum is the digest of the job's
     identity record, which is the key. The context and the fingerprint are
-    `PydraIdentityV1`'s."""
+    `PydraIdentityV1`'s. ``recorded_only`` always holds ``pool``, the section a pool
+    worker adds to the execute context (RFC 0005 section 8), beside
+    ``environment_repository`` and ``environment_facts``, whatever else is given."""
 
+    recorded_only: frozenset[str] = attrs.field(
+        factory=frozenset,
+        converter=_v2_fields,
+        validator=PydraIdentityV1._strings,
+    )
     name: ty.ClassVar[str] = IDENTITY_SCHEME
 
     def key(self, job: "Job") -> KeyRecord:
