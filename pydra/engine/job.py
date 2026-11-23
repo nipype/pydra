@@ -45,7 +45,12 @@ from pydra.engine.result import save
 from pydra.utils.typing import copy_nested_files
 from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
-from pydra.environments.base import Environment
+from pydra.environments.base import (
+    Container,
+    Environment,
+    ImageResolutionError,
+    ResolvedRef,
+)
 from pydra.utils.resources import ComputeResources
 from pydra.utils.etelemetry import check_latest_version
 
@@ -176,6 +181,7 @@ class Job(ty.Generic[TaskType]):
         self.allow_cache_override = True
         self._checksum = None
         self._record = None
+        self._resolved = None
         self._unsuffixed_checksum = None
         # The (field, element index, cause) of every Absent an input field accepted or
         # dropped, set by the graph runner when it forms the job
@@ -245,8 +251,11 @@ class Job(ty.Generic[TaskType]):
         return self.name
 
     def __getstate__(self):
-        # Carry the checksum, so a worker never rehashes the task's code
+        # Carry the checksum, so a worker never rehashes the task's code, and the
+        # environment's resolved reference, which the worker runs and never resolves
         self.checksum
+        if self.uses_image:
+            self.resolved
         # The task stays an object in the state, so it is serialised in the job's own
         # stream, and jobs pickled together (a workflow's node jobs) share one memo.
         # A Job therefore requires cloudpickle: the stdlib pickle cannot serialise the
@@ -273,6 +282,7 @@ class Job(ty.Generic[TaskType]):
         ):  # a job pickled before the task was inlined
             state["task"] = cp.loads(state["task"])
         self.__dict__.update(state)
+        self._received = True  # a worker: it runs the reference it was handed
         # the digests the submitting process computed are not computed again here
         self.task._carry_digests()
         # _cached_result is excluded from __getstate__; ensure it always exists
@@ -284,6 +294,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
         self.__dict__.setdefault("_record", None)
+        self.__dict__.setdefault("_resolved", None)
         self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
         self.__dict__.setdefault("attempt", None)
@@ -339,6 +350,45 @@ class Job(ty.Generic[TaskType]):
         return absence_triples(self)
 
     @property
+    def uses_image(self) -> bool:
+        """Whether the job runs a command in a container image, so its reference is
+        resolved: a shell task in a container environment. A python task has no image
+        to resolve, whatever environment it was given."""
+        from pydra.compose.shell.task import Task as ShellTask
+
+        return isinstance(self.environment, Container) and isinstance(
+            self.task, ShellTask
+        )
+
+    @property
+    def resolved(self) -> "ResolvedRef":
+        """The environment's reference, resolved once in the submitting process and
+        carried with the job: the record keys its ``key`` and the worker executes its
+        ``run``. It is resolved again when the job's environment is replaced."""
+        held = self._resolved
+        if held is None or held[0] is not self.environment:
+            if self.__dict__.get("_received"):
+                raise ImageResolutionError(
+                    "This job reached a worker without the reference its submitting "
+                    "process resolved, and a worker never resolves it again"
+                )
+            memo = self.submitter._resolved_refs
+            key = self.environment._ref_key()
+            if key is not None and key in memo:
+                ref = memo[key]
+            else:
+                ref = self.environment.resolve()
+                if key is not None:
+                    memo[key] = ref
+            if ref.unresolved and self.submitter.resolve_images == "require":
+                raise ImageResolutionError(
+                    f"The image of {ref.run!r} could not be resolved and "
+                    "Submitter(resolve_images='require') was given"
+                )
+            held = self._resolved = (self.environment, ref)
+        return held[1]
+
+    @property
     def record(self) -> dict[str, ty.Any]:
         """The identity record the job's checksum is the digest of (see
         `pydra.utils.identity.job_record`), built once in the submitting process and
@@ -361,11 +411,17 @@ class Job(ty.Generic[TaskType]):
             self.checksum  # collects the library modules the task's code reaches
             identity = self.store.identity
             if identity is None:
-                self._context = job_context(self.task, self.environment)
+                self._context = job_context(
+                    self.task,
+                    self.environment,
+                    self.resolved if self.uses_image else None,
+                )
             else:
                 self._context = identity.context(self, "lookup")
             tool_version = self.record.get("job", {}).get("tool_version")
-            if isinstance(tool_version, dict):
+            if isinstance(tool_version, dict) or (
+                self.uses_image and self.resolved.unresolved
+            ):
                 # a tool not found here: the result is used by this process only
                 self._context = {**self._context, "unknown": _nonce()}
             self._stored_contexts = check_declared_code(

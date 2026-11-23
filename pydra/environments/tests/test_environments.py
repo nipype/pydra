@@ -73,7 +73,9 @@ def test_docker_1(tmp_path):
 
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("docker")),
+        submitter=Submitter(
+            environment=dock, store="pickle", cache_root=newcache("docker")
+        ),
         name="docker",
     )
     outputs_dict = dock.execute(shelly_job)
@@ -116,7 +118,9 @@ def test_docker_1_subm(tmp_path, dock):
     shelly = shell.define(cmd)()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("docker")),
+        submitter=Submitter(
+            environment=dock, store="pickle", cache_root=newcache("docker")
+        ),
         name="docker",
     )
     assert shelly.cmdline == cmd
@@ -219,10 +223,12 @@ def shelly_with_input_factory(filename, executable) -> shell.Task:
     return Shelly(**({} if filename is None else {"file": filename}))
 
 
-def make_job(task: shell.Task, tempdir: Path, name: str):
+def make_job(task: shell.Task, tempdir: Path, name: str, environment=None):
     return Job(
         task=task,
-        submitter=Submitter(store="pickle", cache_root=makedir(tempdir, name)),
+        submitter=Submitter(
+            environment=environment, store="pickle", cache_root=makedir(tempdir, name)
+        ),
         name=name,
     )
 
@@ -304,7 +310,7 @@ def test_docker_fileinp(tmp_path):
         f.write("hello ")
 
     shelly = shelly_with_input_factory(filename=filename, executable="cat")
-    outputs_dict = dock.execute(make_job(shelly, tmp_path, "docker"))
+    outputs_dict = dock.execute(make_job(shelly, tmp_path, "docker", dock))
 
     with Submitter(
         environment=dock, store="pickle", cache_root=newcache("shell_sub")
@@ -335,7 +341,7 @@ def test_docker_fileinp_subm(tmp_path, worker):
         f.write("hello ")
 
     shelly = shelly_with_input_factory(filename=filename, executable="cat")
-    shelly_job = make_job(shelly, tmp_path, "docker_job")
+    shelly_job = make_job(shelly, tmp_path, "docker_job", dock)
     outputs_dict = dock.execute(shelly_job)
 
     with Submitter(

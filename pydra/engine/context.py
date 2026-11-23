@@ -35,7 +35,7 @@ from pydra.utils.hash import (
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
-    from pydra.environments.base import Environment
+    from pydra.environments.base import Environment, ResolvedRef
 
 logger = logging.getLogger("pydra")
 
@@ -452,13 +452,23 @@ def package_versions(modules: ty.Iterable[str]) -> dict[str, str | None]:
     return dict(sorted(versions.items()))
 
 
-def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
+REPOSITORY_FIELD = "environment_repository"
+"""The context field naming the repository an image came from. It is not compared
+between contexts and not part of a slot's name."""
+
+
+def job_context(
+    task: "Task", environment: "Environment", resolved: "ResolvedRef | None" = None
+) -> dict[str, ty.Any]:
     """The record of the context a job of `task` runs in under `environment`:
 
     * ``record``: the layout's version (`RECORD`);
     * ``python``: the interpreter's full version, ``implementation``: its name;
     * ``platform``: the OS, machine and C library;
-    * ``environment``: the environment's checksum;
+    * ``environment``: the environment's resolved key (`Job.resolved`), or its
+      checksum when none is given;
+    * ``environment_repository``: where a container image is pulled from, when its
+      reference carries one; recorded only (`REPOSITORY_FIELD`), so mirrors share slots;
     * ``packages``: the identities of the distributions that installed the library
       modules the task reaches (see `reached_modules`), and of those they require,
       None if the modules cannot be determined;
@@ -478,10 +488,12 @@ def job_context(task: "Task", environment: "Environment") -> dict[str, ty.Any]:
     packages = None if modules is None else package_versions(modules)
     context = {
         **process_context(),
-        "environment": environment.checksum(),
+        "environment": environment.checksum() if resolved is None else resolved.key,
         "packages": packages,
         "installed": _installed_digest(frozenset(packages or ())),
     }
+    if resolved is not None and "repository" in resolved.carried:
+        context[REPOSITORY_FIELD] = resolved.carried["repository"]
     if task._declared_code:
         context["code"] = dict(task._declared_code)
     if packages is None or None in packages.values():
