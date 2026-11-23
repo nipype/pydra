@@ -42,7 +42,7 @@ from pydra.engine.portable.entry import (
     PydraEntryV1,
     StoredEntry,
 )
-from pydra.engine.portable.errors import UnencodableOutput
+from pydra.engine.portable.errors import KeyMismatch, UnencodableOutput
 from pydra.engine.portable.identity import (
     Context,
     KeyRecord,
@@ -950,6 +950,8 @@ class PortableStore:
 
         Raises
         ------
+        KeyMismatch
+            The store's identity refuses ``key`` for ``checksum``; nothing is written.
         StoreNotWritable
             This user cannot write a directory the publish needs.
         UnencodableOutput
@@ -957,6 +959,11 @@ class PortableStore:
         StoreUnavailable
             Any other ``OSError``.
         """
+        if not self.identity.check_key(checksum, key):
+            raise KeyMismatch(
+                f"the key record given for {checksum!r} does not digest to it under "
+                f"{self.identity.name}, so no read would accept the entry"
+            )
         cdir = cdir_for(checksum)
         shard = shard_for(cdir, checksum, self.header.shard)
         fingerprint = self.identity.fingerprint(context)

@@ -15,7 +15,7 @@ from pydra.engine.portable.trust import Root
 from pydra.engine.runner import GraphRunner, NotRun
 from pydra.engine.submitter import Submitter
 
-from .test_portable_store import TRUST, make
+from .test_portable_store import TRUST, make_v2 as make
 from .test_portable_submitter import drive_with_run
 from .test_portable_workflow_jobs import ByTask, spy
 

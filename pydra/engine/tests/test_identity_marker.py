@@ -264,3 +264,24 @@ def test_explain_reads_a_portable_entry(tmp_path):
     result = CliRunner().invoke(cli, ["explain", str(entries[0]), str(entries[1])])
     assert result.exit_code == 1
     assert "inputs.a" in result.output
+
+
+def test_publish_refuses_a_key_its_identity_refuses(tmp_path):
+    """An entry its own identity would refuse on every read is never written: the publish
+    raises where the key was made, not at a later read"""
+    from pydra.engine.portable.errors import KeyMismatch
+
+    root = tmp_path / "cache"
+    store = _store(root)
+    suffix = absence_suffix([("vals", 1, "not-routed")])
+    supplied = {"scheme": IDENTITY_SCHEME, "supplied": "gather-n2"}
+    for checksum, key in [
+        ("python-abc", None),  # no key under pydra-identity@2
+        ("gather-n2" + suffix, supplied),  # a suffix with no triples
+        ("gather-n3", supplied),  # another checksum
+    ]:
+        with pytest.raises(KeyMismatch, match="does not digest"):
+            store.publish(checksum, key, {"n": 1}, {"v": 1}, None, None)
+    assert entry_docs(root) == []
+    committed = store.publish("gather-n2", supplied, {"n": 1}, {"v": 1}, None, None)
+    assert store.read(committed.entry, None).outputs == {"v": 1}

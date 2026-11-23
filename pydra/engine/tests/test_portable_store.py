@@ -24,7 +24,7 @@ from pydra.engine.portable.entry import (
     EntryRef,
     PydraEntryV1,
 )
-from pydra.engine.portable.identity import PydraIdentityV1
+from pydra.engine.portable.identity import PydraIdentityV1, PydraIdentityV2
 from pydra.engine.portable.layout import HEADER_NAME, StoreLayoutMismatch, cdir_for
 from pydra.engine.portable.reuse import PolicyReuse, Verdict
 from pydra.engine.portable.store import Committed, PortableStore, StoreNotWritable
@@ -71,11 +71,17 @@ def _work_under(base, checksum, fingerprint, attempt):
 
 def make(tmp_path, name="root", **kw):
     kw.setdefault("trust", TRUST)
-    # these tests publish synthetic checksums with no key record
+    # pydra-identity@1: `publish` and the tests here publish synthetic checksums with
+    # no key record, which pydra-identity@2 refuses (see `make_v2` for real jobs)
     kw.setdefault("identity", PydraIdentityV1())
     if kw["trust"] == "shared":  # a shared root has no default work directory
         kw.setdefault("work_dir", functools.partial(_work_under, tmp_path))
     return PortableStore(tmp_path / name, **kw)
+
+
+def make_v2(tmp_path, name="root", **kw):
+    """`make` under the default identity, for tests whose jobs carry key records"""
+    return make(tmp_path, name, identity=PydraIdentityV2(), **kw)
 
 
 def publish(store, outputs=OUT, checksum="python-abc", context=CTX, **kw):
@@ -379,6 +385,7 @@ def killed(tmp_path, when):
         text=True,
     )
     assert proc.returncode == -9, proc.stderr
+    # pydra-identity@1, as in SCRIPT: the callers publish again through the keyless `publish`
     return PortableStore(
         tmp_path / "root",
         trust=TRUST,
@@ -653,29 +660,25 @@ def test_result_pickles_with_and_without_the_new_fields(tmp_path):
 
 @python.define
 def _PublishHere(root: str, value: int) -> str:
-    from pydra.engine.portable.identity import PydraIdentityV1
     from pydra.engine.portable.store import PortableStore
+    from pydra.utils.identity import IDENTITY_SCHEME
 
-    store = PortableStore(
-        root,
-        trust="private" if os.name != "nt" else "trusted",
-        identity=PydraIdentityV1(),
-    )
+    store = PortableStore(root, trust="private" if os.name != "nt" else "trusted")
+    key = {"scheme": IDENTITY_SCHEME, "supplied": "python-job"}
     c = store.publish(
-        "python-job", None, {"python": "x", "n": 1}, {"v": value}, None, None
+        "python-job", key, {"python": "x", "n": 1}, {"v": value}, None, None
     )
     return "|".join([c.entry.cdir, c.entry.fingerprint, str(c.won), str(c.stored)])
 
 
 def test_publish_and_read(any_worker, tmp_path):
     root = tmp_path / "root"
-    # the root is created here, in the test process
-    PortableStore(root, trust=TRUST, identity=PydraIdentityV1())
+    PortableStore(root, trust=TRUST)  # the root is created here, in the test process
     with Submitter(worker=any_worker, cache_root=tmp_path / "pc") as sub:
         res = sub(_PublishHere(root=str(root), value=7))
     cdir, fingerprint, won, stored = res.outputs.out.split("|")
     assert (won, stored) == ("True", "True")
-    store = PortableStore(root, trust=TRUST, identity=PydraIdentityV1())
+    store = PortableStore(root, trust=TRUST)
     got = store.read(EntryRef(str(root), cdir, fingerprint), None)
     assert got.outputs == {"v": 7}
 
