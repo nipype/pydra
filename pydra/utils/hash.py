@@ -1333,19 +1333,26 @@ def is_library(obj: object) -> bool:
     else:
         module = inspect.getattr_static(obj, "__module__", None)
     if isinstance(obj, types.FunctionType):
-        module = obj.__module__ or ""
-        if obj.__code__.co_filename == _BY_VALUE_FILENAME:
-            # unpickled by value: its globals keep the file of its module
-            file = obj.__globals__.get("__file__")
-            return _module_is_library(module, file if isinstance(file, str) else "")
-        override = _package_override(module)
-        if override is None:
-            override = _path_is_library(obj.__code__.co_filename)
-        if override is not None:
-            return override
-        if getattr(sys.modules.get(module), "__dict__", None) is not obj.__globals__:
-            return False
+        return _code_is_library(obj.__code__, obj.__module__ or "", obj.__globals__)
     return isinstance(module, str) and _module_is_library(module)
+
+
+def _code_is_library(
+    code: types.CodeType, module: str, globals_: Mapping[str, ty.Any]
+) -> bool:
+    """`is_library`'s rule for a function: its ``code`` in ``module`` with ``globals_``"""
+    if code.co_filename == _BY_VALUE_FILENAME:
+        # unpickled by value: its globals keep the file of its module
+        file = globals_.get("__file__")
+        return _module_is_library(module, file if isinstance(file, str) else "")
+    override = _package_override(module)
+    if override is None:
+        override = _path_is_library(code.co_filename)
+    if override is not None:
+        return override
+    if getattr(sys.modules.get(module), "__dict__", None) is not globals_:
+        return False
+    return _module_is_library(module)
 
 
 ENGINE_PACKAGES = frozenset(
@@ -2051,6 +2058,8 @@ class _CodeWalk:
         # being serialized
         self.refs: set[str] = set()
         self.found_refs: set[str] = set()
+        # the user definitions outside the tier, referenced by name (see `serialize`)
+        self.by_name: list[ty.Any] = []
 
     def library(self, module: str, kind: str, name: str) -> bytes:
         """The reference ``{kind}:{owner}:{name}`` to library code of `module`, where
@@ -2172,6 +2181,7 @@ class _CodeWalk:
                 return ref
             if not library and not self.in_scope(value):
                 if owner := _owner_name(value):
+                    self.by_name.append(value)
                     return f"name:{owner}".encode()
             return f"#{self.number(value)}".encode()
         if isinstance(value, types.MethodType):
@@ -2654,3 +2664,89 @@ if HAVE_NUMPY:
 
 
 NUMPY_CHUNK_LEN = 8192
+
+
+def is_user_code(code: types.CodeType, globals_: Mapping[str, ty.Any]) -> bool:
+    """Whether the code object ``code``, running with the namespace ``globals_``, is
+    code the walk reads as user code: the rule of `is_library` for a function, and not
+    code that `attrs`, `dataclasses` or ``namedtuple`` generate (see `_cell_or_file`)"""
+    if not _cell_or_file(code.co_filename):
+        return False
+    module = globals_.get("__name__") or ""
+    return _is_unowned_python(module) or not _code_is_library(code, module, globals_)
+
+
+def _definition_codes(obj: ty.Any) -> set[types.CodeType]:
+    """The code objects of a function, or of the methods of a class, and those nested
+    in them (inner functions, lambdas, comprehensions)"""
+    funcs = [f for _, f in _class_members(obj)] if isinstance(obj, type) else [obj]
+    codes: set[types.CodeType] = set()
+    todo = [f.__code__ for f in funcs]
+    while todo:
+        code = todo.pop()
+        codes.add(code)
+        todo.extend(c for c in code.co_consts if isinstance(c, types.CodeType))
+    return codes
+
+
+def _input_roots(value: ty.Any, seen: set[int]) -> Iterator[ty.Any]:
+    """The functions and user classes whose code the identity of the input ``value``
+    keys: a function, the function of a method or partial, the class of a user-class
+    instance, at any depth of the containers that hold them"""
+    if id(value) in seen:
+        return
+    seen.add(id(value))
+    if isinstance(value, types.MethodType):
+        yield from _input_roots(value.__func__, seen)
+        yield from _input_roots(value.__self__, seen)
+    elif isinstance(value, functools.partial):
+        yield from _input_roots(value.func, seen)
+        for item in (*value.args, *value.keywords.values()):
+            yield from _input_roots(item, seen)
+    elif isinstance(value, types.FunctionType):
+        yield value
+    elif isinstance(value, type):
+        if is_user_class(value):
+            yield value
+    elif isinstance(value, Mapping):
+        for item in (*value.keys(), *value.values()):
+            yield from _input_roots(item, seen)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            yield from _input_roots(item, seen)
+    elif is_user_class(type(value)):
+        yield type(value)
+        for item in getattr(value, "__dict__", {}).values():
+            yield from _input_roots(item, seen)
+
+
+def reached_definitions(
+    func: types.FunctionType,
+    inputs: Mapping[str, ty.Any] | None = None,
+    code_hash: str | None = None,
+) -> tuple[frozenset[types.CodeType], frozenset[types.CodeType]]:
+    """The code objects the identity of a task keyed by ``func`` and ``inputs`` reaches
+    at the ``code_hash`` tier (`code_hash_default` when None), and those it references
+    by name only, which at the ``function`` and ``module`` tiers are the user code
+    outside the tier. The code reached is that of the walk of ``func`` and of the walk
+    of each function, and of the class of each user-class instance, among ``inputs``."""
+    cache = Cache(code_hash=code_hash)
+    tier = check_code_hash(code_hash or code_hash_default())
+    key = (tier, False, os.environ.get(USER_PACKAGES_ENV_VAR, ""))
+    roots = [(func, False)]
+    seen: set[int] = set()
+    roots += [(r, True) for v in (inputs or {}).values() for r in _input_roots(v, seen)]
+    keyed: set[types.CodeType] = set()
+    named: set[types.CodeType] = set()
+    for root, defaults in roots:
+        if isinstance(root, types.FunctionType) and in_stdlib(root):
+            continue
+        if is_library(root) and not _is_unowned_python(root.__module__):
+            continue
+        walk = _CodeWalk(root, cache, defaults=defaults)
+        walk.walk(key)
+        for obj in walk.definitions:
+            keyed |= _definition_codes(obj)
+        for obj in walk.by_name:
+            named |= _definition_codes(obj)
+    return frozenset(keyed), frozenset(named - keyed)
