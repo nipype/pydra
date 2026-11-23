@@ -182,7 +182,8 @@ class Provider(Protocol):
 
 ```python
 class Environment:
-    def warm(self, roots: Sequence[Path], device: Device) -> WarmEnvironment | None:
+    def warm(self, roots: Sequence[Path], device: Device, ref: ResolvedRef | None = None, *,
+             writable: Sequence[Path] = (), scratch: Path | None = None) -> WarmEnvironment | None:
         """A handle that runs many jobs in one started environment; None: not warmable."""
 
 class WarmEnvironment(Protocol):
@@ -196,8 +197,8 @@ class WarmEnvironment(Protocol):
 | Environment | `warm()` | Each job | Defaults when `warm=True` |
 |---|---|---|---|
 | `Native` | `None` | as today | — |
-| `Docker` | `docker run -d --init --user <uid>:<gid>` of the resolved reference (RFC 0004 §5.3) with `roots` bound and a sleeper as entrypoint; `--gpus` with the worker's `CUDA_VISIBLE_DEVICES` on a `cuda` class | `docker exec -w <work dir> -e TMPDIR=<work dir>/tmp -e HOME=<work dir>/home <id> <command>` | non-root user; per-job `TMPDIR` and `HOME`; `--read-only --tmpfs /tmp` under `Docker(read_only=True)` |
-| `Singularity` / Apptainer | `apptainer instance start -c --no-home` (`--nv` and the worker's `CUDA_VISIBLE_DEVICES` on a `cuda` class) with `roots` bound | `apptainer exec --env TMPDIR=…,HOME=… instance://<token> <command>` | contained; no home; per-job environment |
+| `Docker` | `docker run -d --init --user <uid>:<gid> --label pydra.warm.owner=<host>:<pid>` of the resolved reference (RFC 0004 §5.3) with every root bound read-only under `<root>-ro`, the writable roots also under `<root>`, the scratch `tmp` at `/tmp`, and a sleeper as entrypoint; `--gpus` with the worker's `CUDA_VISIBLE_DEVICES` on a `cuda` class | `docker exec -w <work dir> -e TMPDIR=/tmp -e HOME=<scratch>/jobs/<id>/home <id> <image entrypoint> <command>` | non-root user; per-job `HOME`; `/tmp` emptied after each job; `--read-only` under `Docker(read_only=True)` |
+| `Singularity` / Apptainer | `apptainer instance start -c --no-home` (`--nv` and the worker's `CUDA_VISIBLE_DEVICES` on a `cuda` class) of the local SIF (a `docker://` digest's, never the URI), bound as for `Docker`; the instance name carries `<pid>` and `<host>` | `apptainer exec --pwd <work dir> instance://<name> env HOME=… TMPDIR=/tmp <command>` | contained; no home; per-job `HOME`; `/tmp` emptied after each job |
 | `Lmod` | resolves `module load <full names>` once (RFC 0004 §5.3) and keeps the resulting environment mapping | the command runs with that mapping | no process is kept; the saving is the resolution (`environments/lmod.py:33`) |
 | `Venv` (0001 G2) | through a process-owning provider (above) | a call over that process's protocol | after G2 |
 
@@ -1360,6 +1361,19 @@ for writing a process-owning provider, and the worker protocol as a reference pa
   placement; W6's `bench_pool_overhead` measures the latter.
 
 ## 13. Changes in revisions
+
+### Amendment to revision 4 (implementation of W3)
+
+| Item | Change |
+|---|---|
+| `warm()` signature | §3.1: `warm(roots, device, ref=None, *, writable=(), scratch=None)`. A worker passes the reference its jobs carry (`ref`) and never resolves; without it the environment resolves locally. `writable` names the roots bound writable; `scratch` places the scratch directory. |
+| Bind modes | §3.1 "Binding roots", "Isolation": a warm container keeps the cold run's modes. Every root is bound read-only under `<root>-ro`; a root holding a writable binding (the cache, store, work and scratch roots) is also bound writable under `<root>`. Read-only fields map through the read-only prefix, the working directory and outputs through the writable one, so a job that edits an input in place fails warm as it fails cold. `covers` checks writable roots too, and a ticket needing a root writable that the start bound read-only restarts it. No rw-inputs limit is admitted. |
+| `/tmp` and `HOME` | §3.1 "Isolation", §11 W3: a per-start scratch directory `<cache root>/.pydra-warm-<token>` (store-internal, never a slot) holds each job's `HOME`, removed after the job, and the container's `/tmp`, bound at `/tmp` and emptied on the host after each job under the session's lock. A literal `/tmp/y` is therefore not seen by the next job. Under `Docker(read_only=True)` this bind replaces `--tmpfs /tmp`. Placing it under the cache root (not the system temporary directory) also keeps Docker Desktop, which does not share `/var`, from silently running cold. |
+| Apptainer environment | §3.1 table: `HOME` and `TMPDIR` are set by `env HOME=… TMPDIR=…` inside the instance, not `--env`, since Apptainer refuses to override `HOME` through `--env`; the image must have `env`. To verify in O5. |
+| `max_mount_roots` | §3.1: the roots counted include the scratch directory's root, computed before the comparison, so a start never binds more than `max_mount_roots` roots. |
+| Docker entrypoint | §3.1 table: each `docker exec` runs the image's `ENTRYPOINT` (read after the start) before the command, as cold `docker run` does; an `--entrypoint` in `xargs` takes its place. |
+| Lifecycle | §3.1, §4.3 step 7: a warm container is labelled `pydra.warm.owner=<host>:<pid>` (an instance carries both in its name), and a start removes those whose owner has ended on this host. A failed start removes what it may have left, by name. Open warm environments close at exit, and on `SIGTERM` when the process has no handler of its own. A session runs one job at a time. |
+| Benchmark | §9: the Docker `run`-against-`exec` figure is printed by the marked `test_warm_docker_real` on the CI ubuntu runner (50 commands); Apptainer and Lmod figures come from O5 (`bench_warm_environment`, 200 commands). |
 
 ### Amendment to revision 4 (fail fast instead of hanging)
 
