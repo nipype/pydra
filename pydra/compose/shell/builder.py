@@ -186,13 +186,10 @@ def define(
 
             if name:
                 class_name = name
-            else:
+            else:  # made an identifier by build_task_class
                 class_name = (
                     "_".join(executable) if isinstance(executable, list) else executable
                 )
-                class_name = re.sub(r"[^\w]", "_", class_name)
-            if class_name[0].isdigit():
-                class_name = f"_{class_name}"
 
             # Add in fields from base classes
             parsed_inputs.update({n: getattr(Task, n) for n in Task.BASE_ATTRS})
