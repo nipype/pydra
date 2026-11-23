@@ -263,6 +263,87 @@ def store_collect(root, trust):
     click.echo(f"{len(report.removed)} removed, {len(report.kept)} kept")
 
 
+def _hook(name: str):
+    """The object at the importable dotted ``name``; a class is instantiated with no
+    arguments"""
+    obj = _import(name)
+    return obj() if isinstance(obj, type) else obj
+
+
+@store.command("adopt", context_settings=CONTEXT_SETTINGS)
+@click.argument(
+    "root", type=click.Path(exists=True, file_okay=False, resolve_path=True)
+)
+@click.option(
+    "--from",
+    "old_entries",
+    required=True,
+    help="The name of the store's version directory, which is renamed to the header's "
+    "entries",
+)
+@click.option(
+    "--header",
+    "header_spec",
+    required=True,
+    help="The layout header to write: a JSON file, or the JSON itself",
+)
+@click.option(
+    "--identity",
+    default="pydra.engine.portable.identity.PydraIdentityV2",
+    show_default=True,
+    help="The importable StoreIdentity (a class is instantiated with no arguments)",
+)
+@click.option(
+    "--entry-format",
+    default="pydra.engine.portable.entry.PydraEntryV1",
+    show_default=True,
+    help="The importable EntryFormat (a class is instantiated with no arguments)",
+)
+@click.option(
+    "--check",
+    type=click.Choice(["none", "sample", "all"]),
+    default="sample",
+    show_default=True,
+    help="Which entries are read back through the identity and the entry format",
+)
+@click.option(
+    "--trust",
+    type=click.Choice(["private", "trusted", "shared"]),
+    default="trusted",
+    show_default=True,
+    help="What you assert about who can write the root (RFC 0003 section 6.4)",
+)
+def store_adopt(root, old_entries, header_spec, identity, entry_format, check, trust):
+    """Make the store at ROOT, already laid out like a portable store, a portable store
+    without rewriting an entry (RFC 0003 section 8.2). Stop its writers first."""
+    from pydra.engine.portable.adopt import AdoptRefused, adopt
+    from pydra.engine.portable.layout import LayoutHeader, StoreLayoutUnknown
+
+    data = (
+        header_spec.encode("utf-8")
+        if header_spec.lstrip().startswith("{")
+        else Path(header_spec).read_bytes()
+    )
+    try:
+        header = LayoutHeader.from_json(data)
+        report = adopt(
+            root,
+            old_entries=old_entries,
+            header=header,
+            identity=_hook(identity),
+            entry_format=_hook(entry_format),
+            check=check,
+            trust=trust,
+        )
+    except (AdoptRefused, StoreLayoutUnknown) as err:
+        raise click.ClickException(str(err)) from err
+    click.echo(f"renamed {report.renamed[0]} to {report.renamed[1]}")
+    click.echo("header written" if report.header_written else "header not written")
+    for rel in report.misfiled:
+        click.echo(f"does not verify: {rel}")
+    click.echo(f"{report.checked} checked, {len(report.misfiled)} misfiled")
+
+
 @cli.group(context_settings=CONTEXT_SETTINGS)
 def pool():
     """Warm worker pools (RFC 0005)."""

@@ -30,6 +30,7 @@ __all__ = [
     "StoreLayoutAbsent",
     "LayoutHeader",
     "open_layout",
+    "read_header",
     "cdir_for",
     "shard_for",
 ]
@@ -249,6 +250,18 @@ def _read(root: StorageDir) -> bytes | None:
     return data
 
 
+def read_header(root: StorageDir) -> LayoutHeader | None:
+    """The header of ``root`` as stored, or None if it has none.
+
+    Raises
+    ------
+    StoreLayoutUnknown
+        The header is of a format major other than 1, or cannot be read.
+    """
+    data = _read(root)
+    return None if data is None else LayoutHeader.from_json(data)
+
+
 def _check(stored: LayoutHeader, expected: LayoutHeader) -> LayoutHeader:
     key = _differing_key(stored, expected)
     if key is not None:
@@ -338,7 +351,11 @@ def _legacy(root: StorageDir, others: list[str]) -> StoreUnavailable:
 
 
 def open_layout(
-    root: StorageDir, expected: LayoutHeader, *, create: bool = True
+    root: StorageDir,
+    expected: LayoutHeader,
+    *,
+    create: bool = True,
+    existing: bool = False,
 ) -> LayoutHeader:
     """Check ``root``'s header against ``expected``, creating it if the root is empty.
 
@@ -353,6 +370,10 @@ def open_layout(
     create : bool
         With False nothing is written (a read-only root works) and an empty root raises
         `StoreLayoutAbsent`.
+    existing : bool
+        Write the header into a root that already holds names, which a new root may not:
+        the adoption of a store already in this shape (RFC 0003 section 8.2,
+        `~pydra.engine.portable.adopt.adopt`).
 
     Returns
     -------
@@ -375,7 +396,7 @@ def open_layout(
         if data is not None:
             return _check(LayoutHeader.from_json(data), expected)
         others = _sweep_and_scan(root, sweep=create)
-        if others:
+        if others and not existing:
             data = _read(root)  # another opener may have linked it since the first read
             if data is not None:
                 return _check(LayoutHeader.from_json(data), expected)
