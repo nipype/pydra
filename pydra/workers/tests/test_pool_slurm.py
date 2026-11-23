@@ -99,8 +99,13 @@ for j in "$d"/jobs/*; do
 done
 exit 0
 """
+# scancel: removes the jobs from the queue, unless `linger` exists (a job still listed while it
+# stops, as during Slurm's KillWait)
 SCANCEL = """#!/bin/sh
-for j in "$@"; do rm -f "$FAKE_SLURM/jobs/$j"; echo "$j" >> "$FAKE_SLURM/cancelled"; done
+for j in "$@"; do
+  [ -f "$FAKE_SLURM/linger" ] || rm -f "$FAKE_SLURM/jobs/$j"
+  echo "$j" >> "$FAKE_SLURM/cancelled"
+done
 """
 
 
@@ -242,6 +247,7 @@ def test_class_to_sbatch_args(tmp_path, fake_slurm):
         "--partition=gpuq",
         "--account=lab",
         "--comment=gpu",
+        "--no-requeue",
     } <= set(first)
     assert not any(a.startswith("--qos") for a in first)
     assert first[-2] == "--wrap"
@@ -302,6 +308,8 @@ def test_providers_and_codec_reach_the_worker_command(tmp_path, fake_slurm):
         "tres-per-task",
         "cpus-per-gpu",
         "mem-per-gpu",
+        "requeue",
+        "no-requeue",
     ],
 )
 def test_substrate_owned_options_refused(tmp_path, fake_slurm, key):
@@ -427,6 +435,20 @@ def test_stop_cancels_the_jobs(tmp_path, fake_slurm):
     assert (fake_slurm / "cancelled").read_text().split() == [
         h.job_id for h in handles[:2]
     ]
+
+
+def test_a_stopped_job_still_listed_is_not_adopted_again(tmp_path, fake_slurm):
+    """A job ``stop`` cancelled that Slurm still lists while it stops is neither live nor adopted
+    as an unrecorded worker; once it leaves the queue it is forgotten."""
+    sub = _substrate(tmp_path)
+    [h] = sub.start(_cls(), 1)
+    (fake_slurm / "linger").touch()
+    sub.stop([h])
+    assert sub.live() == []
+    assert sub.live() == []
+    assert sub.handles == [h]
+    (fake_slurm / "jobs" / h.job_id).unlink()
+    assert sub.live() == [] and sub.handles == [h]
 
 
 def test_an_unknown_job_of_this_epoch_is_listed_as_surplus(tmp_path, fake_slurm):

@@ -317,6 +317,34 @@ def test_store_and_cache_root_must_agree(tmp_path):
     assert Submitter(store=store, cache_root=tmp_path / "a").store is store
 
 
+def test_a_private_portable_store_roots_the_submitter_cache(tmp_path):
+    """Given a private or trusted `PortableStore` and no ``cache_root``, a `Submitter`'s cache root is the
+    store's root, as under ``store="portable"``, never the user cache of the host it was made on.
+    """
+    from pydra.engine.portable.store import PortableStore
+
+    private = PortableStore(tmp_path / "p", trust="private", pickle=True)
+    assert Submitter(store=private).cache_root == (tmp_path / "p").resolve()
+    trusted = PortableStore(tmp_path / "t", trust="trusted")
+    assert Submitter(store=trusted).cache_root == (tmp_path / "t").resolve()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="a shared root is PlatformUnsupported on Windows (RFC 0003 section 9)",
+)
+def test_a_shared_portable_store_does_not_root_the_submitter_cache(tmp_path):
+    """A shared `PortableStore`, whose other users must not read a job's run files, leaves a
+    `Submitter` given no ``cache_root`` on the user run cache."""
+    from pydra.engine.portable.store import PortableStore
+    from pydra.utils.general import default_run_cache_root
+
+    shared = PortableStore(
+        tmp_path / "s", trust="shared", work_dir=lambda c, f, a: tmp_path / "w" / a
+    )
+    assert Submitter(store=shared).cache_root == default_run_cache_root().resolve()
+
+
 def test_picklestore_slots(tmp_path):
     store = PickleStore(tmp_path)
     other = {**CTX, "platform": "q"}
@@ -590,7 +618,9 @@ def test_held_info_file_does_not_fail_a_committed_job(
     monkeypatch.chdir(tmp_path)
     refused = held_open(_is_info_file, store_module.REMOVE_RETRY.attempts)
     with caplog.at_level("WARNING", logger="pydra"):
-        with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        with Submitter(
+            worker="debug", cache_root=tmp_path / "cache", store="pickle"
+        ) as sub:
             assert sub(FunAddTwo(a=1)).outputs.out == 3
     assert len(refused) == store_module.REMOVE_RETRY.attempts
     assert os.getcwd() == str(tmp_path)
