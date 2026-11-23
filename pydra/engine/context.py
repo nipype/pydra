@@ -2,6 +2,7 @@
 the environment and the identities of the installed distributions. It is never part
 of the job checksum; a reuse policy (see :mod:`pydra.engine.store`) compares it."""
 
+import csv
 import dataclasses
 import functools
 import hashlib
@@ -11,7 +12,6 @@ import logging
 import os
 import platform
 import re
-import subprocess
 import sys
 import types
 import typing as ty
@@ -21,9 +21,12 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 import attrs
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
 from pydra.utils.general import STDLIB_MODULES, get_fields
 from pydra.utils.hash import (
     _module_is_library,
+    _owners,
+    forget_owners,
     check_code_hash,
     code_hash_default,
     library_modules,
@@ -39,9 +42,6 @@ logger = logging.getLogger("pydra")
 RECORD = 3
 """The version of the record's layout, stored under ``"record"``. Records of other
 versions are never reused under ``"consistent"`` or ``"exact"``."""
-
-GIT_TIMEOUT = 30
-"""Seconds a ``git`` call identifying an editable install may take."""
 
 
 def _platform() -> str:
@@ -86,19 +86,6 @@ def _file_bytes(path: Path) -> bytes:
         return b"<missing>"
 
 
-def _git(directory: Path, *args: str) -> str | None:
-    try:
-        done = subprocess.run(
-            ["git", "-C", str(directory), *args],
-            capture_output=True,
-            timeout=GIT_TIMEOUT,
-            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return done.stdout.decode(errors="surrogateescape") if not done.returncode else None
-
-
 IDENTITY_MAX_FILES = 10_000
 """Most files a local install's identity reads; above it the identity is unknown."""
 
@@ -126,35 +113,6 @@ def _capped_digest(root: Path, files: list[Path]) -> str:
     return _digest(
         os.path.relpath(f, root).encode() + b"\0" + _file_bytes(f) for f in files
     )
-
-
-def _git_identity(root: Path, paths: list[Path]) -> str | None:
-    """``git:<commit>``, followed by a digest of the modified and untracked files in
-    `paths` that are not ignored, if `root` is in a git checkout"""
-    commit = _git(root, "rev-parse", "HEAD")
-    top = _git(root, "rev-parse", "--show-toplevel")
-    status = _git(
-        root,
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--",
-        *(str(p) for p in paths),
-    )
-    if not commit or not top or status is None:
-        return None
-    top_dir = Path(top.strip())
-    entries = status.split("\0")
-    changed = [
-        top_dir / entry[3:]
-        for i, entry in enumerate(entries)
-        if len(entry) > 3 and not (i and entries[i - 1][:1] == "R")
-    ]
-    identity = f"git:{commit.strip()}"
-    if changed:
-        identity += "+" + _capped_digest(top_dir, sorted(changed))
-    return identity
 
 
 def _package_files(paths: list[Path]) -> list[Path]:
@@ -242,15 +200,29 @@ class _Installed:
     def reason(self) -> str | None:
         return self.identified[1]
 
+    @property
+    def keyed(self) -> str | None:
+        """The identity a checksum is keyed by: `identity`, except that an install from
+        an index is keyed by its public version, leaving out the local segment
+        (``+cu121``), which names a build for a platform and is recorded, not keyed
+        (RFC 0004 section 4.1)"""
+        identity = self.identity
+        if identity is None or self.direct:
+            return identity
+        try:
+            return Version(identity).public
+        except InvalidVersion:
+            return identity
+
 
 def _identify(installed: _Installed) -> tuple[str | None, str | None]:
     """The identity of an installed distribution, or why it is unknown. The identity
-    is its version, followed by the commit or archive hash it was installed from, or
-    for an install from a local directory by ``git:<commit>[+<digest of changed
-    files>]`` for an editable install in a git checkout, a digest of its packages'
-    files for another editable install, and a digest of the files it installed (its
-    ``RECORD``) otherwise. An editable install's packages are read up to
-    `IDENTITY_MAX_FILES` and `IDENTITY_MAX_BYTES`."""
+    is its version, followed by the commit or archive hash it was installed from. An
+    install from a local directory, editable or not, has no version in it: it is
+    ``dir:<digest of its files>``, read from the files of its packages for an editable
+    install and from its ``RECORD`` entries outside ``*.dist-info`` otherwise. An
+    editable install's packages are read up to `IDENTITY_MAX_FILES` and
+    `IDENTITY_MAX_BYTES`."""
     version, direct = installed.version, installed.direct
     if not version:
         return None, "it has no version"
@@ -276,16 +248,31 @@ def _identify(installed: _Installed) -> tuple[str | None, str | None]:
         if not paths:
             return None, f"no package of it was found under {root!r}"
         try:
-            identity = _git_identity(Path(root), paths) or (
-                "dir:" + _capped_digest(Path(root), _package_files(paths))
-            )
+            identity = "dir:" + _capped_digest(Path(root), _package_files(paths))
         except _TooLarge as e:
             return None, str(e)
-        return f"{version}@{identity}", None
+        return identity, None
     record = installed.dist.read_text("RECORD")
     if not record:
         return None, "it was installed from a local source without a RECORD"
-    return f"{version}@record:{_digest([record.encode()])}", None
+    return f"dir:{_record_digest(record)}", None
+
+
+def _record_digest(record: str) -> str:
+    """A digest of the hashed ``path,hash`` entries of a ``RECORD`` that stay inside the
+    install, leaving out ``*.dist-info/`` and the scripts outside it (``../``): what was
+    installed, not how or where. ``direct_url.json``, ``INSTALLER`` and an installer's
+    own files differ between two installs of the same files"""
+    entries = set()
+    for row in csv.reader(record.splitlines()):
+        if (
+            len(row) >= 2
+            and row[1]
+            and ".dist-info/" not in row[0]
+            and not row[0].startswith(("../", "/"))
+        ):
+            entries.add((row[0], row[1]))
+    return _digest(f"{path},{hash_}".encode() for path, hash_ in sorted(entries))
 
 
 def _direct_url(dist) -> ty.Any:
@@ -423,27 +410,6 @@ def reached_modules(task: "Task") -> set[str] | None:
     }
 
 
-def _owners(module: str) -> list[str] | None:
-    """The distributions that installed `module`: the one whose files include the
-    module's file, or whose editable source holds it, or for a module without a file
-    (a namespace package) those providing its top-level name; None if there is none"""
-    distributions = _distributions()
-    candidates = _package_distributions().get(module.partition(".")[0], [])
-    file = getattr(sys.modules.get(module), "__file__", None)
-    if not file:
-        return [c for c in candidates if c in distributions] or None
-    path = _norm(file)
-    for name in candidates:
-        if name in distributions and path in distributions[name].files:
-            return [name]
-    roots = [
-        (len(d.editable_root), d.name)
-        for d in distributions.values()
-        if d.editable_root and d.holds(path)
-    ]
-    return [max(roots)[1]] if roots else None
-
-
 @functools.cache
 def _requirements(name: str) -> frozenset[str]:
     """The installed distributions `name` requires, transitively, under the markers of
@@ -535,4 +501,5 @@ def clear_caches() -> None:
         process_context,
     ):
         cached.cache_clear()
+    forget_owners()
     _warned.clear()

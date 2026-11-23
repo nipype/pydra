@@ -25,11 +25,6 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "executable",
     ): "only shell tasks define an executable",
     ("engine/context.py", "module", "__file__"): "a module may have no file",
-    (
-        "engine/context.py",
-        "sys.modules.get(module)",
-        "__file__",
-    ): "a module may have no file",
     ("engine/context.py", "task", "__checksum__"): "in the base branch, unchanged here",
     ("engine/graph.py", "nd", "_task"): "in the base branch, unchanged here",
     ("engine/graph.py", "self", "sorted_nodes"): "in the base branch, unchanged here",

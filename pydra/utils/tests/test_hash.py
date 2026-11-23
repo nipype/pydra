@@ -1041,6 +1041,32 @@ def load_modules(tmp_path, monkeypatch):
         sys.modules.pop(name, None)
 
 
+_owner_of = hash_module.owner_of
+
+
+@pytest.fixture(autouse=True)
+def _forget_owners():
+    """Modules of the same name are loaded from new directories by each test, so no
+    owner is kept between them"""
+    _owner_of.cache_clear()
+    yield
+    _owner_of.cache_clear()
+
+
+@pytest.fixture
+def owned_libpkg(monkeypatch):
+    """``libpkg`` is owned by an installed distribution, so it is library code known
+    by its name and version, not an unowned module walked as user code"""
+    real = hash_module.owner_of
+    monkeypatch.setattr(
+        hash_module,
+        "owner_of",
+        lambda module: (
+            ("libpkg", "1.0") if module.partition(".")[0] == "libpkg" else real(module)
+        ),
+    )
+
+
 def _code_hash(func, code_hash: str) -> str:
     return hash_function(func, cache=Cache(code_hash=code_hash))
 
@@ -1134,7 +1160,7 @@ def _lib_f(load_modules, h=2, name="h"):
 
 
 @pytest.mark.parametrize("code_hash", _TIERS)
-def test_code_hash_library_by_name(load_modules, code_hash):
+def test_code_hash_library_by_name(load_modules, owned_libpkg, code_hash):
     """Code installed in site-packages is identified by its qualified name, never its
     code"""
     base = _code_hash(_lib_f(load_modules), code_hash)
@@ -1153,12 +1179,13 @@ def test_code_hash_library_objects_by_name():
     def f(x):
         return numpy.add(numpy.mean(x), os.environ)
 
+    numpy_version = hash_module.owner_of("numpy")[1].encode()
     encoded = b"".join(bytes_repr(f, Cache()))
-    assert b"global:numpy=module:numpy" in encoded
+    assert b"global:numpy=module:numpy==%s:numpy" % numpy_version in encoded
     assert b"global:os=module:os" in encoded
 
 
-def test_code_hash_library_instances_by_name(load_modules):
+def test_code_hash_library_instances_by_name(load_modules, owned_libpkg):
     _, main = load_modules(
         {
             "libpkg.state": "class Config:\n    pass\n\nCONFIG = Config()\n",
@@ -1169,10 +1196,11 @@ def test_code_hash_library_instances_by_name(load_modules):
         },
         directory="site-packages",
     )
+    numpy_version = hash_module.owner_of("numpy")[1].encode()
     encoded = b"".join(bytes_repr(main.f, Cache()))
-    assert b"global:CONFIG=lib:libpkg.state.CONFIG" in encoded
+    assert b"global:CONFIG=lib:libpkg==1.0:libpkg.state.CONFIG" in encoded
     assert b"global:environ=lib:os.environ" in encoded
-    assert b"global:add=lib:numpy.add" in encoded
+    assert b"global:add=lib:numpy==%s:numpy.add" % numpy_version in encoded
 
 
 @pytest.mark.parametrize(
@@ -1186,7 +1214,9 @@ def test_code_hash_user_packages_exclude(load_modules, monkeypatch, setting, cha
 
 
 @pytest.mark.parametrize("setting,changed", [("", False), ("libpkg", True)])
-def test_code_hash_user_packages_include(load_modules, monkeypatch, setting, changed):
+def test_code_hash_user_packages_include(
+    load_modules, owned_libpkg, monkeypatch, setting, changed
+):
     """``PYDRA_USER_PACKAGES`` names an installed package to make it user code"""
     monkeypatch.setenv(hash_module.USER_PACKAGES_ENV_VAR, setting)
     base = _code_hash(_lib_f(load_modules), "user")
