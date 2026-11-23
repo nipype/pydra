@@ -31,7 +31,7 @@ from pydra.engine.portable.store import PortableStore
 from pydra.engine.resident import ResidentKey
 from pydra.engine.submitter import Submitter
 from pydra.environments import base, docker, lmod, singularity
-from pydra.environments.tests.test_warm_environments import IMAGE, FakeRuntime
+from pydra.environments.tests.warm_fakes import IMAGE, FakeRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform.startswith("win"), reason="the fakes run POSIX commands"
