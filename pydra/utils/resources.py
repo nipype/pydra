@@ -53,6 +53,11 @@ class ComputeResources:
         Wall-clock limit in seconds
     tags : tuple of str, optional
         Labels for routing, not mapped to scheduler arguments
+    gpu_mem : int or str, optional
+        Device memory the task's working set needs on each GPU, spelled like ``mem``;
+        used by worker-pool placement, not mapped to scheduler arguments
+    residency : {"route", "ignore"}
+        ``"ignore"`` lets any worker of a class run the task, unrouted by resident state
     """
 
     cpus: int | None = attrs.field(default=None, validator=_positive)
@@ -61,10 +66,16 @@ class ComputeResources:
     gpu_type: str | None = None
     time: int | None = attrs.field(default=None, validator=_positive)
     tags: tuple[str, ...] = attrs.field(default=(), converter=_to_tags)
+    gpu_mem: str | None = attrs.field(default=None, converter=_to_mem)
+    residency: ty.Literal["route", "ignore"] = attrs.field(
+        default="route", validator=attrs.validators.in_(("route", "ignore"))
+    )
 
     def __attrs_post_init__(self):
         if self.gpu_type is not None and self.gpus is None:
             raise ValueError("gpu_type requires gpus")
+        if self.gpu_mem is not None and self.gpus is None:
+            raise ValueError("gpu_mem requires gpus")
 
     def slurm_args(self) -> list[str]:
         """The ``sbatch`` arguments for these resources."""
