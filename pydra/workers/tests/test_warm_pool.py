@@ -1572,25 +1572,25 @@ def test_ticket_write_streak_ends_with_its_waiting_jobs(
 
     monkeypatch.setattr(pool.pool, "put", failing)
     import time
-    import types
-    from pydra.workers.pool import pool as pool_module
+    import threading
 
-    # the pool's monotonic clock, which the test moves on by an hour
-    now = [time.monotonic()]
-    clock = types.SimpleNamespace(
-        **{n: getattr(time, n) for n in dir(time) if not n.startswith("_")}
-    )
-    clock.monotonic = lambda: now[0]
-    monkeypatch.setattr(pool_module, "time", clock)
     jobs = _round(sub, tasks, [1])
     handle = Handle(pool, tuple(jobs), set(jobs))
     pool._queue_jobs(jobs, handle=handle)
     pool._write()  # failed write 1
     pool.cancel(handle)
     pool._write()  # nothing waits: the streak ends
-    now[0] += 3600
-    pool._queue_jobs(_round(sub, tasks, [2]), handle=None)
-    pool._write()  # failed write 1 of a fresh streak
+    # an hour on, on the monotonic clock as this thread (the code under test) reads it
+    real_monotonic, me = time.monotonic, threading.current_thread()
+    with monkeypatch.context() as later:
+        later.setattr(
+            time,
+            "monotonic",
+            lambda: real_monotonic()
+            + (3600 if threading.current_thread() is me else 0),
+        )
+        pool._queue_jobs(_round(sub, tasks, [2]), handle=None)
+        pool._write()  # failed write 1 of a fresh streak
     assert "cpu" not in pool._broken
 
 
