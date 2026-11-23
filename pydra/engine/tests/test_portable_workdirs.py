@@ -590,14 +590,17 @@ def test_lease_settings_mixed_bounds_spare_a_live_holder(tmp_path):
     b = make(tmp_path, dedupe=True, lease_settings=attrs.evolve(SHORT, max_wait=1.5))
     held = a.acquire("python-abc", CTX)
     with held:
-        time.sleep(1.0)
-        # collect under the short bounds sees the lease as live (before prove renews it)
+        # a second on, past the short stale_after, collect under the short bounds sees
+        # the lease as live
         name = held.lockfile.name[: -len(".lock")]
         with b._open() as root:
-            assert b._lease_live(root, name, time.time())
+            assert b._lease_live(root, name, time.time() + 1.0)
+        waiting = b.acquire("python-abc", CTX)
+        clock = _fake_clock(waiting)  # its wait outlives the short stale_after
         with pytest.raises(LeaseTimeout):
-            with b.acquire("python-abc", CTX):
+            with waiting:
                 pass
+        assert clock.t > SHORT.stale_after
         assert held.prove()
 
 
