@@ -47,6 +47,10 @@ class FakeRuntime:
         self.fail_start = fail_start
         self.entrypoints = entrypoints or {}
         self.exec_delay = 0.0
+        # per-exec delays, taken in order before ``exec_delay``, so a test changes one command's
+        # run without racing the fake for a shared value
+        self.exec_delays: list[float] = []
+        self.running = threading.Event()  # set once a command has begun its delay
         self.lock = threading.Lock()
         self.cold_home = tmp_path / "image-home"
         self.cold_home.mkdir(exist_ok=True)
@@ -189,7 +193,10 @@ class FakeRuntime:
             except FileNotFoundError as e:
                 return 1, "", f"No such file or directory: {e}"
             # the command "runs" for exec_delay seconds; stopping its container ends it at once
-            until = time.monotonic() + self.exec_delay
+            with self.lock:
+                delay = self.exec_delays.pop(0) if self.exec_delays else self.exec_delay
+            until = time.monotonic() + delay
+            self.running.set()
             while time.monotonic() < until:
                 if alive is not None and not alive():
                     return 137, "", "killed"
